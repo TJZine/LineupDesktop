@@ -1,4 +1,4 @@
-export const SETTINGS_SCHEMA_VERSION = 2 as const;
+export const SETTINGS_SCHEMA_VERSION = 3 as const;
 
 export const AUDIO_OUTPUT_DEVICE_ID_PATTERN = /^audio_[A-Za-z0-9_-]{43}$/u;
 export const DESKTOP_AUDIO_OUTPUT_MAX_DEVICE_COUNT = 32;

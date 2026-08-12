@@ -19,6 +19,23 @@ including `WS4-PROOF-01`–`WS4-PROOF-04` and the mandatory three-row Package 6
 operator-assisted fullscreen audit, remains pending. Historical completed units
 below describe their bounded implementation history only.
 
+Guide G1 supersedes the current Settings shape with the sole exact version-3
+contract. It separates Detailed/Wide time range, Auto/Reduced resource policy,
+and Auto/Comfortable/Compact row-density selection without adding preload/IPC
+methods or renderer persistence. Auto maps to
+`AUTO_GUIDE_PRELOAD_PROFILE`; Reduced resource maps to
+`REDUCED_RESOURCE_GUIDE_PRELOAD_PROFILE`. Both profiles size foreground Guide
+requests from complete visible rows plus the shared two-row buffer on each side,
+cap requests at 24 rows, and retain a 360-minute time buffer on each side. Auto
+retains up to 12 entries or 12,000 programs and may warm adjacent channel/time
+windows while idle. Reduced resource retains up to 6 entries or 6,000 programs
+and performs no idle warming. Accepted Guide presentation-setting
+changes coalesce through one focused settlement owner, cancel stale
+presentation work, retain eligible focus intent, and invalidate the affected
+Guide identity; density-only changes remain display-only. G4 now owns
+the pure responsive row policy, measured complete-row geometry, and bounded
+viewport recomputation; G6 still owns Windows DPI/live/native proof.
+
 This document owns the detailed renderer shell breakdown referenced by
 [`CURRENT_STATE.md`](./CURRENT_STATE.md). Keep the current-state table concise;
 record renderer module ownership and completed renderer architecture units here.
@@ -50,6 +67,7 @@ The renderer shell currently spans:
 - `src/renderer/playerOverlayDom.ts`
 - `src/renderer/playerBridgeSubscription.ts`
 - `src/renderer/guidePresentation.ts`
+- `src/renderer/guideChannelWindow.ts`
 - `src/renderer/guidePresentationPolling.ts`
 - `src/renderer/guideTuneController.ts`
 - `src/renderer/desktopInput.ts`
@@ -77,6 +95,18 @@ hierarchy and dynamic menu rows, while the shared, information, and menu
 stylesheets own their separate visual families. Reduced-motion, forced-colors,
 exact viewport, focus, and local fullscreen continuity proof passed at Package 8
 closeout.
+
+Guide G2 adds `guideChannelWindow.ts` as the cohesive renderer owner for the
+sparse absolute eligible-channel window. It merges only current paged results,
+pins visible/focused rows, applies finite profile-aware LRU retention, projects
+explicit inert loading and retryable error rows, and derives the next missing
+foreground intent from complete viewport rows plus bounded overscan. Polling
+continues to own one active/one latest request, cancellation, stale settlement,
+poll refresh, and lower-priority Auto-only warming. `epg.ts` continues to own
+time-column-preserving semantic movement, including viewport-sized Page moves;
+the DOM uses the eligible total for spacer geometry while keeping the existing
+24-row/400-cell mount caps. Main, preload, contracts, persistence, and renderer
+privilege are unchanged.
 
 WS4 preserves this ownership while adding semantic input aliases, context Page
 routing, a source-aware 500 ms Back hold, serialized guarded play/pause/seek/
@@ -122,8 +152,8 @@ revision, or new operation crosses into renderer.
 
 WS5 Unit 5G adds Desktop Guide virtualization without importing the upstream
 LG/webOS performance profile. `guideVirtualization.ts` owns the pure
-viewport/focus range, exact default/aggressive request and cache budgets, cache
-identity, and bounded LRU. The Guide DOM samples real row stride outside its
+viewport/focus range, exact Auto/Reduced resource request and cache budgets,
+cache identity, and bounded LRU. The Guide DOM samples real row stride outside its
 projection loop, preserves noncontiguous spacer geometry, mounts no more than
 24 rows and 400 cells, and keeps the two-hour off-window buffer inert and out of
 focus/accessibility registration. Polling retains one active and one trailing
@@ -248,6 +278,82 @@ The durable proof remains scoped to renderer composition and the dev-only
 harness. It is not a production playback implementation and does not make
 renderer code responsible for Plex transport, native handles, secrets, or
 product playback setup.
+
+## G3B Selected Artwork Projection Disposition
+
+`src/renderer/epg/guideDom.ts` remains the cohesive Guide DOM/layout owner.
+Its new behavior is the selected detail's poster and decorative background
+projection, including independent request identity, currentness, load/error
+cleanup, guarded same-origin opaque poster fallback requests, and terminal theme
+fallback when that poster request fails.
+**Decision: cohesive growth.** Both surfaces consume the same selected
+`infoPanel` and presentation generation, and their lifecycle invariants remain
+DOM-local; the background image owns a separate poster-source request guarded
+by presentation generation, artwork reference, source, and current request
+identity, and no separate image manager or renderer privilege seam is
+justified. The owner is over 800 lines, so the existing fresh
+architecture-review gate remains required.
+
+`src/renderer/styles/guide-epg.css` remains the cohesive Guide visual owner.
+Its new behavior is the detail background surface treatment plus reduced-motion
+and forced-colors rules alongside the existing poster/detail composition.
+**Decision: cohesive growth.** The rules share the same Guide detail surface
+and accessibility policy; extraction would add no independent consumer or
+lifecycle owner.
+
+## G3C Guide Visual And Interaction Parity Disposition
+
+`src/renderer/epg/guideDom.ts` remains the cohesive Guide DOM/layout owner.
+Its G3C behavior re-expresses the selected-detail hierarchy, Classic/Overlay
+shell regions, the single current-channel rail and real `LIVE` status,
+30-minute ruler marker, temporal
+cell states, library tabs, Now Watching surfaces, and explicit loading/empty/
+error/retry presentation in the same selection, generation, focus, and DOM
+reconciliation lifecycle. **Decision: cohesive growth.** The owner is 1,258
+lines, but these concerns share the Guide view-model projection and DOM
+currentness invariants; extraction would create forwarding seams without an
+independent lifecycle. The >800-line owner remains a fresh architecture-review
+surface before closeout.
+
+`src/renderer/styles/guide-epg.css` remains the cohesive Guide visual owner.
+Its G3C behavior adds hierarchy typography, spacing/color roles, Classic/Overlay
+visibility, channel/current/future treatment, marker and focus states, and
+forced-color/reduced-motion preservation alongside the existing artwork and
+grid rules. **Decision: cohesive growth.** At 966 lines it still serves one
+Guide surface and accessibility policy; G4 adds responsive row geometry and
+complete-row floors, while G6 owns Windows/native/device proof.
+
+## G4 Responsive Guide Density Disposition
+
+`src/renderer/guideRowDensity.ts` is the 139-line pure policy owner for the frozen
+108px Comfortable and 72px Compact treatments, complete-row math, explicit
+100%-scale 4K/1080p floors, and the honest 5-row scaled/narrow fallback. Auto
+selects Comfortable first and Compact only when the measured Guide grid cannot
+meet its applicable floor; an undersized grid reports `floorMet: false`
+without inventing a larger target.
+
+`src/renderer/epg/guideDom.ts` remains the cohesive measured geometry owner.
+It samples the current row region/offset and gap before Auto resolution, reports
+only complete rows through the shared interval projection, keeps overscan
+mounted but inert and hidden outside that complete interval, preserves
+focus/current selection, and skips stale mounted-row strides during density/
+layout transitions before allowing a later same-density sample. At 1,258 lines
+it remains a single Guide selection, generation, focus, and
+reconciliation lifecycle; extraction would add no independent consumer or
+currentness owner. **Decision: cohesive growth.**
+
+`src/renderer/index.ts` owns resize/visual-viewport and density/layout
+settlement wiring; density-only changes invalidate layout metrics and recompute
+visible rows without clearing Guide schedule/cache identity or notifying a
+refresh, while layout changes allow one bounded foreground request only when
+the visible window is missing.
+`src/renderer/styles/guide-epg.css` keeps the 72px treatment readable by hiding
+only secondary subtitle/episode metadata while preserving rail, title/time,
+state, focus, the single current-channel fact, forced-color, and reduced-motion
+cues. No
+contract, preload, main, IPC, persistence, playback, dependency, or upstream
+surface changed. Windows/native/manual DPI and device proof remain deferred to
+G6.
 
 ## Verification
 

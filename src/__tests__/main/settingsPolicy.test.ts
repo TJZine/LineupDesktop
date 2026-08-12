@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   DEFAULT_DESKTOP_SETTINGS_VALUES,
+  SETTINGS_SCHEMA_VERSION,
   type DesktopSettingsCapabilityProjection,
   type DesktopSettingsValues,
 } from '../../contracts/settings.js';
@@ -239,7 +240,7 @@ function hydratedPolicy(
 
 function snapshot(overrides: Partial<DesktopSettingsValues>) {
   return {
-    schemaVersion: 2 as const,
+    schemaVersion: SETTINGS_SCHEMA_VERSION,
     revision: 1,
     status: 'ready' as const,
     values: { ...DEFAULT_DESKTOP_SETTINGS_VALUES, ...overrides },

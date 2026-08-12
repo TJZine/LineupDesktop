@@ -72,6 +72,19 @@ export class DesktopPlayerAdapter {
   getPendingRequestCount(): number {
     return this.#requestCustody.getPendingRequestCount();
   }
+  settleRuntimeTerminalError(
+    event: Extract<PlayerEvent, { event: 'error' }>,
+    previousRequestId: PlayerRequestId | null,
+  ): readonly PlayerEvent[] {
+    const currentRequestId = this.#snapshot.requestId;
+    if (currentRequestId !== previousRequestId && currentRequestId !== null) {
+      return [];
+    }
+    const settledError = currentRequestId !== null && currentRequestId === previousRequestId
+      ? { ...event.error, requestId: currentRequestId }
+      : event.error;
+    return this.#recordError(settledError);
+  }
   async dispatchRendererIntent(envelope: unknown): Promise<DesktopPlayerAdapterDispatchResult> {
     const commandResult = mapRendererIntentToCommand(envelope);
     if ('error' in commandResult) {

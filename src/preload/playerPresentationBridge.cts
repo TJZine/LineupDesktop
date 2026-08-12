@@ -55,7 +55,7 @@ function isMatchingPlayerPresentationResult(
     ? value.ok || value.documentEpoch === null
     : value.documentEpoch === input.documentEpoch;
   const negotiationStatusIsValid = !value.ok || (input.documentEpoch === null
-    ? value.status === 'deferred' || value.status === 'hidden'
+    ? value.status === 'applied' || value.status === 'deferred' || value.status === 'hidden'
     : value.status !== 'deferred');
   return revisionMatches && epochMatches && negotiationStatusIsValid;
 }

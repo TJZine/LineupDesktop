@@ -24,7 +24,6 @@ import {
   createRuntimeBoundaryError,
   createRuntimeLoadFailedError,
   createRuntimeSchedulerSelectionError,
-  createRuntimeSourceError,
   createRuntimeWarning,
   recordRuntimeHelperCrashDiagnostic,
 } from './plexPlaybackRuntimeDiagnostics.js';
@@ -106,6 +105,7 @@ export interface PlexPlaybackRuntimeChannelPort {
   resolvePlaybackCandidate(
     selection: PlexPlaybackScheduleSelection,
   ): Promise<PlexPlaybackRuntimeCandidate>;
+  invalidatePlaybackMediaIdentity(): void;
 }
 export type PlexPlaybackRuntimePlayerDispatchResult =
   | {
@@ -116,9 +116,17 @@ export type PlexPlaybackRuntimePlayerDispatchResult =
       ok: false;
       events?: readonly PlayerEvent[];
     };
+export interface PlexPlaybackRuntimePlayerCleanupResult {
+  ok: boolean;
+  events?: readonly PlayerEvent[];
+}
 export interface PlexPlaybackRuntimePlayerPort {
   dispatch(command: PlayerCommand, context?: PrivilegedPlaybackDispatchContext | null): Promise<PlexPlaybackRuntimePlayerDispatchResult>;
-  cleanup(requestId: PlayerRequestId | null): Promise<void>;
+  settleTerminalError(
+    event: Extract<PlayerEvent, { event: 'error' }>,
+    previousRequestId: PlayerRequestId | null,
+  ): readonly PlayerEvent[];
+  cleanup(requestId: PlayerRequestId | null): Promise<PlexPlaybackRuntimePlayerCleanupResult>;
 }
 export interface PlexPlaybackRuntimePmsPort {
   releaseSession(
@@ -225,6 +233,7 @@ export class PlexPlaybackRuntime {
     this.#activeSelection = null;
     const epoch = this.#nextEpoch();
     const events: PlayerEvent[] = [];
+    const previousRequestId = this.#active?.requestId ?? null;
     events.push(...(await this.#cleanupActive('switch', { invalidateEpoch: false })));
     let selection: PlexPlaybackScheduleSelection | null;
     try {
@@ -257,12 +266,13 @@ export class PlexPlaybackRuntime {
       this.#emit(events);
       return { accepted: false, epoch, requestId: null, events };
     }
-    return this.#startSelection(epoch, events, selection);
+    return this.#startSelection(epoch, events, selection, previousRequestId);
   }
   async #startSelection(
     epoch: number,
     events: PlayerEvent[],
     selection: PlexPlaybackScheduleSelection,
+    previousRequestId: PlayerRequestId | null,
   ): Promise<PlexPlaybackRuntimeStartResult> {
     this.#activeSelection = { ...selection };
     this.#recovery.activate(selection);
@@ -273,7 +283,8 @@ export class PlexPlaybackRuntime {
       if (!this.#isCurrentEpoch(epoch)) {
         return this.#staleStartResult(epoch, null, events, 'candidate failure arrived after cleanup');
       }
-      events.push(this.#candidateResolutionError(error));
+      const errorEvent = this.#candidateResolutionError(error);
+      events.push(...this.#settleCandidateTerminalError(errorEvent, previousRequestId));
       this.#emit(events);
       return { accepted: false, epoch, requestId: null, events };
     }
@@ -369,6 +380,9 @@ export class PlexPlaybackRuntime {
   }): Promise<readonly PlayerEvent[]> {
     const releaseCleanupHold = this.#acquireCleanupHold();
     try {
+      if (input.reason === 'logout' || input.reason === 'server-change' || input.reason === 'profile-change' || input.reason === 'teardown') {
+        this.#channel.invalidatePlaybackMediaIdentity();
+      }
       this.#recovery.cancel();
       this.#activeSelection = null;
       const events = await this.#cleanupActive(input.reason, { invalidateEpoch: true });
@@ -500,6 +514,7 @@ export class PlexPlaybackRuntime {
       this.#recovery.cancel();
     }
     const epoch = this.#nextEpoch();
+    const previousRequestId = this.#active?.requestId ?? null;
     const events: PlayerEvent[] = [
       ...(await this.#cleanupActive('switch', { invalidateEpoch: false })),
     ];
@@ -512,7 +527,7 @@ export class PlexPlaybackRuntime {
     ) {
       return 'stale';
     }
-    const result = await this.#startSelection(epoch, events, selection);
+    const result = await this.#startSelection(epoch, events, selection, previousRequestId);
     if (!isSamePlexPlaybackScheduleSelection(this.#activeSelection, identity)) {
       return 'stale';
     }
@@ -561,7 +576,7 @@ export class PlexPlaybackRuntime {
     this.#emit(result.events);
     return result;
   }
-  #candidateResolutionError(error: unknown): PlayerEvent {
+  #candidateResolutionError(error: unknown): Extract<PlayerEvent, { event: 'error' }> {
     if (
       error instanceof PlexPlaybackRuntimeCandidateResolutionError &&
       isSafePlayerError(error.playerError)
@@ -572,16 +587,30 @@ export class PlexPlaybackRuntime {
         error: error.playerError,
       };
     }
-    return createRuntimeSourceError(
-      undefined,
-      'PLAYER_PLAYBACK_CANDIDATE_UNAVAILABLE',
-      'The playback runtime could not resolve the scheduled media.',
-      {
-        operation: 'channel.resolve',
-        status: 'failed',
-        reason: 'playback candidate resolution failed',
+    return {
+      event: 'error',
+      requestId: null,
+      error: {
+        code: 'PLAYER_PLAYBACK_CANDIDATE_UNAVAILABLE',
+        category: 'source',
+        message: 'The playback runtime could not resolve the scheduled media.',
+        recoverable: true,
+        retryable: true,
+        diagnostic: {
+          component: 'plex-playback-runtime',
+          operation: 'channel.resolve',
+          status: 'failed',
+          reason: 'playback candidate resolution failed',
+        },
       },
-    );
+    };
+  }
+  #settleCandidateTerminalError(
+    event: Extract<PlayerEvent, { event: 'error' }>,
+    previousRequestId: PlayerRequestId | null,
+  ): readonly PlayerEvent[] {
+    const settledEvents = this.#player.settleTerminalError(event, previousRequestId);
+    return settledEvents.length > 0 ? settledEvents : [event];
   }
   #observeAcceptedEvents(events: readonly PlayerEvent[]): void {
     const identity = this.#activeSelection;

@@ -34,7 +34,7 @@ export interface PlexStreamResolverAuthHeader {
 }
 
 export interface PlexStreamResolverMediaDetailPort {
-  getMediaDetail(input: { mediaId: string }): Promise<PlexMediaItem | null>;
+  getMediaDetail(input: { ratingKey: string }): Promise<PlexMediaItem | null>;
 }
 
 export interface PlexStreamResolverPmsSessionLease {
@@ -68,6 +68,7 @@ export interface PlexStreamResolverOptions {
 export interface PlexStreamResolverInput {
   requestId: PlayerRequestId;
   mediaId: string;
+  ratingKey: string;
   capabilityProfile: DesktopStreamCapabilityProfile;
   autoplay?: boolean;
   startPositionMs?: number;
@@ -155,18 +156,18 @@ export class PlexStreamResolver {
       return this.#failure(input.requestId, 'PLEX_STREAM_CREDENTIAL_UNAVAILABLE', 'authentication', 'active credential unavailable', diagnostics);
     }
 
-    const mediaDetail = await this.#getMediaDetail(input.requestId, input.mediaId, diagnostics);
+    const mediaDetail = await this.#getMediaDetail(input.requestId, input.ratingKey, diagnostics);
     if (mediaDetail === null) {
       return this.#failure(input.requestId, 'PLEX_STREAM_MEDIA_UNAVAILABLE', 'source', 'media detail unavailable', diagnostics);
     }
 
-    const candidates = mapPlexMediaDetailsToDesktopStreamCandidates(mediaDetail);
+    const candidates = mapPlexMediaDetailsToDesktopStreamCandidates(mediaDetail, input.mediaId);
     diagnostics.push({
       component: 'plex-stream-resolver',
       operation: 'policy.evaluate',
       status: candidates.length > 0 ? 'evaluated' : 'rejected',
       counts: { candidates: candidates.length },
-      media: { id: toPlayerMediaId(mediaDetail), title: mediaDetail.title },
+      media: { id: input.mediaId, title: mediaDetail.title },
       capabilityProfileId: input.capabilityProfile.id,
     });
 
@@ -262,6 +263,7 @@ export class PlexStreamResolver {
       connection,
       authHeader,
       mediaDetail,
+      mediaId: input.mediaId,
       candidate: selected,
       selectedPart: selectedPrivate,
       settingsPreferences: input.settingsPreferences,
@@ -307,11 +309,11 @@ export class PlexStreamResolver {
 
   async #getMediaDetail(
     requestId: PlayerRequestId,
-    mediaId: string,
+    ratingKey: string,
     diagnostics: PlayerRendererSafeDiagnostic[],
   ): Promise<PlexMediaItem | null> {
     try {
-      return await this.#mediaDetail.getMediaDetail({ mediaId });
+      return await this.#mediaDetail.getMediaDetail({ ratingKey });
     } catch {
       diagnostics.push(createPortFailureDiagnostic(requestId, 'media-detail.read'));
       return null;
@@ -380,8 +382,9 @@ export class PlexStreamResolver {
 
 export function mapPlexMediaDetailsToDesktopStreamCandidates(
   mediaDetail: PlexMediaItem,
+  mediaId: string,
 ): readonly DesktopStreamMediaCandidate[] {
-  const mediaSummary = toPlayerMediaSummary(mediaDetail);
+  const mediaSummary = toPlayerMediaSummary(mediaDetail, mediaId);
   return mediaDetail.media.flatMap((variant, variantIndex) => {
     return variant.parts.map((part, partIndex) => {
       const trackScope = createTrackIdScope(variantIndex, partIndex);
@@ -440,6 +443,7 @@ function buildPrivatePlaybackDescriptor(input: {
   connection: PlexConnection;
   authHeader: PlexStreamResolverAuthHeader;
   mediaDetail: PlexMediaItem;
+  mediaId: string;
   candidate: DesktopStreamMediaCandidate;
   selectedPart: PlexMediaPart;
   settingsPreferences?: DesktopPlaybackSettingsPreferences;
@@ -455,7 +459,7 @@ function buildPrivatePlaybackDescriptor(input: {
     ),
     credentialHeader: { ...input.authHeader },
     selectedConnection: projectConnection(input.connection),
-    media: { id: toPlayerMediaId(input.mediaDetail), title: input.mediaDetail.title },
+    media: { id: input.mediaId, title: input.mediaDetail.title },
     setup: {
       playbackMode: input.decision.kind as Exclude<DesktopStreamPolicyDecision['kind'], 'unsupported'>,
       mediaPath: input.mediaDetail.key,
@@ -520,18 +524,14 @@ function findSelectedPrivatePart(
   return null;
 }
 
-function toPlayerMediaSummary(media: PlexMediaItem): PlayerMediaSummary {
+function toPlayerMediaSummary(media: PlexMediaItem, mediaId: string): PlayerMediaSummary {
   return {
-    id: toPlayerMediaId(media),
+    id: mediaId,
     title: media.title,
     ...(media.parentTitle !== undefined ? { subtitle: media.parentTitle } : {}),
     durationMs: media.durationMs,
     container: media.media[0]?.container,
   };
-}
-
-function toPlayerMediaId(media: PlexMediaItem): string {
-  return `plex-media-${media.ratingKey}`;
 }
 
 function toScopedCandidateId(variantIndex: number, partIndex: number): string {

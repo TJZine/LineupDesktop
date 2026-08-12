@@ -8,6 +8,7 @@ import {
 } from '../../contracts/ipc.js';
 import {
   DEFAULT_DESKTOP_SETTINGS_VALUES,
+  SETTINGS_SCHEMA_VERSION,
   createDesktopSettingsView,
 } from '../../contracts/settings.js';
 import { DesktopSettingsStoreError } from '../../main/persistence/desktopSettingsStore.js';
@@ -189,7 +190,7 @@ test('settings IPC canonicalizes only exact system-default and clones capabiliti
 });
 
 test('settings IPC maps every store failure to fixed renderer-safe results and never rejects', async () => {
-  for (const code of ['storage-unavailable', 'unsupported-version', 'revision-conflict', 'operation-failed'] as const) {
+  for (const code of ['storage-unavailable', 'revision-conflict', 'operation-failed'] as const) {
     const handlers = new Map<string, (event: unknown, payload: unknown) => unknown>();
     registerSettingsIpcHandlers({
       store: {
@@ -277,7 +278,12 @@ test('settings IPC maps unexpected handler exceptions to a fixed operation failu
 });
 
 function snapshot(revision: number) {
-  return { schemaVersion: 2 as const, revision, status: 'ready' as const, values: { ...DEFAULT_DESKTOP_SETTINGS_VALUES } };
+  return {
+    schemaVersion: SETTINGS_SCHEMA_VERSION,
+    revision,
+    status: 'ready' as const,
+    values: { ...DEFAULT_DESKTOP_SETTINGS_VALUES },
+  };
 }
 
 function view(revision: number) {

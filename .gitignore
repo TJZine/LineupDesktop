@@ -16,6 +16,8 @@ worktrees/
 logs/
 diagnostics/
 crash-dumps/
+src/native-helper/Lineup.NativePlayerHost/bin/
+src/native-helper/Lineup.NativePlayerHost/obj/
 docs/runs/*
 !docs/runs/README.md
 !docs/runs/2026-07-22-tier3-parity-correction/

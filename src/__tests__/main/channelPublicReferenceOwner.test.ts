@@ -57,7 +57,7 @@ test('projects program references and resolves only current generation channel r
         genres: [],
         startsAtMs: 1,
         endsAtMs: 2,
-        artwork: null,
+        artwork: { poster: null, background: null },
       }],
     }],
     nowWatching: null,
@@ -74,12 +74,16 @@ test('owns and sanitizes artwork alt text without retaining hostile scheduled co
   const owner = new ChannelPublicReferenceOwner();
   const aggregate = createAggregate([channel('channel-1', 1, false, null)]);
   const generation = owner.createGeneration(aggregate);
-  const sourceArtwork = Object.freeze({
+  const sourcePoster = Object.freeze({
     id: 'artwork-ABCDEFGHIJKLMNOP',
     kind: 'poster' as const,
     expiresAtMs: 10_000,
     altText: 'Bearer secret https://private.invalid/<poster>\u0000'.repeat(8),
     status: 'available' as const,
+  });
+  const sourceArtwork = Object.freeze({
+    poster: sourcePoster,
+    background: Object.freeze({ ...sourcePoster, id: 'artwork-QRSTUVWXYZabcdef', kind: 'background' as const }),
   });
   const projected = owner.projectPresentation(generation, {
     channels: [{
@@ -95,10 +99,12 @@ test('owns and sanitizes artwork alt text without retaining hostile scheduled co
   const program = projected.channels[0]!.programs[0]!;
 
   assert.equal(program.title, '[redacted]');
-  assert.equal(program.artwork?.altText, '[redacted]');
-  assert.notEqual(program.artwork, sourceArtwork);
+  assert.equal(program.artwork.poster?.altText, '[redacted]');
+  assert.equal(program.artwork.background?.altText, '[redacted]');
+  assert.notEqual(program.artwork.poster, sourceArtwork.poster);
+  assert.notEqual(program.artwork.background, sourceArtwork.background);
   assert.equal(Object.isFrozen(program.artwork), true);
-  assert.deepEqual(sourceArtwork, {
+  assert.deepEqual(sourceArtwork.poster, {
     id: 'artwork-ABCDEFGHIJKLMNOP', kind: 'poster', expiresAtMs: 10_000,
     altText: 'Bearer secret https://private.invalid/<poster>\u0000'.repeat(8), status: 'available',
   });

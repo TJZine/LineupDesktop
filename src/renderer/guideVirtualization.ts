@@ -1,26 +1,30 @@
 import type { EpgChannelRowViewModel } from './epg.js';
+import type { GuideCompleteRowInterval } from './guideRowDensity.js';
 
 export const GUIDE_DOM_ROW_CAP = 24;
 export const GUIDE_DOM_CELL_CAP = 400;
-export const GUIDE_ROW_BUFFER = 3;
+export const GUIDE_ROW_BUFFER = 2;
 export const GUIDE_DOM_TIME_BUFFER_MS = 120 * 60_000;
 
-export interface GuidePreloadProfile {
-  readonly channelLimit: 12 | 24;
+export type GuidePerformanceProfile = 'auto' | 'reduced-resource';
+
+export interface GuidePerformanceProfileConfig {
+  /** Upper bound retained for cache/warm-page geometry; foreground sizing is viewport-derived. */
+  readonly channelLimit: typeof GUIDE_DOM_ROW_CAP;
   readonly timeBufferMs: number;
   readonly maximumEntries: 6 | 12;
   readonly maximumPrograms: 6_000 | 12_000;
 }
 
-export const DEFAULT_GUIDE_PRELOAD_PROFILE: GuidePreloadProfile = Object.freeze({
-  channelLimit: 12,
-  timeBufferMs: 120 * 60_000,
+export const REDUCED_RESOURCE_GUIDE_PRELOAD_PROFILE: GuidePerformanceProfileConfig = Object.freeze({
+  channelLimit: GUIDE_DOM_ROW_CAP,
+  timeBufferMs: 360 * 60_000,
   maximumEntries: 6,
   maximumPrograms: 6_000,
 });
 
-export const AGGRESSIVE_GUIDE_PRELOAD_PROFILE: GuidePreloadProfile = Object.freeze({
-  channelLimit: 24,
+export const AUTO_GUIDE_PRELOAD_PROFILE: GuidePerformanceProfileConfig = Object.freeze({
+  channelLimit: GUIDE_DOM_ROW_CAP,
   timeBufferMs: 360 * 60_000,
   maximumEntries: 12,
   maximumPrograms: 12_000,
@@ -32,10 +36,19 @@ export interface GuideVirtualRangeInput {
   readonly viewportHeight: number;
   readonly rowOuterSize: number;
   readonly rowStartOffset?: number;
+  readonly completeRowInterval?: GuideCompleteRowInterval;
   readonly windowStartMs: number;
   readonly windowEndMs: number;
   readonly focusedRowIndex: number;
   readonly focusedProgramId: string | null;
+  readonly rowOffset?: number;
+  readonly totalRowCount?: number;
+}
+
+export function projectGuideForegroundChannelLimit(completeVisibleRows: number, overscanRows = GUIDE_ROW_BUFFER): number {
+  const visible = Number.isFinite(completeVisibleRows) ? Math.max(1, Math.trunc(completeVisibleRows)) : 1;
+  const overscan = Number.isFinite(overscanRows) ? Math.max(0, Math.trunc(overscanRows)) : 0;
+  return Math.min(GUIDE_DOM_ROW_CAP, visible + overscan * 2);
 }
 
 export interface GuideVirtualRange {
@@ -48,7 +61,8 @@ export interface GuideVirtualRange {
 
 /** Pure Desktop Guide row/cell projection. Layout values are sampled by the DOM lifecycle owner. */
 export function projectGuideVirtualRange(input: GuideVirtualRangeInput): GuideVirtualRange {
-  const rowCount = input.rows.length;
+  const rowOffset = Math.max(0, Math.trunc(input.rowOffset ?? 0));
+  const rowCount = Math.max(input.rows.length, Math.trunc(input.totalRowCount ?? input.rows.length));
   if (rowCount === 0) {
     return { rowIndexes: [], rowPlacements: [], programIds: new Set(), leadingRows: 0, trailingRows: 0 };
   }
@@ -57,40 +71,65 @@ export function projectGuideVirtualRange(input: GuideVirtualRangeInput): GuideVi
   const viewportHeight = Math.max(1, finite(input.viewportHeight, rowOuterSize));
   const firstVisible = clamp(Math.floor(scrollTop / rowOuterSize), 0, rowCount - 1);
   const lastVisible = clamp(Math.ceil((scrollTop + viewportHeight) / rowOuterSize) - 1, firstVisible, rowCount - 1);
-  const visibleCount = lastVisible - firstVisible + 1;
+  const intervalStart = input.completeRowInterval === undefined
+    ? firstVisible
+    : clamp(Math.trunc(input.completeRowInterval.start), 0, rowCount - 1);
+  const intervalCount = input.completeRowInterval === undefined
+    ? lastVisible - firstVisible + 1
+    : Math.max(0, Math.trunc(input.completeRowInterval.count));
+  const intervalEnd = intervalCount === 0
+    ? intervalStart
+    : clamp(intervalStart + intervalCount - 1, intervalStart, rowCount - 1);
+  // Keep the original viewport/overscan projection so spacer geometry remains
+  // stable; the complete interval is applied by the DOM owner as the
+  // presentation boundary for mounted rows.
+  const projectionStart = firstVisible;
+  const projectionEnd = lastVisible;
+  const visibleCount = projectionEnd - projectionStart + 1;
   const visibleRowsClamped = visibleCount > GUIDE_DOM_ROW_CAP;
   const clampedVisibleStart = visibleRowsClamped
     ? clamp(
-      input.focusedRowIndex >= firstVisible && input.focusedRowIndex <= lastVisible
+      input.focusedRowIndex >= projectionStart && input.focusedRowIndex <= projectionEnd
         ? input.focusedRowIndex - Math.floor(GUIDE_DOM_ROW_CAP / 2)
-        : firstVisible,
-      firstVisible,
-      lastVisible - GUIDE_DOM_ROW_CAP + 1,
+        : projectionStart,
+      projectionStart,
+      projectionEnd - GUIDE_DOM_ROW_CAP + 1,
     )
-    : firstVisible;
-  const clampedVisibleEnd = visibleRowsClamped ? clampedVisibleStart + GUIDE_DOM_ROW_CAP - 1 : lastVisible;
+    : projectionStart;
+  const clampedVisibleEnd = visibleRowsClamped
+    ? clampedVisibleStart + GUIDE_DOM_ROW_CAP - 1
+    : projectionEnd;
   const candidates = new Set<number>();
   for (let index = Math.max(0, clampedVisibleStart - GUIDE_ROW_BUFFER);
     index <= Math.min(rowCount - 1, clampedVisibleEnd + GUIDE_ROW_BUFFER); index += 1) candidates.add(index);
 
   const protectedRows = new Set<number>();
-  for (let index = clampedVisibleStart; index <= clampedVisibleEnd; index += 1) protectedRows.add(index);
+  const protectedRange = visibleRowsClamped
+    ? { start: clampedVisibleStart, end: clampedVisibleEnd }
+    : intervalCount > 0 ? { start: intervalStart, end: intervalEnd } : null;
+  if (protectedRange !== null) {
+    for (let index = protectedRange.start; index <= protectedRange.end; index += 1) protectedRows.add(index);
+  }
   if (!visibleRowsClamped && input.focusedRowIndex >= 0 && input.focusedRowIndex < rowCount && protectedRows.size < GUIDE_DOM_ROW_CAP) {
     candidates.add(input.focusedRowIndex);
     protectedRows.add(input.focusedRowIndex);
   }
-  const rowIndexes = [...candidates];
+  const rowsByAbsoluteIndex = new Map(input.rows.map((row, localIndex) => [
+    row.absoluteIndex ?? rowOffset + localIndex,
+    row,
+  ]));
+  const rowIndexes = [...candidates].filter((index) => rowsByAbsoluteIndex.has(index));
   while (rowIndexes.length > GUIDE_DOM_ROW_CAP) {
     const evictable = rowIndexes.filter((index) => !protectedRows.has(index));
-    const source = evictable;
-    if (source.length === 0) break;
-    const remove = source.sort((left, right) => rowDistance(right, firstVisible, lastVisible) - rowDistance(left, firstVisible, lastVisible))[0];
-    if (remove === undefined) throw new RangeError('Guide row eviction could not satisfy the mounted row cap.');
+    if (evictable.length === 0) break;
+    const remove = evictable.sort(
+      (left, right) => rowDistance(right, projectionStart, projectionEnd) - rowDistance(left, projectionStart, projectionEnd),
+    )[0];
     rowIndexes.splice(rowIndexes.indexOf(remove), 1);
   }
   rowIndexes.sort((left, right) => left - right);
 
-  const cells = rowIndexes.flatMap((rowIndex) => (input.rows[rowIndex]?.programs ?? [])
+  const cells = rowIndexes.flatMap((rowIndex) => (rowsByAbsoluteIndex.get(rowIndex)?.programs ?? [])
     .filter((program) => program.startsAtMs < input.windowEndMs + GUIDE_DOM_TIME_BUFFER_MS
       && program.endsAtMs > input.windowStartMs - GUIDE_DOM_TIME_BUFFER_MS)
     .map((program) => ({
@@ -136,7 +175,7 @@ export class GuidePresentationLru<T> {
   readonly #entries = new Map<string, GuideCacheEntry<T>>();
   #programCount = 0;
 
-  constructor(private readonly profile: GuidePreloadProfile) {}
+  constructor(private readonly profile: GuidePerformanceProfileConfig) {}
 
   get(
     key: string,
@@ -213,16 +252,16 @@ export function projectGuideCacheIdentity(input: Readonly<{
   revision: number;
   selectedLibraryId: string | null;
   pastItemsWindow: string;
-  guideDensity: string;
-  aggressivePreload: boolean;
+  guideTimeRange: string;
+  guidePerformanceProfile: string;
 }>): string {
   return JSON.stringify([
     input.scopeToken,
     input.revision,
     input.selectedLibraryId,
     input.pastItemsWindow,
-    input.guideDensity,
-    input.aggressivePreload,
+    input.guideTimeRange,
+    input.guidePerformanceProfile,
   ]);
 }
 

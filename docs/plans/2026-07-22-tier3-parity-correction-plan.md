@@ -2230,6 +2230,521 @@ work. Product edits remain blocked until an independent
 `lineup-desktop-feature-review` approves this amendment and explicitly approves
 Package 2A with no unresolved material finding.
 
+### WIN-TEST-006 production playback remediation amendment (2026-08-10)
+
+This amendment is the current Tier 3 execution authority for the Windows
+production-playback defect recorded as `WIN-TEST-006`. It supersedes only the
+later statement that WS2 has no executable continuation authority and the
+normal WS5 sequencing while this blocker is open. It does not reopen completed
+WS2 recovery packages, promote a playback capability, close any parity row, or
+by itself authorize Guide appearance work. The plan-review gate,
+implementation, full automated verification, and final adversarial
+implementation review are now
+complete at product checkpoint `e7f1338`; operator-assisted Windows playback
+proof remains mandatory open debt under the sequencing replan below.
+
+**Observed defect.** In a production-mode Windows run, selecting any tested
+channel leaves the Player surface black and silent with no visible error. A
+Mini Guide channel change returns to a persistent Changing channel transition.
+Electron remains responsive, but no native-helper process appears and no
+Windows application or .NET crash is recorded. The current persisted lineup
+contains 459 auto-generated channels; its current source is a collection.
+Those scale facts remain Guide follow-up evidence, but they are not the cause
+of this universal pre-helper playback rejection.
+
+**Deterministic cause.** The production identity seam is internally
+inconsistent:
+
+- `PlexLibraryMinimalAdapter` and `ContentItemMapper` correctly preserve the raw
+  Plex `ratingKey` in scheduler content;
+- `PlexPlaybackBridge` passes that raw `ratingKey` into the main-only stream
+  resolver;
+- `PlaybackMediaDetailPort` incorrectly accepts only values beginning with the
+  synthetic public prefix `plex-media-`, returns `null` for every raw scheduled
+  key, and therefore prevents metadata resolution and helper dispatch; and
+- `PlexPlaybackRuntime` emits the resulting renderer-safe `error` event without
+  settling that failure through `DesktopPlayerAdapter`, the sole owner of the
+  authoritative `PlayerSnapshot`. No adapter-owned `state.changed` event is
+  produced, so the overlay retains the post-tune transition indefinitely.
+
+The prior synthetic `plex-media-` value belonged only to renderer-safe
+`PlayerMediaSummary.id` projection after metadata resolution, not to Plex
+locator custody. The current correction additionally removes its raw-key
+encoding: the public ID is now an independently allocated opaque value and is
+never required, stripped, or reconstructed at the privileged metadata seam.
+
+#### Goal and non-goals
+
+Restore the smallest production path from a raw scheduled Plex `ratingKey` to
+main-owned metadata resolution and helper dispatch, and settle a current
+candidate-resolution failure through the main-owned player adapter into an
+authoritative safe error snapshot that clears the channel transition and
+exposes existing recovery UI. The pre-retest adversarial audit also discovered
+that continuous unchanged player renders repeatedly close the native-video
+aperture; this package must keep an already-applied presentation open when
+mode, request identity, and normalized bounds are unchanged.
+
+This package does not:
+
+- broaden MP4/H.264/AAC Direct Play, subtitle, audio switching, HDR, Direct
+  Stream, or transcode capability truth;
+- change channel persistence, scheduler identity, Guide presentation or
+  appearance, source-resolution performance, or the 459-channel lineup;
+- add an IPC method, public contract field, persistence schema, dependency,
+  helper protocol, native-helper edit, package change, or compatibility prefix
+  fallback;
+- expose a live raw rating key, token, URL, header, Plex payload, connection,
+  path, native handle, raw exception, private playback field, or helper detail
+  through renderer-safe load/events/snapshots/projections, preload, renderer,
+  diagnostics, support bundles, or evidence. The main-only resolver result's
+  `privatePlayback` branch may retain the privileged playback URL/header needed
+  for helper setup, but it may move only through the privileged main dispatch
+  context and never through those renderer/evidence surfaces; or
+- claim that every library item is playable. The Windows acceptance sample
+  must satisfy the unchanged conservative production profile.
+
+#### Architecture and invariants
+
+- Raw Plex `ratingKey` custody remains main-only. Rename the private resolver
+  and media-detail input field to `ratingKey` so its meaning cannot be confused
+  with renderer-safe media identity. `PlexPlaybackBridge` passes the exact raw
+  scheduled key; `PlaybackMediaDetailPort` validates it as a nonempty private
+  key and passes it directly to the existing main-owned metadata transport.
+- `PlexPlaybackBridge` retains only the current raw-key-to-public-ID pair and
+  allocates its renderer media ID as an opaque random value independently of
+  `ratingKey`. Repeated resolution of that current key is stable without an
+  unbounded cache. Existing runtime cleanup invalidates the pair on logout,
+  server change, profile change, and teardown, so an equal Plex key in another
+  identity context cannot alias the old renderer ID. The bridge captures the
+  identity generation and claims the current ID before any settings,
+  capability, or resolver await; invalidation increments that generation and
+  clears the pair. A stale async completion remains subject to runtime epoch
+  quarantine and cannot republish its old pair into the current generation.
+  The bridge passes opaque `mediaId` and exact raw `ratingKey` as distinct
+  main-only resolver inputs.
+  `PlexStreamResolver` uses only the supplied opaque ID in renderer-safe load,
+  decision, diagnostic, session, and private-descriptor media summaries;
+  `PlaybackMediaDetailPort` receives only the raw key for main-owned metadata
+  transport. No public ID may expose, prefix, hash, truncate, or otherwise
+  encode the raw key.
+- `PlexStreamResolverResult` retains its deliberate two-part trust boundary.
+  Renderer-safe `load` plus every later event, snapshot, projection, and
+  support-bundle/evidence surface must exclude the raw rating key, URL, header,
+  and every `privatePlayback` field. The sibling main-only `privatePlayback`
+  result may retain its privileged `playbackUrl` and `credentialHeader` and may
+  be passed only as `PrivilegedPlaybackDispatchContext` during privileged main
+  player dispatch. It must never be copied into a runtime-returned event,
+  adapter snapshot, preload/renderer value, diagnostic, support bundle, or
+  evidence artifact.
+- `DesktopPlayerAdapter` remains the sole `PlayerSnapshot` authority. Add one
+  main-only, synchronous terminal-error settlement operation to
+  `PlexPlaybackRuntimePlayerPort`. Its input is the already-sanitized original
+  `error` event plus the retained prior adapter snapshot request id, and its
+  return is the complete event batch for that failure. The adapter-backed
+  `createDesktopPlayerAdapterRuntimePort` delegates settlement to the adapter
+  rather than constructing a snapshot or `state.changed` event itself.
+- `playbackRuntimeBootstrap.ts` owns both runtime-port bindings. With an
+  adapter, the bootstrap uses the adapter-backed delegation above. Without an
+  adapter, its fallback settlement returns exactly the already-sanitized
+  original `error` event and nothing else: it emits no `state.changed`, mutates
+  no snapshot, and makes no snapshot-authority claim. The runtime publishes
+  exactly the events returned by either binding once and never pre-publishes or
+  duplicates the original error.
+- Runtime epoch is the first currentness guard. After candidate resolution
+  rejects, `PlexPlaybackRuntime` checks the captured start epoch immediately
+  before settlement. A superseded epoch is quarantined by the existing stale
+  path and must not call the adapter or publish the candidate error.
+- Adapter snapshot request identity is the second currentness guard. The
+  adapter receives the retained `previousRequestId` and synchronously accepts
+  exactly two current states after scoped cleanup: the same previous request
+  when cleanup failed and retained it, or `null` when cleanup cleared the
+  snapshot. Every other request ID is a newer owner and is rejected without
+  snapshot mutation, original-error publication, or delayed retry. This check
+  and accepted error mutation occur synchronously so a concurrent renderer
+  load cannot be overwritten after the scoped host cleanup await.
+- For an accepted settlement, the adapter applies its existing error
+  sanitization and authoritative mutation: preserve the current snapshot
+  request identity, set `status: 'error'`, `playing: false`, and `lastError` to
+  the safe error, then return exactly one safe `error` event followed by one
+  adapter-owned `state.changed` event whose snapshot equals `getSnapshot()`.
+  The runtime publishes only those adapter-returned events and does not also
+  emit its original error. The renderer continues to consume
+  `state.changed`; `playerBridgeSubscription` must not synthesize snapshots.
+- Failure settlement must not create a second recovery, focus, timer,
+  transition, snapshot, or renderer currentness owner.
+- `PlaybackMediaDetailPort` diagnostics must contain only fixed categorical
+  context for lookup failure. Remove the raw `ratingKey` and dynamic exception
+  name/message from the recorded context; do not hash, truncate, prefix, or
+  otherwise encode the key as a substitute identifier.
+- Existing renderer 30-second bridge watchdogs, Plex transport 20-second
+  request timeouts, and native-host 5-second command timeouts remain unchanged.
+  No new aggregate timeout or cancellation layer is justified by this
+  deterministic immediate rejection. If the corrected identity path later
+  exposes a genuinely nonsettling source, transport, or helper operation,
+  preserve the evidence and replan that lifecycle owner rather than adding a
+  Promise race that leaves privileged work running.
+- Existing support-bundle export is useful audit evidence but is not a pre-code
+  gate now that source proves the failure. If the still-open reproduction can
+  export a bundle without losing the session, retain only its redacted local
+  result; absence of a bundle does not block this package.
+- No upstream source is copied or behaviorally adapted. The import ledger needs
+  no entry unless implementation actually imports an upstream slice, which is
+  a stop/replan condition.
+
+#### Files in scope
+
+The worker may discover the exact cohesive files within this narrow boundary:
+
+- main-only Plex playback identity input and metadata lookup under
+  `src/main/player/plexPlaybackBridge.ts` and `src/main/plex/streamResolver.ts`,
+  `streamResolverComposition.ts`, and `playbackMediaDetailPort.ts`;
+- main-owned current failure settlement under
+  `src/main/player/plexPlaybackRuntime.ts`, `plexPlaybackComposition.ts`, and
+  `desktopPlayerAdapter.ts`, plus the exact adapter/adapter-less wiring in
+  `src/main/player/playbackRuntimeBootstrap.ts`;
+- focused main/player and main/Plex tests, including one production-identity
+  integration regression and one adapter/runtime settlement integration
+  regression, with the adapter-less fallback covered explicitly in
+  `src/__tests__/main/player/playbackRuntimeBootstrap.test.ts`; and
+- the review-discovered presentation stability correction under
+  `src/renderer/player/nativePlayerPresentationController.ts` and its focused
+  renderer test only, plus an integration regression proving the real
+  subscription/adapter event path clears an active transition into recovery;
+  and
+- this amendment and playback/current-state docs only if implementation makes
+  their ownership wording stale.
+
+`src/renderer/playerBridgeSubscription.ts`,
+`src/renderer/playerOverlayController.ts`, `src/main/index.ts`,
+`src/renderer/index.ts`, and `src/preload/index.cts` are read-only for this
+package. `playbackRuntimeBootstrap.ts` is the sole writable composition owner,
+limited to the two terminal-settlement bindings above and consuming the
+bridge-owned opaque `PlexStreamResolverInput.mediaId` in its existing
+development fake resolver. The fake keeps deterministic media behavior while
+using that already-allocated opaque ID rather than deriving one from the raw
+key. Any requested edit to another composition root stops implementation
+and returns to plan review.
+
+#### Files out of scope
+
+- `src/contracts/**`, `src/preload/**`, `src/native-helper/**`,
+  `src/main/player/streamPolicy/**`, `src/domain/**`, channel/Guide production
+  owners, renderer subscription/overlay owners, persistence, package/lockfile,
+  installer, and release owners
+- capability profile literals, playback policy, track/subtitle/audio/HDR
+  behavior, Guide UI/CSS, the operator's persisted lineup, or local Plex data
+- broad diagnostics changes, raw support-bundle material, and any compatibility
+  acceptance of both raw and synthetic metadata locators
+
+#### Architecture health
+
+Current line-count evidence is: `plexPlaybackBridge.ts` 260,
+`streamResolver.ts` 752, `streamResolverComposition.ts` 56,
+`playbackMediaDetailPort.ts` 76, `plexPlaybackRuntime.ts` 795,
+`plexPlaybackComposition.ts` 122, `desktopPlayerAdapter.ts` 680, and
+`playbackRuntimeBootstrap.ts` 324 lines. `streamResolver.ts`,
+`plexPlaybackRuntime.ts`, and `desktopPlayerAdapter.ts` are attention owners in
+the write boundary; `playbackRuntimeBootstrap.ts` is the focused composition
+owner required to keep adapter selection outside runtime policy.
+
+```text
+Owner: src/main/plex/streamResolver.ts
+Existing responsibility: main-only Plex stream resolution and renderer-safe media projection
+New behavior: private input vocabulary names the already-required raw rating key explicitly
+Decision: cohesive growth
+Evidence: no new policy or lifecycle is added; the edit removes an identity ambiguity at this owner's existing port and preserves its sole public media-id projection
+```
+
+```text
+Owner: src/main/player/plexPlaybackRuntime.ts
+Existing responsibility: epoch/currentness ownership and orchestration of candidate resolution into the player port
+New behavior: route a current candidate-resolution failure through the adapter-backed terminal settlement port
+Decision: cohesive growth
+Evidence: the runtime already owns the captured start epoch and candidate-resolution catch; it adds no renderer state and delegates snapshot mutation
+```
+
+```text
+Owner: src/main/player/desktopPlayerAdapter.ts
+Existing responsibility: sole authoritative PlayerSnapshot mutation, request custody, error sanitization, and state.changed emission
+New behavior: synchronously settle a runtime error only when expected snapshot request identity still matches
+Decision: cohesive growth
+Evidence: the change reuses the adapter's existing error mutation/event rules and prevents a second snapshot owner
+```
+
+```text
+Owner: src/main/player/playbackRuntimeBootstrap.ts
+Existing responsibility: shell-mode and adapter-present/adapter-less runtime-port composition
+New behavior: bind terminal settlement to adapter delegation or the exact safe no-adapter fallback, plus mechanically consume the renamed raw-rating-key input in the existing development fake resolver
+Decision: cohesive growth
+Evidence: this is wiring for the two already-existing bootstrap branches and a type-required private vocabulary rename; the file gains no snapshot mutation, sanitization, playback policy, or renderer authority
+```
+
+`desktopPlayerAdapter.ts` is an existing named hotspot. Its narrow cohesive
+growth is permitted only because moving snapshot mutation elsewhere would
+violate its sole-authority invariant; no unrelated cleanup or extraction is
+authorized. The earlier broad statement that no composition root is writable
+does not apply to this amendment: `playbackRuntimeBootstrap.ts` is writable for
+the exact port wiring above, while Electron main, preload, renderer, and every
+other composition root remain read-only. Run maintainability proof and fresh
+architecture review because the named hotspot, composition wiring, native
+playback, and Plex trust boundaries are review-required even though all files
+remain below 800 lines.
+
+#### Execution package WIN-TEST-006A — raw identity and terminal settlement
+
+This is one atomic execution package and the only currently authorized product
+unit. Parallel product edits are prohibited.
+
+1. Keep exact raw `ratingKey` vocabulary at the privileged metadata seam, and
+   add a distinct opaque `mediaId` resolver input allocated by
+   `PlexPlaybackBridge`. Retain only the current mapping and invalidate it on
+   existing logout/server/profile/teardown cleanup. Remove every raw-key-derived
+   public-ID projection; do not accept a prefixed locator or encode the raw key
+   in another format.
+2. Make `PlexStreamResolver` project the bridge-owned opaque ID consistently
+   through every renderer-safe media summary while `PlaybackMediaDetailPort`
+   continues to pass only the raw key to main-owned metadata transport.
+3. Add the synchronous adapter-backed error-settlement operation to the runtime
+   player port and route the epoch-current candidate-resolution failure through
+   it with the retained `previousRequestId`. The adapter accepts settlement
+   only when that request remains current or scoped cleanup cleared it to
+   `null`; every newer request is quarantined. The adapter, not the
+   runtime/composition/renderer, mutates the snapshot and produces
+   `state.changed`. `PlexPlaybackRuntime` treats the returned batch as the full
+   settlement and publishes it exactly once without separately adding or
+   emitting its original error. Reuse existing overlay reconciliation; do not
+   change renderer subscription, overlay timers, recovery actions, or DOM
+   presentation.
+4. Add a production-identity integration regression using real bridge,
+   resolver, and media-detail owners with injected fake main transport. It must
+   begin with an unprefixed scheduled rating key, assert the exact raw key is
+   used for metadata lookup, and assert the successful trust split: renderer-
+   safe `load`/decision projection excludes the raw key, URL, header, and every
+   private field, while the main-only result may retain dummy privileged URL/
+   header material only under `privatePlayback` for later privileged dispatch.
+5. Extend that boundary proof with a forced metadata failure and a diagnostic
+   store assertion that the opaque dummy rating key and raw exception
+   name/message are absent while fixed safe operation/status/reason context is
+   retained.
+6. Add adapter/runtime/composition regression proof that an epoch-current
+   candidate failure with an idle/null-request adapter snapshot produces one
+   adapter-owned error snapshot plus the ordered safe `error`, `state.changed`
+   event pair; `getSnapshot()` equals the emitted snapshot; the existing
+   renderer subscription consumes that `state.changed` and an active channel
+   transition clears into existing recovery UI. Prove separately that a stale
+   runtime epoch never calls settlement, both retained-prior and cleared-null
+   cases settle, and neither can mutate or publish over a newer adapter request,
+   including a load begun while scoped host cleanup is pending.
+7. Extend `src/__tests__/main/player/playbackRuntimeBootstrap.test.ts` to prove
+   both bootstrap branches. The adapter-backed port delegates terminal
+   settlement and returns its complete ordered batch. The adapter-less fallback
+   returns only the same already-sanitized original `error` event, produces no
+   `state.changed`, claims no snapshot authority, and the runtime callback
+   observes that one returned event exactly once. The privileged main dispatch
+   proof must also show that `privatePlayback` is passed only in
+   `PrivilegedPlaybackDispatchContext` and is absent from returned runtime
+   events and snapshots.
+8. Fix the review-confirmed black-video presentation loop in
+   `nativePlayerPresentationController.ts`. Repeated reconciliation with the
+   same presentation mode, request id, and normalized bounds must not create a
+   revision, call the bridge again, or close an already-open aperture. An
+   actual changed/hidden request, teardown, failed acknowledgement, or required
+   deferred lifecycle retry keeps the existing opaque-until-applied behavior.
+   Add a regression that applies one presentation, then simulates repeated
+   unchanged render/time-update reconciliations and asserts zero additional
+   bridge calls and an open aperture. Do not change `renderer/index.ts`, the
+   subscription, CSS, helper event cadence, or public presentation contracts.
+9. Add the missing end-to-end settlement regression required by step 6: route
+   the real runtime/adapter `state.changed` failure through
+   `subscribePlayerBridge` with an active channel transition and assert that
+   the transition clears and existing recovery UI becomes available. Do not
+   weaken this to direct snapshot injection.
+
+**Verification classification:** `new regression/contract test required`.
+
+Run and observe, in order:
+
+```sh
+node --import tsx --test src/__tests__/main/player/productionPlaybackMediaIdentityIntegration.test.ts src/__tests__/main/player/desktopPlayerAdapter.test.ts src/__tests__/main/player/plexPlaybackBridge.test.ts src/__tests__/main/player/plexPlaybackComposition.test.ts src/__tests__/main/player/plexPlaybackRuntime.test.ts src/__tests__/main/plexPlaybackMediaDetailPort.test.ts src/__tests__/main/plexStreamResolver.test.ts src/__tests__/main/plexStreamResolverComposition.test.ts src/__tests__/renderer/playerOverlayController.test.ts src/__tests__/renderer/nativePlayerPresentationController.test.ts
+node --import tsx --test src/__tests__/main/player/playbackRuntimeBootstrap.test.ts
+npm run typecheck
+npm run verify:architecture
+npm run verify:maintainability
+npm run verify:redaction
+npm run build:electron
+npm run smoke:electron
+npm run verify
+git diff --check
+```
+
+The focused command may use the worker's actual integration-test filename if
+the same exact public seam is added to an existing focused file; record the
+observed command precisely. All commands must pass. Tests use opaque dummy keys
+and fixed safe metadata only.
+
+After clean implementation review, run operator-assisted Windows proof against
+the unchanged production profile:
+
+1. build the .NET Release helper and Electron output from the reviewed commit;
+2. launch with production mode and the existing adjacent approved libmpv
+   prerequisite;
+3. tune one known MP4/H.264/AAC Direct Play item and observe a helper process,
+   terminal `playing` state, visible moving video, and audible audio;
+4. switch through Mini Guide to a second known-compatible channel and observe
+   the transition settle, the helper remain healthy or be cleanly replaced,
+   and the new program play; and
+5. export the existing redacted support bundle and confirm no token, URL,
+   header, rating key, path, handle, raw payload, or helper output is exposed.
+
+Unsupported media must settle into the existing safe visible error/recovery
+state with no persistent spinner; it does not justify capability promotion.
+The package fixes `WIN-TEST-006` only when at least one known-compatible item
+plays with video and audio and the Mini Guide switch also settles. Otherwise
+record the exact safe terminal phase and return to planning; do not claim
+playback, WS5, native-composition, or RD-27 closeout.
+
+#### WIN-TEST-006 sequencing replan — Guide execution with mandatory proof debt (2026-08-10)
+
+This replan becomes execution authority only after an independent Tier 3 plan
+review reports no unresolved material finding. At authoring checkpoint
+`6de7597`, the worktree is clean, the `WIN-TEST-006A` product implementation,
+automated verification, and implementation review are complete at `e7f1338`,
+and the ignored Windows run bundle still records the operator proof as pending.
+Computer Use can inspect the Electron window in this controller environment,
+but input actions fail with `node_repl exec context not found`; that control
+failure is not playback evidence and must not be recorded as a pass or product
+failure.
+
+The open two-channel operator proof is reclassified from a pre-Guide product
+sequencing gate to mandatory consolidated Windows/native campaign debt. It is
+not waived, closed, or weakened. After this replan's clean independent review,
+the next authorized product package is **G0** in
+`docs/plans/2026-08-10-guide-continuous-lineup-visual-parity-plan.md`.
+That controller may execute G0 through G6 serially through their existing
+verification, independent-review, and conventional-commit gates while the
+operator proof remains pending. No product package outside that Guide plan,
+including WS6–WS9 or another playback change, is opened by this sequencing
+decision.
+
+The consolidated G6 Windows/live/native-composition campaign must carry and
+execute the exact `WIN-TEST-006` two-channel proof above together with the
+Guide/native evidence it already owns. G6, affected playback or Guide parity
+rows, WS5, and RD-27 Windows/native closeout cannot be declared complete until
+that proof passes. An environment that can inspect but cannot inject operator
+input may preserve the pending status and continue only through the pre-G6
+Guide packages; it cannot substitute synthetic input, automation, a historical
+capture, or the Computer Use failure for live proof. If the proof is attempted
+and exposes a playback/product failure, stop before the next product package,
+preserve only redacted evidence, and return to the playback quality loop for a
+reviewed remediation or proof-policy replan.
+
+Before G0 and again before every later Guide package, the controller must
+freeze the package's exact selected write-file list and pass this collision
+gate before any product edit:
+
+1. Record `git status --short --untracked-files=all`,
+   `git diff --name-only`, and `git diff --cached --name-only` at the expected
+   committed predecessor.
+2. Compare every selected path against all pre-existing tracked and untracked
+   changes and every other active writer's declared write-file list. Any exact
+   path match is a collision; stop that package without editing, staging,
+   stashing, overwriting, or absorbing the other work.
+3. Treat the `WIN-TEST-006` live-proof writer as proof-only while Guide work is
+   active. Its writable surface is limited to the ignored Windows run bundle
+   and generated build/proof outputs. It has no concurrent tracked product,
+   test, plan, or authority-doc writer.
+4. Exclude the exact committed `WIN-TEST-006A` product/test manifest returned
+   by `git diff-tree --no-commit-id --name-only -r e7f1338` from every Guide
+   package's selected write list. This immutable commit manifest, not a broad
+   directory pattern or an inferred owner list, defines the overlap set. A
+   discovered need to edit one of those paths is a collision and requires a
+   reviewed scope/sequencing amendment before either owner writes.
+
+The collision gate passes only when all selected paths are absent from other
+changes/writer lists and the proof writer remains proof-only. Unrelated user
+changes outside the selected list remain untouched and are not a reason to
+clean or reset the worktree.
+
+Rollback and replan rules are exact:
+
+- Before G0 product work begins, this documentation-only sequencing replan may
+  be reverted without reverting `e7f1338`; the operator proof simply resumes
+  its former pre-Guide blocking position.
+- After any Guide package begins or commits, do not revert this prose to imply
+  a product rollback. Use that Guide package's reviewed rollback checkpoint,
+  preserve prior commits, and issue a new sequencing replan.
+- Never remove or mark the operator proof complete as part of rollback. It
+  remains mandatory until observed passing evidence exists.
+- Stop and return to plan review if the expected committed predecessor or
+  relevant owner baseline changes materially, the exact collision gate fails,
+  another writer needs a selected path, a Guide package needs a playback owner,
+  G6 cannot include the two-channel proof, required evidence cannot remain
+  redacted, or any required verification/review has a material finding.
+- A continued `node_repl exec context not found` control failure preserves
+  pending debt; it does not authorize G6/RD-27 closeout. An observed playback
+  failure triggers the playback remediation path above rather than further
+  Guide product work.
+
+#### Acceptance, rollback, and replan triggers
+
+- Raw scheduled rating keys resolve through main-owned metadata transport and
+  are never exposed renderer-side; the current renderer media ID is an opaque
+  independently allocated value. Repeated current resolution is stable, while
+  identity-boundary cleanup rotates it and retention remains one bounded pair.
+- With an adapter, an epoch-current candidate-resolution failure produces one
+  adapter-owned safe error snapshot and `state.changed` only when the scoped
+  cleanup retained `previousRequestId` or cleared the snapshot to `null`. A
+  stale epoch or any newer request ID cannot mutate or publish over newer
+  playback; the observed transition settles to playing or visible error
+  through existing owners.
+- The adapter-less bootstrap publishes only the one already-sanitized runtime
+  error, without synthesizing `state.changed`, duplicating the event, or
+  claiming snapshot authority.
+- `privatePlayback` remains main-only for privileged dispatch; renderer-safe
+  load/events/snapshots/projections and retained evidence contain no raw key,
+  URL, header, or private descriptor.
+- Repeated unchanged presentation reconciliations leave the acknowledged
+  aperture open and issue no bridge request, while real presentation changes
+  still close until acknowledged.
+- The real runtime/adapter/subscription path clears an active failed tune into
+  existing recovery UI rather than leaving a persistent transition.
+- Focused, full, architecture, maintainability, redaction, Electron build/smoke,
+  implementation review, and the two-channel Windows proof all pass.
+- The checkpoint is one reversible conventional commit, expected as
+  `fix(playback): resolve scheduled Plex media identity`. Rollback reverts that
+  product/test commit only and does not alter persisted channels, credentials,
+  local evidence, or prior audit-fix commits.
+
+Stop and return to plan review before editing if the fix requires a public
+contract/preload/helper/domain/channel/persistence/capability or renderer
+snapshot change; if a raw rating key would cross main custody or remain in
+diagnostics; if both prefixed and raw private formats seem necessary; if
+failure settlement cannot remain epoch-current, adapter-authoritative, and
+exact-request-guarded; if live proof reaches the helper but fails on
+codec/profile policy; if source or transport work truly exceeds existing
+deadlines; if any required verifier fails; or if evidence cannot remain
+redacted.
+
+MODEL_SUGGESTION
+PLANNER: n/a
+IMPLEMENTER: current tracked implementation role selected by the controller
+REVIEWER: current tracked reviewer
+WHY: Tier 3 native-playback/Plex identity and renderer-settlement boundaries require independent plan and implementation review.
+
+NEXT_SESSION_HANDOFF
+NEXT_SESSION_LAUNCHER: lineup-desktop-feature-review
+TASK: Review WIN-TEST-006 Sequencing Replan For Guide G0 Release
+TASK_FAMILY: feature/design
+TIER: Tier 3
+PLAN: docs/plans/2026-07-22-tier3-parity-correction-plan.md
+ARTIFACT: WIN-TEST-006 sequencing replan — Guide execution with mandatory proof debt (2026-08-10)
+FILES:
+- docs/plans/2026-07-22-tier3-parity-correction-plan.md
+- docs/plans/2026-08-10-guide-continuous-lineup-visual-parity-plan.md
+BLOCKERS: G0-G4 are landed, G5 was not activated without measured need, and WIN-TEST-006 operator proof remains mandatory G6/Windows closeout debt.
+MESSAGE:
+Treat this packet as historical sequencing evidence. Current execution authority is the Guide plan's consolidated G6 / WS5 Unit 5H handoff. Preserve the pending two-channel proof, G6/WS5/RD-27 closeout gates, exact commit-manifest collision check, and rollback/replan triggers; do not route another G0 execution.
+
 ### Current WS2 status and next authority
 
 > **Authoritative status (2026-07-28):** Packages 2A (`8dc1057`) and 2B
@@ -2237,10 +2752,14 @@ Package 2A with no unresolved material finding.
 > conservative no-op, and Package 2E closes WS2's platform-neutral
 > implementation gate. Every Package 2A/2B remediation, scope, custody, and
 > override review packet retained below is historical evidence, not executable
-> instruction. The only current continuation authority in this document is the
+> instruction. The current continuation authorities in this document are the
 > [WS3 quality-loop handoff](#whole-ws3-settings-execution-plan-2026-07-29) at
-> the end of the plan. It authorizes the whole WS3 loop, but product edits still
-> wait for the handoff's fresh plan-review gate.
+> the end of the plan and, as a named blocking-defect exception, the
+> [WIN-TEST-006 production playback remediation amendment](#win-test-006-production-playback-remediation-amendment-2026-08-10).
+> The WIN-TEST-006 exception takes execution precedence until it is closed or
+> replanned. The 2026-08-10 sequencing replan above satisfies that branch only
+> after its own clean independent review. Guide G0-G4 have since landed, G5 was
+> not activated, and the live proof remains mandatory G6/Windows closeout debt.
 
 **ACTIVE_WS2_MAC_COMPLETION_OVERRIDE_2026_07_28:** the user's latest explicit
 direction supersedes every conflicting Windows-machine, `.NET` Release-build,
@@ -10678,6 +11197,14 @@ The remaining authoritative sequence is:
    proof runner, archive/transfer custody, native observer, or Windows command.
    This gate must not assume that the deferred 5H-A–5H-C files, scripts, or
    archives exist, and it authorizes no product feature or contract change.
+   The blocking defect discovered by that Windows campaign is governed by the
+   separately reviewed
+   [WIN-TEST-006 production playback remediation amendment](#win-test-006-production-playback-remediation-amendment-2026-08-10).
+   Its implementation is complete at `e7f1338`. After clean independent review,
+   its 2026-08-10 sequencing replan authorizes only the serial G0–G6 packages
+   in `docs/plans/2026-08-10-guide-continuous-lineup-visual-parity-plan.md`
+   while carrying the operator proof into G6. It does not authorize any other
+   WS5 feature, contract, capability, playback change, or WS6–WS9 package.
 2. Only after that tooling gate is reviewed and implemented may the Windows
    audit/testing campaign execute the exact **5H-W — Windows-only execution
    boundary** contract above: 100% DPI feasibility followed by authorized

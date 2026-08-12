@@ -164,6 +164,7 @@ test('completed helper cleanup can Retry only the canonical current program thro
       },
     },
     channel: {
+      invalidatePlaybackMediaIdentity() {},
       async resolvePlaybackCandidate(selection) {
         requestNumber += 1;
         const requestId = `request-${String(requestNumber)}`;
@@ -193,9 +194,13 @@ test('completed helper cleanup can Retry only the canonical current program thro
         commands.push(command);
         return { ok: true };
       },
+      settleTerminalError(event) {
+        return [event];
+      },
       async cleanup() {
         playerCleanupStarted.resolve(undefined);
         await playerCleanupRelease.promise;
+        return { ok: true, events: [] };
       },
     },
     pms: {

@@ -58,13 +58,23 @@ distribution.
 
 Package 4 and WS3 own a separate, non-secret Desktop Settings record at
 `<appData>/lineup-desktop-settings.json`. Electron main alone resolves this
-path and owns serialized whole-record compare-and-swap reads, version-1 to
-version-2 migration, normalization, and replacements. Writes use a
-same-directory mode-0600 temporary file and atomic rename; corrupt or
-unsupported schema bytes are neither rewritten nor replaced. The renderer
-holds only ephemeral renderer-safe Settings values, capability projection,
-revision, and fixed status/error state and has no filesystem, browser-storage,
-migration, or fallback-store access.
+path and owns serialized whole-record compare-and-swap reads and replacements.
+Guide G1 makes version 3 the sole current exact shape and retains no
+version-specific migration, legacy reader, alias, or compatibility writer.
+Missing records receive current defaults; every malformed or non-version-3
+record is exposed as the same revision-zero corrupt snapshot without rewriting
+its bytes until an exact revision-zero replacement publishes one valid version-3
+record. Writes create an exclusive same-directory mode-0600 temporary file
+through one owned handle, write and synchronize the complete record, require a
+successful close, and then publish through atomic rename. Failures before rename
+preserve the authoritative destination and attempt best-effort owned-temp
+cleanup without replacing the fixed safe operation error. This is the strongest
+current portable Node-level publication policy in this owner; it does not make
+Windows rename power-loss durable because the seam has neither a portable
+directory-sync guarantee nor Win32 write-through behavior. The renderer holds
+only ephemeral renderer-safe Settings values, capability projection, revision,
+and fixed status/error state and has no filesystem, browser-storage, migration,
+or fallback-store access.
 
 Preload exposes exactly `settings.getSnapshot`, `settings.replace`, and
 `settings.getAudioOutputs` on the existing `window.lineupDesktop` namespace.
@@ -86,8 +96,8 @@ timeout, quarantine, crash, and cleanup use that same process owner.
 `DesktopSettingsSnapshotOwner` is a separate main-only, non-durable observation
 of the last successful Settings load or replacement. Startup hydrates it and
 native Settings policy from one durable load. Authorized Settings loads still
-delegate to `DesktopSettingsStore`, preserving fresh file observation,
-migration, and serialized compare-and-swap behavior; successful replacements
+delegate to `DesktopSettingsStore`, preserving fresh file observation and
+serialized compare-and-swap behavior; successful replacements
 publish a defensive snapshot copy before IPC success returns, while failed
 loads or replacements preserve the previous observation. Guide projects only
 revision, past-items-window policy, and library-tab enablement from defensive

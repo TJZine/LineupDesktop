@@ -18,12 +18,15 @@ const MAX_CACHE_ENTRIES = 32;
 const MAX_CACHE_BYTES = 24 * 1024 * 1024;
 const MAX_CONCURRENT_FETCHES = 4;
 
-type Authorization = Readonly<{
-  refId: string;
-  locator: string;
+type GuideArtworkRole = 'poster' | 'background';
+
+type Authorization = {
+  readonly refId: string;
+  readonly identity: string;
+  readonly locator: string;
   expiresAtMs: number;
-  session: GuideArtworkReadySession;
-}>;
+  readonly session: GuideArtworkReadySession;
+};
 
 export type GuideArtworkDelivery = Readonly<{
   bytes: Uint8Array;
@@ -40,6 +43,7 @@ type QueueEntry = {
 
 export class GuideArtworkOwner {
   private readonly authorizations = new Map<string, Authorization>();
+  private readonly authorizationIdsByIdentity = new Map<string, string>();
   private readonly cache = new Map<string, CacheEntry>();
   private readonly pending = new Map<string, Promise<GuideArtworkDelivery | null>>();
   private readonly queue: QueueEntry[] = [];
@@ -60,23 +64,34 @@ export class GuideArtworkOwner {
   }
 
   public createRef(input: Readonly<{
+    role: GuideArtworkRole;
     locator: string;
     altText: string;
     lineupRevision: number;
   }>): ArtworkRef | null {
     if (this.disposed) return null;
-    if (this.authorizations.size >= MAX_LIVE_REFS) {
-      this.reclaimExpiredAuthorizations();
-      if (this.authorizations.size >= MAX_LIVE_REFS) return null;
-    }
     let locator: string;
     try {
       locator = normalizeGuideArtworkLocator(input.locator);
     } catch {
       return null;
     }
+    if (!locatorMatchesRole(locator, input.role)) return null;
     const session = this.sessionOwner.captureCurrent(input.lineupRevision);
     if (session === null) return null;
+    const identity = authorizationIdentity(session, input.role, locator);
+    const existingRefId = this.authorizationIdsByIdentity.get(identity);
+    if (existingRefId !== undefined) {
+      const existing = this.readCurrentAuthorization(existingRefId);
+      if (existing !== null) {
+        existing.expiresAtMs = this.nowMs() + ARTWORK_REF_TTL_MS;
+        return projectRef(existing, input.role, input.altText);
+      }
+    }
+    if (this.authorizations.size >= MAX_LIVE_REFS) {
+      this.reclaimExpiredAuthorizations();
+      if (this.authorizations.size >= MAX_LIVE_REFS) return null;
+    }
     let refId: string | null = null;
     for (let attempt = 0; attempt < 100; attempt += 1) {
       const candidate = this.createRefId();
@@ -87,19 +102,16 @@ export class GuideArtworkOwner {
     }
     if (refId === null) return null;
     const expiresAtMs = this.nowMs() + ARTWORK_REF_TTL_MS;
-    this.authorizations.set(refId, Object.freeze({
+    const authorization: Authorization = Object.seal({
       refId,
+      identity,
       locator,
       expiresAtMs,
       session,
-    }));
-    return Object.freeze({
-      id: refId,
-      kind: 'poster',
-      expiresAtMs,
-      altText: clampDisplay(input.altText, 160),
-      status: 'available',
     });
+    this.authorizations.set(refId, authorization);
+    this.authorizationIdsByIdentity.set(identity, refId);
+    return projectRef(authorization, input.role, input.altText);
   }
 
   public get(refId: string): Promise<GuideArtworkDelivery | null> {
@@ -215,7 +227,11 @@ export class GuideArtworkOwner {
   }
 
   private revoke(refId: string): void {
+    const authorization = this.authorizations.get(refId);
     this.authorizations.delete(refId);
+    if (authorization !== undefined && this.authorizationIdsByIdentity.get(authorization.identity) === refId) {
+      this.authorizationIdsByIdentity.delete(authorization.identity);
+    }
     const cached = this.cache.get(refId);
     if (cached !== undefined) {
       this.cache.delete(refId);
@@ -232,6 +248,7 @@ export class GuideArtworkOwner {
 
   private invalidateAll(): void {
     this.authorizations.clear();
+    this.authorizationIdsByIdentity.clear();
     this.cache.clear();
     this.cacheBytes = 0;
     for (const entry of this.queue.splice(0)) {
@@ -240,6 +257,34 @@ export class GuideArtworkOwner {
     }
     for (const controller of this.activeControllers) controller.abort();
   }
+}
+
+function locatorMatchesRole(locator: string, role: GuideArtworkRole): boolean {
+  const family = locator.split('/')[4];
+  return (role === 'poster' && family === 'thumb') ||
+    (role === 'background' && family === 'art');
+}
+
+function authorizationIdentity(
+  session: GuideArtworkReadySession,
+  role: GuideArtworkRole,
+  locator: string,
+): string {
+  return `${String(session.generationId)}\u0000${String(session.lineupRevision)}\u0000${role}\u0000${locator}`;
+}
+
+function projectRef(
+  authorization: Authorization,
+  role: GuideArtworkRole,
+  altText: string,
+): ArtworkRef {
+  return Object.freeze({
+    id: authorization.refId,
+    kind: role,
+    expiresAtMs: authorization.expiresAtMs,
+    altText: clampDisplay(altText, 160),
+    status: 'available',
+  });
 }
 
 function clampDisplay(value: string, maximum: number): string {

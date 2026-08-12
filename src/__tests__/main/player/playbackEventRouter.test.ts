@@ -46,6 +46,7 @@ function createRuntime(
       },
     },
     channel: {
+      invalidatePlaybackMediaIdentity() {},
       async resolvePlaybackCandidate() {
         return {
           requestId,
@@ -61,7 +62,10 @@ function createRuntime(
       async dispatch() {
         return { ok: true };
       },
-      async cleanup() {},
+      settleTerminalError(event) {
+        return [event];
+      },
+      async cleanup() { return { ok: true, events: [] }; },
     },
     pms: {
       async releaseSession() {},

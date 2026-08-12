@@ -1,4 +1,4 @@
-import type { ArtworkRef } from './artwork.js';
+import type { GuideArtworkSet } from './artwork.js';
 
 export interface EpgProgramViewModel {
   id: string;
@@ -12,7 +12,7 @@ export interface EpgProgramViewModel {
   genres: readonly string[];
   startsAtMs: number;
   endsAtMs: number;
-  artwork: ArtworkRef | null;
+  artwork: GuideArtworkSet;
 }
 
 export interface EpgChannelViewModel {

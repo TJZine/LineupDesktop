@@ -48,24 +48,32 @@ async function invokeWith(value: unknown): Promise<{ ok: boolean; error?: { code
   };
 }
 
-test('guide bridge accepts only the strict poster artwork reference vocabulary', async () => {
-  const available = {
+const emptyArtwork = Object.freeze({ poster: null, background: null });
+
+test('guide bridge accepts only the exact opaque two-role artwork set', async () => {
+  const poster = {
     id: 'artwork-ABCDEFGHIJKLMNOP',
     kind: 'poster',
     expiresAtMs: 100,
     altText: 'Program One poster',
     status: 'available',
   };
-  assert.equal((await invokeWith(presentation(available))).ok, true);
-  assert.equal((await invokeWith(presentation(null))).ok, true);
+  const background = { ...poster, id: 'artwork-QRSTUVWXYZabcdef', kind: 'background' };
+  assert.equal((await invokeWith(presentation({ poster, background }))).ok, true);
+  assert.equal((await invokeWith(presentation(emptyArtwork))).ok, true);
 
   const invalidArtwork = [
-    { ...available, id: 'unsafe' },
-    { ...available, kind: 'background' },
-    { ...available, status: 'missing' },
-    { ...available, expiresAtMs: Number.NaN },
-    { ...available, altText: 'x'.repeat(161) },
-    { ...available, extra: true },
+    null,
+    { poster: null },
+    { ...emptyArtwork, logo: null },
+    { ...emptyArtwork, extra: true },
+    { ...emptyArtwork, poster: { ...poster, id: 'unsafe' } },
+    { ...emptyArtwork, poster: { ...poster, kind: 'background' } },
+    { ...emptyArtwork, background: { ...background, kind: 'poster' } },
+    { ...emptyArtwork, poster: { ...poster, status: 'missing' } },
+    { ...emptyArtwork, poster: { ...poster, expiresAtMs: Number.NaN } },
+    { ...emptyArtwork, poster: { ...poster, altText: 'x'.repeat(161) } },
+    { ...emptyArtwork, poster: { ...poster, locator: '/library/metadata/1/thumb' } },
   ];
   for (const artwork of invalidArtwork) {
     const result = await invokeWith(presentation(artwork));
@@ -75,7 +83,7 @@ test('guide bridge accepts only the strict poster artwork reference vocabulary',
 });
 
 test('guide bridge validates the required finite nonnegative minimum start bound', async () => {
-  const base = presentation(null) as Record<string, unknown>;
+  const base = presentation(emptyArtwork) as Record<string, unknown>;
   const missing = { ...base };
   delete missing.minimumStartTimeMs;
   const invalid = [
@@ -99,20 +107,21 @@ test('guide bridge validates the required finite nonnegative minimum start bound
 });
 
 test('guide bridge enforces bounded title and description fields', async () => {
-  const artwork = {
+  const poster = {
     id: 'artwork-ABCDEFGHIJKLMNOP', kind: 'poster', expiresAtMs: 100,
     altText: '', status: 'placeholder',
   };
+  const artwork = { ...emptyArtwork, poster };
   assert.equal((await invokeWith(presentation(artwork, { title: 'x'.repeat(161) }))).ok, false);
   assert.equal((await invokeWith(presentation(artwork, { description: 'x'.repeat(601) }))).ok, false);
 });
 
 test('guide bridge accepts the renderer-safe hostile-input projection', async () => {
-  const artwork = {
+  const poster = {
     id: 'artwork-ABCDEFGHIJKLMNOP', kind: 'poster', expiresAtMs: 100,
     altText: '[redacted]', status: 'available',
   };
-  const result = await invokeWith(presentation(artwork, {
+  const result = await invokeWith(presentation({ ...emptyArtwork, poster }, {
     title: '[redacted]', subtitle: '‹subtitle› [link]',
   }));
   assert.equal(result.ok, true);
@@ -124,7 +133,7 @@ test('guide bridge enforces channel, row, aggregate, and library relation bounds
     programs: Array.from({ length: programCount }, (_, programIndex) => ({
       id: `program-${channelIndex}-${programIndex}`, title: 'Program', subtitle: '', description: '',
       showTitle: '', episodeLabel: '', rating: '', quality: [], genres: [],
-      startsAtMs: programIndex * 2 + 1, endsAtMs: programIndex * 2 + 2, artwork: null,
+      startsAtMs: programIndex * 2 + 1, endsAtMs: programIndex * 2 + 2, artwork: { poster: null, background: null },
     })),
   });
   const withChannels = (channels: unknown[], libraryFilter: unknown = {
@@ -256,7 +265,7 @@ test('guide bridge cancels only its currently active presentation request ids', 
       return { ok: true, requestId: request.requestId, value: {} };
     }
     await new Promise<void>((resolve) => pending.set(request.requestId, resolve));
-    return { ok: true, requestId: request.requestId, value: presentation(null) };
+    return { ok: true, requestId: request.requestId, value: presentation(emptyArtwork) };
   }, {
     getPresentation: 'guide:get', cancelPresentation: 'guide:cancel',
     setLibraryFilter: 'guide:set', tuneChannel: 'player:tune',

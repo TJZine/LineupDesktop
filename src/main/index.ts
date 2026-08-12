@@ -260,14 +260,6 @@ async function startApplication(): Promise<void> {
   });
   const settingsStore = new DesktopSettingsStore({
     settingsFilePath: resolveDesktopSettingsFilePath(app),
-    migrationEventSink: (event) => {
-      diagnosticEventStore.record({
-        surface: 'main', category: 'lifecycle', severity: event.status === 'succeeded' ? 'info' : 'error',
-        status: event.status, operation: 'settings.migration', message: 'Desktop settings migration completed.',
-        result: event.status === 'succeeded' ? 'success' : 'failure',
-        context: { fromVersion: event.fromVersion, toVersion: event.toVersion, status: event.status, revision: event.revision },
-      });
-    },
   });
   const initialSettingsSnapshot = await settingsStore.loadSnapshot();
   if (quitLifecycleOwner.isQuitRequested()) return;

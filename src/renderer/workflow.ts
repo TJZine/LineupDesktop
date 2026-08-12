@@ -11,7 +11,7 @@ import {
   moveEpgSelection,
   pageEpgSelection,
   selectEpgProgram,
-  setEpgGuideDensity,
+  setEpgGuideTimeRange,
   setEpgPastItemsWindow,
   type EpgDirection,
   type EpgDirectionResult,
@@ -222,7 +222,7 @@ export function createWorkflowState(
 ): WorkflowState {
   const settingsDraft = createSettingsDraftState();
   const initialEpg = setEpgPastItemsWindow(
-    createEpgState(guidePresentation, 0, settingsDraft.guideDensity),
+    createEpgState(guidePresentation, 0, settingsDraft.guideTimeRange),
     settingsDraft.pastItemsWindow,
     guidePresentation.nowMs ?? nowMs,
     guidePresentation,
@@ -471,7 +471,7 @@ function synchronizeEpgWithSettings(
   settingsDraft: SettingsDraftState,
   nowMs: number,
 ): EpgState {
-  const epg = setEpgGuideDensity(state.epg, state.guidePresentation, settingsDraft.guideDensity);
+  const epg = setEpgGuideTimeRange(state.epg, state.guidePresentation, settingsDraft.guideTimeRange);
   return settingsDraft.pastItemsWindow === state.settingsDraft.pastItemsWindow
     ? epg
     : setEpgPastItemsWindow(epg, settingsDraft.pastItemsWindow, nowMs, state.guidePresentation);
@@ -520,7 +520,7 @@ export function applyWorkflowEpgDirection(
 
 export function applyWorkflowEpgPage(
   state: WorkflowState,
-  offset: -5 | 5,
+  offset: number,
 ): { workflowState: WorkflowState; result: EpgDirectionResult } {
   const result = pageEpgSelection(state.epg, offset, state.guidePresentation);
   return {

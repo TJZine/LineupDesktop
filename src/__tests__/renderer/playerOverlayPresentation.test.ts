@@ -75,6 +75,6 @@ test('OSD focus projection keeps Sleep request-bound and orders Subtitles, Sleep
 
 function program(id: string, title: string, startsAtMs: number, endsAtMs: number) {
   return {
-    id, title, subtitle: '', description: '', showTitle: '', episodeLabel: '', rating: '', quality: [], genres: [], startsAtMs, endsAtMs, artwork: null,
+    id, title, subtitle: '', description: '', showTitle: '', episodeLabel: '', rating: '', quality: [], genres: [], startsAtMs, endsAtMs, artwork: { poster: null, background: null },
   };
 }

@@ -100,6 +100,7 @@ import {
   guideVisibleWindow,
   guidePresentation,
   guideCellDom,
+  renderEpgGuideDom,
 } from '../../../renderer/epg/guideDom.js';
 import type { EpgProgramCellViewModel } from '../../../renderer/epg.js';
 
@@ -198,7 +199,7 @@ test('guideCellDom builds valid DOM elements', () => {
     progressPercent: 40,
     widthTier: 'medium',
     timeLabel: '1:30 PM - 2:30 PM',
-    artwork: null,
+    artwork: { poster: null, background: null },
   };
 
   const windowStart = 1000;
@@ -216,6 +217,7 @@ test('guideCellDom builds valid DOM elements', () => {
   assert.equal(cell.getAttribute('role'), 'gridcell');
   assert.equal(cell.dataset.selectedProgram, 'true');
   assert.equal(cell.dataset.temporalState, 'current');
+  assert.equal(cell.dataset.guideCellState, 'current');
   assert.equal(cell.style.position, 'absolute');
   assert.equal(cell.style.left, '16.666667%');
   assert.equal(cell.style.width, 'max(0px, calc(33.333333% - 4px))');
@@ -236,4 +238,18 @@ test('guideCellDom builds valid DOM elements', () => {
   const subtitleEl = cell.querySelector('.epg-cell-subtitle');
   assert.notEqual(subtitleEl, null);
   assert.equal(subtitleEl?.textContent, 'Test Subtitle');
+});
+
+test('Guide reconcile instrumentation cannot replace the original render error', (context) => {
+  const original = new Error('render failed');
+  context.mock.method(globalThis.performance, 'mark', () => { throw new Error('mark failed'); });
+  context.mock.method(globalThis.performance, 'clearMarks', () => { throw new Error('clear failed'); });
+  const guide = {
+    presentationGeneration: 1,
+    get selectedProgram(): never { throw original; },
+  };
+  assert.throws(
+    () => renderEpgGuideDom({ guide } as never, {} as never),
+    (error) => error === original,
+  );
 });

@@ -72,7 +72,7 @@ test('session transition and owner disposal abort late artwork completion', asyn
       return fetch.promise;
     },
   });
-  const ref = artworkOwner.createRef({ locator: '/library/metadata/1/thumb', altText: 'Poster', lineupRevision: 1 });
+  const ref = artworkOwner.createRef({ role: 'poster', locator: '/library/metadata/1/thumb', altText: 'Poster', lineupRevision: 1 });
   assert.ok(ref);
   const pending = artworkOwner.get(ref.id);
   await waitForImmediate();
@@ -164,7 +164,7 @@ test('production Plex and channel compositions deliver protocol artwork and canc
       guideArtworkSessionGenerationOwner: plex.guideArtworkSessionGenerationOwner,
       guideArtworkTransport: plex.guideArtworkTransport,
     });
-    const first = channel.guideArtworkOwner.createRef({
+    const first = channel.guideArtworkOwner.createRef({ role: 'poster',
       locator: '/library/metadata/1/thumb', altText: 'Poster', lineupRevision: 0,
     });
     assert.ok(first);
@@ -175,7 +175,7 @@ test('production Plex and channel compositions deliver protocol artwork and canc
     fetches[0]!.resolve({ bytes: new Uint8Array([1, 2, 3]), mimeType: 'image/jpeg' });
     assert.equal((await firstResponse).status, 200);
 
-    const late = channel.guideArtworkOwner.createRef({
+    const late = channel.guideArtworkOwner.createRef({ role: 'poster',
       locator: '/library/metadata/2/thumb', altText: 'Late', lineupRevision: 0,
     });
     assert.ok(late);

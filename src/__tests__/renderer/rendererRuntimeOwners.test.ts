@@ -24,7 +24,7 @@ import { captureGuideProgramFocusIntent, renderRendererFocus, syncRendererFocusT
 import { createFullscreenTransportCoordinator } from '../../renderer/fullscreenTransport.js';
 import { createEmptyPlayerSnapshot } from '../../renderer/playerOverlayPresentation.js';
 import { createGuidePresentationPolling } from '../../renderer/guidePresentationPolling.js';
-import { DEFAULT_GUIDE_PRELOAD_PROFILE } from '../../renderer/guideVirtualization.js';
+import { REDUCED_RESOURCE_GUIDE_PRELOAD_PROFILE } from '../../renderer/guideVirtualization.js';
 import { FocusRegistry, type FocusState } from '../../renderer/navigation.js';
 import { dispatchPlexRuntimeAction } from '../../renderer/plexRuntimeActionDispatch.js';
 import { subscribePlayerBridge } from '../../renderer/playerBridgeSubscription.js';
@@ -32,7 +32,7 @@ import type { PlexRuntimeController } from '../../renderer/plexRuntimeActions.js
 import { createShellController } from '../../renderer/shell/shellController.js';
 import { createRendererShellState, type RendererShellState } from '../../renderer/shell/shellState.js';
 import { createSettingsRuntime } from '../../renderer/settings/settingsRuntime.js';
-import { createSettingsGuideDensitySettlementOwner } from '../../renderer/settings/guideDensitySettlement.js';
+import { createSettingsGuideSettingsSettlementOwner } from '../../renderer/settings/guideSettingsSettlement.js';
 
 test('player bridge subscription owns event projection and unsubscribe cleanup', async () => {
   const initialSnapshot = { ...createEmptyPlayerSnapshot(), requestId: 'playback-1', status: 'playing' as const, playing: true };
@@ -158,12 +158,14 @@ test('guide presentation polling serializes refreshes and settles coalesced work
     host: createNoopIntervalHost(),
     getActiveRoute: () => activeRoute,
     getWindowStartMs: () => windowStartMs,
-    getGuideDensity: () => 'compact',
+    getGuideTimeRange: () => 'wide',
+    getGuidePerformanceProfile: () => 'reduced-resource',
     setLoading: () => {
       loadingCount += 1;
     },
     applyPresentation: (presentation) => {
       applied.push(presentation);
+      return true;
     },
     handleFailure: () => {
       failureCount += 1;
@@ -183,8 +185,8 @@ test('guide presentation polling serializes refreshes and settles coalesced work
   await first;
   assert.equal(requests.length, 2);
   assert.deepEqual(requestedWindows, [
-    initialWindowStartMs - DEFAULT_GUIDE_PRELOAD_PROFILE.timeBufferMs,
-    initialWindowStartMs + EPG_SLOT_DURATION_MS * 2 - DEFAULT_GUIDE_PRELOAD_PROFILE.timeBufferMs,
+    initialWindowStartMs - REDUCED_RESOURCE_GUIDE_PRELOAD_PROFILE.timeBufferMs,
+    initialWindowStartMs + EPG_SLOT_DURATION_MS * 2 - REDUCED_RESOURCE_GUIDE_PRELOAD_PROFILE.timeBufferMs,
   ]);
   assert.equal(applied.length, 0);
 
@@ -229,9 +231,10 @@ test('guide presentation polling applies sustained slow responses while bounding
     } as unknown as Window,
     getActiveRoute: () => 'guide',
     getWindowStartMs: () => 1_778_619_600_000,
-    getGuideDensity: () => 'compact',
+    getGuideTimeRange: () => 'wide',
+    getGuidePerformanceProfile: () => 'reduced-resource',
     setLoading: () => undefined,
-    applyPresentation: (_presentation, generation) => { appliedGenerations.push(generation); },
+    applyPresentation: (_presentation, generation) => { appliedGenerations.push(generation); return true; },
     handleFailure: () => assert.fail('failure callback was not expected'),
   });
 
@@ -303,9 +306,10 @@ test('guide presentation polling times out hung work, starts trailing work, and 
     } as unknown as Window,
     getActiveRoute: () => 'guide',
     getWindowStartMs: () => 1_778_619_600_000,
-    getGuideDensity: () => 'compact',
+    getGuideTimeRange: () => 'wide',
+    getGuidePerformanceProfile: () => 'reduced-resource',
     setLoading: () => undefined,
-    applyPresentation: () => { applied += 1; },
+    applyPresentation: () => { applied += 1; return true; },
     handleFailure: (_source, message) => { failureMessages.push(message); },
   });
 
@@ -356,10 +360,11 @@ test('guide presentation polling schedules Player and Guide with route-owned win
     } as unknown as Window,
     getActiveRoute: () => activeRoute,
     getWindowStartMs: () => 1_700_000_000_000,
-    getGuideDensity: () => 'compact',
+    getGuideTimeRange: () => 'wide',
+    getGuidePerformanceProfile: () => 'reduced-resource',
     getNowMs: () => nowMs,
     setLoading: () => { loadingCount += 1; },
-    applyPresentation: () => undefined,
+    applyPresentation: () => true,
     applyPlayerPresentation: () => { playerApplyCount += 1; },
     handleFailure: () => undefined,
   });
@@ -368,7 +373,7 @@ test('guide presentation polling schedules Player and Guide with route-owned win
   await settleAsyncWork();
   assert.equal(
     windows[0],
-    Math.floor(nowMs / EPG_SLOT_DURATION_MS) * EPG_SLOT_DURATION_MS - DEFAULT_GUIDE_PRELOAD_PROFILE.timeBufferMs,
+    Math.floor(nowMs / EPG_SLOT_DURATION_MS) * EPG_SLOT_DURATION_MS - REDUCED_RESOURCE_GUIDE_PRELOAD_PROFILE.timeBufferMs,
   );
   assert.equal(loadingCount, 0);
   assert.equal(playerApplyCount, 1);
@@ -379,7 +384,7 @@ test('guide presentation polling schedules Player and Guide with route-owned win
   activeRoute = 'guide';
   polling.reconcile('player', 'guide');
   await settleAsyncWork();
-  assert.equal(windows.at(-1), 1_700_000_000_000 - DEFAULT_GUIDE_PRELOAD_PROFILE.timeBufferMs);
+  assert.equal(windows.at(-1), 1_700_000_000_000 - REDUCED_RESOURCE_GUIDE_PRELOAD_PROFILE.timeBufferMs);
   assert.equal(loadingCount, 1);
   activeRoute = 'settings';
   polling.reconcile('guide', 'settings');
@@ -400,9 +405,10 @@ test('Settings-route past-items settlement makes no request; Guide entry recover
     host: createNoopIntervalHost(),
     getActiveRoute: () => activeRoute,
     getWindowStartMs: () => 1_778_619_600_000,
-    getGuideDensity: () => 'compact',
+    getGuideTimeRange: () => 'wide',
+    getGuidePerformanceProfile: () => 'reduced-resource',
     setLoading: () => undefined,
-    applyPresentation: () => undefined,
+    applyPresentation: () => true,
     handleFailure: () => undefined,
   });
 
@@ -430,14 +436,14 @@ test('Settings-route past-items settlement makes no request; Guide entry recover
   assert.equal(requests, 2);
 });
 
-test('Settings density settlement drives Guide and Player polling through optimistic save and rollback', async () => {
+test('Settings time-range settlement drives Guide and Player polling through optimistic save and rollback', async () => {
   type Route = 'guide' | 'player' | 'settings';
   const base = 1_783_512_000_000;
   const presentation: EpgPresentationSource = {
     channels: [{
       id: 'channel-1', number: '1', name: 'One', programs: [{
         id: 'program-1', title: 'Program', subtitle: '', description: '', showTitle: '', episodeLabel: '',
-        rating: '', quality: [], genres: [], startsAtMs: base, endsAtMs: base + EPG_SLOT_DURATION_MS, artwork: null,
+        rating: '', quality: [], genres: [], startsAtMs: base, endsAtMs: base + EPG_SLOT_DURATION_MS, artwork: { poster: null, background: null },
       }],
     }],
     nowWatching: null,
@@ -445,13 +451,13 @@ test('Settings density settlement drives Guide and Player polling through optimi
     minimumStartTimeMs: base,
   };
   let activeRoute: Route = 'guide';
-  let guideDensity: 'comfortable' | 'compact' = 'comfortable';
+  let guideTimeRange: 'detailed' | 'wide' = 'detailed';
   const programFocusId = createGuideProgramFocusId('channel-1', 'program-1');
   const focusRegistry = new FocusRegistry();
   focusRegistry.register({ id: programFocusId, route: 'guide', order: 1 });
   let focusState: FocusState = { activeRoute: 'guide', activeId: programFocusId };
   let pendingFocusId: string | null = null;
-  let epgState = createEpgState(presentation, 0, guideDensity);
+  let epgState = createEpgState(presentation, 0, guideTimeRange);
   const restoredFocusIds: string[] = [];
   const requests: Array<{ route: Route; durationMs: number; startTimeMs: number }> = [];
   const settlementQueue: Promise<void>[] = [];
@@ -459,7 +465,7 @@ test('Settings density settlement drives Guide and Player polling through optimi
   const states: Array<{
     loading: boolean;
     saving: boolean;
-    density: 'comfortable' | 'compact';
+    timeRange: 'detailed' | 'wide';
     errorCode: string | null;
   }> = [];
 
@@ -467,14 +473,15 @@ test('Settings density settlement drives Guide and Player polling through optimi
     guide: {
       getPresentation: async (request: { startTimeMs: number; durationMs: number }) => {
         requests.push({ route: activeRoute, startTimeMs: request.startTimeMs, durationMs: request.durationMs });
-        return { ok: true, requestId: `density-guide-${String(requests.length)}`, value: presentation };
+        return { ok: true, requestId: `time-range-guide-${String(requests.length)}`, value: presentation };
       },
       cancelPresentation: async () => undefined,
     } as unknown as LineupDesktopPreloadApi['guide'],
     host: createNoopIntervalHost(),
     getActiveRoute: () => activeRoute,
     getWindowStartMs: () => epgState.windowStartMs,
-    getGuideDensity: () => guideDensity,
+    getGuideTimeRange: () => guideTimeRange,
+    getGuidePerformanceProfile: () => 'reduced-resource',
     getNowMs: () => base,
     setLoading: (generation) => {
       epgState = { ...epgState, presentationState: 'loading', presentationGeneration: generation };
@@ -487,7 +494,7 @@ test('Settings density settlement drives Guide and Player polling through optimi
         generation,
         target,
         capturedFocusId !== null,
-        guideDensity,
+        guideTimeRange,
         effectiveStartTimeMs,
       );
       epgState = settlement.state;
@@ -496,6 +503,7 @@ test('Settings density settlement drives Guide and Player polling through optimi
         restoredFocusIds.push(pendingFocusId);
         pendingFocusId = null;
       }
+      return true;
     },
     applyPlayerPresentation: (value, generation, effectiveStartTimeMs) => {
       epgState = settleEpgPresentation(
@@ -504,24 +512,29 @@ test('Settings density settlement drives Guide and Player polling through optimi
         generation,
         null,
         false,
-        guideDensity,
+        guideTimeRange,
         effectiveStartTimeMs,
       ).state;
     },
     handleFailure: () => assert.fail('unexpected Guide failure'),
     handlePlayerFailure: () => assert.fail('unexpected Player failure'),
   });
-  const densitySettlementOwner = createSettingsGuideDensitySettlementOwner({
-    getCurrentDensity: () => guideDensity,
+  const guideSettingsSettlementOwner = createSettingsGuideSettingsSettlementOwner({
+    getCurrentSettings: () => ({
+      guideTimeRange,
+      guidePerformanceProfile: 'auto',
+      guideRowDensity: 'auto',
+      guideLayout: 'classic',
+    }),
     getPolling: () => ({
-      hasPendingGuideDensityChange: () => polling.hasPendingGuideDensityChange(),
-      noteGuideDensityChange: () => {
+      hasPendingGuideSettingsChange: () => polling.hasPendingGuideSettingsChange(),
+      noteGuideSettingsChange: () => {
         settlementTrace.push('note');
-        polling.noteGuideDensityChange();
+        polling.noteGuideSettingsChange();
       },
-      settleGuideDensity: (loading) => {
+      settleGuideSettings: (loading) => {
         settlementTrace.push(`settle:${String(loading)}`);
-        return polling.settleGuideDensity(loading);
+        return polling.settleGuideSettings(loading);
       },
     }),
     retainGuideProgramFocusIntent: () => {
@@ -538,6 +551,8 @@ test('Settings density settlement drives Guide and Player polling through optimi
       restoredFocusIds.push(focusState.activeId ?? 'missing-focus');
       pendingFocusId = null;
     },
+    invalidateViewportLayout: () => undefined,
+    reconcileViewport: () => undefined,
   });
 
   let replacementCount = 0;
@@ -561,7 +576,7 @@ test('Settings density settlement drives Guide and Player polling through optimi
     windowBridge: {
       setFullscreen: async (enabled) => ({
         ok: true,
-        requestId: `density-window-${String(enabled)}`,
+        requestId: `time-range-window-${String(enabled)}`,
         value: { enabled },
       }),
     },
@@ -569,18 +584,23 @@ test('Settings density settlement drives Guide and Player polling through optimi
       states.push({
         loading: state.loading,
         saving: state.saving,
-        density: state.values.guideDensity,
+        timeRange: state.values.guideTimeRange,
         errorCode: state.errorCode,
       });
-      const densitySettlement = densitySettlementOwner.begin(
-        state.values.guideDensity,
+      const guideSettingsSettlement = guideSettingsSettlementOwner.begin(
+        {
+          guideTimeRange: state.values.guideTimeRange,
+          guidePerformanceProfile: 'auto',
+          guideRowDensity: 'auto',
+          guideLayout: 'classic',
+        },
         () => {
           settlementTrace.push('apply-workflow-values');
-          guideDensity = state.values.guideDensity;
+          guideTimeRange = state.values.guideTimeRange;
         },
       );
       if (!state.loading) settlementTrace.push('render');
-      settlementQueue.push(densitySettlement.finish(state.loading));
+      settlementQueue.push(guideSettingsSettlement.finish(state.loading));
     },
   });
   const settleSettingsCallbacks = async (): Promise<void> => {
@@ -597,7 +617,7 @@ test('Settings density settlement drives Guide and Player polling through optimi
   assert.equal(states.at(-1)?.loading, false);
 
   settlementTrace.length = 0;
-  await settings.replaceValues((values) => ({ ...values, guideDensity: 'compact' }));
+  await settings.replaceValues((values) => ({ ...values, guideTimeRange: 'wide' }));
   await settleSettingsCallbacks();
   assert.deepEqual(settlementTrace.slice(0, 6), [
     'note',
@@ -607,18 +627,18 @@ test('Settings density settlement drives Guide and Player polling through optimi
     'restore-focus',
     'settle:false',
   ]);
-  await settings.replaceValues((values) => ({ ...values, guideDensity: 'comfortable' }));
+  await settings.replaceValues((values) => ({ ...values, guideTimeRange: 'detailed' }));
   await settleSettingsCallbacks();
-  assert.equal(settings.getState().values.guideDensity, 'compact');
+  assert.equal(settings.getState().values.guideTimeRange, 'wide');
   assert.equal(settings.getState().errorCode, 'storage-unavailable');
 
   activeRoute = 'player';
   focusState = { activeRoute: 'player', activeId: null };
-  await settings.replaceValues((values) => ({ ...values, guideDensity: 'comfortable' }));
+  await settings.replaceValues((values) => ({ ...values, guideTimeRange: 'detailed' }));
   await settleSettingsCallbacks();
   activeRoute = 'settings';
   focusState = { activeRoute: 'settings', activeId: null };
-  await settings.replaceValues((values) => ({ ...values, guideDensity: 'compact' }));
+  await settings.replaceValues((values) => ({ ...values, guideTimeRange: 'wide' }));
   await settleSettingsCallbacks();
   assert.equal(requests.length, 4);
 
@@ -631,7 +651,7 @@ test('Settings density settlement drives Guide and Player polling through optimi
   assert.deepEqual(requests.map(({ route }) => route), ['guide', 'guide', 'guide', 'player', 'guide']);
   const detailedPresentationDurationMs = 2 * 60 * 60_000;
   const widePresentationDurationMs = 3 * 60 * 60_000;
-  const preloadBufferEachSideMs = 2 * 60 * 60_000;
+  const preloadBufferEachSideMs = REDUCED_RESOURCE_GUIDE_PRELOAD_PROFILE.timeBufferMs;
   assert.deepEqual(requests.map(({ durationMs }) => durationMs), [
     widePresentationDurationMs + preloadBufferEachSideMs * 2,
     detailedPresentationDurationMs + preloadBufferEachSideMs * 2,
@@ -643,10 +663,10 @@ test('Settings density settlement drives Guide and Player polling through optimi
     requests.map(({ startTimeMs }) => startTimeMs),
     requests.map(() => base - preloadBufferEachSideMs),
   );
-  assert.ok(restoredFocusIds.length > 0, 'Guide density settlement restores a retained program focus');
+  assert.ok(restoredFocusIds.length > 0, 'Guide time-range settlement restores a retained program focus');
   assert.equal(restoredFocusIds.every((focusId) => focusId === programFocusId), true);
-  assert.ok(states.some((state) => state.saving && state.density === 'compact'));
-  assert.ok(states.some((state) => state.saving && state.density === 'comfortable'));
+  assert.ok(states.some((state) => state.saving && state.timeRange === 'wide'));
+  assert.ok(states.some((state) => state.saving && state.timeRange === 'detailed'));
   assert.ok(states.some((state) => state.errorCode === 'storage-unavailable' && !state.saving));
 });
 
@@ -663,7 +683,7 @@ test('Player first result clamps only to a newer bound and otherwise preserves t
         id: 'channel-1', number: '1', name: 'One', programs: [{
           id: 'program-1', title: 'Program', subtitle: '', description: '', showTitle: '', episodeLabel: '',
           rating: '', quality: [], genres: [], startsAtMs: base,
-          endsAtMs: base + scenario.programDurationSlots * EPG_SLOT_DURATION_MS, artwork: null,
+          endsAtMs: base + scenario.programDurationSlots * EPG_SLOT_DURATION_MS, artwork: { poster: null, background: null },
         }],
       }],
       nowWatching: null,
@@ -673,7 +693,7 @@ test('Player first result clamps only to a newer bound and otherwise preserves t
       libraryFilter: { scopeToken: 'scope', revision: 0, libraries: [], selectedLibraryId: null, persistenceStatus: 'ready' },
     };
     let activeRoute: 'player' | 'guide' = 'player';
-    let state = createEpgState({ channels: [], nowWatching: null, nowMs: scenario.initialWindowStartMs }, 0, 'compact');
+    let state = createEpgState({ channels: [], nowWatching: null, nowMs: scenario.initialWindowStartMs }, 0, 'wide');
     const requestStarts: number[] = [];
     const guide = {
       getPresentation: async (request: { startTimeMs: number }) => {
@@ -688,20 +708,22 @@ test('Player first result clamps only to a newer bound and otherwise preserves t
       host: createNoopIntervalHost(),
       getActiveRoute: () => activeRoute,
       getWindowStartMs: () => state.windowStartMs,
-      getGuideDensity: () => state.guideDensity,
+      getGuideTimeRange: () => state.guideTimeRange,
+      getGuidePerformanceProfile: () => 'reduced-resource',
       getNowMs: () => base - EPG_SLOT_DURATION_MS,
       setLoading: (generation) => { state = { ...state, presentationState: 'loading', presentationGeneration: generation }; },
       applyPresentation: (presentation, generation, _target, effectiveStartTimeMs) => {
-        state = settleEpgPresentation(state, presentation, generation, _target, false, 'compact', effectiveStartTimeMs).state;
+        state = settleEpgPresentation(state, presentation, generation, _target, false, 'wide', effectiveStartTimeMs).state;
+        return true;
       },
       applyPlayerPresentation: (presentation, generation, effectiveStartTimeMs) => {
-        state = settleEpgPresentation(state, presentation, generation, null, false, 'compact', effectiveStartTimeMs).state;
+        state = settleEpgPresentation(state, presentation, generation, null, false, 'wide', effectiveStartTimeMs).state;
       },
       handleFailure: () => undefined,
     });
 
     await polling.refresh('player-first-result', { allowPlayerRoute: true });
-    assert.deepEqual(requestStarts, [base - EPG_SLOT_DURATION_MS - DEFAULT_GUIDE_PRELOAD_PROFILE.timeBufferMs], scenario.label);
+    assert.deepEqual(requestStarts, [base - EPG_SLOT_DURATION_MS - REDUCED_RESOURCE_GUIDE_PRELOAD_PROFILE.timeBufferMs], scenario.label);
     assert.equal(state.minimumStartTimeMs, base, scenario.label);
     assert.equal(state.windowStartMs, scenario.expectedWindowStartMs, scenario.label);
 
@@ -709,8 +731,8 @@ test('Player first result clamps only to a newer bound and otherwise preserves t
     polling.reconcile('player', 'guide');
     await settleAsyncWork();
     assert.deepEqual(requestStarts, [
-      base - EPG_SLOT_DURATION_MS - DEFAULT_GUIDE_PRELOAD_PROFILE.timeBufferMs,
-      scenario.expectedWindowStartMs - DEFAULT_GUIDE_PRELOAD_PROFILE.timeBufferMs,
+      base - EPG_SLOT_DURATION_MS - REDUCED_RESOURCE_GUIDE_PRELOAD_PROFILE.timeBufferMs,
+      scenario.expectedWindowStartMs - REDUCED_RESOURCE_GUIDE_PRELOAD_PROFILE.timeBufferMs,
     ], scenario.label);
     assert.equal(state.minimumStartTimeMs, base, scenario.label);
     assert.equal(state.windowStartMs, scenario.expectedWindowStartMs, scenario.label);
@@ -1045,7 +1067,7 @@ function settingsSnapshot(
   values: typeof DEFAULT_DESKTOP_SETTINGS_VALUES = DEFAULT_DESKTOP_SETTINGS_VALUES,
 ) {
   return createDesktopSettingsView({
-    schemaVersion: 2,
+    schemaVersion: 3,
     revision,
     status: 'ready',
     values: { ...DEFAULT_DESKTOP_SETTINGS_VALUES, ...values },

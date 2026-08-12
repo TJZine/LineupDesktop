@@ -5,9 +5,22 @@ import {
   formatEpgTimeWindow,
   type EpgProgramCellViewModel,
 } from '../epg.js';
-import { isSafeArtworkRefId } from '../../contracts/artwork.js';
+import { isSafeArtworkRefId, type ArtworkRef } from '../../contracts/artwork.js';
 import type { GuideLibraryFilterState } from '../../contracts/guide.js';
-import { projectGuideVirtualRange, type GuideVirtualRange } from '../guideVirtualization.js';
+import {
+  GUIDE_DOM_ROW_CAP,
+  projectGuideVirtualRange,
+  type GuideVirtualRange,
+} from '../guideVirtualization.js';
+import { guidePerformanceMarks } from '../guidePerformanceMarks.js';
+import {
+  GUIDE_COMFORTABLE_ROW_HEIGHT,
+  GUIDE_DEFAULT_ROW_GAP,
+  projectGuideCompleteRowInterval,
+  resolveGuideRowDensity,
+  type GuideCompleteRowInterval,
+  type GuideViewportMetrics,
+} from '../guideRowDensity.js';
 
 export interface CellPosition {
   left: number;
@@ -17,13 +30,25 @@ export interface CellPosition {
 }
 
 const GUIDE_TRACK_UNITS = 1000;
-// CSS rows are 108px tall; the ~12px inter-row gap yields the 120px outer fallback.
-const GUIDE_FALLBACK_ROW_OUTER_SIZE = 120;
 const failedArtwork = new WeakMap<HTMLImageElement, Readonly<{
   presentationGeneration: number;
   refId: string;
 }>>();
 const pendingArtwork = new WeakMap<HTMLImageElement, object>();
+type GuideBackgroundState = 'missing' | 'loading' | 'available' | 'error' | 'poster-fallback';
+type GuideBackgroundCause = 'missing' | 'placeholder' | 'expired' | 'error';
+type GuideBackgroundRequest = Readonly<{
+  refId: string;
+  generationText: string;
+  artworkUrl: string;
+  source: 'background' | 'poster';
+}>;
+type GuideBackgroundFailures = {
+  presentationGeneration: number;
+  refIds: Set<string>;
+};
+const failedBackground = new WeakMap<HTMLImageElement, GuideBackgroundFailures>();
+const pendingBackground = new WeakMap<HTMLImageElement, GuideBackgroundRequest>();
 const guideLayoutMetrics = new WeakMap<HTMLElement, {
   key: string;
   rowOuterSize: number;
@@ -34,6 +59,57 @@ const guideLayoutMetrics = new WeakMap<HTMLElement, {
 
 export function invalidateGuideLayoutMetrics(grid: HTMLElement | null): void {
   if (grid !== null) guideLayoutMetrics.delete(grid);
+}
+
+export function readGuideViewportRows(grid: HTMLElement | null): Readonly<{ start: number; completeCount: number }> {
+  if (grid === null) return { start: 0, completeCount: 6 };
+  const geometry = readGuideViewportGeometry(grid);
+  const scrollTop = Number.isFinite(grid.scrollTop) ? Math.max(0, grid.scrollTop) : 0;
+  const viewportHeight = grid.clientHeight > 0 ? grid.clientHeight : geometry.rowOuterSize * 6;
+  const interval = projectGuideCompleteRowInterval(
+    viewportHeight,
+    geometry.rowStartOffset,
+    scrollTop,
+    geometry.rowHeight,
+    geometry.rowGap,
+  );
+  return {
+    start: interval.start,
+    completeCount: Math.min(GUIDE_DOM_ROW_CAP, interval.count),
+  };
+}
+
+function readGuideViewportGeometry(grid: HTMLElement): Readonly<{
+  rowOuterSize: number;
+  rowHeight: number;
+  rowGap: number;
+  rowStartOffset: number;
+}> {
+  const metrics = guideLayoutMetrics.get(grid);
+  const effectiveDensity = grid.dataset.guideRowDensityEffective === 'compact' ? 'compact' : 'comfortable';
+  const fallbackDensity = metrics === undefined ? resolveGuideRowDensity(
+    effectiveDensity,
+    readGuideViewportMetrics(grid),
+    GUIDE_DEFAULT_ROW_GAP,
+  ) : null;
+  const fallbackRowOuterSize = fallbackDensity?.rowOuterSize ?? GUIDE_DEFAULT_ROW_GAP + GUIDE_COMFORTABLE_ROW_HEIGHT;
+  const measuredLayout = metrics === undefined ? readGuideRowLayout(grid, fallbackRowOuterSize) : null;
+  const rowOuterSize = metrics?.rowOuterSize ?? measuredLayout?.rowOuterSize ?? fallbackRowOuterSize;
+  const rowGap = metrics?.rowGapSize ?? measuredLayout?.rowGap ?? fallbackDensity?.rowGap ?? GUIDE_DEFAULT_ROW_GAP;
+  const rowHeight = Math.max(1, rowOuterSize - rowGap);
+  const rowStartOffset = metrics?.rowStartOffset ?? measuredLayout?.rowStartOffset ?? 0;
+  return { rowOuterSize, rowHeight, rowGap, rowStartOffset };
+}
+
+export function setGuideViewportStart(
+  grid: HTMLElement | null,
+  absoluteStart: number,
+): Readonly<{ start: number; completeCount: number }> | null {
+  if (grid === null) return null;
+  const geometry = readGuideViewportGeometry(grid);
+  const start = Number.isFinite(absoluteStart) ? Math.max(0, Math.trunc(absoluteStart)) : 0;
+  grid.scrollTop = geometry.rowStartOffset + start * geometry.rowOuterSize;
+  return readGuideViewportRows(grid);
 }
 
 export function guideCellPosition(
@@ -122,6 +198,7 @@ export function guideCellDom(
   cell.dataset.guideGeneration = String(program.presentationGeneration);
   cell.dataset.selectedProgram = String(program.isSelected);
   cell.dataset.temporalState = program.temporalState;
+  cell.dataset.guideCellState = program.temporalState;
   cell.dataset.widthTier = pres.widthTier;
   cell.dataset.clippedStart = String(pos.isClippedStart);
   cell.dataset.clippedEnd = String(pos.isClippedEnd);
@@ -223,68 +300,66 @@ export function projectGuideLibraryTabsPending(root: HTMLElement | null, pending
   }
 }
 
-export function renderEpgGuideDom(
+export function renderEpgGuideDom(...args: Parameters<typeof renderEpgGuideDomContent>): void {
+  guidePerformanceMarks.reconcile(
+    args[0].guide.presentationGeneration,
+    () => renderEpgGuideDomContent(...args),
+  );
+}
+
+function renderEpgGuideDomContent(
   view: RouteWorkflowViewModel,
   dom: RendererDomBindings,
   settings: Pick<DesktopSettingsValues,
-    'guideDensity' |
+    'guideTimeRange' |
+    'guideRowDensity' |
     'previewBadgesEnabled' |
     'libraryTabsEnabled' |
     'nowWatchingBannerEnabled' |
     'guideLayout'> = {
-    guideDensity: 'comfortable',
+    guideTimeRange: 'detailed',
+    guideRowDensity: 'auto',
     previewBadgesEnabled: true,
     libraryTabsEnabled: true,
     nowWatchingBannerEnabled: true,
     guideLayout: 'classic',
   },
+  reconcilePass = 0,
 ): void {
-  const selectedRow = view.guide.selectedProgram === null
-    ? undefined
-    : view.guide.rows.find((row) => row.id === view.guide.selectedProgram?.channelId);
-  if (dom.epgDetailChannelElement) {
-    dom.epgDetailChannelElement.textContent =
-      selectedRow === undefined ? '' : `${selectedRow.number} - ${selectedRow.name}`;
-  }
-  if (dom.epgDetailTitleElement) {
-    dom.epgDetailTitleElement.textContent =
-      (view.guide.infoPanel?.title ?? view.guide.state.label).slice(0, 160);
-  }
-  if (dom.epgDetailTimeElement) {
-    dom.epgDetailTimeElement.textContent = view.guide.infoPanel === null ? view.guide.state.detail : [
-      view.guide.infoPanel.eyebrow,
-      view.guide.infoPanel.subtitle,
-      view.guide.infoPanel.timeLabel,
-      settings.previewBadgesEnabled ? view.guide.infoPanel.badges.join(' / ') : '',
-      view.guide.infoPanel.genres,
-    ].filter(Boolean).join(' - ');
-  }
-  if (dom.epgDetailDescriptionElement) {
-    dom.epgDetailDescriptionElement.textContent =
-      (view.guide.infoPanel?.description ?? '').slice(0, 600);
-  }
+  renderGuideDetailCopy(view, dom, settings.previewBadgesEnabled);
   renderGuideDetailArtwork(view, dom);
 
   if (!dom.epgGridElement) {
     return;
   }
 
+  dom.epgGridElement.setAttribute('role', 'grid');
   if (view.guide.presentationState === 'ready') {
-    dom.epgGridElement.setAttribute('role', 'grid');
+    dom.epgGridElement.setAttribute('aria-rowcount', String(view.guide.channelWindow.total + 1));
   } else {
-    dom.epgGridElement.removeAttribute('role');
+    dom.epgGridElement.removeAttribute('aria-rowcount');
   }
 
   const trackWidth = GUIDE_TRACK_UNITS;
 
   const shell = document.createElement('section');
   shell.className = 'epg-shell';
+  const previousGuideLayout = dom.epgGridElement.dataset.guideLayout;
+  const previousEffectiveDensity = dom.epgGridElement.dataset.guideRowDensityEffective;
   shell.dataset.epgLayout = settings.guideLayout;
-  shell.dataset.guideDensity = settings.guideDensity;
-  dom.epgGridElement.dataset.guideDensity = settings.guideDensity;
+  shell.dataset.guideComposition = settings.guideLayout;
+  shell.dataset.guideTimeRange = settings.guideTimeRange;
+  shell.dataset.guideRowDensity = settings.guideRowDensity;
+  dom.epgGridElement.dataset.guideTimeRange = settings.guideTimeRange;
+  dom.epgGridElement.dataset.guideRowDensity = settings.guideRowDensity;
+  dom.epgGridElement.dataset.guideLayout = settings.guideLayout;
+  projectGuideLayoutAttributes(dom.epgGridElement, dom.epgDetailArtworkElement, settings.guideLayout);
 
   const classicHeader = document.createElement('header');
   classicHeader.className = 'epg-classic-header';
+  classicHeader.dataset.guideShellRegion = 'classic-header';
+  classicHeader.hidden = settings.guideLayout !== 'classic';
+  classicHeader.setAttribute('aria-hidden', String(settings.guideLayout !== 'classic'));
   const headerBrand = document.createElement('div');
   headerBrand.className = 'epg-classic-header-brand';
   const brand = document.createElement('strong');
@@ -302,6 +377,7 @@ export function renderEpgGuideDom(
     : document.createElement('div');
   if (nowPlaying !== null) {
     nowPlaying.className = 'epg-classic-now-playing';
+    nowPlaying.dataset.guideNowWatching = 'classic';
     nowPlaying.setAttribute('role', 'status');
     nowPlaying.setAttribute('aria-live', 'polite');
     nowPlaying.setAttribute('aria-atomic', 'true');
@@ -334,6 +410,7 @@ export function renderEpgGuideDom(
     : document.createElement('div');
   if (nowWatching !== null && shellNowWatching !== null) {
     nowWatching.className = 'epg-now-watching-banner';
+    nowWatching.dataset.guideNowWatching = 'overlay';
     nowWatching.setAttribute('role', 'status');
     nowWatching.setAttribute('aria-live', 'polite');
     nowWatching.setAttribute('aria-atomic', 'true');
@@ -388,6 +465,7 @@ export function renderEpgGuideDom(
     shell.append(guideLibraryTabsDom(libraryFilter));
   }
   shell.append(stateElement);
+  let needsPostRenderReconcile = false;
   if (view.guide.presentationState === 'ready') {
     stateElement.hidden = true;
     stateElement.setAttribute('aria-hidden', 'true');
@@ -400,10 +478,44 @@ export function renderEpgGuideDom(
       actionError.textContent = view.guide.tuneError;
       shell.append(actionError);
     }
-    const metricsKey = settings.guideLayout;
+    const previousMetrics = guideLayoutMetrics.get(dom.epgGridElement);
+    const layoutChanged = previousGuideLayout !== undefined && previousGuideLayout !== settings.guideLayout;
+    const previousRowOuterSize = previousMetrics?.rowOuterSize ?? GUIDE_DEFAULT_ROW_GAP + GUIDE_COMFORTABLE_ROW_HEIGHT;
+    const currentRowLayout = previousMetrics?.measured && !layoutChanged && previousEffectiveDensity !== undefined
+      ? null
+      : readGuideRowLayout(dom.epgGridElement, previousRowOuterSize);
+    const previousRowGap = previousMetrics?.measured
+      ? previousMetrics.rowGapSize
+      : currentRowLayout?.rowGap
+        ?? GUIDE_DEFAULT_ROW_GAP;
+    const rowStartOffsetForDensity = previousMetrics?.measured && !layoutChanged && previousEffectiveDensity !== undefined
+      ? previousMetrics.rowStartOffset
+      : currentRowLayout?.rowStartOffset
+        ?? previousMetrics?.rowStartOffset
+        ?? 0;
+    const density = resolveGuideRowDensity(
+      settings.guideRowDensity,
+      readGuideViewportMetrics(dom.epgGridElement, rowStartOffsetForDensity),
+      previousRowGap,
+    );
+    const densityChanged = previousEffectiveDensity !== undefined && previousEffectiveDensity !== density.effective;
+    shell.dataset.guideRowDensityEffective = density.effective;
+    shell.dataset.guideCompleteRows = String(density.completeRows);
+    shell.dataset.guideCompleteRowFloor = String(density.minimumCompleteRows);
+    shell.dataset.guideDensityFloorMet = String(density.floorMet);
+    shell.style.setProperty('--guide-row-height', `${String(density.rowHeight)}px`);
+    dom.epgGridElement.dataset.guideRowDensityEffective = density.effective;
+    const metricsKey = [
+      settings.guideLayout,
+      settings.guideRowDensity,
+      density.effective,
+      String(density.rowHeight),
+      String(dom.epgGridElement.clientWidth),
+      String(dom.epgGridElement.clientHeight),
+    ].join(':');
     const cachedMetrics = guideLayoutMetrics.get(dom.epgGridElement);
-    const canReuse = cachedMetrics?.key === metricsKey && cachedMetrics.measured;
-    const measuredRows = !canReuse && typeof dom.epgGridElement.querySelectorAll === 'function'
+    const canReuse = !densityChanged && cachedMetrics?.key === metricsKey && cachedMetrics.measured;
+    const measuredRows = !densityChanged && !layoutChanged && !canReuse && typeof dom.epgGridElement.querySelectorAll === 'function'
       ? Array.from(dom.epgGridElement.querySelectorAll<HTMLElement>('.epg-grid__row'))
       : [];
     const rowElement = measuredRows[0] ?? null;
@@ -419,18 +531,24 @@ export function renderEpgGuideDom(
       ? null
       : consecutiveRect.top - rowRect.top;
     const computedGap = rowElement === null ? null : readGuideRowGap(rowElement);
-    const rowOuterSize = canReuse
+    const rowOuterSize = densityChanged || layoutChanged
+      ? density.rowOuterSize
+      : canReuse
       ? cachedMetrics.rowOuterSize
       : measuredStride !== null && Number.isFinite(measuredStride) && measuredStride > 0
         ? measuredStride
         : hasMeasurement && computedGap !== null
           ? (measuredRow ?? 0) + computedGap
-          : GUIDE_FALLBACK_ROW_OUTER_SIZE;
-    const rowGapSize = canReuse
+          : density.rowOuterSize;
+    const rowGapSize = densityChanged || layoutChanged
+      ? density.rowGap
+      : canReuse
       ? cachedMetrics.rowGapSize
-      : hasMeasurement ? Math.max(0, rowOuterSize - (measuredRow ?? rowOuterSize)) : 0;
+      : hasMeasurement ? Math.max(0, rowOuterSize - (measuredRow ?? rowOuterSize)) : density.rowGap;
     const gridTop = rowElement === null ? 0 : dom.epgGridElement.getBoundingClientRect().top;
-    const rowStartOffset = canReuse
+    const rowStartOffset = densityChanged || layoutChanged
+      ? rowStartOffsetForDensity
+      : canReuse
       ? cachedMetrics.rowStartOffset
       : rowRect === undefined || representedRowIndex === null
         ? 0
@@ -440,37 +558,147 @@ export function renderEpgGuideDom(
       rowOuterSize,
       rowGapSize,
       rowStartOffset,
-      measured: canReuse || hasMeasurement,
+      measured: canReuse || (!densityChanged && !layoutChanged && hasMeasurement),
     });
-    const focusedRowIndex = view.guide.selectedProgram === null
+    needsPostRenderReconcile = reconcilePass === 0 && (
+      previousMetrics === undefined ||
+      densityChanged ||
+      layoutChanged ||
+      (!canReuse && !hasMeasurement)
+    );
+    const focusedLocalIndex = view.guide.selectedProgram === null
       ? -1
       : view.guide.rows.findIndex((row) => row.id === view.guide.selectedProgram?.channelId);
+    const focusedRowIndex = focusedLocalIndex < 0
+      ? -1
+      : view.guide.rows[focusedLocalIndex]?.absoluteIndex ??
+        view.guide.channelWindow.offset + focusedLocalIndex;
+    const completeRowInterval = projectGuideCompleteRowInterval(
+      dom.epgGridElement.clientHeight || rowOuterSize * 6,
+      rowStartOffset,
+      dom.epgGridElement.scrollTop,
+      Math.max(1, rowOuterSize - rowGapSize),
+      rowGapSize,
+    );
     const virtualRange = projectGuideVirtualRange({
       rows: view.guide.rows,
       scrollTop: dom.epgGridElement.scrollTop,
       viewportHeight: dom.epgGridElement.clientHeight || rowOuterSize * 6,
       rowOuterSize,
       rowStartOffset,
+      completeRowInterval,
       windowStartMs: view.guide.windowStartMs,
       windowEndMs: view.guide.windowEndMs,
       focusedRowIndex,
       focusedProgramId: view.guide.selectedProgram?.id ?? null,
+      rowOffset: view.guide.channelWindow.offset,
+      totalRowCount: view.guide.channelWindow.total,
     });
     shell.append(...readyGuideGridDom(
       view,
       trackWidth,
       settings.previewBadgesEnabled,
       virtualRange,
+      completeRowInterval,
       rowOuterSize,
       rowGapSize,
     ));
   }
   dom.epgGridElement.replaceChildren(shell);
+  if (needsPostRenderReconcile) renderEpgGuideDomContent(view, dom, settings, reconcilePass + 1);
+}
+
+function renderGuideDetailCopy(
+  view: RouteWorkflowViewModel,
+  dom: RendererDomBindings,
+  previewBadgesEnabled: boolean,
+): void {
+  const selectedRow = view.guide.selectedProgram === null
+    ? undefined
+    : view.guide.rows.find((row) => row.id === view.guide.selectedProgram?.channelId);
+  const info = view.guide.infoPanel;
+  const fallbackTitle = view.guide.state.label;
+  const title = (info?.title ?? fallbackTitle).slice(0, 160);
+  const detailState = info === null ? view.guide.state.detail : info.timeLabel;
+  if (dom.epgDetailChannelElement) {
+    dom.epgDetailChannelElement.textContent =
+      selectedRow === undefined ? '' : `${selectedRow.number} - ${selectedRow.name}`;
+    dom.epgDetailChannelElement.dataset.channelState = selectedRow === undefined ? 'missing' : 'selected';
+  }
+  if (dom.epgDetailEyebrowElement) {
+    dom.epgDetailEyebrowElement.textContent = info?.eyebrow ?? '';
+    dom.epgDetailEyebrowElement.hidden = info === null || info.eyebrow.length === 0;
+  }
+  if (dom.epgDetailTitleElement) {
+    dom.epgDetailTitleElement.textContent = title;
+    dom.epgDetailTitleElement.dataset.titleFallback = info === null ? 'state' : 'text';
+  }
+  if (dom.epgDetailSubtitleElement) {
+    dom.epgDetailSubtitleElement.textContent = info?.subtitle ?? '';
+    dom.epgDetailSubtitleElement.hidden = info === null || info.subtitle.length === 0;
+  }
+  if (dom.epgDetailTimeElement) {
+    dom.epgDetailTimeElement.textContent = detailState;
+    dom.epgDetailTimeElement.dataset.detailState = info === null ? view.guide.presentationState : 'selected';
+  }
+  if (dom.epgDetailBadgesElement) {
+    renderGuideDetailBadges(dom.epgDetailBadgesElement, info === null || !previewBadgesEnabled ? [] : info.badges);
+  }
+  if (dom.epgDetailGenresElement) {
+    dom.epgDetailGenresElement.textContent = info?.genres ?? '';
+    dom.epgDetailGenresElement.hidden = info === null || info.genres.length === 0;
+  }
+  if (dom.epgDetailDescriptionElement) {
+    dom.epgDetailDescriptionElement.textContent = (info?.description ?? '').slice(0, 600);
+    dom.epgDetailDescriptionElement.hidden = info === null || info.description.length === 0;
+  }
+}
+
+function renderGuideDetailBadges(
+  container: HTMLElement,
+  badges: readonly string[],
+): void {
+  const slots = typeof container.querySelectorAll === 'function'
+    ? Array.from(container.querySelectorAll<HTMLElement>('[data-epg-detail-badge-slot]'))
+    : [];
+  if (slots.length === 0) {
+    container.textContent = badges.join(' / ');
+    container.hidden = badges.length === 0;
+    return;
+  }
+  for (const [index, slot] of slots.entries()) {
+    const value = badges[index] ?? '';
+    slot.textContent = value;
+    slot.hidden = value.length === 0;
+  }
+  container.hidden = badges.length === 0;
+}
+
+function projectGuideLayoutAttributes(
+  grid: HTMLElement,
+  figure: HTMLElement | null,
+  layout: 'classic' | 'overlay',
+): void {
+  grid.dataset.guideLayout = layout;
+  const guideScreen = typeof grid.closest === 'function'
+    ? grid.closest<HTMLElement>('[data-screen="guide"]')
+    : null;
+  if (guideScreen !== null) guideScreen.dataset.guideLayout = layout;
+  if (figure === null) return;
+  const detail = typeof figure.closest === 'function'
+    ? figure.closest<HTMLElement>('.guide-detail')
+    : null;
+  if (detail !== null) {
+    detail.dataset.guideLayout = layout;
+    detail.dataset.guideComposition = layout;
+  }
 }
 
 export function renderGuideDetailArtwork(
   view: RouteWorkflowViewModel,
   dom: Pick<RendererDomBindings,
+    'epgDetailBackgroundElement' |
+    'epgDetailBackgroundImageElement' |
     'epgDetailArtworkElement' |
     'epgDetailPosterElement' |
     'epgDetailArtworkPlaceholderElement'>,
@@ -481,16 +709,26 @@ export function renderGuideDetailArtwork(
   if (figure === null || image === null || placeholder === null) return;
   placeholder.setAttribute('aria-hidden', 'true');
   const info = view.guide.infoPanel;
-  const artwork = info?.artwork ?? null;
   const nowMs = view.guide.nowMs;
-  if (
-    info === null ||
-    artwork === null ||
-    artwork.status === 'placeholder' ||
-    artwork.expiresAtMs <= nowMs ||
-    artwork.kind !== 'poster' ||
-    !isSafeArtworkRefId(artwork.id)
-  ) {
+  renderGuideDetailPoster(info, nowMs, figure, image, placeholder);
+  renderGuideDetailBackground(
+    info,
+    nowMs,
+    view.guide.presentationGeneration,
+    dom.epgDetailBackgroundElement,
+    dom.epgDetailBackgroundImageElement,
+  );
+}
+
+function renderGuideDetailPoster(
+  info: RouteWorkflowViewModel['guide']['infoPanel'],
+  nowMs: number,
+  figure: HTMLElement,
+  image: HTMLImageElement,
+  placeholder: HTMLElement,
+): void {
+  const artwork = info?.artwork.poster ?? null;
+  if (!isValidGuideArtworkRef(artwork, 'poster', nowMs)) {
     placeholder.textContent = 'Artwork unavailable';
     clearGuideArtworkImage(image);
     failedArtwork.delete(image);
@@ -499,6 +737,7 @@ export function renderGuideDetailArtwork(
   }
   const failed = failedArtwork.get(image);
   if (
+    info !== null &&
     failed?.presentationGeneration === info.presentationGeneration &&
     failed.refId === artwork.id
   ) {
@@ -507,14 +746,15 @@ export function renderGuideDetailArtwork(
     setArtworkState(figure, image, placeholder, 'error');
     return;
   }
+  if (info === null) return;
   const generationText = String(info.presentationGeneration);
+  const artworkUrl = guideArtworkUrl(artwork.id);
   if (
     image.dataset.artworkRefId === artwork.id &&
     image.dataset.artworkGeneration === generationText &&
-    image.getAttribute('src') !== null
+    image.getAttribute('src') === artworkUrl
   ) return;
-  image.onload = null;
-  image.onerror = null;
+  clearGuideArtworkImage(image);
   image.dataset.artworkRefId = artwork.id;
   image.dataset.artworkGeneration = generationText;
   image.alt = clampArtworkAlt(
@@ -525,7 +765,6 @@ export function renderGuideDetailArtwork(
   placeholder.textContent = 'Loading artwork…';
   setArtworkState(figure, image, placeholder, 'loading');
   const request = Object.freeze({ refId: artwork.id, generationText });
-  const artworkUrl = `lineup://shell/artwork/${encodeURIComponent(artwork.id)}`;
   pendingArtwork.set(image, request);
   image.onload = () => {
     if (!isPendingArtwork(image, request, artwork.id, generationText, artworkUrl)) return;
@@ -545,6 +784,235 @@ export function renderGuideDetailArtwork(
     setArtworkState(figure, image, placeholder, 'error');
   };
   image.src = artworkUrl;
+}
+
+function renderGuideDetailBackground(
+  info: RouteWorkflowViewModel['guide']['infoPanel'],
+  nowMs: number,
+  presentationGeneration: number,
+  surface: HTMLElement | null,
+  image: HTMLImageElement | null,
+): void {
+  if (surface === null || image === null) return;
+  surface.setAttribute('aria-hidden', 'true');
+  image.setAttribute('aria-hidden', 'true');
+  image.alt = '';
+  image.decoding = 'async';
+  image.draggable = false;
+  const failedRefs = failedBackgroundForGeneration(image, presentationGeneration);
+  if (info === null) {
+    clearGuideBackgroundImage(image);
+    setGuideBackgroundState(surface, image, 'missing', 'theme');
+    delete surface.dataset.backgroundCause;
+    return;
+  }
+
+  const background = info.artwork.background;
+  const poster = isValidGuideArtworkRef(info.artwork.poster, 'poster', nowMs)
+    ? info.artwork.poster
+    : null;
+  if (isValidGuideArtworkRef(background, 'background', nowMs)) {
+    const generationText = String(presentationGeneration);
+    const artworkUrl = guideArtworkUrl(background.id);
+    if (failedRefs.has(background.id)) {
+      renderGuideBackgroundFallback(surface, image, poster, 'error', presentationGeneration);
+      return;
+    }
+    if (isCurrentGuideBackgroundSource(image, background.id, generationText, artworkUrl, 'background')) {
+      return;
+    }
+    startGuideBackgroundRequest({
+      surface,
+      image,
+      artwork: background,
+      source: 'background',
+      fallbackPoster: poster,
+      presentationGeneration,
+    });
+    return;
+  }
+
+  renderGuideBackgroundFallback(
+    surface,
+    image,
+    poster,
+    guideBackgroundCause(background, nowMs),
+    presentationGeneration,
+  );
+}
+
+function renderGuideBackgroundFallback(
+  surface: HTMLElement,
+  image: HTMLImageElement,
+  poster: ArtworkRef | null,
+  cause: GuideBackgroundCause,
+  presentationGeneration: number,
+): void {
+  const failedRefs = failedBackgroundForGeneration(image, presentationGeneration);
+  if (poster !== null && !failedRefs.has(poster.id)) {
+    startGuideBackgroundRequest({
+      surface,
+      image,
+      artwork: poster,
+      source: 'poster',
+      fallbackPoster: null,
+      presentationGeneration,
+      cause,
+    });
+    return;
+  }
+  clearGuideBackgroundImage(image);
+  setGuideBackgroundState(
+    surface,
+    image,
+    cause === 'error' ? 'error' : 'missing',
+    'theme',
+  );
+  surface.dataset.backgroundCause = cause;
+}
+
+function startGuideBackgroundRequest(input: {
+  surface: HTMLElement;
+  image: HTMLImageElement;
+  artwork: ArtworkRef;
+  source: 'background' | 'poster';
+  fallbackPoster: ArtworkRef | null;
+  presentationGeneration: number;
+  cause?: GuideBackgroundCause;
+}): void {
+  const { surface, image, artwork, source, fallbackPoster, presentationGeneration, cause } = input;
+  const generationText = String(presentationGeneration);
+  const artworkUrl = guideArtworkUrl(artwork.id);
+  if (cause === undefined) delete surface.dataset.backgroundCause;
+  else surface.dataset.backgroundCause = cause;
+  if (isCurrentGuideBackgroundSource(image, artwork.id, generationText, artworkUrl, source)) return;
+  clearGuideBackgroundImage(image);
+  image.dataset.artworkRefId = artwork.id;
+  image.dataset.artworkGeneration = generationText;
+  image.dataset.backgroundSource = source;
+  image.alt = '';
+  image.decoding = 'async';
+  image.draggable = false;
+  setGuideBackgroundState(surface, image, 'loading', source);
+  const request: GuideBackgroundRequest = Object.freeze({
+    refId: artwork.id,
+    generationText,
+    artworkUrl,
+    source,
+  });
+  pendingBackground.set(image, request);
+  image.onload = () => {
+    if (!isPendingGuideBackground(image, request)) return;
+    pendingBackground.delete(image);
+    image.onload = null;
+    image.onerror = null;
+    setGuideBackgroundState(
+      surface,
+      image,
+      source === 'poster' ? 'poster-fallback' : 'available',
+      source,
+    );
+  };
+  image.onerror = () => {
+    if (!isPendingGuideBackground(image, request)) return;
+    pendingBackground.delete(image);
+    image.onload = null;
+    image.onerror = null;
+    failedBackgroundForGeneration(image, presentationGeneration).add(artwork.id);
+    renderGuideBackgroundFallback(surface, image, fallbackPoster, 'error', presentationGeneration);
+  };
+  image.src = artworkUrl;
+}
+
+function failedBackgroundForGeneration(
+  image: HTMLImageElement,
+  presentationGeneration: number,
+): Set<string> {
+  const current = failedBackground.get(image);
+  if (current?.presentationGeneration === presentationGeneration) return current.refIds;
+  const next = { presentationGeneration, refIds: new Set<string>() };
+  failedBackground.set(image, next);
+  return next.refIds;
+}
+
+function isCurrentGuideBackgroundSource(
+  image: HTMLImageElement,
+  refId: string,
+  generationText: string,
+  artworkUrl: string,
+  source: 'background' | 'poster',
+): boolean {
+  return image.dataset.artworkRefId === refId &&
+    image.dataset.artworkGeneration === generationText &&
+    image.dataset.backgroundSource === source &&
+    image.getAttribute('src') === artworkUrl;
+}
+
+function isPendingGuideBackground(
+  image: HTMLImageElement,
+  request: GuideBackgroundRequest,
+): boolean {
+  return pendingBackground.get(image) === request &&
+    isCurrentGuideBackgroundSource(
+      image,
+      request.refId,
+      request.generationText,
+      request.artworkUrl,
+      request.source,
+    );
+}
+
+function clearGuideBackgroundImage(image: HTMLImageElement): void {
+  pendingBackground.delete(image);
+  image.onload = null;
+  image.onerror = null;
+  image.removeAttribute('src');
+  image.alt = '';
+  image.hidden = true;
+  delete image.dataset.artworkRefId;
+  delete image.dataset.artworkGeneration;
+  delete image.dataset.backgroundSource;
+}
+
+function setGuideBackgroundState(
+  surface: HTMLElement,
+  image: HTMLImageElement,
+  state: GuideBackgroundState,
+  source: 'background' | 'poster' | 'theme',
+): void {
+  surface.dataset.backgroundState = state;
+  surface.dataset.backgroundSource = source;
+  if (source === 'poster') surface.dataset.backgroundFallback = 'poster';
+  else if (source === 'theme') surface.dataset.backgroundFallback = 'theme';
+  else delete surface.dataset.backgroundFallback;
+  image.hidden = state !== 'available' && state !== 'poster-fallback';
+}
+
+function guideBackgroundCause(
+  artwork: ArtworkRef | null,
+  nowMs: number,
+): GuideBackgroundCause {
+  if (artwork === null || !isSafeArtworkRefId(artwork.id)) return 'missing';
+  if (artwork.status === 'placeholder') return 'placeholder';
+  if (!Number.isFinite(artwork.expiresAtMs) || artwork.expiresAtMs <= nowMs) return 'expired';
+  return 'missing';
+}
+
+function isValidGuideArtworkRef(
+  artwork: ArtworkRef | null,
+  kind: ArtworkRef['kind'],
+  nowMs: number,
+): artwork is ArtworkRef {
+  return artwork !== null &&
+    artwork.status === 'available' &&
+    artwork.kind === kind &&
+    Number.isFinite(artwork.expiresAtMs) &&
+    artwork.expiresAtMs > nowMs &&
+    isSafeArtworkRefId(artwork.id);
+}
+
+function guideArtworkUrl(refId: string): string {
+  return `lineup://shell/artwork/${encodeURIComponent(refId)}`;
 }
 
 function isPendingArtwork(
@@ -590,12 +1058,14 @@ function readyGuideGridDom(
   trackWidth: number,
   previewBadgesEnabled: boolean,
   virtualRange: GuideVirtualRange,
+  completeRowInterval: GuideCompleteRowInterval,
   rowOuterSize: number,
   rowGapSize: number,
 ): HTMLElement[] {
   const header = document.createElement('div');
   header.className = 'epg-time-header';
   header.setAttribute('role', 'row');
+  header.setAttribute('aria-rowindex', '1');
   const channelHeader = document.createElement('span');
   channelHeader.setAttribute('role', 'columnheader');
   channelHeader.setAttribute('aria-label', 'Channel');
@@ -630,7 +1100,13 @@ function readyGuideGridDom(
 
     const marker = document.createElement('div');
     marker.className = 'epg-current-time-marker';
+    marker.dataset.currentTimeMarker = 'true';
+    marker.setAttribute('aria-hidden', 'true');
     marker.style.left = `${toTrackPercent(markerLeft, trackWidth)}%`;
+    const markerLabel = document.createElement('span');
+    markerLabel.className = 'epg-current-time-marker-label';
+    markerLabel.textContent = 'NOW';
+    marker.append(markerLabel);
     slotTrack.append(marker);
   }
 
@@ -642,21 +1118,67 @@ function readyGuideGridDom(
       rows.push(guideRowSpacer(placement.gapBefore * rowOuterSize - rowGapSize));
     }
     const rowIndex = placement.rowIndex;
-    const row = view.guide.rows[rowIndex];
+    const row = view.guide.rows.find((candidate, localIndex) =>
+      (candidate.absoluteIndex ?? view.guide.channelWindow.offset + localIndex) === rowIndex);
     if (row === undefined) continue;
     const rowElement = document.createElement('section');
     rowElement.className = 'epg-grid__row';
     rowElement.dataset.guideRowIndex = String(rowIndex);
     rowElement.setAttribute('role', 'row');
+    rowElement.setAttribute('aria-rowindex', String(rowIndex + 2));
+    const completeVisible = rowIndex >= completeRowInterval.start &&
+      rowIndex < completeRowInterval.start + completeRowInterval.count;
+    rowElement.dataset.guideRowBuffer = String(!completeVisible);
+    rowElement.inert = !completeVisible;
+    if (!completeVisible) rowElement.className += ' epg-grid__row--buffer';
+    if (row.loadState !== undefined && row.loadState !== 'ready') {
+      rowElement.className += ' epg-grid__row--placeholder';
+      rowElement.dataset.guideRowState = row.loadState;
+      rowElement.setAttribute('aria-hidden', !completeVisible || row.loadState === 'loading' ? 'true' : 'false');
+      const statusCell = document.createElement('div');
+      statusCell.setAttribute('role', 'gridcell');
+      if (row.loadState === 'loading') {
+        const loading = document.createElement('span');
+        loading.className = 'epg-grid__row-status';
+        loading.textContent = 'Loading channel…';
+        statusCell.append(loading);
+      } else {
+        const retry = document.createElement('button');
+        retry.type = 'button';
+        retry.className = 'epg-grid__row-status';
+        retry.dataset.guideAction = 'retry';
+        retry.dataset.guideRetryIndex = String(rowIndex);
+        retry.dataset.focusId = `guide-window-retry-${String(rowIndex)}`;
+        retry.textContent = 'Channel unavailable — Retry';
+        statusCell.append(retry);
+      }
+      rowElement.append(statusCell);
+      rows.push(rowElement);
+      continue;
+    }
+    if (!completeVisible) rowElement.setAttribute('aria-hidden', 'true');
+    rowElement.setAttribute('aria-selected', String(row.isSelected));
     rowElement.dataset.selectedChannel = String(row.isSelected);
+    rowElement.dataset.currentChannel = String(row.isNowWatching);
     const channel = document.createElement('div');
     channel.className = 'epg-grid__channel';
     channel.setAttribute('role', 'rowheader');
+    channel.setAttribute(
+      'aria-label',
+      `${row.number} - ${row.name}${row.isNowWatching ? ' — Live' : ''}`,
+    );
     const number = document.createElement('strong');
     number.textContent = row.number;
     const name = document.createElement('span');
     name.textContent = row.name;
     channel.append(number, name);
+    if (row.isNowWatching) {
+      const status = document.createElement('span');
+      status.className = 'epg-grid__channel-status';
+      status.setAttribute('aria-hidden', 'true');
+      status.textContent = 'LIVE';
+      channel.append(status);
+    }
     rowElement.append(channel);
 
     const programs = document.createElement('div');
@@ -680,6 +1202,8 @@ function readyGuideGridDom(
     if (hasMarker) {
       const line = document.createElement('div');
       line.className = 'epg-current-time-line';
+      line.dataset.currentTimeMarker = 'true';
+      line.setAttribute('aria-hidden', 'true');
       line.style.left = `${toTrackPercent(markerLeft, trackWidth)}%`;
       programs.append(line);
     }
@@ -709,6 +1233,51 @@ function parseGuideRowIndex(value: string | undefined): number | null {
   if (value === undefined || !/^\d+$/.test(value)) return null;
   const parsed = Number(value);
   return Number.isSafeInteger(parsed) ? parsed : null;
+}
+
+function readGuideRowLayout(
+  grid: HTMLElement,
+  fallbackRowOuterSize: number,
+): Readonly<{ rowStartOffset: number; rowGap: number | null; rowOuterSize: number }> | null {
+  if (typeof grid.querySelectorAll !== 'function') return null;
+  const rows = Array.from(grid.querySelectorAll<HTMLElement>('.epg-grid__row'));
+  const row = rows[0];
+  const rowIndex = parseGuideRowIndex(row?.dataset.guideRowIndex);
+  const rowRect = row?.getBoundingClientRect?.();
+  if (row === undefined || rowIndex === null || rowRect === undefined) return null;
+  const gridRect = grid.getBoundingClientRect?.();
+  if (gridRect === undefined) return null;
+  const nextRow = rows.find((candidate) => parseGuideRowIndex(candidate.dataset.guideRowIndex) === rowIndex + 1);
+  const nextRect = nextRow?.getBoundingClientRect?.();
+  const measuredStride = nextRect === undefined ? null : nextRect.top - rowRect.top;
+  const rowOuterSize = measuredStride !== null && Number.isFinite(measuredStride) && measuredStride > 0
+    ? measuredStride
+    : fallbackRowOuterSize;
+  const computedGap = readGuideRowGap(row);
+  const rowGap = computedGap ?? (
+    measuredStride !== null && Number.isFinite(measuredStride) && measuredStride >= rowRect.height
+      ? Math.max(0, measuredStride - rowRect.height)
+      : null
+  );
+  const scrollTop = Number.isFinite(grid.scrollTop) ? Math.max(0, grid.scrollTop) : 0;
+  return {
+    rowStartOffset: Math.max(0, rowRect.top - gridRect.top + scrollTop - rowIndex * rowOuterSize),
+    rowGap,
+    rowOuterSize,
+  };
+}
+
+function readGuideViewportMetrics(grid: HTMLElement, rowStartOffset = 0): GuideViewportMetrics {
+  const view = grid.ownerDocument?.defaultView;
+  const globalWindow = typeof window === 'undefined' ? undefined : window;
+  const availableHeight = Math.max(0, grid.clientHeight - Math.max(0, rowStartOffset));
+  return {
+    width: view?.innerWidth ?? globalWindow?.innerWidth ?? grid.clientWidth,
+    height: view?.innerHeight ?? globalWindow?.innerHeight ?? grid.clientHeight,
+    devicePixelRatio: view?.devicePixelRatio ?? globalWindow?.devicePixelRatio ?? 1,
+    availableWidth: grid.clientWidth,
+    availableHeight: grid.clientHeight > 0 ? availableHeight : undefined,
+  };
 }
 
 function readGuideRowGap(row: HTMLElement): number | null {

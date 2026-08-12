@@ -248,10 +248,18 @@ test('GuideRuntime paged artwork output becomes an owned renderer-safe projectio
   const configured = createChannelConfig('chan-1', 1, 'Channel 1');
   repository.data.channels = [configured];
   repository.data.currentChannelId = configured.id;
+  const privateLocatorMarker = ['guide', 'private', 'token', 'marker'].join('-');
   const hostileTitle = 'Bearer secret https://private.invalid/<title>\u0000'.repeat(8);
   const plexAdapter = new MockPlexLibraryAdapter();
-  plexAdapter.setLibraryItems('lib-1', [{ ...createLibraryItem(0), title: hostileTitle }]);
+  plexAdapter.setLibraryItems('lib-1', [{
+    ...createLibraryItem(0),
+    title: hostileTitle,
+    thumb: `/library/metadata/1/thumb?private=${privateLocatorMarker}`,
+    art: `/library/metadata/1/art?private=${privateLocatorMarker}`,
+    clearLogo: '/library/metadata/1/clearLogo',
+  }]);
   const createdRefs: object[] = [];
+  const createdInputs: Array<{ role: string; locator: string }> = [];
   const runtime = new GuideRuntime({
     repository: repository as unknown as ChannelRepository,
     plexLibraryAdapter: plexAdapter as unknown as PlexLibraryMinimalAdapter,
@@ -259,11 +267,13 @@ test('GuideRuntime paged artwork output becomes an owned renderer-safe projectio
     clock: { now: () => 1_000 },
     ...pagedRuntimeOptions(),
     guideArtworkOwner: {
-      createRef: (input: { altText: string }) => {
+      createRef: (input: { role: 'poster' | 'background'; locator: string; altText: string }) => {
         const ref = Object.freeze({
-          id: 'artwork-ABCDEFGHIJKLMNOP', kind: 'poster' as const, expiresAtMs: 10_000,
+          id: input.role === 'poster' ? 'artwork-ABCDEFGHIJKLMNOP' : 'artwork-QRSTUVWXYZabcdef',
+          kind: input.role, expiresAtMs: 10_000,
           altText: input.altText, status: 'available' as const,
         });
+        createdInputs.push({ role: input.role, locator: input.locator });
         createdRefs.push(ref);
         return ref;
       },
@@ -279,8 +289,17 @@ test('GuideRuntime paged artwork output becomes an owned renderer-safe projectio
   });
 
   assert.equal(projected.channels[0]!.programs[0]!.title, '[redacted]');
-  assert.equal(projected.channels[0]!.programs[0]!.artwork?.altText, '[redacted]');
-  assert.notEqual(projected.channels[0]!.programs[0]!.artwork, createdRefs[0]);
+  assert.equal(projected.channels[0]!.programs[0]!.artwork.poster?.altText, '[redacted]');
+  assert.equal(projected.channels[0]!.programs[0]!.artwork.background?.altText, '[redacted]');
+  assert.notEqual(projected.channels[0]!.programs[0]!.artwork.poster, createdRefs[0]);
+  assert.notEqual(projected.channels[0]!.programs[0]!.artwork.background, createdRefs[1]);
+  const serializedProjection = JSON.stringify(projected);
+  assert.equal(serializedProjection.includes(privateLocatorMarker), false);
+  assert.equal(createdInputs.some(({ locator }) => locator === privateLocatorMarker), false);
+  assert.deepEqual(createdInputs, [
+    { role: 'poster', locator: `/library/metadata/1/thumb?private=${privateLocatorMarker}` },
+    { role: 'background', locator: `/library/metadata/1/art?private=${privateLocatorMarker}` },
+  ]);
   assert.equal((createdRefs[0] as { altText: string }).altText, hostileTitle);
 });
 

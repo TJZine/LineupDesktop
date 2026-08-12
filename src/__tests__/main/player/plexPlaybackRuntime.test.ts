@@ -9,6 +9,7 @@ import {
   type PlexPlaybackRuntimeChannelPort,
   type PlexPlaybackRuntimeCleanupReason,
   type PlexPlaybackRuntimePlayerDispatchResult,
+  type PlexPlaybackRuntimePlayerCleanupResult,
   type PlexPlaybackRuntimePlayerPort,
   type PlexPlaybackRuntimeSchedulerPort,
   type PlexPlaybackRuntimeStartResult,
@@ -106,6 +107,11 @@ class FakeChannelPort implements PlexPlaybackRuntimeChannelPort {
   candidatePromise: Promise<PlexPlaybackRuntimeCandidate> | null = null;
   onResolvePlaybackCandidate: (() => void) | null = null;
   readonly selections: PlexPlaybackScheduleSelection[] = [];
+  readonly identityInvalidations: number[] = [];
+
+  invalidatePlaybackMediaIdentity(): void {
+    this.identityInvalidations.push(this.identityInvalidations.length + 1);
+  }
 
   async resolvePlaybackCandidate(
     nextSelection: PlexPlaybackScheduleSelection,
@@ -119,11 +125,19 @@ class FakeChannelPort implements PlexPlaybackRuntimeChannelPort {
 class FakePlayerPort implements PlexPlaybackRuntimePlayerPort {
   readonly commands: PlayerCommand[] = [];
   readonly cleanupRequestIds: Array<string | null> = [];
+  readonly terminalSettlements: Array<{
+    event: Extract<PlayerEvent, { event: 'error' }>;
+    expectedSnapshotRequestId: string | null;
+  }> = [];
   dispatchResult: PlexPlaybackRuntimePlayerDispatchResult = { ok: true };
   stopDispatchPromise: Promise<PlexPlaybackRuntimePlayerDispatchResult> | null = null;
   cleanupPromise: Promise<void> | null = null;
+  cleanupResult: PlexPlaybackRuntimePlayerCleanupResult = { ok: true, events: [] };
   dispatchFailure: Error | null = null;
   cleanupFailure: Error | null = null;
+  terminalSettlement:
+    | ((event: Extract<PlayerEvent, { event: 'error' }>) => readonly PlayerEvent[])
+    | null = null;
 
   async dispatch(command: PlayerCommand): Promise<PlexPlaybackRuntimePlayerDispatchResult> {
     this.commands.push(command);
@@ -136,7 +150,15 @@ class FakePlayerPort implements PlexPlaybackRuntimePlayerPort {
     return this.dispatchResult;
   }
 
-  async cleanup(requestId: string | null): Promise<void> {
+  settleTerminalError(
+    event: Extract<PlayerEvent, { event: 'error' }>,
+    expectedSnapshotRequestId: string | null,
+  ): readonly PlayerEvent[] {
+    this.terminalSettlements.push({ event, expectedSnapshotRequestId });
+    return this.terminalSettlement?.(event) ?? [event];
+  }
+
+  async cleanup(requestId: string | null): Promise<PlexPlaybackRuntimePlayerCleanupResult> {
     this.cleanupRequestIds.push(requestId);
     if (this.cleanupPromise !== null) {
       await this.cleanupPromise;
@@ -144,6 +166,7 @@ class FakePlayerPort implements PlexPlaybackRuntimePlayerPort {
     if (this.cleanupFailure !== null) {
       throw this.cleanupFailure;
     }
+    return this.cleanupResult;
   }
 }
 
@@ -757,6 +780,10 @@ test('RD-12 plex playback runtime cleans PMS and player state for every cleanup 
     assert.equal(pms.releases[0]?.requestId, `request-${reason}`);
     assert.equal(player.cleanupRequestIds[0], `request-${reason}`);
     assert.equal(player.commands.filter((command) => command.command === 'stop').length, cleanupCommandCount);
+    assert.equal(
+      channel.identityInvalidations.length,
+      ['logout', 'server-change', 'profile-change', 'teardown'].includes(reason) ? 1 : 0,
+    );
     assertNoForbiddenKeys(events);
     assertRendererSafePlayerEvents(events);
 
@@ -841,7 +868,7 @@ test('plex playback runtime stop holds replacement starts until its complete dra
 });
 
 test('plex playback runtime suppresses a superseded candidate resolution failure', async () => {
-  const { runtime, channel, pms, emitted } = createRuntime();
+  const { runtime, channel, player, pms, emitted } = createRuntime();
   const candidateResolution = createDeferred<PlexPlaybackRuntimeCandidate>();
   const candidateResolutionStarted = createDeferred<void>();
   channel.candidatePromise = candidateResolution.promise;
@@ -868,12 +895,60 @@ test('plex playback runtime suppresses a superseded candidate resolution failure
   assert.equal(staleResult.accepted, false);
   assert.equal(staleResult.events.some((event) => event.event === 'error'), false);
   assert.equal(emitted.some((event) => event.event === 'error'), false);
+  assert.equal(player.terminalSettlements.length, 0);
 
   await runtime.cleanup({ reason: 'teardown' });
   assert.deepEqual(
     pms.releases.map((release) => release.session.id),
     ['pms-2'],
   );
+});
+
+test('plex playback runtime publishes one complete current terminal settlement without duplicating the original error', async () => {
+  const { runtime, channel, player, emitted, eventObserver } = createRuntime();
+  const emittedBatches: Array<readonly PlayerEvent[]> = [];
+  eventObserver.current = (events) => {
+    emittedBatches.push(events);
+  };
+  channel.candidatePromise = Promise.reject(new Error('candidate unavailable'));
+  const terminalSnapshot = {
+    requestId: null,
+    status: 'error' as const,
+    media: null,
+    capabilityProfileId: null,
+    seekSupport: 'unknown' as const,
+    playing: false,
+    positionMs: 0,
+    durationMs: null,
+    bufferedRanges: [],
+    volume: 1,
+    muted: false,
+    playbackRate: 1,
+    tracks: [],
+    selectedAudioTrackId: null,
+    selectedSubtitleTrackId: null,
+    selectedVideoTrackId: null,
+    quality: {
+      mode: 'unknown' as const,
+      sourceDynamicRange: 'unknown' as const,
+      outputDynamicRangeStatus: 'unknown' as const,
+    },
+    lastError: null,
+  };
+  player.terminalSettlement = (event) => [
+    event,
+    { event: 'state.changed', requestId: null, snapshot: terminalSnapshot },
+  ];
+
+  const result = await runtime.startCurrentPlayback('startup');
+
+  assert.equal(result.accepted, false);
+  assert.equal(player.terminalSettlements.length, 1);
+  assert.equal(player.terminalSettlements[0]?.expectedSnapshotRequestId, null);
+  assert.deepEqual(result.events, emitted);
+  assert.deepEqual(emitted.map((event) => event.event), ['error', 'state.changed']);
+  assert.equal(emittedBatches.length, 1);
+  assert.equal(emitted.filter((event) => event.event === 'error').length, 1);
 });
 
 test('RD-12 plex playback runtime quarantines stale player events by epoch', async () => {
@@ -937,6 +1012,29 @@ test('RD-12 plex playback runtime reports cleanup failures without privileged de
   assertTextAbsent(diagnostics.getRecords(), nativeDetail);
   assertTextAbsent(diagnostics.getRecords(), 'player-private-detail');
   assertNoForbiddenKeys(events);
+  assertRendererSafePlayerEvents(events);
+});
+
+test('playback runtime forwards a rejected player cleanup settlement without duplicating it', async () => {
+  const { runtime, player, diagnostics } = createRuntime();
+  await runtime.startCurrentPlayback();
+  const settlement: PlayerEvent = {
+    event: 'warning',
+    requestId: 'request-1',
+    warning: {
+      code: 'PLAYER_CLEANUP_WARNING',
+      category: 'cleanup-failure',
+      message: 'Playback cleanup did not complete.',
+      recoverable: true,
+      retryable: true,
+    },
+  };
+  player.cleanupResult = { ok: false, events: [settlement] };
+
+  const events = await runtime.cleanup({ reason: 'server-change' });
+
+  assert.deepEqual(events, [settlement]);
+  assert.equal(diagnostics.getCrashRecoverySummary().cleanupFailureCount, 1);
   assertRendererSafePlayerEvents(events);
 });
 

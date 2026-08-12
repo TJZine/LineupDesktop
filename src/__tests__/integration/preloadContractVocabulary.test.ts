@@ -1577,6 +1577,36 @@ test('preload player bridge validates snapshot invoke results before returning t
   assert.equal((result as { ok: boolean }).ok, true);
 });
 
+test('preload player presentation bridge accepts an initial applied epoch', async () => {
+  const request = {
+    documentEpoch: null,
+    revision: 1,
+    requestId: 'player-load-1',
+    mode: 'player-full',
+    rect: { x: 0, y: 0, width: 1, height: 1 },
+  } as const;
+  const harness = createPreloadHarness((channel, invokedRequest, input) => {
+    assert.equal(channel, LINEUP_PLAYER_UPDATE_PRESENTATION_CHANNEL);
+    assert.deepEqual(invokedRequest, request);
+    return input({
+      ok: true,
+      status: 'applied',
+      documentEpoch: 3,
+      revision: request.revision,
+    });
+  });
+
+  const result = await harness.api.player.updatePresentation(harness.input(request));
+
+  assert.deepEqual(result, {
+    ok: true,
+    status: 'applied',
+    documentEpoch: 3,
+    revision: request.revision,
+  });
+  assert.equal(harness.calls.length, 1);
+});
+
 test('preload player recovery bridge exposes only the closed action vocabulary and validates settlement', async () => {
   const snapshot = createSafePlayerSnapshot();
   const accepted = createPreloadHarness((_channel, request, input) => {
@@ -1949,7 +1979,7 @@ test('guide bridge validates presentation request ranges and result envelopes', 
             genres: ['Drama'],
             startsAtMs: 1,
             endsAtMs: 2,
-            artwork: null,
+            artwork: { poster: null, background: null },
           },
         ],
       },
@@ -1991,6 +2021,35 @@ test('guide bridge validates presentation request ranges and result envelopes', 
 
   const valid = await bridge.getPresentation({ startTimeMs: 0, durationMs: 60_000 });
   assert.equal((valid as { ok: boolean }).ok, true);
+
+  const formerLogoFieldBridge = createGuideBridge(
+    async (_channel, request) => ({
+      ok: true,
+      requestId: request.requestId,
+      value: {
+        ...validPresentation,
+        channels: validPresentation.channels.map((channel) => ({
+          ...channel,
+          programs: channel.programs.map((program) => ({
+            ...program,
+            artwork: { ...program.artwork, logo: null },
+          })),
+        })),
+      },
+    }),
+    {
+      getPresentation: LINEUP_GUIDE_GET_PRESENTATION_CHANNEL,
+      cancelPresentation: LINEUP_GUIDE_CANCEL_PRESENTATION_CHANNEL,
+      setLibraryFilter: LINEUP_GUIDE_SET_LIBRARY_FILTER_CHANNEL,
+      tuneChannel: LINEUP_PLAYER_TUNE_CHANNEL,
+    },
+    () => 'guide-request-former-logo',
+  );
+  const formerLogoField = await formerLogoFieldBridge.getPresentation({
+    startTimeMs: 0,
+    durationMs: 60_000,
+  });
+  assert.equal((formerLogoField as { ok: boolean }).ok, false);
 
   const wrongRequestBridge = createGuideBridge(
     async () => ({
@@ -2710,7 +2769,7 @@ test('preload settings bridge exposes three total guarded methods with exact req
       requestId,
       value: {
         snapshot: {
-          schemaVersion: 2,
+          schemaVersion: 3,
           revision: channel === LINEUP_SETTINGS_GET_SNAPSHOT_CHANNEL ? 2 : 3,
           status: 'ready',
           values: DEFAULT_DESKTOP_SETTINGS_VALUES,
@@ -2784,7 +2843,7 @@ test('preload settings guards reject persisted system-default, invalid capabilit
     requestId: 'settings-get-strict',
     value: {
       snapshot: {
-        schemaVersion: 2,
+        schemaVersion: 3,
         revision: 1,
         status: 'ready',
         values: DEFAULT_DESKTOP_SETTINGS_VALUES,

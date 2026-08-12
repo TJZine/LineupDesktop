@@ -25,7 +25,7 @@ test('settingsSetup initial state has expected default values', () => {
     DEFAULT_DESKTOP_SETTINGS_VALUES,
   );
   assert.equal(state.launchMode, 'windowed');
-  assert.equal(state.guideDensity, 'comfortable');
+  assert.equal(state.guideTimeRange, 'detailed');
   assert.equal(state.previewBadgesEnabled, true);
   assert.equal(state.setupReminderEnabled, true);
   assert.deepEqual(state.supportBundleExport, {
@@ -44,12 +44,12 @@ test('applySettingsAction handles cycleLaunchMode state transition', () => {
   assert.equal(state.launchMode, 'windowed');
 });
 
-test('applySettingsAction handles cycleGuideDensity state transition', () => {
+test('applySettingsAction handles cycleGuideTimeRange state transition', () => {
   let state = createSettingsDraftState();
-  state = applySettingsAction(state, 'cycleGuideDensity');
-  assert.equal(state.guideDensity, 'compact');
-  state = applySettingsAction(state, 'cycleGuideDensity');
-  assert.equal(state.guideDensity, 'comfortable');
+  state = applySettingsAction(state, 'cycleGuideTimeRange');
+  assert.equal(state.guideTimeRange, 'wide');
+  state = applySettingsAction(state, 'cycleGuideTimeRange');
+  assert.equal(state.guideTimeRange, 'detailed');
 });
 
 test('applySettingsAction handles togglePreviewBadges state transition', () => {
@@ -197,11 +197,16 @@ test('createSettingsSections generates sections with expected structures', () =>
   assert.equal(setupSection?.items[3]?.valueLabel, '101');
 
   const ids = sections.flatMap((section) => section.items.map((item) => item.id));
-  assert.equal(ids.length, 32);
+  assert.equal(ids.length, 33);
   assert.ok(ids.includes('audio-output'));
   assert.ok(ids.includes('audio-setup-status'));
   assert.ok(ids.includes('now-playing-auto-hide'));
-  assert.equal(sections[3]?.items.every((item) => item.disabled), true);
+  assert.equal(
+    sections[3]?.items
+      .filter((item) => ['guide-performance-profile', 'guide-time-range', 'guide-row-density'].includes(item.id))
+      .every((item) => !item.disabled),
+    true,
+  );
 });
 
 test('settings sections preserve exact category order, closed options, and disabled truth', () => {
@@ -211,14 +216,25 @@ test('settings sections preserve exact category order, closed options, and disab
   ]);
   const items = sections.flatMap((section) => section.items);
   assert.equal(items.find((item) => item.id === 'subtitle-mode')?.valueLabel, 'Full (Burn-in, default)');
-  assert.equal(items.find((item) => item.id === 'guide-density')?.valueLabel, 'Detailed (2h)');
+  const detailedTimeRange = items.find((item) => item.id === 'guide-time-range');
+  assert.equal(detailedTimeRange?.valueLabel, 'Detailed (2h)');
+  assert.equal(detailedTimeRange?.description, 'Detailed shows 2 hours; Wide shows 3 hours.');
+  const wideTimeRange = createSettingsSections({
+    ...createSettingsDraftState(),
+    guideTimeRange: 'wide',
+  }).flatMap((section) => section.items).find((item) => item.id === 'guide-time-range');
+  assert.equal(wideTimeRange?.valueLabel, 'Wide (3h)');
+  assert.equal(wideTimeRange?.description, detailedTimeRange?.description);
   assert.equal(items.find((item) => item.id === 'info-box-background')?.disabledReason, 'Disabled until safe artwork is available.');
-  assert.equal(
-    sections[3]?.items.every((item) => (
-      item.disabledReason === 'Available when Guide preferences are supported.'
-    )),
-    true,
-  );
+  const guideItems = new Map(sections[3]?.items.map((item) => [item.id, item]) ?? []);
+  for (const id of ['library-tabs', 'now-watching-banner', 'guide-performance-profile', 'guide-time-range', 'guide-row-density']) {
+    assert.equal(guideItems.get(id)?.disabled, false);
+    assert.equal(guideItems.get(id)?.disabledReason, undefined);
+  }
+  for (const id of ['guide-layout', 'past-items-window']) {
+    assert.equal(guideItems.get(id)?.disabled, true);
+    assert.equal(guideItems.get(id)?.disabledReason, 'This Guide preference is not yet available.');
+  }
 
   let values = { ...DEFAULT_DESKTOP_SETTINGS_VALUES };
   const themes = [values.theme];
@@ -274,8 +290,9 @@ test('settings focus ownership exposes the exact fixed-schema interactive contro
       [
         'settings-library-tabs',
         'settings-now-watching-banner',
-        'settings-aggressive-guide-preload',
-        'settings-guide-density',
+        'settings-guide-performance-profile',
+        'settings-guide-time-range',
+        'settings-guide-row-density',
         'settings-guide-layout',
         'settings-past-items-window',
       ],

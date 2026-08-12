@@ -107,6 +107,33 @@ class DeferredNativePlayerHost implements NativePlayerHostPort {
   }
 }
 
+class DeferredCleanupNativePlayerHost extends FakeNativePlayerHost {
+  readonly cleanupStarted: Promise<void>;
+  #notifyCleanupStarted!: () => void;
+  #finishCleanup!: () => void;
+  readonly #cleanupFinished: Promise<void>;
+
+  constructor() {
+    super();
+    this.cleanupStarted = new Promise<void>((resolve) => {
+      this.#notifyCleanupStarted = resolve;
+    });
+    this.#cleanupFinished = new Promise<void>((resolve) => {
+      this.#finishCleanup = resolve;
+    });
+  }
+
+  override async cleanup(requestId: string | null): Promise<void> {
+    this.cleanupRequestIds.push(requestId);
+    this.#notifyCleanupStarted();
+    await this.#cleanupFinished;
+  }
+
+  finishCleanup(): void {
+    this.#finishCleanup();
+  }
+}
+
 const media: PlayerMediaSummary = {
   id: 'media-1',
   title: 'Episode 1',
@@ -159,6 +186,116 @@ function runtimeLoadCommand(requestId = 'request-load-1'): PlayerCommand {
     payload: loadEnvelope(requestId).payload as PlayerLoadCommandPayload,
   };
 }
+
+function runtimeTerminalError(): Extract<PlayerEvent, { event: 'error' }> {
+  return {
+    event: 'error',
+    requestId: null,
+    error: {
+      code: 'PLAYER_PLAYBACK_CANDIDATE_UNAVAILABLE',
+      category: 'source',
+      message: 'The playback runtime could not resolve the scheduled media.',
+      recoverable: true,
+      retryable: true,
+      diagnostic: {
+        component: 'plex-playback-runtime',
+        operation: 'channel.resolve',
+        status: 'failed',
+        reason: 'playback candidate resolution failed',
+      },
+    },
+  };
+}
+
+test('desktop player adapter accepts an exact runtime terminal settlement and owns the error snapshot', () => {
+  const adapter = new DesktopPlayerAdapter(new FakeNativePlayerHost());
+  const events = adapter.settleRuntimeTerminalError(runtimeTerminalError(), null);
+
+  assert.deepEqual(events.map((event) => event.event), ['error', 'state.changed']);
+  const changed = events[1];
+  assert.equal(changed?.event, 'state.changed');
+  assert.deepEqual(changed?.event === 'state.changed' ? changed.snapshot : null, adapter.getSnapshot());
+  assert.equal(adapter.getSnapshot().requestId, null);
+  assert.equal(adapter.getSnapshot().status, 'error');
+  assert.equal(adapter.getSnapshot().playing, false);
+  assert.deepEqual(adapter.getSnapshot().lastError, events[0]?.event === 'error' ? events[0].error : null);
+});
+
+test('desktop player adapter rejects a runtime terminal settlement on request mismatch without mutation or events', async () => {
+  const adapter = new DesktopPlayerAdapter(new FakeNativePlayerHost());
+  await adapter.dispatchRuntimeCommand(runtimeLoadCommand('newer-request'), privilegedContext('newer-request'));
+  const before = adapter.getSnapshot();
+
+  const events = adapter.settleRuntimeTerminalError(runtimeTerminalError(), null);
+
+  assert.deepEqual(events, []);
+  assert.deepEqual(adapter.getSnapshot(), before);
+});
+
+test('desktop player adapter settles a current failure against a retained previous request', async () => {
+  const adapter = new DesktopPlayerAdapter(new FakeNativePlayerHost());
+  await adapter.dispatchRuntimeCommand(
+    runtimeLoadCommand('previous-request'),
+    privilegedContext('previous-request'),
+  );
+
+  const events = adapter.settleRuntimeTerminalError(
+    runtimeTerminalError(),
+    'previous-request',
+  );
+
+  assert.deepEqual(events.map((event) => event.event), ['error', 'state.changed']);
+  const errorEvent = events[0];
+  const stateChangedEvent = events[1];
+  const snapshot = adapter.getSnapshot();
+  assert.equal(errorEvent?.event, 'error');
+  assert.equal(errorEvent?.requestId, 'previous-request');
+  assert.equal(errorEvent?.event === 'error' ? errorEvent.error.requestId : null, 'previous-request');
+  assert.equal(stateChangedEvent?.event, 'state.changed');
+  assert.equal(stateChangedEvent?.requestId, 'previous-request');
+  assert.equal(
+    stateChangedEvent?.event === 'state.changed' ? stateChangedEvent.snapshot.requestId : null,
+    'previous-request',
+  );
+  assert.equal(
+    stateChangedEvent?.event === 'state.changed'
+      ? stateChangedEvent.snapshot.lastError?.requestId
+      : null,
+    'previous-request',
+  );
+  assert.equal(snapshot.requestId, 'previous-request');
+  assert.equal(snapshot.lastError?.requestId, 'previous-request');
+  assert.equal(snapshot.status, 'error');
+});
+
+test('desktop player adapter quarantines a prior candidate failure when a load supersedes scoped cleanup', async () => {
+  const host = new DeferredCleanupNativePlayerHost();
+  const adapter = new DesktopPlayerAdapter(host);
+  await adapter.dispatchRuntimeCommand(
+    runtimeLoadCommand('previous-request'),
+    privilegedContext('previous-request'),
+  );
+
+  const cleanup = adapter.cleanup('previous-request');
+  await host.cleanupStarted;
+  await adapter.dispatchRuntimeCommand(
+    runtimeLoadCommand('newer-request'),
+    privilegedContext('newer-request'),
+  );
+  host.finishCleanup();
+  const cleanupResult = await cleanup;
+  const beforeSettlement = adapter.getSnapshot();
+
+  const settlement = adapter.settleRuntimeTerminalError(
+    runtimeTerminalError(),
+    'previous-request',
+  );
+
+  assert.deepEqual(cleanupResult.events, []);
+  assert.deepEqual(settlement, []);
+  assert.deepEqual(adapter.getSnapshot(), beforeSettlement);
+  assert.equal(adapter.getSnapshot().requestId, 'newer-request');
+});
 
 function privilegedContext(requestId = 'request-load-1'): PrivilegedPlaybackDispatchContext {
   return {

@@ -34,8 +34,8 @@ const values = { ...DEFAULT_DESKTOP_SETTINGS_VALUES };
 const snapshot = { schemaVersion: SETTINGS_SCHEMA_VERSION, revision: 2, status: 'ready' as const, values };
 const view = createDesktopSettingsView(snapshot);
 
-test('settings contract freezes the exact version-2 values, defaults, statuses, and error vocabulary', () => {
-  assert.equal(SETTINGS_SCHEMA_VERSION, 2);
+test('settings contract freezes the exact version-3 values, defaults, statuses, and error vocabulary', () => {
+  assert.equal(SETTINGS_SCHEMA_VERSION, 3);
   assert.deepEqual(Object.keys(values), [...DESKTOP_SETTINGS_VALUE_KEYS]);
   assert.deepEqual(values, {
     launchMode: 'windowed',
@@ -52,8 +52,9 @@ test('settings contract freezes the exact version-2 values, defaults, statuses, 
     transcodeCompatibilityModeEnabled: false,
     libraryTabsEnabled: true,
     nowWatchingBannerEnabled: true,
-    aggressiveGuidePreloadEnabled: false,
-    guideDensity: 'comfortable',
+    guideTimeRange: 'detailed',
+    guidePerformanceProfile: 'auto',
+    guideRowDensity: 'auto',
     guideLayout: 'classic',
     pastItemsWindow: 'auto',
     infoBoxBackgroundMode: 'theme-default',
@@ -67,11 +68,11 @@ test('settings contract freezes the exact version-2 values, defaults, statuses, 
     previewBadgesEnabled: true,
     setupReminderEnabled: true,
   });
-  assert.deepEqual([...DESKTOP_SETTINGS_LOAD_STATUSES], ['ready', 'missing', 'corrupt', 'unsupported-version']);
+  assert.deepEqual([...DESKTOP_SETTINGS_LOAD_STATUSES], ['ready', 'missing', 'corrupt']);
   assert.equal(DESKTOP_SETTINGS_LOAD_STATUSES.includes('migrated' as never), false);
   assert.deepEqual([...DESKTOP_SETTINGS_ERROR_CODES], [
     'unauthorized', 'validation-failed', 'revision-conflict', 'storage-unavailable',
-    'unsupported-version', 'operation-failed',
+    'operation-failed',
   ]);
   for (const code of DESKTOP_SETTINGS_ERROR_CODES) {
     const failure = desktopSettingsFailure('settings-1', code);
@@ -83,6 +84,11 @@ test('settings contract freezes the exact version-2 values, defaults, statuses, 
 test('settings request and persisted record guards require exact shapes and canonical values', () => {
   assert.equal(isDesktopSettingsValues(values), true);
   assert.equal(isDesktopSettingsValues({ ...values, extra: true }), false);
+  assert.equal(isDesktopSettingsValues({ ...values, guideTimeRange: 'wide' }), true);
+  assert.equal(isDesktopSettingsValues({ ...values, guidePerformanceProfile: 'reduced-resource' }), true);
+  assert.equal(isDesktopSettingsValues({ ...values, guideRowDensity: 'compact' }), true);
+  assert.equal(isDesktopSettingsValues({ ...values, guidePreferences: true } as unknown), false);
+  assert.equal(isDesktopSettingsValues({ ...values, guidePerformanceMode: 'auto' } as unknown), false);
   assert.equal(isDesktopSettingsValues({ ...values, audioOutputDeviceId: opaqueAudioId }), true);
   assert.equal(isDesktopSettingsValues({ ...values, audioOutputDeviceId: 'system-default' }), false);
   assert.equal(isDesktopSettingsGetSnapshotRequest({ requestId: 'settings-get-1' }), true);
@@ -129,6 +135,21 @@ test('settings replacement rejects noncanonical audio ids and unsupported litera
     requestId: 'settings-replace-language',
     expectedRevision: 0,
     values: { ...values, preferredSubtitleLanguage: 'xx' },
+  }), false);
+  assert.equal(isDesktopSettingsReplaceRequest({
+    requestId: 'settings-replace-time-range',
+    expectedRevision: 0,
+    values: { ...values, guideTimeRange: 'extended' } as unknown,
+  }), false);
+  assert.equal(isDesktopSettingsReplaceRequest({
+    requestId: 'settings-replace-performance',
+    expectedRevision: 0,
+    values: { ...values, guidePerformanceProfile: true } as unknown,
+  }), false);
+  assert.equal(isDesktopSettingsReplaceRequest({
+    requestId: 'settings-replace-row-density',
+    expectedRevision: 0,
+    values: { ...values, guideRowDensity: 'dense' } as unknown,
   }), false);
   assert.equal(isDesktopSettingsReplaceRequest({
     requestId: 'settings-replace-quality',

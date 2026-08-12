@@ -108,10 +108,15 @@ test('collectRuntimeVersions probes the bundled Electron runtime with a sanitize
 
   withTemporaryEnvironmentVariables({
     NODE_OPTIONS: '--require /hostile-preload.cjs',
+    Node_Options: '--require /duplicate-hostile-preload.cjs',
     npm_config_node_options: '--trace-warnings',
+    NPM_CONFIG_NODE_OPTIONS: '--require /duplicate-hostile-npm-preload.cjs',
     npm_config_script_shell: '/hostile-script-shell',
+    Npm_Config_Script_Shell: '/duplicate-hostile-script-shell',
     npm_execpath: '/hostile-npm-cli.js',
+    NPM_EXECPATH: '/duplicate-hostile-npm-cli.js',
     npm_node_execpath: '/hostile-node',
+    Npm_Node_ExecPath: '/duplicate-hostile-node',
   }, () => {
     assert.deepEqual(collectRuntimeVersions(root, { spawnSyncForTest }), expectedVersions);
     assert.deepEqual(
@@ -129,7 +134,10 @@ test('collectRuntimeVersions probes the bundled Electron runtime with a sanitize
     assert.equal(options.timeout, 15_000);
     assert.equal(options.maxBuffer, 64 * 1024);
     assert.equal(options.env.ELECTRON_RUN_AS_NODE, '1');
-    assert.equal(options.env.PATH, process.env.PATH);
+    assert.equal(
+      readEnvironmentVariable(options.env, 'PATH'),
+      readEnvironmentVariable(process.env, 'PATH'),
+    );
     for (const key of [
       'NODE_OPTIONS',
       'npm_config_node_options',
@@ -137,7 +145,7 @@ test('collectRuntimeVersions probes the bundled Electron runtime with a sanitize
       'npm_execpath',
       'npm_node_execpath',
     ]) {
-      assert.equal(Object.hasOwn(options.env, key), false);
+      assert.equal(hasEnvironmentVariable(options.env, key), false);
     }
   }
 });
@@ -278,10 +286,15 @@ test('clean Electron build runner invokes bounded npm CLI without a shell', () =
   let invocation;
   withTemporaryEnvironmentVariables({
     NODE_OPTIONS: '--require /hostile-preload.cjs',
+    Node_Options: '--require /duplicate-hostile-preload.cjs',
     npm_config_node_options: '--trace-warnings',
+    NPM_CONFIG_NODE_OPTIONS: '--require /duplicate-hostile-npm-preload.cjs',
     npm_config_script_shell: '/hostile-script-shell',
+    Npm_Config_Script_Shell: '/duplicate-hostile-script-shell',
     npm_execpath: '/hostile-npm-cli.js',
+    NPM_EXECPATH: '/duplicate-hostile-npm-cli.js',
     npm_node_execpath: '/hostile-node',
+    Npm_Node_ExecPath: '/duplicate-hostile-node',
   }, () => {
     runCleanElectronBuild('/fixture-root', {
       nodeExecutableForTest: '/fixture-node',
@@ -306,7 +319,10 @@ test('clean Electron build runner invokes bounded npm CLI without a shell', () =
     maxBuffer: 1024 * 1024,
     shell: false,
   });
-  assert.equal(env.PATH, process.env.PATH);
+  assert.equal(
+    readEnvironmentVariable(env, 'PATH'),
+    readEnvironmentVariable(process.env, 'PATH'),
+  );
   for (const key of [
     'NODE_OPTIONS',
     'npm_config_node_options',
@@ -314,7 +330,7 @@ test('clean Electron build runner invokes bounded npm CLI without a shell', () =
     'npm_execpath',
     'npm_node_execpath',
   ]) {
-    assert.equal(Object.hasOwn(env, key), false);
+    assert.equal(hasEnvironmentVariable(env, key), false);
   }
 });
 
@@ -1113,4 +1129,18 @@ function withTemporaryEnvironmentVariables(values, callback) {
     restore();
     throw error;
   }
+}
+
+function readEnvironmentVariable(environment, name) {
+  const normalizedName = name.toLowerCase();
+  return Object.entries(environment).find(
+    ([key]) => key.toLowerCase() === normalizedName,
+  )?.[1];
+}
+
+function hasEnvironmentVariable(environment, name) {
+  const normalizedName = name.toLowerCase();
+  return Object.keys(environment).some(
+    (key) => key.toLowerCase() === normalizedName,
+  );
 }

@@ -31,14 +31,25 @@ import { createPlayerInputCommandController } from './playerInputCommandControll
 import { createSleepTimerController } from './sleepTimerController.js';
 import { createPlayerErrorRecoveryController } from './playerErrorRecoveryController.js';
 import { recordRendererBridgeFailure } from './rendererBridgeFailures.js';
-import { findEpgProgramCell, focusEpgNow, selectEpgPageTarget, settleEpgPresentation, settleEpgPresentationFailure, setEpgPresentationState, setEpgTuneError } from './epg.js';
+import { findEpgProgramCell, focusEpgNow, moveEpgSelectionAbsolute, selectEpgPageTarget, settleEpgPresentation, settleEpgPresentationFailure, setEpgPresentationState, setEpgTuneError } from './epg.js';
 import { registerRendererActions, type GuideActionId, type GuideProgramActionTarget } from './rendererActionRegistration.js';
 import { subscribePlayerBridge } from './playerBridgeSubscription.js';
-import { createGuidePresentationPolling } from './guidePresentationPolling.js';
+import {
+  createGuidePresentationPolling,
+  GUIDE_VIEWPORT_REFRESH_SOURCE,
+} from './guidePresentationPolling.js';
+import { classifyGuideKeyboardInput, guidePerformanceMarks } from './guidePerformanceMarks.js';
 import { projectGuideCacheIdentity } from './guideVirtualization.js';
+import { GuideChannelWindow } from './guideChannelWindow.js';
 import { createGuideLibraryFilterController, projectNativePlayerPresentationMode } from './guidePresentation.js';
 import { createNativePlayerPresentationController } from './player/nativePlayerPresentationController.js';
-import { invalidateGuideLayoutMetrics, projectGuideLibraryTabsPending } from './epg/guideDom.js';
+import {
+  invalidateGuideLayoutMetrics,
+  projectGuideLibraryTabsPending,
+  readGuideViewportRows,
+  renderEpgGuideDom,
+  setGuideViewportStart,
+} from './epg/guideDom.js';
 import { dispatchPlexRuntimeAction } from './plexRuntimeActionDispatch.js';
 import { initializeProfilePinModal, openProfilePinModal, isProfilePinModalActive, closeProfilePinModal } from './profilePinModal.js';
 import { SETTINGS_SECTION_IDS, isPersistedSettingsActionEnabled, type SettingsSectionId } from './settingsSetup.js';
@@ -56,7 +67,7 @@ import { handleStagedSetupBack } from './setup/stagedSetupController.js';
 import { renderStagedSetupDom } from './setup/stagedSetupDom.js';
 import { cleanupSetupRouteLifecycle, clearSetupSourceLifecycle, createSetupComposition } from './setup/setupComposition.js';
 import { createSettingsRuntime } from './settings/settingsRuntime.js';
-import { createSettingsGuideDensitySettlementOwner } from './settings/guideDensitySettlement.js';
+import { createSettingsGuideSettingsSettlementOwner } from './settings/guideSettingsSettlement.js';
 import { createAudioSetupRuntime } from './settings/audioSetupRuntime.js';
 import { canActivateRouteDuringAudioSetup } from './settings/audioSetupNavigation.js';
 import { renderAudioSetupDom } from './settings/audioSetupDom.js';
@@ -72,15 +83,38 @@ const scheduleGuideVirtualReconcile = (): void => {
   if (guideVirtualFrame !== null) window.cancelAnimationFrame(guideVirtualFrame);
   guideVirtualFrame = window.requestAnimationFrame(() => {
     guideVirtualFrame = null;
-    renderApp();
+    reconcileGuideViewport();
   });
 };
 const handleGuideResize = (): void => {
   invalidateGuideLayoutMetrics(dom.epgGridElement);
   scheduleGuideVirtualReconcile();
 };
-dom.epgGridElement?.addEventListener('scroll', scheduleGuideVirtualReconcile, { passive: true });
+let pendingGuideWheel = false;
+const receiveGuideKey = (event: KeyboardEvent): void => {
+  if (workflowState.routeState.activeRoute === 'guide') {
+    guidePerformanceMarks.inputReceived(classifyGuideKeyboardInput(event));
+  }
+};
+const receiveGuideWheel = (): void => {
+  pendingGuideWheel = true;
+  guidePerformanceMarks.inputReceived('wheel');
+};
+const receiveGuidePointer = (): void => {
+  if (workflowState.routeState.activeRoute === 'guide') guidePerformanceMarks.inputReceived('pointer');
+};
+const handleGuideScroll = (): void => {
+  if (!pendingGuideWheel) guidePerformanceMarks.inputReceived('scroll');
+  guidePerformanceMarks.inputAccepted(pendingGuideWheel ? 'wheel' : 'scroll');
+  pendingGuideWheel = false;
+  scheduleGuideVirtualReconcile();
+};
+window.addEventListener('keydown', receiveGuideKey, { capture: true });
+window.addEventListener('pointerdown', receiveGuidePointer, { capture: true });
+dom.epgGridElement?.addEventListener('wheel', receiveGuideWheel, { passive: true });
+dom.epgGridElement?.addEventListener('scroll', handleGuideScroll, { passive: true });
 window.addEventListener('resize', handleGuideResize);
+window.visualViewport?.addEventListener('resize', handleGuideResize);
 const shellDom = queryShellDom();
 let fullscreenEnabled = false, shellState: RendererShellState = createRendererShellState();
 const fullscreenTransport = createFullscreenTransportCoordinator({
@@ -91,6 +125,8 @@ const fullscreenTransport = createFullscreenTransportCoordinator({
   },
 });
 let workflowState = createWorkflowState('player');
+const guideChannelWindow = new GuideChannelWindow();
+guideChannelWindow.reset('guide-startup');
 const supportBundleExportCoordinator = new SupportBundleExportCoordinator();
 let overlayState = createPlayerOverlayState();
 let playerSnapshot = createEmptyPlayerSnapshot();
@@ -99,27 +135,42 @@ let pendingGuideFocusId: string | null = null, launchActive = true;
 let startupProfilePickerHandled = false;
 const focusRegistry = new FocusRegistry(); let focusState: FocusState;
 let guidePresentationPolling: ReturnType<typeof createGuidePresentationPolling> | undefined;
-const settingsGuideDensitySettlementOwner = createSettingsGuideDensitySettlementOwner({
-  getCurrentDensity: () => workflowState.settingsDraft.guideDensity,
+const settingsGuideSettingsSettlementOwner = createSettingsGuideSettingsSettlementOwner({
+  getCurrentSettings: () => ({
+    guideTimeRange: workflowState.settingsDraft.guideTimeRange,
+    guidePerformanceProfile: workflowState.settingsDraft.guidePerformanceProfile,
+    guideRowDensity: workflowState.settingsDraft.guideRowDensity,
+    guideLayout: workflowState.settingsDraft.guideLayout,
+  }),
   getPolling: () => guidePresentationPolling,
   retainGuideProgramFocusIntent: () => { retainGuideProgramFocusIntent(); },
   restorePendingGuideFocus,
+  invalidateViewportLayout: () => { invalidateGuideLayoutMetrics(dom.epgGridElement); },
+  reconcileViewport: (allowRefresh) => {
+    if (workflowState.routeState.activeRoute === 'guide') reconcileGuideViewport(allowRefresh);
+  },
 });
 const settingsRuntime = createSettingsRuntime({
   settings: window.lineupDesktop.settings, windowBridge: fullscreenTransport,
   onStateChanged: (state) => {
-    const layoutChanged = state.values.guideLayout !== workflowState.settingsDraft.guideLayout;
-    const aggressivePreloadChanged = state.values.aggressiveGuidePreloadEnabled !== workflowState.settingsDraft.aggressiveGuidePreloadEnabled;
+    const guideTimeRangeChanged = state.values.guideTimeRange !== workflowState.settingsDraft.guideTimeRange;
+    const guidePerformanceProfileChanged = state.values.guidePerformanceProfile !== workflowState.settingsDraft.guidePerformanceProfile;
     const pastItemsWindowChanged = state.values.pastItemsWindow !== workflowState.settingsDraft.pastItemsWindow;
-    const densitySettlement = settingsGuideDensitySettlementOwner.begin(
-      state.values.guideDensity,
+    const guideSettingsSettlement = settingsGuideSettingsSettlementOwner.begin(
+      {
+        guideTimeRange: state.values.guideTimeRange,
+        guidePerformanceProfile: state.values.guidePerformanceProfile,
+        guideRowDensity: state.values.guideRowDensity,
+        guideLayout: state.values.guideLayout,
+      },
       () => {
         workflowState = applyWorkflowSettingsValues(workflowState, state.values, state.capabilities);
       },
     );
-    if (layoutChanged) invalidateGuideLayoutMetrics(dom.epgGridElement);
+    if (guideTimeRangeChanged || guidePerformanceProfileChanged) guideChannelWindow.clear();
     if (pastItemsWindowChanged) {
       guidePresentationPolling?.notePastItemsWindowChange();
+      guideChannelWindow.clear();
       retainGuideProgramFocusIntent();
     }
     document.documentElement.dataset.theme = state.values.theme;
@@ -128,24 +179,15 @@ const settingsRuntime = createSettingsRuntime({
     const errorElement = document.querySelector<HTMLElement>('[data-settings-error]');
     if (errorElement) { errorElement.textContent = state.errorMessage ?? ''; errorElement.hidden = state.errorMessage === null; }
     if (!state.loading) {
-      const activeRoute = workflowState.routeState.activeRoute;
       renderApp();
-      void densitySettlement.finish(false);
-      const polling = guidePresentationPolling;
-      if (aggressivePreloadChanged && polling !== undefined && (activeRoute === 'guide' || activeRoute === 'player')) {
-        void polling.refresh('guide-aggressive-preload-change', {
-          showLoading: activeRoute === 'guide',
-          allowPlayerRoute: activeRoute === 'player',
-          invalidateCache: true,
-        });
-      }
+      void guideSettingsSettlement.finish(false);
       guidePresentationPolling?.settlePastItemsWindow({
         currentValue: state.values.pastItemsWindow,
         acceptedValue: state.snapshot?.values.pastItemsWindow ?? null,
         saving: state.saving,
       });
     } else {
-      void densitySettlement.finish(true);
+      void guideSettingsSettlement.finish(true);
     }
   },
 });
@@ -382,48 +424,82 @@ const initializedGuidePresentationPolling = createGuidePresentationPolling({
   host: window,
   getActiveRoute: () => workflowState.routeState.activeRoute,
   getWindowStartMs: () => workflowState.epg.windowStartMs,
-  getGuideDensity: () => workflowState.settingsDraft.guideDensity,
-  getAggressivePreloadEnabled: () => workflowState.settingsDraft.aggressiveGuidePreloadEnabled,
+  getGuideTimeRange: () => workflowState.settingsDraft.guideTimeRange,
+  getGuidePerformanceProfile: () => workflowState.settingsDraft.guidePerformanceProfile,
   getCacheScopeToken: () => workflowState.guidePresentation.libraryFilter?.scopeToken ?? null,
-  getCacheIdentity: () => {
-    const filter = workflowState.guidePresentation.libraryFilter;
-    return filter === undefined ? null : projectGuideCacheIdentity({
-      scopeToken: filter.scopeToken,
-      revision: filter.revision,
-      selectedLibraryId: filter.selectedLibraryId,
-      pastItemsWindow: workflowState.settingsDraft.pastItemsWindow,
-      guideDensity: workflowState.settingsDraft.guideDensity,
-      aggressivePreload: workflowState.settingsDraft.aggressiveGuidePreloadEnabled,
-    });
+  getCacheIdentity: () => guideWindowIdentity(workflowState.guidePresentation),
+  getChannelOffset: () => guideChannelWindow.visibleStart,
+  getCompleteVisibleRowCount: () => guideChannelWindow.completeVisibleRowCount,
+  requestWindowState: (state, request) => {
+    if (request.warmOnly) return;
+    const intent = guideChannelWindow.createIntent(
+      request.generation,
+      request.channelOffset,
+      request.channelLimit,
+    );
+    if (state === 'queued') guideChannelWindow.markLoading(intent);
+    else guideChannelWindow.release(intent);
+    if (guideChannelWindow.total > 0 && workflowState.routeState.activeRoute === 'guide') {
+      workflowState = { ...workflowState, guidePresentation: guideChannelWindow.presentation() };
+      renderGuidePresentationUpdate(request.source);
+    }
   },
-  getChannelOffset: () => workflowState.guidePresentation.channelWindow?.offset ?? 0,
   setLoading: (generation) => {
     retainGuideProgramFocusIntent();
     workflowState = {
       ...workflowState,
       epg: setEpgPresentationState(workflowState.epg, 'loading', generation),
     };
+    guidePerformanceMarks.stateAccepted(generation, 'loading', -1);
     renderApp();
   },
-  applyPresentation: (normalizedGuidePresentation, generation, pagingTargetGlobalIndex, effectiveStartTimeMs) => {
+  applyPresentation: (
+    normalizedGuidePresentation,
+    generation,
+    pagingTargetGlobalIndex,
+    effectiveStartTimeMs,
+    requestWindow,
+    source,
+  ) => {
+    const identity = guideWindowIdentity(normalizedGuidePresentation) ?? 'guide-unscoped';
+    const viewport = readGuideViewportRows(dom.epgGridElement);
+    const requestedWindow = requestWindow ?? {
+      channelOffset: normalizedGuidePresentation.channelWindow?.offset ?? 0,
+      channelLimit: normalizedGuidePresentation.channels.length || guideChannelWindow.completeVisibleRowCount,
+    };
+    if (!guideChannelWindow.mergePresentation(
+      identity,
+      workflowState.settingsDraft.guidePerformanceProfile,
+      generation,
+      requestedWindow.channelOffset,
+      requestedWindow.channelLimit,
+      normalizedGuidePresentation,
+    )) {
+      return false;
+    }
+    guideChannelWindow.setVisible(viewport.start, viewport.completeCount,
+      guideChannelWindow.absoluteIndexForChannel(workflowState.epg.selectedChannelId));
+    const sparsePresentation = guideChannelWindow.presentation();
     const capturedFocusId = captureGuideProgramFocusIntent(pendingGuideFocusId, focusState.activeId);
     const settlement = settleEpgPresentation(
       workflowState.epg,
-      normalizedGuidePresentation,
+      sparsePresentation,
       generation,
       pagingTargetGlobalIndex,
       capturedFocusId !== null,
-      workflowState.settingsDraft.guideDensity,
+      workflowState.settingsDraft.guideTimeRange,
       effectiveStartTimeMs,
     );
     workflowState = {
       ...workflowState,
-      guidePresentation: normalizedGuidePresentation,
+      guidePresentation: sparsePresentation,
       epg: settlement.state,
     };
     if (settlement.pendingFocusId !== undefined) pendingGuideFocusId = settlement.pendingFocusId;
-    renderApp();
-    restorePendingGuideFocus();
+    guidePerformanceMarks.stateAccepted(generation, 'ready', pagingTargetGlobalIndex ?? -1);
+    const guideScoped = renderGuidePresentationUpdate(source);
+    if (!guideScoped) restorePendingGuideFocus();
+    return true;
   },
   applyPlayerPresentation: (normalizedGuidePresentation, generation, effectiveStartTimeMs) => {
     const settlement = settleEpgPresentation(
@@ -432,7 +508,7 @@ const initializedGuidePresentationPolling = createGuidePresentationPolling({
       generation,
       null,
       false,
-      workflowState.settingsDraft.guideDensity,
+      workflowState.settingsDraft.guideTimeRange,
       effectiveStartTimeMs,
     );
     workflowState = {
@@ -448,7 +524,16 @@ const initializedGuidePresentationPolling = createGuidePresentationPolling({
     message,
     { route: 'player', source },
   ),
-  handleFailure: handleGuidePresentationFailure,
+  handleFailure: (source, message, generation, retainLastValid, requestWindow) => {
+    if (requestWindow !== undefined && guideChannelWindow.total > 0) {
+      const intent = guideChannelWindow.createIntent(generation, requestWindow.channelOffset, requestWindow.channelLimit);
+      guideChannelWindow.fail(intent);
+      workflowState = { ...workflowState, guidePresentation: guideChannelWindow.presentation() };
+      handleGuidePresentationFailure(source, message, generation, true);
+      return;
+    }
+    handleGuidePresentationFailure(source, message, generation, retainLastValid);
+  },
   setPagingBusy: (busy) => {
     if (busy) dom.epgGridElement?.setAttribute('aria-busy', 'true');
     else dom.epgGridElement?.removeAttribute('aria-busy');
@@ -464,6 +549,7 @@ guideFilterController = createGuideLibraryFilterController({
       ...workflowState,
       guidePresentation: { ...workflowState.guidePresentation, libraryFilter },
     };
+    guideChannelWindow.clear();
   },
   refresh: () => { void initializedGuidePresentationPolling.refresh('guide-library-filter', { channelOffset: 0, showLoading: false, invalidateCache: true, cancelActive: true }); },
   cancelPage: () => initializedGuidePresentationPolling.cancelPage(),
@@ -500,8 +586,12 @@ attachNavigationInputRuntime(navigationLifecycle, {
     initializedGuidePresentationPolling.stop();
     if (guideVirtualFrame !== null) window.cancelAnimationFrame(guideVirtualFrame);
     guideVirtualFrame = null;
-    dom.epgGridElement?.removeEventListener('scroll', scheduleGuideVirtualReconcile);
+    dom.epgGridElement?.removeEventListener('wheel', receiveGuideWheel);
+    dom.epgGridElement?.removeEventListener('scroll', handleGuideScroll);
+    window.removeEventListener('keydown', receiveGuideKey, { capture: true });
+    window.removeEventListener('pointerdown', receiveGuidePointer, { capture: true });
     window.removeEventListener('resize', handleGuideResize);
+    window.visualViewport?.removeEventListener('resize', handleGuideResize);
     guideTuneController.stop();
     playerOverlayController.dispose();
     shellController.cleanup();
@@ -643,6 +733,7 @@ function activateRoute(route: AppRouteId, enterChannelSetup = true): boolean {
     guideTuneController.stop();
     guideFilterController?.cancel();
     pendingGuideFocusId = null;
+    guideChannelWindow.clear();
   }
   initializedGuidePresentationPolling.reconcile(previousRoute, workflowState.routeState.activeRoute);
   focusState = focusRegistry.focusRoute(focusState, route).state;
@@ -740,8 +831,30 @@ function handleGuideDirection(direction: 'up' | 'down' | 'left' | 'right'): bool
   if (shouldYieldGuideProgramDirectionToFocusGraph(focusState.activeId, direction, dom.focusableElements)) {
     return false;
   }
+  if (direction === 'up' || direction === 'down') {
+    const absolute = moveEpgSelectionAbsolute(
+      workflowState.epg,
+      direction === 'up' ? -1 : 1,
+      workflowState.guidePresentation,
+    );
+    if (absolute !== null) {
+      guidePerformanceMarks.inputAccepted('arrow');
+      if (absolute.loaded) {
+        workflowState = { ...workflowState, epg: absolute.state };
+        const selectedFocusId = getRouteWorkflowView(workflowState).guide.selectedProgram?.focusId;
+        focusState = advanceGuideProgramFocusIntent(focusState, selectedFocusId);
+        renderApp();
+        if (selectedFocusId !== undefined) restoreFocusTarget(selectedFocusId);
+      } else {
+        if (absolute.rowState === 'error') requestGuideErrorTarget(absolute.targetAbsoluteIndex);
+        else requestGuideAbsoluteTarget(absolute.targetAbsoluteIndex);
+      }
+      return true;
+    }
+  }
   const movement = applyWorkflowEpgDirection(workflowState, direction);
   if (!movement.result.handled) return false;
+  guidePerformanceMarks.inputAccepted('arrow');
   workflowState = movement.workflowState;
   const selectedFocusId = getRouteWorkflowView(workflowState).guide.selectedProgram?.focusId;
   focusState = advanceGuideProgramFocusIntent(focusState, selectedFocusId);
@@ -759,13 +872,31 @@ function handleGuidePage(offset: -5 | 5): boolean {
       !focusState.activeId?.startsWith('guide-program-')) {
     return false;
   }
+  const viewportOffset = Math.sign(offset) * guideChannelWindow.completeVisibleRowCount;
+  const absolute = moveEpgSelectionAbsolute(workflowState.epg, viewportOffset, workflowState.guidePresentation);
+  if (absolute !== null) {
+    guidePerformanceMarks.inputAccepted('page');
+    if (!absolute.loaded) {
+      if (absolute.rowState === 'error') requestGuideErrorTarget(absolute.targetAbsoluteIndex);
+      else requestGuideAbsoluteTarget(absolute.targetAbsoluteIndex);
+    }
+    else {
+      workflowState = { ...workflowState, epg: absolute.state };
+      const selectedFocusId = getRouteWorkflowView(workflowState).guide.selectedProgram?.focusId;
+      focusState = advanceGuideProgramFocusIntent(focusState, selectedFocusId);
+      renderApp();
+      if (selectedFocusId !== undefined) restoreFocusTarget(selectedFocusId);
+    }
+    return true;
+  }
   const result = initializedGuidePresentationPolling.navigatePage({
     state: workflowState.epg,
     presentation: workflowState.guidePresentation,
-    offset,
+    offset: viewportOffset,
     scopeToken: workflowState.guidePresentation.libraryFilter?.scopeToken ?? null,
   });
   if (!result.handled) return false;
+  guidePerformanceMarks.inputAccepted('page');
   if (result.targetLocalIndex !== null) {
     const nextEpg = selectEpgPageTarget(workflowState.epg, result.targetLocalIndex, workflowState.guidePresentation);
     workflowState = {
@@ -778,6 +909,37 @@ function handleGuidePage(offset: -5 | 5): boolean {
     if (selectedFocusId !== undefined) restoreFocusTarget(selectedFocusId);
   }
   return true;
+}
+
+function requestGuideAbsoluteTarget(targetAbsoluteIndex: number): void {
+  const completeCount = guideChannelWindow.completeVisibleRowCount;
+  const requestedStart = Math.max(0, targetAbsoluteIndex - Math.floor(completeCount / 2));
+  const viewport = setGuideViewportStart(dom.epgGridElement, requestedStart);
+  if (viewport === null) return;
+  const focusedIndex = guideChannelWindow.absoluteIndexForChannel(workflowState.epg.selectedChannelId);
+  guideChannelWindow.setVisible(viewport.start, viewport.completeCount, focusedIndex);
+  const request = guideChannelWindow.beginForeground(initializedGuidePresentationPolling.getGeneration() + 1);
+  if (request === null) return;
+  void initializedGuidePresentationPolling.requestPage({
+    targetGlobalIndex: targetAbsoluteIndex,
+    scopeToken: workflowState.guidePresentation.libraryFilter?.scopeToken ?? null,
+    channelOffset: request.channelOffset,
+    channelLimit: request.channelLimit,
+  });
+}
+
+function requestGuideErrorTarget(targetAbsoluteIndex: number): void {
+  const request = guideChannelWindow.retryAt(
+    targetAbsoluteIndex,
+    initializedGuidePresentationPolling.getGeneration() + 1,
+  );
+  if (request === null) return;
+  void initializedGuidePresentationPolling.requestPage({
+    targetGlobalIndex: targetAbsoluteIndex,
+    scopeToken: workflowState.guidePresentation.libraryFilter?.scopeToken ?? null,
+    channelOffset: request.channelOffset,
+    channelLimit: request.channelLimit,
+  });
 }
 
 function handleGuideMediaPlay(): boolean {
@@ -806,8 +968,20 @@ function applyGuideAction(action: GuideActionId): void {
       void applyRouteAction('openChannelSetup');
       return;
     case 'refresh':
-    case 'retry':
       void initializedGuidePresentationPolling.refresh(`guide-${action}`, { showLoading: true });
+      return;
+    case 'retry': {
+      const request = guideChannelWindow.retryVisible(initializedGuidePresentationPolling.getGeneration() + 1);
+      if (request === null) {
+        void initializedGuidePresentationPolling.refresh('guide-retry', { showLoading: true });
+        return;
+      }
+      void initializedGuidePresentationPolling.refresh('guide-retry-window', {
+        channelOffset: request.channelOffset,
+        channelLimit: request.channelLimit,
+        showLoading: false,
+      });
+    }
   }
 }
 
@@ -821,6 +995,7 @@ function activateGuideProgram(target: GuideProgramActionTarget): void {
 
 function focusGuideProgramFromPointer(target: GuideProgramActionTarget): boolean {
   if (focusState.activeId === target.focusId) return false;
+  guidePerformanceMarks.inputAccepted('pointer');
   focusRendererElement(target.element);
   return true;
 }
@@ -932,7 +1107,7 @@ function handleGuidePresentationFailure(source: string, message: string, generat
     ...workflowState,
     epg: settleEpgPresentationFailure(workflowState.epg, message, generation, retainLastValid),
   };
-  renderApp();
+  renderGuidePresentationUpdate(source);
   recordRendererBridgeFailure(window.lineupDesktop.diagnostics.recordRendererEvent, 'guide.getPresentation', message, {
     route: workflowState.routeState.activeRoute,
     source,
@@ -1084,6 +1259,61 @@ function renderApp(): void {
   renderRendererFocus(focusState, dom);
   updateGuideTunePendingDom(guideTuneController.getPendingTarget());
   scrollFocusedSetupControlIntoView();
+}
+
+function renderGuideViewportDom(): void {
+  renderEpgGuideDom(
+    getRouteWorkflowView(workflowState, channelController.getState()),
+    dom,
+    workflowState.settingsDraft,
+  );
+  projectGuideLibraryTabsPending(dom.epgGridElement, guideFilterController?.isPending() === true);
+  syncRendererFocusTargets(focusRegistry, dom);
+  restorePendingGuideFocus();
+  if (focusState.activeId !== null) {
+    focusState = focusRegistry.focusTarget(focusState, focusState.activeId).state;
+  }
+  renderRendererFocus(focusState, dom);
+  updateGuideTunePendingDom(guideTuneController.getPendingTarget());
+}
+
+function renderGuidePresentationUpdate(source: string | undefined): boolean {
+  const guideScoped = source === GUIDE_VIEWPORT_REFRESH_SOURCE;
+  if (guideScoped) renderGuideViewportDom();
+  else renderApp();
+  return guideScoped;
+}
+
+function guideWindowIdentity(presentation: typeof workflowState.guidePresentation): string | null {
+  const filter = presentation.libraryFilter;
+  return filter === undefined ? null : projectGuideCacheIdentity({
+    scopeToken: filter.scopeToken,
+    revision: filter.revision,
+    selectedLibraryId: filter.selectedLibraryId,
+    pastItemsWindow: workflowState.settingsDraft.pastItemsWindow,
+    guideTimeRange: workflowState.settingsDraft.guideTimeRange,
+    guidePerformanceProfile: workflowState.settingsDraft.guidePerformanceProfile,
+  });
+}
+
+function reconcileGuideViewport(allowRefresh = true): void {
+  if (workflowState.routeState.activeRoute !== 'guide') return;
+  const viewport = readGuideViewportRows(dom.epgGridElement);
+  const focusedIndex = guideChannelWindow.absoluteIndexForChannel(workflowState.epg.selectedChannelId);
+  guideChannelWindow.setProfile(workflowState.settingsDraft.guidePerformanceProfile);
+  guideChannelWindow.setVisible(viewport.start, viewport.completeCount, focusedIndex);
+  if (guideChannelWindow.total > 0) {
+    workflowState = { ...workflowState, guidePresentation: guideChannelWindow.presentation() };
+  }
+  renderGuideViewportDom();
+  if (!allowRefresh) return;
+  const request = guideChannelWindow.beginForeground(initializedGuidePresentationPolling.getGeneration() + 1);
+  if (request === null) return;
+  void initializedGuidePresentationPolling.refresh(GUIDE_VIEWPORT_REFRESH_SOURCE, {
+    channelOffset: request.channelOffset,
+    channelLimit: request.channelLimit,
+    showLoading: false,
+  });
 }
 
 function projectChannelBuildCancellation(state: ChannelRuntimeRendererState): void {

@@ -3,13 +3,13 @@ import { createLineupBrandGlyph } from './onboarding/lineupBrandGlyph.js';
 import { PLAYER_OVERLAY_MARKUP } from './playerOverlayDom.js';
 
 const STATIC_SCREEN_MARKUP = `
-<section class="screen-stack" aria-live="polite" data-static-screens-mounted>
+<section class="screen-stack" data-static-screens-mounted>
   <div class="player-presentation" data-player-presentation-surface data-native-presentation-aperture="opaque" aria-hidden="true" inert></div>
   <section id="screen-player" class="screen screen--active screen--player" data-screen="player" data-style-surface="screen" aria-label="Player">
       ${PLAYER_OVERLAY_MARKUP}
       <aside class="setup-reminder" data-setup-reminder="player" aria-label="Channel setup reminder" hidden><span>No channels are ready yet.</span><button type="button" data-route-action="openChannelSetup">Set up channels</button></aside>
   </section>
-  <section id="screen-guide" class="screen" data-screen="guide" data-style-surface="screen" aria-labelledby="screen-guide-title" hidden>
+  <section id="screen-guide" class="screen" data-screen="guide" data-guide-layout="classic" data-style-surface="screen" aria-labelledby="screen-guide-title" hidden>
     <div class="screen__content">
       <div class="screen-shell-state" data-shell-state="active">
         <span>Guide</span>
@@ -19,19 +19,36 @@ const STATIC_SCREEN_MARKUP = `
       <h2 id="screen-guide-title">Guide</h2>
       <p data-workflow-primary="guide">Tonight at a glance.</p>
       <p data-workflow-secondary="guide">Use directional controls to move through time windows, channels, and programs.</p>
-      <section class="guide-detail" aria-label="Selected guide program">
+      <section class="guide-detail" data-guide-layout="classic" data-guide-composition="classic" aria-label="Selected guide program">
+        <div class="guide-detail__background" data-epg-detail-background data-background-state="missing" data-background-source="theme" aria-hidden="true">
+          <img data-epg-detail-background-image alt="" aria-hidden="true" decoding="async" draggable="false" hidden>
+        </div>
         <figure data-epg-detail-artwork data-artwork-state="missing">
           <img data-epg-detail-poster alt="" decoding="async" draggable="false" hidden>
           <span data-epg-detail-artwork-placeholder aria-hidden="true">Artwork unavailable</span>
         </figure>
-        <div class="guide-detail__copy">
-          <p data-epg-detail-channel></p>
-          <h3 data-epg-detail-title></h3>
-          <p data-epg-detail-time></p>
-          <p data-epg-detail-description></p>
+        <div class="guide-detail__copy" data-guide-info-panel>
+          <div class="guide-detail__identity" role="status" aria-live="polite" aria-atomic="true">
+            <p class="guide-detail__channel" data-epg-detail-channel></p>
+            <p class="guide-detail__eyebrow" data-epg-detail-eyebrow></p>
+            <h3 data-epg-detail-title data-title-fallback="text"></h3>
+            <p class="guide-detail__subtitle" data-epg-detail-subtitle></p>
+            <p class="guide-detail__time" data-epg-detail-time></p>
+          </div>
+          <div class="guide-detail__metadata">
+            <div class="guide-detail__badges" data-epg-detail-badges role="group" aria-label="Program details">
+              <span data-epg-detail-badge-slot="0" hidden></span>
+              <span data-epg-detail-badge-slot="1" hidden></span>
+              <span data-epg-detail-badge-slot="2" hidden></span>
+              <span data-epg-detail-badge-slot="3" hidden></span>
+              <span data-epg-detail-badge-slot="4" hidden></span>
+            </div>
+            <p class="guide-detail__genres" data-epg-detail-genres></p>
+            <p class="guide-detail__description" data-epg-detail-description></p>
+          </div>
         </div>
       </section>
-      <div class="epg-grid" data-epg-grid aria-label="Guide schedule grid"></div>
+      <div id="guide-grid" class="epg-grid" data-epg-grid role="grid" aria-label="Guide schedule grid"></div>
     </div>
   </section>
   <section id="screen-settings" class="screen" data-screen="settings" data-style-surface="screen" aria-labelledby="screen-settings-title" hidden>

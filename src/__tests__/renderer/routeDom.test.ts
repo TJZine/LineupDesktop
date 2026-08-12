@@ -5,7 +5,7 @@ import type { RendererDomBindings } from '../../renderer/domBindings.js';
 import type { ChannelRuntimeRendererState } from '../../renderer/channelRuntimeState.js';
 import { createPlayerOverlayState, openOsd, openPlaybackOptions } from '../../renderer/overlays.js';
 import { createEmptyPlayerSnapshot } from '../../renderer/playerOverlayPresentation.js';
-import { setEpgPresentationState, type EpgPresentationSource } from '../../renderer/epg.js';
+import { createEpgGuideView, setEpgPresentationState, type EpgPresentationSource } from '../../renderer/epg.js';
 import {
   renderChannelSetupResult,
   renderRouteDom,
@@ -50,7 +50,7 @@ const GUIDE_PRESENTATION: EpgPresentationSource = {
       description: 'Archive description.', showTitle: 'The Midnight Archive', episodeLabel: 'S2 E4',
       rating: 'TV-14', quality: ['HD'], genres: ['Drama'],
       startsAtMs: GUIDE_BASE, endsAtMs: GUIDE_BASE + 60 * 60 * 1000,
-      artwork: null,
+      artwork: { poster: null, background: null },
     }],
   }],
   nowWatching: {
@@ -387,10 +387,17 @@ test('route DOM renders guide states and focused program details', () => {
   });
 
   try {
+    const guideState = createWorkflowState('guide');
+    const expectedTimeLabel = createEpgGuideView(guideState.epg, guideState.guidePresentation).infoPanel?.timeLabel;
     const grid = new ElementDouble();
     const detailChannel = new ElementDouble();
+    const detailEyebrow = new ElementDouble();
     const detailTitle = new ElementDouble();
+    const detailSubtitle = new ElementDouble();
     const detailTime = new ElementDouble();
+    const detailBadges = new ElementDouble();
+    const detailGenres = new ElementDouble();
+    const detailDescription = new ElementDouble();
     const dom = createOverlayDomBindings({
       overlayStack: new ElementDouble(),
       overlays: [],
@@ -398,22 +405,42 @@ test('route DOM renders guide states and focused program details', () => {
     });
     dom.epgGridElement = grid as unknown as HTMLElement;
     dom.epgDetailChannelElement = detailChannel as unknown as HTMLElement;
+    dom.epgDetailEyebrowElement = detailEyebrow as unknown as HTMLElement;
     dom.epgDetailTitleElement = detailTitle as unknown as HTMLElement;
+    dom.epgDetailSubtitleElement = detailSubtitle as unknown as HTMLElement;
     dom.epgDetailTimeElement = detailTime as unknown as HTMLElement;
+    dom.epgDetailBadgesElement = detailBadges as unknown as HTMLElement;
+    dom.epgDetailGenresElement = detailGenres as unknown as HTMLElement;
+    dom.epgDetailDescriptionElement = detailDescription as unknown as HTMLElement;
 
     renderWorkflowDom(
-      createWorkflowState('guide'),
+      guideState,
       createPlayerOverlayState(),
       createRendererSafePlayerSnapshot(),
       dom,
     );
 
-    const renderedText = [collectText(grid), detailChannel.textContent, detailTitle.textContent, detailTime.textContent].join(' ');
+    const renderedText = [
+      collectText(grid),
+      detailChannel.textContent,
+      detailTitle.textContent,
+      detailSubtitle.textContent,
+      detailTime.textContent,
+      detailBadges.textContent,
+      detailGenres.textContent,
+    ].join(' ');
     assert.match(renderedText, /LINEUP/u);
     assert.match(renderedText, /101 - Liminal One/u);
     assert.match(renderedText, /Guide ready/u);
     assert.match(renderedText, /The Midnight Archive/u);
     assert.match(renderedText, /S2 E4/u);
+    assert.equal(detailEyebrow.textContent, 'The Midnight Archive');
+    assert.equal(detailSubtitle.textContent, 'S2 E4');
+    assert.equal(detailTime.textContent, expectedTimeLabel);
+    assert.equal(detailBadges.textContent, 'TV-14 / HD');
+    assert.equal(detailGenres.textContent, 'Drama');
+    assert.equal(detailDescription.textContent, 'Archive description.');
+    assert.equal(detailTitle.dataset.titleFallback, 'text');
     assert.match(collectVisibleText(grid), /Edit lineup/u);
     const editLineupActions = findElementsByDataset(grid, 'guideAction', 'setup');
     assert.equal(editLineupActions.length, 1);
@@ -430,6 +457,53 @@ test('route DOM renders guide states and focused program details', () => {
     assert.ok(readyRow);
     assert.equal(findElementsByRole(readyRow, 'rowheader').length, 1);
     assert.equal(findElementsByRole(readyRow, 'gridcell').length, 1);
+    assert.equal(findElementsByClassName(grid, 'epg-classic-header').length, 1);
+    assert.equal(findElementsByClassName(grid, 'epg-classic-header')[0]?.hidden, false);
+    assert.equal(readyRow?.dataset.currentChannel, 'true');
+    assert.equal(readyRow?.dataset.tunedChannel, undefined);
+    const channelHeader = findElementsByRole(readyRow, 'rowheader')[0];
+    assert.match(channelHeader?.getAttribute('aria-label') ?? '', /Live/u);
+    assert.doesNotMatch(channelHeader?.getAttribute('aria-label') ?? '', /tuned/ui);
+    assert.equal(channelHeader?.dataset.channelCurrent, undefined);
+    assert.equal(channelHeader?.dataset.channelTuned, undefined);
+    const liveStatuses = findElementsByClassName(readyRow, 'epg-grid__channel-status');
+    assert.equal(liveStatuses.length, 1);
+    assert.equal(liveStatuses[0]?.textContent, 'LIVE');
+    assert.equal(liveStatuses[0]?.getAttribute('aria-hidden'), 'true');
+    const marker = findElementsByDataset(grid, 'currentTimeMarker', 'true');
+    assert.ok(marker.length >= 1);
+
+    const withoutPreviewBadges = createWorkflowState('guide');
+    withoutPreviewBadges.settingsDraft = {
+      ...withoutPreviewBadges.settingsDraft,
+      previewBadgesEnabled: false,
+    };
+    renderWorkflowDom(
+      withoutPreviewBadges,
+      createPlayerOverlayState(),
+      createRendererSafePlayerSnapshot(),
+      dom,
+    );
+    assert.equal(detailBadges.textContent, '');
+    assert.equal(detailSubtitle.textContent, 'S2 E4');
+    assert.equal(detailTime.textContent, expectedTimeLabel);
+    assert.equal(detailGenres.textContent, 'Drama');
+
+    const overlayGrid = new ElementDouble();
+    dom.epgGridElement = overlayGrid as unknown as HTMLElement;
+    renderWorkflowDom(
+      {
+        ...createWorkflowState('guide'),
+        settingsDraft: { ...createWorkflowState('guide').settingsDraft, guideLayout: 'overlay' },
+      },
+      createPlayerOverlayState(),
+      createRendererSafePlayerSnapshot(),
+      dom,
+    );
+    const overlayHeader = findElementsByClassName(overlayGrid, 'epg-classic-header')[0];
+    assert.equal(overlayGrid.dataset.guideLayout, 'overlay');
+    assert.equal(overlayHeader?.hidden, true);
+    assert.equal(findElementsByClassName(overlayGrid, 'epg-now-watching-banner').length, 1);
 
     for (const state of ['loading', 'empty-channels', 'empty-programs', 'error'] as const) {
       const stateGrid = new ElementDouble();
@@ -451,7 +525,8 @@ test('route DOM renders guide states and focused program details', () => {
       );
 
       const stateText = collectText(stateGrid);
-      assert.equal(stateGrid.getAttribute('role'), null);
+      assert.equal(stateGrid.getAttribute('role'), 'grid');
+      assert.equal(stateGrid.getAttribute('aria-rowcount'), null);
       assert.match(stateText, state === 'loading' ? /Loading guide/u : state === 'empty-channels' ? /No channels available/u : state === 'empty-programs' ? /No programs in this window/u : /Guide unavailable/u);
       assert.doesNotMatch(stateText, /Signal Warmup|After Hours Cinema|Pilot Block|Roundtable/u);
       assert.match(stateTitle.textContent, state === 'loading' ? /Loading guide/u : state === 'empty-channels' ? /No channels available/u : state === 'empty-programs' ? /No programs in this window/u : /Guide unavailable/u);
@@ -510,7 +585,8 @@ test('route DOM suppresses now-playing chrome and summary when ready data has no
       createRendererSafePlayerSnapshot(),
       dom,
     );
-    assert.equal(grid.getAttribute('role'), null);
+    assert.equal(grid.getAttribute('role'), 'grid');
+    assert.equal(grid.getAttribute('aria-rowcount'), null);
     assert.doesNotMatch(collectText(grid), /NOW PLAYING/u);
   } finally {
     restoreDocument(originalDocument);
@@ -668,7 +744,8 @@ test('Guide clears stale Now Watching surfaces for every non-ready presentation 
         assert.equal(findElementsByClassName(grid, activeClass).length, 1);
 
         render(layout, presentationState);
-        assert.equal(grid.getAttribute('role'), null);
+        assert.equal(grid.getAttribute('role'), 'grid');
+        assert.equal(grid.getAttribute('aria-rowcount'), null);
         assert.equal(findElementsByClassName(grid, 'epg-classic-now-playing').length, 0);
         assert.equal(findElementsByClassName(grid, 'epg-now-watching-banner').length, 0);
         assert.doesNotMatch(collectText(grid), /NOW PLAYING/u);
@@ -1515,6 +1592,8 @@ function createOverlayDomBindings({
     epgDetailTitleElement: null,
     epgDetailTimeElement: null,
     epgDetailDescriptionElement: null,
+    epgDetailBackgroundElement: null,
+    epgDetailBackgroundImageElement: null,
     epgDetailArtworkElement: null,
     epgDetailPosterElement: null,
     epgDetailArtworkPlaceholderElement: null,

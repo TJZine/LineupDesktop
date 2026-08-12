@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
@@ -14,10 +15,16 @@ import {
 export interface DesktopSettingsFileSystem {
   readFile(filePath: string, encoding: 'utf8'): Promise<string>;
   mkdir(directoryPath: string, options: { recursive: true }): Promise<unknown>;
-  writeFile(filePath: string, content: string, options: { encoding: 'utf8'; mode: number }): Promise<void>;
-  chmod(filePath: string, mode: number): Promise<void>;
+  open(filePath: string, flags: 'wx', mode: number): Promise<DesktopSettingsFileHandle>;
   rename(sourcePath: string, destinationPath: string): Promise<void>;
   unlink(filePath: string): Promise<void>;
+}
+
+export interface DesktopSettingsFileHandle {
+  writeFile(content: string, encoding: 'utf8'): Promise<void>;
+  chmod(mode: number): Promise<void>;
+  sync(): Promise<void>;
+  close(): Promise<void>;
 }
 
 export class DesktopSettingsStoreError extends Error {
@@ -33,8 +40,7 @@ export class DesktopSettingsStoreError extends Error {
 export interface DesktopSettingsStoreOptions {
   settingsFilePath: string;
   fileSystem?: DesktopSettingsFileSystem;
-  processId?: number;
-  migrationEventSink?: (event: DesktopSettingsMigrationEvent) => void;
+  randomHex128?: () => string;
 }
 
 interface StoredDesktopSettingsRecord {
@@ -43,46 +49,37 @@ interface StoredDesktopSettingsRecord {
   values: DesktopSettingsValues;
 }
 
-interface StoredDesktopSettingsVersionOneRecord {
-  schemaVersion: 1;
-  revision: number;
-  values: {
-    launchMode: 'windowed' | 'fullscreen';
-    guideDensity: 'comfortable' | 'compact';
-    previewBadgesEnabled: boolean;
-    setupReminderEnabled: boolean;
-  };
-}
-
-export interface DesktopSettingsMigrationEvent {
-  fromVersion: 1;
-  toVersion: 2;
-  status: 'succeeded' | 'failed';
-  revision: number;
-}
-
 const nodeFileSystem: DesktopSettingsFileSystem = {
   readFile: (filePath, encoding) => fs.readFile(filePath, encoding),
   mkdir: (directoryPath, options) => fs.mkdir(directoryPath, options),
-  writeFile: (filePath, content, options) => fs.writeFile(filePath, content, options),
-  chmod: (filePath, mode) => fs.chmod(filePath, mode),
+  open: async (filePath, flags, mode) => {
+    const handle = await fs.open(filePath, flags, mode);
+    return {
+      writeFile: async (content, encoding) => {
+        await handle.writeFile(content, { encoding });
+      },
+      chmod: (nextMode) => handle.chmod(nextMode),
+      sync: () => handle.sync(),
+      close: () => handle.close(),
+    };
+  },
   rename: (sourcePath, destinationPath) => fs.rename(sourcePath, destinationPath),
   unlink: (filePath) => fs.unlink(filePath),
 };
 
+const TEMP_FILE_OPEN_ATTEMPTS = 8;
+const randomHex128Pattern = /^[0-9a-f]{32}$/u;
+
 export class DesktopSettingsStore {
   private readonly settingsFilePath: string;
   private readonly fileSystem: DesktopSettingsFileSystem;
-  private readonly processId: number;
-  private readonly migrationEventSink: ((event: DesktopSettingsMigrationEvent) => void) | undefined;
+  private readonly randomHex128: () => string;
   private operationChain: Promise<void> = Promise.resolve();
-  private tempCounter = 0;
 
   constructor(options: DesktopSettingsStoreOptions) {
     this.settingsFilePath = options.settingsFilePath;
     this.fileSystem = options.fileSystem ?? nodeFileSystem;
-    this.processId = options.processId ?? process.pid;
-    this.migrationEventSink = options.migrationEventSink;
+    this.randomHex128 = options.randomHex128 ?? (() => randomBytes(16).toString('hex'));
   }
 
   loadSnapshot(): Promise<DesktopSettingsSnapshot> {
@@ -95,9 +92,6 @@ export class DesktopSettingsStore {
   ): Promise<DesktopSettingsSnapshot> {
     return this.enqueue(async () => {
       const current = await this.readSnapshot();
-      if (current.status === 'unsupported-version') {
-        throw new DesktopSettingsStoreError('unsupported-version');
-      }
       if (current.revision !== expectedRevision) {
         throw new DesktopSettingsStoreError('revision-conflict');
       }
@@ -140,13 +134,8 @@ export class DesktopSettingsStore {
     } catch {
       return defaultSnapshot('corrupt');
     }
-    if (isStoredDesktopSettingsVersionOneRecord(parsed)) {
-      return this.migrateVersionOneRecord(parsed);
-    }
-    if (isPlainRecord(parsed) &&
-      Number.isInteger(parsed.schemaVersion) &&
-      parsed.schemaVersion !== SETTINGS_SCHEMA_VERSION) {
-      return defaultSnapshot(parsed.schemaVersion === 1 ? 'corrupt' : 'unsupported-version');
+    if (isPlainRecord(parsed) && parsed.schemaVersion !== SETTINGS_SCHEMA_VERSION) {
+      return defaultSnapshot('corrupt');
     }
     if (!isStoredDesktopSettingsRecord(parsed)) {
       return defaultSnapshot('corrupt');
@@ -159,62 +148,59 @@ export class DesktopSettingsStore {
     };
   }
 
-  private async migrateVersionOneRecord(
-    record: StoredDesktopSettingsVersionOneRecord,
-  ): Promise<DesktopSettingsSnapshot> {
-    if (record.revision === Number.MAX_SAFE_INTEGER) {
-      throw new DesktopSettingsStoreError('operation-failed');
-    }
-    const revision = record.revision + 1;
-    const values: DesktopSettingsValues = {
-      ...createDefaultDesktopSettingsValues(),
-      launchMode: record.values.launchMode,
-      guideDensity: record.values.guideDensity,
-      previewBadgesEnabled: record.values.previewBadgesEnabled,
-      setupReminderEnabled: record.values.setupReminderEnabled,
-    };
-    const migratedRecord: StoredDesktopSettingsRecord = {
-      schemaVersion: SETTINGS_SCHEMA_VERSION,
-      revision,
-      values,
-    };
-    try {
-      await this.writeRecord(migratedRecord);
-    } catch {
-      this.emitMigrationEvent({ fromVersion: 1, toVersion: 2, status: 'failed', revision });
-      throw new DesktopSettingsStoreError('operation-failed');
-    }
-    this.emitMigrationEvent({ fromVersion: 1, toVersion: 2, status: 'succeeded', revision });
-    return {
-      ...migratedRecord,
-      status: 'ready',
-    };
-  }
-
-  private emitMigrationEvent(event: DesktopSettingsMigrationEvent): void {
-    try {
-      this.migrationEventSink?.(event);
-    } catch {
-      // Fixed migration diagnostics are best-effort and cannot change storage outcomes.
-    }
-  }
-
   private async writeRecord(record: StoredDesktopSettingsRecord): Promise<void> {
     const parentDirectory = path.dirname(this.settingsFilePath);
-    const tempFilePath = `${this.settingsFilePath}.${String(this.processId)}.${String(++this.tempCounter)}.tmp`;
-    let tempWriteStarted = false;
+    let tempFilePath: string | null = null;
+    let ownsTempFile = false;
     try {
       await this.fileSystem.mkdir(parentDirectory, { recursive: true });
-      tempWriteStarted = true;
-      await this.fileSystem.writeFile(
-        tempFilePath,
-        `${JSON.stringify(record)}\n`,
-        { encoding: 'utf8', mode: 0o600 },
-      );
-      await this.fileSystem.chmod(tempFilePath, 0o600);
+      let handle: DesktopSettingsFileHandle | null = null;
+      for (let attempt = 0; attempt < TEMP_FILE_OPEN_ATTEMPTS; attempt += 1) {
+        const suffix = this.randomHex128();
+        if (!randomHex128Pattern.test(suffix)) {
+          throw new DesktopSettingsStoreError('operation-failed');
+        }
+        const candidatePath = `${this.settingsFilePath}.${suffix}.tmp`;
+        try {
+          handle = await this.fileSystem.open(candidatePath, 'wx', 0o600);
+          tempFilePath = candidatePath;
+          break;
+        } catch (error: unknown) {
+          if (isNodeErrorCode(error, 'EEXIST')) continue;
+          throw error;
+        }
+      }
+      if (handle === null || tempFilePath === null) {
+        throw new DesktopSettingsStoreError('operation-failed');
+      }
+      ownsTempFile = true;
+
+      let handleStageFailed = false;
+      let handleStageError: unknown;
+      try {
+        await handle.chmod(0o600);
+        await handle.writeFile(`${JSON.stringify(record)}\n`, 'utf8');
+        await handle.sync();
+      } catch (error: unknown) {
+        handleStageFailed = true;
+        handleStageError = error;
+      }
+      try {
+        await handle.close();
+      } catch (error: unknown) {
+        if (!handleStageFailed) {
+          handleStageFailed = true;
+          handleStageError = error;
+        }
+      }
+      if (handleStageFailed) {
+        throw handleStageError;
+      }
+
       await this.fileSystem.rename(tempFilePath, this.settingsFilePath);
+      ownsTempFile = false;
     } catch {
-      if (tempWriteStarted) {
+      if (ownsTempFile && tempFilePath !== null) {
         try {
           await this.fileSystem.unlink(tempFilePath);
         } catch {
@@ -227,7 +213,7 @@ export class DesktopSettingsStore {
 }
 
 function defaultSnapshot(
-  status: 'missing' | 'corrupt' | 'unsupported-version',
+  status: 'missing' | 'corrupt',
 ): DesktopSettingsSnapshot {
   return {
     schemaVersion: SETTINGS_SCHEMA_VERSION,
@@ -246,27 +232,6 @@ function isStoredDesktopSettingsRecord(value: unknown): value is StoredDesktopSe
     value.schemaVersion === SETTINGS_SCHEMA_VERSION &&
     isSafeRevision(value.revision) &&
     isDesktopSettingsValues(value.values);
-}
-
-function isStoredDesktopSettingsVersionOneRecord(
-  value: unknown,
-): value is StoredDesktopSettingsVersionOneRecord {
-  if (!isPlainRecord(value) ||
-    Object.keys(value).length !== 3 ||
-    value.schemaVersion !== 1 ||
-    !isSafeRevision(value.revision) ||
-    !isPlainRecord(value.values) ||
-    Object.keys(value.values).length !== 4) {
-    return false;
-  }
-  return Object.hasOwn(value.values, 'launchMode') &&
-    Object.hasOwn(value.values, 'guideDensity') &&
-    Object.hasOwn(value.values, 'previewBadgesEnabled') &&
-    Object.hasOwn(value.values, 'setupReminderEnabled') &&
-    (value.values.launchMode === 'windowed' || value.values.launchMode === 'fullscreen') &&
-    (value.values.guideDensity === 'comfortable' || value.values.guideDensity === 'compact') &&
-    typeof value.values.previewBadgesEnabled === 'boolean' &&
-    typeof value.values.setupReminderEnabled === 'boolean';
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {

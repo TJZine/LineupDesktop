@@ -132,7 +132,7 @@ const GUIDE_ARTWORK_MAX_BYTES = 1_500_000;
 const PLEX_TV_ORIGIN = 'https://plex.tv';
 export const PLEX_TOKEN_HEADER_NAME = ['X-Plex', 'Token'].join('-');
 const GUIDE_ARTWORK_LOCATOR_PATTERN =
-  /^\/library\/metadata\/[0-9]{1,20}\/thumb(?:\/[0-9]{1,20})?$/u;
+  /^\/library\/metadata\/[0-9]{1,20}\/(?:thumb|art)(?:\/[0-9]{1,20})?$/u;
 
 export class LivePlexTransport
   implements
