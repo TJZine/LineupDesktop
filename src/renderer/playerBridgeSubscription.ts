@@ -13,6 +13,7 @@ export interface PlayerBridgeSubscriptionOptions {
   onSnapshot?(snapshot: PlayerSnapshot, authoritative: boolean, explicitTrackList?: boolean): void;
   onEvent?(event: PlayerEvent): void;
   render(): void;
+  renderProgress(): void;
 }
 
 export interface PlayerBridgeSubscription {
@@ -25,12 +26,17 @@ export function subscribePlayerBridge(
 ): PlayerBridgeSubscription {
   let active = true;
   let projectionGeneration = 0;
-  const project = (snapshot: PlayerSnapshot, authoritative: boolean, explicitTrackList = false): void => {
+  const project = (
+    snapshot: PlayerSnapshot,
+    authoritative: boolean,
+    explicitTrackList = false,
+    render: () => void = options.render,
+  ): void => {
     if (!active) return;
     projectionGeneration += 1;
     options.setSnapshot(snapshot);
     options.onSnapshot?.(snapshot, authoritative, explicitTrackList);
-    options.render();
+    render();
   };
 
   const unsubscribeBridge = options.player.onEvent((event) => {
@@ -47,7 +53,12 @@ export function subscribePlayerBridge(
     if (event.requestId !== snapshot.requestId) return;
     switch (event.event) {
       case 'time.updated':
-        project({ ...snapshot, positionMs: event.positionMs, durationMs: event.durationMs }, false);
+        project(
+          { ...snapshot, positionMs: event.positionMs, durationMs: event.durationMs },
+          false,
+          false,
+          options.renderProgress,
+        );
         return;
       case 'buffer.updated':
         project({ ...snapshot, bufferedRanges: event.bufferedRanges }, false);

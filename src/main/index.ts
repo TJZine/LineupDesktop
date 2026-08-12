@@ -116,8 +116,6 @@ let containmentCounters: ShellContainmentCounters = {
   webviewDenied: 0,
 };
 
-app.commandLine.appendSwitch('disable-gpu');
-
 const applicationStartup = startApplication();
 applicationStartupSettled = applicationStartup.then(
   () => undefined,
@@ -314,7 +312,10 @@ async function startApplication(): Promise<void> {
     configurePermissionContainment();
     registerShellIpcHandlers();
     const productionNativeHostFactory = shellMode === 'production'
-      ? createProductionNativeHostFactory({ diagnosticEventStore })
+      ? createProductionNativeHostFactory({
+          diagnosticEventStore,
+          getNativeParentIdentity: () => getShellWindowController().getNativeParentIdentity(),
+        })
       : null;
     const settingsNativeHostComposition = createSettingsNativeHostComposition({
       shellMode,

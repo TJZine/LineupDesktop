@@ -411,6 +411,7 @@ function createRendererHarness(adapter: DesktopPlayerAdapter) {
     },
     onEvent: (event) => controller.handlePlayerEvent(event),
     render: () => undefined,
+    renderProgress: () => undefined,
   });
   return {
     controller,

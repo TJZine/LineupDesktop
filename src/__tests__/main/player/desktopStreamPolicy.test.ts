@@ -248,11 +248,11 @@ test('desktop stream policy chooses direct stream for supported container remux'
 test('desktop stream policy records audio fallback without exposing internals', () => {
   const decision = decideFixture('audioFallback');
 
-  assert.equal(decision.kind, 'direct-stream');
+  assert.equal(decision.kind, 'direct-play');
   assert.equal(decision.selectedTrackIds.audio, 'audio-track-fallback-aac');
   assert.equal(decision.summary.audioCodec, 'aac');
   assert.deepEqual(decision.reasonCodes, [
-    'direct-stream-audio-fallback',
+    'direct-play-supported',
     'requested-audio-unavailable',
     'audio-fallback-selected',
     'no-subtitle-selected',
@@ -279,11 +279,11 @@ test('desktop stream policy falls back when requested audio exists but is incomp
     preferredAudioTrackId: 'audio-track-requested-flac',
   });
 
-  assert.equal(decision.kind, 'direct-stream');
+  assert.equal(decision.kind, 'direct-play');
   assert.equal(decision.selectedTrackIds.audio, 'audio-track-fallback-aac');
   assert.equal(decision.summary.audioCodec, 'aac');
   assert.deepEqual(decision.reasonCodes, [
-    'direct-stream-audio-fallback',
+    'direct-play-supported',
     'audio-fallback-selected',
     'no-subtitle-selected',
   ]);
@@ -294,11 +294,11 @@ test('desktop stream policy falls back when requested audio exists but is incomp
 test('desktop stream policy records subtitle fallback through supported delivery', () => {
   const decision = decideFixture('subtitleFallback');
 
-  assert.equal(decision.kind, 'direct-stream');
+  assert.equal(decision.kind, 'direct-play');
   assert.equal(decision.selectedTrackIds.subtitle, 'subtitle-track-sidecar');
   assert.equal(decision.summary.subtitleDelivery, 'sidecar');
   assert.deepEqual(decision.reasonCodes, [
-    'direct-stream-subtitle-fallback',
+    'direct-play-supported',
     'requested-subtitle-unavailable',
     'subtitle-fallback-selected',
   ]);

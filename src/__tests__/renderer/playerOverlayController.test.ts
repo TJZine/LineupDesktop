@@ -357,6 +357,7 @@ test('real incremental player subscription events do not extend an open OSD dead
     onSnapshot: harness.controller.reconcileSnapshot,
     onEvent: harness.controller.handlePlayerEvent,
     render: () => undefined,
+    renderProgress: () => undefined,
   });
   harness.controller.requestOsd();
   harness.timers.advance(1_000);
@@ -406,6 +407,7 @@ test('explicit tracks.changed loss invalidates pending options during load-like 
     onSnapshot: harness.controller.reconcileSnapshot,
     onEvent: harness.controller.handlePlayerEvent,
     render: () => undefined,
+    renderProgress: () => undefined,
   });
   emit({
     event: 'tracks.changed', requestId: 'playback-1', tracks: [
@@ -441,6 +443,7 @@ test('explicit tracks.changed loss invalidates pending options during load-like 
     onSnapshot: fallback.controller.reconcileSnapshot,
     onEvent: fallback.controller.handlePlayerEvent,
     render: () => undefined,
+    renderProgress: () => undefined,
   });
   emitFallback({ event: 'tracks.changed', requestId: 'playback-1', tracks: [] });
   assert.equal(fallback.state().activeOverlayId, null);

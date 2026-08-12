@@ -31,6 +31,8 @@ export interface NativeHelperCommandMessage {
   setup?: NativeHelperPlaybackSetup | null;
   playbackUrl?: string | null;
   credentialHeader?: { name: string; value: string } | null;
+  parentHwnd?: string;
+  parentPid?: number;
 }
 
 export interface NativeHelperCleanupMessage {

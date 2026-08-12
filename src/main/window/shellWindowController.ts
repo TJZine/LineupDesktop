@@ -103,8 +103,9 @@ export function createShellWindowController(options: ShellWindowControllerOption
         width: 1280,
         height: 720,
         show: false,
-        backgroundColor: '#111318',
-        frame: true,
+        transparent: true,
+        backgroundColor: '#00000000',
+        frame: false,
         resizable: true,
       });
       baseWindow = createdBase;

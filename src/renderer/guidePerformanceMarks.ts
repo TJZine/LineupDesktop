@@ -1,5 +1,5 @@
 export type GuideInputKind = 'arrow' | 'page' | 'wheel' | 'scroll' | 'pointer' | 'gamepad' | 'other';
-export type GuideRequestOrigin = 'foreground' | 'poll' | 'warm';
+export type GuideRequestOrigin = 'foreground' | 'poll';
 export type GuideRequestClass = 'renderer-cache' | 'runtime' | 'rejected';
 type GuideMarkName = 'input-received' | 'input-accepted' | 'request-start' | 'request-settled' |
   'state-accepted' | 'reconcile-start' | 'reconcile-end';

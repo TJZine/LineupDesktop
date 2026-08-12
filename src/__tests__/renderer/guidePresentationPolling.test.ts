@@ -3,13 +3,9 @@ import test from 'node:test';
 import {
   EPG_DETAILED_WINDOW_DURATION_MS,
   EPG_WIDE_WINDOW_DURATION_MS,
-  EPG_SLOT_DURATION_MS,
   type EpgGuideTimeRange,
 } from '../../renderer/epg.js';
-import {
-  createGuidePresentationPolling,
-  GUIDE_VIEWPORT_REFRESH_SOURCE,
-} from '../../renderer/guidePresentationPolling.js';
+import { createGuidePresentationPolling } from '../../renderer/guidePresentationPolling.js';
 import { GuideChannelWindow } from '../../renderer/guideChannelWindow.js';
 import type { LineupDesktopPreloadApi } from '../../contracts/shell.js';
 import {
@@ -38,17 +34,6 @@ function host(): Window {
   return {
     setTimeout: (callback: TimerHandler, delay?: number) => globalThis.setTimeout(callback, delay) as unknown as number,
     clearTimeout: (handle: number) => globalThis.clearTimeout(handle),
-  } as unknown as Window;
-}
-
-function idleHost(idle: Array<() => void>): Window {
-  return {
-    ...host(),
-    requestIdleCallback: (callback: IdleRequestCallback) => {
-      idle.push(() => callback({ didTimeout: false, timeRemaining: () => 50 }));
-      return idle.length;
-    },
-    cancelIdleCallback: () => undefined,
   } as unknown as Window;
 }
 
@@ -178,8 +163,7 @@ test('polling does not coalesce an active request when the visible-row channel l
   assert.deepEqual(appliedLimits, [12]);
 });
 
-test('merge-rejected pages are failed without cache promotion, replay, or idle warming', async (context) => {
-  const idle: Array<() => void> = [];
+test('merge-rejected pages are failed without cache promotion or replay', async (context) => {
   const busy: boolean[] = [];
   const failures: Array<{ retain: boolean; offset: number | undefined }> = [];
   const marks: Array<Record<string, unknown>> = [];
@@ -218,7 +202,7 @@ test('merge-rejected pages are failed without cache promotion, replay, or idle w
       cancelPresentation: async () => undefined,
       setLibraryFilter: async () => { throw new Error('Unexpected filter request.'); },
     },
-    host: idleHost(idle),
+    host: host(),
     getActiveRoute: () => 'guide',
     getWindowStartMs: () => 0,
     getGuideTimeRange: () => 'wide',
@@ -238,12 +222,10 @@ test('merge-rejected pages are failed without cache promotion, replay, or idle w
   assert.equal(polling.getPendingPageTarget(), null);
   assert.deepEqual(busy, [true, false]);
   assert.deepEqual(failures, [{ retain: false, offset: 0 }]);
-  assert.equal(idle.length, 0);
 
   await polling.requestPage({ targetGlobalIndex: 0, scopeToken: 'scope', channelOffset: 0, channelLimit: 1 });
   assert.equal(requests, 2, 'the rejected response was not cached or replayed');
   assert.deepEqual(busy, [true, false, true, false]);
-  assert.equal(idle.length, 0, 'rejected pages do not seed idle warming');
   assert.deepEqual(
     marks.filter((detail) => detail.requestClass === 'rejected').map((detail) => detail.accepted),
     [false, false],
@@ -420,7 +402,7 @@ test('Guide polling emits one honest terminal mark for runtime, cache, and cance
   assert.deepEqual(starts.map(({ detail }) => detail.sequence), settled.map(({ detail }) => detail.sequence));
 });
 
-test('Desktop preload profiles use exact row/time bounds and auto idle warming starts with the next channel page', async () => {
+test('Desktop preload profiles use exact foreground row and time bounds without speculative requests', async () => {
   const windowStartMs = 10 * 60 * 60_000;
   const foregroundRequests: Array<{ startTimeMs: number; durationMs: number; channelLimit?: number }> = [];
   for (const [auto, expected] of [
@@ -436,7 +418,6 @@ test('Desktop preload profiles use exact row/time bounds and auto idle warming s
     }],
   ] as const) {
     const requests: Array<{ startTimeMs: number; durationMs: number; channelOffset?: number; channelLimit?: number }> = [];
-    const idle: Array<() => void> = [];
     const controller = createGuidePresentationPolling({
       guide: {
         getPresentation: async (input) => {
@@ -451,8 +432,6 @@ test('Desktop preload profiles use exact row/time bounds and auto idle warming s
       host: {
         setTimeout: (callback: TimerHandler, delay?: number) => globalThis.setTimeout(callback, delay) as unknown as number,
         clearTimeout: (handle: number) => globalThis.clearTimeout(handle),
-        requestIdleCallback: (callback: IdleRequestCallback) => { idle.push(() => callback({ didTimeout: false, timeRemaining: () => 50 })); return idle.length; },
-        cancelIdleCallback: () => undefined,
       } as unknown as Window,
       getActiveRoute: () => 'guide', getWindowStartMs: () => windowStartMs,
       getGuideTimeRange: () => 'wide', getGuidePerformanceProfile: () => auto ? 'auto' : 'reduced-resource',
@@ -465,127 +444,10 @@ test('Desktop preload profiles use exact row/time bounds and auto idle warming s
       durationMs: requests[0]?.durationMs ?? 0,
       channelLimit: requests[0]?.channelLimit,
     });
-    if (auto) {
-      assert.equal(idle.length, 1);
-      idle.shift()?.();
-      await new Promise((resolve) => globalThis.setTimeout(resolve, 0));
-      assert.equal(requests[1]?.channelOffset, AUTO_GUIDE_PRELOAD_PROFILE.channelLimit);
-      assert.equal(requests.length, 2);
-    } else {
-      assert.equal(idle.length, 0);
-    }
+    assert.equal(requests.length, 1);
     controller.stop();
   }
   assert.deepEqual(foregroundRequests[0], foregroundRequests[1]);
-});
-
-test('auto warm failures remain cache misses without applying foreground failure state', async () => {
-  for (const failureMode of ['rejection', 'error-result', 'scope-mismatch'] as const) {
-    const idle: Array<() => void> = [];
-    const failures: string[] = [];
-    let requestCount = 0;
-    let applied = 0;
-    const controller = createGuidePresentationPolling({
-      guide: {
-        getPresentation: async (input) => {
-          requestCount += 1;
-          if (requestCount === 1) {
-            const response = result(`${failureMode}-foreground`);
-            if (!response.ok) throw new Error('Expected foreground fixture success.');
-            return {
-              ...response,
-              value: {
-                ...response.value,
-                channelWindow: { offset: input.channelOffset ?? 0, total: 300 },
-              },
-            };
-          }
-          if (failureMode === 'rejection') throw new Error('private warm failure');
-          if (failureMode === 'scope-mismatch') {
-            const response = result(`${failureMode}-warm`);
-            if (!response.ok) throw new Error('Expected warm scope-mismatch fixture success.');
-            return {
-              ...response,
-              value: {
-                ...response.value,
-                libraryFilter: {
-                  ...response.value.libraryFilter,
-                  scopeToken: 'scope:stale',
-                },
-              },
-            };
-          }
-          return {
-            ok: false as const,
-            requestId: `${failureMode}-warm`,
-            error: {
-              code: 'GUIDE_TRANSPORT_ERROR',
-              message: 'Guide is unavailable.',
-              retryable: true,
-              recoverable: true,
-              operation: 'getPresentation',
-            },
-          };
-        },
-        cancelPresentation: async () => undefined,
-        setLibraryFilter: async () => { throw new Error('Unexpected filter request.'); },
-      },
-      host: idleHost(idle),
-      getActiveRoute: () => 'guide',
-      getWindowStartMs: () => 0,
-      getGuideTimeRange: () => 'wide',
-      getGuidePerformanceProfile: () => 'auto',
-      getCacheIdentity: () => 'identity',
-      getCacheScopeToken: () => 'scope',
-      setLoading: () => undefined,
-      applyPresentation: () => { applied += 1; return true; },
-      handleFailure: (source) => { failures.push(`guide:${source}`); },
-      handlePlayerFailure: (source) => { failures.push(`player:${source}`); },
-    });
-
-    await controller.refresh('foreground');
-    assert.equal(applied, 1, `${failureMode} applies the foreground result`);
-    assert.equal(idle.length, 1, `${failureMode} schedules an auto warm`);
-
-    idle.shift()?.();
-    await tick();
-
-    assert.equal(requestCount, 2, `${failureMode} executes the warm request`);
-    assert.equal(applied, 1, `${failureMode} does not apply a warm result`);
-    assert.deepEqual(failures, [], `${failureMode} does not apply foreground failure state`);
-    controller.stop();
-  }
-});
-
-test('foreground visible-window work cancels an active idle warm before it runs', async () => {
-  const idle: Array<() => void> = [];
-  const warm = deferred<ReturnType<typeof result>>();
-  const offsets: number[] = [];
-  let cancellations = 0;
-  const controller = createGuidePresentationPolling({
-    guide: {
-      getPresentation: async (input) => {
-        offsets.push(input.channelOffset ?? 0);
-        if (offsets.length === 2) return warm.promise;
-        const response = result(`foreground-${String(offsets.length)}`);
-        if (!response.ok) throw new Error('Expected successful Guide fixture.');
-        return { ...response, value: { ...response.value, channelWindow: { offset: input.channelOffset ?? 0, total: 500 } } };
-      },
-      cancelPresentation: async () => { cancellations += 1; },
-      setLibraryFilter: async () => { throw new Error('Unexpected filter request.'); },
-    },
-    host: idleHost(idle), getActiveRoute: () => 'guide', getWindowStartMs: () => 0,
-    getGuideTimeRange: () => 'detailed', getGuidePerformanceProfile: () => 'auto',
-    setLoading: () => undefined, applyPresentation: () => true, handleFailure: () => undefined,
-  });
-  await controller.refresh('foreground');
-  idle.shift()?.();
-  await tick();
-  assert.equal(offsets.length, 2, 'idle warm is active');
-  await controller.refresh(GUIDE_VIEWPORT_REFRESH_SOURCE, { channelOffset: 250, channelLimit: 11 });
-  assert.equal(cancellations, 1);
-  assert.deepEqual(offsets, [0, GUIDE_DOM_ROW_CAP, 250]);
-  controller.stop();
 });
 
 test('superseded foreground windows emit generation-aware settlement and permit bounded refetch', async () => {
@@ -628,126 +490,31 @@ test('superseded foreground windows emit generation-aware settlement and permit 
   controller.stop();
 });
 
-test('guide-visible-window keeps Guide-scoped rendering through queued, accepted, and settled callbacks', async () => {
-  const request = deferred<ReturnType<typeof result>>();
-  const lifecycle: Array<{ phase: string; source: string }> = [];
-  let guideScopedRenders = 0;
-  let unrelatedApplicationRenders = 0;
-  let nativePresentationReconciles = 0;
-  const renderForSource = (source: string): void => {
-    if (source === GUIDE_VIEWPORT_REFRESH_SOURCE) {
-      guideScopedRenders += 1;
-      return;
-    }
-    unrelatedApplicationRenders += 1;
-    nativePresentationReconciles += 1;
-  };
+test('accepted poll-start and poll-interval presentations use the foreground apply owner', async () => {
+  const requests = [deferred<ReturnType<typeof result>>(), deferred<ReturnType<typeof result>>()];
+  let requestIndex = 0;
+  let appliedPresentations = 0;
   const controller = createGuidePresentationPolling({
     ...createOptions({
-      getPresentation: async () => request.promise,
+      getPresentation: async () => requests[requestIndex++]!.promise,
       cancelPresentation: async () => undefined,
       setLibraryFilter: async () => { throw new Error('Unexpected filter request.'); },
     }, () => 'detailed', () => undefined),
-    requestWindowState: (state, window) => {
-      lifecycle.push({ phase: state, source: window.source });
-      renderForSource(window.source);
-    },
     applyPresentation: (_presentation, _generation, _target, _effectiveStart, _window, source) => {
-      assert.equal(source, GUIDE_VIEWPORT_REFRESH_SOURCE);
-      lifecycle.push({ phase: 'accepted', source });
-      renderForSource(source);
+      assert.ok(source === 'poll-start' || source === 'poll-interval');
+      appliedPresentations += 1;
       return true;
     },
   });
 
-  const refresh = controller.refresh(GUIDE_VIEWPORT_REFRESH_SOURCE, {
-    channelOffset: 80,
-    channelLimit: 10,
-    showLoading: false,
-  });
-  request.resolve(result(GUIDE_VIEWPORT_REFRESH_SOURCE));
-  await refresh;
+  const start = controller.refresh('poll-start');
+  requests[0]?.resolve(result('poll-start'));
+  await start;
+  const interval = controller.refresh('poll-interval');
+  requests[1]?.resolve(result('poll-interval'));
+  await interval;
 
-  assert.deepEqual(lifecycle, [
-    { phase: 'queued', source: GUIDE_VIEWPORT_REFRESH_SOURCE },
-    { phase: 'accepted', source: GUIDE_VIEWPORT_REFRESH_SOURCE },
-    { phase: 'settled', source: GUIDE_VIEWPORT_REFRESH_SOURCE },
-  ]);
-  assert.equal(guideScopedRenders, 3);
-  assert.equal(unrelatedApplicationRenders, 0);
-  assert.equal(nativePresentationReconciles, 0);
-
-  renderForSource('poll-interval');
-  assert.equal(unrelatedApplicationRenders, 1, 'non-viewport refreshes retain whole-application rendering');
-  assert.equal(nativePresentationReconciles, 1);
-  controller.stop();
-});
-
-test('auto page and adjacent-time warm entries are consumed without another bridge request', async () => {
-  let windowStartMs = 10 * 60 * 60_000;
-  const idle: Array<() => void> = [];
-  const requests: Array<{ startTimeMs: number; channelOffset?: number }> = [];
-  let applied = 0;
-  let channelOffset = 0;
-  const controller = createGuidePresentationPolling({
-    guide: {
-      getPresentation: async (input) => {
-        requests.push(input);
-        const response = result(`warm-${String(requests.length)}`);
-        if (!response.ok) throw new Error('Expected warm cache fixture success.');
-        return { ...response, value: { ...response.value, channelWindow: { offset: input.channelOffset ?? 0, total: 300 } } };
-      },
-      cancelPresentation: async () => undefined,
-      setLibraryFilter: async () => { throw new Error('Unexpected filter request.'); },
-    },
-    host: idleHost(idle),
-    getActiveRoute: () => 'guide', getWindowStartMs: () => windowStartMs,
-    getChannelOffset: () => channelOffset,
-    getGuideTimeRange: () => 'wide', getGuidePerformanceProfile: () => 'auto',
-    getCacheIdentity: () => 'identity', getCacheScopeToken: () => 'scope',
-    setLoading: () => undefined, applyPresentation: (presentation) => {
-      applied += 1;
-      channelOffset = presentation.channelWindow?.offset ?? channelOffset;
-      return true;
-    }, handleFailure: () => undefined,
-  });
-
-  await controller.refresh('foreground');
-  assert.equal(requests.length, 1);
-  idle.shift()?.();
-  await tick();
-  assert.equal(requests[1]?.channelOffset, AUTO_GUIDE_PRELOAD_PROFILE.channelLimit);
-
-  const beforePage = requests.length;
-  await controller.requestPage({
-    targetGlobalIndex: AUTO_GUIDE_PRELOAD_PROFILE.channelLimit,
-    scopeToken: 'scope',
-    channelOffset: AUTO_GUIDE_PRELOAD_PROFILE.channelLimit,
-  });
-  assert.equal(requests.length, beforePage, 'warmed page is applied from cache');
-
-  idle.shift()?.();
-  await tick();
-  assert.equal(
-    requests.at(-1)?.channelOffset,
-    AUTO_GUIDE_PRELOAD_PROFILE.channelLimit * 2,
-    'cache-hit page reprioritizes the next adjacent page',
-  );
-  idle.shift()?.();
-  await tick();
-  assert.equal(requests.at(-1)?.channelOffset, 0, 'cache-hit page then warms the previous adjacent page');
-  idle.shift()?.();
-  await tick();
-  assert.equal(requests.at(-1)?.channelOffset, AUTO_GUIDE_PRELOAD_PROFILE.channelLimit);
-  assert.equal(
-    requests.at(-1)?.startTimeMs,
-    windowStartMs + EPG_SLOT_DURATION_MS - AUTO_GUIDE_PRELOAD_PROFILE.timeBufferMs,
-  );
-  const beforeWindow = requests.length;
-  windowStartMs += EPG_SLOT_DURATION_MS;
-  await controller.refresh('epg-window-change');
-  assert.equal(requests.length, beforeWindow, 'warmed adjacent time window is applied from cache');
-  assert.equal(applied, 3);
+  assert.equal(appliedPresentations, 2);
   controller.stop();
 });
 
@@ -855,45 +622,6 @@ test('page/window cache entries expire at the poll interval and refetch on a sta
   controller.stop();
 });
 
-test('preload profile replacement swaps the cache and discards stale warm candidates', async () => {
-  let auto = true;
-  const idle: Array<() => void> = [];
-  const requests: Array<{ channelLimit?: number }> = [];
-  const controller = createGuidePresentationPolling({
-    guide: {
-      getPresentation: async (input) => {
-        requests.push(input);
-        return result(`profile-switch-${String(requests.length)}`);
-      },
-      cancelPresentation: async () => undefined,
-      setLibraryFilter: async () => { throw new Error('Unexpected filter request.'); },
-    },
-    host: idleHost(idle),
-    getActiveRoute: () => 'guide',
-    getWindowStartMs: () => 0,
-    getGuideTimeRange: () => 'wide',
-    getGuidePerformanceProfile: () => auto ? 'auto' : 'reduced-resource',
-    getCacheIdentity: () => 'identity',
-    getCacheScopeToken: () => 'scope',
-    setLoading: () => undefined,
-    applyPresentation: () => true,
-    handleFailure: () => undefined,
-  });
-
-  await controller.refresh('foreground');
-  assert.equal(requests.length, 1);
-  assert.equal(idle.length, 1);
-
-  auto = false;
-  await controller.refresh('epg-window-change');
-  assert.equal(requests.length, 2, 'the new profile starts with an empty LRU');
-  assert.equal(requests[1]?.channelLimit, REDUCED_RESOURCE_GUIDE_PRELOAD_PROFILE.channelLimit);
-  idle.shift()?.();
-  await tick();
-  assert.equal(requests.length, 2, 'warm candidates from the discarded profile are not requested');
-  controller.stop();
-});
-
 test('undefined cache identity matches null for lookup, insertion, and currentness', async () => {
   for (const initialIdentity of [null, undefined] as const) {
     const identity: string | null | undefined = initialIdentity;
@@ -957,52 +685,6 @@ test('cache hits cross one async boundary before currentness is rechecked', asyn
   activeRoute = 'settings';
   await cacheHit;
   assert.equal(applied, 1, 'the cache hit yields before applying stale presentation');
-  controller.stop();
-});
-
-test('a scheduled idle warm cannot displace foreground active and trailing intent', async () => {
-  const idle: Array<() => void> = [];
-  const requests: Array<{
-    input: { channelOffset?: number };
-    pending: Deferred<Awaited<ReturnType<LineupDesktopPreloadApi['guide']['getPresentation']>>>;
-  }> = [];
-  let immediate = true;
-  const controller = createGuidePresentationPolling({
-    guide: {
-      getPresentation: (input) => {
-        if (immediate) {
-          immediate = false;
-          const response = result('initial');
-          if (!response.ok) throw new Error('Expected initial result.');
-          return Promise.resolve({ ...response, value: { ...response.value, channelWindow: { offset: 0, total: 300 } } });
-        }
-        const pending = deferred<Awaited<ReturnType<LineupDesktopPreloadApi['guide']['getPresentation']>>>();
-        requests.push({ input, pending });
-        return pending.promise;
-      },
-      cancelPresentation: async () => undefined,
-      setLibraryFilter: async () => { throw new Error('Unexpected filter request.'); },
-    },
-    host: idleHost(idle), getActiveRoute: () => 'guide', getWindowStartMs: () => 0,
-    getGuideTimeRange: () => 'wide', getGuidePerformanceProfile: () => 'auto',
-    getCacheIdentity: () => 'identity', getCacheScopeToken: () => 'scope',
-    setLoading: () => undefined, applyPresentation: () => true, handleFailure: () => undefined,
-  });
-
-  await controller.refresh('initial');
-  assert.equal(idle.length, 1);
-  const active = controller.refresh('ordinary-active');
-  const trailing = controller.refresh('ordinary-trailing');
-  assert.equal(requests.length, 1);
-  idle.shift()?.();
-  await Promise.resolve();
-  assert.equal(requests.length, 1, 'stale idle callback does not enqueue or overwrite foreground work');
-  requests[0]?.pending.resolve(result('active'));
-  await tick();
-  assert.equal(requests.length, 2);
-  assert.equal(requests[1]?.input.channelOffset ?? 0, 0, 'ordinary trailing intent starts before any warm page');
-  requests[1]?.pending.resolve(result('trailing'));
-  await Promise.all([active, trailing]);
   controller.stop();
 });
 

@@ -10,6 +10,7 @@ export interface ProductionNativeHostFactoryOptions {
   diagnosticEventStore?: DiagnosticEventStore;
   requestTimeoutMs?: number;
   cleanupGraceMs?: number;
+  getNativeParentIdentity(): { hwnd: string; pid: number } | null;
 }
 
 function getElectronApp(): { getAppPath(): string } | null {
@@ -67,7 +68,7 @@ export function getProductionHelperPath(): string | null {
 }
 
 export function createProductionNativeHostFactory(
-  options: ProductionNativeHostFactoryOptions = {},
+  options: ProductionNativeHostFactoryOptions,
 ): (() => NativePlayerHostPort) | null {
   const helperPath = getProductionHelperPath();
   if (!helperPath) {
@@ -86,6 +87,7 @@ export function createProductionNativeHostFactory(
       requestTimeoutMs: options.requestTimeoutMs,
       cleanupGraceMs: options.cleanupGraceMs,
       diagnosticEventStore: options.diagnosticEventStore,
+      getNativeParentIdentity: options.getNativeParentIdentity,
     });
   };
 }

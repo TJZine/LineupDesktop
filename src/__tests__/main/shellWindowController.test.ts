@@ -8,7 +8,7 @@ import { createShellWindowController } from '../../main/window/shellWindowContro
 import { NativePlayerPresentationOwner } from '../../main/player/nativePlayerPresentationOwner.js';
 import type { NativePlayerPresentationUpdate } from '../../main/player/nativePlayerHostPort.js';
 
-test('shell window controller composes one hidden opaque BaseWindow and transparent sandboxed view', async () => {
+test('shell window controller composes one hidden transparent frameless BaseWindow and sandboxed view', async () => {
   const windowOptions: BaseWindowConstructorOptions[] = [];
   const viewOptions: WebContentsViewConstructorOptions[] = [];
   const fakeWindow = new FakeBaseWindow();
@@ -22,7 +22,7 @@ test('shell window controller composes one hidden opaque BaseWindow and transpar
   const shell = await controller.createWindow();
   assert.equal(shell.baseWindow, fakeWindow.value);
   assert.equal(shell.webContents, fakeView.webContents);
-  assert.deepEqual(windowOptions, [{ width: 1280, height: 720, show: false, backgroundColor: '#111318', frame: true, resizable: true }]);
+  assert.deepEqual(windowOptions, [{ width: 1280, height: 720, show: false, transparent: true, backgroundColor: '#00000000', frame: false, resizable: true }]);
   assert.deepEqual(viewOptions[0]?.webPreferences, {
     preload: '/dist/preload/index.cjs',
     nodeIntegration: false,

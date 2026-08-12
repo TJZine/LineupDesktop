@@ -63,6 +63,7 @@ export interface NativePlayerHostProcessOptions {
   requestTimeoutMs?: number;
   cleanupGraceMs?: number;
   diagnosticEventStore?: DiagnosticEventStore;
+  getNativeParentIdentity(): { hwnd: string; pid: number } | null;
 }
 const DEFAULT_REQUEST_TIMEOUT_MS = 5_000;
 const DEFAULT_CLEANUP_GRACE_MS = 500;
@@ -74,6 +75,7 @@ export class NativePlayerHostProcess implements NativePlayerHostPort {
   readonly #cleanupGraceMs: number;
   readonly #diagnosticEventStore?: DiagnosticEventStore;
   readonly #encodeMessage: (message: unknown) => string;
+  readonly #getNativeParentIdentity: () => { hwnd: string; pid: number } | null;
   #child: NativePlayerHostChildProcess | null = null;
   #playbackPending = new Map<PlayerRequestId, PendingPlaybackCommand>();
   #presentationPending = new Map<PlayerRequestId, PendingPresentation>();
@@ -91,6 +93,7 @@ export class NativePlayerHostProcess implements NativePlayerHostPort {
     this.#cleanupGraceMs = options.cleanupGraceMs ?? DEFAULT_CLEANUP_GRACE_MS;
     this.#diagnosticEventStore = options.diagnosticEventStore;
     this.#encodeMessage = options.encodeMessage ?? encodeNativeHelperMessage;
+    this.#getNativeParentIdentity = options.getNativeParentIdentity;
   }
   async execute(
     command: PlayerCommand,
@@ -123,6 +126,18 @@ export class NativePlayerHostProcess implements NativePlayerHostPort {
         error: safeNativeHostFailure('PLAYER_HELPER_DUPLICATE_REQUEST', 'helper-failure', false, false),
       };
     }
+    let nativeParent: { hwnd: string; pid: number } | null = null;
+    if (command.command === 'load') {
+      try {
+        const candidate = this.#getNativeParentIdentity();
+        if (!isValidNativeParentIdentity(candidate)) {
+          return { ok: false, error: safeNativeHostFailure('PLAYER_HELPER_PRESENTATION_REJECTED', 'helper-failure', true, false) };
+        }
+        nativeParent = candidate;
+      } catch {
+        return { ok: false, error: safeNativeHostFailure('PLAYER_HELPER_PRESENTATION_REJECTED', 'helper-failure', true, false) };
+      }
+    }
     const child = this.#getOrSpawnChild();
     if ('error' in child) {
       return { ok: false, error: child.error };
@@ -148,6 +163,10 @@ export class NativePlayerHostProcess implements NativePlayerHostPort {
       this.#playbackPending.set(command.requestId, pending);
       try {
         const procCmd = toNativeHelperCommand(command, context);
+        if (procCmd.type === 'command' && nativeParent !== null) {
+          procCmd.parentHwnd = nativeParent.hwnd;
+          procCmd.parentPid = nativeParent.pid;
+        }
         const serialized = this.#encodeMessage(procCmd);
         validateHelperMessageSize(serialized);
         activeChild.stdin.write(`${serialized}\n`, (error) => {
@@ -763,6 +782,19 @@ export class NativePlayerHostProcess implements NativePlayerHostPort {
         finish(new Error('Native player host cleanup failed.'));
       }
     });
+  }
+}
+
+function isValidNativeParentIdentity(
+  value: { hwnd: string; pid: number } | null,
+): value is { hwnd: string; pid: number } {
+  if (value === null || !/^[0-9]+$/u.test(value.hwnd) ||
+    !Number.isInteger(value.pid) || value.pid <= 0 || value.pid > 2_147_483_647) return false;
+  try {
+    const hwnd = BigInt(value.hwnd);
+    return hwnd > 0n && hwnd <= 18_446_744_073_709_551_615n;
+  } catch {
+    return false;
   }
 }
 

@@ -412,8 +412,9 @@ test('native helper emits loaded media metadata from command payload', async () 
 
 test('native helper tears down mpv before reinitializing and applies mapped public track selection', async () => {
   const source = await readFile(programPath, 'utf8');
+  const command = methodBody(source, 'private static void HandleCommand(InputMessage msg)');
 
-  assert.match(source, /if \(mpvContext != IntPtr\.Zero\)\s*\{\s*TeardownMpvContext\(\);/su);
+  assertUniqueOrdered(command, 'TeardownMpvContext()', 'InitializeMpv(msg)');
   assert.match(source, /NativeMethods\.mpv_terminate_destroy\(mpvContext\)/u);
   assert.doesNotMatch(source, /ApplySelectedPrivateTracks\(msg\.setup\.selectedPrivateTrackIds\)/u);
   assert.match(source, /currentPlaybackSetup\s*=\s*msg\.setup/u);
@@ -450,12 +451,10 @@ test('native helper gates FILE_LOADED on checked initial track selection results
 
 test('native helper preserves replacement load request id after teardown', async () => {
   const source = await readFile(programPath, 'utf8');
+  const command = methodBody(source, 'private static void HandleCommand(InputMessage msg)');
 
   assert.doesNotMatch(source, /currentRequestId\s*=\s*msg\.requestId;\s*InitializeMpv\(msg\)/u);
-  assert.match(
-    source,
-    /if \(mpvContext != IntPtr\.Zero\)\s*\{\s*TeardownMpvContext\(\);\s*\}\s*currentRequestId\s*=\s*msg\.requestId;\s*EnsureLibmpvResolverRegistered\(\);/su,
-  );
+  assertUniqueOrdered(command, 'TeardownMpvContext()', 'InitializeMpv(msg)');
 });
 
 test('native helper rejects controls before media is loaded', async () => {
@@ -580,6 +579,32 @@ test('native helper checks essential property observation registration before st
   );
 });
 
+test('native helper emits only changed public quality summaries and resets the signature per load', async () => {
+  const source = await readFile(programPath, 'utf8');
+  const emitQuality = methodBody(source, 'private static void EmitQualityChanged()');
+  const initialize = methodBody(source, 'private static void InitializeMpv(InputMessage msg)');
+  const teardown = methodBody(source, 'private static void TeardownMpvContext()');
+
+  assertUniqueOrdered(emitQuality, 'qualityState.GetQualitySummary()', 'JsonSerializer.Serialize(summary)');
+  assertUniqueOrdered(emitQuality, 'String.Equals(lastEmittedQualitySignature, signature, StringComparison.Ordinal)', 'lastEmittedQualitySignature = signature');
+  assertUniqueOrdered(emitQuality, 'lastEmittedQualitySignature = signature', 'WriteOutputEvent');
+  assert.match(initialize, /qualityState = new MpvPlaybackQualityState[\s\S]*?lastEmittedQualitySignature = null;/u);
+  assert.match(teardown, /qualityState = null;\s*lastEmittedQualitySignature = null;/u);
+});
+
+test('native helper coalesces forward time updates while preserving backward seeks', async () => {
+  const source = await readFile(programPath, 'utf8');
+  const propertyChange = methodBody(source, 'private static void HandlePropertyChange(MpvEventProperty prop)');
+  const initialize = methodBody(source, 'private static void InitializeMpv(InputMessage msg)');
+  const teardown = methodBody(source, 'private static void TeardownMpvContext()');
+
+  assertUniqueOrdered(propertyChange, 'positionMs >= previousPositionMs', 'positionMs - previousPositionMs < 250');
+  assertUniqueOrdered(propertyChange, 'lastEmittedPositionMs = positionMs', 'WriteOutputEvent');
+  assert.match(propertyChange, /\["positionMs"\] = positionMs,[\s\S]*?\["durationMs"\] = \(int\)\(cachedDurationSeconds \* 1000\)/u);
+  assert.match(initialize, /lastEmittedQualitySignature = null;\s*lastEmittedPositionMs = null;/u);
+  assert.match(teardown, /lastEmittedQualitySignature = null;\s*lastEmittedPositionMs = null;/u);
+});
+
 test('native helper classifies official end-file reasons without exposing raw mpv values', async () => {
   const source = await readFile(programPath, 'utf8');
 
@@ -613,20 +638,23 @@ test('native helper classifies official end-file reasons without exposing raw mp
   assert.doesNotMatch(source, /\["(?:reason|error)"\]\s*=\s*endFile\./u);
 });
 
-test('native presentation uses one bounded owner thread and a disabled nonactivating child', async () => {
+test('native presentation uses one bounded owner thread and an unowned disabled nonactivating popup', async () => {
   const source = await readFile(programPath, 'utf8');
   const manifest = await readFile(path.join(path.dirname(programPath), 'app.manifest'), 'utf8');
   assert.match(source, /BlockingCollection<PresentationWork>\(16\)/u);
   assert.match(source, /Name = "LineupPresentationRenderLoop"/u);
-  assert.match(source, /0x4E000000/u);
-  assert.match(source, /0x08000004/u);
-  assert.match(source, /HwndBottom/u);
+  assert.match(source, /0x88000000/u);
+  assert.match(source, /0x08000080/u);
+  assert.match(source, /ClientToScreen\(parent, ref clientOrigin\)/u);
+  assert.match(source, /CreateWindowEx\([\s\S]*?width,[\s\S]*?height,[\s\S]*?IntPtr\.Zero,[\s\S]*?IntPtr\.Zero,[\s\S]*?instance/u);
+  assert.match(source, /SetWindowPos\(window, parent, left, top, width, height, SwpNoActivate\)/u);
   assert.match(source, /WM_MOUSEACTIVATE \/ MA_NOACTIVATE/u);
   assert.match(source, /WM_GETOBJECT: no native accessibility provider/u);
-  assert.match(source, /AreDpiAwarenessContextsEqual/u);
+  assert.match(source, /GetWindowThreadProcessId\(parent, out uint pid\)/u);
+  assert.doesNotMatch(source, /AreDpiAwarenessContextsEqual|SetThreadDpiAwarenessContext/u);
   assert.match(source, /Math\.Floor\(bounds\.x/u);
   assert.match(source, /Math\.Ceiling\(\(bounds\.x \+ bounds\.width\)/u);
-  assert.doesNotMatch(source, /HWND_TOPMOST|HwndTopmost|WS_POPUP/u);
+  assert.doesNotMatch(source, /HWND_TOPMOST|HwndTopmost|HwndTop|WS_CHILD/u);
   assert.match(manifest, />PerMonitorV2</u);
 });
 
@@ -673,52 +701,46 @@ test('native presentation SetWindowPos outcomes control visibility and acknowled
 
   assert.match(source, /public bool Show\(\)\s*\{\s*bool shown = NativeMethods\.SetWindowPos[\s\S]*?if \(shown\) Visible = true;\s*return shown;\s*\}/u);
   assert.match(source, /public bool Hide\(\)\s*\{\s*bool hidden = NativeMethods\.SetWindowPos[\s\S]*?if \(hidden\) Visible = false;\s*return hidden;\s*\}/u);
-  assert.match(source, /if \(!renderSurface\.Show\(\)\)\s*\{\s*DestroyPresentationResources\(\);\s*return "rejected";\s*\}[\s\S]*?return "applied";/u);
-  assert.match(source, /if \(renderSurface == null \|\| renderSurface\.Hide\(\)\) return true;\s*DestroyPresentationResources\(\);\s*return false;/u);
+  assert.match(source, /if \(!nativeVideoHost\.Show\(\)\)\s*\{\s*DestroyPresentationResources\(\);\s*return "rejected";\s*\}[\s\S]*?return "applied";/u);
+  assert.match(source, /if \(nativeVideoHost == null \|\| nativeVideoHost\.Hide\(\)\) return true;\s*DestroyPresentationResources\(\);\s*return false;/u);
   assert.match(source, /if \(!HidePresentationSurface\(\)\) return "rejected";\s*latestPresentationHidden = true;\s*if \(staleRevision\) return "stale";/u);
 });
 
-test('native presentation contains rejected work and fails the shared lifecycle on asynchronous rendering errors', async () => {
+test('native presentation embeds gpu-next in the owner-thread child without a custom render API', async () => {
   const source = await readFile(programPath, 'utf8');
   const presentationLoop = methodBody(source, 'private static void PresentationLoop()');
-  const failureContainment = methodBody(source, 'private static void ContainPresentationFailure()');
-  const lifecycleFailure = methodBody(source, 'private static void FailPresentationLifecycle()');
-  const renderFrame = methodBody(source, 'private static void RenderFrame()');
+  const initialize = methodBody(source, 'private static void InitializeMpv(InputMessage msg)');
 
   assert.match(presentationLoop, /catch\s*\{\s*ContainPresentationFailure\(\);\s*work\.Status = "rejected";\s*\}\s*finally\s*\{\s*work\.Completed\.Set\(\);/u);
-  assert.match(presentationLoop, /try\s*\{\s*RenderFrame\(\);\s*PumpWindowMessages\(\);\s*\}\s*catch\s*\{\s*FailPresentationLifecycle\(\);\s*return;/u);
-  assert.match(failureContainment, /try\s*\{\s*HidePresentationSurface\(\);\s*\}\s*catch\s*\{\s*\}\s*DestroyPresentationResources\(\);\s*latestPresentationHidden = true;/u);
-  assertUniqueOrdered(lifecycleFailure, 'ContainPresentationFailure()', 'Environment.Exit(1)');
-  assert.match(renderFrame, /if \(!renderSurface\.MakeCurrent\(\)\) throw new InvalidOperationException\(\);/u);
-  assert.match(renderFrame, /if \(!NativeMethods\.SwapBuffers\(renderSurface\.DeviceContext\)\) throw new InvalidOperationException\(\);/u);
+  assert.match(presentationLoop, /PumpWindowMessages\(\);/u);
+  assertUniqueOrdered(initialize, 'CreatePresentationHostOnOwnerThread(msg)', 'NativeMethods.mpv_initialize(mpvContext)');
+  assertUniqueOrdered(initialize, 'EnsureOptionSet(mpvContext, "vo", "gpu-next")', 'EnsureOptionInt64Set(mpvContext, "wid", nativeWindowHandle)');
+  assert.doesNotMatch(source, /mpv_render_context_|wgl|SwapBuffers|MpvOpenGl|MpvRenderParam/u);
 });
 
-test('native presentation resources are destroyed by their owner before mpv teardown', async () => {
+test('native presentation keeps the HWND through mpv teardown before owner-thread destruction', async () => {
   const source = await readFile(programPath, 'utf8');
   const teardown = methodBody(source, 'private static void TeardownMpvContext()');
   const cleanup = methodBody(source, 'private static void HandleCleanup(string? requestId)');
   const command = methodBody(source, 'private static void HandleCommand(InputMessage msg)');
+  const initialize = methodBody(source, 'private static void InitializeMpv(InputMessage msg)');
 
   assert.doesNotMatch(teardown, /renderContext|renderSurface|DestroyPresentationResources/u);
-  assertUniqueOrdered(cleanup, 'DestroyPresentationOnOwnerThread()', 'TeardownMpvContext()');
+  assertUniqueOrdered(cleanup, 'HidePresentationOnOwnerThread()', 'TeardownMpvContext()');
+  assertUniqueOrdered(cleanup, 'TeardownMpvContext()', 'DestroyPresentationOnOwnerThread()');
+  assertUniqueOrdered(command, 'HidePresentationOnOwnerThread()', 'TeardownMpvContext()');
+  assertUniqueOrdered(command, 'TeardownMpvContext()', 'DestroyPresentationOnOwnerThread()');
   assertUniqueOrdered(command, 'DestroyPresentationOnOwnerThread()', 'InitializeMpv(msg)');
+  assertUniqueOrdered(initialize, 'CreatePresentationHostOnOwnerThread(msg)', 'NativeMethods.mpv_initialize(mpvContext)');
 });
 
-test('native presentation roots the OpenGL address callback for the render-context lifetime', async () => {
+test('native presentation passes the child HWND to mpv as an int64 option before initialize', async () => {
   const source = await readFile(programPath, 'utf8');
+  const initialize = methodBody(source, 'private static void InitializeMpv(InputMessage msg)');
 
-  assert.match(
-    source,
-    /private static readonly MpvOpenGlGetProcAddressDelegate OpenGlGetProcAddress = GetOpenGlProcAddress;/u,
-  );
-  assert.match(
-    source,
-    /get_proc_address = Marshal\.GetFunctionPointerForDelegate\(OpenGlGetProcAddress\)/u,
-  );
-  assert.doesNotMatch(
-    source,
-    /GetFunctionPointerForDelegate\(\(MpvOpenGlGetProcAddressDelegate\)GetOpenGlProcAddress\)/u,
-  );
+  assert.match(source, /NativeVideoHost\? host = NativeVideoHost\.TryCreate/u);
+  assert.match(source, /NativeMethods\.mpv_set_option\(mpv, name, MpvFormatInt64, data\)/u);
+  assertUniqueOrdered(initialize, 'EnsureOptionInt64Set(mpvContext, "wid", nativeWindowHandle)', 'NativeMethods.mpv_initialize(mpvContext)');
 });
 
 test('native presentation operation ids reject every replay and nonincreasing sequence', async () => {

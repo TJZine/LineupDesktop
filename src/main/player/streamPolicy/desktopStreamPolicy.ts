@@ -72,9 +72,7 @@ function evaluateCandidate(
     videoSupported &&
     audioSupported &&
     subtitleSupported &&
-    hdrSupported &&
-    !selection.audioFallback &&
-    !selection.subtitleFallback
+    hdrSupported
   ) {
     directPlayReasons.unshift('direct-play-supported');
     return {
@@ -404,12 +402,6 @@ function buildDirectStreamReasons(options: {
   }
   if (!options.subtitleSupported && options.profile.directStream.subtitleConversion === 'supported') {
     reasons.push('direct-stream-subtitle-conversion');
-  }
-  if (options.selection.audioFallback && options.profile.audioTrackSwitching === 'supported') {
-    reasons.push('direct-stream-audio-fallback');
-  }
-  if (options.selection.subtitleFallback && options.profile.subtitleTrackSwitching === 'supported') {
-    reasons.push('direct-stream-subtitle-fallback');
   }
   if (!options.videoSupported || !options.hdrSupported) {
     return [];

@@ -33,13 +33,11 @@ namespace Lineup.NativePlayerHost
         private const int MpvFormatNodeArray = 7;
         private const int MpvFormatNodeMap = 8;
 
-        private const int GlColorBufferBit = 0x00004000;
         private const int SwpShowWindow = 0x0040;
         private const int SwpHideWindow = 0x0080;
         private const int SwpNoActivate = 0x0010;
         private const int MAX_HELPER_MESSAGE_SIZE = 1024 * 1024;
         private const int MAX_PRESENTATION_MESSAGE_SIZE = 4096;
-        private static readonly IntPtr HwndBottom = new IntPtr(1);
         private static readonly object MpvLock = new object();
 
         private static string? libmpvPath;
@@ -55,11 +53,11 @@ namespace Lineup.NativePlayerHost
 
         private static MpvTrackState? trackState;
         private static MpvPlaybackQualityState? qualityState;
+        private static string? lastEmittedQualitySignature;
+        private static int? lastEmittedPositionMs;
 
-        private static RenderSurface? renderSurface;
+        private static NativeVideoHost? nativeVideoHost;
         private static Thread? eventThread;
-        private static IntPtr renderContext = IntPtr.Zero;
-        private static readonly MpvOpenGlGetProcAddressDelegate OpenGlGetProcAddress = GetOpenGlProcAddress;
         private static readonly BlockingCollection<PresentationWork> PresentationQueue = new BlockingCollection<PresentationWork>(16);
         private static Thread? presentationThread;
         private static long latestPresentationEpoch;
@@ -94,29 +92,6 @@ namespace Lineup.NativePlayerHost
             public long playlist_entry_id;
             public long playlist_insert_id;
             public int playlist_insert_num_entries;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        private struct MpvRenderParam
-        {
-            public int type;
-            public IntPtr data;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        private struct MpvOpenGlInitParams
-        {
-            public IntPtr get_proc_address;
-            public IntPtr get_proc_address_ctx;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        private struct MpvOpenGlFbo
-        {
-            public int fbo;
-            public int w;
-            public int h;
-            public int internal_format;
         }
 
         [StructLayout(LayoutKind.Sequential)]
@@ -552,6 +527,11 @@ namespace Lineup.NativePlayerHost
                         return;
                     }
 
+                    HidePresentationOnOwnerThread();
+                    lock (MpvLock)
+                    {
+                        TeardownMpvContext();
+                    }
                     DestroyPresentationOnOwnerThread();
 
                     InitializeMpv(msg);
@@ -716,13 +696,9 @@ namespace Lineup.NativePlayerHost
 
         private static void InitializeMpv(InputMessage msg)
         {
+            long nativeWindowHandle = CreatePresentationHostOnOwnerThread(msg);
             lock (MpvLock)
             {
-                if (mpvContext != IntPtr.Zero)
-                {
-                    TeardownMpvContext();
-                }
-
                 currentRequestId = msg.requestId;
                 EnsureLibmpvResolverRegistered();
 
@@ -734,9 +710,11 @@ namespace Lineup.NativePlayerHost
 
                 EnsureOptionSet(mpvContext, "terminal", "no");
                 EnsureOptionSet(mpvContext, "msg-level", "all=no");
-                EnsureOptionSet(mpvContext, "vo", "libmpv");
+                EnsureOptionSet(mpvContext, "vo", "gpu-next");
+                EnsureOptionSet(mpvContext, "gpu-api", "auto");
                 EnsureOptionSet(mpvContext, "osc", "no");
                 EnsureOptionSet(mpvContext, "hwdec", "auto");
+                EnsureOptionInt64Set(mpvContext, "wid", nativeWindowHandle);
                 if (!string.IsNullOrEmpty(msg.setup?.audioOutputNativeKey))
                 {
                     EnsureOptionSet(mpvContext, "audio-device", msg.setup.audioOutputNativeKey);
@@ -764,6 +742,8 @@ namespace Lineup.NativePlayerHost
 
                 trackState = new MpvTrackState(mpvContext, msg.setup);
                 qualityState = new MpvPlaybackQualityState(mpvContext, msg.setup?.playbackMode ?? "unknown");
+                lastEmittedQualitySignature = null;
+                lastEmittedPositionMs = null;
                 currentPlaybackSetup = msg.setup;
 
                 ObserveProperty(mpvContext, 1, "time-pos", MpvFormatDouble);
@@ -901,11 +881,19 @@ namespace Lineup.NativePlayerHost
                 if (prop.format == MpvFormatDouble && prop.data != IntPtr.Zero)
                 {
                     double posSeconds = Marshal.PtrToStructure<double>(prop.data);
+                    int positionMs = (int)(posSeconds * 1000);
+                    if (lastEmittedPositionMs is int previousPositionMs &&
+                        positionMs >= previousPositionMs &&
+                        positionMs - previousPositionMs < 250)
+                    {
+                        return;
+                    }
+                    lastEmittedPositionMs = positionMs;
                     WriteOutputEvent(new Dictionary<string, object?>
                     {
                         ["type"] = "time.updated",
                         ["requestId"] = currentRequestId,
-                        ["positionMs"] = (int)(posSeconds * 1000),
+                        ["positionMs"] = positionMs,
                         ["durationMs"] = (int)(cachedDurationSeconds * 1000)
                     });
                 }
@@ -1024,16 +1012,7 @@ namespace Lineup.NativePlayerHost
                         work.Completed.Set();
                     }
                 }
-                try
-                {
-                    RenderFrame();
-                    PumpWindowMessages();
-                }
-                catch
-                {
-                    FailPresentationLifecycle();
-                    return;
-                }
+                PumpWindowMessages();
             }
             DestroyPresentationResources();
         }
@@ -1044,6 +1023,22 @@ namespace Lineup.NativePlayerHost
             {
                 DestroyPresentationResources();
                 return "hidden";
+            }
+            if (message.type == "presentation.hide")
+            {
+                return HidePresentationSurface() ? "hidden" : "rejected";
+            }
+            if (message.type == "presentation.create")
+            {
+                if (!ulong.TryParse(message.parentHwnd, NumberStyles.None, CultureInfo.InvariantCulture, out ulong createRawParent) || createRawParent == 0)
+                {
+                    return "rejected";
+                }
+                NativeVideoHost? host = NativeVideoHost.TryCreate(unchecked((IntPtr)(long)createRawParent), message.parentPid);
+                if (host == null) return "rejected";
+                nativeVideoHost = host;
+                message.parentHwnd = host.WindowHandle.ToInt64().ToString(CultureInfo.InvariantCulture);
+                return "created";
             }
             bool exactTuple = message.documentEpoch == latestPresentationEpoch &&
                 message.revision == latestPresentationRevision &&
@@ -1076,18 +1071,13 @@ namespace Lineup.NativePlayerHost
                 return "stale";
             }
             IntPtr parent = unchecked((IntPtr)(long)rawParent);
-            if (renderSurface == null || !renderSurface.HasParent(parent))
-            {
-                DestroyPresentationResources();
-                renderSurface = RenderSurface.TryCreate(parent, message.parentPid);
-            }
-            if (renderSurface == null || !renderSurface.ApplyBounds(message.bounds, message.mode == "guide-classic-pip"))
+            if (nativeVideoHost == null || !nativeVideoHost.HasParent(parent) ||
+                !nativeVideoHost.ApplyBounds(message.bounds, message.mode == "guide-classic-pip"))
             {
                 HidePresentationSurface();
                 return "rejected";
             }
-            EnsureRenderContext();
-            if (!renderSurface.Show())
+            if (!nativeVideoHost.Show())
             {
                 DestroyPresentationResources();
                 return "rejected";
@@ -1101,66 +1091,18 @@ namespace Lineup.NativePlayerHost
 
         private static bool HidePresentationSurface()
         {
-            if (renderSurface == null || renderSurface.Hide()) return true;
+            if (nativeVideoHost == null || nativeVideoHost.Hide()) return true;
             DestroyPresentationResources();
             return false;
         }
 
-        private static void EnsureRenderContext()
-        {
-            if (renderContext != IntPtr.Zero) return;
-            if (renderSurface == null || mpvContext == IntPtr.Zero) throw new InvalidOperationException();
-            IntPtr apiType = Marshal.StringToHGlobalAnsi("opengl");
-            MpvOpenGlInitParams initParams = new MpvOpenGlInitParams
-            {
-                get_proc_address = Marshal.GetFunctionPointerForDelegate(OpenGlGetProcAddress),
-                get_proc_address_ctx = IntPtr.Zero
-            };
-            IntPtr initParamsPtr = Marshal.AllocHGlobal(Marshal.SizeOf<MpvOpenGlInitParams>());
-            Marshal.StructureToPtr(initParams, initParamsPtr, false);
-            IntPtr initParamArray = AllocRenderParams(new MpvRenderParam { type = 1, data = apiType }, new MpvRenderParam { type = 2, data = initParamsPtr });
-            try
-            {
-                if (!renderSurface.MakeCurrent()) throw new InvalidOperationException();
-                if (NativeMethods.mpv_render_context_create(out renderContext, mpvContext, initParamArray) < 0) renderContext = IntPtr.Zero;
-                NativeMethods.wglMakeCurrent(IntPtr.Zero, IntPtr.Zero);
-            }
-            finally
-            {
-                Marshal.FreeHGlobal(initParamArray); Marshal.FreeHGlobal(initParamsPtr); Marshal.FreeHGlobal(apiType);
-            }
-            if (renderContext == IntPtr.Zero) throw new InvalidOperationException();
-        }
-
-        private static void RenderFrame()
-        {
-            if (renderContext == IntPtr.Zero || renderSurface == null || !renderSurface.Visible) return;
-            if (!renderSurface.MakeCurrent()) throw new InvalidOperationException();
-            NativeMethods.glViewport(0, 0, renderSurface.Width, renderSurface.Height);
-            NativeMethods.glClearColor(0, 0, 0, 1); NativeMethods.glClear(GlColorBufferBit);
-            IntPtr renderParams = AllocRenderParams(new MpvRenderParam { type = 3, data = renderSurface.FboParam }, new MpvRenderParam { type = 4, data = renderSurface.FlipYParam });
-            try { NativeMethods.mpv_render_context_update(renderContext); NativeMethods.mpv_render_context_render(renderContext, renderParams); }
-            finally { Marshal.FreeHGlobal(renderParams); }
-            if (!NativeMethods.SwapBuffers(renderSurface.DeviceContext)) throw new InvalidOperationException();
-        }
-
         private static void DestroyPresentationResources()
         {
-            IntPtr context = renderContext;
-            renderContext = IntPtr.Zero;
+            NativeVideoHost? host = nativeVideoHost;
+            nativeVideoHost = null;
             try
             {
-                if (context != IntPtr.Zero) NativeMethods.mpv_render_context_free(context);
-            }
-            catch
-            {
-            }
-
-            RenderSurface? surface = renderSurface;
-            renderSurface = null;
-            try
-            {
-                surface?.Dispose();
+                host?.Dispose();
             }
             catch
             {
@@ -1180,12 +1122,6 @@ namespace Lineup.NativePlayerHost
             latestPresentationHidden = true;
         }
 
-        private static void FailPresentationLifecycle()
-        {
-            ContainPresentationFailure();
-            Environment.Exit(1);
-        }
-
         private static void WritePresentationResult(InputMessage message, string status)
         {
             Console.Out.WriteLine(JsonSerializer.Serialize(new Dictionary<string, object?> {
@@ -1197,10 +1133,25 @@ namespace Lineup.NativePlayerHost
 
         private static void HandleCleanup(string? requestId)
         {
-            DestroyPresentationOnOwnerThread();
+            HidePresentationOnOwnerThread();
             lock (MpvLock)
             {
                 TeardownMpvContext();
+            }
+            DestroyPresentationOnOwnerThread();
+        }
+
+        private static void HidePresentationOnOwnerThread()
+        {
+            PresentationWork hide = new PresentationWork { Message = new InputMessage { type = "presentation.hide" } };
+            if (!PresentationQueue.TryAdd(hide))
+            {
+                throw new InvalidOperationException("Native presentation hide could not be queued.");
+            }
+            hide.Completed.Wait();
+            if (hide.Status != "hidden")
+            {
+                throw new InvalidOperationException("Native presentation could not be hidden.");
             }
         }
 
@@ -1212,6 +1163,29 @@ namespace Lineup.NativePlayerHost
                 throw new InvalidOperationException("Native presentation cleanup could not be queued.");
             }
             destroy.Completed.Wait();
+        }
+
+        private static long CreatePresentationHostOnOwnerThread(InputMessage message)
+        {
+            InputMessage createMessage = new InputMessage
+            {
+                type = "presentation.create",
+                parentHwnd = message.parentHwnd,
+                parentPid = message.parentPid
+            };
+            PresentationWork create = new PresentationWork { Message = createMessage };
+            if (!PresentationQueue.TryAdd(create))
+            {
+                throw new InvalidOperationException("Native presentation host could not be queued.");
+            }
+            create.Completed.Wait();
+            if (create.Status != "created" ||
+                !long.TryParse(createMessage.parentHwnd, NumberStyles.None, CultureInfo.InvariantCulture, out long windowHandle) ||
+                windowHandle == 0)
+            {
+                throw new InvalidOperationException("Native presentation host could not be created.");
+            }
+            return windowHandle;
         }
 
         private static void ConfigureLibmpvPath(string[] args)
@@ -1264,6 +1238,8 @@ namespace Lineup.NativePlayerHost
             isBuffering = false;
             trackState = null;
             qualityState = null;
+            lastEmittedQualitySignature = null;
+            lastEmittedPositionMs = null;
         }
 
         private static void CacheLoadedMedia(InputMessage msg)
@@ -1303,11 +1279,15 @@ namespace Lineup.NativePlayerHost
         private static void EmitQualityChanged()
         {
             if (qualityState == null) return;
+            Dictionary<string, object?> summary = qualityState.GetQualitySummary();
+            string signature = JsonSerializer.Serialize(summary);
+            if (String.Equals(lastEmittedQualitySignature, signature, StringComparison.Ordinal)) return;
+            lastEmittedQualitySignature = signature;
             WriteOutputEvent(new Dictionary<string, object?>
             {
                 ["type"] = "quality.changed",
                 ["requestId"] = currentRequestId,
-                ["quality"] = qualityState.GetQualitySummary()
+                ["quality"] = summary
             });
         }
 
@@ -1366,6 +1346,24 @@ namespace Lineup.NativePlayerHost
             {
                 TeardownMpvContext();
                 throw new InvalidOperationException("Native player initialization failed.");
+            }
+        }
+
+        private static void EnsureOptionInt64Set(IntPtr mpv, string name, long value)
+        {
+            IntPtr data = Marshal.AllocHGlobal(sizeof(long));
+            try
+            {
+                Marshal.WriteInt64(data, value);
+                if (NativeMethods.mpv_set_option(mpv, name, MpvFormatInt64, data) < 0)
+                {
+                    TeardownMpvContext();
+                    throw new InvalidOperationException("Native player initialization failed.");
+                }
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(data);
             }
         }
 
@@ -1446,29 +1444,6 @@ namespace Lineup.NativePlayerHost
                     }
                 }
             }
-        }
-
-        private static IntPtr AllocRenderParams(params MpvRenderParam[] parameters)
-        {
-            int itemSize = Marshal.SizeOf<MpvRenderParam>();
-            IntPtr buffer = Marshal.AllocHGlobal(itemSize * (parameters.Length + 1));
-            for (int index = 0; index < parameters.Length; index += 1)
-            {
-                Marshal.StructureToPtr(parameters[index], IntPtr.Add(buffer, itemSize * index), false);
-            }
-            Marshal.StructureToPtr(new MpvRenderParam { type = 0, data = IntPtr.Zero }, IntPtr.Add(buffer, itemSize * parameters.Length), false);
-            return buffer;
-        }
-
-        private static IntPtr GetOpenGlProcAddress(IntPtr context, string name)
-        {
-            IntPtr pointer = NativeMethods.wglGetProcAddress(name);
-            if (pointer != IntPtr.Zero)
-            {
-                return pointer;
-            }
-            IntPtr module = NativeMethods.GetModuleHandle("opengl32.dll");
-            return module == IntPtr.Zero ? IntPtr.Zero : NativeMethods.GetProcAddress(module, name);
         }
 
         private static IntPtr ResolveLibmpv(string libraryName, System.Reflection.Assembly assembly, DllImportSearchPath? searchPath)
@@ -1559,36 +1534,24 @@ namespace Lineup.NativePlayerHost
             }
         }
 
-        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-        private delegate IntPtr MpvOpenGlGetProcAddressDelegate(IntPtr context, string name);
-
-        private sealed class RenderSurface : IDisposable
+        private sealed class NativeVideoHost : IDisposable
         {
             private static readonly NativeMethods.WndProc WndProcDelegate = DefWindowProc;
             private readonly IntPtr window;
-            private readonly IntPtr renderingContext;
             private readonly IntPtr classAtom;
             private readonly IntPtr instance;
             private readonly string className;
             private readonly IntPtr parent;
             private readonly int parentPid;
 
-            public readonly IntPtr DeviceContext;
-            public int Width { get; private set; }
-            public int Height { get; private set; }
             public bool Visible { get; private set; }
-            public readonly IntPtr FboParam;
-            public readonly IntPtr FlipYParam;
+            public IntPtr WindowHandle => window;
 
-            private RenderSurface(
+            private NativeVideoHost(
                 IntPtr instance,
                 IntPtr classAtom,
                 string className,
                 IntPtr window,
-                IntPtr deviceContext,
-                IntPtr renderingContext,
-                int width,
-                int height,
                 IntPtr parent,
                 int parentPid)
             {
@@ -1596,29 +1559,19 @@ namespace Lineup.NativePlayerHost
                 this.classAtom = classAtom;
                 this.className = className;
                 this.window = window;
-                DeviceContext = deviceContext;
-                this.renderingContext = renderingContext;
-                Width = width;
-                Height = height;
                 this.parent = parent;
                 this.parentPid = parentPid;
-
-                MpvOpenGlFbo fbo = new MpvOpenGlFbo { fbo = 0, w = Width, h = Height, internal_format = 0 };
-                FboParam = Marshal.AllocHGlobal(Marshal.SizeOf<MpvOpenGlFbo>());
-                Marshal.StructureToPtr(fbo, FboParam, false);
-                FlipYParam = Marshal.AllocHGlobal(sizeof(int));
-                Marshal.WriteInt32(FlipYParam, 1);
             }
 
-            public static RenderSurface? TryCreate(IntPtr parent, int parentPid)
+            public static NativeVideoHost? TryCreate(IntPtr parent, int parentPid)
             {
                 if (!ValidateParent(parent, parentPid, out _, out _, out _)) return null;
                 IntPtr instance = NativeMethods.GetModuleHandle(null);
                 string className = "LineupNativePlayerPresentationHost";
                 int width = 1;
                 int height = 1;
-                int style = unchecked((int)0x4E000000); // WS_CHILD | CLIPSIBLINGS | CLIPCHILDREN | DISABLED
-                int exStyle = unchecked((int)0x08000004); // NOACTIVATE | NOPARENTNOTIFY
+                int style = unchecked((int)0x88000000); // WS_POPUP | DISABLED
+                int exStyle = unchecked((int)0x08000080); // NOACTIVATE | TOOLWINDOW
 
                 NativeMethods.WNDCLASSEX wndClass = new NativeMethods.WNDCLASSEX
                 {
@@ -1643,7 +1596,7 @@ namespace Lineup.NativePlayerHost
                     0,
                     width,
                     height,
-                    parent,
+                    IntPtr.Zero,
                     IntPtr.Zero,
                     instance,
                     IntPtr.Zero);
@@ -1652,36 +1605,7 @@ namespace Lineup.NativePlayerHost
                     return null;
                 }
 
-                IntPtr deviceContext = NativeMethods.GetDC(window);
-                if (deviceContext == IntPtr.Zero)
-                {
-                    NativeMethods.DestroyWindow(window);
-                    return null;
-                }
-
-                NativeMethods.PIXELFORMATDESCRIPTOR pfd = NativeMethods.PIXELFORMATDESCRIPTOR.Create();
-                int pixelFormat = NativeMethods.ChoosePixelFormat(deviceContext, ref pfd);
-                if (pixelFormat == 0 || !NativeMethods.SetPixelFormat(deviceContext, pixelFormat, ref pfd))
-                {
-                    NativeMethods.ReleaseDC(window, deviceContext);
-                    NativeMethods.DestroyWindow(window);
-                    return null;
-                }
-
-                IntPtr renderingContext = NativeMethods.wglCreateContext(deviceContext);
-                if (renderingContext == IntPtr.Zero || !NativeMethods.wglMakeCurrent(deviceContext, renderingContext))
-                {
-                    if (renderingContext != IntPtr.Zero)
-                    {
-                        NativeMethods.wglDeleteContext(renderingContext);
-                    }
-                    NativeMethods.ReleaseDC(window, deviceContext);
-                    NativeMethods.DestroyWindow(window);
-                    return null;
-                }
-
-                NativeMethods.wglMakeCurrent(IntPtr.Zero, IntPtr.Zero);
-                return new RenderSurface(instance, new IntPtr(atom), className, window, deviceContext, renderingContext, width, height, parent, parentPid);
+                return new NativeVideoHost(instance, new IntPtr(atom), className, window, parent, parentPid);
             }
 
             public bool HasParent(IntPtr value) => value == parent;
@@ -1692,45 +1616,39 @@ namespace Lineup.NativePlayerHost
                 if (client.left != stableClient.left || client.top != stableClient.top || client.right != stableClient.right || client.bottom != stableClient.bottom) return false;
                 int clientWidth = client.right - client.left, clientHeight = client.bottom - client.top;
                 if (clientWidth <= 0 || clientHeight <= 0 || !FiniteBounds(bounds)) return false;
-                int left = Clamp((int)Math.Floor(bounds.x * clientWidth), 0, clientWidth);
-                int top = Clamp((int)Math.Floor(bounds.y * clientHeight), 0, clientHeight);
-                int right = Clamp((int)Math.Ceiling((bounds.x + bounds.width) * clientWidth), 0, clientWidth);
-                int bottom = Clamp((int)Math.Ceiling((bounds.y + bounds.height) * clientHeight), 0, clientHeight);
+                NativeMethods.POINT clientOrigin = new NativeMethods.POINT { x = 0, y = 0 };
+                if (!NativeMethods.ClientToScreen(parent, ref clientOrigin)) return false;
+                int clientLeft = Clamp((int)Math.Floor(bounds.x * clientWidth), 0, clientWidth);
+                int clientTop = Clamp((int)Math.Floor(bounds.y * clientHeight), 0, clientHeight);
+                int clientRight = Clamp((int)Math.Ceiling((bounds.x + bounds.width) * clientWidth), 0, clientWidth);
+                int clientBottom = Clamp((int)Math.Ceiling((bounds.y + bounds.height) * clientHeight), 0, clientHeight);
+                int left = clientOrigin.x + clientLeft;
+                int top = clientOrigin.y + clientTop;
+                int right = clientOrigin.x + clientRight;
+                int bottom = clientOrigin.y + clientBottom;
                 int width = right - left, height = bottom - top;
                 int inset = (int)Math.Ceiling(16.0 * dpi / 96.0);
-                if (width <= 0 || height <= 0 || classic && (width < 160 || height < 90 || width > clientWidth / 2 || height > clientHeight / 2 || left < inset || top < inset || clientWidth - right < inset || clientHeight - bottom < inset)) return false;
-                if (!NativeMethods.SetWindowPos(window, HwndBottom, left, top, width, height, SwpNoActivate)) return false;
-                Width = width; Height = height;
-                Marshal.StructureToPtr(new MpvOpenGlFbo { fbo = 0, w = Width, h = Height, internal_format = 0 }, FboParam, false);
+                if (width <= 0 || height <= 0 || classic && (width < 160 || height < 90 || width > clientWidth / 2 || height > clientHeight / 2 || clientLeft < inset || clientTop < inset || clientWidth - clientRight < inset || clientHeight - clientBottom < inset)) return false;
+                if (!NativeMethods.SetWindowPos(window, parent, left, top, width, height, SwpNoActivate)) return false;
                 return true;
             }
 
             public bool Show()
             {
-                bool shown = NativeMethods.SetWindowPos(window, HwndBottom, 0, 0, 0, 0, 0x0001 | 0x0002 | SwpNoActivate | SwpShowWindow);
+                bool shown = NativeMethods.SetWindowPos(window, parent, 0, 0, 0, 0, 0x0001 | 0x0002 | SwpNoActivate | SwpShowWindow);
                 if (shown) Visible = true;
                 return shown;
             }
 
             public bool Hide()
             {
-                bool hidden = NativeMethods.SetWindowPos(window, HwndBottom, 0, 0, 0, 0, 0x0001 | 0x0002 | SwpNoActivate | SwpHideWindow);
+                bool hidden = NativeMethods.SetWindowPos(window, parent, 0, 0, 0, 0, 0x0001 | 0x0002 | SwpNoActivate | SwpHideWindow);
                 if (hidden) Visible = false;
                 return hidden;
             }
 
-            public bool MakeCurrent()
-            {
-                return NativeMethods.wglMakeCurrent(DeviceContext, renderingContext);
-            }
-
             public void Dispose()
             {
-                Marshal.FreeHGlobal(FboParam);
-                Marshal.FreeHGlobal(FlipYParam);
-                NativeMethods.wglMakeCurrent(IntPtr.Zero, IntPtr.Zero);
-                NativeMethods.wglDeleteContext(renderingContext);
-                NativeMethods.ReleaseDC(window, DeviceContext);
                 NativeMethods.DestroyWindow(window);
                 if (classAtom != IntPtr.Zero)
                 {
@@ -1750,7 +1668,7 @@ namespace Lineup.NativePlayerHost
                 client = default; stableClient = default; dpi = 0;
                 if (!NativeMethods.IsWindow(parent)) return false;
                 NativeMethods.GetWindowThreadProcessId(parent, out uint pid);
-                if (pid != (uint)expectedPid || !NativeMethods.AreDpiAwarenessContextsEqual(NativeMethods.GetWindowDpiAwarenessContext(parent), NativeMethods.GetThreadDpiAwarenessContext())) return false;
+                if (pid != (uint)expectedPid) return false;
                 uint before = NativeMethods.GetDpiForWindow(parent);
                 if (before == 0 || !NativeMethods.GetClientRect(parent, out client)) return false;
                 uint after = NativeMethods.GetDpiForWindow(parent);
@@ -1776,6 +1694,9 @@ namespace Lineup.NativePlayerHost
 
             [DllImport("libmpv-2.dll", CallingConvention = CallingConvention.Cdecl)]
             public static extern int mpv_set_option_string(IntPtr context, string name, string value);
+
+            [DllImport("libmpv-2.dll", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+            public static extern int mpv_set_option(IntPtr context, string name, int format, IntPtr data);
 
             [DllImport("libmpv-2.dll", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
             public static extern int mpv_set_property_string(IntPtr context, string name, string value);
@@ -1807,23 +1728,8 @@ namespace Lineup.NativePlayerHost
             [DllImport("libmpv-2.dll", CallingConvention = CallingConvention.Cdecl)]
             public static extern void mpv_terminate_destroy(IntPtr context);
 
-            [DllImport("libmpv-2.dll", CallingConvention = CallingConvention.Cdecl)]
-            public static extern int mpv_render_context_create(out IntPtr context, IntPtr mpv, IntPtr parameters);
-
-            [DllImport("libmpv-2.dll", CallingConvention = CallingConvention.Cdecl)]
-            public static extern void mpv_render_context_render(IntPtr context, IntPtr parameters);
-
-            [DllImport("libmpv-2.dll", CallingConvention = CallingConvention.Cdecl)]
-            public static extern ulong mpv_render_context_update(IntPtr context);
-
-            [DllImport("libmpv-2.dll", CallingConvention = CallingConvention.Cdecl)]
-            public static extern void mpv_render_context_free(IntPtr context);
-
             [DllImport("kernel32.dll", CharSet = CharSet.Ansi, SetLastError = true)]
             public static extern IntPtr GetModuleHandle(string? moduleName);
-
-            [DllImport("kernel32.dll", CharSet = CharSet.Ansi, SetLastError = true)]
-            public static extern IntPtr GetProcAddress(IntPtr module, string procName);
 
             [DllImport("user32.dll", CharSet = CharSet.Ansi, SetLastError = true)]
             public static extern ushort RegisterClassEx(ref WNDCLASSEX lpwcx);
@@ -1856,28 +1762,13 @@ namespace Lineup.NativePlayerHost
             public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
 
             [DllImport("user32.dll")]
-            public static extern IntPtr GetWindowDpiAwarenessContext(IntPtr hWnd);
-
-            [DllImport("user32.dll")]
-            public static extern IntPtr GetThreadDpiAwarenessContext();
-
-            [DllImport("user32.dll")]
-            public static extern bool AreDpiAwarenessContextsEqual(IntPtr dpiContextA, IntPtr dpiContextB);
-
-            [DllImport("user32.dll")]
             public static extern uint GetDpiForWindow(IntPtr hWnd);
 
             [DllImport("user32.dll")]
             public static extern bool GetClientRect(IntPtr hWnd, out RECT rect);
 
-            [DllImport("user32.dll", SetLastError = true)]
-            public static extern IntPtr GetDC(IntPtr hWnd);
-
-            [DllImport("user32.dll", SetLastError = true)]
-            public static extern int ReleaseDC(IntPtr hWnd, IntPtr hDC);
-
             [DllImport("user32.dll")]
-            public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+            public static extern bool ClientToScreen(IntPtr hWnd, ref POINT point);
 
             [DllImport("user32.dll", SetLastError = true)]
             public static extern bool SetWindowPos(
@@ -1890,9 +1781,6 @@ namespace Lineup.NativePlayerHost
                 int uFlags);
 
             [DllImport("user32.dll")]
-            public static extern bool UpdateWindow(IntPtr hWnd);
-
-            [DllImport("user32.dll")]
             public static extern IntPtr DefWindowProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
 
             [DllImport("user32.dll")]
@@ -1903,36 +1791,6 @@ namespace Lineup.NativePlayerHost
 
             [DllImport("user32.dll")]
             public static extern IntPtr DispatchMessage(ref MSG lpMsg);
-
-            [DllImport("gdi32.dll", SetLastError = true)]
-            public static extern int ChoosePixelFormat(IntPtr hdc, ref PIXELFORMATDESCRIPTOR ppfd);
-
-            [DllImport("gdi32.dll", SetLastError = true)]
-            public static extern bool SetPixelFormat(IntPtr hdc, int format, ref PIXELFORMATDESCRIPTOR ppfd);
-
-            [DllImport("gdi32.dll")]
-            public static extern bool SwapBuffers(IntPtr hdc);
-
-            [DllImport("opengl32.dll", SetLastError = true)]
-            public static extern IntPtr wglCreateContext(IntPtr hdc);
-
-            [DllImport("opengl32.dll", SetLastError = true)]
-            public static extern bool wglMakeCurrent(IntPtr hdc, IntPtr hglrc);
-
-            [DllImport("opengl32.dll", SetLastError = true)]
-            public static extern bool wglDeleteContext(IntPtr hglrc);
-
-            [DllImport("opengl32.dll", CharSet = CharSet.Ansi, SetLastError = true)]
-            public static extern IntPtr wglGetProcAddress(string lpszProc);
-
-            [DllImport("opengl32.dll")]
-            public static extern void glViewport(int x, int y, int width, int height);
-
-            [DllImport("opengl32.dll")]
-            public static extern void glClearColor(float red, float green, float blue, float alpha);
-
-            [DllImport("opengl32.dll")]
-            public static extern void glClear(int mask);
 
             public delegate IntPtr WndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
 
@@ -1980,51 +1838,6 @@ namespace Lineup.NativePlayerHost
                 public POINT pt;
             }
 
-            [StructLayout(LayoutKind.Sequential)]
-            public struct PIXELFORMATDESCRIPTOR
-            {
-                public ushort nSize;
-                public ushort nVersion;
-                public uint dwFlags;
-                public byte iPixelType;
-                public byte cColorBits;
-                public byte cRedBits;
-                public byte cRedShift;
-                public byte cGreenBits;
-                public byte cGreenShift;
-                public byte cBlueBits;
-                public byte cBlueShift;
-                public byte cAlphaBits;
-                public byte cAlphaShift;
-                public byte cAccumBits;
-                public byte cAccumRedBits;
-                public byte cAccumGreenBits;
-                public byte cAccumBlueBits;
-                public byte cAccumAlphaBits;
-                public byte cDepthBits;
-                public byte cStencilBits;
-                public byte cAuxBuffers;
-                public sbyte iLayerType;
-                public byte bReserved;
-                public uint dwLayerMask;
-                public uint dwVisibleMask;
-                public uint dwDamageMask;
-
-                public static PIXELFORMATDESCRIPTOR Create()
-                {
-                    return new PIXELFORMATDESCRIPTOR
-                    {
-                        nSize = (ushort)Marshal.SizeOf<PIXELFORMATDESCRIPTOR>(),
-                        nVersion = 1,
-                        dwFlags = 0x00000004 | 0x00000020 | 0x00000001,
-                        iPixelType = 0,
-                        cColorBits = 32,
-                        cAlphaBits = 8,
-                        cDepthBits = 24,
-                        iLayerType = 0,
-                    };
-                }
-            }
         }
     }
 }

@@ -13,8 +13,9 @@ import {
 } from '../../../contracts/player.js';
 import { assertPublicSafe } from './playerPublicSafetyAssertions.js';
 import {
-  NativePlayerHostProcess,
+  NativePlayerHostProcess as ProductionNativePlayerHostProcess,
   type NativePlayerHostChildProcess,
+  type NativePlayerHostProcessOptions,
 } from '../../../main/player/nativePlayerHostProcess.js';
 import { DiagnosticEventStore } from '../../../main/diagnostics/diagnosticEventStore.js';
 import type { NativePlayerHostLifecycleFailure } from '../../../main/player/nativePlayerHostPort.js';
@@ -22,6 +23,13 @@ import type { NativePlayerHostLifecycleFailure } from '../../../main/player/nati
 type SpawnedNativeHostChildProcess = NativePlayerHostChildProcess & {
   readonly exitCode: number | null;
 };
+
+class NativePlayerHostProcess extends ProductionNativePlayerHostProcess {
+  constructor(options: Omit<NativePlayerHostProcessOptions, 'getNativeParentIdentity'> &
+    Partial<Pick<NativePlayerHostProcessOptions, 'getNativeParentIdentity'>>) {
+    super({ getNativeParentIdentity: () => ({ hwnd: '42', pid: 9 }), ...options });
+  }
+}
 
 class FakeHostChildProcess extends EventEmitter implements NativePlayerHostChildProcess {
   readonly stdin = new PassThrough();
@@ -188,6 +196,8 @@ test('native host process translates commands and returns safe host events', asy
     requestId: 'native-load-1',
     command: 'load',
     payload: loadCommand.payload,
+    parentHwnd: '42',
+    parentPid: 9,
   });
 
   child.send({
@@ -344,6 +354,7 @@ test('native host process hides the exact current loaded request before a replac
   await new Promise<void>((resolve) => setImmediate(resolve));
   assert.deepEqual(child.writes[2], {
     type: 'command', requestId: 'native-load-2', command: 'load', payload: loadCommand.payload,
+    parentHwnd: '42', parentPid: 9,
   });
   child.send({ type: 'result', requestId: 'native-load-2', ok: true, events: [] });
   assert.equal((await replacement).ok, true);
@@ -421,6 +432,7 @@ test('native host process accepts a stale active presentation ACK and sends the 
   await new Promise<void>((resolve) => setImmediate(resolve));
   assert.deepEqual(child.writes[1], {
     type: 'command', requestId: 'native-load-after-stale-hide', command: 'load', payload: loadCommand.payload,
+    parentHwnd: '42', parentPid: 9,
   });
   assert.equal(child.killed, false);
   assert.equal(lifecycle.length, 0);
@@ -466,6 +478,7 @@ test('native host process drains a pending presentation and excludes new shows a
   assert.equal(child.writes.length, 3);
   assert.deepEqual(child.writes[2], {
     type: 'command', requestId: 'native-load-after-pending-show', command: 'load', payload: loadCommand.payload,
+    parentHwnd: '42', parentPid: 9,
   });
   child.send({ type: 'result', requestId: 'native-load-after-pending-show', ok: true, events: [] });
   assert.equal((await replacement).ok, true);
@@ -1251,6 +1264,8 @@ test('native host process quarantines oversized output before the next command',
     requestId: 'native-load-after-oversized',
     command: 'load',
     payload: loadCommand.payload,
+    parentHwnd: '42',
+    parentPid: 9,
   });
 });
 
@@ -1285,6 +1300,8 @@ test('native host process normalizes timeout, spawn failure, and exit failure', 
     requestId: 'native-load-after-timeout',
     command: 'load',
     payload: loadCommand.payload,
+    parentHwnd: '42',
+    parentPid: 9,
   });
 
   const sensitiveHelperPath = ['', 'tmp', 'helper-secret'].join('/');
@@ -1385,6 +1402,8 @@ test('native host process cleanup reaps child and ignores late output', async ()
     requestId: 'native-load-2',
     command: 'load',
     payload: loadCommand.payload,
+    parentHwnd: '42',
+    parentPid: 9,
   });
 });
 
@@ -1516,9 +1535,11 @@ test('native host process drops stderr content before diagnostics storage', asyn
 
 test('native host process serializes private playback details correctly', async () => {
   const child = new FakeHostChildProcess();
+  const privateParentPid = Number(['12', '34'].join(''));
   const host = new NativePlayerHostProcess({
     spawnHostProcess: () => child,
     requestTimeoutMs: 100,
+    getNativeParentIdentity: () => ({ hwnd: '424242', pid: privateParentPid }),
   });
 
   const context = {
@@ -1563,11 +1584,30 @@ test('native host process serializes private playback details correctly', async 
     setup: context.privatePlayback.setup,
     playbackUrl: context.privatePlayback.playbackUrl,
     credentialHeader: context.privatePlayback.credentialHeader,
+    parentHwnd: '424242',
+    parentPid: privateParentPid,
   });
 
   child.send({ type: 'result', requestId: 'native-load-1', ok: true, events: [] });
   const result = await pending;
   assert.equal(result.ok, true);
+});
+
+test('native host process rejects an invalid private parent identity before spawning', async () => {
+  let spawnCount = 0;
+  const privateParentPid = Number(['12', '34'].join(''));
+  const host = new NativePlayerHostProcess({
+    spawnHostProcess: () => {
+      spawnCount += 1;
+      return new FakeHostChildProcess();
+    },
+    getNativeParentIdentity: () => ({ hwnd: ' ', pid: privateParentPid }),
+  });
+
+  const result = await host.execute(loadCommand);
+
+  assert.equal(result.ok, false);
+  assert.equal(spawnCount, 0);
 });
 
 test('native host process rejects oversized messages', async () => {

@@ -348,7 +348,7 @@ export function createSettingsSections(
       items: [
         control('library-tabs', 'Library Tabs', onOff(state.libraryTabsEnabled), 'Filter the Guide by source library.', 'toggleLibraryTabs'),
         control('now-watching-banner', 'Now Watching Banner', onOff(state.nowWatchingBannerEnabled), 'Show the current channel and program above the Guide.', 'toggleNowWatchingBanner'),
-        control('guide-performance-profile', 'Performance Profile', state.guidePerformanceProfile === 'auto' ? 'Auto' : 'Reduced resource', 'Auto retains more nearby Guide work and may warm adjacent windows; Reduced resource limits retention and disables idle warming.', 'cycleGuidePerformanceProfile'),
+        control('guide-performance-profile', 'Performance Profile', state.guidePerformanceProfile === 'auto' ? 'Auto' : 'Reduced resource', 'Auto retains more nearby Guide work; Reduced resource limits retention.', 'cycleGuidePerformanceProfile'),
         control(
           'guide-time-range',
           'Time Range',

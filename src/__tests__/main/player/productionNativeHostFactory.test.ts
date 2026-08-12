@@ -9,9 +9,11 @@ import {
 } from '../../../main/player/productionNativeHostFactory.js';
 import { NativePlayerHostProcess } from '../../../main/player/nativePlayerHostProcess.js';
 
+const getNativeParentIdentity = () => ({ hwnd: '42', pid: 9 });
+
 test('productionNativeHostFactory returns null on non-Windows platforms', () => {
   if (process.platform !== 'win32') {
-    const factory = createProductionNativeHostFactory();
+    const factory = createProductionNativeHostFactory({ getNativeParentIdentity });
     assert.equal(factory, null);
 
     const path = getProductionHelperPath();
@@ -22,7 +24,7 @@ test('productionNativeHostFactory returns null on non-Windows platforms', () => 
 test('productionNativeHostFactory creates NativePlayerHostProcess when helper is available on Windows', () => {
   if (process.platform === 'win32') {
     const helperPath = getProductionHelperPath();
-    const factory = createProductionNativeHostFactory();
+    const factory = createProductionNativeHostFactory({ getNativeParentIdentity });
     if (helperPath === null) {
       assert.equal(factory, null);
     } else {

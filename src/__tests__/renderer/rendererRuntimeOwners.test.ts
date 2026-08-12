@@ -38,6 +38,7 @@ test('player bridge subscription owns event projection and unsubscribe cleanup',
   const initialSnapshot = { ...createEmptyPlayerSnapshot(), requestId: 'playback-1', status: 'playing' as const, playing: true };
   let snapshot: PlayerSnapshot = initialSnapshot;
   let renderCount = 0;
+  let progressRenderCount = 0;
   let emitPlayerEvent = (_event: PlayerEvent): void => {
     throw new Error('player event listener was not registered');
   };
@@ -80,6 +81,9 @@ test('player bridge subscription owns event projection and unsubscribe cleanup',
     render() {
       renderCount += 1;
     },
+    renderProgress() {
+      progressRenderCount += 1;
+    },
   });
 
   await subscription.initializeSnapshot();
@@ -89,7 +93,12 @@ test('player bridge subscription owns event projection and unsubscribe cleanup',
   emitPlayerEvent({ event: 'time.updated', requestId: 'playback-1', positionMs: 90, durationMs: 120 });
   assert.equal(snapshot.positionMs, 90);
   assert.equal(snapshot.durationMs, 120);
+  assert.equal(renderCount, 1);
+  assert.equal(progressRenderCount, 1);
+
+  emitPlayerEvent({ event: 'state.changed', requestId: 'playback-1', snapshot: { ...snapshot, status: 'paused', playing: false } });
   assert.equal(renderCount, 2);
+  assert.equal(progressRenderCount, 1);
 
   subscription.unsubscribe();
   assert.equal(unsubscribed, true);
@@ -114,6 +123,7 @@ test('player bridge filters request-scoped events, keeps settlement separate, an
     setSnapshot: (next) => { snapshot = next; },
     onEvent: (event) => { observedEvents.push(event); },
     render: () => { renders += 1; },
+    renderProgress: () => undefined,
   });
 
   const pendingInit = subscription.initializeSnapshot();
@@ -336,7 +346,7 @@ test('guide presentation polling times out hung work, starts trailing work, and 
   polling.stop();
 });
 
-test('guide presentation polling schedules Player and Guide with route-owned windows and cleanup', async () => {
+test('guide polling is Guide-route-only while explicit Player refresh remains available', async () => {
   let activeRoute: 'player' | 'guide' | 'settings' = 'player';
   const intervalCallbacks: Array<() => void> = [];
   let clearCount = 0;
@@ -371,24 +381,30 @@ test('guide presentation polling schedules Player and Guide with route-owned win
 
   polling.start();
   await settleAsyncWork();
+  assert.equal(windows.length, 0, 'idle Player startup issues no Guide request');
+  assert.equal(intervalCallbacks.length, 0);
+  assert.equal(loadingCount, 0);
+
+  await polling.refresh('player-tune-success', { allowPlayerRoute: true });
   assert.equal(
     windows[0],
     Math.floor(nowMs / EPG_SLOT_DURATION_MS) * EPG_SLOT_DURATION_MS - REDUCED_RESOURCE_GUIDE_PRELOAD_PROFILE.timeBufferMs,
   );
   assert.equal(loadingCount, 0);
   assert.equal(playerApplyCount, 1);
-  intervalCallbacks[0]?.();
-  await settleAsyncWork();
-  assert.equal(windows.length, 2);
 
   activeRoute = 'guide';
   polling.reconcile('player', 'guide');
   await settleAsyncWork();
   assert.equal(windows.at(-1), 1_700_000_000_000 - REDUCED_RESOURCE_GUIDE_PRELOAD_PROFILE.timeBufferMs);
   assert.equal(loadingCount, 1);
+  assert.equal(intervalCallbacks.length, 1);
+  const foregroundRequestCount = windows.length;
+  await settleAsyncWork();
+  assert.equal(windows.length, foregroundRequestCount, 'accepted foreground work schedules no warm request');
   activeRoute = 'settings';
   polling.reconcile('guide', 'settings');
-  assert.equal(clearCount, 2);
+  assert.equal(clearCount, 1);
 });
 
 test('Settings-route past-items settlement makes no request; Guide entry recovers once', async () => {
