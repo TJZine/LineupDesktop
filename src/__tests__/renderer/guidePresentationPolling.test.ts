@@ -6,11 +6,15 @@ import {
   EPG_SLOT_DURATION_MS,
   type EpgGuideTimeRange,
 } from '../../renderer/epg.js';
-import { createGuidePresentationPolling } from '../../renderer/guidePresentationPolling.js';
+import {
+  createGuidePresentationPolling,
+  GUIDE_VIEWPORT_REFRESH_SOURCE,
+} from '../../renderer/guidePresentationPolling.js';
 import { GuideChannelWindow } from '../../renderer/guideChannelWindow.js';
 import type { LineupDesktopPreloadApi } from '../../contracts/shell.js';
 import {
   AUTO_GUIDE_PRELOAD_PROFILE,
+  GUIDE_DOM_ROW_CAP,
   REDUCED_RESOURCE_GUIDE_PRELOAD_PROFILE,
 } from '../../renderer/guideVirtualization.js';
 
@@ -113,7 +117,7 @@ test('Guide polling requests exactly the time-range duration', async () => {
   assert.deepEqual(durations, [bufferedDuration(EPG_DETAILED_WINDOW_DURATION_MS), bufferedDuration(EPG_WIDE_WINDOW_DURATION_MS)]);
 });
 
-test('foreground channel limits follow complete viewport rows plus bounded overscan and clamp at 24', async () => {
+test('foreground channel limits follow complete viewport rows plus bounded overscan and clamp at the DOM row cap', async () => {
   let completeVisibleRows = 7;
   const limits: number[] = [];
   const guide = {
@@ -131,7 +135,7 @@ test('foreground channel limits follow complete viewport rows plus bounded overs
   await polling.refresh('visible-seven');
   completeVisibleRows = 30;
   await polling.refresh('visible-clamped');
-  assert.deepEqual(limits, [11, 24]);
+  assert.deepEqual(limits, [11, GUIDE_DOM_ROW_CAP]);
 });
 
 test('polling does not coalesce an active request when the visible-row channel limit changes', async () => {
@@ -291,7 +295,7 @@ test('an invalid response for a new identity preserves the accepted owner and po
         'auto',
         generation,
         requestWindow?.channelOffset ?? 0,
-        requestWindow?.channelLimit ?? 24,
+        requestWindow?.channelLimit ?? GUIDE_DOM_ROW_CAP,
         presentation,
       ),
     handleFailure: () => undefined,
@@ -502,9 +506,9 @@ test('foreground visible-window work cancels an active idle warm before it runs'
   idle.shift()?.();
   await tick();
   assert.equal(offsets.length, 2, 'idle warm is active');
-  await controller.refresh('guide-visible-window', { channelOffset: 250, channelLimit: 11 });
+  await controller.refresh(GUIDE_VIEWPORT_REFRESH_SOURCE, { channelOffset: 250, channelLimit: 11 });
   assert.equal(cancellations, 1);
-  assert.deepEqual(offsets, [0, 24, 250]);
+  assert.deepEqual(offsets, [0, GUIDE_DOM_ROW_CAP, 250]);
   controller.stop();
 });
 
@@ -542,9 +546,64 @@ test('superseded foreground windows emit generation-aware settlement and permit 
   const refetch = controller.refresh('visible-a-again', { channelOffset: 100, channelLimit: 10 });
   assert.equal(requests.length, 3);
   assert.ok(states.filter(({ state, offset }) => state === 'queued' && offset === 100).length === 2);
-  assert.ok(states.every(({ limit }) => limit <= 24));
+  assert.ok(states.every(({ limit }) => limit <= GUIDE_DOM_ROW_CAP));
   requests[2]?.resolve(result('refetch-a'));
   await refetch;
+  controller.stop();
+});
+
+test('guide-visible-window keeps Guide-scoped rendering through queued, accepted, and settled callbacks', async () => {
+  const request = deferred<ReturnType<typeof result>>();
+  const lifecycle: Array<{ phase: string; source: string }> = [];
+  let guideScopedRenders = 0;
+  let unrelatedApplicationRenders = 0;
+  let nativePresentationReconciles = 0;
+  const renderForSource = (source: string): void => {
+    if (source === GUIDE_VIEWPORT_REFRESH_SOURCE) {
+      guideScopedRenders += 1;
+      return;
+    }
+    unrelatedApplicationRenders += 1;
+    nativePresentationReconciles += 1;
+  };
+  const controller = createGuidePresentationPolling({
+    ...createOptions({
+      getPresentation: async () => request.promise,
+      cancelPresentation: async () => undefined,
+      setLibraryFilter: async () => { throw new Error('Unexpected filter request.'); },
+    }, () => 'detailed', () => undefined),
+    requestWindowState: (state, window) => {
+      lifecycle.push({ phase: state, source: window.source });
+      renderForSource(window.source);
+    },
+    applyPresentation: (_presentation, _generation, _target, _effectiveStart, _window, source) => {
+      assert.equal(source, GUIDE_VIEWPORT_REFRESH_SOURCE);
+      lifecycle.push({ phase: 'accepted', source });
+      renderForSource(source);
+      return true;
+    },
+  });
+
+  const refresh = controller.refresh(GUIDE_VIEWPORT_REFRESH_SOURCE, {
+    channelOffset: 80,
+    channelLimit: 10,
+    showLoading: false,
+  });
+  request.resolve(result(GUIDE_VIEWPORT_REFRESH_SOURCE));
+  await refresh;
+
+  assert.deepEqual(lifecycle, [
+    { phase: 'queued', source: GUIDE_VIEWPORT_REFRESH_SOURCE },
+    { phase: 'accepted', source: GUIDE_VIEWPORT_REFRESH_SOURCE },
+    { phase: 'settled', source: GUIDE_VIEWPORT_REFRESH_SOURCE },
+  ]);
+  assert.equal(guideScopedRenders, 3);
+  assert.equal(unrelatedApplicationRenders, 0);
+  assert.equal(nativePresentationReconciles, 0);
+
+  renderForSource('poll-interval');
+  assert.equal(unrelatedApplicationRenders, 1, 'non-viewport refreshes retain whole-application rendering');
+  assert.equal(nativePresentationReconciles, 1);
   controller.stop();
 });
 

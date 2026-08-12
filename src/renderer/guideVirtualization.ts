@@ -10,21 +10,21 @@ export type GuidePerformanceProfile = 'auto' | 'reduced-resource';
 
 export interface GuidePerformanceProfileConfig {
   /** Upper bound retained for cache/warm-page geometry; foreground sizing is viewport-derived. */
-  readonly channelLimit: 24;
+  readonly channelLimit: typeof GUIDE_DOM_ROW_CAP;
   readonly timeBufferMs: number;
   readonly maximumEntries: 6 | 12;
   readonly maximumPrograms: 6_000 | 12_000;
 }
 
 export const REDUCED_RESOURCE_GUIDE_PRELOAD_PROFILE: GuidePerformanceProfileConfig = Object.freeze({
-  channelLimit: 24,
+  channelLimit: GUIDE_DOM_ROW_CAP,
   timeBufferMs: 360 * 60_000,
   maximumEntries: 6,
   maximumPrograms: 6_000,
 });
 
 export const AUTO_GUIDE_PRELOAD_PROFILE: GuidePerformanceProfileConfig = Object.freeze({
-  channelLimit: 24,
+  channelLimit: GUIDE_DOM_ROW_CAP,
   timeBufferMs: 360 * 60_000,
   maximumEntries: 12,
   maximumPrograms: 12_000,

@@ -14,6 +14,7 @@ import {
   AUTO_GUIDE_PRELOAD_PROFILE,
   REDUCED_RESOURCE_GUIDE_PRELOAD_PROFILE,
   GuidePresentationLru,
+  GUIDE_DOM_ROW_CAP,
   guideCacheKey,
   projectGuideForegroundChannelLimit,
   type GuidePerformanceProfile,
@@ -24,6 +25,7 @@ import { guidePerformanceMarks, type GuideRequestOrigin } from './guidePerforman
 const GUIDE_POLL_INTERVAL_MS = 15_000;
 const GUIDE_REQUEST_TIMEOUT_MS = 30_000;
 const GUIDE_REQUEST_TIMEOUT_MESSAGE = 'Guide refresh timed out. Try again.';
+export const GUIDE_VIEWPORT_REFRESH_SOURCE = 'guide-visible-window';
 
 export interface GuidePresentationPollingOptions {
   guide: LineupDesktopPreloadApi['guide'];
@@ -38,6 +40,7 @@ export interface GuidePresentationPollingOptions {
   getCompleteVisibleRowCount?(): number;
   getNowMs?(): number;
   requestWindowState?(state: 'queued' | 'settled', request: Readonly<{
+    source: string;
     generation: number;
     channelOffset: number;
     channelLimit: number;
@@ -50,6 +53,7 @@ export interface GuidePresentationPollingOptions {
     pagingTargetGlobalIndex: number | null | undefined,
     effectiveStartTimeMs?: number,
     requestWindow?: Readonly<{ channelOffset: number; channelLimit: number }>,
+    source?: string,
   ): boolean;
   handleFailure(source: string, message: string, generation: number, retainLastValid: boolean,
     requestWindow?: Readonly<{ channelOffset: number; channelLimit: number }>): void;
@@ -220,6 +224,7 @@ export function createGuidePresentationPolling(
     state: 'queued' | 'settled',
     intent: GuidePresentationRefreshIntent,
   ): void => options.requestWindowState?.(state, {
+    source: intent.source,
     generation: intent.generation,
     channelOffset: intent.channelOffset,
     channelLimit: intent.channelLimit,
@@ -492,6 +497,7 @@ export function createGuidePresentationPolling(
           pagingTarget,
           resolveEffectiveStartTimeMs(intent, cached),
           { channelOffset: intent.channelOffset, channelLimit: intent.channelLimit },
+          intent.source,
         );
         if (!accepted) {
           rejectPresentation(intent, markSettled);
@@ -572,6 +578,7 @@ export function createGuidePresentationPolling(
               pagingTarget,
               effectiveStartTimeMs,
               { channelOffset: intent.channelOffset, channelLimit: intent.channelLimit },
+              intent.source,
             );
             if (!accepted) {
               rejectPresentation(intent, markSettled);
@@ -780,7 +787,7 @@ export function createGuidePresentationPolling(
 
 function clampChannelLimit(value: number): number {
   if (!Number.isFinite(value)) return 1;
-  return Math.min(24, Math.max(1, Math.trunc(value)));
+  return Math.min(GUIDE_DOM_ROW_CAP, Math.max(1, Math.trunc(value)));
 }
 
 function waitForGuidePresentation<T>(

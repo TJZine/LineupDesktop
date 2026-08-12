@@ -34,7 +34,10 @@ import { recordRendererBridgeFailure } from './rendererBridgeFailures.js';
 import { findEpgProgramCell, focusEpgNow, moveEpgSelectionAbsolute, selectEpgPageTarget, settleEpgPresentation, settleEpgPresentationFailure, setEpgPresentationState, setEpgTuneError } from './epg.js';
 import { registerRendererActions, type GuideActionId, type GuideProgramActionTarget } from './rendererActionRegistration.js';
 import { subscribePlayerBridge } from './playerBridgeSubscription.js';
-import { createGuidePresentationPolling } from './guidePresentationPolling.js';
+import {
+  createGuidePresentationPolling,
+  GUIDE_VIEWPORT_REFRESH_SOURCE,
+} from './guidePresentationPolling.js';
 import { classifyGuideKeyboardInput, guidePerformanceMarks } from './guidePerformanceMarks.js';
 import { projectGuideCacheIdentity } from './guideVirtualization.js';
 import { GuideChannelWindow } from './guideChannelWindow.js';
@@ -438,7 +441,7 @@ const initializedGuidePresentationPolling = createGuidePresentationPolling({
     else guideChannelWindow.release(intent);
     if (guideChannelWindow.total > 0 && workflowState.routeState.activeRoute === 'guide') {
       workflowState = { ...workflowState, guidePresentation: guideChannelWindow.presentation() };
-      renderApp();
+      renderGuidePresentationUpdate(request.source);
     }
   },
   setLoading: (generation) => {
@@ -450,7 +453,14 @@ const initializedGuidePresentationPolling = createGuidePresentationPolling({
     guidePerformanceMarks.stateAccepted(generation, 'loading', -1);
     renderApp();
   },
-  applyPresentation: (normalizedGuidePresentation, generation, pagingTargetGlobalIndex, effectiveStartTimeMs, requestWindow) => {
+  applyPresentation: (
+    normalizedGuidePresentation,
+    generation,
+    pagingTargetGlobalIndex,
+    effectiveStartTimeMs,
+    requestWindow,
+    source,
+  ) => {
     const identity = guideWindowIdentity(normalizedGuidePresentation) ?? 'guide-unscoped';
     const viewport = readGuideViewportRows(dom.epgGridElement);
     const window = requestWindow ?? {
@@ -487,8 +497,8 @@ const initializedGuidePresentationPolling = createGuidePresentationPolling({
     };
     if (settlement.pendingFocusId !== undefined) pendingGuideFocusId = settlement.pendingFocusId;
     guidePerformanceMarks.stateAccepted(generation, 'ready', pagingTargetGlobalIndex ?? -1);
-    renderApp();
-    restorePendingGuideFocus();
+    const guideScoped = renderGuidePresentationUpdate(source);
+    if (!guideScoped) restorePendingGuideFocus();
     return true;
   },
   applyPlayerPresentation: (normalizedGuidePresentation, generation, effectiveStartTimeMs) => {
@@ -1097,7 +1107,7 @@ function handleGuidePresentationFailure(source: string, message: string, generat
     ...workflowState,
     epg: settleEpgPresentationFailure(workflowState.epg, message, generation, retainLastValid),
   };
-  renderApp();
+  renderGuidePresentationUpdate(source);
   recordRendererBridgeFailure(window.lineupDesktop.diagnostics.recordRendererEvent, 'guide.getPresentation', message, {
     route: workflowState.routeState.activeRoute,
     source,
@@ -1267,6 +1277,13 @@ function renderGuideViewportDom(): void {
   updateGuideTunePendingDom(guideTuneController.getPendingTarget());
 }
 
+function renderGuidePresentationUpdate(source: string | undefined): boolean {
+  const guideScoped = source === GUIDE_VIEWPORT_REFRESH_SOURCE;
+  if (guideScoped) renderGuideViewportDom();
+  else renderApp();
+  return guideScoped;
+}
+
 function guideWindowIdentity(presentation: typeof workflowState.guidePresentation): string | null {
   const filter = presentation.libraryFilter;
   return filter === undefined ? null : projectGuideCacheIdentity({
@@ -1292,7 +1309,7 @@ function reconcileGuideViewport(allowRefresh = true): void {
   if (!allowRefresh) return;
   const request = guideChannelWindow.beginForeground(initializedGuidePresentationPolling.getGeneration() + 1);
   if (request === null) return;
-  void initializedGuidePresentationPolling.refresh('guide-visible-window', {
+  void initializedGuidePresentationPolling.refresh(GUIDE_VIEWPORT_REFRESH_SOURCE, {
     channelOffset: request.channelOffset,
     channelLimit: request.channelLimit,
     showLoading: false,

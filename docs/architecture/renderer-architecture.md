@@ -279,12 +279,14 @@ product playback setup.
 `src/renderer/epg/guideDom.ts` remains the cohesive Guide DOM/layout owner.
 Its new behavior is the selected detail's poster and decorative background
 projection, including independent request identity, currentness, load/error
-cleanup, source-cleared poster treatment fallback, and theme fallback.
+cleanup, guarded same-origin opaque poster fallback requests, and terminal theme
+fallback when that poster request fails.
 **Decision: cohesive growth.** Both surfaces consume the same selected
 `infoPanel` and presentation generation, and their lifecycle invariants remain
-DOM-local; poster fallback reuses the visible poster without a second
-background-image request, and no separate image manager or renderer privilege
-seam is justified. The owner is over 800 lines, so the existing fresh
+DOM-local; the background image owns a separate poster-source request guarded
+by presentation generation, artwork reference, source, and current request
+identity, and no separate image manager or renderer privilege seam is
+justified. The owner is over 800 lines, so the existing fresh
 architecture-review gate remains required.
 
 `src/renderer/styles/guide-epg.css` remains the cohesive Guide visual owner.
@@ -298,7 +300,8 @@ lifecycle owner.
 
 `src/renderer/epg/guideDom.ts` remains the cohesive Guide DOM/layout owner.
 Its G3C behavior re-expresses the selected-detail hierarchy, Classic/Overlay
-shell regions, tuned/current channel rail, 30-minute ruler marker, temporal
+shell regions, the single current-channel rail and real `LIVE` status,
+30-minute ruler marker, temporal
 cell states, library tabs, Now Watching surfaces, and explicit loading/empty/
 error/retry presentation in the same selection, generation, focus, and DOM
 reconciliation lifecycle. **Decision: cohesive growth.** The owner is 1,258
@@ -341,7 +344,8 @@ refresh, while layout changes allow one bounded foreground request only when
 the visible window is missing.
 `src/renderer/styles/guide-epg.css` keeps the 72px treatment readable by hiding
 only secondary subtitle/episode metadata while preserving rail, title/time,
-state, focus, tuned, current, forced-color, and reduced-motion cues. No
+state, focus, the single current-channel fact, forced-color, and reduced-motion
+cues. No
 contract, preload, main, IPC, persistence, playback, dependency, or upstream
 surface changed. Windows/native/manual DPI and device proof remain deferred to
 G6.
