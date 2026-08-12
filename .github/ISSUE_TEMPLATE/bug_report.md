@@ -8,10 +8,10 @@ assignees: ''
 
 ## Environment
 
-- Windows version:
+- Operating system and version:
 - Lineup Desktop version or commit:
 - Plex Media Server version:
-- Install type: dev, unpacked, portable, or installer
+- Install type: development build or packaged app
 
 ## Description
 
