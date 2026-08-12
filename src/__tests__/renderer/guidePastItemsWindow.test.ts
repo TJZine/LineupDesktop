@@ -20,12 +20,6 @@ import { REDUCED_RESOURCE_GUIDE_PRELOAD_PROFILE } from '../../renderer/guideVirt
 
 const BASE = Date.UTC(2026, 6, 8, 12, 0);
 
-function presentation(): EpgPresentationSource;
-function presentation(
-  minimumStartTimeMs: number,
-  startsAtMs?: number,
-  endsAtMs?: number,
-): GuidePresentationSource & EpgPresentationSource;
 function presentation(
   minimumStartTimeMs?: number,
   startsAtMs = BASE,
@@ -41,6 +35,19 @@ function presentation(
     nowWatching: null,
     nowMs: BASE,
     ...(minimumStartTimeMs === undefined ? {} : { minimumStartTimeMs }),
+    channelWindow: { offset: 0, total: 1 },
+    libraryFilter: { scopeToken: 'scope', revision: 0, libraries: [], selectedLibraryId: null, persistenceStatus: 'ready' },
+  };
+}
+
+function guidePresentation(
+  minimumStartTimeMs: number,
+  startsAtMs = BASE,
+  endsAtMs = BASE + EPG_SLOT_DURATION_MS,
+): GuidePresentationSource {
+  return {
+    ...presentation(minimumStartTimeMs, startsAtMs, endsAtMs),
+    minimumStartTimeMs,
     channelWindow: { offset: 0, total: 1 },
     libraryFilter: { scopeToken: 'scope', revision: 0, libraries: [], selectedLibraryId: null, persistenceStatus: 'ready' },
   };
@@ -204,7 +211,7 @@ test('polling adopts the main-clamped effective start and full duration without 
   pending.resolve({
     ok: true,
     requestId: 'guide-request',
-    value: presentation(BASE),
+    value: guidePresentation(BASE),
   });
   await refresh;
   assert.equal(requests.length, 1);
@@ -215,8 +222,8 @@ test('sequential polling settlements advance the bound and retain a program cros
   const firstBound = BASE;
   const secondBound = BASE + EPG_SLOT_DURATION_MS;
   const results = [
-    presentation(firstBound, firstBound, secondBound),
-    presentation(secondBound, secondBound - EPG_SLOT_DURATION_MS / 2, secondBound + EPG_SLOT_DURATION_MS),
+    guidePresentation(firstBound, firstBound, secondBound),
+    guidePresentation(secondBound, secondBound - EPG_SLOT_DURATION_MS / 2, secondBound + EPG_SLOT_DURATION_MS),
   ];
   const requests: number[] = [];
   const renderedProgramIds: string[] = [];
@@ -284,7 +291,7 @@ test('polling rejects a stale pre-settlement result after optimistic policy inva
   const refresh = polling.refresh('past-window');
   await Promise.resolve();
   polling.notePastItemsWindowChange();
-  pending.resolve({ ok: true, requestId: 'guide-request', value: presentation(BASE) });
+  pending.resolve({ ok: true, requestId: 'guide-request', value: guidePresentation(BASE) });
   await refresh;
   assert.equal(applied, 0);
 });

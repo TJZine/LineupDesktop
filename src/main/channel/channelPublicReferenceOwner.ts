@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { Buffer } from 'node:buffer';
 
 import type { ChannelSetupSummary } from '../../contracts/channel.js';
-import type { ArtworkRef, GuideArtworkSet } from '../../contracts/artwork.js';
+import type { ArtworkRef } from '../../contracts/artwork.js';
 import type {
   EpgChannelViewModel,
   EpgCurrentProgramViewModel,
