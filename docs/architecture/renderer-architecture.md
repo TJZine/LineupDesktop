@@ -27,9 +27,9 @@ methods or renderer persistence. Auto maps to
 `REDUCED_RESOURCE_GUIDE_PRELOAD_PROFILE`. Both profiles size foreground Guide
 requests from complete visible rows plus the shared two-row buffer on each side,
 cap requests at 24 rows, and retain a 360-minute time buffer on each side. Auto
-retains up to 12 entries or 12,000 programs and may warm adjacent channel/time
-windows while idle. Reduced resource retains up to 6 entries or 6,000 programs
-and performs no idle warming. Accepted Guide presentation-setting
+retains up to 12 entries or 12,000 programs. Reduced resource retains up to 6
+entries or 6,000 programs. Neither profile issues speculative idle requests.
+Accepted Guide presentation-setting
 changes coalesce through one focused settlement owner, cancel stale
 presentation work, retain eligible focus intent, and invalidate the affected
 Guide identity; density-only changes remain display-only. G4 now owns
@@ -102,7 +102,7 @@ pins visible/focused rows, applies finite profile-aware LRU retention, projects
 explicit inert loading and retryable error rows, and derives the next missing
 foreground intent from complete viewport rows plus bounded overscan. Polling
 continues to own one active/one latest request, cancellation, stale settlement,
-poll refresh, and lower-priority Auto-only warming. `epg.ts` continues to own
+and Guide-route poll refresh. `epg.ts` continues to own
 time-column-preserving semantic movement, including viewport-sized Page moves;
 the DOM uses the eligible total for spacer geometry while keeping the existing
 24-row/400-cell mount caps. Main, preload, contracts, persistence, and renderer
@@ -129,7 +129,8 @@ fallback, and two-phase aperture opening only after a current `applied` ACK.
 Player and Overlay use the full client area; Classic exposes a playing-only PIP
 and reserves no empty PIP when hidden. The renderer still receives no HWND,
 native path, DPI/display record, helper protocol material, or privileged media
-descriptor. Windows composition proof remains deferred to 5H.
+descriptor. The 2026-08-12 Windows replay establishes bounded composition
+viability only; broader Windows composition closeout remains deferred to 5H.
 
 WS5 Unit 5E makes Guide density semantic rather than cosmetic. Detailed owns
 exactly four 30-minute slots and a two-hour request window; Wide owns exactly
@@ -157,8 +158,8 @@ cache identity, and bounded LRU. The Guide DOM samples real row stride outside i
 projection loop, preserves noncontiguous spacer geometry, mounts no more than
 24 rows and 400 cells, and keeps the two-hour off-window buffer inert and out of
 focus/accessibility registration. Polling retains one active and one trailing
-request, serves current warmed page/time entries only, and never lets idle warm
-work replace foreground intent. Guide focus reveal occurs only for semantic
+foreground request and serves current retained page/time entries. Guide focus
+reveal occurs only for semantic
 focus moves/restores, so ordinary wheel/scrollbar reconciliation does not snap
 back. No public contract, preload/main operation, dependency, worker thread,
 television detection, or renderer privilege is added.

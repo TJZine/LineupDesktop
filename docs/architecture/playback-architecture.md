@@ -1,7 +1,8 @@
 # Playback Architecture
 
-Lineup Desktop runtime playback is code complete and reviewed, with
-Windows/manual product proof still pending. The current production profile
+Lineup Desktop has a production native-playback path with bounded Windows
+observation; broader Windows/manual product proof and closeout remain pending.
+The current production profile
 admits nonempty container/video/audio facts to direct-play-first libmpv attempts,
 supports embedded subtitle and audio-track selection, and enables automatic
 hardware decoding with libmpv's inherent software fallback. WS3 adds locally verified Settings
@@ -17,20 +18,37 @@ playback descriptor to the helper host, which runs a repo-owned C# native helper
 process. The helper communicates with the main process via an NDJSON protocol
 over stdin/stdout. Live Plex stream resolution, media detail, and PMS session
 ports are composed and wired. Renderer player UI state binds dynamically to safe
-player IPC events. Manual proof of running native playback on Windows is
-deferred to RD-27 and remains pending; the WS2-specific native/live subset is
-also carried as nonblocking `WS2-POST-VALIDATION-01`.
+player IPC events.
 
-WS5 Unit 5D checkpoint `81cf42c` adds the production app-owned native
-presentation path: one exact renderer/preload/main contract, epoch/revision
-currentness, hide-before-load/switch/cleanup barriers, and a Win32 child HWND
-owned by the existing shared native helper. Host-owned monotonic operation IDs
-reject replay in constant space. A valid executed helper-stale ACK does not
-quarantine the shared helper; a post-send helper rejection, write/output/framing
-failure, ACK timeout, or helper exit/stream failure does quarantine it and enters
-the existing playback crash cleanup. Windows compilation and live composition
-proof remain deferred to Unit 5H; this local checkpoint does not promote
-capabilities or close WS5.
+WS5 Unit 5D checkpoint `81cf42c` established the exact renderer/preload/main
+presentation contract, epoch/revision currentness, and
+hide-before-load/switch/cleanup barriers. The current production path privately
+supplies the validated Electron HWND/PID as a bounds, DPI, and Z-order reference.
+The Electron `BaseWindow` is transparent and frameless. The shared
+helper creates an unowned disabled, no-activate tool popup, positions it directly
+behind the Electron window, and passes the popup HWND to libmpv through `wid`
+before initialization. The transparent renderer aperture exposes native video
+while Electron-owned HTML remains above it.
+Production sets `vo=gpu-next`, `gpu-api=auto`, and `hwdec=auto`; it has no custom
+WGL context or mpv render-API loop. This direction aligns with mpv's documented
+`wid` embedding and was informed by Plezy and Jellyfin presentation patterns;
+no source was copied or adapted from either project.
+
+A bounded Windows production replay on 2026-08-12 observed real Plex Direct Play
+video, an OSD above video, a full Guide Overlay above continuing video with
+Electron focus retained, replacement tune playback without a black screen, and
+a settled renderer. This is a bounded viability observation, not durable/full
+Windows closeout or proof of HDR/Dolby Vision monitor output, receiver
+passthrough, Direct Stream, or transcode. The broader RD-27,
+`WS2-POST-VALIDATION-01`, and WS5 proof obligations remain open. Host-owned
+monotonic operation IDs reject replay in constant space. A valid executed
+helper-stale ACK does not quarantine the shared helper; a post-send helper
+rejection, write/output/framing failure, ACK timeout, or helper exit/stream
+failure does quarantine it and enters the existing playback crash cleanup.
+Replacement load and cleanup hide the old host, terminate libmpv and join its
+event thread while the `wid` host still exists, then destroy that host. A
+replacement host is created only after old teardown and before the new libmpv
+initialization.
 
 ## Current Hypothesis
 
