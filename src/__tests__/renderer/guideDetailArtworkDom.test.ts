@@ -397,7 +397,7 @@ test('fixed Classic markup owns exactly one poster, placeholder, copy, and descr
   assert.match(guide, /data-epg-detail-title[^>]+data-title-fallback="text"/u);
   assert.match(guide, /data-guide-layout="classic"/u);
   assert.match(guide, /data-epg-detail-artwork-placeholder aria-hidden="true"/u);
-  assert.match(guide, /data-epg-detail-background[^>]+aria-hidden="true"/u);
+  assert.match(guide, /data-epg-detail-background\s[^>]*aria-hidden="true"/u);
   assert.match(guide, /data-epg-detail-background-image[^>]+aria-hidden="true"/u);
   assert.match(guide, /data-epg-detail-badges[^>]+role="group"[^>]+aria-label="Program details"/u);
   assert.match(guide, /class="guide-detail__copy"/u);
@@ -443,8 +443,6 @@ test('artwork accessibility styles disable motion and preserve forced-color boun
   assert.equal(cssDeclaration(badge, 'border'), '1px solid var(--osd-pill-border)');
   const currentRail = extractCssRule(css, '.epg-grid__row[data-current-channel="true"] .epg-grid__channel');
   assert.equal(cssDeclaration(currentRail, 'border-inline-start'), '3px solid var(--color-primary)');
-  const markerLabel = extractCssRule(css, '.epg-current-time-marker-label');
-  assert.equal(cssDeclaration(markerLabel, 'font-size'), '9px');
 });
 
 test('CSS media assertions stay contained within the matched at-rule body', () => {

@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import type { GuidePresentationSource } from '../../contracts/guide.js';
+import type { LineupDesktopPreloadApi } from '../../contracts/shell.js';
 import {
   EPG_WIDE_WINDOW_DURATION_MS,
   EPG_SLOT_DURATION_MS,
@@ -18,6 +20,12 @@ import { REDUCED_RESOURCE_GUIDE_PRELOAD_PROFILE } from '../../renderer/guideVirt
 
 const BASE = Date.UTC(2026, 6, 8, 12, 0);
 
+function presentation(): EpgPresentationSource;
+function presentation(
+  minimumStartTimeMs: number,
+  startsAtMs?: number,
+  endsAtMs?: number,
+): GuidePresentationSource & EpgPresentationSource;
 function presentation(
   minimumStartTimeMs?: number,
   startsAtMs = BASE,
@@ -63,7 +71,9 @@ function deferred<T>(): { promise: Promise<T>; resolve(value: T): void } {
   return { promise, resolve: (value) => resolvePromise(value) };
 }
 
-type GuideRequest = { startTimeMs: number; durationMs: number; channelOffset?: number; channelLimit?: number };
+type GuideBridge = LineupDesktopPreloadApi['guide'];
+type GuideRequest = Parameters<GuideBridge['getPresentation']>[0];
+type GuideResult = Awaited<ReturnType<GuideBridge['getPresentation']>>;
 
 test('renderer uses conservative Auto 15 provisionally and never moves left of the bound', () => {
   const source = presentation();
@@ -157,17 +167,20 @@ test('renderer clamps every left/window/focus path while retaining an overlappin
 });
 
 test('polling adopts the main-clamped effective start and full duration without a corrective request', async () => {
-  const pending = deferred<unknown>();
+  const pending = deferred<GuideResult>();
   const requests: Array<{ startTimeMs: number; durationMs: number }> = [];
   const applied: Array<{ effectiveStartTimeMs: number | undefined }> = [];
   const polling = createGuidePresentationPolling({
     guide: {
       getPresentation: async (request: GuideRequest) => {
         requests.push(request);
-        return await pending.promise as never;
+        return await pending.promise;
       },
       cancelPresentation: async () => undefined,
-    } as never,
+      setLibraryFilter: async (): Promise<never> => {
+        throw new Error('setLibraryFilter is not expected in this test.');
+      },
+    } satisfies GuideBridge,
     host: host(),
     getActiveRoute: () => 'guide',
     getWindowStartMs: () => BASE - EPG_SLOT_DURATION_MS,
@@ -215,7 +228,10 @@ test('sequential polling settlements advance the bound and retain a program cros
         return { ok: true, requestId: `rollover-${requests.length}`, value: results.shift()! };
       },
       cancelPresentation: async () => undefined,
-    } as never,
+      setLibraryFilter: async (): Promise<never> => {
+        throw new Error('setLibraryFilter is not expected in this test.');
+      },
+    } satisfies GuideBridge,
     host: host(),
     getActiveRoute: () => 'guide',
     getWindowStartMs: () => state.windowStartMs,
@@ -246,13 +262,16 @@ test('sequential polling settlements advance the bound and retain a program cros
 });
 
 test('polling rejects a stale pre-settlement result after optimistic policy invalidation', async () => {
-  const pending = deferred<unknown>();
+  const pending = deferred<GuideResult>();
   let applied = 0;
   const polling = createGuidePresentationPolling({
     guide: {
-      getPresentation: async () => await pending.promise as never,
+      getPresentation: async () => await pending.promise,
       cancelPresentation: async () => undefined,
-    } as never,
+      setLibraryFilter: async (): Promise<never> => {
+        throw new Error('setLibraryFilter is not expected in this test.');
+      },
+    } satisfies GuideBridge,
     host: host(),
     getActiveRoute: () => 'guide',
     getWindowStartMs: () => BASE,

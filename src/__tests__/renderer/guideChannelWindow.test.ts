@@ -18,6 +18,7 @@ for (const total of [459, 500]) {
 
     owner.setVisible(Math.floor(total / 2), 8);
     const middleLoading = owner.project(2);
+    assert.ok(middleLoading.rows.length > 0);
     assert.ok(middleLoading.rows.every((row) => row.state === 'loading'));
     assert.equal(middleLoading.request?.channelOffset, Math.floor(total / 2) - 2);
     mergeVisible(owner, total, 2);
@@ -27,6 +28,7 @@ for (const total of [459, 500]) {
     mergeVisible(owner, total, 3);
     const last = owner.project();
     assert.equal(last.rows.at(-1)?.absoluteIndex, total - 1);
+    assert.ok(last.rows.length > 0);
     assert.ok(last.rows.every((row) => row.state === 'ready'));
     assert.ok(last.rows.length <= GUIDE_DOM_ROW_CAP);
   });
@@ -43,9 +45,12 @@ test('fast jumps expose inert loading/error projections and retry without fabric
   assert.ok(intent !== null);
   assert.ok(intent.channelLimit <= GUIDE_DOM_ROW_CAP);
   owner.markLoading(intent);
-  assert.ok(owner.project().rows.every((row) => row.state === 'loading'));
+  const projectedLoading = owner.project();
+  assert.ok(projectedLoading.rows.length > 0);
+  assert.ok(projectedLoading.rows.every((row) => row.state === 'loading'));
   owner.fail(intent);
   const failed = owner.project(3);
+  assert.ok(failed.rows.length > 0);
   assert.ok(failed.rows.every((row) => row.state === 'error'));
   assert.ok(failed.rows.every((row) => !('channel' in row)));
   const retry = owner.retryVisible(3);
@@ -53,9 +58,13 @@ test('fast jumps expose inert loading/error projections and retry without fabric
   assert.equal(retry?.channelLimit, intent.channelLimit);
   assert.ok(retry !== null);
   owner.markLoading(retry);
-  assert.ok(owner.project().rows.every((row) => row.state === 'loading'));
+  const retryLoading = owner.project();
+  assert.ok(retryLoading.rows.length > 0);
+  assert.ok(retryLoading.rows.every((row) => row.state === 'loading'));
   assert.equal(owner.merge(retry, page(retry.channelOffset, retry.channelLimit, 500)), true);
-  assert.ok(owner.project().rows.every((row) => row.state === 'ready'));
+  const ready = owner.project();
+  assert.ok(ready.rows.length > 0);
+  assert.ok(ready.rows.every((row) => row.state === 'ready'));
 });
 
 test('identity epochs reject stale pages and sparse navigation preserves time-column intent', () => {

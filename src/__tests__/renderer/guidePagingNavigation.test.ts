@@ -182,10 +182,12 @@ test('Guide paging owner binds focus to its exact request and retains last valid
   assert.equal(focusedAfterPaging, 'channel-12');
 
   const canceled = polling.requestPage({ targetGlobalIndex: 25, scopeToken: 'scope', channelOffset: 20 });
+  const canceledRequest = requests[3];
+  assert.ok(canceledRequest !== undefined);
   route = 'settings';
   polling.reconcile('guide', 'settings');
   await canceled;
-  requests[3]?.resolve(okPresentation(9, 20, 30, 'scope'));
+  canceledRequest.resolve(okPresentation(9, 20, 30, 'scope'));
   await settle();
   assert.equal(applied.length, 1);
   assert.equal(busy.at(-1), false);

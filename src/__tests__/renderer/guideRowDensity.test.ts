@@ -5,6 +5,7 @@ import {
   completeGuideRowCount,
   GUIDE_COMFORTABLE_ROW_HEIGHT,
   GUIDE_COMPACT_ROW_HEIGHT,
+  GUIDE_DEFAULT_ROW_GAP,
   GUIDE_MAX_COMPLETE_ROW_FLOOR,
   GUIDE_MINIMUM_COMPLETE_ROW_FLOOR,
   GUIDE_STANDARD_COMPLETE_ROW_FLOOR,
@@ -20,10 +21,20 @@ import {
 test('Guide density keeps the frozen pure 108px/72px treatments and complete-row math', () => {
   assert.equal(resolveGuideRowDensity('comfortable', { width: 1_920, height: 1_080 }).rowHeight, GUIDE_COMFORTABLE_ROW_HEIGHT);
   assert.equal(resolveGuideRowDensity('compact', { width: 1_920, height: 1_080 }).rowHeight, GUIDE_COMPACT_ROW_HEIGHT);
-  assert.equal(completeGuideRowCount(108 * 8 + 107, GUIDE_COMFORTABLE_ROW_HEIGHT), 8);
-  assert.equal(completeGuideRowCount(108 * 8 + 1, GUIDE_COMFORTABLE_ROW_HEIGHT), 8);
-  assert.equal(completeGuideRowCount(107, GUIDE_COMFORTABLE_ROW_HEIGHT), 0, 'partial row is not reported as complete');
-  assert.equal(completeGuideRowCount(72 * 5 + 4 * 12, GUIDE_COMPACT_ROW_HEIGHT, 12), 5);
+  assert.equal(completeGuideRowCount(
+    GUIDE_COMFORTABLE_ROW_HEIGHT * 8 + GUIDE_COMFORTABLE_ROW_HEIGHT - 1,
+    GUIDE_COMFORTABLE_ROW_HEIGHT,
+  ), 8);
+  assert.equal(completeGuideRowCount(GUIDE_COMFORTABLE_ROW_HEIGHT * 8 + 1, GUIDE_COMFORTABLE_ROW_HEIGHT), 8);
+  assert.equal(completeGuideRowCount(
+    GUIDE_COMFORTABLE_ROW_HEIGHT - 1,
+    GUIDE_COMFORTABLE_ROW_HEIGHT,
+  ), 0, 'partial row is not reported as complete');
+  assert.equal(completeGuideRowCount(
+    GUIDE_COMPACT_ROW_HEIGHT * 5 + 4 * GUIDE_DEFAULT_ROW_GAP,
+    GUIDE_COMPACT_ROW_HEIGHT,
+    GUIDE_DEFAULT_ROW_GAP,
+  ), 5);
   assert.deepEqual(projectGuideCompleteRowInterval(720, 300, 0, GUIDE_COMFORTABLE_ROW_HEIGHT, 16), {
     start: 0,
     count: 3,

@@ -55,21 +55,23 @@ test('native aperture CSS makes only acknowledged page compositions transparent 
   const fs = processValue.getBuiltinModule('node:fs');
   const base = fs.readFileSync(new URL('../../renderer/styles/base.css', import.meta.url), 'utf8');
   const guide = fs.readFileSync(new URL('../../renderer/styles/guide-epg.css', import.meta.url), 'utf8');
-  const openBackground = extractCssRule(base, [
+  for (const selector of [
     ':root[data-native-presentation-aperture="open"]',
     ':root[data-native-presentation-aperture="open"] body',
     ':root[data-native-presentation-aperture="open"] .app-shell',
     ':root[data-native-presentation-aperture="open"] [data-static-screen-root]',
     ':root[data-native-presentation-aperture="open"] .screen-stack',
-  ]);
-  assert.equal(cssDeclaration(openBackground, 'background'), 'transparent');
+  ]) {
+    assert.equal(cssDeclaration(extractCssRule(base, selector), 'background'), 'transparent');
+  }
 
-  const openScreens = extractCssRule(base, [
+  for (const selector of [
     ':root[data-native-presentation-aperture="open"][data-native-presentation-mode="player-full"] .screen[data-screen="player"]',
     ':root[data-native-presentation-aperture="open"][data-native-presentation-mode="guide-overlay-full"] .screen[data-screen="guide"]',
     ':root[data-native-presentation-aperture="open"][data-native-presentation-mode="guide-classic-pip"] .screen[data-screen="guide"]',
-  ]);
-  assert.equal(cssDeclaration(openScreens, 'background'), 'transparent');
+  ]) {
+    assert.equal(cssDeclaration(extractCssRule(base, selector), 'background'), 'transparent');
+  }
 
   const root = extractCssRule(base, ':root');
   assert.equal(cssDeclaration(root, 'background'), 'var(--color-app-bg)');
@@ -135,11 +137,12 @@ test('Guide time range no longer compresses row geometry', () => {
   assert.equal(cssDeclaration(comfortable, '--guide-row-height'), '108px');
   const compact = extractCssRule(guide, '.epg-shell[data-guide-row-density-effective="compact"]');
   assert.equal(cssDeclaration(compact, '--guide-row-height'), '72px');
-  const compactSecondary = extractCssRule(guide, [
+  for (const selector of [
     '.epg-shell[data-guide-row-density-effective="compact"] .epg-cell-subtitle',
     '.epg-shell[data-guide-row-density-effective="compact"] .epg-badge--episode',
-  ]);
-  assert.equal(cssDeclaration(compactSecondary, 'display'), 'none');
+  ]) {
+    assert.equal(cssDeclaration(extractCssRule(guide, selector), 'display'), 'none');
+  }
   const channel = extractCssRule(guide, '.epg-grid__channel');
   assert.equal(cssDeclaration(channel, 'height'), 'var(--guide-row-height)');
   assert.equal(cssDeclaration(channel, 'box-sizing'), 'border-box');
@@ -177,26 +180,32 @@ test('Guide Classic and Overlay owners expose explicit shell, rail, and marker r
   assert.equal(cssDeclaration(currentCell, 'border-color'), 'var(--color-focus-border)');
   const upcomingCell = extractCssRule(guide, '.epg-grid__program[data-temporal-state="upcoming"]');
   assert.equal(cssDeclaration(upcomingCell, 'border-color'), 'var(--color-border-strong)');
-  const focused = extractCssRule(guide, [
-    '.epg-grid__program:focus-visible',
-    '.epg-grid__program.is-focused',
-    '.epg-library-tab:focus-visible',
-    '.epg-library-tab.is-focused',
-  ]);
-  assert.equal(cssDeclaration(focused, 'outline'), 'var(--focus-ring-width) solid var(--color-focus)');
+  for (const [selector, outline] of [
+    ['.epg-grid__program:focus-visible', 'var(--focus-ring-width) solid var(--color-focus)'],
+    ['.epg-grid__program.is-focused', 'var(--focus-ring-width) solid var(--color-focus)'],
+    ['.epg-library-tab:focus-visible', '3px solid Highlight'],
+    ['.epg-library-tab.is-focused', 'var(--focus-ring-width) solid var(--color-focus)'],
+  ] as const) {
+    assert.equal(
+      cssDeclaration(extractCssRule(guide, selector), 'outline'),
+      outline,
+    );
+  }
   const past = extractCssRule(guide, '.epg-grid__program[data-temporal-state="past"]');
   assert.equal(cssDeclaration(past, 'opacity'), '0.62');
-  const pastFocused = extractCssRule(guide, [
+  for (const selector of [
     '.epg-grid__program[data-temporal-state="past"][data-selected-program="true"]',
     '.epg-grid__program[data-temporal-state="past"]:focus-visible',
     '.epg-grid__program[data-temporal-state="past"].is-focused',
-  ]);
-  assert.equal(cssDeclaration(pastFocused, 'opacity'), '1');
+  ]) {
+    assert.equal(cssDeclaration(extractCssRule(guide, selector), 'opacity'), '1');
+  }
   const forcedColors = extractCssAtRuleBody(guide, '@media (forced-colors: active)');
-  const forcedPastFocused = extractCssRule(forcedColors ?? '', [
+  for (const selector of [
     '.epg-grid__program[data-temporal-state="past"][data-selected-program="true"]',
     '.epg-grid__program[data-temporal-state="past"]:focus-visible',
     '.epg-grid__program[data-temporal-state="past"].is-focused',
-  ]);
-  assert.equal(cssDeclaration(forcedPastFocused, 'opacity'), '1');
+  ]) {
+    assert.equal(cssDeclaration(extractCssRule(forcedColors ?? '', selector), 'opacity'), '1');
+  }
 });
