@@ -438,7 +438,7 @@ TASK: Implement the accepted-suggestion Tier 3 remediation packages
 TASK_FAMILY: feature/design
 TIER: Tier 3
 PLAN: `docs/plans/2026-08-11-accepted-suggestion-remediation-plan.md`
-ARTIFACT: `/Users/tristan/.codex/attachments/20b0b6a8-2169-4cd8-89e4-5e21565de76d/pasted-text.txt`
+ARTIFACT: the controller-provided 2026-08-11 accepted-suggestion review attachment
 FILES:
 - `docs/plans/2026-08-11-accepted-suggestion-remediation-plan.md`
 - `docs/plans/2026-08-10-guide-continuous-lineup-visual-parity-plan.md`
