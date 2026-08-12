@@ -72,7 +72,7 @@ function createProgram(id: string, startsAtMs: number, endsAtMs: number): EpgPro
     genres: [],
     startsAtMs,
     endsAtMs,
-    artwork: { poster: null, background: null, logo: null },
+    artwork: { poster: null, background: null },
   };
 }
 
@@ -129,8 +129,8 @@ test('Guide MediaPlay invokes the real command-time focus transition without pla
     nowWatching: null,
     channels: [{
       id: 'channel-1', number: '1', name: 'One', programs: [
-        { id: 'old', title: 'Old', subtitle: '', description: '', showTitle: '', episodeLabel: '', rating: '', quality: [], genres: [], startsAtMs: base, endsAtMs: base + EPG_SLOT_DURATION_MS, artwork: { poster: null, background: null, logo: null } },
-        { id: 'new', title: 'New', subtitle: '', description: '', showTitle: '', episodeLabel: '', rating: '', quality: [], genres: [], startsAtMs: base + EPG_SLOT_DURATION_MS, endsAtMs: base + 2 * EPG_SLOT_DURATION_MS, artwork: { poster: null, background: null, logo: null } },
+        { id: 'old', title: 'Old', subtitle: '', description: '', showTitle: '', episodeLabel: '', rating: '', quality: [], genres: [], startsAtMs: base, endsAtMs: base + EPG_SLOT_DURATION_MS, artwork: { poster: null, background: null } },
+        { id: 'new', title: 'New', subtitle: '', description: '', showTitle: '', episodeLabel: '', rating: '', quality: [], genres: [], startsAtMs: base + EPG_SLOT_DURATION_MS, endsAtMs: base + 2 * EPG_SLOT_DURATION_MS, artwork: { poster: null, background: null } },
       ],
     }],
   };

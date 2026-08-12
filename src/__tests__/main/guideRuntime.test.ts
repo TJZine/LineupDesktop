@@ -267,7 +267,7 @@ test('GuideRuntime paged artwork output becomes an owned renderer-safe projectio
     clock: { now: () => 1_000 },
     ...pagedRuntimeOptions(),
     guideArtworkOwner: {
-      createRef: (input: { role: 'poster' | 'background' | 'logo'; locator: string; altText: string }) => {
+      createRef: (input: { role: 'poster' | 'background'; locator: string; altText: string }) => {
         const ref = Object.freeze({
           id: input.role === 'poster' ? 'artwork-ABCDEFGHIJKLMNOP' : 'artwork-QRSTUVWXYZabcdef',
           kind: input.role, expiresAtMs: 10_000,
@@ -291,7 +291,6 @@ test('GuideRuntime paged artwork output becomes an owned renderer-safe projectio
   assert.equal(projected.channels[0]!.programs[0]!.title, '[redacted]');
   assert.equal(projected.channels[0]!.programs[0]!.artwork.poster?.altText, '[redacted]');
   assert.equal(projected.channels[0]!.programs[0]!.artwork.background?.altText, '[redacted]');
-  assert.equal(projected.channels[0]!.programs[0]!.artwork.logo, null);
   assert.notEqual(projected.channels[0]!.programs[0]!.artwork.poster, createdRefs[0]);
   assert.notEqual(projected.channels[0]!.programs[0]!.artwork.background, createdRefs[1]);
   const serializedProjection = JSON.stringify(projected);

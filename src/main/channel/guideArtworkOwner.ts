@@ -18,13 +18,15 @@ const MAX_CACHE_ENTRIES = 32;
 const MAX_CACHE_BYTES = 24 * 1024 * 1024;
 const MAX_CONCURRENT_FETCHES = 4;
 
-type Authorization = Readonly<{
-  refId: string;
-  identity: string;
-  locator: string;
+type GuideArtworkRole = 'poster' | 'background';
+
+type Authorization = {
+  readonly refId: string;
+  readonly identity: string;
+  readonly locator: string;
   expiresAtMs: number;
-  session: GuideArtworkReadySession;
-}>;
+  readonly session: GuideArtworkReadySession;
+};
 
 export type GuideArtworkDelivery = Readonly<{
   bytes: Uint8Array;
@@ -62,7 +64,7 @@ export class GuideArtworkOwner {
   }
 
   public createRef(input: Readonly<{
-    role: ArtworkRef['kind'];
+    role: GuideArtworkRole;
     locator: string;
     altText: string;
     lineupRevision: number;
@@ -81,7 +83,10 @@ export class GuideArtworkOwner {
     const existingRefId = this.authorizationIdsByIdentity.get(identity);
     if (existingRefId !== undefined) {
       const existing = this.readCurrentAuthorization(existingRefId);
-      if (existing !== null) return projectRef(existing, input.role, input.altText);
+      if (existing !== null) {
+        existing.expiresAtMs = this.nowMs() + ARTWORK_REF_TTL_MS;
+        return projectRef(existing, input.role, input.altText);
+      }
     }
     if (this.authorizations.size >= MAX_LIVE_REFS) {
       this.reclaimExpiredAuthorizations();
@@ -97,7 +102,7 @@ export class GuideArtworkOwner {
     }
     if (refId === null) return null;
     const expiresAtMs = this.nowMs() + ARTWORK_REF_TTL_MS;
-    const authorization: Authorization = Object.freeze({
+    const authorization: Authorization = Object.seal({
       refId,
       identity,
       locator,
@@ -254,8 +259,7 @@ export class GuideArtworkOwner {
   }
 }
 
-function locatorMatchesRole(locator: string, role: ArtworkRef['kind']): boolean {
-  if (role === 'logo') return false;
+function locatorMatchesRole(locator: string, role: GuideArtworkRole): boolean {
   const family = locator.split('/')[4];
   return (role === 'poster' && family === 'thumb') ||
     (role === 'background' && family === 'art');
@@ -263,7 +267,7 @@ function locatorMatchesRole(locator: string, role: ArtworkRef['kind']): boolean 
 
 function authorizationIdentity(
   session: GuideArtworkReadySession,
-  role: ArtworkRef['kind'],
+  role: GuideArtworkRole,
   locator: string,
 ): string {
   return `${String(session.generationId)}\u0000${String(session.lineupRevision)}\u0000${role}\u0000${locator}`;
@@ -271,7 +275,7 @@ function authorizationIdentity(
 
 function projectRef(
   authorization: Authorization,
-  role: ArtworkRef['kind'],
+  role: GuideArtworkRole,
   altText: string,
 ): ArtworkRef {
   return Object.freeze({

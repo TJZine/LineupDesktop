@@ -42,7 +42,7 @@ function render(poster: ArtworkRef | null, generation = 1, background: ArtworkRe
         id: 'program-1', title: 'Program One', subtitle: '', description: 'Description',
         showTitle: '', episodeLabel: '', rating: '', quality: [], genres: [],
         startsAtMs: nowMs, endsAtMs: nowMs + 60_000,
-        artwork: { poster, background, logo: null },
+        artwork: { poster, background },
       }],
     }],
     nowWatching: null,
@@ -241,7 +241,6 @@ test('null logo keeps the title-text fallback and never creates a logo request',
     epgDetailDescriptionElement: null,
     epgGridElement: null,
   } as unknown as RendererDomBindings);
-  assert.equal(harness.view.guide.infoPanel?.artwork.logo, null);
   assert.equal(title.textContent, 'Program One');
   assert.equal(harness.image.getAttribute('src'), null);
   assert.equal(harness.backgroundImage.getAttribute('src'), null);

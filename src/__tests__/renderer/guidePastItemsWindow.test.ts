@@ -27,7 +27,7 @@ function presentation(
     channels: [{
       id: 'channel-1', number: '1', name: 'One', programs: [{
         id: 'program-1', title: 'Program', subtitle: '', description: '', showTitle: '', episodeLabel: '',
-        rating: '', quality: [], genres: [], startsAtMs, endsAtMs, artwork: { poster: null, background: null, logo: null },
+        rating: '', quality: [], genres: [], startsAtMs, endsAtMs, artwork: { poster: null, background: null },
       }],
     }],
     nowWatching: null,

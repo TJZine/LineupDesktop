@@ -66,7 +66,7 @@ test('artwork refs bind the current session, clamp alt text, and expire', async 
   assert.equal(await owner.get(ref.id), null);
 });
 
-test('role policy and stable authorization identity stay closed without extending expiry', async () => {
+test('role policy stays closed and stable authorization identity receives sliding expiry', async () => {
   let now = 1_000;
   let generationId = 2;
   let refCounter = 0;
@@ -83,13 +83,13 @@ test('role policy and stable authorization identity stay closed without extendin
     () => now,
     () => `artwork-${String(++refCounter).padStart(24, 'a')}`,
   );
-  const create = (role: 'poster' | 'background' | 'logo', locator: string, altText: string, lineupRevision = 4) =>
+  const create = (role: 'poster' | 'background', locator: string, altText: string, lineupRevision = 4) =>
     owner.createRef({ role, locator, altText, lineupRevision });
 
   assert.equal(create('background', '/library/metadata/1/thumb', 'Wrong'), null);
   assert.equal(create('poster', '/library/metadata/1/art', 'Wrong'), null);
-  assert.equal(create('logo', '/library/metadata/1/thumb', 'Wrong'), null);
-  assert.equal(create('logo', '/library/metadata/1/clearLogo', 'Wrong'), null);
+  assert.equal(owner.createRef({ role: 'logo', locator: '/library/metadata/1/thumb', altText: 'Wrong', lineupRevision: 4 } as never), null);
+  assert.equal(owner.createRef({ role: 'logo', locator: '/library/metadata/1/clearLogo', altText: 'Wrong', lineupRevision: 4 } as never), null);
   assert.equal(owner.createRef({ role: 'banner' as never, locator: '/library/metadata/1/thumb', altText: 'Wrong', lineupRevision: 4 }), null);
 
   const first = create('poster', '/library/metadata/1/thumb', 'First');
@@ -98,11 +98,18 @@ test('role policy and stable authorization identity stay closed without extendin
   const repeated = create('poster', '/library/metadata/1/thumb', 'Second');
   assert.ok(repeated);
   assert.equal(repeated.id, first.id);
-  assert.equal(repeated.expiresAtMs, first.expiresAtMs);
+  assert.equal(repeated.expiresAtMs, now + 15 * 60 * 1_000);
+  assert.ok(repeated.expiresAtMs > first.expiresAtMs);
   assert.equal(repeated.altText, 'Second');
   assert.notEqual(create('poster', '/library/metadata/2/thumb', 'Other')?.id, first.id);
   assert.notEqual(create('background', '/library/metadata/1/art', 'Other')?.id, first.id);
   assert.notEqual(create('poster', '/library/metadata/1/thumb', 'Other', 5)?.id, first.id);
+
+  now = repeated.expiresAtMs;
+  const replacement = create('poster', '/library/metadata/1/thumb', 'Replacement');
+  assert.ok(replacement);
+  assert.notEqual(replacement.id, first.id);
+  assert.equal(await owner.get(first.id), null);
 
   generationId += 1;
   for (const listener of [...listeners]) listener();
@@ -113,6 +120,37 @@ test('role policy and stable authorization identity stay closed without extendin
   owner.dispose();
   assert.equal(await owner.get(nextSession.id), null);
   assert.equal(create('poster', '/library/metadata/1/thumb', 'Disposed'), null);
+});
+
+test('refreshing a reused authorization preserves in-flight fetch currentness', async () => {
+  let now = 1_000;
+  let refCounter = 0;
+  const fetch = deferred<{ bytes: Uint8Array; mimeType: 'image/jpeg' }>();
+  const ready = session();
+  const owner = new GuideArtworkOwner(
+    { subscribe: () => () => undefined, captureCurrent: () => ready, isCurrent: () => true } as never,
+    { fetchGuideArtwork: async () => fetch.promise },
+    () => now,
+    () => `artwork-${String(++refCounter).padStart(24, 'a')}`,
+  );
+  const first = owner.createRef({
+    role: 'poster', locator: '/library/metadata/1/thumb', altText: 'First', lineupRevision: 4,
+  });
+  assert.ok(first);
+  const pending = owner.get(first.id);
+  await waitForImmediate();
+
+  now = first.expiresAtMs - 1;
+  const refreshed = owner.createRef({
+    role: 'poster', locator: '/library/metadata/1/thumb', altText: 'Refreshed', lineupRevision: 4,
+  });
+  assert.ok(refreshed);
+  assert.equal(refreshed.id, first.id);
+  assert.equal(refreshed.expiresAtMs, now + 15 * 60 * 1_000);
+
+  now = first.expiresAtMs;
+  fetch.resolve({ bytes: new Uint8Array([1]), mimeType: 'image/jpeg' });
+  assert.deepEqual(await pending, { bytes: new Uint8Array([1]), mimeType: 'image/jpeg' });
 });
 
 test('authorization caps at 6000 live refs and cache eviction revokes delivery', async () => {

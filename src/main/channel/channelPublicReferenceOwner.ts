@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { Buffer } from 'node:buffer';
 
 import type { ChannelSetupSummary } from '../../contracts/channel.js';
+import type { ArtworkRef, GuideArtworkSet } from '../../contracts/artwork.js';
 import type {
   EpgChannelViewModel,
   EpgCurrentProgramViewModel,
@@ -341,25 +342,24 @@ function projectProgram(program: EpgProgramViewModel, id: string): EpgProgramVie
     artwork: Object.freeze({
       poster: projectArtworkRef(program.artwork.poster, title, 'poster'),
       background: projectArtworkRef(program.artwork.background, title, 'background'),
-      logo: projectArtworkRef(program.artwork.logo, title, 'logo'),
     }),
   };
 }
 
 function projectArtworkRef(
-  artwork: EpgProgramViewModel['artwork']['poster'],
+  artwork: ArtworkRef | null,
   title: string,
-  role: 'poster' | 'background' | 'logo',
-) {
+  role: 'poster' | 'background',
+): ArtworkRef | null {
   if (artwork === null) return null;
-  const fallback = `${role === 'background' ? 'Background' : role === 'logo' ? 'Logo' : 'Poster'} for ${title}`;
+  const fallback = `${role === 'background' ? 'Background' : 'Poster'} for ${title}`;
   return Object.freeze({
     id: artwork.id,
     kind: role,
     expiresAtMs: artwork.expiresAtMs,
     altText: display(artwork.altText, fallback.length <= 160 ? fallback : `Program ${role}`, 160),
     status: artwork.status,
-  });
+  }) satisfies ArtworkRef;
 }
 
 function projectCurrent(

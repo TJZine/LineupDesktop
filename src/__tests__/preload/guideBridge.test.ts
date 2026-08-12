@@ -48,9 +48,9 @@ async function invokeWith(value: unknown): Promise<{ ok: boolean; error?: { code
   };
 }
 
-const emptyArtwork = Object.freeze({ poster: null, background: null, logo: null });
+const emptyArtwork = Object.freeze({ poster: null, background: null });
 
-test('guide bridge accepts only the exact opaque three-role artwork set', async () => {
+test('guide bridge accepts only the exact opaque two-role artwork set', async () => {
   const poster = {
     id: 'artwork-ABCDEFGHIJKLMNOP',
     kind: 'poster',
@@ -59,18 +59,17 @@ test('guide bridge accepts only the exact opaque three-role artwork set', async 
     status: 'available',
   };
   const background = { ...poster, id: 'artwork-QRSTUVWXYZabcdef', kind: 'background' };
-  const logo = { ...poster, id: 'artwork-0123456789abcdef', kind: 'logo' };
-  assert.equal((await invokeWith(presentation({ poster, background, logo }))).ok, true);
+  assert.equal((await invokeWith(presentation({ poster, background }))).ok, true);
   assert.equal((await invokeWith(presentation(emptyArtwork))).ok, true);
 
   const invalidArtwork = [
     null,
-    { poster: null, background: null },
+    { poster: null },
+    { ...emptyArtwork, logo: null },
     { ...emptyArtwork, extra: true },
     { ...emptyArtwork, poster: { ...poster, id: 'unsafe' } },
     { ...emptyArtwork, poster: { ...poster, kind: 'background' } },
     { ...emptyArtwork, background: { ...background, kind: 'poster' } },
-    { ...emptyArtwork, logo: { ...logo, kind: 'background' } },
     { ...emptyArtwork, poster: { ...poster, status: 'missing' } },
     { ...emptyArtwork, poster: { ...poster, expiresAtMs: Number.NaN } },
     { ...emptyArtwork, poster: { ...poster, altText: 'x'.repeat(161) } },
@@ -134,7 +133,7 @@ test('guide bridge enforces channel, row, aggregate, and library relation bounds
     programs: Array.from({ length: programCount }, (_, programIndex) => ({
       id: `program-${channelIndex}-${programIndex}`, title: 'Program', subtitle: '', description: '',
       showTitle: '', episodeLabel: '', rating: '', quality: [], genres: [],
-      startsAtMs: programIndex * 2 + 1, endsAtMs: programIndex * 2 + 2, artwork: { poster: null, background: null, logo: null },
+      startsAtMs: programIndex * 2 + 1, endsAtMs: programIndex * 2 + 2, artwork: { poster: null, background: null },
     })),
   });
   const withChannels = (channels: unknown[], libraryFilter: unknown = {

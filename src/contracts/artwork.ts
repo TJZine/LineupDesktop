@@ -9,7 +9,6 @@ export interface ArtworkRef {
 export interface GuideArtworkSet {
   readonly poster: ArtworkRef | null;
   readonly background: ArtworkRef | null;
-  readonly logo: ArtworkRef | null;
 }
 
 export const ARTWORK_REF_ID_PATTERN = /^artwork-[A-Za-z0-9_-]{16,96}$/u;

@@ -634,7 +634,7 @@ function program(rowIndex: number, programIndex: number): EpgProgramCellViewMode
     id: `program-${String(rowIndex)}-${String(programIndex)}`, channelId: `channel-${String(rowIndex)}`,
     focusId: `focus-${String(rowIndex)}-${String(programIndex)}`, title: 'Program', subtitle: '', description: '',
     showTitle: '', episodeLabel: '', rating: '', quality: [], genres: [], startsAtMs: programIndex * SLOT,
-    endsAtMs: (programIndex + 1) * SLOT, artwork: { poster: null, background: null, logo: null }, presentationGeneration: 1, columnStart: programIndex + 1,
+    endsAtMs: (programIndex + 1) * SLOT, artwork: { poster: null, background: null }, presentationGeneration: 1, columnStart: programIndex + 1,
     columnSpan: 1, isSelected: rowIndex === 200 && programIndex === 15, temporalState: 'upcoming',
     progressPercent: 0, widthTier: 'narrow', timeLabel: '',
   };

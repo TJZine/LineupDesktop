@@ -334,7 +334,7 @@ function page(
         programs: (withoutPrograms.has(index) ? [] : [0, 1, 2]).map((programIndex) => ({
           id: `program-${String(index)}-${String(programIndex)}`,
           title: `Program ${String(programIndex)}`,
-          subtitle: '', description: '', showTitle: '', episodeLabel: '', rating: '', quality: [], genres: [], artwork: { poster: null, background: null, logo: null },
+          subtitle: '', description: '', showTitle: '', episodeLabel: '', rating: '', quality: [], genres: [], artwork: { poster: null, background: null },
           startsAtMs: programIndex * SLOT,
           endsAtMs: (programIndex + 1) * SLOT,
         })),

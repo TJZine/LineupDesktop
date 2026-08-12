@@ -57,7 +57,7 @@ test('projects program references and resolves only current generation channel r
         genres: [],
         startsAtMs: 1,
         endsAtMs: 2,
-        artwork: { poster: null, background: null, logo: null },
+        artwork: { poster: null, background: null },
       }],
     }],
     nowWatching: null,
@@ -84,7 +84,6 @@ test('owns and sanitizes artwork alt text without retaining hostile scheduled co
   const sourceArtwork = Object.freeze({
     poster: sourcePoster,
     background: Object.freeze({ ...sourcePoster, id: 'artwork-QRSTUVWXYZabcdef', kind: 'background' as const }),
-    logo: Object.freeze({ ...sourcePoster, id: 'artwork-0123456789abcdef', kind: 'logo' as const }),
   });
   const projected = owner.projectPresentation(generation, {
     channels: [{
@@ -102,10 +101,8 @@ test('owns and sanitizes artwork alt text without retaining hostile scheduled co
   assert.equal(program.title, '[redacted]');
   assert.equal(program.artwork.poster?.altText, '[redacted]');
   assert.equal(program.artwork.background?.altText, '[redacted]');
-  assert.equal(program.artwork.logo?.altText, '[redacted]');
   assert.notEqual(program.artwork.poster, sourceArtwork.poster);
   assert.notEqual(program.artwork.background, sourceArtwork.background);
-  assert.notEqual(program.artwork.logo, sourceArtwork.logo);
   assert.equal(Object.isFrozen(program.artwork), true);
   assert.deepEqual(sourceArtwork.poster, {
     id: 'artwork-ABCDEFGHIJKLMNOP', kind: 'poster', expiresAtMs: 10_000,

@@ -1949,7 +1949,7 @@ test('guide bridge validates presentation request ranges and result envelopes', 
             genres: ['Drama'],
             startsAtMs: 1,
             endsAtMs: 2,
-            artwork: { poster: null, background: null, logo: null },
+            artwork: { poster: null, background: null },
           },
         ],
       },
@@ -1991,6 +1991,35 @@ test('guide bridge validates presentation request ranges and result envelopes', 
 
   const valid = await bridge.getPresentation({ startTimeMs: 0, durationMs: 60_000 });
   assert.equal((valid as { ok: boolean }).ok, true);
+
+  const formerLogoFieldBridge = createGuideBridge(
+    async (_channel, request) => ({
+      ok: true,
+      requestId: request.requestId,
+      value: {
+        ...validPresentation,
+        channels: validPresentation.channels.map((channel) => ({
+          ...channel,
+          programs: channel.programs.map((program) => ({
+            ...program,
+            artwork: { ...program.artwork, logo: null },
+          })),
+        })),
+      },
+    }),
+    {
+      getPresentation: LINEUP_GUIDE_GET_PRESENTATION_CHANNEL,
+      cancelPresentation: LINEUP_GUIDE_CANCEL_PRESENTATION_CHANNEL,
+      setLibraryFilter: LINEUP_GUIDE_SET_LIBRARY_FILTER_CHANNEL,
+      tuneChannel: LINEUP_PLAYER_TUNE_CHANNEL,
+    },
+    () => 'guide-request-former-logo',
+  );
+  const formerLogoField = await formerLogoFieldBridge.getPresentation({
+    startTimeMs: 0,
+    durationMs: 60_000,
+  });
+  assert.equal((formerLogoField as { ok: boolean }).ok, false);
 
   const wrongRequestBridge = createGuideBridge(
     async () => ({

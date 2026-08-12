@@ -367,10 +367,9 @@ function isArtworkRef(value: unknown): value is ArtworkRef {
 
 function isGuideArtworkSet(value: unknown): value is GuideArtworkSet {
   return isPlainRecord(value) &&
-    hasOnlyKeys(value, ['poster', 'background', 'logo']) &&
+    hasOnlyKeys(value, ['poster', 'background']) &&
     (value.poster === null || (isArtworkRef(value.poster) && value.poster.kind === 'poster')) &&
-    (value.background === null || (isArtworkRef(value.background) && value.background.kind === 'background')) &&
-    (value.logo === null || (isArtworkRef(value.logo) && value.logo.kind === 'logo'));
+    (value.background === null || (isArtworkRef(value.background) && value.background.kind === 'background'));
 }
 
 function isFiniteNonNegativeNumber(value: unknown): value is number {

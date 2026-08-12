@@ -20,7 +20,7 @@ function cell(startsAtMs = 1_000, endsAtMs = 3_000): EpgProgramCellViewModel {
     rating: '', quality: [], genres: [], startsAtMs, endsAtMs,
     columnStart: 1, columnSpan: 1, isSelected: true, temporalState: 'current',
     progressPercent: 50, widthTier: 'narrow', timeLabel: 'Now',
-    artwork: { poster: null, background: null, logo: null },
+    artwork: { poster: null, background: null },
   };
 }
 

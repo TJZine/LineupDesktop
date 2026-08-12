@@ -7,6 +7,7 @@ import type {
   GuideLibraryFilterState,
   GuidePresentationSource,
 } from '../../contracts/guide.js';
+import type { GuideArtworkSet } from '../../contracts/artwork.js';
 import { randomBytes } from 'node:crypto';
 import type { ChannelClock, ChannelLogger } from '../../domain/channel/interfaces.js';
 import { ContentResolver } from '../../domain/channel/contentResolver.js';
@@ -593,8 +594,8 @@ function createProgramArtworkSet(
   item: ChannelContentItem | SchedulerContentItem,
   guideArtworkOwner: GuideArtworkOwner | null,
   lineupRevision: number | null,
-) {
-  const missing = { poster: null, background: null, logo: null } as const;
+): GuideArtworkSet {
+  const missing = { poster: null, background: null } as const;
   if (guideArtworkOwner === null || lineupRevision === null) return missing;
   const thumb = typeof item.thumb === 'string' && item.thumb.length > 0 ? item.thumb : null;
   const showThumb = 'showThumb' in item && typeof item.showThumb === 'string' && item.showThumb.length > 0
@@ -612,7 +613,6 @@ function createProgramArtworkSet(
     background: backgroundLocator === null ? null : guideArtworkOwner.createRef({
       role: 'background', locator: backgroundLocator, altText: title, lineupRevision,
     }),
-    logo: null,
   };
 }
 
