@@ -158,6 +158,7 @@ class PlayerCoordinator extends ChangeNotifier {
     _telemetry = event.telemetry;
     _tracks = event.tracks;
     if (event.status.state == PlayerState.error) {
+      _activeLoadGeneration = null;
       _error =
           'Playback stopped unexpectedly. Retry or choose another channel.';
       _tuning = false;
@@ -184,8 +185,11 @@ class PlayerCoordinator extends ChangeNotifier {
           break;
         case PlayerState.ended:
         case PlayerState.stopped:
+          _activeLoadGeneration = null;
           _cancelOverlayTimer();
-          _overlay = PlayerOverlay.none;
+          if (_overlay != PlayerOverlay.error) {
+            _overlay = PlayerOverlay.none;
+          }
           final playback = _activePlayback;
           _activePlayback = null;
           _activeChannel = null;
@@ -256,7 +260,7 @@ class PlayerCoordinator extends ChangeNotifier {
       request = lineup.playbackFor(program.scheduled.item.id);
       await _load(request.uri, generation);
       if (generation != _tuneGeneration) {
-        if (_disposed) await _stopQuietly();
+        if (_tuning || _disposed) await _stopQuietly();
         await _release(request);
         return;
       }
@@ -273,7 +277,7 @@ class PlayerCoordinator extends ChangeNotifier {
           _activePlayback = null;
           _activeChannel = null;
         }
-        if (_disposed) await _stopQuietly();
+        if (_tuning || _disposed) await _stopQuietly();
         await _release(request);
         return;
       }
@@ -289,7 +293,7 @@ class PlayerCoordinator extends ChangeNotifier {
             previousChannelId != channelId) {
           await lineup.setCurrentChannel(previousChannelId);
         }
-        if (_disposed) await _stopQuietly();
+        if (_tuning || _disposed) await _stopQuietly();
         await _release(request);
         return;
       }
@@ -347,7 +351,6 @@ class PlayerCoordinator extends ChangeNotifier {
 
   Future<void> stop() async {
     ++_tuneGeneration;
-    _activeLoadGeneration = null;
     _tuning = false;
     _canRetry = false;
     notifyListeners();

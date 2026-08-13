@@ -6,6 +6,9 @@ import '../ui/app_theme.dart';
 import 'lineup_controller.dart';
 import 'lineup_shell.dart';
 
+const _requiredEngineFailureMessage =
+    'The required Lineup DirectComposition Flutter engine is not active.';
+
 class LineupBootstrap extends StatefulWidget {
   const LineupBootstrap({
     required this.player,
@@ -101,7 +104,8 @@ class _LineupBootstrapState extends State<LineupBootstrap> {
             return _StartupFailureBody(
               requiredEngineFailure:
                   error is PlatformException &&
-                  error.code == 'initialize_failed',
+                  error.code == 'initialize_failed' &&
+                  error.message == _requiredEngineFailureMessage,
             );
           }
           if (snapshot.connectionState != ConnectionState.done) {
@@ -182,9 +186,7 @@ class _StartupFailureBody extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  requiredEngineFailure
-                      ? 'The required Lineup DirectComposition Flutter engine is not active.'
-                      : 'Restart the app, and check diagnostics if the problem continues.',
+                  requiredEngineFailure ? _requiredEngineFailureMessage : 'Restart the app, and check diagnostics if the problem continues.',
                   textAlign: TextAlign.center,
                 ),
               ],

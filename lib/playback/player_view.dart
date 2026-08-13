@@ -591,12 +591,14 @@ class _MiniGuideRow extends StatelessWidget {
     final current = controller.guide.currentProgram(channel.id);
     final next = controller.guide.nextProgram(channel.id);
     final now = controller.guide.now;
-    final progress = current == null
+    final span = current == null
+        ? 0
+        : current.scheduled.end
+              .difference(current.scheduled.start)
+              .inMicroseconds;
+    final progress = current == null || span <= 0
         ? 0.0
-        : now.difference(current.scheduled.start).inMilliseconds /
-              current.scheduled.end
-                  .difference(current.scheduled.start)
-                  .inMilliseconds;
+        : now.difference(current.scheduled.start).inMicroseconds / span;
     return Semantics(
       selected: focused,
       label:
