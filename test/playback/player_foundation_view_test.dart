@@ -25,27 +25,38 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('recreation resends unchanged native presentation bounds', (
-    tester,
-  ) async {
-    final player = _RecordingPlayer();
+  testWidgets(
+    'recreation resends bounds and resets the fullscreen projection',
+    (tester) async {
+      final player = _RecordingPlayer();
 
-    await tester.pumpWidget(_host(PlayerFoundationView(player: player)));
-    await tester.pump();
+      await tester.pumpWidget(_host(PlayerFoundationView(player: player)));
+      await tester.pump();
 
-    final initialBounds = player.videoRects.where(_hasArea).length;
-    expect(initialBounds, 1);
+      final initialBounds = player.videoRects.where(_hasArea).length;
+      expect(initialBounds, 1);
 
-    final recreate = find.text('Dispose + recreate');
-    await tester.ensureVisible(recreate);
-    await tester.tap(recreate);
-    await tester.pumpAndSettle();
+      final fullscreen = find.text('Fullscreen');
+      await tester.ensureVisible(fullscreen);
+      await tester.tap(fullscreen);
+      await tester.pumpAndSettle();
 
-    expect(player.disposeCalls, 1);
-    expect(player.initializeCalls, 1);
-    expect(player.videoRects.where(_hasArea), hasLength(initialBounds + 1));
-    expect(tester.takeException(), isNull);
-  });
+      expect(player.fullscreenCalls, [true]);
+      expect(find.text('Exit fullscreen'), findsOneWidget);
+
+      final recreate = find.text('Dispose + recreate');
+      await tester.ensureVisible(recreate);
+      await tester.tap(recreate);
+      await tester.pumpAndSettle();
+
+      expect(player.disposeCalls, 1);
+      expect(player.initializeCalls, 1);
+      expect(player.videoRects.where(_hasArea), hasLength(initialBounds + 1));
+      expect(find.text('Fullscreen'), findsOneWidget);
+      expect(find.text('Exit fullscreen'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
 }
 
 Widget _host(Widget child) {
@@ -63,6 +74,7 @@ class _RecordingPlayer implements NativePlayer {
   }) : _status = status;
 
   final List<PlayerVideoRect> videoRects = [];
+  final List<bool> fullscreenCalls = [];
   PlayerStatus _status;
   int initializeCalls = 0;
   int disposeCalls = 0;
@@ -112,7 +124,9 @@ class _RecordingPlayer implements NativePlayer {
   }
 
   @override
-  Future<void> setFullscreen(bool fullscreen) async {}
+  Future<void> setFullscreen(bool fullscreen) async {
+    fullscreenCalls.add(fullscreen);
+  }
 
   @override
   Future<void> selectTrack(PlayerTrackType type, int? id) async {}

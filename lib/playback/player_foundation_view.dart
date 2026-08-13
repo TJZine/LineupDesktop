@@ -99,7 +99,10 @@ class _PlayerFoundationViewState extends State<PlayerFoundationView> {
       await widget.player.dispose();
       await widget.player.initialize();
       if (mounted) {
-        setState(() => _presentationEpoch += 1);
+        setState(() {
+          _fullscreen = false;
+          _presentationEpoch += 1;
+        });
       }
       if (media != null) await widget.player.load(media);
     });
