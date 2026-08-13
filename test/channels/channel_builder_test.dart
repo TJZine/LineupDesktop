@@ -18,6 +18,7 @@ void main() {
         title: 'Movie $index',
         type: 'movie',
         duration: const Duration(minutes: 90),
+        libraryId: '1',
         genres: const ['Comedy'],
         year: 1981,
       ),
@@ -54,6 +55,7 @@ void main() {
         title: 'One',
         type: 'movie',
         duration: Duration(minutes: 1),
+        libraryId: '1',
         genres: ['Rare'],
       ),
     ];

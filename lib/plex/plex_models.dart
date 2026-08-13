@@ -108,6 +108,7 @@ class PlexMediaItem {
     required this.title,
     required this.type,
     required this.duration,
+    this.libraryId,
     this.parentTitle,
     this.grandparentTitle,
     this.thumbPath,
@@ -124,6 +125,7 @@ class PlexMediaItem {
     this.studio,
     this.year,
     this.addedAt,
+    this.viewed = false,
   });
 
   final String id;
@@ -131,6 +133,7 @@ class PlexMediaItem {
   final String title;
   final String type;
   final Duration duration;
+  final String? libraryId;
   final String? parentTitle;
   final String? grandparentTitle;
   final String? thumbPath;
@@ -147,6 +150,7 @@ class PlexMediaItem {
   final String? studio;
   final int? year;
   final DateTime? addedAt;
+  final bool viewed;
 
   ChannelItem toChannelItem(Uri? artwork) => ChannelItem(
     id: id,

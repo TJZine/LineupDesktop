@@ -277,7 +277,9 @@ class PlexClient {
           );
       final json = await _serverJson(uri, token);
       final metadata = _containerList(json, 'Metadata');
-      output.addAll(metadata.map(parseMediaItem));
+      output.addAll(
+        metadata.map((item) => parseMediaItem(item, libraryId: libraryId)),
+      );
       if (metadata.length < pageSize) break;
       start += metadata.length;
     }
@@ -333,6 +335,23 @@ class PlexClient {
     );
   }
 
+  Future<void> releasePlaybackSession({
+    required Uri server,
+    required String token,
+    required String sessionId,
+  }) async {
+    try {
+      await _http.get(
+        server
+            .resolve('/video/:/transcode/universal/stop')
+            .replace(queryParameters: {'session': sessionId}),
+        headers: _headers(token),
+      );
+    } catch (_) {
+      // Lease cleanup is best effort and never replaces playback settlement.
+    }
+  }
+
   Future<Map<String, Object?>> _serverJson(Uri uri, String token) async {
     final response = await _http.get(uri, headers: _headers(token));
     return _json(response, {200});
@@ -341,7 +360,7 @@ class PlexClient {
   void close() => _http.close();
 }
 
-PlexMediaItem parseMediaItem(Object? raw) {
+PlexMediaItem parseMediaItem(Object? raw, {String? libraryId}) {
   final json = _record(raw, 'media item');
   final media = (json['Media'] as List? ?? const [])
       .whereType<Map>()
@@ -375,6 +394,7 @@ PlexMediaItem parseMediaItem(Object? raw) {
     title: _text(json['title'], 'media title'),
     type: _text(json['type'], 'media type'),
     duration: Duration(milliseconds: (json['duration'] as num?)?.toInt() ?? 0),
+    libraryId: libraryId,
     parentTitle: _optionalText(json['parentTitle']),
     grandparentTitle: _optionalText(json['grandparentTitle']),
     thumbPath: _optionalText(json['thumb']),
@@ -396,6 +416,7 @@ PlexMediaItem parseMediaItem(Object? raw) {
             isUtc: true,
           )
         : null,
+    viewed: ((json['viewCount'] as num?)?.toInt() ?? 0) > 0,
   );
 }
 

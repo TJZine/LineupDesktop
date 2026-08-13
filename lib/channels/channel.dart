@@ -183,7 +183,6 @@ class ChannelItem {
     'durationMs': duration.inMilliseconds,
     if (showTitle != null) 'showTitle': showTitle,
     if (showThumb != null) 'showThumb': showThumb,
-    if (artwork != null) 'artwork': artwork.toString(),
   };
 
   factory ChannelItem.fromJson(Object? value) {
@@ -200,7 +199,6 @@ class ChannelItem {
       duration: duration,
       showTitle: json['showTitle'] as String?,
       showThumb: json['showThumb'] as String?,
-      artwork: Uri.tryParse(json['artwork'] as String? ?? ''),
     );
   }
 }

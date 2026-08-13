@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../channels/channel.dart';
+import '../channels/content_resolver.dart';
+import '../channels/scheduler.dart';
 import '../diagnostics/diagnostics.dart';
 import '../persistence/app_store.dart';
 import '../plex/plex_client.dart';
@@ -247,6 +249,13 @@ class LineupController extends ChangeNotifier {
       rethrow;
     }
   }
+
+  ScheduleIndex scheduleFor(Channel channel) => buildSchedule(
+    resolveContent(channel.source, availableMedia),
+    mode: channel.playbackMode,
+    seed: channel.shuffleSeed,
+    blockSize: channel.blockSize ?? 3,
+  );
 
   Future<void> deleteChannel(String id) async {
     final old = channels;

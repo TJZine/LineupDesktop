@@ -523,6 +523,11 @@ class _ChannelEditorState extends State<ChannelEditor> {
   );
   late PlaybackMode _mode =
       widget.channel?.playbackMode ?? PlaybackMode.shuffle;
+  late bool _manual = widget.channel?.source is ManualSource;
+  late final Set<String> _manualItemIds = switch (widget.channel?.source) {
+    ManualSource(:final items) => items.map((item) => item.id).toSet(),
+    _ => <String>{},
+  };
   late String? _libraryId = switch (widget.channel?.source) {
     LibrarySource(:final libraryId) => libraryId,
     _ => widget.controller.selectedLibraryIds.firstOrNull,
@@ -577,6 +582,16 @@ class _ChannelEditorState extends State<ChannelEditor> {
               ),
             ),
             const SizedBox(height: 12),
+            SegmentedButton<bool>(
+              segments: const [
+                ButtonSegment(value: false, label: Text('Entire library')),
+                ButtonSegment(value: true, label: Text('Hand-picked')),
+              ],
+              selected: {_manual},
+              onSelectionChanged: (value) =>
+                  setState(() => _manual = value.single),
+            ),
+            const SizedBox(height: 12),
             DropdownButtonFormField<String>(
               initialValue: _libraryId,
               decoration: const InputDecoration(labelText: 'Content library'),
@@ -590,8 +605,35 @@ class _ChannelEditorState extends State<ChannelEditor> {
                     child: Text(library.title),
                   ),
               ],
-              onChanged: (value) => setState(() => _libraryId = value),
+              onChanged: _manual
+                  ? null
+                  : (value) => setState(() => _libraryId = value),
             ),
+            if (_manual) ...[
+              const SizedBox(height: 12),
+              SizedBox(
+                height: 240,
+                child: ListView.builder(
+                  itemCount: widget.controller.availableMedia.length,
+                  itemBuilder: (context, index) {
+                    final item = widget.controller.availableMedia[index];
+                    return CheckboxListTile(
+                      dense: true,
+                      value: _manualItemIds.contains(item.id),
+                      title: Text(item.title),
+                      subtitle: item.grandparentTitle == null
+                          ? null
+                          : Text(item.grandparentTitle!),
+                      onChanged: (selected) => setState(
+                        () => selected == true
+                            ? _manualItemIds.add(item.id)
+                            : _manualItemIds.remove(item.id),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
             const SizedBox(height: 12),
             SegmentedButton<PlaybackMode>(
               segments: const [
@@ -633,21 +675,34 @@ class _ChannelEditorState extends State<ChannelEditor> {
   Future<void> _save() async {
     try {
       final id = _libraryId;
-      if (id == null) throw const FormatException('Select a library');
-      final library = widget.controller.libraries.firstWhere(
-        (library) => library.id == id,
-      );
+      if (!_manual && id == null) {
+        throw const FormatException('Select a library');
+      }
+      final library = _manual
+          ? null
+          : widget.controller.libraries.firstWhere(
+              (library) => library.id == id,
+            );
+      final manualItems = widget.controller.availableMedia
+          .where((item) => _manualItemIds.contains(item.id))
+          .map((item) => item.toChannelItem(null))
+          .toList();
+      if (_manual && manualItems.isEmpty) {
+        throw const FormatException('Select at least one program');
+      }
       final channelId = widget.channel?.id ?? createChannelId();
       await widget.controller.saveChannel(
         Channel(
           id: channelId,
           number: int.parse(_number.text),
           name: _name.text,
-          source: LibrarySource(
-            libraryId: id,
-            libraryType: library.type,
-            includeWatched: _includeWatched,
-          ),
+          source: _manual
+              ? ManualSource(manualItems)
+              : LibrarySource(
+                  libraryId: id!,
+                  libraryType: library!.type,
+                  includeWatched: _includeWatched,
+                ),
           playbackMode: _mode,
           anchor: widget.channel?.anchor ?? DateTime.now().toUtc(),
           shuffleSeed: widget.channel?.shuffleSeed ?? channelId.hashCode,

@@ -53,27 +53,31 @@ List<ChannelProposal> buildChannelProposals({
     String filterKey,
   ) {
     if (!strategies.contains(strategy)) return;
-    final counts = <String, int>{};
-    for (final item in items) {
-      for (final tag
-          in select(item)
-              .map((value) => value.trim())
-              .where((value) => value.isNotEmpty)
-              .toSet()) {
-        counts[tag] = (counts[tag] ?? 0) + 1;
+    for (final library in movieLibraries) {
+      final counts = <String, int>{};
+      for (final item in items.where((item) => item.libraryId == library.id)) {
+        for (final tag
+            in select(item)
+                .map((value) => value.trim())
+                .where((value) => value.isNotEmpty)
+                .toSet()) {
+          counts[tag] = (counts[tag] ?? 0) + 1;
+        }
       }
-    }
-    for (final entry
-        in counts.entries.where((entry) => entry.value >= minimumItems).toList()
-          ..sort(
-            (a, b) => b.value.compareTo(a.value) != 0
-                ? b.value.compareTo(a.value)
-                : a.key.compareTo(b.key),
-          )) {
-      for (final library in movieLibraries.take(1)) {
+      for (final entry
+          in counts.entries
+              .where((entry) => entry.value >= minimumItems)
+              .toList()
+            ..sort(
+              (a, b) => b.value.compareTo(a.value) != 0
+                  ? b.value.compareTo(a.value)
+                  : a.key.compareTo(b.key),
+            )) {
         proposals.add(
           ChannelProposal(
-            name: entry.key,
+            name: movieLibraries.length == 1
+                ? entry.key
+                : '${library.title} • ${entry.key}',
             source: LibrarySource(
               libraryId: library.id,
               libraryType: library.type,
@@ -90,7 +94,10 @@ List<ChannelProposal> buildChannelProposals({
 
   if (strategies.contains(BuilderStrategy.recentlyAdded)) {
     for (final library in libraries) {
-      if (items.length >= minimumItems) {
+      final itemCount = items
+          .where((item) => item.libraryId == library.id)
+          .length;
+      if (itemCount >= minimumItems) {
         proposals.add(
           ChannelProposal(
             name: '${library.title} Recently Added',
@@ -100,7 +107,7 @@ List<ChannelProposal> buildChannelProposals({
               filters: const {'sort': 'added:desc'},
             ),
             mode: PlaybackMode.sequential,
-            itemCount: items.length,
+            itemCount: itemCount,
             strategy: BuilderStrategy.recentlyAdded,
           ),
         );
