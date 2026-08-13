@@ -1,19 +1,21 @@
 import 'package:flutter/material.dart';
 
 import '../playback/native_player.dart';
+import '../playback/player_foundation_view.dart';
 import '../ui/empty_feature_view.dart';
 
 class LineupShell extends StatefulWidget {
-  const LineupShell({required this.player, super.key});
+  const LineupShell({required this.player, this.initialMediaPath, super.key});
 
   final NativePlayer player;
+  final String? initialMediaPath;
 
   @override
   State<LineupShell> createState() => _LineupShellState();
 }
 
 class _LineupShellState extends State<LineupShell> {
-  int _selectedIndex = 0;
+  late int _selectedIndex = widget.initialMediaPath == null ? 0 : 4;
 
   static const _destinations = <_Destination>[
     _Destination(
@@ -44,43 +46,64 @@ class _LineupShellState extends State<LineupShell> {
       'Diagnostics foundation',
       'Runtime diagnostics will be added with redaction before network and native playback work.',
     ),
+    _Destination(
+      'Player',
+      Icons.play_circle_outline,
+      Icons.play_circle,
+      'Native player foundation',
+      'Exercise the Windows libmpv and DirectComposition boundary.',
+    ),
   ];
 
   @override
   Widget build(BuildContext context) {
     final destination = _destinations[_selectedIndex];
+    final background = Theme.of(context).scaffoldBackgroundColor;
+    final playerSelected = destination.label == 'Player';
     return Scaffold(
+      backgroundColor: Colors.transparent,
       body: SafeArea(
         child: Row(
           children: [
-            NavigationRail(
-              selectedIndex: _selectedIndex,
-              onDestinationSelected: (index) =>
-                  setState(() => _selectedIndex = index),
-              extended: MediaQuery.sizeOf(context).width >= 1040,
-              leading: const Padding(
-                padding: EdgeInsets.fromLTRB(12, 16, 12, 28),
-                child: _Brand(),
+            ColoredBox(
+              color: background,
+              child: NavigationRail(
+                selectedIndex: _selectedIndex,
+                onDestinationSelected: (index) =>
+                    setState(() => _selectedIndex = index),
+                extended: MediaQuery.sizeOf(context).width >= 1040,
+                leading: const Padding(
+                  padding: EdgeInsets.fromLTRB(12, 16, 12, 28),
+                  child: _Brand(),
+                ),
+                destinations: [
+                  for (final item in _destinations)
+                    NavigationRailDestination(
+                      icon: Icon(item.icon),
+                      selectedIcon: Icon(item.selectedIcon),
+                      label: Text(item.label),
+                    ),
+                ],
               ),
-              destinations: [
-                for (final item in _destinations)
-                  NavigationRailDestination(
-                    icon: Icon(item.icon),
-                    selectedIcon: Icon(item.selectedIcon),
-                    label: Text(item.label),
-                  ),
-              ],
             ),
             const VerticalDivider(width: 1),
             Expanded(
-              child: EmptyFeatureView(
-                key: ValueKey(destination.label),
-                section: destination.label,
-                title: destination.title,
-                description: destination.description,
-                icon: destination.selectedIcon,
-                status: widget.player.status,
-              ),
+              child: playerSelected
+                  ? PlayerFoundationView(
+                      player: widget.player,
+                      initialMediaPath: widget.initialMediaPath,
+                    )
+                  : ColoredBox(
+                      color: background,
+                      child: EmptyFeatureView(
+                        key: ValueKey(destination.label),
+                        section: destination.label,
+                        title: destination.title,
+                        description: destination.description,
+                        icon: destination.selectedIcon,
+                        status: widget.player.status,
+                      ),
+                    ),
             ),
           ],
         ),

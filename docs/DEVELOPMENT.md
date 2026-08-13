@@ -66,3 +66,64 @@ flutter run -d macos
 flutter build macos
 flutter build windows # run on Windows
 ```
+
+## Windows native player
+
+The Windows player requires Visual Studio Build Tools 2022 with Desktop C++,
+ATL, Windows SDK `10.0.22621.0`, and Debugging Tools for Windows. The pinned
+Flutter SDK is also the source checkout for the owned engine patch:
+
+```powershell
+$env:PATH = 'C:\path\to\depot_tools;C:\path\to\flutter\bin;' + $env:PATH
+$env:DEPOT_TOOLS_WIN_TOOLCHAIN = '0'
+$env:GYP_MSVS_OVERRIDE_PATH = 'C:\path\to\VisualStudio2022BuildTools'
+$env:WINDOWSSDKDIR = 'C:\Program Files (x86)\Windows Kits\10'
+
+Set-Location C:\path\to\flutter
+gclient sync --no-history
+git apply --unidiff-zero C:\path\to\LineupDesktop\tool\flutter_engine\0001-windows-direct-composition.patch
+
+Set-Location engine\src
+python .\flutter\tools\gn --runtime-mode=debug
+ninja -C out\host_debug
+python .\flutter\tools\gn --runtime-mode=release
+ninja -C out\host_release
+```
+
+The patch must be applied to the exact revisions recorded in
+`tool/flutter_engine/README.md`; run `git apply --check` first on a fresh
+checkout using `--unidiff-zero`. Select the resulting engine explicitly—do not replace Flutter's SDK
+cache:
+
+```powershell
+$engineSource = 'C:\path\to\flutter\engine\src'
+flutter run -d windows `
+  --local-engine=host_debug `
+  --local-engine-host=host_debug `
+  --local-engine-src-path=$engineSource `
+  --dart-entrypoint-args='--media=C:\path\to\sdr-sample.mp4'
+
+flutter build windows `
+  --local-engine=host_release `
+  --local-engine-host=host_release `
+  --local-engine-src-path=$engineSource
+```
+
+Set `LINEUP_MPV_ROOT` to an uncommitted x86-64 libmpv development directory
+containing `include\mpv\client.h`, `libmpv-2.dll`, and an MSVC-compatible
+`libmpv.lib`. Shinchiro development archives contain a GNU import library; for
+local development, generate the MSVC import library from the DLL exports with
+Visual Studio's `lib.exe`. Do not commit or redistribute the DLL, import
+library, or generated app bundle until the exact mpv/FFmpeg configuration,
+source offer, notices, license obligations, and packaging policy are approved.
+
+The development build used for this foundation is Shinchiro's official GitHub
+release `20260421`, asset
+`mpv-dev-x86_64-20260421-git-5921fe5.7z`, SHA-256
+`9DCDA280322CFEC168D42F5AFA1A58691311E6AAF81B8A0DFDDFA97A6209A5FA`.
+It reports mpv `v0.41.0-524-g5921fe50b`, FFmpeg
+`N-124056-gc92304f8c`, and libplacebo
+`v7.360.0-16-g409c9a8-dirty`. The upstream build does not pass
+`-Dgpl=false`, so treat it as mpv's default GPLv2-or-later configuration. It is
+acceptable for ignored local development here, not an approved redistributable
+Lineup dependency.

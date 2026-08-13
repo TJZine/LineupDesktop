@@ -1,0 +1,44 @@
+From: Lineup Desktop contributors
+Subject: [PATCH] windows: require opt-in DirectComposition presentation
+
+Adapted for Flutter 3.47.0 / engine 5f77625673248ee5846fbcaf5d3e1a3878386fd7
+from edde746/flutter-plezy commit e721699fd4857afcd5a3414dccc55edc24c6680f.
+See NOTICE for the applicable BSD-3-Clause terms.
+
+diff --git a/engine/src/flutter/shell/platform/windows/egl/manager.cc b/engine/src/flutter/shell/platform/windows/egl/manager.cc
+--- a/engine/src/flutter/shell/platform/windows/egl/manager.cc
++++ b/engine/src/flutter/shell/platform/windows/egl/manager.cc
+@@ -289,0 +290,3 @@ std::unique_ptr<WindowSurface> Manager::CreateWindowSurface(HWND hwnd,
++  const bool use_direct_composition =
++      ::GetEnvironmentVariableW(L"FLUTTER_WINDOWS_DCOMP", nullptr, 0) > 0;
++
+@@ -293,7 +296,10 @@ std::unique_ptr<WindowSurface> Manager::CreateWindowSurface(HWND hwnd,
+-  const EGLint surface_attributes[] = {EGL_FIXED_SIZE_ANGLE,
+-                                       EGL_TRUE,
+-                                       EGL_WIDTH,
+-                                       static_cast<EGLint>(width),
+-                                       EGL_HEIGHT,
+-                                       static_cast<EGLint>(height),
+-                                       EGL_NONE};
++  std::vector<EGLint> surface_attributes = {
++      EGL_FIXED_SIZE_ANGLE, EGL_TRUE,
++      EGL_WIDTH,            static_cast<EGLint>(width),
++      EGL_HEIGHT,           static_cast<EGLint>(height),
++  };
++  if (use_direct_composition) {
++    surface_attributes.push_back(EGL_DIRECT_COMPOSITION_ANGLE);
++    surface_attributes.push_back(EGL_TRUE);
++  }
++  surface_attributes.push_back(EGL_NONE);
+@@ -303 +309 @@ std::unique_ptr<WindowSurface> Manager::CreateWindowSurface(HWND hwnd,
+-      surface_attributes);
++      surface_attributes.data());
+@@ -307,0 +314,8 @@ std::unique_ptr<WindowSurface> Manager::CreateWindowSurface(HWND hwnd,
++  if (use_direct_composition) {
++    // The runner clears this before engine startup and the native player
++    // requires the exact marker. A stock or failed patched engine therefore
++    // cannot silently fall back to opaque HWND presentation.
++    ::SetEnvironmentVariableW(
++        L"LINEUP_FLUTTER_DCOMP_ACTIVE",
++        L"5f77625673248ee5846fbcaf5d3e1a3878386fd7");
++  }

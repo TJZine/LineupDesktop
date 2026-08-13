@@ -1,13 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../playback/native_player.dart';
 import '../ui/app_theme.dart';
 import 'lineup_shell.dart';
 
 class LineupBootstrap extends StatefulWidget {
-  const LineupBootstrap({required this.player, super.key});
+  const LineupBootstrap({
+    required this.player,
+    this.initialMediaPath,
+    super.key,
+  });
 
   final NativePlayer player;
+  final String? initialMediaPath;
 
   @override
   State<LineupBootstrap> createState() => _LineupBootstrapState();
@@ -57,12 +63,15 @@ class _LineupBootstrapState extends State<LineupBootstrap> {
         future: _startup,
         builder: (context, snapshot) {
           if (snapshot.hasError) {
-            return const _StartupFailureBody();
+            return _StartupFailureBody(error: snapshot.error);
           }
           if (snapshot.connectionState != ConnectionState.done) {
             return const _StartupProgress();
           }
-          return LineupShell(player: widget.player);
+          return LineupShell(
+            player: widget.player,
+            initialMediaPath: widget.initialMediaPath,
+          );
         },
       ),
     );
@@ -86,7 +95,9 @@ class _StartupProgress extends StatelessWidget {
 }
 
 class _StartupFailureBody extends StatelessWidget {
-  const _StartupFailureBody();
+  const _StartupFailureBody({required this.error});
+
+  final Object? error;
 
   @override
   Widget build(BuildContext context) {
@@ -106,8 +117,12 @@ class _StartupFailureBody extends StatelessWidget {
                   style: Theme.of(context).textTheme.headlineSmall,
                 ),
                 const SizedBox(height: 12),
-                const Text(
-                  'No settings or media were changed. Restart the app, and check diagnostics if the problem continues.',
+                Text(
+                  error is PlatformException &&
+                          (error as PlatformException).code ==
+                              'initialize_failed'
+                      ? (error as PlatformException).message ?? 'The required Windows native player could not initialize.'
+                      : 'No settings or media were changed. Restart the app, and check diagnostics if the problem continues.',
                   textAlign: TextAlign.center,
                 ),
               ],

@@ -1,11 +1,13 @@
+import 'dart:io';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
 import 'app/lineup_app.dart';
 import 'playback/unsupported_native_player.dart';
+import 'playback/windows_native_player.dart';
 
-void main() {
+void main(List<String> arguments) {
   WidgetsFlutterBinding.ensureInitialized();
 
   FlutterError.onError = (details) {
@@ -24,5 +26,19 @@ void main() {
     return true;
   };
 
-  runApp(LineupBootstrap(player: UnsupportedNativePlayer.macos()));
+  String? mediaArgument;
+  for (final argument in arguments) {
+    if (argument.startsWith('--media=')) {
+      mediaArgument = argument.substring('--media='.length);
+      break;
+    }
+  }
+  runApp(
+    LineupBootstrap(
+      player: Platform.isWindows
+          ? WindowsNativePlayer()
+          : UnsupportedNativePlayer.macos(),
+      initialMediaPath: mediaArgument,
+    ),
+  );
 }

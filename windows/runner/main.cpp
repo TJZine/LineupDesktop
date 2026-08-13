@@ -17,6 +17,12 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   // plugins.
   ::CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 
+  // The pinned Lineup engine patch consumes this opt-in before creating the
+  // Flutter view's ANGLE surface. Clear the proof marker so a stock engine or
+  // failed DirectComposition surface cannot silently masquerade as supported.
+  ::SetEnvironmentVariableW(L"LINEUP_FLUTTER_DCOMP_ACTIVE", nullptr);
+  ::SetEnvironmentVariableW(L"FLUTTER_WINDOWS_DCOMP", L"1");
+
   flutter::DartProject project(L"data");
 
   std::vector<std::string> command_line_arguments =

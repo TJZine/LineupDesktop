@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/lineup_app.dart';
 import 'package:lineup_desktop/playback/native_player.dart';
@@ -42,6 +43,22 @@ void main() {
     expect(find.textContaining('player initialization failed'), findsNothing);
     expect(find.text('Guide'), findsNothing);
   });
+
+  testWidgets('makes a missing required Windows engine explicit', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      LineupBootstrap(player: _RequiredEngineFailingPlayer()),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text(
+        'The required Lineup DirectComposition Flutter engine is not active.',
+      ),
+      findsOneWidget,
+    );
+  });
 }
 
 class _FakePlayer implements NativePlayer {
@@ -52,6 +69,18 @@ class _FakePlayer implements NativePlayer {
     state: PlayerState.idle,
     message: 'Playback test backend ready',
   );
+
+  @override
+  Duration get position => Duration.zero;
+
+  @override
+  Duration get duration => Duration.zero;
+
+  @override
+  PlayerTelemetry get telemetry => const PlayerTelemetry();
+
+  @override
+  List<PlayerTrack> get tracks => const [];
 
   @override
   Stream<PlayerEvent> get events => const Stream.empty();
@@ -72,6 +101,18 @@ class _FakePlayer implements NativePlayer {
   Future<void> seek(Duration position) async {}
 
   @override
+  Future<void> setVideoRect(PlayerVideoRect rect) async {}
+
+  @override
+  Future<void> setFullscreen(bool fullscreen) async {}
+
+  @override
+  Future<void> selectTrack(PlayerTrackType type, int? id) async {}
+
+  @override
+  Future<void> setVolume(double volume) async {}
+
+  @override
   Future<void> stop() async {}
 
   @override
@@ -84,5 +125,16 @@ class _FailingPlayer extends _FakePlayer {
   @override
   Future<void> initialize() async {
     throw StateError('player initialization failed');
+  }
+}
+
+class _RequiredEngineFailingPlayer extends _FakePlayer {
+  @override
+  Future<void> initialize() async {
+    throw PlatformException(
+      code: 'initialize_failed',
+      message:
+          'The required Lineup DirectComposition Flutter engine is not active.',
+    );
   }
 }

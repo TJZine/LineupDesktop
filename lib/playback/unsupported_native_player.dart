@@ -14,6 +14,18 @@ class UnsupportedNativePlayer implements NativePlayer {
   PlayerStatus get status => _unsupported;
 
   @override
+  Duration get position => Duration.zero;
+
+  @override
+  Duration get duration => Duration.zero;
+
+  @override
+  PlayerTelemetry get telemetry => const PlayerTelemetry();
+
+  @override
+  List<PlayerTrack> get tracks => const [];
+
+  @override
   Stream<PlayerEvent> get events => const Stream.empty();
 
   @override
@@ -34,6 +46,19 @@ class UnsupportedNativePlayer implements NativePlayer {
 
   @override
   Future<void> seek(Duration position) async => _unavailable();
+
+  @override
+  Future<void> setVideoRect(PlayerVideoRect rect) async => _unavailable();
+
+  @override
+  Future<void> setFullscreen(bool fullscreen) async => _unavailable();
+
+  @override
+  Future<void> selectTrack(PlayerTrackType type, int? id) async =>
+      _unavailable();
+
+  @override
+  Future<void> setVolume(double volume) async => _unavailable();
 
   @override
   Future<void> stop() async => _unavailable();
