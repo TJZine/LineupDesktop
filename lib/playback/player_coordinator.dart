@@ -50,6 +50,7 @@ class PlayerCoordinator extends ChangeNotifier {
   Timer? _sleepTimer;
   Timer? _numberTimer;
   Timer? _cursorTimer;
+  int _overlayEpoch = 0;
   PlayerOverlay _overlay = PlayerOverlay.none;
   String _channelNumber = '';
   String? _miniGuideChannelId;
@@ -57,11 +58,14 @@ class PlayerCoordinator extends ChangeNotifier {
   bool _fullscreen = false;
   bool _cursorVisible = true;
   bool _tuning = false;
+  bool _canRetry = false;
+  bool _overlayInteraction = false;
   Duration? _sleepDuration;
   int _tuneGeneration = 0;
   Future<void> _tuneOperations = Future.value();
   bool _disposed = false;
   LineupPlaybackRequest? _activePlayback;
+  String? _retryChannelId;
   List<Channel> _indexedChannels = const [];
   Map<String, int> _channelIndexById = const {};
   Map<int, Channel> _channelByNumber = const {};
@@ -80,10 +84,38 @@ class PlayerCoordinator extends ChangeNotifier {
   int get miniGuideChannelIndex =>
       _channelIndexById[miniGuideChannelId] ??
       (_indexedChannels.isEmpty ? -1 : 0);
+  List<Channel> get miniGuideChannels {
+    final channels = _indexedChannels;
+    final selected = miniGuideChannelIndex;
+    if (channels.isEmpty || selected < 0) return const [];
+    final count = channels.length.clamp(0, 5);
+    return List.generate(
+      count,
+      (offset) =>
+          channels[((selected - 2 + offset) % channels.length +
+                  channels.length) %
+              channels.length],
+      growable: false,
+    );
+  }
+
   String? get error => _error;
   bool get fullscreen => _fullscreen;
   bool get cursorVisible => _cursorVisible;
   bool get tuning => _tuning;
+  bool get canRetry => _canRetry;
+  bool get hasPlaybackIntent =>
+      _tuning ||
+      _activePlayback != null ||
+      switch (_status.state) {
+        PlayerState.loading ||
+        PlayerState.ready ||
+        PlayerState.playing ||
+        PlayerState.paused ||
+        PlayerState.buffering ||
+        PlayerState.seeking => true,
+        _ => false,
+      };
   Duration? get sleepDuration => _sleepDuration;
   Channel? get currentChannel {
     final index = _channelIndexById[lineup.currentChannelId];
@@ -95,7 +127,13 @@ class PlayerCoordinator extends ChangeNotifier {
     return id == null ? null : guide.currentProgram(id);
   }
 
+  GuideProgram? get nextProgram {
+    final id = lineup.currentChannelId;
+    return id == null ? null : guide.nextProgram(id);
+  }
+
   void _event(PlayerEvent event) {
+    if (event.generation != null && event.generation != _tuneGeneration) return;
     _status = event.status;
     _position = event.position;
     _duration = event.duration;
@@ -104,12 +142,41 @@ class PlayerCoordinator extends ChangeNotifier {
     if (event.status.state == PlayerState.error) {
       _error = event.status.message;
       _tuning = false;
+      _canRetry = event.status.recoverable && _retryChannelId != null;
       final playback = _activePlayback;
       _activePlayback = null;
       unawaited(_release(playback));
       _setOverlay(PlayerOverlay.error, timed: false);
-    } else if (event.status.state == PlayerState.loading) {
-      _overlayTimer?.cancel();
+    } else {
+      switch (event.status.state) {
+        case PlayerState.loading:
+          _cancelOverlayTimer();
+          if (_overlay == PlayerOverlay.osd) _overlay = PlayerOverlay.none;
+          break;
+        case PlayerState.ready:
+        case PlayerState.paused:
+        case PlayerState.buffering:
+        case PlayerState.seeking:
+          _setOverlay(PlayerOverlay.osd, timed: false);
+          break;
+        case PlayerState.playing:
+          if (_overlay == PlayerOverlay.osd) _scheduleOverlayHide(_overlay);
+          break;
+        case PlayerState.ended:
+        case PlayerState.stopped:
+          _cancelOverlayTimer();
+          _overlay = PlayerOverlay.none;
+          final playback = _activePlayback;
+          _activePlayback = null;
+          unawaited(_release(playback));
+          break;
+        case PlayerState.idle:
+        case PlayerState.unsupported:
+          _cancelOverlayTimer();
+          break;
+        case PlayerState.error:
+          break;
+      }
     }
     notifyListeners();
   }
@@ -117,8 +184,10 @@ class PlayerCoordinator extends ChangeNotifier {
   Future<void> tune(String channelId) {
     final generation = ++_tuneGeneration;
     _tuning = true;
+    _canRetry = false;
     _error = null;
-    _overlayTimer?.cancel();
+    _retryChannelId = channelId;
+    _cancelOverlayTimer();
     _overlay = PlayerOverlay.osd;
     notifyListeners();
     final operation = _tuneOperations.then(
@@ -139,6 +208,7 @@ class PlayerCoordinator extends ChangeNotifier {
     if (generation != _tuneGeneration) return;
     if (program == null) {
       _tuning = false;
+      _canRetry = true;
       _error = 'The current program could not be loaded.';
       _setOverlay(PlayerOverlay.error, timed: false);
       return;
@@ -190,6 +260,7 @@ class PlayerCoordinator extends ChangeNotifier {
         return;
       }
       _tuning = false;
+      _canRetry = false;
       showOsd();
     } catch (error) {
       if (identical(_activePlayback, request)) {
@@ -199,13 +270,14 @@ class PlayerCoordinator extends ChangeNotifier {
       await _release(request);
       if (generation != _tuneGeneration) return;
       _tuning = false;
+      _canRetry = true;
       _error = error.toString();
       _setOverlay(PlayerOverlay.error, timed: false);
     }
   }
 
   Future<void> retry() async {
-    final id = currentChannel?.id;
+    final id = _retryChannelId ?? currentChannel?.id;
     if (id != null) await tune(id);
   }
 
@@ -226,6 +298,7 @@ class PlayerCoordinator extends ChangeNotifier {
   Future<void> stop() async {
     ++_tuneGeneration;
     _tuning = false;
+    _canRetry = false;
     notifyListeners();
     final operation = _tuneOperations.then((_) async {
       final playback = _activePlayback;
@@ -248,6 +321,11 @@ class PlayerCoordinator extends ChangeNotifier {
         ? _duration
         : requested;
     return player.seek(target);
+  }
+
+  Future<void> seekTo(Duration position) async {
+    await player.seek(position);
+    showOsd();
   }
 
   Future<void> selectTrack(PlayerTrackType type, int? id) async {
@@ -293,6 +371,13 @@ class PlayerCoordinator extends ChangeNotifier {
     _setOverlay(PlayerOverlay.miniGuide, timeout: const Duration(seconds: 8));
   }
 
+  void focusMiniGuideChannel(String channelId) {
+    if (!_channelIndexById.containsKey(channelId)) return;
+    _miniGuideChannelId = channelId;
+    _requestMiniGuideRows();
+    _setOverlay(PlayerOverlay.miniGuide, timeout: const Duration(seconds: 8));
+  }
+
   Future<void> tuneMiniGuideSelection() async {
     final id = miniGuideChannelId;
     if (id != null) await tune(id);
@@ -304,7 +389,8 @@ class PlayerCoordinator extends ChangeNotifier {
       showOsd();
       return;
     }
-    _overlayTimer?.cancel();
+    _cancelOverlayTimer();
+    _overlayInteraction = false;
     _overlay = PlayerOverlay.none;
     notifyListeners();
   }
@@ -365,22 +451,63 @@ class PlayerCoordinator extends ChangeNotifier {
     });
   }
 
+  void handlePointerActivity() {
+    showCursor();
+    if (_overlay == PlayerOverlay.none) {
+      showOsd();
+    } else if (_overlay == PlayerOverlay.osd &&
+        _status.state == PlayerState.playing) {
+      _scheduleOverlayHide(PlayerOverlay.osd);
+    }
+  }
+
+  void setOverlayInteraction(bool interacting) {
+    if (_overlayInteraction == interacting) return;
+    _overlayInteraction = interacting;
+    if (interacting) {
+      _cancelOverlayTimer();
+    } else if (_status.state == PlayerState.playing &&
+        (_overlay == PlayerOverlay.osd ||
+            _overlay == PlayerOverlay.miniGuide)) {
+      _scheduleOverlayHide(
+        _overlay,
+        timeout: _overlay == PlayerOverlay.miniGuide
+            ? const Duration(seconds: 8)
+            : null,
+      );
+    }
+  }
+
   void _setOverlay(
     PlayerOverlay value, {
     bool timed = true,
     Duration? timeout,
   }) {
-    _overlayTimer?.cancel();
+    _cancelOverlayTimer();
+    if (_overlay != value) _overlayInteraction = false;
     _overlay = value;
     notifyListeners();
     if (timed && _status.state == PlayerState.playing) {
-      _overlayTimer = Timer(timeout ?? overlayTimeout, () {
-        if (_overlay == value) {
-          _overlay = PlayerOverlay.none;
-          notifyListeners();
-        }
-      });
+      _scheduleOverlayHide(value, timeout: timeout);
     }
+  }
+
+  void _scheduleOverlayHide(PlayerOverlay value, {Duration? timeout}) {
+    _overlayTimer?.cancel();
+    if (_overlayInteraction) return;
+    final epoch = ++_overlayEpoch;
+    _overlayTimer = Timer(timeout ?? overlayTimeout, () {
+      if (_disposed || epoch != _overlayEpoch || _overlay != value) return;
+      _overlayTimer = null;
+      _overlay = PlayerOverlay.none;
+      notifyListeners();
+    });
+  }
+
+  void _cancelOverlayTimer() {
+    _overlayEpoch++;
+    _overlayTimer?.cancel();
+    _overlayTimer = null;
   }
 
   void _lineupChanged() {
@@ -410,11 +537,7 @@ class PlayerCoordinator extends ChangeNotifier {
   }
 
   void _requestMiniGuideRows() {
-    final selected = miniGuideChannelIndex;
-    if (selected < 0) return;
-    final start = (selected - 3).clamp(0, _indexedChannels.length);
-    final end = (start + 7).clamp(0, _indexedChannels.length);
-    guide.requestChannels(_indexedChannels.getRange(start, end));
+    guide.requestChannels(miniGuideChannels);
   }
 
   Future<void> _release(LineupPlaybackRequest? playback) async {
@@ -453,7 +576,7 @@ class PlayerCoordinator extends ChangeNotifier {
     lineup.removeListener(_lineupChanged);
     guide.removeListener(_guideChanged);
     _subscription?.cancel();
-    _overlayTimer?.cancel();
+    _cancelOverlayTimer();
     _sleepTimer?.cancel();
     _numberTimer?.cancel();
     _cursorTimer?.cancel();

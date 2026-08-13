@@ -26,7 +26,7 @@ void main() {
     );
 
     expect(find.byType(NativeVideoSurface), findsNothing);
-    expect(find.text('Player preview'), findsOneWidget);
+    expect(find.text('Playback unavailable'), findsOneWidget);
     expect(find.text('Playback is unavailable on macOS.'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
@@ -58,6 +58,48 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
     expect(guideOpened, isTrue);
 
+    guideOpened = false;
+    fixture.player.closeOverlay();
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    expect(guideOpened, isTrue);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
+  testWidgets('player OSD and mini Guide reflow at desktop sizes', (
+    tester,
+  ) async {
+    final fixture = _Fixture(PlayerState.playing);
+    for (final size in const [
+      Size(800, 600),
+      Size(1280, 720),
+      Size(1600, 900),
+      Size(1920, 1080),
+      Size(3840, 2160),
+      Size(1360, 840),
+    ]) {
+      await tester.binding.setSurfaceSize(size);
+      fixture.player.showOsd();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      );
+      await tester.pump();
+      expect(
+        find.bySemanticsLabel(RegExp('Playback controls')),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull, reason: '$size');
+    }
+
+    fixture.player.showMiniGuide();
+    await tester.pump();
+    expect(find.bySemanticsLabel(RegExp('Mini Guide')), findsOneWidget);
+    expect(find.textContaining('UP/DOWN Browse'), findsOneWidget);
+
+    await tester.binding.setSurfaceSize(null);
     await tester.pumpWidget(const SizedBox.shrink());
     fixture.dispose();
   });

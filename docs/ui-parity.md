@@ -1,7 +1,7 @@
 # Portable UI parity
 
-This document is the source record for Prompt 3B. It describes portable,
-non-player Flutter UI parity; it does not claim Windows media validation.
+This document is the source record for Prompt 3B and Prompt 4B portable UI
+parity. It does not claim Windows media validation.
 
 ## Provenance and authority
 
@@ -74,7 +74,7 @@ TV pixel copying.
 | Dialogs and destructive confirmation | Parity | Flutter dialog semantics, Cancel-first action order, destructive styling, focus restoration, and inline error ownership are used. |
 | Transient feedback | Present but materially divergent | Repeated errors use one semantic notice primitive. A generic toast owner was not added because only persistence errors have current consumers and remain more actionable inline. |
 | Compact 800×600 management/setup layout | Parity | Headers, action groups, category selectors, empty states, and scroll owners reflow without a window-management dependency. |
-| 1280×720 through 3840×2160 | Intentional Desktop adaptation | Widget tests verify the capped 1,120-pixel management workspace, extended navigation, reachability, and absence of layout errors through a 3840×2160 logical viewport. Guide/player retain their specialized full-area owners. Windows runtime DPI behavior remains Windows-only validation. |
+| 1280×720 through 3840×2160 | Intentional Desktop adaptation | Widget tests verify management-page reachability and absence of layout errors throughout this range. The capped 1,120-pixel management workspace and extended navigation are asserted at 2560×1440 and 3840×2160. Guide/player retain their specialized full-area owners. Windows runtime DPI behavior remains Windows-only validation. |
 | Windows focus, native video layering, HDR and playback | Windows-only validation | Not modified or claimed by Prompt 3B. |
 
 ## Shared portable UI ownership
@@ -130,7 +130,7 @@ contains no real Plex data, and cannot be reached from production navigation.
 Focused validation:
 
 ```sh
-/Users/tristan/Software/dev/flutter/bin/flutter test test/app/ui_parity_test.dart
+flutter test test/app/ui_parity_test.dart
 ```
 
 The focused suite verifies destination order and focus entry, responsive
@@ -138,12 +138,14 @@ management pages at 800×600, 1280×720, 1600×900, 1920×1080, 2560×1440 and
 3840×2160, destructive confirmation, local editor validation, physical
 protected-PIN keys, Settings category scrolling, and all three Channel Setup
 stages. At 2560×1440 and 3840×2160 the tests also assert the deliberate
-1,120-logical-pixel management workspace, 1,180-pixel onboarding workspace,
-1,440-pixel Channel Setup workspace, extended navigation, and Diagnostics
-reachability. Flutter lays out in logical pixels; a deterministic 3840×2160 at
-DPR 2 case verifies the 1920×1080 logical regime. Actual Windows DPI mapping
-and physical readability still require Windows runtime observation. The full
-validation commands remain in `docs/DEVELOPMENT.md`.
+1,120-logical-pixel management workspace and extended navigation. The
+1,180-pixel onboarding workspace and 1,440-pixel Channel Setup workspace are
+asserted only at 3840×2160. Diagnostics reachability is verified at every
+listed management-page size. Flutter lays out in logical pixels; a
+deterministic 3840×2160 at DPR 2 case verifies the 1920×1080 logical regime.
+Actual Windows DPI mapping and physical readability still require Windows
+runtime observation. The full validation commands remain in
+`docs/DEVELOPMENT.md`.
 
 `flutter run -d macos` built, launched, attached to the Dart VM service, and
 reported the Metal Impeller backend. The host Mac was locked and could not be
@@ -164,3 +166,98 @@ native presentation/transparency, libmpv playback, HDR/tone mapping, remote
 stream acceptance, audio passthrough, fullscreen behavior, and the broader
 codec/container campaign. Packaging, signing, updating, and approval of a
 redistributable libmpv dependency also remain outside this pass.
+
+## Prompt 4B Guide and player refinement
+
+### Provenance
+
+- LineupDesktop starting commit:
+  `a3f6f84e6f29b083d25e70b62045cb290d679ba6` on
+  `replatform/flutter-native`.
+- LineupDesktop ending commit: the
+  `feat(guide): refine portable Guide and player parity` commit containing this
+  section. Its exact SHA is recorded in the Prompt 4B closeout because a commit
+  cannot contain its own SHA.
+- Upstream product reference: sibling `TJZine/Lineup`, fetched and inspected
+  read-only at `origin/code-health`
+  `f5f587c93cbea74f6c23f2df86ddae15fcb40e65`. Upstream `origin/main` remained
+  the README-only `5f01be6a719174ae1f89a70b8cab1095bf17c8b9` and was not used as the product
+  implementation reference.
+- The upstream application was not run with a Plex account. Evidence came from
+  committed source, tests, styles, input policy, and timing constants. No
+  credential-bearing or private media surface was captured.
+
+Relevant upstream paths included:
+
+- `src/modules/ui/epg/**`, including `EPGFocusNavigator`, `EPGVirtualizer`,
+  `EPGShellView`, cell/info-panel views, constants, tests, and styles;
+- `src/modules/ui/player-osd/**`;
+- `src/modules/ui/mini-guide/**`;
+- `src/modules/ui/playback-options/**`;
+- `src/modules/navigation/**`; and
+- `src/core/channel-tuning/**`.
+
+### Ending parity matrix
+
+| Surface or behavior | Classification | Evidence and disposition |
+| --- | --- | --- |
+| Guide header, channel identity rail, time ruler, current-time line, program grid, progress, focused/current/past treatment and details | Parity | Flutter uses responsive proportions rather than copying webOS coordinates. Channel logos remain not applicable because the current Desktop `Channel` model has no safe logo fact. |
+| Focused program, selected program, tuned channel, currently airing program and pointer hover | Parity | `GuideController` owns distinct focused and selected identities; tuning remains in `LineupController`/`PlayerCoordinator`; airing is clock-derived; hover is local visual state and cannot retune or replace logical focus. |
+| Vertical/time navigation and jump to now | Parity | Left/right follows scheduled geometry. Up/down carries a focus time into the adjacent row and chooses the overlapping or nearest program. Page navigation is viewport-sized and Play/P jumps to now, matching upstream input intent. |
+| Guide context restoration | Parity | The persistent Guide owner retains channel/program identity, time window, and vertical offset across Guide/PiP/player route disposal and return. Focus repair cannot tune. |
+| Vertical virtualization and bounded derived work | Parity | Fixed-extent lazy rows, bounded overscan, 64-row schedule/index caches, four concurrent schedule loads, a 256-program per-row projection ceiling, 12-entry artwork cache, four artwork loads, and generation rejection remain explicit. A 1,000-channel fixture is covered. |
+| Horizontal ownership | Intentional Desktop adaptation | The visible `guideHours` window is the horizontal viewport and `windowStart` is its owner; navigation advances the window in 30-minute steps. There is no second pixel scroll owner or competing jump-to-now animation. |
+| Guide with PiP allocation | Parity | `PlayerSurface` is the single Flutter/native presentation geometry used by both PiP and full player. Tuning remains in Guide; PiP can then open the full shell. The macOS unsupported surface never fabricates video. |
+| Tune, replacement tune, loading, retry, stopped/ended and stale work | Parity | The retained coordinator serializes tune operations, uses tune generations, releases playback leases, rejects optional stale public-seam generations, and projects recoverable versus terminal failures without adding widget playback state. |
+| Ready, playing, paused, buffering, seeking, track and output metadata projection | Parity | The public seam accepts these contract-valid states. The OSD exposes only available tracks/telemetry, disables unsupported actions honestly, and does not add native handles. Production Windows still rejects stale load IDs before Dart. |
+| OSD structure and status-sensitive auto-hide | Parity | One coordinator timer uses an epoch, resets on interaction, stays visible for paused/buffering/seeking, suspends while controls have accessibility focus, and cannot hide a reopened overlay. Error and track surfaces are untimed. |
+| Mini Guide | Parity | Five bounded nearby rows match upstream structure and expose channel identity, current title/progress, next title, tuned state, logical focus, paging, replacement tune, full-Guide entry and exact input guidance. |
+| Responsive Guide/player layout | Intentional Desktop adaptation | Central Guide policy controls padding, rail width, showcase/PiP allocation and compact details. OSD and mini Guide use capped safe-area surfaces. Widget coverage includes 800×600, 1280×720, 1360×840, 1600×900, 1920×1080 and 3840×2160 logical sizes. |
+| Accessibility | Parity | Only lazy visible rows/cells enter the tree; channel, program, time range, airing/ended/upcoming, selected/focused/tuned, progress, loading/buffering, modal labels, action names and disabled availability are exposed. |
+| Exact TV pointer behavior and animation timing | Insufficient evidence | Upstream is remote-first and source does not establish a Desktop pointer contract. Flutter uses click-to-focus, double-click current program to tune, visible hover, Tab focus, reduced motion, and short focus transitions. |
+| Native video, transparency, HDR, fullscreen and media acceptance | Windows-only validation | No runner, C++, DirectComposition, engine patch, libmpv, CMake or packaging code changed. macOS layout evidence does not prove native composition. |
+
+### Deterministic evidence
+
+`test_driver/ui_harness.dart` is a separate development composition root. It
+contains 1,000 synthetic channels with 12 synthetic programs each and a
+public-seam player fake. It contains no native handle, URL credential, private
+metadata, or production import path from `lib/main.dart`.
+
+Focused tests cover geometry, visible ranges, bounded widget/load counts,
+1,000-channel traversal, overlap navigation, focus/selection distinction,
+lineup replacement, stale schedule and native events, Guide scroll restoration,
+Guide/PiP/player transitions, OSD fake-time reset/suspension/currentness,
+mini-Guide paging/replacement, state projection, unsupported macOS behavior,
+representative responsive sizes, semantics, and retry/terminal errors.
+
+Two deterministic DPR-1/Ahem-font goldens record the high-value Guide
+contracts at 1920×1080 with PiP and at compact 1280×720 with focused/current/
+tuned states. A full-player golden was evaluated but not retained because the
+Flutter test raster never completed reliably for that surface; responsive
+player/OSD/mini-Guide widget and semantics tests provide stable evidence
+without committing a hanging test or excessive tolerance.
+
+### macOS runtime and profile evidence
+
+The synthetic 1,000-channel × 12-program harness built and launched in ordinary
+debug mode and profile mode at the runner's initial 800×600 logical window.
+Both used the Metal Impeller backend; the profile bundle was 74.0 MB. The host
+was locked, `open` could not foreground the application, and Computer Use could
+not unlock it. Consequently no claim is made for manually observed traversal,
+resize, pointer, keyboard, VoiceOver, frame timing, or absence of jank from
+those runs.
+
+Deterministic widget instrumentation at 1280×800 observed 1,000-channel first
+viewport construction with 1,171 widgets, 13 cached/loaded rows, roughly 61–75
+ms in the debug test process depending on the run, about 0.3–3.3 ms for 500
+logical downward moves before the following frame, and roughly 7–10 MB RSS
+growth. These are diagnostic observations, not profile-mode frame claims and
+not Windows evidence.
+
+Remaining acceptance is the unlocked-host manual campaign plus all Windows-only
+native presentation/media items already listed above. In particular, these
+portable tests and macOS builds do not prove DirectComposition layering,
+transparent video, HDR, hardware decode, fullscreen/multi-monitor behavior,
+remote Plex streams, audio passthrough, lifecycle, packaging, signing, or
+installer behavior.

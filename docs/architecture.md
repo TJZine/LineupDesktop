@@ -94,13 +94,16 @@ navigation do not enter C++.
   channel, track projection, decoder/output and quality/HDR observations,
   fullscreen/resize/minimize handling, and clean recreation controls.
 - A retained Flutter Guide with lazy fixed-extent rows, shared time geometry,
-  stable logical channel/program focus, bounded schedule and artwork caches,
-  stale-result rejection, library filters, accessible visible-cell semantics,
-  and full Guide presentation above continuing native video.
-- One Flutter player coordinator and overlay model for the OSD, now-playing
-  information, mini Guide, full Guide, channel entry, audio/subtitle tracks,
-  errors/retry, sleep timer, fullscreen intent, cursor timeout, and input/focus
-  restoration. Product state does not move into the native player.
+  distinct focus/selection/tuned/airing/hover treatment, bounded schedule and
+  artwork caches, stale-result rejection, library filters, accessible
+  visible-cell semantics, responsive PiP allocation, and selection/time/scroll
+  restoration across player transitions.
+- One Flutter player coordinator and overlay model for contract-valid playback
+  projection, the status-sensitive OSD, now-playing information, bounded
+  five-row mini Guide, full Guide, channel entry, available audio/subtitle
+  tracks, recoverable/terminal errors, sleep timer, fullscreen intent, cursor
+  timeout, cancellable epoch-safe auto-hide, and input/focus restoration.
+  Product state does not move into the native player.
 - A Dart product engine for Plex PIN authentication, Plex Home profiles,
   server discovery/probing, library and media parsing, privileged playback
   descriptors, deterministic channels/schedules, channel suggestions,

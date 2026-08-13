@@ -1,12 +1,13 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/lineup_app.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
+import 'package:lineup_desktop/channels/channel.dart';
+import 'package:lineup_desktop/channels/scheduler.dart';
 import 'package:lineup_desktop/persistence/app_store.dart';
 import 'package:lineup_desktop/playback/native_player.dart';
+import 'package:lineup_desktop/playback/native_video_surface.dart';
 import 'package:lineup_desktop/plex/plex_client.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
 
@@ -20,7 +21,8 @@ void main() {
     await tester.pumpWidget(
       LineupBootstrap(player: player, controller: controller),
     );
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump();
 
     expect(find.text('Create a channel to build your Guide'), findsOneWidget);
 
@@ -55,6 +57,55 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();
     expect(FocusManager.instance.primaryFocus?.debugLabel, 'Player');
+  });
+
+  testWidgets('Guide tune remains in PiP before opening the full player', (
+    tester,
+  ) async {
+    final controller = _FakeController()
+      ..stage = SetupStage.ready
+      ..channels = [
+        Channel(
+          id: 'channel',
+          number: 7,
+          name: 'Synthetic Seven',
+          source: const ManualSource([
+            ChannelItem(
+              id: 'program',
+              title: 'Synthetic Program',
+              duration: Duration(hours: 24),
+            ),
+          ]),
+          playbackMode: PlaybackMode.sequential,
+          anchor: DateTime.now().subtract(const Duration(hours: 1)),
+          shuffleSeed: 7,
+        ),
+      ];
+    final player = _FakePlayer();
+    await tester.pumpWidget(
+      LineupBootstrap(player: player, controller: controller),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+    await tester.pump();
+
+    expect(player.loads, 1);
+    expect(find.byKey(const Key('guide-picture-in-picture')), findsOneWidget);
+    expect(find.byType(NativeVideoSurface), findsOneWidget);
+    expect(find.text('Guide'), findsWidgets);
+
+    await tester.tap(find.byKey(const Key('guide-picture-in-picture')));
+    await tester.pump();
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Player');
+    expect(find.byType(NativeVideoSurface), findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
+    await tester.pump();
+    expect(find.byKey(const Key('guide-picture-in-picture')), findsOneWidget);
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Guide');
   });
 
   testWidgets('onboarding link action is keyboard reachable', (tester) async {
@@ -183,6 +234,17 @@ class _FakeController extends LineupController {
     selectedProfile = selected;
     selectedPin = pin;
   }
+
+  @override
+  LineupPlaybackRequest playbackFor(String itemId) =>
+      LineupPlaybackRequest(Uri.parse('lineup-test://synthetic'), () async {});
+
+  @override
+  Future<ScheduleIndex> loadScheduleFor(Channel channel) async => buildSchedule(
+    (channel.source as ManualSource).items,
+    mode: channel.playbackMode,
+    seed: channel.shuffleSeed,
+  );
 }
 
 class _MemoryStore implements AppStore {
@@ -210,6 +272,7 @@ class _MemoryCredentials implements CredentialStore {
 
 class _FakePlayer implements NativePlayer {
   bool disposed = false;
+  int loads = 0;
 
   @override
   PlayerStatus get status => const PlayerStatus(
@@ -236,7 +299,9 @@ class _FakePlayer implements NativePlayer {
   Future<void> initialize() async {}
 
   @override
-  Future<void> load(Uri media) async {}
+  Future<void> load(Uri media) async {
+    loads++;
+  }
 
   @override
   Future<void> play() async {}

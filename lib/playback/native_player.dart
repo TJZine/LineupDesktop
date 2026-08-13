@@ -21,13 +21,30 @@ abstract interface class NativePlayer {
   Future<void> dispose();
 }
 
-enum PlayerState { idle, loading, playing, paused, stopped, error, unsupported }
+enum PlayerState {
+  idle,
+  loading,
+  ready,
+  playing,
+  paused,
+  buffering,
+  seeking,
+  ended,
+  stopped,
+  error,
+  unsupported,
+}
 
 class PlayerStatus {
-  const PlayerStatus({required this.state, required this.message});
+  const PlayerStatus({
+    required this.state,
+    required this.message,
+    this.recoverable = false,
+  });
 
   final PlayerState state;
   final String message;
+  final bool recoverable;
 }
 
 class PlayerEvent {
@@ -37,6 +54,7 @@ class PlayerEvent {
     required this.duration,
     required this.telemetry,
     required this.tracks,
+    this.generation,
   });
 
   final PlayerStatus status;
@@ -44,6 +62,10 @@ class PlayerEvent {
   final Duration duration;
   final PlayerTelemetry telemetry;
   final List<PlayerTrack> tracks;
+
+  /// Optional public-seam generation used by deterministic test players.
+  /// Production native owners may reject stale events before emitting them.
+  final int? generation;
 }
 
 class PlayerVideoRect {

@@ -47,6 +47,7 @@ class _LineupShellState extends State<LineupShell> {
       lineup: widget.controller,
       guide: _guide,
     );
+    _player.addListener(_changed);
     if (_selectedIndex == 0) _player.showFullGuide();
     widget.controller.addListener(_changed);
     WidgetsBinding.instance.addPostFrameCallback((_) => _restoreRouteFocus());
@@ -59,6 +60,7 @@ class _LineupShellState extends State<LineupShell> {
   @override
   void dispose() {
     widget.controller.removeListener(_changed);
+    _player.removeListener(_changed);
     _player.dispose();
     _guide.dispose();
     _guideFocus.dispose();
@@ -111,20 +113,18 @@ class _LineupShellState extends State<LineupShell> {
       openGuide: () => _select(0),
     );
     final views = <Widget>[
-      Stack(
-        fit: StackFit.expand,
-        children: [
-          playerView,
-          GuideView(
-            controller: _guide,
-            focusNode: _guideFocus,
-            onClose: () => _select(4),
-            onTune: (channelId) async {
-              await _player.tune(channelId);
-              if (_player.error == null) _select(4);
-            },
-          ),
-        ],
+      GuideView(
+        controller: _guide,
+        focusNode: _guideFocus,
+        onClose: () => _select(4),
+        pictureInPicture: _player.hasPlaybackIntent
+            ? PlayerSurface(controller: _player, showErrors: true)
+            : null,
+        playbackMessage: _player.tuning
+            ? 'Preparing playback…'
+            : _player.error ?? _player.status.message,
+        onOpenPlayer: () => _select(4),
+        onTune: _player.tune,
       ),
       ChannelsView(controller: controller, focusNode: _channelsFocus),
       SettingsView(controller: controller, focusNode: _settingsFocus),
@@ -330,7 +330,6 @@ class _ChannelsViewState extends State<ChannelsView> {
     }
     try {
       await widget.controller.deleteChannel(channel.id);
-      widget.focusNode?.requestFocus();
     } catch (_) {
       if (mounted) {
         setState(
@@ -339,7 +338,13 @@ class _ChannelsViewState extends State<ChannelsView> {
         );
         opener.requestFocus();
       }
+      return;
     }
+    if (!mounted) return;
+    final deletedFocus = _deleteFocus.remove(channel.id);
+    setState(() => _error = null);
+    deletedFocus?.dispose();
+    widget.focusNode?.requestFocus();
   }
 }
 
@@ -516,11 +521,12 @@ class _ChannelEditorState extends State<ChannelEditor> {
                 onSelectionChanged: (value) =>
                     setState(() => _mode = value.single),
               ),
-              SwitchListTile(
-                value: _includeWatched,
-                title: const Text('Include watched items'),
-                onChanged: (value) => setState(() => _includeWatched = value),
-              ),
+              if (!_manual)
+                SwitchListTile(
+                  value: _includeWatched,
+                  title: const Text('Include watched items'),
+                  onChanged: (value) => setState(() => _includeWatched = value),
+                ),
               Text(
                 '${widget.controller.availableMedia.length} loaded items are available.',
                 style: Theme.of(context).textTheme.bodySmall,
@@ -705,27 +711,33 @@ class _SettingsViewState extends State<SettingsView> {
                 value.guideHours,
                 const [2, 4, 6, 8, 12],
                 (item) => '$item hours',
-                (item) => _update(
-                  widget.controller.settings.copyWith(guideHours: item),
-                ),
+                _saving
+                    ? null
+                    : (item) => _update(
+                        widget.controller.settings.copyWith(guideHours: item),
+                      ),
               ),
               _Dropdown<int>(
                 'Past window',
                 value.pastMinutes,
                 const [0, 15, 30, 60, 120, 180],
                 (item) => '$item minutes',
-                (item) => _update(
-                  widget.controller.settings.copyWith(pastMinutes: item),
-                ),
+                _saving
+                    ? null
+                    : (item) => _update(
+                        widget.controller.settings.copyWith(pastMinutes: item),
+                      ),
               ),
               _Dropdown<GuideDensity>(
                 'Row density',
                 value.guideDensity,
                 GuideDensity.values,
                 (item) => _enumLabel(item.name),
-                (item) => _update(
-                  widget.controller.settings.copyWith(guideDensity: item),
-                ),
+                _saving
+                    ? null
+                    : (item) => _update(
+                        widget.controller.settings.copyWith(guideDensity: item),
+                      ),
               ),
             ],
             _SettingsCategory.accessibility => [
@@ -794,12 +806,18 @@ class _SettingsViewState extends State<SettingsView> {
       _saving = true;
       _error = null;
     });
+    String? error;
     try {
       await widget.controller.updateSettings(next);
     } catch (_) {
-      _error = 'This setting could not be saved. Your previous value remains.';
+      error = 'This setting could not be saved. Your previous value remains.';
     } finally {
-      if (mounted) setState(() => _saving = false);
+      if (mounted) {
+        setState(() {
+          _saving = false;
+          _error = error;
+        });
+      }
     }
   }
 
@@ -927,7 +945,7 @@ class _Dropdown<T> extends StatelessWidget {
   final T value;
   final List<T> values;
   final String Function(T) display;
-  final ValueChanged<T> changed;
+  final ValueChanged<T>? changed;
   @override
   Widget build(BuildContext context) => ListTile(
     title: Text(label),
@@ -937,9 +955,11 @@ class _Dropdown<T> extends StatelessWidget {
         for (final item in values)
           DropdownMenuItem(value: item, child: Text(display(item))),
       ],
-      onChanged: (item) {
-        if (item != null) changed(item);
-      },
+      onChanged: changed == null
+          ? null
+          : (item) {
+              if (item != null) changed!(item);
+            },
     ),
   );
 }

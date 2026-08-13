@@ -35,26 +35,38 @@ class FixtureController extends LineupController {
 }
 
 class FixturePlayer implements NativePlayer {
-  @override
-  PlayerStatus get status => const PlayerStatus(
+  final _events = StreamController<PlayerEvent>();
+  int generation = 0;
+  PlayerStatus _status = const PlayerStatus(
     state: PlayerState.idle,
     message: 'Test player is idle',
   );
+  Duration _position = Duration.zero;
+  Duration _duration = Duration.zero;
+  PlayerTelemetry _telemetry = const PlayerTelemetry();
+  List<PlayerTrack> _tracks = const [];
 
   @override
-  Duration get position => Duration.zero;
+  PlayerStatus get status => _status;
+
   @override
-  Duration get duration => Duration.zero;
+  Duration get position => _position;
   @override
-  PlayerTelemetry get telemetry => const PlayerTelemetry();
+  Duration get duration => _duration;
   @override
-  List<PlayerTrack> get tracks => const [];
+  PlayerTelemetry get telemetry => _telemetry;
   @override
-  Stream<PlayerEvent> get events => const Stream.empty();
+  List<PlayerTrack> get tracks => _tracks;
+  @override
+  Stream<PlayerEvent> get events => _events.stream;
   @override
   Future<void> initialize() async {}
   @override
-  Future<void> load(Uri media) async {}
+  Future<void> load(Uri media) async {
+    generation++;
+    emit(const PlayerStatus(state: PlayerState.loading, message: 'Loading'));
+  }
+
   @override
   Future<void> pause() async {}
   @override
@@ -72,7 +84,32 @@ class FixturePlayer implements NativePlayer {
   @override
   Future<void> stop() async {}
   @override
-  Future<void> dispose() async {}
+  Future<void> dispose() => _events.close();
+
+  void emit(
+    PlayerStatus status, {
+    Duration? position,
+    Duration? duration,
+    PlayerTelemetry? telemetry,
+    List<PlayerTrack>? tracks,
+    int? eventGeneration,
+  }) {
+    _status = status;
+    _position = position ?? _position;
+    _duration = duration ?? _duration;
+    _telemetry = telemetry ?? _telemetry;
+    _tracks = List.unmodifiable(tracks ?? _tracks);
+    _events.add(
+      PlayerEvent(
+        status: _status,
+        position: _position,
+        duration: _duration,
+        telemetry: _telemetry,
+        tracks: _tracks,
+        generation: eventGeneration ?? generation,
+      ),
+    );
+  }
 }
 
 class _MemoryStore implements AppStore {

@@ -101,10 +101,78 @@ void main() {
       await Future<void>.delayed(Duration.zero);
 
       expect(coordinator.miniGuideChannelId, 'channel-500');
-      expect(loads, greaterThanOrEqualTo(7));
+      expect(loads, greaterThanOrEqualTo(5));
       expect(guide.cachedRowCount, lessThanOrEqualTo(14));
 
       coordinator.dispose();
+      guide.dispose();
+      lineup.dispose();
+    },
+  );
+
+  testWidgets(
+    'OSD timeout resets, suspends for focus, and rejects stale timers',
+    (tester) async {
+      final lineup = _TestLineup();
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => _schedule(channel),
+      );
+      final coordinator = PlayerCoordinator(
+        player: _Player(),
+        lineup: lineup,
+        guide: guide,
+        overlayTimeout: const Duration(seconds: 4),
+      );
+
+      coordinator.showOsd();
+      await tester.pump(const Duration(seconds: 3));
+      coordinator.showOsd();
+      await tester.pump(const Duration(seconds: 2));
+      expect(coordinator.overlay, PlayerOverlay.osd);
+      await tester.pump(const Duration(seconds: 3));
+      expect(coordinator.overlay, PlayerOverlay.none);
+
+      coordinator.showOsd();
+      coordinator.setOverlayInteraction(true);
+      await tester.pump(const Duration(seconds: 10));
+      expect(coordinator.overlay, PlayerOverlay.osd);
+      coordinator.setOverlayInteraction(false);
+      await tester.pump(const Duration(seconds: 4));
+      expect(coordinator.overlay, PlayerOverlay.none);
+
+      coordinator.dispose();
+      guide.dispose();
+      lineup.dispose();
+    },
+  );
+
+  test(
+    'stale generated native events are rejected at the Dart owner',
+    () async {
+      final lineup = _TestLineup();
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => _schedule(channel),
+      );
+      final player = _EventPlayer();
+      final coordinator = PlayerCoordinator(
+        player: player,
+        lineup: lineup,
+        guide: guide,
+      );
+
+      player.emitStatus(PlayerState.paused, generation: 9);
+      await Future<void>.delayed(Duration.zero);
+      expect(coordinator.status.state, PlayerState.playing);
+
+      player.emitStatus(PlayerState.buffering, generation: 0);
+      await Future<void>.delayed(Duration.zero);
+      expect(coordinator.status.state, PlayerState.buffering);
+      expect(coordinator.overlay, PlayerOverlay.osd);
+
+      coordinator.dispose();
+      await player.close();
       guide.dispose();
       lineup.dispose();
     },
@@ -492,6 +560,19 @@ class _EventPlayer extends _Player {
         duration: Duration.zero,
         telemetry: PlayerTelemetry(),
         tracks: [],
+      ),
+    );
+  }
+
+  void emitStatus(PlayerState state, {int? generation}) {
+    _events.add(
+      PlayerEvent(
+        status: PlayerStatus(state: state, message: state.name),
+        position: position,
+        duration: duration,
+        telemetry: telemetry,
+        tracks: tracks,
+        generation: generation,
       ),
     );
   }

@@ -72,10 +72,10 @@ void main() {
         clock: () => DateTime(2026, 8, 13, 12),
       );
       guide.moveVertical(5);
-      final selected = guide.selectedChannelId;
+      final selected = guide.focusedChannelId;
 
       lineup.setChannels(lineup.channels.reversed.toList());
-      expect(guide.selectedChannelId, selected);
+      expect(guide.focusedChannelId, selected);
 
       final selectedIndex = lineup.channels.indexWhere(
         (channel) => channel.id == selected,
@@ -84,7 +84,7 @@ void main() {
       lineup.setChannels(
         lineup.channels.where((channel) => channel.id != selected).toList(),
       );
-      expect(guide.selectedChannelId, expectedFallback);
+      expect(guide.focusedChannelId, expectedFallback);
 
       guide.dispose();
       lineup.dispose();
@@ -330,7 +330,7 @@ void main() {
       const LineupSettings(guideHours: 8, guideDensity: GuideDensity.compact),
     );
 
-    expect(guide.selectedChannelId, 'stable');
+    expect(guide.focusedChannelId, 'stable');
     expect(guide.guideHours, 8);
     expect(guide.density, GuideDensity.compact);
 
@@ -371,6 +371,52 @@ void main() {
       lineup.dispose();
     },
   );
+
+  test('Guide geometry maps time and visible rows deterministically', () {
+    final start = DateTime.utc(2026, 8, 13, 12);
+    final rect = GuideGeometry.programRect(
+      windowStart: start,
+      windowEnd: start.add(const Duration(hours: 2)),
+      programStart: start.add(const Duration(minutes: 30)),
+      programEnd: start.add(const Duration(minutes: 60)),
+      viewportWidth: 800,
+    );
+    expect(rect.left, 200);
+    expect(rect.width, 200);
+
+    final rows = GuideGeometry.visibleRows(
+      scrollOffset: 245,
+      viewportHeight: 400,
+      rowHeight: 80,
+      totalRows: 1000,
+    );
+    expect(rows, (first: 3, count: 5));
+  });
+
+  test('focus movement does not silently select a program', () async {
+    final lineup = _TestLineup(_channels(2));
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+      clock: () => DateTime(2026, 8, 13, 12),
+    )..requestViewport(0, 2);
+    await _settle();
+
+    final firstFocus = guide.focusedProgram;
+    expect(firstFocus, isNotNull);
+    expect(guide.selectedProgram, isNull);
+
+    guide.moveVertical(1);
+    expect(guide.focusedChannelId, 'channel-1');
+    expect(guide.focusedProgram?.scheduled.start, firstFocus!.scheduled.start);
+    expect(guide.selectedProgram, isNull);
+
+    expect(guide.selectFocusedProgram(), isNotNull);
+    expect(guide.selectedProgramId, guide.focusedProgramId);
+
+    guide.dispose();
+    lineup.dispose();
+  });
 }
 
 List<Channel> _channels(

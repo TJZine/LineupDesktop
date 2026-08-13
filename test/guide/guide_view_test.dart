@@ -78,7 +78,10 @@ void main() {
     await tester.pump();
     firstViewport.stop();
 
-    expect(find.bySemanticsLabel('Channel 1, Channel 0'), findsOneWidget);
+    expect(
+      find.bySemanticsLabel(RegExp(r'^Channel 1, Channel 0')),
+      findsOneWidget,
+    );
     expect(find.text('Channel 999'), findsNothing);
     expect(loads, lessThan(30));
 
@@ -97,7 +100,7 @@ void main() {
 
     await tester.sendKeyEvent(LogicalKeyboardKey.pageDown);
     await tester.pump();
-    expect(guide.selectedChannelId, isNot('channel-0'));
+    expect(guide.focusedChannelId, isNot('channel-0'));
     expect(loads, lessThan(40));
 
     await tester.binding.setSurfaceSize(null);
@@ -137,8 +140,88 @@ void main() {
     await tester.tap(find.text('Schedule unavailable — select to retry'));
     await tester.pumpAndSettle();
 
-    expect(find.bySemanticsLabel(RegExp('currently playing')), findsWidgets);
+    expect(find.bySemanticsLabel(RegExp('currently airing')), findsWidgets);
 
+    await tester.pumpWidget(const SizedBox.shrink());
+    guide.dispose();
+    lineup.dispose();
+  });
+
+  testWidgets('responsive PiP geometry and Guide focus remain coherent', (
+    tester,
+  ) async {
+    final lineup = _Lineup(20);
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    var tunes = 0;
+
+    for (final size in const [
+      Size(1280, 720),
+      Size(1600, 900),
+      Size(1920, 1080),
+      Size(3840, 2160),
+      Size(1360, 840),
+    ]) {
+      await tester.binding.setSurfaceSize(size);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: GuideView(
+            controller: guide,
+            pictureInPicture: const ColoredBox(color: Colors.black),
+            onOpenPlayer: () {},
+            onClose: () {},
+            onTune: (_) async => tunes++,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('guide-picture-in-picture')), findsOneWidget);
+      expect(tester.takeException(), isNull, reason: '$size');
+    }
+
+    expect(guide.focusedProgram, isNotNull);
+    expect(guide.selectedProgram, isNull);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+    expect(guide.selectedProgramId, guide.focusedProgramId);
+    expect(tunes, 1);
+
+    await tester.binding.setSurfaceSize(null);
+    await tester.pumpWidget(const SizedBox.shrink());
+    guide.dispose();
+    lineup.dispose();
+  });
+
+  testWidgets('vertical Guide position survives route disposal and return', (
+    tester,
+  ) async {
+    final lineup = _Lineup(100);
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    Widget buildGuide() => MaterialApp(
+      home: GuideView(controller: guide, onClose: () {}, onTune: (_) async {}),
+    );
+
+    await tester.binding.setSurfaceSize(const Size(1280, 720));
+    await tester.pumpWidget(buildGuide());
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(ListView), const Offset(0, -1200));
+    await tester.pumpAndSettle();
+    final remembered = guide.verticalOffset;
+    expect(remembered, greaterThan(500));
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+    await tester.pumpWidget(buildGuide());
+    await tester.pumpAndSettle();
+    final scrollable = tester.state<ScrollableState>(find.byType(Scrollable));
+    expect(scrollable.position.pixels, closeTo(remembered, 1));
+
+    await tester.binding.setSurfaceSize(null);
     await tester.pumpWidget(const SizedBox.shrink());
     guide.dispose();
     lineup.dispose();
