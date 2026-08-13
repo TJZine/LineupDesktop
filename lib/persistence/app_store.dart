@@ -11,8 +11,6 @@ import '../settings/lineup_settings.dart';
 class PersistedState {
   const PersistedState({
     this.settings = const LineupSettings(),
-    this.channels = const [],
-    this.currentChannelId,
     this.profileId,
     this.selectedServerByProfile = const {},
     this.selectedLibraryIdsByProfileServer = const {},
@@ -21,8 +19,6 @@ class PersistedState {
   });
 
   final LineupSettings settings;
-  final List<Channel> channels;
-  final String? currentChannelId;
   final String? profileId;
   final Map<String, String> selectedServerByProfile;
   final Map<String, Map<String, List<String>>>
@@ -32,8 +28,6 @@ class PersistedState {
 
   Map<String, Object?> toJson() => {
     'settings': settings.toJson(),
-    'channels': channels.map((channel) => channel.toJson()).toList(),
-    'currentChannelId': currentChannelId,
     'profileId': profileId,
     'selectedServerByProfile': selectedServerByProfile,
     'selectedLibraryIdsByProfileServer': selectedLibraryIdsByProfileServer,
@@ -53,16 +47,8 @@ class PersistedState {
     if (value is! Map) throw const FormatException('State must be an object.');
     final json = Map<String, Object?>.from(value);
     try {
-      final channels = (json['channels'] as List? ?? const [])
-          .map(Channel.fromJson)
-          .toList();
-      for (final channel in channels) {
-        channel.validate(channels);
-      }
       return PersistedState(
         settings: LineupSettings.fromJson(json['settings']),
-        channels: channels,
-        currentChannelId: json['currentChannelId'] as String?,
         profileId: json['profileId'] as String?,
         selectedServerByProfile: Map<String, String>.from(
           json['selectedServerByProfile'] as Map? ?? const {},

@@ -28,8 +28,6 @@ void main() {
     await store.save(
       PersistedState(
         settings: const LineupSettings(reduceMotion: true),
-        channels: [channel],
-        currentChannelId: channel.id,
         selectedServerByProfile: const {'profile': 'server'},
         selectedLibraryIdsByProfileServer: const {
           'profile': {
@@ -48,8 +46,6 @@ void main() {
     );
     final restored = await store.load();
     expect(restored.settings.reduceMotion, isTrue);
-    expect(restored.channels.single.id, 'stable-id');
-    expect(restored.channels.single.builderKey, 'builder-key');
     expect(restored.selectedServerByProfile, {'profile': 'server'});
     expect(restored.selectedLibraryIdsByProfileServer['profile']?['server'], [
       '1',
@@ -81,7 +77,7 @@ void main() {
       await directory.create(recursive: true);
       await File('${directory.path}/state.json').writeAsString('{broken');
       final restored = await FileAppStore(directory).load();
-      expect(restored.channels, isEmpty);
+      expect(restored.channelsByProfileServer, isEmpty);
       expect(
         await directory
             .list()

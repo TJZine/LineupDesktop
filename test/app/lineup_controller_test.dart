@@ -180,7 +180,7 @@ void main() {
       );
 
       expect(store.state.settings.diagnosticsEnabled, isFalse);
-      expect(store.state.channels.single.id, 'channel');
+      expect(controller.channels.single.id, 'channel');
     },
   );
 }

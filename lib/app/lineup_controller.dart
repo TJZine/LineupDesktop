@@ -66,8 +66,8 @@ class LineupController extends ChangeNotifier {
     _persisted = await store.load();
     settings = _persisted.settings;
     diagnostics.enabled = settings.diagnosticsEnabled;
-    channels = List.unmodifiable(_persisted.channels);
-    currentChannelId = _persisted.currentChannelId;
+    channels = const [];
+    currentChannelId = null;
     selectedLibraryIds = const {};
     final token = await credentials.readAccountToken();
     if (token == null) {
@@ -347,14 +347,6 @@ class LineupController extends ChangeNotifier {
     final operation = ++_epoch;
     return _run(
       () async {
-        final token = _profileToken ?? _accountToken;
-        final endpoint = connection?.uri;
-        if (token == null || endpoint == null) {
-          throw const PlexException(
-            'server-unreachable',
-            'Select a server first.',
-          );
-        }
         final allowed = libraries.map((library) => library.id).toSet();
         if (ids.isEmpty || !allowed.containsAll(ids)) {
           throw const PlexException(
@@ -610,8 +602,6 @@ class LineupController extends ChangeNotifier {
     }
     final next = PersistedState(
       settings: settings,
-      channels: channels,
-      currentChannelId: currentChannelId,
       profileId: profile?.id,
       selectedServerByProfile: selectedServers,
       selectedLibraryIdsByProfileServer: librarySelections,
