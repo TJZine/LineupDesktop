@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [initial-build, replatform/flutter-native]
+    branches: [initial-build]
   pull_request:
 
 permissions:
