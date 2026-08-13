@@ -653,7 +653,6 @@ class _ProfilePinDialogState extends State<_ProfilePinDialog> {
               children: [
                 for (var digit = 1; digit <= 9; digit++)
                   FilledButton(
-                    autofocus: digit == 5,
                     onPressed: () => _digit(digit),
                     child: Text('$digit'),
                   ),

@@ -141,6 +141,7 @@ void main() {
       ..libraries = const [
         PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
       ];
+    addTearDown(controller.dispose);
     await tester.pumpWidget(
       MaterialApp(home: UpstreamChannelSetupView(controller: controller)),
     );
@@ -269,6 +270,7 @@ void main() {
         PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
         PlexLibrary(id: 'shows', title: 'Shows', type: PlexLibraryType.show),
       ];
+    addTearDown(controller.dispose);
     await tester.pumpWidget(
       MaterialApp(home: UpstreamChannelSetupView(controller: controller)),
     );
@@ -287,6 +289,7 @@ void main() {
       ..libraries = const [
         PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
       ];
+    addTearDown(controller.dispose);
     await tester.pumpWidget(
       MaterialApp(home: UpstreamChannelSetupView(controller: controller)),
     );

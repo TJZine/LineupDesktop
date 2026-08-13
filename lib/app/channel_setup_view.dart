@@ -132,7 +132,7 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
           ),
         ],
       );
-      if (constraints.maxWidth < LineupLayout.compact) {
+      if (LineupLayout.isCompactWidth(constraints.maxWidth)) {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -304,7 +304,7 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
     ),
     child: LayoutBuilder(
       builder: (_, constraints) {
-        final compact = constraints.maxWidth < LineupLayout.compact;
+        final compact = LineupLayout.isCompactWidth(constraints.maxWidth);
         final rail = _categoryRail(compact);
         final details = _categoryDetails();
         return Column(
@@ -837,30 +837,32 @@ class _SetupFooter extends StatelessWidget {
   final Widget primary;
 
   @override
-  Widget build(BuildContext context) {
-    final secondaryActions = Wrap(
-      spacing: 10,
-      runSpacing: 10,
-      children: secondary,
-    );
-    if (LineupLayout.isCompact(context)) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final secondaryActions = Wrap(
+        spacing: 10,
+        runSpacing: 10,
+        children: secondary,
+      );
+      if (LineupLayout.isCompactWidth(constraints.maxWidth)) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            secondaryActions,
+            const SizedBox(height: 10),
+            Align(alignment: Alignment.centerRight, child: primary),
+          ],
+        );
+      }
+      return Row(
         children: [
-          secondaryActions,
-          const SizedBox(height: 10),
-          Align(alignment: Alignment.centerRight, child: primary),
+          Expanded(child: secondaryActions),
+          const SizedBox(width: 16),
+          primary,
         ],
       );
-    }
-    return Row(
-      children: [
-        Expanded(child: secondaryActions),
-        const SizedBox(width: 16),
-        primary,
-      ],
-    );
-  }
+    },
+  );
 }
 
 class _StepPill extends StatelessWidget {

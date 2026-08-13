@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -12,6 +14,28 @@ import 'package:lineup_desktop/plex/plex_client.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
 
 void main() {
+  testWidgets('startup announcement is a labeled live region', (tester) async {
+    final semantics = tester.ensureSemantics();
+    addTearDown(semantics.dispose);
+    final controller = _LoadingController();
+
+    await tester.pumpWidget(
+      LineupBootstrap(player: _FakePlayer(), controller: controller),
+    );
+    await tester.pump();
+
+    expect(
+      tester
+          .getSemantics(find.bySemanticsLabel('Starting Lineup Desktop'))
+          .flagsCollection
+          .isLiveRegion,
+      isTrue,
+    );
+
+    controller.completeInitialization();
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('shows honest empty states and supports shell navigation', (
     tester,
   ) async {
@@ -245,6 +269,15 @@ class _FakeController extends LineupController {
     mode: channel.playbackMode,
     seed: channel.shuffleSeed,
   );
+}
+
+class _LoadingController extends _FakeController {
+  final _initialization = Completer<void>();
+
+  @override
+  Future<void> initialize() => _initialization.future;
+
+  void completeInitialization() => _initialization.complete();
 }
 
 class _MemoryStore implements AppStore {

@@ -10,6 +10,7 @@ void main() {
     final unsendable = ReceivePort();
     final media = <PlexMediaItem>[_UnsendableMediaItem(unsendable)];
     final worker = ScheduleWorker(media, const []);
+    addTearDown(worker.dispose);
 
     await expectLater(worker.build(_channel), throwsA(anything));
     unsendable.close();
@@ -20,12 +21,12 @@ void main() {
     final schedule = await worker.build(_channel);
 
     expect(schedule.items.single.id, _mediaItem.id);
-    worker.dispose();
   });
 
   test('send failure does not retain the failed operation', () async {
     final unsendable = ReceivePort();
     final worker = ScheduleWorker(const [], const []);
+    addTearDown(worker.dispose);
 
     await expectLater(
       worker.build(_manualChannel(_UnsendableChannelItem(unsendable))),
@@ -44,7 +45,6 @@ void main() {
     );
 
     expect(schedule.items.single.id, 'item');
-    worker.dispose();
   });
 
   test(
@@ -52,6 +52,7 @@ void main() {
     () async {
       final media = <PlexMediaItem>[const _ExitingMediaItem()];
       final worker = ScheduleWorker(media, const []);
+      addTearDown(worker.dispose);
 
       await expectLater(worker.build(_channel), throwsA(isA<StateError>()));
       media
@@ -61,7 +62,6 @@ void main() {
       final schedule = await worker.build(_channel);
 
       expect(schedule.items.single.id, _mediaItem.id);
-      worker.dispose();
     },
   );
 }

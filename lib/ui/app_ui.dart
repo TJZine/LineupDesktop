@@ -7,8 +7,7 @@ abstract final class LineupLayout {
   static const expandedNavigation = 1100.0;
   static const readableWidth = 1120.0;
 
-  static bool isCompact(BuildContext context) =>
-      MediaQuery.sizeOf(context).width < compact;
+  static bool isCompactWidth(double width) => width < compact;
 }
 
 class LineupNotice extends StatelessWidget {
@@ -57,41 +56,49 @@ class LineupPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) => FocusTraversalGroup(
     child: SafeArea(
-      child: Padding(
-        padding: EdgeInsets.all(LineupLayout.isCompact(context) ? 20 : 32),
-        child: Center(
-          child: ConstrainedBox(
-            key: const ValueKey('lineup-page-content'),
-            constraints: const BoxConstraints(
-              maxWidth: LineupLayout.readableWidth,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = LineupLayout.isCompactWidth(constraints.maxWidth);
+          return Padding(
+            padding: EdgeInsets.all(compact ? 20 : 32),
+            child: Center(
+              child: ConstrainedBox(
+                key: const ValueKey('lineup-page-content'),
+                constraints: const BoxConstraints(
+                  maxWidth: LineupLayout.readableWidth,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (compact)
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _PageTitle(title),
+                          if (actions != null) ...[
+                            const SizedBox(height: 16),
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: actions,
+                            ),
+                          ],
+                        ],
+                      )
+                    else
+                      Row(
+                        children: [
+                          Expanded(child: _PageTitle(title)),
+                          ?actions,
+                        ],
+                      ),
+                    const SizedBox(height: 24),
+                    Expanded(child: child),
+                  ],
+                ),
+              ),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (LineupLayout.isCompact(context))
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _PageTitle(title),
-                      if (actions != null) ...[
-                        const SizedBox(height: 16),
-                        Align(alignment: Alignment.centerLeft, child: actions),
-                      ],
-                    ],
-                  )
-                else
-                  Row(
-                    children: [
-                      Expanded(child: _PageTitle(title)),
-                      ?actions,
-                    ],
-                  ),
-                const SizedBox(height: 24),
-                Expanded(child: child),
-              ],
-            ),
-          ),
-        ),
+          );
+        },
       ),
     ),
   );
