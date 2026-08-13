@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../channels/channel.dart';
 import '../channels/content_resolver.dart';
@@ -41,6 +42,8 @@ class _LineupShellState extends State<LineupShell> {
   final _settingsFocus = FocusNode(debugLabel: 'Settings');
   final _diagnosticsFocus = FocusNode(debugLabel: 'Diagnostics');
   final _playerFocus = FocusNode(debugLabel: 'Player');
+  bool _appMenuOpen = false;
+  int? _guideReturnIndex;
   @override
   void initState() {
     super.initState();
@@ -80,6 +83,7 @@ class _LineupShellState extends State<LineupShell> {
 
   void _select(int index) {
     if (index == 0) {
+      if (_selectedIndex != 0) _guideReturnIndex = _selectedIndex;
       _player.showFullGuide();
     } else if (_player.overlay == PlayerOverlay.fullGuide) {
       _player.closeOverlay();
@@ -90,19 +94,101 @@ class _LineupShellState extends State<LineupShell> {
 
   void _restoreRouteFocus() {
     if (!mounted) return;
-    switch (_selectedIndex) {
-      case 0:
-        _guideFocus.requestFocus();
-      case 1:
-        _channelsFocus.requestFocus();
-      case 2:
-        _settingsFocus.requestFocus();
-      case 3:
-        _diagnosticsFocus.requestFocus();
-      case 4:
-        _playerFocus.requestFocus();
-    }
+    final target = switch (_selectedIndex) {
+      0 => _guideFocus,
+      1 => _channelsFocus,
+      2 => _settingsFocus,
+      3 => _diagnosticsFocus,
+      4 => _playerFocus,
+      _ => _guideFocus,
+    };
+    target.requestFocus();
   }
+
+  void _openAppMenu() => setState(() => _appMenuOpen = true);
+
+  void _closeGuide(bool hasPlaybackSurface) {
+    final target = _guideReturnIndex ?? (hasPlaybackSurface ? 4 : null);
+    _guideReturnIndex = null;
+    target == null ? _openAppMenu() : _select(target);
+  }
+
+  void _closeAppMenu() {
+    setState(() => _appMenuOpen = false);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _restoreRouteFocus());
+  }
+
+  Widget _immersiveAppMenu() => Stack(
+    fit: StackFit.expand,
+    children: [
+      ModalBarrier(
+        dismissible: true,
+        onDismiss: _closeAppMenu,
+        color: LineupTheme.of(context).scrim.withValues(alpha: 0.45),
+      ),
+      Align(
+        alignment: Alignment.topRight,
+        child: SafeArea(
+          minimum: const EdgeInsets.all(16),
+          child: Focus(
+            autofocus: true,
+            onKeyEvent: (_, event) {
+              if (event is KeyDownEvent &&
+                  (event.logicalKey == LogicalKeyboardKey.escape ||
+                      event.logicalKey == LogicalKeyboardKey.goBack)) {
+                _closeAppMenu();
+                return KeyEventResult.handled;
+              }
+              return KeyEventResult.ignored;
+            },
+            child: Card(
+              key: const Key('immersive-app-menu'),
+              child: SizedBox(
+                width: 280,
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Text(
+                          'Lineup',
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                      ),
+                      for (final destination in const [
+                        (0, Icons.live_tv_outlined, 'Guide'),
+                        (1, Icons.view_list_outlined, 'Channels'),
+                        (2, Icons.settings_outlined, 'Settings'),
+                        (3, Icons.monitor_heart_outlined, 'Diagnostics'),
+                        (4, Icons.play_circle_outline, 'Player'),
+                      ])
+                        TextButton.icon(
+                          style: TextButton.styleFrom(
+                            alignment: Alignment.centerLeft,
+                            backgroundColor: _selectedIndex == destination.$1
+                                ? LineupTheme.of(context).selectedSurface
+                                : null,
+                          ),
+                          onPressed: () {
+                            _appMenuOpen = false;
+                            _select(destination.$1);
+                          },
+                          icon: Icon(destination.$2),
+                          label: Text(destination.$3),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    ],
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -117,21 +203,38 @@ class _LineupShellState extends State<LineupShell> {
       controller: _player,
       focusNode: _playerFocus,
       openGuide: () => _select(0),
+      openMenu: _openAppMenu,
+    );
+    final hasPlaybackSurface =
+        _player.hasPlaybackIntent || _player.error != null;
+    final overlayGuide =
+        controller.settings.guideLayoutMode == GuideLayoutMode.overlay &&
+        hasPlaybackSurface;
+    final guideView = GuideView(
+      controller: _guide,
+      focusNode: _guideFocus,
+      onClose: () => _closeGuide(hasPlaybackSurface),
+      onOpenMenu: _openAppMenu,
+      overlayMode: overlayGuide,
+      pictureInPicture: hasPlaybackSurface && !overlayGuide
+          ? PlayerSurface(controller: _player, showErrors: true)
+          : null,
+      playbackMessage: _player.tuning
+          ? 'Preparing playback…'
+          : _player.error ?? _player.status.message,
+      onOpenPlayer: () => _select(4),
+      onTune: _player.tune,
     );
     final views = <Widget>[
-      GuideView(
-        controller: _guide,
-        focusNode: _guideFocus,
-        onClose: () => _select(4),
-        pictureInPicture: _player.hasPlaybackIntent || _player.error != null
-            ? PlayerSurface(controller: _player, showErrors: true)
-            : null,
-        playbackMessage: _player.tuning
-            ? 'Preparing playback…'
-            : _player.error ?? _player.status.message,
-        onOpenPlayer: () => _select(4),
-        onTune: _player.tune,
-      ),
+      overlayGuide
+          ? Stack(
+              fit: StackFit.expand,
+              children: [
+                PlayerSurface(controller: _player),
+                guideView,
+              ],
+            )
+          : guideView,
       ChannelsView(controller: controller, focusNode: _channelsFocus),
       SettingsView(controller: controller, focusNode: _settingsFocus),
       DiagnosticsView(
@@ -141,6 +244,18 @@ class _LineupShellState extends State<LineupShell> {
       ),
       playerView,
     ];
+    if (_selectedIndex == 0 || _selectedIndex == 4) {
+      return Scaffold(
+        backgroundColor: Colors.transparent,
+        body: Stack(
+          fit: StackFit.expand,
+          children: [
+            SafeArea(child: views[_selectedIndex]),
+            if (_appMenuOpen) _immersiveAppMenu(),
+          ],
+        ),
+      );
+    }
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: SafeArea(
@@ -618,7 +733,7 @@ class _ChannelEditorState extends State<ChannelEditor> {
   }
 }
 
-enum _SettingsCategory { guide, accessibility, account, support }
+enum _SettingsCategory { appearance, guide, accessibility, account, support }
 
 class SettingsView extends StatefulWidget {
   const SettingsView({required this.controller, this.focusNode, super.key});
@@ -630,7 +745,7 @@ class SettingsView extends StatefulWidget {
 }
 
 class _SettingsViewState extends State<SettingsView> {
-  _SettingsCategory _category = _SettingsCategory.guide;
+  _SettingsCategory _category = _SettingsCategory.appearance;
   bool _saving = false;
   String? _error;
 
@@ -678,6 +793,7 @@ class _SettingsViewState extends State<SettingsView> {
   }
 
   Widget _categorySelector(bool compact) {
+    final roles = LineupTheme.of(context);
     final controls = [
       for (final category in _SettingsCategory.values)
         Padding(
@@ -686,19 +802,19 @@ class _SettingsViewState extends State<SettingsView> {
             selected: category == _category,
             button: true,
             child: OutlinedButton(
-              focusNode: category == _SettingsCategory.guide
+              focusNode: category == _SettingsCategory.appearance
                   ? widget.focusNode
                   : null,
               autofocus: category == _category,
               style: OutlinedButton.styleFrom(
                 alignment: Alignment.centerLeft,
                 backgroundColor: category == _category
-                    ? LineupTheme.brass.withValues(alpha: 0.14)
+                    ? roles.selectedSurface
                     : null,
                 side: BorderSide(
                   color: category == _category
-                      ? LineupTheme.brass
-                      : Colors.white12,
+                      ? roles.focusBorder
+                      : roles.subtleBorder,
                 ),
               ),
               onPressed: () => setState(() => _category = category),
@@ -722,7 +838,36 @@ class _SettingsViewState extends State<SettingsView> {
         LineupSection(
           title: _categoryLabel(_category),
           children: switch (_category) {
+            _SettingsCategory.appearance => [
+              _Dropdown<LineupThemeName>(
+                'Theme',
+                value.theme,
+                LineupThemeName.values,
+                (item) => item.label,
+                _saving
+                    ? null
+                    : (item) => _update(
+                        widget.controller.settings.copyWith(theme: item),
+                      ),
+              ),
+            ],
             _SettingsCategory.guide => [
+              _Dropdown<GuideLayoutMode>(
+                'Guide presentation',
+                value.guideLayoutMode,
+                GuideLayoutMode.values,
+                (item) => switch (item) {
+                  GuideLayoutMode.pictureInPicture => 'Classic with PiP',
+                  GuideLayoutMode.overlay => 'Overlay',
+                },
+                _saving
+                    ? null
+                    : (item) => _update(
+                        widget.controller.settings.copyWith(
+                          guideLayoutMode: item,
+                        ),
+                      ),
+              ),
               _Dropdown<int>(
                 'Visible time range',
                 value.guideHours,
@@ -840,6 +985,7 @@ class _SettingsViewState extends State<SettingsView> {
 
   static String _categoryLabel(_SettingsCategory category) =>
       switch (category) {
+        _SettingsCategory.appearance => 'Appearance',
         _SettingsCategory.guide => 'Guide',
         _SettingsCategory.accessibility => 'Accessibility',
         _SettingsCategory.account => 'Account',
@@ -935,7 +1081,9 @@ class _DiagnosticsSummaryState extends State<_DiagnosticsSummary> {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(LineupTheme.radius),
         side: BorderSide(
-          color: _focused ? Colors.white : Colors.white12,
+          color: _focused
+              ? LineupTheme.of(context).focusBorder
+              : LineupTheme.of(context).subtleBorder,
           width: _focused ? 3 : 1,
         ),
       ),

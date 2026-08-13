@@ -27,17 +27,18 @@ class LineupRuntimeFailure extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final roles = LineupTheme.of(context);
     return ColoredBox(
-      color: const Color(0xFF17191D),
+      color: roles.primarySurface,
       child: Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Semantics(
             liveRegion: true,
             label: 'This part of Lineup Desktop could not be displayed',
-            child: const Text(
+            child: Text(
               'Something went wrong while displaying this view.',
-              style: TextStyle(color: Colors.white),
+              style: TextStyle(color: roles.primaryText),
               textAlign: TextAlign.center,
             ),
           ),
@@ -48,13 +49,25 @@ class LineupRuntimeFailure extends StatelessWidget {
 }
 
 class _LineupBootstrapState extends State<LineupBootstrap> {
-  late final Future<void> _startup = Future.wait([
-    widget.player.initialize(),
-    widget.controller.initialize(),
-  ]);
+  late final Future<void> _startup;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_changed);
+    _startup = Future.wait([
+      widget.player.initialize(),
+      widget.controller.initialize(),
+    ]);
+  }
+
+  void _changed() {
+    if (mounted) setState(() {});
+  }
 
   @override
   void dispose() {
+    widget.controller.removeListener(_changed);
     widget.player.dispose();
     widget.controller.dispose();
     super.dispose();
@@ -65,7 +78,7 @@ class _LineupBootstrapState extends State<LineupBootstrap> {
     return MaterialApp(
       title: 'Lineup Desktop',
       debugShowCheckedModeBanner: false,
-      theme: LineupTheme.dark,
+      theme: LineupTheme.forName(widget.controller.settings.theme),
       home: FutureBuilder<void>(
         future: _startup,
         builder: (context, snapshot) {
@@ -91,13 +104,17 @@ class _StartupProgress extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final roles = LineupTheme.of(context);
     return Scaffold(
       body: DecoratedBox(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: RadialGradient(
             center: Alignment(-0.5, -0.6),
             radius: 1.2,
-            colors: [Color(0x1428C8A0), LineupTheme.obsidian],
+            colors: [
+              roles.progressFill.withValues(alpha: 0.10),
+              roles.deepBackground,
+            ],
           ),
         ),
         child: Center(

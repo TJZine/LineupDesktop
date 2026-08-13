@@ -49,10 +49,10 @@ void main() {
 
     expect(find.text('Create a channel to build your Guide'), findsOneWidget);
 
-    await tester.tap(find.byIcon(Icons.settings_outlined));
+    await _openImmersiveDestination(tester, 'Settings');
     await tester.pumpAndSettle();
 
-    expect(find.text('Visible time range'), findsOneWidget);
+    expect(find.text('Theme'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
@@ -69,7 +69,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(FocusManager.instance.primaryFocus?.debugLabel, 'Guide');
 
-    await tester.tap(find.byIcon(Icons.play_circle_outline));
+    await _openImmersiveDestination(tester, 'Player');
     await tester.pumpAndSettle();
     expect(FocusManager.instance.primaryFocus?.debugLabel, 'Player');
 
@@ -138,7 +138,6 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pump();
 
@@ -222,6 +221,16 @@ void main() {
       findsOneWidget,
     );
   });
+}
+
+Future<void> _openImmersiveDestination(
+  WidgetTester tester,
+  String destination,
+) async {
+  await tester.tap(find.byKey(const Key('guide-app-menu')));
+  await tester.pump(const Duration(milliseconds: 250));
+  await tester.tap(find.text(destination).last);
+  await tester.pumpAndSettle();
 }
 
 class _FakeController extends LineupController {

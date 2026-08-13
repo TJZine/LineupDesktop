@@ -40,6 +40,8 @@ class GuideView extends StatefulWidget {
     required this.controller,
     required this.onClose,
     required this.onTune,
+    this.onOpenMenu,
+    this.overlayMode = false,
     this.pictureInPicture,
     this.onOpenPlayer,
     this.playbackMessage,
@@ -50,6 +52,8 @@ class GuideView extends StatefulWidget {
   final GuideController controller;
   final VoidCallback onClose;
   final Future<void> Function(String channelId) onTune;
+  final VoidCallback? onOpenMenu;
+  final bool overlayMode;
   final Widget? pictureInPicture;
   final VoidCallback? onOpenPlayer;
   final String? playbackMessage;
@@ -173,87 +177,101 @@ class _GuideViewState extends State<GuideView> {
   @override
   Widget build(BuildContext context) {
     final channels = widget.controller.channels;
+    final roles = LineupTheme.of(context);
     return Focus(
       focusNode: widget.focusNode,
       autofocus: true,
       onKeyEvent: _key,
       child: Material(
-        color: LineupTheme.obsidian,
+        key: Key(widget.overlayMode ? 'overlay-guide' : 'classic-guide'),
+        color: widget.overlayMode ? Colors.transparent : roles.deepBackground,
         child: LayoutBuilder(
           builder: (context, outer) {
             final policy = GuideLayoutPolicy.forSize(
               outer.biggest,
               hasPicture: widget.pictureInPicture != null,
             );
-            return Padding(
-              padding: EdgeInsets.fromLTRB(
-                policy.padding,
-                policy.padding,
-                policy.padding,
-                policy.padding,
-              ),
-              child: Column(
-                children: [
-                  _Toolbar(
-                    controller: widget.controller,
-                    onClose: widget.onClose,
-                    compact: policy.compact,
-                  ),
-                  const SizedBox(height: 10),
-                  if (channels.isEmpty)
-                    const Expanded(child: _EmptyGuide())
-                  else
-                    Expanded(
-                      child: Column(
-                        children: [
-                          SizedBox(
-                            height: policy.showcaseHeight,
-                            child: _GuideShowcase(
-                              controller: widget.controller,
-                              picture: widget.pictureInPicture,
-                              pictureWidth: policy.pictureWidth,
-                              compact: policy.compact,
-                              playbackMessage: widget.playbackMessage,
-                              onOpenPlayer: widget.onOpenPlayer,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          _TimeHeader(
-                            controller: widget.controller,
-                            railWidth: policy.channelRailWidth,
-                          ),
-                          Expanded(
-                            child: LayoutBuilder(
-                              builder: (context, constraints) {
-                                _visibleRows = GuideGeometry.visibleRows(
-                                  scrollOffset: _scroll.hasClients
-                                      ? _scroll.offset
-                                      : 0,
-                                  viewportHeight: constraints.maxHeight,
-                                  rowHeight: _rowHeight,
-                                  totalRows: channels.length,
-                                ).count;
-                                WidgetsBinding.instance.addPostFrameCallback(
-                                  (_) => _requestViewport(),
-                                );
-                                return ListView.builder(
-                                  controller: _scroll,
-                                  itemExtent: _rowHeight,
-                                  itemCount: channels.length,
-                                  itemBuilder: (context, index) => _GuideRow(
-                                    channel: channels[index],
-                                    controller: widget.controller,
-                                    railWidth: policy.channelRailWidth,
-                                    onTune: widget.onTune,
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
+            return DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: widget.overlayMode
+                    ? LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.transparent,
+                          roles.scrim.withValues(alpha: 0.82),
+                          roles.scrim,
                         ],
-                      ),
+                        stops: const [0, 0.28, 0.62],
+                      )
+                    : null,
+              ),
+              child: Padding(
+                padding: EdgeInsets.all(policy.padding),
+                child: Column(
+                  children: [
+                    _Toolbar(
+                      controller: widget.controller,
+                      onClose: widget.onClose,
+                      onOpenMenu: widget.onOpenMenu,
+                      compact: policy.compact,
                     ),
-                ],
+                    const SizedBox(height: 10),
+                    if (channels.isEmpty)
+                      const Expanded(child: _EmptyGuide())
+                    else
+                      Expanded(
+                        child: Column(
+                          children: [
+                            SizedBox(
+                              height: policy.showcaseHeight,
+                              child: _GuideShowcase(
+                                controller: widget.controller,
+                                picture: widget.pictureInPicture,
+                                pictureWidth: policy.pictureWidth,
+                                compact: policy.compact,
+                                playbackMessage: widget.playbackMessage,
+                                onOpenPlayer: widget.onOpenPlayer,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            _TimeHeader(
+                              controller: widget.controller,
+                              railWidth: policy.channelRailWidth,
+                            ),
+                            Expanded(
+                              child: LayoutBuilder(
+                                builder: (context, constraints) {
+                                  _visibleRows = GuideGeometry.visibleRows(
+                                    scrollOffset: _scroll.hasClients
+                                        ? _scroll.offset
+                                        : 0,
+                                    viewportHeight: constraints.maxHeight,
+                                    rowHeight: _rowHeight,
+                                    totalRows: channels.length,
+                                  ).count;
+                                  WidgetsBinding.instance.addPostFrameCallback(
+                                    (_) => _requestViewport(),
+                                  );
+                                  return ListView.builder(
+                                    controller: _scroll,
+                                    itemExtent: _rowHeight,
+                                    itemCount: channels.length,
+                                    itemBuilder: (context, index) => _GuideRow(
+                                      channel: channels[index],
+                                      controller: widget.controller,
+                                      railWidth: policy.channelRailWidth,
+                                      onTune: widget.onTune,
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
               ),
             );
           },
@@ -267,10 +285,12 @@ class _Toolbar extends StatelessWidget {
   const _Toolbar({
     required this.controller,
     required this.onClose,
+    required this.onOpenMenu,
     required this.compact,
   });
   final GuideController controller;
   final VoidCallback onClose;
+  final VoidCallback? onOpenMenu;
   final bool compact;
 
   @override
@@ -280,7 +300,11 @@ class _Toolbar extends StatelessWidget {
       height: 48,
       child: Row(
         children: [
-          Text('Guide', style: Theme.of(context).textTheme.headlineMedium),
+          Image.asset('assets/branding/lineup-logo-mark.png', height: 26),
+          const SizedBox(width: 9),
+          Text('LINEUP', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(width: 10),
+          Text('Guide', style: Theme.of(context).textTheme.labelLarge),
           if (!compact) ...[
             const SizedBox(width: 16),
             Text('${controller.channels.length} channels'),
@@ -304,6 +328,13 @@ class _Toolbar extends StatelessWidget {
               onChanged: controller.setLibraryFilter,
             ),
           const SizedBox(width: 8),
+          if (onOpenMenu != null)
+            IconButton(
+              key: const Key('guide-app-menu'),
+              tooltip: 'Open Lineup menu',
+              onPressed: onOpenMenu,
+              icon: const Icon(Icons.menu),
+            ),
           TextButton.icon(
             onPressed: controller.playToNow,
             icon: const Icon(Icons.adjust),
@@ -463,16 +494,16 @@ class _GuideRow extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 10),
                 decoration: BoxDecoration(
                   color: tunedChannel
-                      ? const Color(0xFF294B46)
+                      ? LineupTheme.of(context).tunedSurface
                       : selectedChannel
-                      ? LineupTheme.brass.withValues(alpha: 0.18)
-                      : LineupTheme.smoke,
-                  borderRadius: const BorderRadius.horizontal(
-                    left: Radius.circular(8),
+                      ? LineupTheme.of(context).selectedSurface
+                      : LineupTheme.of(context).primarySurface,
+                  borderRadius: BorderRadius.horizontal(
+                    left: Radius.circular(LineupTheme.of(context).panelRadius),
                   ),
                   border: Border.all(
                     color: focusedChannel
-                        ? LineupTheme.brass
+                        ? LineupTheme.of(context).focusBorder
                         : Colors.transparent,
                     width: focusedChannel ? 2 : 1,
                   ),
@@ -581,7 +612,10 @@ class _Programs extends StatelessWidget {
                   bottom: 0,
                   child: Semantics(
                     label: 'Current time',
-                    child: Container(width: 2, color: Colors.redAccent),
+                    child: Container(
+                      width: 2,
+                      color: LineupTheme.of(context).liveAccent,
+                    ),
                   ),
                 ),
             ],
@@ -698,21 +732,24 @@ class _ProgramCellState extends State<_ProgramCell> {
               padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
               decoration: BoxDecoration(
                 color: widget.current
-                    ? const Color(0xFF294B46)
+                    ? LineupTheme.of(context).tunedSurface
                     : widget.past
-                    ? LineupTheme.smoke.withValues(alpha: 0.56)
+                    ? LineupTheme.of(context).primarySurface
+                          .withValues(alpha: 0.56)
                     : widget.selected
-                    ? LineupTheme.brass.withValues(alpha: 0.22)
+                    ? LineupTheme.of(context).selectedSurface
                     : _hovered
-                    ? Colors.white.withValues(alpha: 0.11)
-                    : LineupTheme.smoke,
-                borderRadius: BorderRadius.circular(7),
+                    ? LineupTheme.of(context).elevatedSurface
+                    : LineupTheme.of(context).primarySurface,
+                borderRadius: BorderRadius.circular(
+                  LineupTheme.of(context).panelRadius,
+                ),
                 border: Border.all(
                   color: widget.focused
-                      ? LineupTheme.brass
+                      ? LineupTheme.of(context).focusBorder
                       : widget.selected
-                      ? Colors.white54
-                      : Colors.white12,
+                      ? LineupTheme.of(context).defaultBorder
+                      : LineupTheme.of(context).subtleBorder,
                   width: widget.focused
                       ? (widget.largeFocus ? 5 : 3)
                       : widget.selected
@@ -728,7 +765,7 @@ class _ProgramCellState extends State<_ProgramCell> {
                       alignment: Alignment.centerLeft,
                       widthFactor: widget.progress.clamp(0, 1),
                       child: ColoredBox(
-                        color: LineupTheme.brass.withValues(alpha: 0.14),
+                        color: LineupTheme.of(context).selectedSurface,
                       ),
                     ),
                   Align(
@@ -738,7 +775,9 @@ class _ProgramCellState extends State<_ProgramCell> {
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        color: widget.past ? Colors.white60 : null,
+                        color: widget.past
+                            ? LineupTheme.of(context).mutedText
+                            : null,
                         fontWeight: widget.focused
                             ? FontWeight.w800
                             : FontWeight.w500,
@@ -796,9 +835,12 @@ class _Details extends StatelessWidget {
                         child: FutureBuilder(
                           future: controller.artworkFor(program),
                           builder: (context, snapshot) => snapshot.data == null
-                              ? const ColoredBox(
-                                  color: LineupTheme.smoke,
-                                  child: Icon(Icons.movie_outlined, size: 34),
+                              ? ColoredBox(
+                                  color: LineupTheme.of(context).primarySurface,
+                                  child: const Icon(
+                                    Icons.movie_outlined,
+                                    size: 34,
+                                  ),
                                 )
                               : Image.memory(
                                   snapshot.data!,
@@ -822,7 +864,9 @@ class _Details extends StatelessWidget {
                           Text(
                             '${channel.number} • ${channel.name}',
                             style: Theme.of(context).textTheme.labelLarge
-                                ?.copyWith(color: LineupTheme.brass),
+                                ?.copyWith(
+                                  color: LineupTheme.of(context).progressFill,
+                                ),
                           ),
                         Text(
                           program.scheduled.item.title,

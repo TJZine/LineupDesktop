@@ -75,11 +75,14 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
   @override
   Widget build(BuildContext context) => Scaffold(
     body: DecoratedBox(
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         gradient: RadialGradient(
           center: Alignment(-0.65, -0.75),
           radius: 1.35,
-          colors: [Color(0x1228C8A0), LineupTheme.obsidian],
+          colors: [
+            LineupTheme.of(context).progressFill.withValues(alpha: 0.07),
+            LineupTheme.of(context).deepBackground,
+          ],
         ),
       ),
       child: SafeArea(
@@ -123,9 +126,11 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
                         ?.copyWith(fontWeight: FontWeight.w800),
                   ),
                 ),
-                const Text(
+                Text(
                   'Build a clean, remote-first channel lineup for this server.',
-                  style: TextStyle(color: Colors.white60),
+                  style: TextStyle(
+                    color: LineupTheme.of(context).secondaryText,
+                  ),
                 ),
               ],
             ),
@@ -250,14 +255,18 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
                               library.type == PlexLibraryType.show
                                   ? 'TV Shows'
                                   : 'Movies',
-                              style: const TextStyle(color: Colors.white54),
+                              style: TextStyle(
+                                color: LineupTheme.of(context).mutedText,
+                              ),
                             ),
                           ],
                         ),
                       ),
                       Icon(
                         selected ? Icons.check_circle : Icons.circle_outlined,
-                        color: selected ? LineupTheme.brass : Colors.white30,
+                        color: selected
+                            ? LineupTheme.of(context).progressFill
+                            : LineupTheme.of(context).mutedText,
                       ),
                     ],
                   ),
@@ -557,7 +566,10 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
       children: [
         Text(title, style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 4),
-        Text(subtitle, style: const TextStyle(color: Colors.white54)),
+        Text(
+          subtitle,
+          style: TextStyle(color: LineupTheme.of(context).mutedText),
+        ),
       ],
     ),
   );
@@ -610,13 +622,16 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
         decoration: BoxDecoration(
-          color: LineupTheme.brass.withValues(alpha: 0.08),
+          color: LineupTheme.of(context).selectedSurface,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: LineupTheme.brass.withValues(alpha: 0.2)),
+          border: Border.all(color: LineupTheme.of(context).defaultBorder),
         ),
         child: Row(
           children: [
-            const Icon(Icons.auto_awesome, color: LineupTheme.brass),
+            Icon(
+              Icons.auto_awesome,
+              color: LineupTheme.of(context).progressFill,
+            ),
             const SizedBox(width: 12),
             Expanded(
               child: Text(
@@ -808,10 +823,10 @@ class _SetupSurface extends StatelessWidget {
   final Widget footer;
   @override
   Widget build(BuildContext context) => Material(
-    color: Colors.white.withValues(alpha: 0.035),
+    color: LineupTheme.of(context).primarySurface,
     shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(LineupTheme.radiusLarge),
-      side: BorderSide(color: LineupTheme.brass.withValues(alpha: 0.12)),
+      borderRadius: BorderRadius.circular(LineupTheme.of(context).panelRadius),
+      side: BorderSide(color: LineupTheme.of(context).defaultBorder),
     ),
     child: Padding(
       padding: const EdgeInsets.all(26),
@@ -820,7 +835,10 @@ class _SetupSurface extends StatelessWidget {
         children: [
           Text(title, style: Theme.of(context).textTheme.headlineSmall),
           const SizedBox(height: 5),
-          Text(subtitle, style: const TextStyle(color: Colors.white60)),
+          Text(
+            subtitle,
+            style: TextStyle(color: LineupTheme.of(context).secondaryText),
+          ),
           const SizedBox(height: 20),
           Expanded(child: child),
           const SizedBox(height: 18),
@@ -894,9 +912,13 @@ class _RailButton extends StatelessWidget {
       style: OutlinedButton.styleFrom(
         alignment: Alignment.centerLeft,
         backgroundColor: selected
-            ? LineupTheme.brass.withValues(alpha: 0.15)
+            ? LineupTheme.of(context).selectedSurface
             : null,
-        side: BorderSide(color: selected ? LineupTheme.brass : Colors.white12),
+        side: BorderSide(
+          color: selected
+              ? LineupTheme.of(context).focusBorder
+              : LineupTheme.of(context).subtleBorder,
+        ),
       ),
       onPressed: onPressed,
       child: Text(label),
@@ -936,7 +958,9 @@ class _ImpactCard extends StatelessWidget {
                     label,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: Colors.white60),
+                    style: TextStyle(
+                      color: LineupTheme.of(context).secondaryText,
+                    ),
                   ),
                 ],
               ),

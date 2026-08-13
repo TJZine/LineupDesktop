@@ -207,12 +207,16 @@ class _LineupSelectionCardState extends State<LineupSelectionCard> {
     selected: widget.selected,
     enabled: widget.onPressed != null,
     child: AnimatedContainer(
-      duration: LineupTheme.fast,
+      duration: MediaQuery.disableAnimationsOf(context)
+          ? Duration.zero
+          : LineupTheme.fast,
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(LineupTheme.radiusLarge + 3),
         border: Border.all(
-          color: _focused ? Colors.white : Colors.transparent,
+          color: _focused
+              ? LineupTheme.of(context).focusBorder
+              : Colors.transparent,
           width: _focused ? 3 : 1,
         ),
       ),
@@ -221,7 +225,9 @@ class _LineupSelectionCardState extends State<LineupSelectionCard> {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(LineupTheme.radiusLarge),
           side: BorderSide(
-            color: widget.selected ? LineupTheme.brass : Colors.white12,
+            color: widget.selected
+                ? LineupTheme.of(context).progressFill
+                : LineupTheme.of(context).subtleBorder,
             width: widget.selected ? 2 : 1,
           ),
         ),
@@ -257,7 +263,7 @@ Future<bool> confirmDestructiveAction(
           FilledButton(
             style: FilledButton.styleFrom(
               backgroundColor: Theme.of(context).colorScheme.error,
-              foregroundColor: Colors.white,
+              foregroundColor: Theme.of(context).colorScheme.onError,
             ),
             onPressed: () => Navigator.pop(context, true),
             child: Text(confirmLabel),

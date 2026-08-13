@@ -13,12 +13,14 @@ class PlayerView extends StatefulWidget {
   const PlayerView({
     required this.controller,
     required this.openGuide,
+    this.openMenu,
     this.focusNode,
     super.key,
   });
 
   final PlayerCoordinator controller;
   final VoidCallback openGuide;
+  final VoidCallback? openMenu;
   final FocusNode? focusNode;
 
   @override
@@ -186,7 +188,10 @@ class _PlayerViewState extends State<PlayerView> {
               children: [
                 PlayerSurface(controller: controller),
                 switch (controller.overlay) {
-                  PlayerOverlay.osd => _Osd(controller: controller),
+                  PlayerOverlay.osd => _Osd(
+                    controller: controller,
+                    openMenu: widget.openMenu,
+                  ),
                   PlayerOverlay.miniGuide => _MiniGuide(controller: controller),
                   PlayerOverlay.audioTracks => _Tracks(
                     controller: controller,
@@ -227,11 +232,12 @@ class PlayerSurface extends StatelessWidget {
   Widget build(BuildContext context) {
     final state = controller.status.state;
     final unsupported = state == PlayerState.unsupported;
+    final roles = LineupTheme.of(context);
     return Stack(
       fit: StackFit.expand,
       children: [
         if (unsupported)
-          const ColoredBox(color: LineupTheme.obsidian)
+          ColoredBox(color: roles.deepBackground)
         else
           NativeVideoSurface(player: controller.player),
         if (unsupported) _Unsupported(message: controller.status.message),
@@ -252,7 +258,7 @@ class _SurfaceError extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ColoredBox(
-    color: LineupTheme.obsidian,
+    color: LineupTheme.of(context).deepBackground,
     child: Center(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -280,11 +286,13 @@ class _SurfaceError extends StatelessWidget {
 }
 
 class _Osd extends StatelessWidget {
-  const _Osd({required this.controller});
+  const _Osd({required this.controller, this.openMenu});
   final PlayerCoordinator controller;
+  final VoidCallback? openMenu;
 
   @override
   Widget build(BuildContext context) {
+    final roles = LineupTheme.of(context);
     final channel = controller.currentChannel;
     final program = controller.currentProgram;
     final next = controller.nextProgram;
@@ -312,12 +320,10 @@ class _Osd extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
               decoration: BoxDecoration(
-                color: const Color(0xEE11141B),
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: Colors.white24),
-                boxShadow: const [
-                  BoxShadow(color: Colors.black54, blurRadius: 24),
-                ],
+                color: roles.overlaySurface,
+                borderRadius: BorderRadius.circular(roles.panelRadius),
+                border: Border.all(color: roles.defaultBorder),
+                boxShadow: [BoxShadow(color: roles.scrim, blurRadius: 24)],
               ),
               child: Semantics(
                 container: true,
@@ -335,13 +341,13 @@ class _Osd extends StatelessWidget {
                               vertical: 8,
                             ),
                             decoration: BoxDecoration(
-                              color: LineupTheme.brass,
+                              color: roles.progressFill,
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Text(
                               '${channel.number}',
-                              style: const TextStyle(
-                                color: LineupTheme.obsidian,
+                              style: TextStyle(
+                                color: roles.onFocus,
                                 fontWeight: FontWeight.w900,
                               ),
                             ),
@@ -470,6 +476,13 @@ class _Osd extends StatelessWidget {
                                 : 'Sleep ${controller.sleepDuration!.inMinutes}m',
                           ),
                         const Spacer(),
+                        if (openMenu != null)
+                          IconButton(
+                            key: const Key('player-app-menu'),
+                            tooltip: 'Open Lineup menu',
+                            onPressed: openMenu,
+                            icon: const Icon(Icons.menu),
+                          ),
                         IconButton(
                           tooltip: unsupported
                               ? 'Fullscreen unavailable without playback'
@@ -505,45 +518,52 @@ class _MiniGuide extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final channels = controller.miniGuideChannels;
+    final roles = LineupTheme.of(context);
     return Focus(
       onFocusChange: controller.setOverlayInteraction,
       child: Align(
-        alignment: Alignment.centerLeft,
+        alignment: Alignment.topCenter,
         child: SafeArea(
           minimum: const EdgeInsets.all(16),
           child: Material(
-            color: const Color(0xF211141B),
-            borderRadius: BorderRadius.circular(18),
+            key: const Key('mini-guide-shelf'),
+            color: roles.overlaySurface,
+            borderRadius: BorderRadius.circular(roles.panelRadius),
             child: ConstrainedBox(
               constraints: BoxConstraints(
-                minWidth: 360,
-                maxWidth: MediaQuery.sizeOf(context).width < 900 ? 460 : 620,
+                maxWidth: 1180,
                 maxHeight: MediaQuery.sizeOf(context).height - 32,
               ),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Semantics(
-                  container: true,
-                  explicitChildNodes: true,
-                  label: 'Mini Guide',
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Text(
-                        'On now',
-                        style: Theme.of(context).textTheme.titleLarge,
-                      ),
-                      const SizedBox(height: 8),
-                      for (final channel in channels)
-                        _MiniGuideRow(controller: controller, channel: channel),
-                      const SizedBox(height: 8),
-                      const Text(
-                        'UP/DOWN Browse • CH± Page • OK Watch • RIGHT Full Guide • BACK Close',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.white60, fontSize: 12),
-                      ),
-                    ],
+              child: SizedBox(
+                width: double.infinity,
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Semantics(
+                    container: true,
+                    explicitChildNodes: true,
+                    label: 'Mini Guide',
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          'On now',
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                        const SizedBox(height: 8),
+                        for (final channel in channels)
+                          _MiniGuideRow(
+                            controller: controller,
+                            channel: channel,
+                          ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'UP/DOWN Browse • CH± Page • OK Watch • RIGHT Full Guide • BACK Close',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(fontSize: 12),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -563,6 +583,7 @@ class _MiniGuideRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final roles = LineupTheme.of(context);
     final focused = channel.id == controller.miniGuideChannelId;
     final tuned = channel.id == controller.lineup.currentChannelId;
     final unsupported = controller.status.state == PlayerState.unsupported;
@@ -580,13 +601,11 @@ class _MiniGuideRow extends StatelessWidget {
       label:
           'Channel ${channel.number}, ${channel.name}. Now ${current?.scheduled.item.title ?? 'schedule loading'}.${next == null ? '' : ' Next ${next.scheduled.item.title}.'}${tuned ? ' Now watching.' : ''}',
       child: Card(
-        color: focused
-            ? LineupTheme.brass.withValues(alpha: 0.18)
-            : Colors.transparent,
+        color: focused ? roles.focusedSurface : Colors.transparent,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(10),
           side: BorderSide(
-            color: focused ? LineupTheme.brass : Colors.white12,
+            color: focused ? roles.focusBorder : roles.subtleBorder,
             width: focused ? 2 : 1,
           ),
         ),
@@ -679,49 +698,63 @@ class _Tracks extends StatelessWidget {
     final tracks = controller.tracks
         .where((track) => track.type == type)
         .toList();
-    return Center(
-      child: Card(
-        child: SizedBox(
-          width: 460,
-          child: Padding(
-            padding: const EdgeInsets.all(18),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  type == PlayerTrackType.audio ? 'Audio tracks' : 'Subtitles',
-                  style: Theme.of(context).textTheme.titleLarge,
+    final roles = LineupTheme.of(context);
+    return Focus(
+      onFocusChange: controller.setOverlayInteraction,
+      child: Align(
+        alignment: Alignment.centerRight,
+        child: SafeArea(
+          minimum: EdgeInsets.all(roles.overlaySafeArea),
+          child: Card(
+            key: const Key('playback-options-rail'),
+            child: SizedBox(
+              width: 460,
+              height: double.infinity,
+              child: Padding(
+                padding: const EdgeInsets.all(18),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      type == PlayerTrackType.audio
+                          ? 'Audio tracks'
+                          : 'Subtitles',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                    if (type == PlayerTrackType.subtitle)
+                      ListTile(
+                        leading: Icon(
+                          tracks.any((track) => track.selected)
+                              ? Icons.radio_button_unchecked
+                              : Icons.radio_button_checked,
+                        ),
+                        title: const Text('Off'),
+                        onTap: () => controller.selectTrack(type, null),
+                      ),
+                    for (final track in tracks)
+                      ListTile(
+                        leading: Icon(
+                          track.selected
+                              ? Icons.radio_button_checked
+                              : Icons.radio_button_unchecked,
+                        ),
+                        title: Text(
+                          track.title ??
+                              track.language ??
+                              '${track.type.name} ${track.id}',
+                        ),
+                        subtitle: track.codec == null
+                            ? null
+                            : Text(track.codec!),
+                        onTap: () => controller.selectTrack(type, track.id),
+                      ),
+                    TextButton(
+                      onPressed: controller.closeOverlay,
+                      child: const Text('Back'),
+                    ),
+                  ],
                 ),
-                if (type == PlayerTrackType.subtitle)
-                  ListTile(
-                    leading: Icon(
-                      tracks.any((track) => track.selected)
-                          ? Icons.radio_button_unchecked
-                          : Icons.radio_button_checked,
-                    ),
-                    title: const Text('Off'),
-                    onTap: () => controller.selectTrack(type, null),
-                  ),
-                for (final track in tracks)
-                  ListTile(
-                    leading: Icon(
-                      track.selected
-                          ? Icons.radio_button_checked
-                          : Icons.radio_button_unchecked,
-                    ),
-                    title: Text(
-                      track.title ??
-                          track.language ??
-                          '${track.type.name} ${track.id}',
-                    ),
-                    subtitle: track.codec == null ? null : Text(track.codec!),
-                    onTap: () => controller.selectTrack(type, track.id),
-                  ),
-                TextButton(
-                  onPressed: controller.closeOverlay,
-                  child: const Text('Back'),
-                ),
-              ],
+              ),
             ),
           ),
         ),
@@ -739,6 +772,7 @@ class _ChannelNumber extends StatelessWidget {
       liveRegion: true,
       label: 'Channel number ${controller.channelNumber}',
       child: Card(
+        key: const Key('channel-number-buffer'),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 34, vertical: 24),
           child: Text(

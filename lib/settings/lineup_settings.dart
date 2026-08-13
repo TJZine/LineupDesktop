@@ -1,5 +1,25 @@
 enum GuideDensity { comfortable, compact }
 
+enum GuideLayoutMode { pictureInPicture, overlay }
+
+enum LineupThemeName {
+  emberSteel('ember-steel', 'Ember & Steel'),
+  slatePine('slate-pine', 'Slate & Pine'),
+  swiss('swiss', 'Swiss Minimal'),
+  directv('directv', 'DirecTV Classic'),
+  glass('glass', 'Glassmorphism');
+
+  const LineupThemeName(this.storageKey, this.label);
+
+  final String storageKey;
+  final String label;
+
+  static LineupThemeName fromStorage(Object? value) => values.firstWhere(
+    (theme) => theme.storageKey == value,
+    orElse: () => emberSteel,
+  );
+}
+
 enum VideoQuality { original, high, medium, low }
 
 enum ToneMapPolicy { automatic, always, never }
@@ -8,9 +28,11 @@ enum SubtitleMode { off, forced, full }
 
 class LineupSettings {
   const LineupSettings({
+    this.theme = LineupThemeName.emberSteel,
     this.guideHours = 4,
     this.pastMinutes = 30,
     this.guideDensity = GuideDensity.comfortable,
+    this.guideLayoutMode = GuideLayoutMode.pictureInPicture,
     this.videoQuality = VideoQuality.original,
     this.toneMapPolicy = ToneMapPolicy.automatic,
     this.audioOutput = 'system',
@@ -26,9 +48,11 @@ class LineupSettings {
     this.diagnosticsEnabled = false,
   });
 
+  final LineupThemeName theme;
   final int guideHours;
   final int pastMinutes;
   final GuideDensity guideDensity;
+  final GuideLayoutMode guideLayoutMode;
   final VideoQuality videoQuality;
   final ToneMapPolicy toneMapPolicy;
   final String audioOutput;
@@ -44,9 +68,11 @@ class LineupSettings {
   final bool diagnosticsEnabled;
 
   LineupSettings copyWith({
+    LineupThemeName? theme,
     int? guideHours,
     int? pastMinutes,
     GuideDensity? guideDensity,
+    GuideLayoutMode? guideLayoutMode,
     VideoQuality? videoQuality,
     ToneMapPolicy? toneMapPolicy,
     String? audioOutput,
@@ -61,9 +87,11 @@ class LineupSettings {
     bool? profilePickerOnStartup,
     bool? diagnosticsEnabled,
   }) => LineupSettings(
+    theme: theme ?? this.theme,
     guideHours: guideHours ?? this.guideHours,
     pastMinutes: pastMinutes ?? this.pastMinutes,
     guideDensity: guideDensity ?? this.guideDensity,
+    guideLayoutMode: guideLayoutMode ?? this.guideLayoutMode,
     videoQuality: videoQuality ?? this.videoQuality,
     toneMapPolicy: toneMapPolicy ?? this.toneMapPolicy,
     audioOutput: audioOutput ?? this.audioOutput,
@@ -82,9 +110,11 @@ class LineupSettings {
   );
 
   Map<String, Object?> toJson() => {
+    'theme': theme.storageKey,
     'guideHours': guideHours,
     'pastMinutes': pastMinutes,
     'guideDensity': guideDensity.name,
+    'guideLayoutMode': guideLayoutMode.name,
     'videoQuality': videoQuality.name,
     'toneMapPolicy': toneMapPolicy.name,
     'audioOutput': audioOutput,
@@ -109,12 +139,18 @@ class LineupSettings {
     final guideHours = (json['guideHours'] as num?)?.toInt() ?? 4;
     final pastMinutes = (json['pastMinutes'] as num?)?.toInt() ?? 30;
     return LineupSettings(
+      theme: LineupThemeName.fromStorage(json['theme']),
       guideHours: guideHours.clamp(2, 12),
       pastMinutes: pastMinutes.clamp(0, 180),
       guideDensity: enumValue(
         GuideDensity.values,
         'guideDensity',
         GuideDensity.comfortable,
+      ),
+      guideLayoutMode: enumValue(
+        GuideLayoutMode.values,
+        'guideLayoutMode',
+        GuideLayoutMode.pictureInPicture,
       ),
       videoQuality: enumValue(
         VideoQuality.values,

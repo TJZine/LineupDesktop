@@ -86,8 +86,16 @@ navigation do not enter C++.
   section, notice, empty-state and confirmation primitives, focus-aware
   Material controls, semantic labels, navigation shell, and explicit startup
   failure surface.
+- A persisted five-theme Flutter system using `ThemeData` plus one semantic
+  `ThemeExtension`. Ember & Steel is the default; onboarding, management,
+  Guide, player, overlays, dialogs, progress and focus consume shared roles
+  without theme-specific native code or feature-widget theme branches.
 - Production Guide, Channels, Settings, Diagnostics, and shared player routes
   consuming the persisted Channel Builder lineup without fixture-only paths.
+- One route-selection authority with a discoverable management shell for
+  Channels, Settings and Diagnostics, and an immersive shell for Guide and
+  Player. The immersive Lineup menu calls the same route owner; it is not a
+  second navigation system.
 - The Dart native-player seam and an explicit macOS unsupported development
   backend. It never reports successful playback.
 - A Windows C++ libmpv owner, native child presentation, command/property/event

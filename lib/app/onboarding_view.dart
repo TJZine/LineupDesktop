@@ -46,11 +46,14 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
   @override
   Widget build(BuildContext context) => Scaffold(
     body: DecoratedBox(
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         gradient: RadialGradient(
           center: Alignment(-0.6, -0.65),
           radius: 1.25,
-          colors: [Color(0x1428C8A0), LineupTheme.obsidian],
+          colors: [
+            LineupTheme.of(context).progressFill.withValues(alpha: 0.08),
+            LineupTheme.of(context).deepBackground,
+          ],
         ),
       ),
       child: SafeArea(
@@ -94,16 +97,31 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
     );
   }
 
-  Widget _welcome() => _HeroContent(
-    title: 'Your Plex library, scheduled like television',
-    subtitle: 'Link Plex once, choose who is watching, then tune Lineup to your server.',
-    child: FilledButton.icon(
-      autofocus: true,
-      onPressed: widget.controller.busy ? null : widget.controller.startLinking,
-      icon: const Icon(Icons.link),
-      label: const Text('Sign in to Plex'),
-    ),
-  );
+  Widget _welcome() {
+    final enabled = !widget.controller.busy;
+    return _HeroContent(
+      title: 'Your Plex library, scheduled like television',
+      subtitle: 'Link Plex once, choose who is watching, then tune Lineup to your server.',
+      child: Focus(
+        autofocus: true,
+        onKeyEvent: (_, event) {
+          if (enabled &&
+              event is KeyDownEvent &&
+              (event.logicalKey == LogicalKeyboardKey.enter ||
+                  event.logicalKey == LogicalKeyboardKey.select)) {
+            unawaited(widget.controller.startLinking());
+            return KeyEventResult.handled;
+          }
+          return KeyEventResult.ignored;
+        },
+        child: FilledButton.icon(
+          onPressed: enabled ? widget.controller.startLinking : null,
+          icon: const Icon(Icons.link),
+          label: const Text('Sign in to Plex'),
+        ),
+      ),
+    );
+  }
 
   Widget _linking() {
     final pin = widget.controller.activePin;
@@ -365,10 +383,10 @@ class _OnboardingPanel extends StatelessWidget {
     width: double.infinity,
     padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 38),
     decoration: BoxDecoration(
-      color: Colors.white.withValues(alpha: 0.035),
-      borderRadius: BorderRadius.circular(16),
+      color: LineupTheme.of(context).primarySurface,
+      borderRadius: BorderRadius.circular(LineupTheme.of(context).panelRadius),
       border: Border(
-        bottom: BorderSide(color: LineupTheme.brass.withValues(alpha: 0.12)),
+        bottom: BorderSide(color: LineupTheme.of(context).defaultBorder),
       ),
     ),
     child: Column(
@@ -415,14 +433,17 @@ class _HeroContent extends StatelessWidget {
       ),
       if (step != null) ...[
         const SizedBox(height: 8),
-        Text(step!, style: const TextStyle(color: LineupTheme.brass)),
+        Text(
+          step!,
+          style: TextStyle(color: LineupTheme.of(context).progressFill),
+        ),
       ],
       const SizedBox(height: 10),
       Text(
         subtitle,
         textAlign: TextAlign.center,
         style: Theme.of(context).textTheme.titleMedium
-            ?.copyWith(color: Colors.white60),
+            ?.copyWith(color: LineupTheme.of(context).secondaryText),
       ),
       const SizedBox(height: 30),
       child,
@@ -440,12 +461,9 @@ class _PinCell extends StatelessWidget {
     margin: const EdgeInsets.symmetric(horizontal: 7),
     alignment: Alignment.center,
     decoration: BoxDecoration(
-      color: Colors.white.withValues(alpha: 0.045),
+      color: LineupTheme.of(context).elevatedSurface,
       borderRadius: BorderRadius.circular(40),
-      border: Border.all(
-        color: LineupTheme.brass.withValues(alpha: 0.5),
-        width: 2,
-      ),
+      border: Border.all(color: LineupTheme.of(context).focusBorder, width: 2),
     ),
     child: Text(
       character,

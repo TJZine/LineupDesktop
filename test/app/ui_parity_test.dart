@@ -17,24 +17,32 @@ void main() {
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
 
-    final labels = tester
-        .widgetList<Text>(
-          find.descendant(
-            of: find.byType(NavigationRail),
-            matching: find.byType(Text),
-          ),
-        )
-        .map((text) => text.data)
-        .whereType<String>()
-        .toList();
-    expect(labels, ['Guide', 'Channels', 'Settings', 'Diagnostics', 'Player']);
+    expect(find.byType(NavigationRail), findsNothing);
+    await tester.tap(find.byKey(const Key('guide-app-menu')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('immersive-app-menu')), findsOneWidget);
+    for (final label in [
+      'Guide',
+      'Channels',
+      'Settings',
+      'Diagnostics',
+      'Player',
+    ]) {
+      expect(find.text(label), findsWidgets);
+    }
+    await tester.tap(find.text('Channels').last);
+    await tester.pumpAndSettle();
 
     for (final target in [
       (Icons.view_list_outlined, 'Channels'),
       (Icons.settings_outlined, 'Settings'),
       (Icons.monitor_heart_outlined, 'Diagnostics'),
     ]) {
-      await tester.tap(find.byIcon(target.$1));
+      if (target.$2 == 'Channels') {
+        // The menu transition above already selected this destination.
+      } else {
+        await tester.tap(find.byIcon(target.$1));
+      }
       await tester.pumpAndSettle();
       expect(FocusManager.instance.primaryFocus?.debugLabel, target.$2);
       if (target.$2 == 'Channels') {
@@ -52,7 +60,7 @@ void main() {
         expect(
           tester
               .widget<OutlinedButton>(
-                find.widgetWithText(OutlinedButton, 'Guide'),
+                find.widgetWithText(OutlinedButton, 'Appearance'),
               )
               .focusNode
               ?.hasFocus,
@@ -81,7 +89,7 @@ void main() {
       await tester.pumpWidget(fixture.build());
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byIcon(Icons.view_list_outlined));
+      await _openImmersiveDestination(tester, 'Channels');
       await tester.pumpAndSettle();
       expect(find.text('Open Channel builder'), findsOneWidget);
       expect(tester.takeException(), isNull, reason: 'Channels at $size');
@@ -164,7 +172,7 @@ void main() {
     await tester.pumpWidget(fixture.build());
     await tester.pump();
     await tester.pump();
-    await tester.tap(find.byIcon(Icons.view_list_outlined));
+    await _openImmersiveDestination(tester, 'Channels');
     await tester.pumpAndSettle();
 
     await tester.tap(find.byTooltip('Delete Newsroom'));
@@ -200,7 +208,7 @@ void main() {
 
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
-    await tester.tap(find.byIcon(Icons.settings_outlined));
+    await _openImmersiveDestination(tester, 'Settings');
     await tester.pumpAndSettle();
 
     expect(
@@ -224,7 +232,7 @@ void main() {
       ..controller.selectedLibraryIds = const {'movies'};
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
-    await tester.tap(find.byIcon(Icons.view_list_outlined));
+    await _openImmersiveDestination(tester, 'Channels');
     await tester.pumpAndSettle();
     await tester.tap(find.text('Create channel'));
     await tester.pumpAndSettle();
@@ -307,6 +315,25 @@ void main() {
     expect(find.text('Review expected changes'), findsOneWidget);
     expect(find.text('Confirm & Replace'), findsOneWidget);
   });
+}
+
+Future<void> _openImmersiveDestination(
+  WidgetTester tester,
+  String destination,
+) async {
+  if (find.byKey(const Key('guide-app-menu')).evaluate().isNotEmpty) {
+    await tester.tap(find.byKey(const Key('guide-app-menu')));
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.tap(find.text(destination).last);
+  } else {
+    await tester.tap(
+      find.descendant(
+        of: find.byType(NavigationRail),
+        matching: find.text(destination),
+      ),
+    );
+  }
+  await tester.pumpAndSettle();
 }
 
 class _ProfileFixtureController extends FixtureController {

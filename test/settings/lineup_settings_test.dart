@@ -11,19 +11,34 @@ void main() {
     expect(settings.guideHours, 12);
     expect(settings.pastMinutes, 0);
     expect(settings.subtitleMode, SubtitleMode.full);
+    expect(settings.theme, LineupThemeName.emberSteel);
+    expect(settings.guideLayoutMode, GuideLayoutMode.pictureInPicture);
   });
 
   test('round trips meaningful preferences', () {
     const original = LineupSettings(
+      theme: LineupThemeName.slatePine,
       guideDensity: GuideDensity.compact,
+      guideLayoutMode: GuideLayoutMode.overlay,
       audioPassthrough: true,
       audioSetupComplete: true,
       reduceMotion: true,
     );
     final restored = LineupSettings.fromJson(original.toJson());
     expect(restored.guideDensity, GuideDensity.compact);
+    expect(restored.theme, LineupThemeName.slatePine);
+    expect(restored.guideLayoutMode, GuideLayoutMode.overlay);
     expect(restored.audioPassthrough, isTrue);
     expect(restored.audioSetupComplete, isTrue);
     expect(restored.reduceMotion, isTrue);
+  });
+
+  test('invalid theme and Guide layout values fall back safely', () {
+    final restored = LineupSettings.fromJson({
+      'theme': 'future-theme',
+      'guideLayoutMode': 'future-layout',
+    });
+    expect(restored.theme, LineupThemeName.emberSteel);
+    expect(restored.guideLayoutMode, GuideLayoutMode.pictureInPicture);
   });
 }

@@ -3,6 +3,11 @@
 This document is the source record for Prompt 3B and Prompt 4B portable UI
 parity. It does not claim Windows media validation.
 
+The earlier “Parity” classifications below are historical records of those
+accepted source-based passes. Prompt 4C does not promote them to live visual
+acceptance; its current locked-host classification matrix is recorded at the
+end of this document.
+
 ## Provenance and authority
 
 - LineupDesktop starting commit:
@@ -262,3 +267,102 @@ portable tests and macOS builds do not prove DirectComposition layering,
 transparent video, HDR, hardware decode, fullscreen/multi-monitor behavior,
 remote Plex streams, audio passthrough, lifecycle, packaging, signing, or
 installer behavior.
+
+## Prompt 4C source-defined theme and shell refinement
+
+### Provenance and evidence boundary
+
+- LineupDesktop starting commit: `dfa5f505290a2f4cbda12b496da10e88db86b057`
+  on `replatform/flutter-native`.
+- Upstream product reference: sibling `TJZine/Lineup`, inspected without
+  modification at `origin/code-health`
+  `f5f587c93cbea74f6c23f2df86ddae15fcb40e65`. Upstream `origin/main` remains
+  the README-only `5f01be6a719174ae1f89a70b8cab1095bf17c8b9`.
+- The upstream development command defined in `package.json` is `npm run dev`
+  (`vite`). It was not run because the remotely controlled macOS display was
+  locked. No viewport or browser dimensions were observed, and no private Plex
+  state was rendered.
+- LineupDesktop was likewise not foregrounded. Evidence in this pass is limited
+  to committed upstream source, Flutter source, deterministic tests, semantics,
+  layout constraints, static analysis, and build results. It is not evidence of
+  live visual parity.
+
+Exact upstream theme sources inspected were
+`src/modules/ui/theme/themeDefinitions.ts`, `src/styles/tokens.css`,
+`src/styles/themes.css`, `src/modules/settings/ThemePreferencesStore.ts`,
+`src/core/app-shell/runtime/AppThemeController.ts`, and its tests. Structural
+sources inspected included `src/modules/ui/epg/view/shell/EPGShellView.ts`, the
+EPG `styles.shell.css`, `styles.classic.css`, `styles.info-panel.css`,
+`styles.cells.css`, and `styles.theme.css`; `src/modules/ui/player-osd/**`;
+`src/modules/ui/mini-guide/**`; `src/modules/ui/playback-options/**`;
+`src/modules/ui/auth/AuthScreen.ts` and `AuthPinDisplay.ts`; Settings,
+onboarding, profile/server/audio setup, and Channel Setup component/style
+sources; and `src/modules/settings/EpgPreferencesStore.ts`.
+
+### Source-defined changes
+
+- `LineupThemeName` defines the exhaustive upstream order: Ember & Steel,
+  Slate & Pine, Swiss Minimal, DirecTV Classic, and Glassmorphism. Ember & Steel
+  is the invalid/missing-value default.
+- `LineupSettings` persists the theme and Guide presentation. The existing
+  controller save/rollback owner remains authoritative; successful changes
+  rebuild the root `MaterialApp` immediately, while failed writes retain the
+  previous theme.
+- One `ThemeData` builder and one `LineupThemeRoles` extension own deep,
+  surface, elevated, overlay, focus, selected, tuned, live, text, border,
+  progress, scrim, radius, and overlay-safe-area semantics. Onboarding, Channel
+  Setup, management, Settings, Guide, PiP, program cells, player surfaces, OSD,
+  mini Guide, selectors, dialogs, and notices consume these roles. The QR card
+  intentionally remains white for scan contrast.
+- Reduced motion and large focus indicators remain independent persisted
+  accessibility preferences. Mechanical checks cover primary text and focused
+  control contrast for every theme.
+- The persistent management `NavigationRail` remains on Channels, Settings,
+  and Diagnostics, but is absent from Guide and Player. Both immersive surfaces
+  use one shared Lineup menu that calls the existing route-selection owner.
+  Guide/player transitions retain explicit Escape/Back behavior and focus
+  restoration without a second navigation model.
+- Classic Guide with application-owned PiP remains the default. Overlay Guide
+  is persisted as a secondary mode and structurally layers the same Guide over
+  the same `PlayerSurface`. The branded header, Now Playing/showcase allocation,
+  16:9 PiP, information area, channel rail, time ruler, duration-based grid,
+  current-time line, library filter, and current/focused/selected/tuned roles
+  remain in one Flutter geometry model.
+- OSD surfaces use semantic overlay/scrim roles; track selectors are a
+  media-oriented right rail; mini Guide retains bounded shelf content; channel
+  entry retains its two-second auto-commit digit buffer; unsupported macOS,
+  loading, buffering, retry, sleep timer, telemetry omission, and overlay
+  timing remain truthful public-contract behavior.
+- Accepted QR/PIN, protected-profile keypad, measured server facts, audio
+  choice, and staged Channel Setup ownership were retained after source
+  inspection rather than reimplemented.
+
+### Prompt 4C locked-host classification matrix
+
+No row in this matrix is classified as visual parity.
+
+| Surface or state | Temporary classification | Source/test evidence and deferred acceptance |
+| --- | --- | --- |
+| Startup, auth welcome, QR/PIN, waiting, retry | Source-aligned theme mechanics implemented | Semantic theme roles reach the existing branded hierarchy; unlocked comparison remains required. |
+| Profiles and protected PIN | Existing implementation retained after source inspection | Card/keypad ownership and semantics remain; proportions, focus-ring appearance, and all themes require unlocked acceptance. |
+| Server discovery/selection/retry | Existing implementation retained after source inspection | No health, latency, or relay facts are fabricated; presentation remains subject to unlocked acceptance. |
+| Audio Setup and all Channel Setup stages | Source-aligned theme mechanics implemented | Existing staged header/content/footer and state owners remain; live spatial acceptance is deferred. |
+| Channels empty/populated/editor/delete/persistence error | Intentional Desktop structural adaptation | Management rail and readable-width workspace remain. Upstream has no equivalent implemented channel editor. |
+| Settings | Source-aligned structure implemented | Existing category/detail layout now exposes persisted theme and Guide presentation; live typography and spacing acceptance is deferred. |
+| Diagnostics | Intentional Desktop structural adaptation | Credential-safe management destination retained; no upstream consumer-equivalent surface exists. |
+| Guide without playback | Source-aligned structure implemented | Immersive shell, branded header, information area, time geometry, semantic states, filters, and bounded rows are deterministic; requires unlocked visual acceptance. |
+| Guide with default PiP | Source-aligned structure implemented | Classic/PiP is default and the single 16:9 `PlayerSurface` geometry remains authoritative; video composition requires Windows-native validation. |
+| Overlay Guide | Source-aligned structure implemented | Persisted secondary layout layers Guide over `PlayerSurface`; scrim/readability and transitions require unlocked visual acceptance. |
+| OSD, mini Guide, channel entry, track selectors, loading/error | Source-aligned structure implemented | Hierarchy, safe area, right rail, digit buffer, bounded shelf, truthful telemetry, and timer behavior are testable; visual motion/contrast requires unlocked acceptance. |
+| Five-theme coverage across major surfaces | Source-aligned theme mechanics implemented | Inventory/default/persistence/immediate update/semantic roles/contrast are deterministic. Visual balance of every theme requires unlocked acceptance. |
+| Responsive 1280×720, 1600×900, 1920×1080 | Requires unlocked visual acceptance | Existing layout tests exercise these logical regimes; no live side-by-side state was observed. |
+| Native video, transparency, HDR, hardware decode, fullscreen | Requires Windows-native validation | No Windows, C++, engine, libmpv, or native-presentation source changed or was claimed. |
+
+No new golden baselines were generated or accepted. Existing approved goldens
+were not rewritten. Prompt 4E must perform the foreground side-by-side campaign
+on an unlocked Mac at 1280×720, 1600×900, and 1920×1080 across all required
+onboarding, management, Guide, PiP, overlay, OSD, mini-Guide, selector,
+buffering, error, and unsupported-backend states. It must adjudicate composition,
+proportions, typography, spacing, artwork, action placement, focus visibility,
+theme balance, transitions, and compact-window behavior. Windows still owns
+native video/presentation acceptance.
