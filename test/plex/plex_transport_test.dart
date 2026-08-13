@@ -70,4 +70,45 @@ void main() {
       );
     },
   );
+
+  test(
+    'Plex Home falls back from empty v2 users and missing v2 switch',
+    () async {
+      final paths = <String>[];
+      final client = PlexClient(
+        clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+        httpClient: MockClient((request) async {
+          paths.add(request.url.path);
+          return switch (request.url.path) {
+            '/api/v2/home/users' => http.Response(
+              jsonEncode({'users': []}),
+              200,
+            ),
+            '/api/home/users' => http.Response(
+              '<MediaContainer><User id="7" title="Home &amp; Away" protected="0"/></MediaContainer>',
+              200,
+            ),
+            '/api/v2/home/users/7/switch' => http.Response('', 404),
+            '/api/home/users/7/switch' => http.Response(
+              '<user authenticationToken="profile-secret"/>',
+              200,
+            ),
+            _ => http.Response('', 500),
+          };
+        }),
+      );
+      final users = await client.homeUsers('account-secret');
+      expect(users.single.name, 'Home & Away');
+      expect(
+        await client.switchHomeUser('account-secret', '7', null),
+        'profile-secret',
+      );
+      expect(paths, [
+        '/api/v2/home/users',
+        '/api/home/users',
+        '/api/v2/home/users/7/switch',
+        '/api/home/users/7/switch',
+      ]);
+    },
+  );
 }

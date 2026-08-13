@@ -93,7 +93,7 @@ class PlexClient {
         _throwResponse(response);
       }
       final users = _parseHomeUsers(response.body);
-      if (users.isNotEmpty || path.endsWith('/users')) return users;
+      if (users.isNotEmpty || path == '/api/home/users') return users;
     }
     return const [];
   }
@@ -103,32 +103,42 @@ class PlexClient {
     String userId,
     String? pin,
   ) async {
-    final response = await _http.post(
-      Uri.https('plex.tv', '/api/v2/home/users/$userId/switch'),
-      headers: {
-        ..._headers(accountToken),
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: {if (pin != null && pin.isNotEmpty) 'pin': pin},
+    for (final path in [
+      '/api/v2/home/users/$userId/switch',
+      '/api/home/users/$userId/switch',
+    ]) {
+      final response = await _http.post(
+        Uri.https('plex.tv', path),
+        headers: {
+          ..._headers(accountToken),
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: {if (pin != null && pin.isNotEmpty) 'pin': pin},
+      );
+      if (response.statusCode == 401 || response.statusCode == 403) {
+        throw const PlexException(
+          'incorrect-pin',
+          'That Plex Home PIN was not accepted.',
+        );
+      }
+      if ((response.statusCode == 404 ||
+              response.statusCode == 405 ||
+              response.statusCode >= 500) &&
+          path.contains('/v2/')) {
+        continue;
+      }
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        _throwResponse(response);
+      }
+      final json = _tryJson(response.body);
+      final token = _findToken(json) ?? _findTokenInXml(response.body);
+      if (token != null) return token;
+      if (!path.contains('/v2/')) break;
+    }
+    throw const PlexException(
+      'parse-error',
+      'Plex did not return a profile token.',
     );
-    if (response.statusCode == 401 || response.statusCode == 403) {
-      throw const PlexException(
-        'incorrect-pin',
-        'That Plex Home PIN was not accepted.',
-      );
-    }
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      _throwResponse(response);
-    }
-    final json = _tryJson(response.body);
-    final token = _findToken(json) ?? _findTokenInXml(response.body);
-    if (token == null) {
-      throw const PlexException(
-        'parse-error',
-        'Plex did not return a profile token.',
-      );
-    }
-    return token;
   }
 
   Future<List<PlexServer>> discoverServers(String token) async {
