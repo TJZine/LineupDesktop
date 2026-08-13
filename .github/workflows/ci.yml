@@ -1,10 +1,12 @@
-name: Lineup Desktop CI
+name: CI
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   pull_request:
+
+permissions:
+  contents: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
@@ -12,45 +14,74 @@ concurrency:
 
 jobs:
   verify:
-    name: Verify (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 10
-    strategy:
-      fail-fast: false
-      matrix:
-        os:
-          - ubuntu-latest
-          - windows-latest
+    name: Verify Dart
+    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          persist-credentials: false
+          flutter-version: 3.47.0
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: dart format --output=none --set-exit-if-changed .
+      - run: flutter analyze
+      - run: flutter test
 
-      - name: Assert exact checkout SHA
-        shell: bash
-        env:
-          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+  build-macos:
+    name: Build macOS
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: 3.47.0
+          channel: stable
+          cache: true
+      - run: flutter build macos
+
+  build-windows:
+    name: Build Windows development player
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: 3.47.0
+          channel: stable
+          cache: true
+      - name: Validate the exact Flutter and engine sources for the owned patch
+        shell: pwsh
         run: |
-          actual_sha="$(git rev-parse HEAD)"
-          if [ "$actual_sha" != "$EXPECTED_SHA" ]; then
-            echo "Expected checkout $EXPECTED_SHA but resolved $actual_sha" >&2
-            exit 1
-          fi
-          echo "Verified checkout $actual_sha"
-
-      - name: Setup Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version-file: .nvmrc
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Verify
-        run: npm run verify
-
-      - name: Channel Builder performance
-        if: ${{ !cancelled() && runner.os == 'Windows' }}
-        run: npm run verify:channel-builder-performance
+          $flutterSource = Join-Path $env:RUNNER_TEMP 'lineup-flutter-source'
+          $depotTools = Join-Path $env:RUNNER_TEMP 'depot_tools'
+          git clone --filter=blob:none https://github.com/flutter/flutter.git $flutterSource
+          git -C $flutterSource checkout 4cf24164269a5ebf0c16a028a00727d0e77bbb05
+          if ((git -C $flutterSource rev-parse HEAD:engine/scripts/standard.gclient).Trim() -ne 'a05a39e336335389321b8a6d855b13bd3fc7892c') {
+            throw 'Pinned Flutter standard.gclient blob does not match.'
+          }
+          Copy-Item -LiteralPath (Join-Path $flutterSource 'engine\scripts\standard.gclient') -Destination (Join-Path $flutterSource '.gclient')
+          git clone --depth 1 https://chromium.googlesource.com/chromium/tools/depot_tools.git $depotTools
+          $env:PATH = "$depotTools;$env:PATH"
+          $env:DEPOT_TOOLS_WIN_TOOLCHAIN = '0'
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $env:GYP_MSVS_OVERRIDE_PATH = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          $env:WINDOWSSDKDIR = "${env:ProgramFiles(x86)}\Windows Kits\10"
+          Set-Location $flutterSource
+          gclient sync --no-history
+          & "$env:GITHUB_WORKSPACE\tool\flutter_engine\apply.ps1" -FlutterRoot $flutterSource
+          Set-Location (Join-Path $flutterSource 'engine\src')
+          python .\flutter\tools\gn --runtime-mode=release
+          ninja -C out\host_release
+      - name: Build with the pinned libmpv development asset
+        shell: pwsh
+        run: |
+          $mpvRoot = Join-Path $env:RUNNER_TEMP 'lineup-mpv'
+          & .\tool\windows\prepare-mpv-dev.ps1 -Destination $mpvRoot
+          $env:LINEUP_MPV_ROOT = $mpvRoot
+          $env:LINEUP_ALLOW_GPL_MPV_DEV_ARTIFACT = '1'
+          $engineSource = Join-Path $env:RUNNER_TEMP 'lineup-flutter-source\engine\src'
+          flutter build windows `
+            --local-engine=host_release `
+            --local-engine-host=host_release `
+            --local-engine-src-path=$engineSource
