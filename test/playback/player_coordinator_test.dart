@@ -299,6 +299,62 @@ void main() {
     lineup.dispose();
   });
 
+  test('initial media is loaded once and exposes failures', () async {
+    final lineup = _TestLineup();
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    final player = _LoadFailurePlayer();
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+    );
+
+    final media = Uri.parse('lineup-test://initial');
+    await coordinator.loadInitialMedia(media);
+    await coordinator.loadInitialMedia(media);
+
+    expect(player.loads, [media]);
+    expect(coordinator.error, contains('load failed after dispatch'));
+    expect(coordinator.overlay, PlayerOverlay.error);
+
+    coordinator.dispose();
+    guide.dispose();
+    lineup.dispose();
+  });
+
+  test('a tune supersedes a pending initial media load', () async {
+    final lineup = _TestLineup();
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    )..requestViewport(0, 2);
+    await Future<void>.delayed(Duration.zero);
+    final player = _ControlledPlayer();
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+    );
+
+    final initial = coordinator.loadInitialMedia(
+      Uri.parse('lineup-test://initial'),
+    );
+    await player.firstLoadStarted.future;
+    await coordinator.tune('channel-b');
+    player.releaseFirstLoad.complete();
+    await initial;
+
+    expect(lineup.currentChannelId, 'channel-b');
+    expect(coordinator.error, isNull);
+
+    coordinator.dispose();
+    guide.dispose();
+    lineup.dispose();
+  });
+
   test('terminal error during seek cannot settle tune as successful', () async {
     final lineup = _TestLineup();
     final guide = GuideController(

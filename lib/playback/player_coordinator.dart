@@ -64,6 +64,7 @@ class PlayerCoordinator extends ChangeNotifier {
   int _tuneGeneration = 0;
   Future<void> _tuneOperations = Future.value();
   bool _disposed = false;
+  bool _initialMediaRequested = false;
   LineupPlaybackRequest? _activePlayback;
   String? _retryChannelId;
   List<Channel> _indexedChannels = const [];
@@ -195,6 +196,21 @@ class PlayerCoordinator extends ChangeNotifier {
     );
     _tuneOperations = operation.catchError((_) {});
     return operation;
+  }
+
+  Future<void> loadInitialMedia(Uri media) async {
+    if (_initialMediaRequested) return;
+    _initialMediaRequested = true;
+    final generation = ++_tuneGeneration;
+    try {
+      await player.load(media);
+      if (!_disposed && generation == _tuneGeneration) showOsd();
+    } catch (error) {
+      if (_disposed || generation != _tuneGeneration) return;
+      _error = error.toString();
+      _canRetry = false;
+      _setOverlay(PlayerOverlay.error, timed: false);
+    }
   }
 
   Future<void> _performTune(String channelId, int generation) async {

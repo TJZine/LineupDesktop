@@ -81,7 +81,6 @@ class GuideRowData {
 class GuideController extends ChangeNotifier {
   static const maximumCachedArtworkEntries = 12;
   static const maximumConcurrentArtworkLoads = 4;
-  static const maximumProjectedProgramsPerRow = 256;
 
   GuideController({
     required this.lineup,
@@ -476,7 +475,6 @@ class GuideController extends ChangeNotifier {
                         channel.anchor,
                         schedule,
                       )
-                      .take(maximumProjectedProgramsPerRow)
                       .map((scheduled) {
                         return GuideProgram(
                           channelId: channel.id,

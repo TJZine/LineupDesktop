@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -14,14 +13,12 @@ class PlayerView extends StatefulWidget {
   const PlayerView({
     required this.controller,
     required this.openGuide,
-    this.initialMediaPath,
     this.focusNode,
     super.key,
   });
 
   final PlayerCoordinator controller;
   final VoidCallback openGuide;
-  final String? initialMediaPath;
   final FocusNode? focusNode;
 
   @override
@@ -33,17 +30,6 @@ class _PlayerViewState extends State<PlayerView> {
   void initState() {
     super.initState();
     widget.controller.addListener(_changed);
-    final path = widget.initialMediaPath;
-    if (path != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) async {
-        try {
-          await widget.controller.player.load(_mediaUri(path));
-          widget.controller.showOsd();
-        } catch (_) {
-          // The coordinator/player status owns the visible failure state.
-        }
-      });
-    }
   }
 
   @override
@@ -69,6 +55,29 @@ class _PlayerViewState extends State<PlayerView> {
       } else {
         controller.closeOverlay();
       }
+      return KeyEventResult.handled;
+    }
+    final unsupported = controller.status.state == PlayerState.unsupported;
+    final selects =
+        key == LogicalKeyboardKey.enter ||
+        key == LogicalKeyboardKey.space ||
+        key == LogicalKeyboardKey.select ||
+        key == LogicalKeyboardKey.mediaPlayPause;
+    if (unsupported &&
+        (_digit(key) != null ||
+            key == LogicalKeyboardKey.mediaPlay ||
+            key == LogicalKeyboardKey.mediaPause ||
+            key == LogicalKeyboardKey.mediaStop ||
+            key == LogicalKeyboardKey.mediaRewind ||
+            key == LogicalKeyboardKey.mediaFastForward ||
+            ((key == LogicalKeyboardKey.pageUp ||
+                    key == LogicalKeyboardKey.pageDown) &&
+                controller.overlay != PlayerOverlay.miniGuide) ||
+            (controller.overlay == PlayerOverlay.none &&
+                (selects ||
+                    key == LogicalKeyboardKey.arrowLeft ||
+                    key == LogicalKeyboardKey.arrowRight)) ||
+            (controller.overlay == PlayerOverlay.miniGuide && selects))) {
       return KeyEventResult.handled;
     }
     if (controller.overlay == PlayerOverlay.audioTracks ||
@@ -230,7 +239,7 @@ class PlayerSurface extends StatelessWidget {
           const _Loading(label: 'Preparing playback'),
         if (state == PlayerState.buffering)
           const _Loading(label: 'Buffering playback'),
-        if (showErrors && state == PlayerState.error)
+        if (showErrors && controller.error != null)
           _SurfaceError(controller: controller),
       ],
     );
@@ -556,6 +565,7 @@ class _MiniGuideRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final focused = channel.id == controller.miniGuideChannelId;
     final tuned = channel.id == controller.lineup.currentChannelId;
+    final unsupported = controller.status.state == PlayerState.unsupported;
     final current = controller.guide.currentProgram(channel.id);
     final next = controller.guide.nextProgram(channel.id);
     final now = controller.guide.now;
@@ -640,8 +650,14 @@ class _MiniGuideRow extends StatelessWidget {
                   ),
                 ),
                 IconButton(
-                  tooltip: tuned ? 'Watching this channel' : 'Watch channel',
-                  onPressed: tuned ? null : () => controller.tune(channel.id),
+                  tooltip: unsupported
+                      ? 'Playback unavailable'
+                      : tuned
+                      ? 'Watching this channel'
+                      : 'Watch channel',
+                  onPressed: tuned || unsupported
+                      ? null
+                      : () => controller.tune(channel.id),
                   icon: const Icon(Icons.play_arrow),
                 ),
               ],
@@ -807,17 +823,6 @@ class _Unsupported extends StatelessWidget {
       ],
     ),
   );
-}
-
-Uri _mediaUri(String value) {
-  if (Platform.isWindows &&
-      (RegExp(r'^[A-Za-z]:[\\/]').hasMatch(value) || value.startsWith(r'\\'))) {
-    return Uri.file(value, windows: true);
-  }
-  final parsed = Uri.tryParse(value);
-  return parsed != null && parsed.hasScheme
-      ? parsed
-      : Uri.file(value, windows: Platform.isWindows);
 }
 
 String? _digit(LogicalKeyboardKey key) {

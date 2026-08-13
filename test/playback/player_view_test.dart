@@ -29,6 +29,33 @@ void main() {
     expect(find.text('Playback unavailable'), findsOneWidget);
     expect(find.text('Playback is unavailable on macOS.'), findsOneWidget);
 
+    await tester.sendKeyEvent(LogicalKeyboardKey.space);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.mediaPlay);
+    expect(fixture.native.transportCommands, 0);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
+  testWidgets('Guide-sized player surface keeps load failures reachable', (
+    tester,
+  ) async {
+    final fixture = _Fixture(PlayerState.playing, failLoad: true);
+    await fixture.player.loadInitialMedia(Uri.parse('lineup-test://failure'));
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SizedBox(
+          width: 320,
+          height: 180,
+          child: PlayerSurface(controller: fixture.player, showErrors: true),
+        ),
+      ),
+    );
+
+    expect(find.textContaining('synthetic load failure'), findsOneWidget);
+
     await tester.pumpWidget(const SizedBox.shrink());
     fixture.dispose();
   });
@@ -106,7 +133,7 @@ void main() {
 }
 
 class _Fixture {
-  _Fixture(PlayerState state) {
+  _Fixture(PlayerState state, {bool failLoad = false}) {
     lineup = _Lineup();
     guide = GuideController(
       lineup: lineup,
@@ -116,15 +143,13 @@ class _Fixture {
         seed: channel.shuffleSeed,
       ),
     )..requestViewport(0, 1);
-    player = PlayerCoordinator(
-      player: _Native(state),
-      lineup: lineup,
-      guide: guide,
-    );
+    native = _Native(state, failLoad: failLoad);
+    player = PlayerCoordinator(player: native, lineup: lineup, guide: guide);
   }
 
   late final _Lineup lineup;
   late final GuideController guide;
+  late final _Native native;
   late final PlayerCoordinator player;
 
   void dispose() {
@@ -166,13 +191,16 @@ class _Lineup extends LineupController {
 }
 
 class _Native implements NativePlayer {
-  _Native(PlayerState state)
+  _Native(PlayerState state, {this.failLoad = false})
     : status = PlayerStatus(
         state: state,
         message: state == PlayerState.unsupported
             ? 'Playback is unavailable on macOS.'
             : 'Playing',
       );
+
+  final bool failLoad;
+  int transportCommands = 0;
 
   @override
   final PlayerStatus status;
@@ -189,13 +217,25 @@ class _Native implements NativePlayer {
   @override
   Future<void> initialize() async {}
   @override
-  Future<void> load(Uri media) async {}
+  Future<void> load(Uri media) async {
+    if (failLoad) throw StateError('synthetic load failure');
+  }
+
   @override
-  Future<void> play() async {}
+  Future<void> play() async {
+    transportCommands++;
+  }
+
   @override
-  Future<void> pause() async {}
+  Future<void> pause() async {
+    transportCommands++;
+  }
+
   @override
-  Future<void> seek(Duration position) async {}
+  Future<void> seek(Duration position) async {
+    transportCommands++;
+  }
+
   @override
   Future<void> setVideoRect(PlayerVideoRect rect) async {}
   @override

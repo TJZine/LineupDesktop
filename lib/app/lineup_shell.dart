@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import '../channels/channel.dart';
@@ -47,6 +50,10 @@ class _LineupShellState extends State<LineupShell> {
       lineup: widget.controller,
       guide: _guide,
     );
+    final initialMediaPath = widget.initialMediaPath;
+    if (initialMediaPath != null) {
+      unawaited(_player.loadInitialMedia(_mediaUri(initialMediaPath)));
+    }
     _player.addListener(_changed);
     if (_selectedIndex == 0) _player.showFullGuide();
     widget.controller.addListener(_changed);
@@ -108,7 +115,6 @@ class _LineupShellState extends State<LineupShell> {
     final playerView = PlayerView(
       key: _playerKey,
       controller: _player,
-      initialMediaPath: widget.initialMediaPath,
       focusNode: _playerFocus,
       openGuide: () => _select(0),
     );
@@ -117,7 +123,7 @@ class _LineupShellState extends State<LineupShell> {
         controller: _guide,
         focusNode: _guideFocus,
         onClose: () => _select(4),
-        pictureInPicture: _player.hasPlaybackIntent
+        pictureInPicture: _player.hasPlaybackIntent || _player.error != null
             ? PlayerSurface(controller: _player, showErrors: true)
             : null,
         playbackMessage: _player.tuning
@@ -206,6 +212,17 @@ class _LineupShellState extends State<LineupShell> {
       ),
     );
   }
+}
+
+Uri _mediaUri(String value) {
+  if (Platform.isWindows &&
+      (RegExp(r'^[A-Za-z]:[\\/]').hasMatch(value) || value.startsWith(r'\\'))) {
+    return Uri.file(value, windows: true);
+  }
+  final parsed = Uri.tryParse(value);
+  return parsed != null && parsed.hasScheme
+      ? parsed
+      : Uri.file(value, windows: Platform.isWindows);
 }
 
 class ChannelsView extends StatefulWidget {

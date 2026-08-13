@@ -417,6 +417,47 @@ void main() {
     guide.dispose();
     lineup.dispose();
   });
+
+  test(
+    'short programs are not silently truncated from the Guide window',
+    () async {
+      final anchor = DateTime(2026, 8, 13, 12);
+      final items = List.generate(
+        300,
+        (index) => ChannelItem(
+          id: 'short-$index',
+          title: 'Short $index',
+          duration: const Duration(minutes: 1),
+        ),
+      );
+      final channel = Channel(
+        id: 'shorts',
+        number: 1,
+        name: 'Short programs',
+        source: ManualSource(items),
+        playbackMode: PlaybackMode.sequential,
+        anchor: anchor,
+        shuffleSeed: 1,
+      );
+      final lineup = _TestLineup([channel])
+        ..settings = const LineupSettings(guideHours: 8, pastMinutes: 0);
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => buildSchedule(
+          items,
+          mode: channel.playbackMode,
+          seed: channel.shuffleSeed,
+        ),
+        clock: () => anchor,
+      )..requestViewport(0, 1);
+      await _settle();
+
+      expect(guide.row(channel.id).programs, hasLength(480));
+
+      guide.dispose();
+      lineup.dispose();
+    },
+  );
 }
 
 List<Channel> _channels(
