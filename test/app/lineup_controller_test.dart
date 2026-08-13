@@ -296,8 +296,8 @@ class _FakePlex extends PlexClient {
       Future.value(const []);
 
   @override
-  Future<List<PlexPlaylist>> playlists(Uri server, String token) async =>
-      const [];
+  Future<PlexPlaylistCatalog> playlists(Uri server, String token) async =>
+      const PlexPlaylistCatalog(playlists: [], failedIds: {});
 
   @override
   void close() {}

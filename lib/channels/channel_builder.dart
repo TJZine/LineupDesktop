@@ -316,12 +316,7 @@ List<Channel> materializeChannelPlan({
   var next = 1;
   for (final entry in expanded.take(maximumChannels)) {
     final name = '${entry.proposal.name}${entry.suffix}';
-    final builderKey = _builderKey(
-      entry.proposal,
-      entry.suffix,
-      entry.mode,
-      entry.blockSize,
-    );
+    final builderKey = _builderKey(entry.proposal, entry.suffix);
     final matched = mode == ChannelBuildMode.merge
         ? existing
               .where((channel) => channel.builderKey == builderKey)
@@ -337,7 +332,7 @@ List<Channel> materializeChannelPlan({
       Channel(
         id: id,
         number: number,
-        name: matched?.name ?? name,
+        name: name,
         source: entry.proposal.source,
         playbackMode: entry.mode,
         anchor: anchor ?? DateTime.now().toUtc(),
@@ -359,20 +354,13 @@ bool _containsShows(ContentSource source) => switch (source) {
   PlaylistSource() => false,
 };
 
-String _builderKey(
-  ChannelProposal proposal,
-  String suffix,
-  PlaybackMode mode,
-  int? blockSize,
-) => sha256
+String _builderKey(ChannelProposal proposal, String suffix) => sha256
     .convert(
       utf8.encode(
         jsonEncode({
           'strategy': proposal.strategy.name,
           'source': proposal.source.toJson(),
           'suffix': suffix,
-          'mode': mode.name,
-          'blockSize': ?blockSize,
         }),
       ),
     )

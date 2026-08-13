@@ -303,7 +303,7 @@ class PlexClient {
     return output;
   }
 
-  Future<List<PlexPlaylist>> playlists(Uri server, String token) async {
+  Future<PlexPlaylistCatalog> playlists(Uri server, String token) async {
     final json = await _serverJson(
       server
           .resolve('/playlists/all')
@@ -311,6 +311,7 @@ class PlexClient {
       token,
     );
     final output = <PlexPlaylist>[];
+    final failed = <String>{};
     final metadata = _containerList(json, 'Metadata');
     for (var start = 0; start < metadata.length; start += 4) {
       final batch = metadata.skip(start).take(4).map((raw) async {
@@ -333,6 +334,8 @@ class PlexClient {
                   items: items,
                 );
         } catch (_) {
+          final value = raw is Map ? raw['ratingKey'] : null;
+          if (value != null) failed.add('$value');
           return null;
         }
       });
@@ -340,7 +343,10 @@ class PlexClient {
         if (playlist != null) output.add(playlist);
       }
     }
-    return List.unmodifiable(output);
+    return PlexPlaylistCatalog(
+      playlists: List.unmodifiable(output),
+      failedIds: Set.unmodifiable(failed),
+    );
   }
 
   PlexPlaybackDescriptor playbackDescriptor({

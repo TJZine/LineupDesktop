@@ -328,4 +328,34 @@ void main() {
     );
     expect(channels, hasLength(2));
   });
+
+  test('merge identity remains stable when playback configuration changes', () {
+    const proposal = ChannelProposal(
+      name: 'Series',
+      source: LibrarySource(libraryId: 'tv', libraryType: PlexLibraryType.show),
+      mode: PlaybackMode.shuffle,
+      itemCount: 10,
+      strategy: BuilderStrategy.recentlyAdded,
+      series: true,
+    );
+    final first = materializeChannelPlan(
+      proposals: const [proposal],
+      existing: const [],
+      mode: ChannelBuildMode.replace,
+      seriesMode: PlaybackMode.shuffle,
+      anchor: DateTime.utc(2026),
+    ).single;
+    final changed = materializeChannelPlan(
+      proposals: const [proposal],
+      existing: [first],
+      mode: ChannelBuildMode.merge,
+      seriesMode: PlaybackMode.block,
+      seriesBlockSize: 5,
+      anchor: DateTime.utc(2027),
+    ).single;
+    expect(changed.id, first.id);
+    expect(changed.number, first.number);
+    expect(changed.playbackMode, PlaybackMode.block);
+    expect(changed.blockSize, 5);
+  });
 }

@@ -272,10 +272,11 @@ void main() {
       );
       expect(episodes.single.type, 'episode');
       expect(requests.first.queryParameters['type'], '4');
-      expect(playlists.single.title, 'Favorites');
-      expect(playlists.single.items.single.id, 'm1');
+      expect(playlists.playlists.single.title, 'Favorites');
+      expect(playlists.playlists.single.items.single.id, 'm1');
       expect(requests.last.host, 'plex.example');
       expect(requests.last.path, '/playlists/p1/items');
+      expect(playlists.failedIds, isEmpty);
     },
   );
 

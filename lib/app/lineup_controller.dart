@@ -54,6 +54,7 @@ class LineupController extends ChangeNotifier {
   PlexPin? activePin;
   SetupStage stage = SetupStage.welcome;
   bool busy = false;
+  bool channelSetupCanCancel = false;
   String? error;
   int _epoch = 0;
   String? _accountToken;
@@ -164,7 +165,10 @@ class LineupController extends ChangeNotifier {
       final validated = await plex.account(token);
       if (operation != _epoch) return;
       await credentials.writeAccountToken(token);
-      if (operation != _epoch) return;
+      if (operation != _epoch) {
+        await credentials.clear();
+        return;
+      }
       account = validated;
       _accountToken = token;
       profiles = await plex.homeUsers(token);
@@ -200,7 +204,10 @@ class LineupController extends ChangeNotifier {
             : await plex.switchHomeUser(accountToken, selected.id, pin);
         if (operation != _epoch) return;
         await credentials.writeProfileToken(selected.id, token);
-        if (operation != _epoch) return;
+        if (operation != _epoch) {
+          await credentials.clear();
+          return;
+        }
         final oldProfile = profile;
         final oldProfileToken = _profileToken;
         final oldServer = server;
@@ -317,6 +324,7 @@ class LineupController extends ChangeNotifier {
             ? null
             : _persisted.currentChannelByProfileServer[profileId]?[selected.id];
         stage = SetupStage.channelSetup;
+        channelSetupCanCancel = false;
         try {
           await _save();
         } catch (_) {
@@ -386,20 +394,36 @@ class LineupController extends ChangeNotifier {
       items.addAll(await plex.libraryItems(endpoint, token, id, library.type));
       if (operation != _epoch) return;
     }
-    List<PlexPlaylist> playlists;
+    PlexPlaylistCatalog catalog;
     try {
-      playlists = await plex.playlists(endpoint, token);
+      catalog = await plex.playlists(endpoint, token);
     } on PlexException catch (exception) {
       diagnostics.add('plex-library', 'Playlist discovery unavailable', {
         'error': exception.toString(),
       });
-      playlists = const [];
+      catalog = const PlexPlaylistCatalog(playlists: [], failedIds: {});
     }
     if (operation != _epoch) return;
+    final required = channels
+        .map((channel) => channel.source)
+        .whereType<PlaylistSource>()
+        .map((source) => source.playlistId)
+        .toSet();
+    if (catalog.failedIds.any(required.contains)) {
+      throw const PlexException(
+        'playlist-unavailable',
+        'A playlist used by this lineup could not be loaded. Retry setup.',
+      );
+    }
+    if (catalog.failedIds.isNotEmpty) {
+      diagnostics.add('plex-library', 'Some playlists could not be loaded', {
+        'count': catalog.failedIds.length,
+      });
+    }
     availableMedia = List.unmodifiable(
       items.where((item) => item.duration > Duration.zero),
     );
-    availablePlaylists = playlists;
+    availablePlaylists = catalog.playlists;
   }
 
   Future<void> completeAudioSetup({
@@ -427,12 +451,14 @@ class LineupController extends ChangeNotifier {
   }
 
   Future<void> enterChannelSetup() async {
+    channelSetupCanCancel = stage == SetupStage.ready;
     stage = SetupStage.channelSetup;
     notifyListeners();
   }
 
   void cancelChannelSetup() {
-    if (server != null && channels.isNotEmpty) {
+    if (channelSetupCanCancel) {
+      channelSetupCanCancel = false;
       error = null;
       stage = SetupStage.ready;
       notifyListeners();
@@ -556,6 +582,10 @@ class LineupController extends ChangeNotifier {
     libraries = const [];
     availableMedia = const [];
     availablePlaylists = const [];
+    selectedLibraryIds = const {};
+    channels = const [];
+    currentChannelId = null;
+    channelSetupCanCancel = false;
     _accountToken = null;
     _profileToken = null;
     stage = SetupStage.welcome;
@@ -623,7 +653,7 @@ class LineupController extends ChangeNotifier {
     notifyListeners();
     try {
       await body();
-      return true;
+      return operation == _epoch;
     } catch (exception) {
       if (operation != _epoch) return false;
       error = exception is PlexException

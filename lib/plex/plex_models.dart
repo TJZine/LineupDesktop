@@ -91,6 +91,12 @@ class PlexPlaylist {
   final List<PlexMediaItem> items;
 }
 
+class PlexPlaylistCatalog {
+  const PlexPlaylistCatalog({required this.playlists, required this.failedIds});
+  final List<PlexPlaylist> playlists;
+  final Set<String> failedIds;
+}
+
 class PlexTrack {
   const PlexTrack({
     required this.id,

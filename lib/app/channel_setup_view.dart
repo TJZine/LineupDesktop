@@ -156,7 +156,7 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
         Wrap(
           spacing: 10,
           children: [
-            if (widget.controller.channels.isNotEmpty)
+            if (widget.controller.channelSetupCanCancel)
               OutlinedButton(
                 onPressed: widget.controller.cancelChannelSetup,
                 child: const Text('Cancel'),
