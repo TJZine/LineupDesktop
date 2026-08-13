@@ -241,7 +241,7 @@ class WindowsNativePlayer implements NativePlayer {
       case 'duration':
         _duration = _durationFromSeconds(value);
       case 'track-list':
-        _tracks = _decodeTracks(value);
+        _tracks = List.unmodifiable(_decodeTracks(value));
       case 'video-format':
         _telemetry = _copyTelemetry(videoFormat: value);
       case 'video-codec':

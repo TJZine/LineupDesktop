@@ -8,14 +8,14 @@ See NOTICE for the applicable BSD-3-Clause terms.
 diff --git a/engine/src/flutter/shell/platform/windows/egl/manager.cc b/engine/src/flutter/shell/platform/windows/egl/manager.cc
 --- a/engine/src/flutter/shell/platform/windows/egl/manager.cc
 +++ b/engine/src/flutter/shell/platform/windows/egl/manager.cc
-@@ -283,29 +283,46 @@ std::unique_ptr<WindowSurface> Manager::CreateWindowSurface(HWND hwnd,
+@@ -283,29 +283,46 @@
  std::unique_ptr<WindowSurface> Manager::CreateWindowSurface(HWND hwnd,
                                                              size_t width,
                                                              size_t height) {
    if (!hwnd || !is_valid_) {
      return nullptr;
    }
-
+ 
 +  const bool use_direct_composition =
 +      ::GetEnvironmentVariableW(L"FLUTTER_WINDOWS_DCOMP", nullptr, 0) > 0;
 +  if (use_direct_composition) {
@@ -42,8 +42,7 @@ diff --git a/engine/src/flutter/shell/platform/windows/egl/manager.cc b/engine/s
 +    surface_attributes.push_back(EGL_TRUE);
 +  }
 +  surface_attributes.push_back(EGL_NONE);
--
-+
+ 
    auto const surface = ::eglCreateWindowSurface(
        display_, config_, static_cast<EGLNativeWindowType>(hwnd),
 -      surface_attributes);
@@ -51,7 +50,7 @@ diff --git a/engine/src/flutter/shell/platform/windows/egl/manager.cc b/engine/s
    if (surface == EGL_NO_SURFACE) {
      LogEGLError("Surface creation failed.");
      return nullptr;
-   }
++  }
 +  if (use_direct_composition) {
 +    // The runner clears this before engine startup and the native player
 +    // requires the exact marker. A stock or failed patched engine therefore
@@ -59,9 +58,8 @@ diff --git a/engine/src/flutter/shell/platform/windows/egl/manager.cc b/engine/s
 +    ::SetEnvironmentVariableW(
 +        L"LINEUP_FLUTTER_DCOMP_ACTIVE",
 +        L"5f77625673248ee5846fbcaf5d3e1a3878386fd7");
-+  }
--
-+
+   }
+ 
    return std::make_unique<WindowSurface>(display_, render_context_->GetHandle(),
                                           surface, width, height);
  }

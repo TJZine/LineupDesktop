@@ -28,6 +28,7 @@ class _PlayerFoundationViewState extends State<PlayerFoundationView> {
   PlayerEvent? _event;
   String? _operation;
   bool _fullscreen = false;
+  int _presentationEpoch = 0;
 
   @override
   void initState() {
@@ -97,6 +98,9 @@ class _PlayerFoundationViewState extends State<PlayerFoundationView> {
     await _run('Recreate native player', () async {
       await widget.player.dispose();
       await widget.player.initialize();
+      if (mounted) {
+        setState(() => _presentationEpoch += 1);
+      }
       if (media != null) await widget.player.load(media);
     });
   }
@@ -104,11 +108,18 @@ class _PlayerFoundationViewState extends State<PlayerFoundationView> {
   @override
   Widget build(BuildContext context) {
     final event = _event;
+    final status = event?.status ?? widget.player.status;
     final telemetry = event?.telemetry ?? widget.player.telemetry;
     return Stack(
       fit: StackFit.expand,
       children: [
-        NativeVideoSurface(player: widget.player),
+        if (status.state == PlayerState.unsupported)
+          ColoredBox(color: Theme.of(context).scaffoldBackgroundColor)
+        else
+          NativeVideoSurface(
+            player: widget.player,
+            presentationEpoch: _presentationEpoch,
+          ),
         Positioned(
           left: 28,
           top: 24,
@@ -120,7 +131,7 @@ class _PlayerFoundationViewState extends State<PlayerFoundationView> {
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               child: Text(
-                'Flutter overlay • ${event?.status.message ?? widget.player.status.message}',
+                'Flutter overlay • ${status.message}',
                 style: Theme.of(context).textTheme.titleMedium,
               ),
             ),
