@@ -128,10 +128,11 @@ actually exercised.
 One behaviorful `ChangeNotifier` owns the current cross-feature asynchronous
 state graph; widgets retain local form and navigation state. A separate state
 framework would add forwarding and lifecycle ceremony without improving this
-single-owner graph. `http`, `xml`, `path_provider`, and
-`qr_flutter`, and `flutter_secure_storage` provide maintained transport, Plex
-XML fallback, platform application-data paths, native QR rendering, and
-Keychain/platform-secure credential storage respectively. The macOS
+single-owner graph. `http`, `xml`, `path_provider`, `qr_flutter`, `crypto`, and
+`flutter_secure_storage` provide maintained transport, Plex XML fallback,
+platform application-data paths, Flutter-rendered QR presentation, stable builder
+provenance hashes, and Keychain/platform-secure credential storage
+respectively. The macOS
 legacy-Keychain option is an explicit bridge
 for unsigned development, not plaintext storage or the production signing
 endpoint. No plaintext credential fallback exists.

@@ -8,6 +8,7 @@ import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/persistence/app_store.dart';
 import 'package:lineup_desktop/playback/native_player.dart';
 import 'package:lineup_desktop/plex/plex_client.dart';
+import 'package:lineup_desktop/plex/plex_models.dart';
 
 void main() {
   testWidgets('shows honest empty states and supports shell navigation', (
@@ -45,6 +46,48 @@ void main() {
     await tester.pump();
 
     expect(controller.linkingRequested, isTrue);
+  });
+
+  testWidgets('Plex linking presents QR, PIN cells, and cancellation', (
+    tester,
+  ) async {
+    final controller = _FakeController()
+      ..stage = SetupStage.linking
+      ..activePin = PlexPin(
+        id: 1,
+        code: 'ABCD',
+        expiresAt: DateTime.now().add(const Duration(minutes: 2)),
+      );
+    await tester.pumpWidget(
+      LineupBootstrap(player: _FakePlayer(), controller: controller),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.bySemanticsLabel('QR code for plex.tv/link'), findsOneWidget);
+    expect(find.bySemanticsLabel('Plex link code A B C D'), findsOneWidget);
+    await tester.tap(find.text('Cancel'));
+    expect(controller.linkingCanceled, isTrue);
+  });
+
+  testWidgets('protected profile PIN submits after four remote digits', (
+    tester,
+  ) async {
+    const child = PlexHomeUser(id: 'child', name: 'Child', protected: true);
+    final controller = _FakeController()
+      ..stage = SetupStage.profiles
+      ..profiles = const [child];
+    await tester.pumpWidget(
+      LineupBootstrap(player: _FakePlayer(), controller: controller),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Child'));
+    await tester.pumpAndSettle();
+    for (final digit in ['1', '2', '3', '4']) {
+      await tester.tap(find.widgetWithText(FilledButton, digit));
+      await tester.pump();
+    }
+    expect(controller.selectedProfile, child);
+    expect(controller.selectedPin, '1234');
   });
 
   testWidgets('presents initialization failures without entering the shell', (
@@ -95,6 +138,9 @@ class _FakeController extends LineupController {
       );
 
   bool linkingRequested = false;
+  bool linkingCanceled = false;
+  PlexHomeUser? selectedProfile;
+  String? selectedPin;
 
   @override
   Future<void> initialize() async {}
@@ -102,6 +148,17 @@ class _FakeController extends LineupController {
   @override
   Future<void> startLinking() async {
     linkingRequested = true;
+  }
+
+  @override
+  Future<void> cancelLinking() async {
+    linkingCanceled = true;
+  }
+
+  @override
+  Future<void> selectProfile(PlexHomeUser selected, {String? pin}) async {
+    selectedProfile = selected;
+    selectedPin = pin;
   }
 }
 

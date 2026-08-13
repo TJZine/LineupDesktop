@@ -23,6 +23,7 @@ void main() {
       playbackMode: PlaybackMode.shuffle,
       anchor: DateTime.utc(2026),
       shuffleSeed: 4,
+      builderKey: 'builder-key',
     );
     await store.save(
       PersistedState(
@@ -35,15 +36,32 @@ void main() {
             'server': ['1'],
           },
         },
+        channelsByProfileServer: {
+          'profile': {
+            'server': [channel],
+          },
+        },
+        currentChannelByProfileServer: const {
+          'profile': {'server': 'stable-id'},
+        },
       ),
     );
     final restored = await store.load();
     expect(restored.settings.reduceMotion, isTrue);
     expect(restored.channels.single.id, 'stable-id');
+    expect(restored.channels.single.builderKey, 'builder-key');
     expect(restored.selectedServerByProfile, {'profile': 'server'});
     expect(restored.selectedLibraryIdsByProfileServer['profile']?['server'], [
       '1',
     ]);
+    expect(
+      restored.channelsByProfileServer['profile']?['server']?.single.id,
+      'stable-id',
+    );
+    expect(
+      restored.currentChannelByProfileServer['profile']?['server'],
+      'stable-id',
+    );
     expect(
       await directory
           .list()

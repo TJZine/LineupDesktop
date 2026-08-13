@@ -3,17 +3,29 @@ import 'channel.dart';
 
 List<ChannelItem> resolveContent(
   ContentSource source,
-  List<PlexMediaItem> media,
-) {
+  List<PlexMediaItem> media, [
+  List<PlexPlaylist> playlists = const [],
+]) {
   final resolved = switch (source) {
     LibrarySource source => _library(source, media),
     ManualSource(:final items) => List<ChannelItem>.of(items),
+    PlaylistSource(:final playlistId) =>
+      playlists
+          .where((playlist) => playlist.id == playlistId)
+          .expand((playlist) => playlist.items)
+          .map(channelItemFor)
+          .toList(),
     MixedSource(:final sources, :final interleave) =>
       interleave
           ? _interleave(
-              sources.map((source) => resolveContent(source, media)).toList(),
+              sources
+                  .map((source) => resolveContent(source, media, playlists))
+                  .toList(),
             )
-          : [for (final source in sources) ...resolveContent(source, media)],
+          : [
+              for (final source in sources)
+                ...resolveContent(source, media, playlists),
+            ],
   };
   return List.unmodifiable(resolved);
 }

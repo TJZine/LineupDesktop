@@ -44,6 +44,7 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
   bool _replaceConfirmed = false;
   bool _building = false;
   String? _error;
+  List<Channel>? _planned;
 
   @override
   void initState() {
@@ -155,6 +156,11 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
         Wrap(
           spacing: 10,
           children: [
+            if (widget.controller.channels.isNotEmpty)
+              OutlinedButton(
+                onPressed: widget.controller.cancelChannelSetup,
+                child: const Text('Cancel'),
+              ),
             OutlinedButton(
               onPressed: () => setState(
                 () => _selectedLibraries.addAll(
@@ -189,61 +195,65 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
       itemBuilder: (_, index) {
         final library = widget.controller.libraries[index];
         final selected = _selectedLibraries.contains(library.id);
-        return Card(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-            side: BorderSide(
-              color: selected ? LineupTheme.brass : Colors.white12,
-              width: selected ? 2 : 1,
+        return Semantics(
+          button: true,
+          selected: selected,
+          child: Card(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+              side: BorderSide(
+                color: selected ? LineupTheme.brass : Colors.white12,
+                width: selected ? 2 : 1,
+              ),
             ),
-          ),
-          child: InkWell(
-            autofocus: index == 0,
-            borderRadius: BorderRadius.circular(14),
-            onTap: () => setState(
-              () => selected
-                  ? _selectedLibraries.remove(library.id)
-                  : _selectedLibraries.add(library.id),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(18),
-              child: Row(
-                children: [
-                  Icon(
-                    library.type == PlexLibraryType.show
-                        ? Icons.tv
-                        : Icons.movie_outlined,
-                    size: 38,
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          library.title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        Text(
-                          library.type == PlexLibraryType.show
-                              ? 'TV Shows'
-                              : 'Movies',
-                          style: const TextStyle(color: Colors.white54),
-                        ),
-                      ],
+            child: InkWell(
+              autofocus: index == 0,
+              borderRadius: BorderRadius.circular(14),
+              onTap: () => setState(
+                () => selected
+                    ? _selectedLibraries.remove(library.id)
+                    : _selectedLibraries.add(library.id),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(18),
+                child: Row(
+                  children: [
+                    Icon(
+                      library.type == PlexLibraryType.show
+                          ? Icons.tv
+                          : Icons.movie_outlined,
+                      size: 38,
                     ),
-                  ),
-                  Icon(
-                    selected ? Icons.check_circle : Icons.circle_outlined,
-                    color: selected ? LineupTheme.brass : Colors.white30,
-                  ),
-                ],
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            library.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          Text(
+                            library.type == PlexLibraryType.show
+                                ? 'TV Shows'
+                                : 'Movies',
+                            style: const TextStyle(color: Colors.white54),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Icon(
+                      selected ? Icons.check_circle : Icons.circle_outlined,
+                      color: selected ? LineupTheme.brass : Colors.white30,
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -255,8 +265,15 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
   Future<void> _continueFromLibraries() async {
     setState(() => _error = null);
     try {
-      await widget.controller.setLibraries(_selectedLibraries);
-      if (mounted) setState(() => _step = 2);
+      final loaded = await widget.controller.setLibraries(_selectedLibraries);
+      if (!mounted) return;
+      setState(() {
+        if (loaded) {
+          _step = 2;
+        } else {
+          _error = widget.controller.error ?? 'Library loading failed.';
+        }
+      });
     } catch (error) {
       if (mounted) setState(() => _error = _message(error));
     }
@@ -273,9 +290,7 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
           child: const Text('Back'),
         ),
         FilledButton.icon(
-          onPressed: _proposals.isEmpty
-              ? null
-              : () => setState(() => _step = 3),
+          onPressed: _proposals.isEmpty ? null : _prepareReview,
           icon: const Icon(Icons.preview_outlined),
           label: Text(
             widget.controller.channels.isEmpty ? 'Build Channels' : 'Review',
@@ -612,16 +627,7 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
   }
 
   Widget _reviewStep() {
-    final planned = materializeChannelPlan(
-      proposals: _proposals,
-      existing: widget.controller.channels,
-      mode: _mode,
-      seriesMode: _seriesOrdering,
-      seriesBlockSize: _seriesBlockSize,
-      alternateCopies: _alternateLineups ? _alternateCopies : 0,
-      variantMode: _alternateLineups ? _variantMode : null,
-      variantBlockSize: _variantBlockSize,
-    );
+    final planned = _planned ?? const <Channel>[];
     final removed = _mode == ChannelBuildMode.replace
         ? widget.controller.channels.length
         : 0;
@@ -686,7 +692,9 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
                                     (candidate) =>
                                         !widget.controller.channels.any(
                                           (existing) =>
-                                              existing.name == candidate.name,
+                                              candidate.builderKey != null &&
+                                              existing.builderKey ==
+                                                  candidate.builderKey,
                                         ),
                                   )
                                   .length,
@@ -721,6 +729,22 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
             ),
     );
   }
+
+  void _prepareReview() => setState(() {
+    _planned = materializeChannelPlan(
+      proposals: _proposals,
+      existing: widget.controller.channels,
+      mode: _mode,
+      seriesMode: _seriesOrdering,
+      seriesBlockSize: _seriesBlockSize,
+      alternateCopies: _alternateLineups ? _alternateCopies : 0,
+      variantMode: _alternateLineups ? _variantMode : null,
+      variantBlockSize: _variantBlockSize,
+      maximumChannels: _maximumChannels,
+      anchor: DateTime.now().toUtc(),
+    );
+    _step = 3;
+  });
 
   Future<void> _build(List<Channel> planned) async {
     setState(() {

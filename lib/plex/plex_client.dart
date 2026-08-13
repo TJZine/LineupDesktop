@@ -311,22 +311,33 @@ class PlexClient {
       token,
     );
     final output = <PlexPlaylist>[];
-    for (final raw in _containerList(json, 'Metadata')) {
-      final playlist = _record(raw, 'playlist');
-      final key = _text(playlist['key'], 'playlist key');
-      final itemsJson = await _serverJson(server.resolve('$key/items'), token);
-      final items = _containerList(itemsJson, 'Metadata')
-          .map(parseMediaItem)
-          .where((item) => item.duration > Duration.zero)
-          .toList(growable: false);
-      if (items.isNotEmpty) {
-        output.add(
-          PlexPlaylist(
-            id: _id(playlist['ratingKey'], 'playlist id'),
-            title: _text(playlist['title'], 'playlist title'),
-            items: items,
-          ),
-        );
+    final metadata = _containerList(json, 'Metadata');
+    for (var start = 0; start < metadata.length; start += 4) {
+      final batch = metadata.skip(start).take(4).map((raw) async {
+        try {
+          final playlist = _record(raw, 'playlist');
+          final id = _id(playlist['ratingKey'], 'playlist id');
+          final itemsJson = await _serverJson(
+            server.resolve('/playlists/${Uri.encodeComponent(id)}/items'),
+            token,
+          );
+          final items = _containerList(itemsJson, 'Metadata')
+              .map(parseMediaItem)
+              .where((item) => item.duration > Duration.zero)
+              .toList(growable: false);
+          return items.isEmpty
+              ? null
+              : PlexPlaylist(
+                  id: id,
+                  title: _text(playlist['title'], 'playlist title'),
+                  items: items,
+                );
+        } catch (_) {
+          return null;
+        }
+      });
+      for (final playlist in await Future.wait(batch)) {
+        if (playlist != null) output.add(playlist);
       }
     }
     return List.unmodifiable(output);

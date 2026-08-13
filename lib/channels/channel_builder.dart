@@ -1,6 +1,9 @@
+import 'dart:convert';
+
+import 'package:crypto/crypto.dart';
+
 import '../plex/plex_models.dart';
 import 'channel.dart';
-import 'content_resolver.dart';
 
 enum BuilderStrategy {
   playlists,
@@ -33,6 +36,7 @@ class ChannelProposal {
     required this.mode,
     required this.itemCount,
     required this.strategy,
+    this.series = false,
   });
 
   final String name;
@@ -40,6 +44,7 @@ class ChannelProposal {
   final PlaybackMode mode;
   final int itemCount;
   final BuilderStrategy strategy;
+  final bool series;
 }
 
 List<ChannelProposal> buildChannelProposals({
@@ -162,12 +167,11 @@ List<ChannelProposal> buildChannelProposals({
       proposals.add(
         ChannelProposal(
           name: playlist.title,
-          source: ManualSource(
-            playlist.items.map(channelItemFor).toList(growable: false),
-          ),
+          source: PlaylistSource(playlist.id),
           mode: PlaybackMode.shuffle,
           itemCount: playlist.items.length,
           strategy: BuilderStrategy.playlists,
+          series: playlist.items.any((item) => item.type == 'episode'),
         ),
       );
     }
@@ -252,6 +256,7 @@ List<Channel> materializeChannelPlan({
   int alternateCopies = 0,
   PlaybackMode? variantMode,
   int variantBlockSize = 3,
+  int maximumChannels = 1000,
   DateTime? anchor,
 }) {
   final expanded =
@@ -264,7 +269,7 @@ List<Channel> materializeChannelPlan({
         })
       >[];
   for (final proposal in proposals) {
-    final isSeries = _containsShows(proposal.source);
+    final isSeries = proposal.series || _containsShows(proposal.source);
     final baseMode = isSeries ? seriesMode : proposal.mode;
     final baseBlockSize = baseMode == PlaybackMode.block
         ? seriesBlockSize
@@ -309,10 +314,18 @@ List<Channel> materializeChannelPlan({
       : existing.map((channel) => channel.number).toSet();
   final output = <Channel>[];
   var next = 1;
-  for (final entry in expanded) {
+  for (final entry in expanded.take(maximumChannels)) {
     final name = '${entry.proposal.name}${entry.suffix}';
+    final builderKey = _builderKey(
+      entry.proposal,
+      entry.suffix,
+      entry.mode,
+      entry.blockSize,
+    );
     final matched = mode == ChannelBuildMode.merge
-        ? existing.where((channel) => channel.name == name).firstOrNull
+        ? existing
+              .where((channel) => channel.builderKey == builderKey)
+              .firstOrNull
         : null;
     while (matched == null && used.contains(next) && next <= 1000) {
       next++;
@@ -330,6 +343,7 @@ List<Channel> materializeChannelPlan({
         anchor: anchor ?? DateTime.now().toUtc(),
         shuffleSeed: id.hashCode,
         blockSize: entry.blockSize,
+        builderKey: builderKey,
       ),
     );
     used.add(number);
@@ -342,4 +356,24 @@ bool _containsShows(ContentSource source) => switch (source) {
   LibrarySource(:final libraryType) => libraryType == PlexLibraryType.show,
   MixedSource(:final sources) => sources.any(_containsShows),
   ManualSource() => false,
+  PlaylistSource() => false,
 };
+
+String _builderKey(
+  ChannelProposal proposal,
+  String suffix,
+  PlaybackMode mode,
+  int? blockSize,
+) => sha256
+    .convert(
+      utf8.encode(
+        jsonEncode({
+          'strategy': proposal.strategy.name,
+          'source': proposal.source.toJson(),
+          'suffix': suffix,
+          'mode': mode.name,
+          'blockSize': ?blockSize,
+        }),
+      ),
+    )
+    .toString();

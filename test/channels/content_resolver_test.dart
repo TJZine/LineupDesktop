@@ -64,4 +64,12 @@ void main() {
       'b',
     ]);
   });
+
+  test('playlist sources resolve current Plex playlist contents', () {
+    const source = PlaylistSource('playlist');
+    final resolved = resolveContent(source, const [], [
+      PlexPlaylist(id: 'playlist', title: 'Favorites', items: media),
+    ]);
+    expect(resolved.map((item) => item.id), media.map((item) => item.id));
+  });
 }

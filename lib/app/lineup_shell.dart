@@ -738,5 +738,6 @@ class _Brand extends StatelessWidget {
 String _sourceLabel(ContentSource source) => switch (source) {
   LibrarySource() => 'library',
   ManualSource() => 'manual',
+  PlaylistSource() => 'playlist',
   MixedSource() => 'mixed',
 };

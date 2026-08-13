@@ -16,6 +16,8 @@ class PersistedState {
     this.profileId,
     this.selectedServerByProfile = const {},
     this.selectedLibraryIdsByProfileServer = const {},
+    this.channelsByProfileServer = const {},
+    this.currentChannelByProfileServer = const {},
   });
 
   final LineupSettings settings;
@@ -25,6 +27,8 @@ class PersistedState {
   final Map<String, String> selectedServerByProfile;
   final Map<String, Map<String, List<String>>>
   selectedLibraryIdsByProfileServer;
+  final Map<String, Map<String, List<Channel>>> channelsByProfileServer;
+  final Map<String, Map<String, String>> currentChannelByProfileServer;
 
   Map<String, Object?> toJson() => {
     'settings': settings.toJson(),
@@ -33,6 +37,16 @@ class PersistedState {
     'profileId': profileId,
     'selectedServerByProfile': selectedServerByProfile,
     'selectedLibraryIdsByProfileServer': selectedLibraryIdsByProfileServer,
+    'channelsByProfileServer': {
+      for (final profile in channelsByProfileServer.entries)
+        profile.key: {
+          for (final server in profile.value.entries)
+            server.key: server.value
+                .map((channel) => channel.toJson())
+                .toList(),
+        },
+    },
+    'currentChannelByProfileServer': currentChannelByProfileServer,
   };
 
   factory PersistedState.fromJson(Object? value) {
@@ -56,11 +70,51 @@ class PersistedState {
         selectedLibraryIdsByProfileServer: _librarySelections(
           json['selectedLibraryIdsByProfileServer'],
         ),
+        channelsByProfileServer: _channelSelections(
+          json['channelsByProfileServer'],
+        ),
+        currentChannelByProfileServer: _stringSelections(
+          json['currentChannelByProfileServer'],
+        ),
       );
     } catch (error) {
       throw FormatException('State contains invalid values.', error);
     }
   }
+}
+
+Map<String, Map<String, List<Channel>>> _channelSelections(Object? value) {
+  if (value == null) return const {};
+  if (value is! Map) throw const FormatException('Invalid channel selections.');
+  final selections = {
+    for (final profile in value.entries)
+      if (profile.key is String && profile.value is Map)
+        profile.key as String: {
+          for (final server in (profile.value as Map).entries)
+            if (server.key is String && server.value is List)
+              server.key as String: (server.value as List)
+                  .map(Channel.fromJson)
+                  .toList(),
+        },
+  };
+  for (final profile in selections.values) {
+    for (final channels in profile.values) {
+      for (final channel in channels) {
+        channel.validate(channels);
+      }
+    }
+  }
+  return selections;
+}
+
+Map<String, Map<String, String>> _stringSelections(Object? value) {
+  if (value == null) return const {};
+  if (value is! Map) throw const FormatException('Invalid current channels.');
+  return {
+    for (final profile in value.entries)
+      if (profile.key is String && profile.value is Map)
+        profile.key as String: Map<String, String>.from(profile.value as Map),
+  };
 }
 
 Map<String, Map<String, List<String>>> _librarySelections(Object? value) {

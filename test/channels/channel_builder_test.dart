@@ -98,7 +98,8 @@ void main() {
       'Favorites',
       'Friday Night',
     ]);
-    expect(proposals.first.source, isA<ManualSource>());
+    expect(proposals.first.source, isA<PlaylistSource>());
+    expect((proposals.first.source as PlaylistSource).playlistId, 'p1');
     expect((proposals.last.source as LibrarySource).filters, {
       'collection': 'Friday Night',
     });
@@ -260,5 +261,71 @@ void main() {
     );
     expect(narrow, isEmpty);
     expect(broad.single.name, 'Actor');
+  });
+
+  test(
+    'merge identity updates generated channels without matching custom names',
+    () {
+      const proposal = ChannelProposal(
+        name: 'Comedy',
+        source: LibrarySource(
+          libraryId: 'movies',
+          libraryType: PlexLibraryType.movie,
+          filters: {'genre': 'Comedy'},
+        ),
+        mode: PlaybackMode.shuffle,
+        itemCount: 10,
+        strategy: BuilderStrategy.genres,
+      );
+      final first = materializeChannelPlan(
+        proposals: const [proposal],
+        existing: const [],
+        mode: ChannelBuildMode.replace,
+        anchor: DateTime.utc(2026),
+      ).single;
+      final custom = Channel(
+        id: 'custom',
+        number: 2,
+        name: 'Comedy',
+        source: const LibrarySource(
+          libraryId: 'other',
+          libraryType: PlexLibraryType.movie,
+        ),
+        playbackMode: PlaybackMode.sequential,
+        anchor: DateTime.utc(2026),
+        shuffleSeed: 2,
+      );
+      final merged = materializeChannelPlan(
+        proposals: const [proposal],
+        existing: [first, custom],
+        mode: ChannelBuildMode.merge,
+        seriesMode: PlaybackMode.shuffle,
+        anchor: DateTime.utc(2027),
+      );
+      expect(merged.single.id, first.id);
+      expect(merged.single.number, first.number);
+      expect(merged.single.builderKey, first.builderKey);
+    },
+  );
+
+  test('maximum channels applies after series expansion', () {
+    const proposal = ChannelProposal(
+      name: 'Series',
+      source: LibrarySource(libraryId: 'tv', libraryType: PlexLibraryType.show),
+      mode: PlaybackMode.shuffle,
+      itemCount: 10,
+      strategy: BuilderStrategy.recentlyAdded,
+      series: true,
+    );
+    final channels = materializeChannelPlan(
+      proposals: const [proposal],
+      existing: const [],
+      mode: ChannelBuildMode.replace,
+      alternateCopies: 3,
+      variantMode: PlaybackMode.block,
+      maximumChannels: 2,
+      anchor: DateTime.utc(2026),
+    );
+    expect(channels, hasLength(2));
   });
 }

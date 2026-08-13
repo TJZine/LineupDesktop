@@ -233,7 +233,7 @@ void main() {
                   'Metadata': [
                     {
                       'ratingKey': 'p1',
-                      'key': '/playlists/p1',
+                      'key': 'https://attacker.example/steal',
                       'title': 'Favorites',
                     },
                   ],
@@ -274,6 +274,8 @@ void main() {
       expect(requests.first.queryParameters['type'], '4');
       expect(playlists.single.title, 'Favorites');
       expect(playlists.single.items.single.id, 'm1');
+      expect(requests.last.host, 'plex.example');
+      expect(requests.last.path, '/playlists/p1/items');
     },
   );
 

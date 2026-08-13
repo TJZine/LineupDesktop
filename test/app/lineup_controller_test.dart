@@ -39,6 +39,66 @@ void main() {
     },
   );
 
+  test('failed library loading stays on Channel Setup with an error', () async {
+    final controller =
+        LineupController(
+            store: _MemoryStore(),
+            credentials: _MemoryCredentials(accountToken: 'token'),
+            plex: _FakePlex()
+              ..libraryItemsHandler = (_, _, _, _) async =>
+                  throw const PlexException('offline', 'Library unavailable'),
+          )
+          ..connection = PlexConnection(
+            uri: Uri.parse('https://plex.example:32400'),
+            local: true,
+            relay: false,
+          )
+          ..libraries = const [
+            PlexLibrary(
+              id: 'movies',
+              title: 'Movies',
+              type: PlexLibraryType.movie,
+            ),
+          ]
+          ..stage = SetupStage.channelSetup;
+    addTearDown(controller.dispose);
+    await controller.initialize();
+    controller
+      ..connection = PlexConnection(
+        uri: Uri.parse('https://plex.example:32400'),
+        local: true,
+        relay: false,
+      )
+      ..libraries = const [
+        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
+      ]
+      ..stage = SetupStage.channelSetup;
+
+    final loaded = await controller.setLibraries({'movies'});
+
+    expect(loaded, isFalse);
+    expect(controller.stage, SetupStage.channelSetup);
+    expect(controller.error, 'Library unavailable');
+  });
+
+  test('audio persistence failure stays retryable and visible', () async {
+    final controller = LineupController(
+      store: _MemoryStore()..failNextSave = true,
+      credentials: _MemoryCredentials(),
+      plex: _FakePlex(),
+    )..stage = SetupStage.audio;
+    addTearDown(controller.dispose);
+
+    await controller.completeAudioSetup(
+      externalAudio: true,
+      directPlayFallback: true,
+    );
+
+    expect(controller.stage, SetupStage.audio);
+    expect(controller.settings.audioSetupComplete, isFalse);
+    expect(controller.error, contains('Could not save audio settings'));
+  });
+
   test('a stale failure cannot overwrite logout state', () async {
     final account = Completer<PlexAccount>();
     final controller = LineupController(
@@ -194,6 +254,8 @@ class _FakePlex extends PlexClient {
   PlexPin? pinResult;
   Future<PlexAccount> Function(String)? accountHandler;
   Future<String?> Function(PlexPin)? pollHandler;
+  Future<List<PlexMediaItem>> Function(Uri, String, String, PlexLibraryType)?
+  libraryItemsHandler;
   final discoveredTokens = <String>[];
   int pollCalls = 0;
 
@@ -222,6 +284,20 @@ class _FakePlex extends PlexClient {
 
   @override
   Future<void> cancelPin(PlexPin pin) async {}
+
+  @override
+  Future<List<PlexMediaItem>> libraryItems(
+    Uri server,
+    String token,
+    String libraryId,
+    PlexLibraryType libraryType,
+  ) =>
+      libraryItemsHandler?.call(server, token, libraryId, libraryType) ??
+      Future.value(const []);
+
+  @override
+  Future<List<PlexPlaylist>> playlists(Uri server, String token) async =>
+      const [];
 
   @override
   void close() {}

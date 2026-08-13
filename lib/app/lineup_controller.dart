@@ -209,6 +209,8 @@ class LineupController extends ChangeNotifier {
         final oldSelectedLibraries = selectedLibraryIds;
         final oldMedia = availableMedia;
         final oldPlaylists = availablePlaylists;
+        final oldChannels = channels;
+        final oldCurrent = currentChannelId;
         profile = selected;
         _profileToken = token;
         server = null;
@@ -217,6 +219,8 @@ class LineupController extends ChangeNotifier {
         selectedLibraryIds = const {};
         availableMedia = const [];
         availablePlaylists = const [];
+        channels = const [];
+        currentChannelId = null;
         try {
           await _save();
         } catch (_) {
@@ -228,6 +232,8 @@ class LineupController extends ChangeNotifier {
           selectedLibraryIds = oldSelectedLibraries;
           availableMedia = oldMedia;
           availablePlaylists = oldPlaylists;
+          channels = oldChannels;
+          currentChannelId = oldCurrent;
           rethrow;
         }
         await _discover(operation);
@@ -282,6 +288,8 @@ class LineupController extends ChangeNotifier {
         final oldSelectedLibraries = selectedLibraryIds;
         final oldMedia = availableMedia;
         final oldPlaylists = availablePlaylists;
+        final oldChannels = channels;
+        final oldCurrent = currentChannelId;
         server = selected;
         connection = selectedConnection;
         libraries = loadedLibraries;
@@ -299,6 +307,15 @@ class LineupController extends ChangeNotifier {
         );
         availableMedia = const [];
         availablePlaylists = const [];
+        channels = List.unmodifiable(
+          profileId == null
+              ? const <Channel>[]
+              : _persisted.channelsByProfileServer[profileId]?[selected.id] ??
+                    const <Channel>[],
+        );
+        currentChannelId = profileId == null
+            ? null
+            : _persisted.currentChannelByProfileServer[profileId]?[selected.id];
         stage = SetupStage.channelSetup;
         try {
           await _save();
@@ -309,6 +326,8 @@ class LineupController extends ChangeNotifier {
           selectedLibraryIds = oldSelectedLibraries;
           availableMedia = oldMedia;
           availablePlaylists = oldPlaylists;
+          channels = oldChannels;
+          currentChannelId = oldCurrent;
           rethrow;
         }
         if (selectedLibraryIds.isNotEmpty && channels.isNotEmpty) {
@@ -324,9 +343,9 @@ class LineupController extends ChangeNotifier {
     );
   }
 
-  Future<void> setLibraries(Set<String> ids) async {
+  Future<bool> setLibraries(Set<String> ids) async {
     final operation = ++_epoch;
-    await _run(
+    return _run(
       () async {
         final token = _profileToken ?? _accountToken;
         final endpoint = connection?.uri;
@@ -395,20 +414,37 @@ class LineupController extends ChangeNotifier {
     required bool externalAudio,
     required bool directPlayFallback,
   }) async {
-    await updateSettings(
-      settings.copyWith(
-        audioPassthrough: externalAudio,
-        directPlayAudioFallback: directPlayFallback,
-        audioSetupComplete: true,
-      ),
-    );
-    stage = SetupStage.channelSetup;
-    notifyListeners();
+    try {
+      await updateSettings(
+        settings.copyWith(
+          audioPassthrough: externalAudio,
+          directPlayAudioFallback: directPlayFallback,
+          audioSetupComplete: true,
+        ),
+      );
+      stage = SetupStage.channelSetup;
+      notifyListeners();
+    } catch (exception) {
+      error =
+          'Could not save audio settings. Check device storage and try again.';
+      diagnostics.add('application', 'Audio setup persistence failed', {
+        'error': exception.toString(),
+      });
+      notifyListeners();
+    }
   }
 
   Future<void> enterChannelSetup() async {
     stage = SetupStage.channelSetup;
     notifyListeners();
+  }
+
+  void cancelChannelSetup() {
+    if (server != null && channels.isNotEmpty) {
+      error = null;
+      stage = SetupStage.ready;
+      notifyListeners();
+    }
   }
 
   void showProfiles() {
@@ -428,8 +464,11 @@ class LineupController extends ChangeNotifier {
       ChannelBuildMode.append => [...channels, ...planned],
       ChannelBuildMode.merge => [
         ...channels.where(
-          (existing) =>
-              !planned.any((candidate) => candidate.name == existing.name),
+          (existing) => !planned.any(
+            (candidate) =>
+                candidate.builderKey != null &&
+                candidate.builderKey == existing.builderKey,
+          ),
         ),
         ...planned,
       ],
@@ -476,7 +515,7 @@ class LineupController extends ChangeNotifier {
   }
 
   ScheduleIndex scheduleFor(Channel channel) => buildSchedule(
-    resolveContent(channel.source, availableMedia),
+    resolveContent(channel.source, availableMedia, availablePlaylists),
     mode: channel.playbackMode,
     seed: channel.shuffleSeed,
     blockSize: channel.blockSize ?? 3,
@@ -544,10 +583,30 @@ class LineupController extends ChangeNotifier {
             selection.key: List<String>.of(selection.value),
         },
     };
+    final channelSelections = {
+      for (final entry in _persisted.channelsByProfileServer.entries)
+        entry.key: {
+          for (final selection in entry.value.entries)
+            selection.key: List<Channel>.of(selection.value),
+        },
+    };
+    final currentSelections = {
+      for (final entry in _persisted.currentChannelByProfileServer.entries)
+        entry.key: Map<String, String>.of(entry.value),
+    };
     if (profileId != null && server != null) {
       selectedServers[profileId] = server!.id;
       librarySelections.putIfAbsent(profileId, () => {})[server!.id] =
           selectedLibraryIds.toList();
+      channelSelections.putIfAbsent(profileId, () => {})[server!.id] = channels
+          .toList();
+      final current = currentChannelId;
+      if (current == null) {
+        currentSelections[profileId]?.remove(server!.id);
+      } else {
+        currentSelections.putIfAbsent(profileId, () => {})[server!.id] =
+            current;
+      }
     }
     final next = PersistedState(
       settings: settings,
@@ -556,12 +615,14 @@ class LineupController extends ChangeNotifier {
       profileId: profile?.id,
       selectedServerByProfile: selectedServers,
       selectedLibraryIdsByProfileServer: librarySelections,
+      channelsByProfileServer: channelSelections,
+      currentChannelByProfileServer: currentSelections,
     );
     await store.save(next);
     _persisted = next;
   }
 
-  Future<void> _run(
+  Future<bool> _run(
     Future<void> Function() body, {
     required int operation,
     required SetupStage fallbackStage,
@@ -572,8 +633,9 @@ class LineupController extends ChangeNotifier {
     notifyListeners();
     try {
       await body();
+      return true;
     } catch (exception) {
-      if (operation != _epoch) return;
+      if (operation != _epoch) return false;
       error = exception is PlexException
           ? exception.message
           : 'Lineup could not complete that request.';
@@ -581,6 +643,7 @@ class LineupController extends ChangeNotifier {
       diagnostics.add('application', 'Operation failed', {
         'error': exception.toString(),
       });
+      return false;
     } finally {
       if (_busyOperation == operation) {
         _busyOperation = null;

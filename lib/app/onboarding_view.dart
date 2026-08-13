@@ -142,6 +142,7 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
                   Semantics(
                     liveRegion: true,
                     label: 'Plex link code ${code.split('').join(' ')}',
+                    excludeSemantics: true,
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -259,13 +260,14 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
               icon: const Icon(Icons.refresh),
               label: const Text('Retry discovery'),
             ),
-            OutlinedButton.icon(
-              onPressed: widget.controller.busy
-                  ? null
-                  : widget.controller.showProfiles,
-              icon: const Icon(Icons.switch_account),
-              label: const Text('Switch profile'),
-            ),
+            if (widget.controller.profiles.isNotEmpty)
+              OutlinedButton.icon(
+                onPressed: widget.controller.busy
+                    ? null
+                    : widget.controller.showProfiles,
+                icon: const Icon(Icons.switch_account),
+                label: const Text('Switch profile'),
+              ),
           ],
         ),
       ],
@@ -321,7 +323,7 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
         FilledButton(
           onPressed: _externalAudio == null || widget.controller.busy
               ? null
-              : () => widget.controller.completeAudioSetup(
+              : () async => widget.controller.completeAudioSetup(
                   externalAudio: _externalAudio!,
                   directPlayFallback: _audioFallback,
                 ),
@@ -468,7 +470,7 @@ class _ProfileCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) => SizedBox(
     width: 170,
-    height: 205,
+    height: 236,
     child: Card(
       child: InkWell(
         autofocus: autofocus,
@@ -557,39 +559,43 @@ class _AudioChoice extends StatelessWidget {
   final VoidCallback onPressed;
   final bool autofocus;
   @override
-  Widget build(BuildContext context) => SizedBox(
-    width: 360,
-    height: 210,
-    child: Card(
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(
-          color: selected ? LineupTheme.brass : Colors.white12,
-          width: selected ? 2 : 1,
+  Widget build(BuildContext context) => Semantics(
+    button: true,
+    selected: selected,
+    child: SizedBox(
+      width: 360,
+      height: 210,
+      child: Card(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(
+            color: selected ? LineupTheme.brass : Colors.white12,
+            width: selected ? 2 : 1,
+          ),
         ),
-      ),
-      child: InkWell(
-        autofocus: autofocus,
-        borderRadius: BorderRadius.circular(16),
-        onTap: onPressed,
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, size: 64),
-              const SizedBox(height: 14),
-              Text(
-                title,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
+        child: InkWell(
+          autofocus: autofocus,
+          borderRadius: BorderRadius.circular(16),
+          onTap: onPressed,
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, size: 64),
+                const SizedBox(height: 14),
+                Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 6),
-              Text(subtitle, textAlign: TextAlign.center),
-            ],
+                const SizedBox(height: 6),
+                Text(subtitle, textAlign: TextAlign.center),
+              ],
+            ),
           ),
         ),
       ),
@@ -652,6 +658,7 @@ class _ProfilePinDialogState extends State<_ProfilePinDialog> {
           GridView.count(
             shrinkWrap: true,
             crossAxisCount: 3,
+            childAspectRatio: 1.8,
             mainAxisSpacing: 10,
             crossAxisSpacing: 10,
             children: [

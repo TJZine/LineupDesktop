@@ -25,6 +25,7 @@ sealed class ContentSource {
       'manual' => ManualSource(
         (json['items'] as List? ?? const []).map(ChannelItem.fromJson).toList(),
       ),
+      'playlist' => PlaylistSource(_string(json['playlistId'])),
       'mixed' => MixedSource(
         sources: (json['sources'] as List? ?? const [])
             .map(ContentSource.fromJson)
@@ -34,6 +35,18 @@ sealed class ContentSource {
       _ => throw const FormatException('Unknown content source type'),
     };
   }
+}
+
+class PlaylistSource extends ContentSource {
+  const PlaylistSource(this.playlistId);
+
+  final String playlistId;
+
+  @override
+  Map<String, Object?> toJson() => {
+    'type': 'playlist',
+    'playlistId': playlistId,
+  };
 }
 
 class LibrarySource extends ContentSource {
@@ -138,6 +151,7 @@ class Channel {
     required this.anchor,
     required this.shuffleSeed,
     this.blockSize,
+    this.builderKey,
   });
 
   final String id;
@@ -148,6 +162,7 @@ class Channel {
   final DateTime anchor;
   final int shuffleSeed;
   final int? blockSize;
+  final String? builderKey;
 
   void validate(Iterable<Channel> existing) {
     if (id.trim().isEmpty || name.trim().isEmpty) {
@@ -177,6 +192,7 @@ class Channel {
     'anchor': anchor.toUtc().toIso8601String(),
     'shuffleSeed': shuffleSeed,
     if (blockSize != null) 'blockSize': blockSize,
+    if (builderKey != null) 'builderKey': builderKey,
   };
 
   factory Channel.fromJson(Object? value) {
@@ -190,6 +206,7 @@ class Channel {
       anchor: DateTime.parse(_string(json['anchor'])).toUtc(),
       shuffleSeed: (json['shuffleSeed'] as num).toInt(),
       blockSize: (json['blockSize'] as num?)?.toInt(),
+      builderKey: json['builderKey'] as String?,
     );
   }
 }
@@ -218,6 +235,10 @@ void _validateSource(ContentSource source, int depth) {
       if (items.isEmpty ||
           items.any((item) => item.duration <= Duration.zero)) {
         throw const FormatException('Manual content cannot be empty');
+      }
+    case PlaylistSource(:final playlistId):
+      if (playlistId.isEmpty) {
+        throw const FormatException('Playlist is required');
       }
     case MixedSource(:final sources):
       if (sources.isEmpty) {
