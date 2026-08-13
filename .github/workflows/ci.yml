@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -59,3 +60,96 @@ jobs:
           $env:LINEUP_MPV_ROOT = $mpvRoot
           $env:LINEUP_ALLOW_GPL_MPV_DEV_ARTIFACT = '1'
           flutter build windows
+
+  engine-inputs:
+    name: Detect Windows engine inputs
+    runs-on: ubuntu-latest
+    outputs:
+      required: ${{ steps.detect.outputs.required }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+      - id: detect
+        name: Detect engine changes
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          CURRENT_SHA: ${{ github.sha }}
+        run: |
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            echo "required=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            base="$PR_BASE_SHA"
+            head="$PR_HEAD_SHA"
+          else
+            base="$PUSH_BEFORE"
+            head="$CURRENT_SHA"
+          fi
+
+          if [[ -z "$base" || "$base" =~ ^0+$ ]]; then
+            echo "required=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          changed_files="$(git diff --name-only "$base" "$head")"
+          if grep -Eq '^(\.metadata|tool/flutter_engine/(apply\.ps1|0001-windows-direct-composition\.patch))$' <<<"$changed_files"; then
+            echo "required=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "required=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  build-windows-engine:
+    name: Build patched Flutter engine
+    needs: engine-inputs
+    if: needs.engine-inputs.outputs.required == 'true'
+    runs-on: windows-2022
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: 3.47.0
+          channel: stable
+          cache: true
+      - name: Validate exact Flutter and engine sources and build the patched engine
+        shell: pwsh
+        run: |
+          $flutterSource = Join-Path $env:RUNNER_TEMP 'lineup-flutter-source'
+          $depotTools = Join-Path $env:RUNNER_TEMP 'depot_tools'
+          git clone --filter=blob:none https://github.com/flutter/flutter.git $flutterSource
+          git -C $flutterSource checkout 4cf24164269a5ebf0c16a028a00727d0e77bbb05
+          if ((git -C $flutterSource rev-parse HEAD:engine/scripts/standard.gclient).Trim() -ne 'a05a39e336335389321b8a6d855b13bd3fc7892c') {
+            throw 'Pinned Flutter standard.gclient blob does not match.'
+          }
+          Copy-Item -LiteralPath (Join-Path $flutterSource 'engine\scripts\standard.gclient') -Destination (Join-Path $flutterSource '.gclient')
+          git clone --depth 1 https://chromium.googlesource.com/chromium/tools/depot_tools.git $depotTools
+          $env:PATH = "$depotTools;$env:PATH"
+          $env:DEPOT_TOOLS_WIN_TOOLCHAIN = '0'
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $env:GYP_MSVS_OVERRIDE_PATH = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          $env:WINDOWSSDKDIR = "${env:ProgramFiles(x86)}\Windows Kits\10"
+          Set-Location $flutterSource
+          gclient sync --no-history
+          & "$env:GITHUB_WORKSPACE\tool\flutter_engine\apply.ps1" -FlutterRoot $flutterSource
+          Set-Location (Join-Path $flutterSource 'engine\src')
+          python .\flutter\tools\gn --runtime-mode=release
+          ninja -C out\host_release
+      - name: Compile Lineup against the patched engine
+        shell: pwsh
+        run: |
+          $mpvRoot = Join-Path $env:RUNNER_TEMP 'lineup-mpv'
+          & .\tool\windows\prepare-mpv-dev.ps1 -Destination $mpvRoot
+          $env:LINEUP_MPV_ROOT = $mpvRoot
+          $env:LINEUP_ALLOW_GPL_MPV_DEV_ARTIFACT = '1'
+          $engineSource = Join-Path $env:RUNNER_TEMP 'lineup-flutter-source\engine\src'
+          flutter build windows `
+            --local-engine=host_release `
+            --local-engine-host=host_release `
+            --local-engine-src-path=$engineSource
