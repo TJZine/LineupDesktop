@@ -33,6 +33,7 @@ class PlayerCoordinator extends ChangeNotifier {
     _tracks = player.tracks;
     _subscription = player.events.listen(_event);
     lineup.addListener(_lineupChanged);
+    guide.addListener(_guideChanged);
   }
 
   final NativePlayer player;
@@ -58,6 +59,7 @@ class PlayerCoordinator extends ChangeNotifier {
   bool _tuning = false;
   Duration? _sleepDuration;
   int _tuneGeneration = 0;
+  Future<void> _tuneOperations = Future.value();
   LineupPlaybackRequest? _activePlayback;
   List<Channel> _indexedChannels = const [];
   Map<String, int> _channelIndexById = const {};
@@ -100,6 +102,9 @@ class PlayerCoordinator extends ChangeNotifier {
     _tracks = event.tracks;
     if (event.status.state == PlayerState.error) {
       _error = event.status.message;
+      final playback = _activePlayback;
+      _activePlayback = null;
+      unawaited(_release(playback));
       _setOverlay(PlayerOverlay.error, timed: false);
     } else if (event.status.state == PlayerState.loading) {
       _overlayTimer?.cancel();
@@ -107,13 +112,22 @@ class PlayerCoordinator extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> tune(String channelId) async {
+  Future<void> tune(String channelId) {
     final generation = ++_tuneGeneration;
     _tuning = true;
     _error = null;
     _overlayTimer?.cancel();
     _overlay = PlayerOverlay.osd;
     notifyListeners();
+    final operation = _tuneOperations.then(
+      (_) => _performTune(channelId, generation),
+    );
+    _tuneOperations = operation.catchError((_) {});
+    return operation;
+  }
+
+  Future<void> _performTune(String channelId, int generation) async {
+    if (generation != _tuneGeneration) return;
     GuideProgram? program;
     try {
       program = await guide.ensureCurrentProgram(channelId);
@@ -132,23 +146,36 @@ class PlayerCoordinator extends ChangeNotifier {
       request = lineup.playbackFor(program.scheduled.item.id);
       await player.load(request.uri);
       if (generation != _tuneGeneration) {
-        await request.release();
+        await _release(request);
         return;
       }
       final replaced = _activePlayback;
       _activePlayback = request;
-      await replaced?.release();
+      unawaited(_release(replaced));
       final elapsed = DateTime.now().difference(program.scheduled.start);
       if (elapsed > const Duration(seconds: 2)) await player.seek(elapsed);
-      if (generation != _tuneGeneration) return;
+      if (generation != _tuneGeneration) {
+        if (identical(_activePlayback, request)) _activePlayback = null;
+        await _release(request);
+        return;
+      }
       await lineup.setCurrentChannel(channelId);
+      if (generation != _tuneGeneration) {
+        if (identical(_activePlayback, request)) _activePlayback = null;
+        await _release(request);
+        return;
+      }
       _tuning = false;
       showOsd();
     } catch (error) {
-      if (request != null) {
-        await request.release();
-        await _activePlayback?.release();
+      await _release(request);
+      if (identical(_activePlayback, request)) {
         _activePlayback = null;
+        try {
+          await player.stop();
+        } catch (_) {
+          // The original playback failure remains the useful error.
+        }
       }
       if (generation != _tuneGeneration) return;
       _tuning = false;
@@ -177,9 +204,20 @@ class PlayerCoordinator extends ChangeNotifier {
       _status.state == PlayerState.playing ? player.pause() : player.play();
 
   Future<void> stop() async {
-    await player.stop();
-    await _activePlayback?.release();
-    _activePlayback = null;
+    ++_tuneGeneration;
+    _tuning = false;
+    notifyListeners();
+    final operation = _tuneOperations.then((_) async {
+      final playback = _activePlayback;
+      _activePlayback = null;
+      try {
+        await player.stop();
+      } finally {
+        await _release(playback);
+      }
+    });
+    _tuneOperations = operation.catchError((_) {});
+    await operation;
   }
 
   Future<void> seekBy(Duration offset) {
@@ -208,6 +246,7 @@ class PlayerCoordinator extends ChangeNotifier {
   void showMiniGuide() {
     _miniGuideChannelId =
         lineup.currentChannelId ?? lineup.channels.firstOrNull?.id;
+    _requestMiniGuideRows();
     _setOverlay(PlayerOverlay.miniGuide, timeout: const Duration(seconds: 8));
   }
 
@@ -230,6 +269,7 @@ class PlayerCoordinator extends ChangeNotifier {
     final raw = (index < 0 ? 0 : index) + offset;
     final next = ((raw % channels.length) + channels.length) % channels.length;
     _miniGuideChannelId = channels[next].id;
+    _requestMiniGuideRows();
     _setOverlay(PlayerOverlay.miniGuide, timeout: const Duration(seconds: 8));
   }
 
@@ -331,6 +371,29 @@ class PlayerCoordinator extends ChangeNotifier {
     notifyListeners();
   }
 
+  void _guideChanged() {
+    if (_overlay == PlayerOverlay.miniGuide || _overlay == PlayerOverlay.osd) {
+      notifyListeners();
+    }
+  }
+
+  void _requestMiniGuideRows() {
+    final selected = miniGuideChannelIndex;
+    if (selected < 0) return;
+    final start = (selected - 3).clamp(0, _indexedChannels.length);
+    final end = (start + 7).clamp(0, _indexedChannels.length);
+    guide.requestChannels(_indexedChannels.getRange(start, end));
+  }
+
+  Future<void> _release(LineupPlaybackRequest? playback) async {
+    if (playback == null) return;
+    try {
+      await playback.release();
+    } catch (_) {
+      // Playback lease cleanup is best effort.
+    }
+  }
+
   void _indexChannels() {
     _indexedChannels = lineup.channels;
     _channelIndexById = {
@@ -347,6 +410,7 @@ class PlayerCoordinator extends ChangeNotifier {
     ++_tuneGeneration;
     _tuning = false;
     lineup.removeListener(_lineupChanged);
+    guide.removeListener(_guideChanged);
     _subscription?.cancel();
     _overlayTimer?.cancel();
     _sleepTimer?.cancel();
@@ -354,7 +418,7 @@ class PlayerCoordinator extends ChangeNotifier {
     _cursorTimer?.cancel();
     final playback = _activePlayback;
     _activePlayback = null;
-    if (playback != null) unawaited(playback.release());
+    unawaited(_release(playback));
     super.dispose();
   }
 }

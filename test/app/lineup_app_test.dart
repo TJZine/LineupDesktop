@@ -34,6 +34,29 @@ void main() {
     expect(player.disposed, isTrue);
   });
 
+  testWidgets('Guide and player routes transfer and restore focus explicitly', (
+    tester,
+  ) async {
+    final controller = _FakeController()..stage = SetupStage.ready;
+    await tester.pumpWidget(
+      LineupBootstrap(player: _FakePlayer(), controller: controller),
+    );
+    await tester.pumpAndSettle();
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Guide');
+
+    await tester.tap(find.byIcon(Icons.play_circle_outline));
+    await tester.pumpAndSettle();
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Player');
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
+    await tester.pumpAndSettle();
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Guide');
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Player');
+  });
+
   testWidgets('onboarding link action is keyboard reachable', (tester) async {
     final controller = _FakeController();
     await tester.pumpWidget(

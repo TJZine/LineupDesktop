@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:isolate';
 
 import 'package:flutter/foundation.dart';
 
@@ -22,6 +23,22 @@ enum SetupStage {
   channelSetup,
   ready,
 }
+
+Set<String> _sourceLibraryIds(ContentSource source) => switch (source) {
+  LibrarySource(:final libraryId) => {libraryId},
+  MixedSource(:final sources) => {
+    for (final source in sources) ..._sourceLibraryIds(source),
+  },
+  ManualSource() || PlaylistSource() => const {},
+};
+
+Set<String> _sourcePlaylistIds(ContentSource source) => switch (source) {
+  PlaylistSource(:final playlistId) => {playlistId},
+  MixedSource(:final sources) => {
+    for (final source in sources) ..._sourcePlaylistIds(source),
+  },
+  ManualSource() || LibrarySource() => const {},
+};
 
 class LineupPlaybackRequest {
   LineupPlaybackRequest(this.uri, this._release);
@@ -77,6 +94,8 @@ class LineupController extends ChangeNotifier {
   PersistedState _persisted = const PersistedState();
   Timer? _pinTimer;
   int? _busyOperation;
+  List<PlexMediaItem>? _indexedMedia;
+  Map<String, List<PlexMediaItem>> _mediaByLibrary = const {};
 
   Future<void> initialize() async {
     _persisted = await store.load();
@@ -560,6 +579,42 @@ class LineupController extends ChangeNotifier {
     seed: channel.shuffleSeed,
     blockSize: channel.blockSize ?? 3,
   );
+
+  Future<ScheduleIndex> loadScheduleFor(Channel channel) {
+    final media = <PlexMediaItem>[
+      for (final id in _sourceLibraryIds(channel.source))
+        ...(_indexedMediaByLibrary[id] ?? const []),
+    ];
+    final playlistIds = _sourcePlaylistIds(channel.source);
+    final playlists = availablePlaylists
+        .where((playlist) => playlistIds.contains(playlist.id))
+        .toList(growable: false);
+    return Isolate.run(
+      () => buildSchedule(
+        resolveContent(channel.source, media, playlists),
+        mode: channel.playbackMode,
+        seed: channel.shuffleSeed,
+        blockSize: channel.blockSize ?? 3,
+      ),
+    );
+  }
+
+  Map<String, List<PlexMediaItem>> get _indexedMediaByLibrary {
+    if (identical(_indexedMedia, availableMedia)) return _mediaByLibrary;
+    final grouped = <String, List<PlexMediaItem>>{};
+    for (final item in availableMedia) {
+      final libraryId = item.libraryId;
+      if (libraryId != null) {
+        grouped.putIfAbsent(libraryId, () => []).add(item);
+      }
+    }
+    _indexedMedia = availableMedia;
+    _mediaByLibrary = {
+      for (final entry in grouped.entries)
+        entry.key: List.unmodifiable(entry.value),
+    };
+    return _mediaByLibrary;
+  }
 
   LineupPlaybackRequest playbackFor(String itemId) {
     final endpoint = connection?.uri;

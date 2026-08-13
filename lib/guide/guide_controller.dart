@@ -45,10 +45,7 @@ class GuideController extends ChangeNotifier {
     DateTime Function()? clock,
     this.maximumCachedRows = 64,
     this.maximumConcurrentLoads = 4,
-  }) : _loadSchedule =
-           loadSchedule ??
-           ((channel) =>
-               Future<ScheduleIndex>(() => lineup.scheduleFor(channel))),
+  }) : _loadSchedule = loadSchedule ?? lineup.loadScheduleFor,
        _clock = clock ?? DateTime.now {
     _channels = lineup.channels;
     _updateVisibleChannels();
@@ -69,7 +66,9 @@ class GuideController extends ChangeNotifier {
   final LinkedHashMap<String, Future<Uint8List?>> _artwork = LinkedHashMap();
   final Queue<Channel> _pending = Queue();
   final Set<String> _queuedIds = {};
+  final Queue<_ArtworkRequest> _pendingArtwork = Queue();
   List<Channel> _channels = const [];
+  Map<String, Channel> _channelById = const {};
   List<Channel> _visibleChannels = const [];
   Map<String, int> _visibleIndexById = const {};
   Set<String> _availableLibraryIds = const {};
@@ -81,6 +80,7 @@ class GuideController extends ChangeNotifier {
   String? _libraryFilterId;
   int _generation = 0;
   int _activeLoads = 0;
+  int _activeArtworkLoads = 0;
 
   List<Channel> get channels => _visibleChannels;
 
@@ -113,20 +113,22 @@ class GuideController extends ChangeNotifier {
 
   GuideProgram? currentProgram(String channelId, [DateTime? at]) {
     final now = at ?? _clock();
+    final schedule = _schedules[channelId];
+    final channel = _channelById[channelId];
+    if (schedule != null && channel != null) {
+      final scheduled = programAt(now, channel.anchor, schedule);
+      return GuideProgram(channelId: channelId, scheduled: scheduled);
+    }
     return row(channelId).programs
         .where((program) => program.isCurrentAt(now))
         .firstOrNull;
   }
 
   Future<GuideProgram?> ensureCurrentProgram(String channelId) async {
-    final channel = _channels
-        .where((value) => value.id == channelId)
-        .firstOrNull;
+    final channel = _channelById[channelId];
     if (channel == null) return null;
+    if (_schedules.containsKey(channelId)) return currentProgram(channelId);
     final existing = _rows[channelId];
-    if (existing?.state == GuideLoadState.ready) {
-      return currentProgram(channelId);
-    }
     if (existing?.state == GuideLoadState.error) _rows.remove(channelId);
     _request(channel);
     final completer = Completer<void>();
@@ -134,7 +136,7 @@ class GuideController extends ChangeNotifier {
       final value = _rows[channelId];
       if (value != null && value.state != GuideLoadState.loading) {
         if (!completer.isCompleted) completer.complete();
-      } else if (!_channels.any((value) => value.id == channelId)) {
+      } else if (!_channelById.containsKey(channelId)) {
         if (!completer.isCompleted) completer.complete();
       }
     }
@@ -160,14 +162,44 @@ class GuideController extends ChangeNotifier {
       _artwork[key] = existing;
       return existing;
     }
-    final loading = lineup
-        .artworkFor(program.scheduled.item)
-        .catchError((_) => null);
+    final completer = Completer<Uint8List?>();
+    final loading = completer.future;
     _artwork[key] = loading;
+    _pendingArtwork.add(
+      _ArtworkRequest(key, program.scheduled.item, completer),
+    );
     while (_artwork.length > 12) {
-      _artwork.remove(_artwork.keys.first);
+      final evicted = _artwork.keys.first;
+      _artwork.remove(evicted);
+      _pendingArtwork.removeWhere((request) {
+        if (request.key != evicted) return false;
+        if (!request.completer.isCompleted) request.completer.complete(null);
+        return true;
+      });
     }
+    _pumpArtwork();
     return loading;
+  }
+
+  void _pumpArtwork() {
+    while (_activeArtworkLoads < 4 && _pendingArtwork.isNotEmpty) {
+      final request = _pendingArtwork.removeFirst();
+      if (!identical(_artwork[request.key], request.completer.future)) {
+        if (!request.completer.isCompleted) request.completer.complete(null);
+        continue;
+      }
+      _activeArtworkLoads++;
+      lineup
+          .artworkFor(request.item)
+          .then(
+            request.completer.complete,
+            onError: (_) => request.completer.complete(null),
+          )
+          .whenComplete(() {
+            _activeArtworkLoads--;
+            _pumpArtwork();
+          });
+    }
   }
 
   void requestViewport(int firstIndex, int visibleCount) {
@@ -180,11 +212,15 @@ class GuideController extends ChangeNotifier {
     }
   }
 
+  void requestChannels(Iterable<Channel> channels) {
+    for (final channel in channels) {
+      _request(channel);
+    }
+  }
+
   Future<void> retry(String channelId) async {
     _rows.remove(channelId);
-    final channel = _channels
-        .where((value) => value.id == channelId)
-        .firstOrNull;
+    final channel = _channelById[channelId];
     if (channel != null) _request(channel);
   }
 
@@ -303,7 +339,7 @@ class GuideController extends ChangeNotifier {
           .then(
             (schedule) {
               if (generation != _generation ||
-                  !_channels.any((value) => value.id == channel.id)) {
+                  !_channelById.containsKey(channel.id)) {
                 return;
               }
               _putSchedule(channel.id, schedule);
@@ -367,6 +403,12 @@ class GuideController extends ChangeNotifier {
     _rows.clear();
     if (clearSchedules) _schedules.clear();
     if (clearSchedules) _artwork.clear();
+    if (clearSchedules) {
+      for (final request in _pendingArtwork) {
+        if (!request.completer.isCompleted) request.completer.complete(null);
+      }
+      _pendingArtwork.clear();
+    }
     notifyListeners();
   }
 
@@ -413,6 +455,7 @@ class GuideController extends ChangeNotifier {
   }
 
   void _updateVisibleChannels() {
+    _channelById = {for (final channel in _channels) channel.id: channel};
     _availableLibraryIds = {
       for (final channel in _channels) ..._sourceLibraryIds(channel.source),
     };
@@ -440,6 +483,14 @@ class GuideController extends ChangeNotifier {
     _generation++;
     super.dispose();
   }
+}
+
+class _ArtworkRequest {
+  const _ArtworkRequest(this.key, this.item, this.completer);
+
+  final String key;
+  final ChannelItem item;
+  final Completer<Uint8List?> completer;
 }
 
 String _channelFingerprint(Channel channel) =>

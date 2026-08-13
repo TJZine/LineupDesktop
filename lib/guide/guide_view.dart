@@ -13,12 +13,14 @@ class GuideView extends StatefulWidget {
     required this.controller,
     required this.onClose,
     required this.onTune,
+    this.focusNode,
     super.key,
   });
 
   final GuideController controller;
   final VoidCallback onClose;
   final Future<void> Function(String channelId) onTune;
+  final FocusNode? focusNode;
 
   @override
   State<GuideView> createState() => _GuideViewState();
@@ -127,6 +129,7 @@ class _GuideViewState extends State<GuideView> {
   Widget build(BuildContext context) {
     final channels = widget.controller.channels;
     return Focus(
+      focusNode: widget.focusNode,
       autofocus: true,
       onKeyEvent: _key,
       child: Material(

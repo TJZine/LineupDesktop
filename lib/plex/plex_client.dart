@@ -402,10 +402,19 @@ class PlexClient {
     Uri path, {
     int maximumBytes = 4 * 1024 * 1024,
   }) async {
-    final request = http.Request(
-      'GET',
-      path.hasScheme ? path : server.resolveUri(path),
-    )..headers.addAll(_headers(token));
+    final uri = server.resolveUri(path);
+    if (uri.scheme != server.scheme ||
+        uri.host != server.host ||
+        uri.port != server.port ||
+        uri.userInfo.isNotEmpty) {
+      throw const PlexException(
+        'artwork-unavailable',
+        'Program artwork is unavailable.',
+      );
+    }
+    final request = http.Request('GET', uri)
+      ..followRedirects = false
+      ..headers.addAll(_headers(token));
     final response = await _http.send(request).timeout(requestTimeout);
     if (response.statusCode != 200 ||
         (response.contentLength ?? 0) > maximumBytes) {

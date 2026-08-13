@@ -31,6 +31,8 @@ class _LineupShellState extends State<LineupShell> {
   late final GuideController _guide;
   late final PlayerCoordinator _player;
   final _playerKey = GlobalKey();
+  final _guideFocus = FocusNode(debugLabel: 'Guide');
+  final _playerFocus = FocusNode(debugLabel: 'Player');
   @override
   void initState() {
     super.initState();
@@ -42,6 +44,7 @@ class _LineupShellState extends State<LineupShell> {
     );
     if (_selectedIndex == 0) _player.showFullGuide();
     widget.controller.addListener(_changed);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _restoreRouteFocus());
   }
 
   void _changed() {
@@ -53,6 +56,8 @@ class _LineupShellState extends State<LineupShell> {
     widget.controller.removeListener(_changed);
     _player.dispose();
     _guide.dispose();
+    _guideFocus.dispose();
+    _playerFocus.dispose();
     super.dispose();
   }
 
@@ -63,6 +68,16 @@ class _LineupShellState extends State<LineupShell> {
       _player.closeOverlay();
     }
     setState(() => _selectedIndex = index);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _restoreRouteFocus());
+  }
+
+  void _restoreRouteFocus() {
+    if (!mounted) return;
+    if (_selectedIndex == 0) {
+      _guideFocus.requestFocus();
+    } else if (_selectedIndex == 4) {
+      _playerFocus.requestFocus();
+    }
   }
 
   @override
@@ -77,6 +92,7 @@ class _LineupShellState extends State<LineupShell> {
       key: _playerKey,
       controller: _player,
       initialMediaPath: widget.initialMediaPath,
+      focusNode: _playerFocus,
       openGuide: () => _select(0),
     );
     final views = <Widget>[
@@ -86,6 +102,7 @@ class _LineupShellState extends State<LineupShell> {
           playerView,
           GuideView(
             controller: _guide,
+            focusNode: _guideFocus,
             onClose: () => _select(4),
             onTune: (channelId) async {
               await _player.tune(channelId);

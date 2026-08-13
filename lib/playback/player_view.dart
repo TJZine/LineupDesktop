@@ -14,12 +14,14 @@ class PlayerView extends StatefulWidget {
     required this.controller,
     required this.openGuide,
     this.initialMediaPath,
+    this.focusNode,
     super.key,
   });
 
   final PlayerCoordinator controller;
   final VoidCallback openGuide;
   final String? initialMediaPath;
+  final FocusNode? focusNode;
 
   @override
   State<PlayerView> createState() => _PlayerViewState();
@@ -153,6 +155,8 @@ class _PlayerViewState extends State<PlayerView> {
     return Material(
       color: Colors.transparent,
       child: Focus(
+        focusNode: widget.focusNode,
+        canRequestFocus: controller.overlay != PlayerOverlay.fullGuide,
         autofocus: true,
         onKeyEvent: _key,
         child: MouseRegion(

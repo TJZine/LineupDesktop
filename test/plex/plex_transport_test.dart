@@ -223,6 +223,21 @@ void main() {
       client.artwork(
         Uri.parse('https://plex.example:32400'),
         'secret',
+        Uri.parse('https://attacker.example/art'),
+      ),
+      throwsA(
+        isA<PlexException>().having(
+          (exception) => exception.code,
+          'code',
+          'artwork-unavailable',
+        ),
+      ),
+    );
+
+    await expectLater(
+      client.artwork(
+        Uri.parse('https://plex.example:32400'),
+        'secret',
         Uri.parse('/library/art/1'),
         maximumBytes: 3,
       ),

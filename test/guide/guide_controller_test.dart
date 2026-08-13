@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
@@ -137,6 +138,65 @@ void main() {
     expect(loads, 1);
     expect(guide.row(lineup.channels.single.id).state, GuideLoadState.ready);
 
+    guide.dispose();
+    lineup.dispose();
+  });
+
+  test('tuning resolves now after the Guide browses another window', () async {
+    final lineup = _TestLineup(_channels(1));
+    final now = DateTime(2026, 8, 13, 12);
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+      clock: () => now,
+    );
+    guide.requestViewport(0, 1);
+    await _settle();
+    for (var index = 0; index < 12; index++) {
+      guide.moveHorizontal(1);
+    }
+
+    final current = await guide.ensureCurrentProgram(lineup.channels.single.id);
+
+    expect(current, isNotNull);
+    expect(current!.isCurrentAt(now), isTrue);
+    guide.dispose();
+    lineup.dispose();
+  });
+
+  test('artwork work stays bounded during rapid selection', () async {
+    final lineup = _ArtworkLineup(_channels(1));
+    final guide = GuideController(lineup: lineup);
+    final futures = <Future<Uint8List?>>[];
+    for (var index = 0; index < 20; index++) {
+      final start = DateTime(2026, 8, 13, 12).add(Duration(hours: index));
+      futures.add(
+        guide.artworkFor(
+          GuideProgram(
+            channelId: 'channel-0',
+            scheduled: ScheduledProgram(
+              item: ChannelItem(
+                id: 'art-$index',
+                title: 'Artwork $index',
+                duration: const Duration(hours: 1),
+                artwork: Uri.parse('/art/$index'),
+              ),
+              start: start,
+              end: start.add(const Duration(hours: 1)),
+              elapsed: Duration.zero,
+              index: index,
+              loop: 0,
+            ),
+          ),
+        ),
+      );
+    }
+    await _settle();
+
+    expect(lineup.artworkLoads, 4);
+    expect(await Future.wait(futures.skip(4).take(4)), everyElement(isNull));
+
+    lineup.completeArtwork();
     guide.dispose();
     lineup.dispose();
   });
@@ -294,6 +354,27 @@ class _TestLineup extends LineupController {
   void setSettings(LineupSettings value) {
     settings = value;
     notifyListeners();
+  }
+}
+
+class _ArtworkLineup extends _TestLineup {
+  _ArtworkLineup(super.value);
+
+  final _artwork = <Completer<Uint8List?>>[];
+  int artworkLoads = 0;
+
+  @override
+  Future<Uint8List?> artworkFor(ChannelItem item) {
+    artworkLoads++;
+    final completer = Completer<Uint8List?>();
+    _artwork.add(completer);
+    return completer.future;
+  }
+
+  void completeArtwork() {
+    for (final completer in _artwork) {
+      if (!completer.isCompleted) completer.complete(Uint8List(0));
+    }
   }
 }
 
