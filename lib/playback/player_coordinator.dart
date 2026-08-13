@@ -58,6 +58,7 @@ class PlayerCoordinator extends ChangeNotifier {
   bool _tuning = false;
   Duration? _sleepDuration;
   int _tuneGeneration = 0;
+  LineupPlaybackRequest? _activePlayback;
   List<Channel> _indexedChannels = const [];
   Map<String, int> _channelIndexById = const {};
   Map<int, Channel> _channelByNumber = const {};
@@ -126,10 +127,17 @@ class PlayerCoordinator extends ChangeNotifier {
       _setOverlay(PlayerOverlay.error, timed: false);
       return;
     }
+    LineupPlaybackRequest? request;
     try {
-      final uri = lineup.playbackUriFor(program.scheduled.item.id);
-      await player.load(uri);
-      if (generation != _tuneGeneration) return;
+      request = lineup.playbackFor(program.scheduled.item.id);
+      await player.load(request.uri);
+      if (generation != _tuneGeneration) {
+        await request.release();
+        return;
+      }
+      final replaced = _activePlayback;
+      _activePlayback = request;
+      await replaced?.release();
       final elapsed = DateTime.now().difference(program.scheduled.start);
       if (elapsed > const Duration(seconds: 2)) await player.seek(elapsed);
       if (generation != _tuneGeneration) return;
@@ -137,6 +145,11 @@ class PlayerCoordinator extends ChangeNotifier {
       _tuning = false;
       showOsd();
     } catch (error) {
+      if (request != null) {
+        await request.release();
+        await _activePlayback?.release();
+        _activePlayback = null;
+      }
       if (generation != _tuneGeneration) return;
       _tuning = false;
       _error = error.toString();
@@ -162,6 +175,12 @@ class PlayerCoordinator extends ChangeNotifier {
 
   Future<void> togglePlayback() =>
       _status.state == PlayerState.playing ? player.pause() : player.play();
+
+  Future<void> stop() async {
+    await player.stop();
+    await _activePlayback?.release();
+    _activePlayback = null;
+  }
 
   Future<void> seekBy(Duration offset) {
     final requested = _position + offset;
@@ -263,7 +282,7 @@ class PlayerCoordinator extends ChangeNotifier {
     final duration = _sleepDuration;
     if (duration != null) {
       _sleepTimer = Timer(duration, () async {
-        await player.stop();
+        await stop();
         _sleepDuration = null;
         notifyListeners();
       });
@@ -333,6 +352,9 @@ class PlayerCoordinator extends ChangeNotifier {
     _sleepTimer?.cancel();
     _numberTimer?.cancel();
     _cursorTimer?.cancel();
+    final playback = _activePlayback;
+    _activePlayback = null;
+    if (playback != null) unawaited(playback.release());
     super.dispose();
   }
 }

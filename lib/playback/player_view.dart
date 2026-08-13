@@ -133,7 +133,7 @@ class _PlayerViewState extends State<PlayerView> {
     } else if (key == LogicalKeyboardKey.mediaPause) {
       unawaited(controller.player.pause());
     } else if (key == LogicalKeyboardKey.mediaStop) {
-      unawaited(controller.player.stop());
+      unawaited(controller.stop());
     } else if (key == LogicalKeyboardKey.mediaRewind) {
       unawaited(controller.seekBy(const Duration(seconds: -10)));
     } else if (key == LogicalKeyboardKey.mediaFastForward) {

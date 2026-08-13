@@ -23,6 +23,20 @@ enum SetupStage {
   ready,
 }
 
+class LineupPlaybackRequest {
+  LineupPlaybackRequest(this.uri, this._release);
+
+  final Uri uri;
+  final Future<void> Function() _release;
+  bool _released = false;
+
+  Future<void> release() async {
+    if (_released) return;
+    _released = true;
+    await _release();
+  }
+}
+
 class LineupController extends ChangeNotifier {
   LineupController({
     required this.store,
@@ -547,7 +561,7 @@ class LineupController extends ChangeNotifier {
     blockSize: channel.blockSize ?? 3,
   );
 
-  Uri playbackUriFor(String itemId) {
+  LineupPlaybackRequest playbackFor(String itemId) {
     final endpoint = connection?.uri;
     final token = _profileToken ?? _accountToken;
     final item = availableMedia
@@ -572,11 +586,19 @@ class LineupController extends ChangeNotifier {
         dolbyVision: true,
       ),
     );
-    return descriptor.uri.replace(
+    final uri = descriptor.uri.replace(
       queryParameters: {
         ...descriptor.uri.queryParameters,
         'X-Plex-Token': token,
       },
+    );
+    return LineupPlaybackRequest(
+      uri,
+      () => plex.releasePlaybackSession(
+        server: endpoint,
+        token: token,
+        sessionId: descriptor.sessionId,
+      ),
     );
   }
 

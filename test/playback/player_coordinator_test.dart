@@ -34,6 +34,10 @@ void main() {
       expect(player.seeks.single, greaterThanOrEqualTo(Duration.zero));
       expect(lineup.currentChannelId, 'channel-b');
       expect(coordinator.overlay, PlayerOverlay.osd);
+      expect(lineup.releases, 0);
+      await coordinator.stop();
+      await coordinator.stop();
+      expect(lineup.releases, 1);
 
       coordinator.dispose();
       guide.dispose();
@@ -135,8 +139,13 @@ class _TestLineup extends LineupController {
     stage = SetupStage.ready;
   }
 
+  int releases = 0;
+
   @override
-  Uri playbackUriFor(String itemId) => Uri.parse('https://media.test/program');
+  LineupPlaybackRequest playbackFor(String itemId) =>
+      LineupPlaybackRequest(Uri.parse('https://media.test/program'), () async {
+        releases++;
+      });
 
   @override
   Future<void> setCurrentChannel(String id) async {
