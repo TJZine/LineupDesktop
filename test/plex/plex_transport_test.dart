@@ -139,6 +139,77 @@ void main() {
     },
   );
 
+  test('connection probing ignores a timed-out candidate', () async {
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      httpClient: MockClient((request) async {
+        if (request.url.host == 'slow.example') throw TimeoutException('slow');
+        return http.Response(
+          '<MediaContainer machineIdentifier="expected"/>',
+          200,
+        );
+      }),
+    );
+
+    final selected = await client.selectConnection(
+      PlexServer(
+        id: 'expected',
+        name: 'Server',
+        connections: [
+          PlexConnection(
+            uri: Uri.parse('https://slow.example:32400'),
+            local: true,
+            relay: false,
+          ),
+          PlexConnection(
+            uri: Uri.parse('https://ready.example:32400'),
+            local: true,
+            relay: false,
+          ),
+        ],
+      ),
+      'secret',
+    );
+
+    expect(selected.uri.host, 'ready.example');
+  });
+
+  for (final (status, code) in [
+    (401, 'auth-required'),
+    (403, 'access-denied'),
+  ]) {
+    test('connection probing preserves HTTP $status failures', () async {
+      final client = PlexClient(
+        clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+        httpClient: MockClient((_) async => http.Response('', status)),
+      );
+
+      await expectLater(
+        client.selectConnection(
+          PlexServer(
+            id: 'expected',
+            name: 'Server',
+            connections: [
+              PlexConnection(
+                uri: Uri.parse('https://server.example:32400'),
+                local: true,
+                relay: false,
+              ),
+            ],
+          ),
+          'secret',
+        ),
+        throwsA(
+          isA<PlexException>().having(
+            (exception) => exception.code,
+            'code',
+            code,
+          ),
+        ),
+      );
+    });
+  }
+
   test(
     'connection probing is bounded to eight advertised candidates',
     () async {

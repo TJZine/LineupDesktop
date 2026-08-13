@@ -256,33 +256,34 @@ class PlexClient {
     String token,
   ) async {
     final watch = Stopwatch()..start();
+    late final http.Response response;
     try {
-      final response = await _send(
+      response = await _send(
         _http.get(
           connection.uri.resolve('/identity'),
           headers: _headers(token),
         ),
         timeout: const Duration(seconds: 4),
       );
-      if (response.statusCode == 401) {
-        throw const PlexException(
-          'auth-required',
-          'The Plex server requires authentication.',
-        );
-      }
-      if (response.statusCode == 403) {
-        throw const PlexException(
-          'access-denied',
-          'This Plex profile cannot access that server.',
-        );
-      }
-      if (response.statusCode >= 200 &&
-          response.statusCode < 300 &&
-          _identityId(response.body) == server.id) {
-        return (connection, watch.elapsed);
-      }
-    } catch (error) {
-      if (error is PlexException) rethrow;
+    } catch (_) {
+      return null;
+    }
+    if (response.statusCode == 401) {
+      throw const PlexException(
+        'auth-required',
+        'The Plex server requires authentication.',
+      );
+    }
+    if (response.statusCode == 403) {
+      throw const PlexException(
+        'access-denied',
+        'This Plex profile cannot access that server.',
+      );
+    }
+    if (response.statusCode >= 200 &&
+        response.statusCode < 300 &&
+        _identityId(response.body) == server.id) {
+      return (connection, watch.elapsed);
     }
     return null;
   }
