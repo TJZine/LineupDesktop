@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/channel_setup_view.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/channels/channel.dart';
+import 'package:lineup_desktop/persistence/app_store.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 import 'package:lineup_desktop/ui/app_ui.dart';
@@ -38,10 +39,14 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(
-      tester.getTopLeft(find.text('Action')).dy,
-      greaterThan(tester.getTopLeft(find.text('Constrained page')).dy),
+    final contentBounds = tester.getRect(
+      find.byKey(const ValueKey('lineup-page-content')),
     );
+    final actionBounds = tester.getRect(find.text('Action'));
+    final titleBounds = tester.getRect(find.text('Constrained page'));
+    expect(contentBounds.intersect(actionBounds), actionBounds);
+    expect(contentBounds.intersect(titleBounds), titleBounds);
+    expect(actionBounds.top, greaterThan(titleBounds.top));
   });
 
   testWidgets('successful channel deletion clears a prior failure', (
@@ -49,7 +54,7 @@ void main() {
   ) async {
     await tester.binding.setSurfaceSize(const Size(1280, 720));
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    final controller = _DeleteFixtureController()
+    final controller = FixtureController(store: _FailNextSaveStore())
       ..stage = SetupStage.ready
       ..channels = [_channel];
     final fixture = UiFixture(controller: controller);
@@ -254,16 +259,16 @@ Future<void> _confirmDelete(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
-class _DeleteFixtureController extends FixtureController {
-  bool failNextDelete = true;
+class _FailNextSaveStore extends FixtureStore {
+  bool _failNextSave = true;
 
   @override
-  Future<void> deleteChannel(String id) async {
-    if (failNextDelete) {
-      failNextDelete = false;
-      throw StateError('synthetic delete failure');
+  Future<void> save(PersistedState value) async {
+    if (_failNextSave) {
+      _failNextSave = false;
+      throw StateError('synthetic save failure');
     }
-    await super.deleteChannel(id);
+    await super.save(value);
   }
 }
 
