@@ -25,7 +25,12 @@ class ScheduleWorker {
     final id = ++_nextRequest;
     final completer = Completer<ScheduleIndex>();
     _pending[id] = completer;
-    port.send([id, channel]);
+    try {
+      port.send([id, channel]);
+    } catch (_) {
+      _pending.remove(id);
+      rethrow;
+    }
     return completer.future;
   }
 
@@ -33,12 +38,46 @@ class ScheduleWorker {
     final ready = Completer<SendPort>();
     final responses = ReceivePort();
     _responses = responses;
+    void fail(Object error, [StackTrace? stackTrace]) {
+      if (!identical(_responses, responses)) return;
+      if (!ready.isCompleted) ready.completeError(error, stackTrace);
+      for (final completer in _pending.values) {
+        if (!completer.isCompleted) {
+          completer.completeError(error, stackTrace);
+        }
+      }
+      _pending.clear();
+      _isolate?.kill(priority: Isolate.immediate);
+      _isolate = null;
+      _starting = null;
+      _responses = null;
+      responses.close();
+    }
+
     responses.listen((message) {
+      if (message == null) {
+        fail(StateError('Schedule worker exited unexpectedly'));
+        return;
+      }
+      if (message is List<Object?> && message.length == 2) {
+        final error = RemoteError(
+          message[0].toString(),
+          message[1]?.toString() ?? '',
+        );
+        fail(error, error.stackTrace);
+        return;
+      }
       if (message is SendPort) {
         if (!ready.isCompleted) ready.complete(message);
         return;
       }
-      final values = message as List<Object?>;
+      if (message is! List<Object?> ||
+          message.length != 3 ||
+          message[0] is! int) {
+        fail(StateError('Schedule worker sent an invalid response'));
+        return;
+      }
+      final values = message;
       final completer = _pending.remove(values[0] as int);
       if (completer == null) return;
       final schedule = values[1] as ScheduleIndex?;
@@ -48,16 +87,32 @@ class ScheduleWorker {
         completer.complete(schedule);
       }
     });
-    final isolate = await Isolate.spawn(_run, [
-      responses.sendPort,
-      media,
-      playlists,
-    ], debugName: 'Lineup schedule worker');
+    late final Isolate isolate;
+    try {
+      isolate = await Isolate.spawn(
+        _run,
+        [responses.sendPort, media, playlists],
+        onExit: responses.sendPort,
+        onError: responses.sendPort,
+        errorsAreFatal: true,
+        debugName: 'Lineup schedule worker',
+      );
+    } catch (_) {
+      if (identical(_responses, responses)) {
+        _responses = null;
+        _isolate = null;
+        _starting = null;
+        responses.close();
+      }
+      rethrow;
+    }
     if (_disposed) {
       isolate.kill(priority: Isolate.immediate);
       if (!ready.isCompleted) {
         ready.completeError(StateError('Schedule worker was disposed'));
       }
+    } else if (!identical(_responses, responses)) {
+      isolate.kill(priority: Isolate.immediate);
     } else {
       _isolate = isolate;
     }
