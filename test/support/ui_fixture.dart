@@ -70,8 +70,8 @@ class FixturePlayer implements NativePlayer {
   @override
   Future<void> initialize() async {}
   @override
-  Future<void> load(Uri media) async {
-    generation++;
+  Future<void> load(Uri media, {int? generation}) async {
+    this.generation = generation ?? this.generation + 1;
     emit(const PlayerStatus(state: PlayerState.loading, message: 'Loading'));
   }
 

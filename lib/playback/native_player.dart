@@ -9,7 +9,7 @@ abstract interface class NativePlayer {
   Stream<PlayerEvent> get events;
 
   Future<void> initialize();
-  Future<void> load(Uri media);
+  Future<void> load(Uri media, {int? generation});
   Future<void> play();
   Future<void> pause();
   Future<void> seek(Duration position);

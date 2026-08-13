@@ -25,6 +25,7 @@ class WindowsNativePlayer implements NativePlayer {
   Future<void> _lifecycle = Future.value();
   int _nextLoadId = 0;
   int? _activeLoadId;
+  int? _activeGeneration;
   bool _initialized = false;
 
   @override
@@ -69,7 +70,7 @@ class WindowsNativePlayer implements NativePlayer {
   });
 
   @override
-  Future<void> load(Uri media) async {
+  Future<void> load(Uri media, {int? generation}) async {
     await _lifecycle;
     _requireInitialized();
     final loadId = ++_nextLoadId;
@@ -79,6 +80,7 @@ class WindowsNativePlayer implements NativePlayer {
     );
     _pendingLoad = pending;
     _activeLoadId = loadId;
+    _activeGeneration = generation;
     _resetMediaState();
     _setStatus(PlayerState.loading, 'Loading media');
     try {
@@ -105,7 +107,9 @@ class WindowsNativePlayer implements NativePlayer {
           error is TimeoutException
               ? 'Media load timed out'
               : 'Media load failed',
+          recoverable: true,
         );
+        _activeGeneration = null;
       }
       rethrow;
     } finally {
@@ -157,6 +161,7 @@ class WindowsNativePlayer implements NativePlayer {
     );
     _pendingLoad = null;
     _activeLoadId = null;
+    _activeGeneration = null;
     if (!_initialized) return;
     _initialized = false;
     try {
@@ -217,7 +222,7 @@ class WindowsNativePlayer implements NativePlayer {
       _ => PlayerState.idle,
     };
     final message = event['message'] as String? ?? state.name;
-    _setStatus(state, message);
+    _setStatus(state, message, recoverable: state == PlayerState.error);
     if (state == PlayerState.playing) {
       final pending = _pendingLoad;
       if (pending != null && !pending.isCompleted) pending.complete();
@@ -400,8 +405,16 @@ class WindowsNativePlayer implements NativePlayer {
     _tracks = const [];
   }
 
-  void _setStatus(PlayerState state, String message) {
-    _status = PlayerStatus(state: state, message: message);
+  void _setStatus(
+    PlayerState state,
+    String message, {
+    bool recoverable = false,
+  }) {
+    _status = PlayerStatus(
+      state: state,
+      message: message,
+      recoverable: recoverable,
+    );
     _emit();
   }
 
@@ -414,6 +427,7 @@ class WindowsNativePlayer implements NativePlayer {
         duration: _duration,
         telemetry: _telemetry,
         tracks: List.unmodifiable(_tracks),
+        generation: _activeGeneration,
       ),
     );
   }

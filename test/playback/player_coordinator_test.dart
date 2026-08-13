@@ -162,11 +162,14 @@ void main() {
         guide: guide,
       );
 
-      player.emitStatus(PlayerState.paused, generation: 9);
+      await coordinator.loadInitialMedia(Uri.parse('lineup-test://generation'));
+      final generation = player.loadGenerations.single!;
+
+      player.emitStatus(PlayerState.paused, generation: generation + 1);
       await Future<void>.delayed(Duration.zero);
       expect(coordinator.status.state, PlayerState.playing);
 
-      player.emitStatus(PlayerState.buffering, generation: 0);
+      player.emitStatus(PlayerState.buffering, generation: generation);
       await Future<void>.delayed(Duration.zero);
       expect(coordinator.status.state, PlayerState.buffering);
       expect(coordinator.overlay, PlayerOverlay.osd);
@@ -209,6 +212,43 @@ void main() {
     guide.dispose();
     lineup.dispose();
   });
+
+  test(
+    'load generation follows dispatch when an intermediate tune is skipped',
+    () async {
+      final lineup = _TestLineup();
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => _schedule(channel),
+      )..requestViewport(0, 2);
+      await Future<void>.delayed(Duration.zero);
+      final player = _ControlledPlayer();
+      final coordinator = PlayerCoordinator(
+        player: player,
+        lineup: lineup,
+        guide: guide,
+      );
+
+      final first = coordinator.tune('channel-0');
+      await player.firstLoadStarted.future;
+      final skipped = coordinator.tune('channel-b');
+      final winning = coordinator.tune('channel-0');
+      player.releaseFirstLoad.complete();
+      await Future.wait([first, skipped, winning]);
+
+      expect(player.loads, hasLength(2));
+      expect(player.loadGenerations, hasLength(2));
+      expect(player.loadGenerations.every((value) => value != null), isTrue);
+      expect(
+        player.loadGenerations.last!,
+        greaterThan(player.loadGenerations.first! + 1),
+      );
+
+      coordinator.dispose();
+      guide.dispose();
+      lineup.dispose();
+    },
+  );
 
   test('stop cancels a pending tune and releases its request', () async {
     final lineup = _TestLineup();
@@ -271,6 +311,36 @@ void main() {
       lineup.dispose();
     },
   );
+
+  test('recoverable player errors retain the retry action', () async {
+    final lineup = _TestLineup();
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    )..requestViewport(0, 2);
+    await Future<void>.delayed(Duration.zero);
+    final player = _EventPlayer();
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+    );
+
+    await coordinator.tune('channel-b');
+    player.emitError(
+      recoverable: true,
+      generation: player.loadGenerations.single,
+    );
+    await Future<void>.delayed(Duration.zero);
+
+    expect(coordinator.canRetry, isTrue);
+    expect(coordinator.overlay, PlayerOverlay.error);
+
+    coordinator.dispose();
+    await player.close();
+    guide.dispose();
+    lineup.dispose();
+  });
 
   test('load side effects roll back when load later fails', () async {
     final lineup = _TestLineup();
@@ -532,6 +602,7 @@ class _BlockingLineup extends _TestLineup {
 
 class _Player implements NativePlayer {
   final loads = <Uri>[];
+  final loadGenerations = <int?>[];
   final seeks = <Duration>[];
   final selectedTracks = <(PlayerTrackType, int?)>[];
   int stops = 0;
@@ -554,7 +625,11 @@ class _Player implements NativePlayer {
   @override
   Future<void> initialize() async {}
   @override
-  Future<void> load(Uri media) async => loads.add(media);
+  Future<void> load(Uri media, {int? generation}) async {
+    loads.add(media);
+    loadGenerations.add(generation);
+  }
+
   @override
   Future<void> play() async {}
   @override
@@ -584,8 +659,8 @@ class _ControlledPlayer extends _Player {
   final releaseFirstLoad = Completer<void>();
 
   @override
-  Future<void> load(Uri media) async {
-    loads.add(media);
+  Future<void> load(Uri media, {int? generation}) async {
+    await super.load(media, generation: generation);
     if (loads.length == 1) {
       firstLoadStarted.complete();
       await releaseFirstLoad.future;
@@ -595,8 +670,8 @@ class _ControlledPlayer extends _Player {
 
 class _LoadFailurePlayer extends _Player {
   @override
-  Future<void> load(Uri media) async {
-    loads.add(media);
+  Future<void> load(Uri media, {int? generation}) async {
+    await super.load(media, generation: generation);
     throw StateError('load failed after dispatch');
   }
 }
@@ -608,14 +683,19 @@ class _EventPlayer extends _Player {
   @override
   Stream<PlayerEvent> get events => _events.stream;
 
-  void emitError() {
+  void emitError({bool recoverable = false, int? generation}) {
     _events.add(
-      const PlayerEvent(
-        status: PlayerStatus(state: PlayerState.error, message: 'Failed'),
+      PlayerEvent(
+        status: PlayerStatus(
+          state: PlayerState.error,
+          message: 'Failed',
+          recoverable: recoverable,
+        ),
         position: Duration.zero,
         duration: Duration.zero,
-        telemetry: PlayerTelemetry(),
-        tracks: [],
+        telemetry: const PlayerTelemetry(),
+        tracks: const [],
+        generation: generation,
       ),
     );
   }

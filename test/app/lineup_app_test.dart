@@ -44,8 +44,7 @@ void main() {
     await tester.pumpWidget(
       LineupBootstrap(player: player, controller: controller),
     );
-    await tester.pump();
-    await tester.pump();
+    await tester.pumpAndSettle();
 
     expect(find.text('Create a channel to build your Guide'), findsOneWidget);
 
@@ -112,8 +111,7 @@ void main() {
     await tester.pump();
 
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
-    await tester.pump();
-    await tester.pump();
+    await tester.pumpAndSettle();
 
     expect(player.loads, 1);
     expect(find.byKey(const Key('guide-picture-in-picture')), findsOneWidget);
@@ -370,7 +368,7 @@ class _FakePlayer implements NativePlayer {
   Future<void> initialize() async {}
 
   @override
-  Future<void> load(Uri media) async {
+  Future<void> load(Uri media, {int? generation}) async {
     loads++;
   }
 

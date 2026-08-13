@@ -86,6 +86,8 @@ class HarnessController extends LineupController {
 
 class HarnessPlayer implements NativePlayer {
   final _events = StreamController<PlayerEvent>.broadcast();
+  bool _disposed = false;
+  int? _generation;
   PlayerStatus _status = const PlayerStatus(
     state: PlayerState.playing,
     message: 'Synthetic player surface',
@@ -121,13 +123,16 @@ class HarnessPlayer implements NativePlayer {
   @override
   Future<void> initialize() async {}
   @override
-  Future<void> load(Uri media) async {
+  Future<void> load(Uri media, {int? generation}) async {
+    if (_disposed) return;
+    _generation = generation;
     _status = const PlayerStatus(
       state: PlayerState.loading,
       message: 'Loading synthetic program',
     );
     _emit();
     await Future<void>.delayed(const Duration(milliseconds: 250));
+    if (_disposed) return;
     _status = const PlayerStatus(
       state: PlayerState.playing,
       message: 'Playing synthetic program',
@@ -150,15 +155,19 @@ class HarnessPlayer implements NativePlayer {
     _emit();
   }
 
-  void _emit() => _events.add(
-    PlayerEvent(
-      status: status,
-      position: position,
-      duration: duration,
-      telemetry: telemetry,
-      tracks: tracks,
-    ),
-  );
+  void _emit() {
+    if (_disposed || _events.isClosed) return;
+    _events.add(
+      PlayerEvent(
+        status: status,
+        position: position,
+        duration: duration,
+        telemetry: telemetry,
+        tracks: tracks,
+        generation: _generation,
+      ),
+    );
+  }
 
   @override
   Future<void> seek(Duration position) async {}
@@ -173,7 +182,11 @@ class HarnessPlayer implements NativePlayer {
   @override
   Future<void> stop() async {}
   @override
-  Future<void> dispose() => _events.close();
+  Future<void> dispose() async {
+    if (_disposed) return;
+    _disposed = true;
+    await _events.close();
+  }
 }
 
 class _HarnessStore implements AppStore {

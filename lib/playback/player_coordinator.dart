@@ -62,6 +62,7 @@ class PlayerCoordinator extends ChangeNotifier {
   bool _overlayInteraction = false;
   Duration? _sleepDuration;
   int _tuneGeneration = 0;
+  int? _activeLoadGeneration;
   Future<void> _tuneOperations = Future.value();
   bool _disposed = false;
   bool _initialMediaRequested = false;
@@ -134,7 +135,9 @@ class PlayerCoordinator extends ChangeNotifier {
   }
 
   void _event(PlayerEvent event) {
-    if (event.generation != null && event.generation != _tuneGeneration) return;
+    if (event.generation != null && event.generation != _activeLoadGeneration) {
+      return;
+    }
     _status = event.status;
     _position = event.position;
     _duration = event.duration;
@@ -203,7 +206,7 @@ class PlayerCoordinator extends ChangeNotifier {
     _initialMediaRequested = true;
     final generation = ++_tuneGeneration;
     try {
-      await player.load(media);
+      await _load(media, generation);
       if (!_disposed && generation == _tuneGeneration) showOsd();
     } catch (error) {
       if (_disposed || generation != _tuneGeneration) return;
@@ -233,7 +236,7 @@ class PlayerCoordinator extends ChangeNotifier {
     final previousChannelId = lineup.currentChannelId;
     try {
       request = lineup.playbackFor(program.scheduled.item.id);
-      await player.load(request.uri);
+      await _load(request.uri, generation);
       if (generation != _tuneGeneration) {
         if (_disposed) await _stopQuietly();
         await _release(request);
@@ -297,6 +300,11 @@ class PlayerCoordinator extends ChangeNotifier {
     if (id != null) await tune(id);
   }
 
+  Future<void> _load(Uri media, int generation) {
+    _activeLoadGeneration = generation;
+    return player.load(media, generation: generation);
+  }
+
   Future<void> previousChannel() => _tuneOffset(-1);
   Future<void> nextChannel() => _tuneOffset(1);
 
@@ -313,6 +321,7 @@ class PlayerCoordinator extends ChangeNotifier {
 
   Future<void> stop() async {
     ++_tuneGeneration;
+    _activeLoadGeneration = null;
     _tuning = false;
     _canRetry = false;
     notifyListeners();
@@ -588,6 +597,7 @@ class PlayerCoordinator extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     ++_tuneGeneration;
+    _activeLoadGeneration = null;
     _tuning = false;
     lineup.removeListener(_lineupChanged);
     guide.removeListener(_guideChanged);

@@ -36,7 +36,7 @@ class UnsupportedNativePlayer implements NativePlayer {
   );
 
   @override
-  Future<void> load(Uri media) async => _unavailable();
+  Future<void> load(Uri media, {int? generation}) async => _unavailable();
 
   @override
   Future<void> play() async => _unavailable();

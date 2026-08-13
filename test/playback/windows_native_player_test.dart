@@ -99,6 +99,57 @@ void main() {
   );
 
   test(
+    'native load errors preserve retry and coordinator generation',
+    () async {
+      final calls = <MethodCall>[];
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        calls.add(call);
+        return null;
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+      final player = WindowsNativePlayer();
+      final events = <PlayerEvent>[];
+      final subscription = player.events.listen(events.add);
+      await player.initialize();
+      final load = player.load(
+        Uri.parse('file:///retryable.mp4'),
+        generation: 42,
+      );
+      await Future<void>.delayed(Duration.zero);
+      final loadId = calls.last.arguments!['loadId']! as int;
+      final loadExpectation = expectLater(
+        load,
+        throwsA(isA<PlayerUnavailable>()),
+      );
+      await _sendNativeEvent(messenger, {
+        'type': 'state',
+        'loadId': loadId,
+        'state': 'error',
+        'message': 'Temporary media failure',
+      });
+
+      await loadExpectation;
+      expect(player.status.recoverable, isTrue);
+      expect(
+        events.where((event) => event.status.state == PlayerState.error),
+        isNotEmpty,
+      );
+      expect(
+        events
+            .where((event) => event.status.state == PlayerState.error)
+            .every(
+              (event) => event.status.recoverable && event.generation == 42,
+            ),
+        isTrue,
+      );
+
+      await subscription.cancel();
+      await player.dispose();
+    },
+  );
+
+  test(
     'ignores stale or unscoped events and clears facts for replacement',
     () async {
       final calls = <MethodCall>[];
