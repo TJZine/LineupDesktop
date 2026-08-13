@@ -41,7 +41,7 @@ jobs:
       - run: flutter build macos
 
   build-windows:
-    name: Build Windows scaffold
+    name: Build Windows development player
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -50,4 +50,34 @@ jobs:
           flutter-version: 3.47.0
           channel: stable
           cache: true
-      - run: flutter build windows
+      - name: Validate the exact Flutter and engine sources for the owned patch
+        shell: pwsh
+        run: |
+          $flutterSource = Join-Path $env:RUNNER_TEMP 'lineup-flutter-source'
+          $depotTools = Join-Path $env:RUNNER_TEMP 'depot_tools'
+          git clone --filter=blob:none https://github.com/flutter/flutter.git $flutterSource
+          git -C $flutterSource checkout 4cf24164269a5ebf0c16a028a00727d0e77bbb05
+          git clone --depth 1 https://chromium.googlesource.com/chromium/tools/depot_tools.git $depotTools
+          $env:PATH = "$depotTools;$env:PATH"
+          $env:DEPOT_TOOLS_WIN_TOOLCHAIN = '0'
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $env:GYP_MSVS_OVERRIDE_PATH = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          $env:WINDOWSSDKDIR = "${env:ProgramFiles(x86)}\Windows Kits\10"
+          Set-Location $flutterSource
+          gclient sync --no-history
+          & "$env:GITHUB_WORKSPACE\tool\flutter_engine\apply.ps1" -FlutterRoot $flutterSource
+          Set-Location (Join-Path $flutterSource 'engine\src')
+          python .\flutter\tools\gn --runtime-mode=release
+          ninja -C out\host_release
+      - name: Build with the pinned libmpv development asset
+        shell: pwsh
+        run: |
+          $mpvRoot = Join-Path $env:RUNNER_TEMP 'lineup-mpv'
+          & .\tool\windows\prepare-mpv-dev.ps1 -Destination $mpvRoot
+          $env:LINEUP_MPV_ROOT = $mpvRoot
+          $env:LINEUP_ALLOW_GPL_MPV_DEV_ARTIFACT = '1'
+          $engineSource = Join-Path $env:RUNNER_TEMP 'lineup-flutter-source\engine\src'
+          flutter build windows `
+            --local-engine=host_release `
+            --local-engine-host=host_release `
+            --local-engine-src-path=$engineSource

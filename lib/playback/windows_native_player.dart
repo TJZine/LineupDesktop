@@ -6,8 +6,13 @@ import 'native_player.dart';
 
 class WindowsNativePlayer implements NativePlayer {
   static const _channel = MethodChannel('lineup/native_player');
+  static WindowsNativePlayer? _handlerOwner;
+
+  WindowsNativePlayer({Duration? loadTimeout})
+    : _loadTimeout = loadTimeout ?? const Duration(seconds: 30);
 
   final _events = StreamController<PlayerEvent>.broadcast(sync: true);
+  final Duration _loadTimeout;
   PlayerStatus _status = const PlayerStatus(
     state: PlayerState.idle,
     message: 'Native player not initialized',
@@ -17,6 +22,9 @@ class WindowsNativePlayer implements NativePlayer {
   PlayerTelemetry _telemetry = const PlayerTelemetry();
   List<PlayerTrack> _tracks = const [];
   Completer<void>? _pendingLoad;
+  Future<void> _lifecycle = Future.value();
+  int _nextLoadId = 0;
+  int? _activeLoadId;
   bool _initialized = false;
 
   @override
@@ -38,32 +46,62 @@ class WindowsNativePlayer implements NativePlayer {
   Stream<PlayerEvent> get events => _events.stream;
 
   @override
-  Future<void> initialize() async {
+  Future<void> initialize() => _serializeLifecycle(() async {
     if (_initialized) return;
+    if (_handlerOwner != null && !identical(_handlerOwner, this)) {
+      throw const PlayerUnavailable(
+        'Another Windows native player already owns the platform channel.',
+      );
+    }
+    _handlerOwner = this;
     _channel.setMethodCallHandler(_handleNativeCall);
     try {
       await _channel.invokeMethod<Object?>('initialize');
     } catch (_) {
-      _channel.setMethodCallHandler(null);
+      if (identical(_handlerOwner, this)) {
+        _channel.setMethodCallHandler(null);
+        _handlerOwner = null;
+      }
       rethrow;
     }
     _initialized = true;
     _setStatus(PlayerState.idle, 'Native libmpv player ready');
-  }
+  });
 
   @override
   Future<void> load(Uri media) async {
+    await _lifecycle;
     _requireInitialized();
+    final loadId = ++_nextLoadId;
     final pending = Completer<void>();
-    _pendingLoad?.completeError(
+    _completePendingLoadError(
       const PlayerUnavailable('A newer media load replaced this request.'),
     );
     _pendingLoad = pending;
+    _activeLoadId = loadId;
+    _resetMediaState();
+    _setStatus(PlayerState.loading, 'Loading media');
     try {
-      await _channel.invokeMethod<void>('load', {'uri': media.toString()});
-      await pending.future.timeout(const Duration(seconds: 30));
+      await _channel.invokeMethod<void>('load', {
+        'uri': media.toString(),
+        'loadId': loadId,
+      });
+      await pending.future.timeout(_loadTimeout);
+    } catch (error) {
+      if (identical(_pendingLoad, pending)) {
+        _activeLoadId = null;
+        _setStatus(
+          PlayerState.error,
+          error is TimeoutException
+              ? 'Media load timed out'
+              : 'Media load failed',
+        );
+      }
+      rethrow;
     } finally {
-      if (identical(_pendingLoad, pending)) _pendingLoad = null;
+      if (identical(_pendingLoad, pending)) {
+        _pendingLoad = null;
+      }
     }
   }
 
@@ -103,19 +141,34 @@ class WindowsNativePlayer implements NativePlayer {
   Future<void> stop() => _invoke('stop');
 
   @override
-  Future<void> dispose() async {
-    _pendingLoad?.completeError(
+  Future<void> dispose() => _serializeLifecycle(() async {
+    _completePendingLoadError(
       const PlayerUnavailable('The native player was disposed.'),
     );
     _pendingLoad = null;
+    _activeLoadId = null;
     if (!_initialized) return;
     _initialized = false;
-    await _channel.invokeMethod<void>('dispose');
-    _channel.setMethodCallHandler(null);
-    _setStatus(PlayerState.stopped, 'Native player disposed');
+    try {
+      await _channel.invokeMethod<void>('dispose');
+    } finally {
+      if (identical(_handlerOwner, this)) {
+        _channel.setMethodCallHandler(null);
+        _handlerOwner = null;
+      }
+      _resetMediaState();
+      _setStatus(PlayerState.stopped, 'Native player disposed');
+    }
+  });
+
+  Future<void> _serializeLifecycle(Future<void> Function() operation) {
+    final next = _lifecycle.then((_) => operation());
+    _lifecycle = next.catchError((_) {});
+    return next;
   }
 
   Future<void> _invoke(String method, [Map<String, Object?>? arguments]) async {
+    await _lifecycle;
     _requireInitialized();
     await _channel.invokeMethod<void>(method, arguments);
   }
@@ -128,13 +181,20 @@ class WindowsNativePlayer implements NativePlayer {
 
   Future<void> _handleNativeCall(MethodCall call) async {
     if (call.method != 'event') return;
+    if (call.arguments is! Map) return;
     final event = Map<Object?, Object?>.from(call.arguments as Map);
+    if (!_isCurrentLoadEvent(event)) return;
     switch (event['type']) {
       case 'state':
         _handleState(event);
       case 'property':
         _handleProperty(event['name'] as String?, event['value']);
     }
+  }
+
+  bool _isCurrentLoadEvent(Map<Object?, Object?> event) {
+    final loadId = event['loadId'];
+    return loadId is int && loadId == _activeLoadId;
   }
 
   void _handleState(Map<Object?, Object?> event) {
@@ -149,9 +209,10 @@ class WindowsNativePlayer implements NativePlayer {
     final message = event['message'] as String? ?? state.name;
     _setStatus(state, message);
     if (state == PlayerState.playing) {
-      _pendingLoad?.complete();
+      final pending = _pendingLoad;
+      if (pending != null && !pending.isCompleted) pending.complete();
     } else if (state == PlayerState.error) {
-      _pendingLoad?.completeError(PlayerUnavailable(message));
+      _completePendingLoadError(PlayerUnavailable(message));
     }
   }
 
@@ -172,13 +233,13 @@ class WindowsNativePlayer implements NativePlayer {
       case 'track-list':
         _tracks = _decodeTracks(value);
       case 'video-format':
-        _telemetry = _copyTelemetry(videoFormat: value as String?);
+        _telemetry = _copyTelemetry(videoFormat: value);
       case 'video-codec':
-        _telemetry = _copyTelemetry(videoCodec: value as String?);
+        _telemetry = _copyTelemetry(videoCodec: value);
       case 'current-vo':
-        _telemetry = _copyTelemetry(videoOutput: value as String?);
+        _telemetry = _copyTelemetry(videoOutput: value);
       case 'hwdec-current':
-        _telemetry = _copyTelemetry(hardwareDecoder: value as String?);
+        _telemetry = _copyTelemetry(hardwareDecoder: value);
       case 'video-params':
         _applyVideoParameters(value);
     }
@@ -225,46 +286,77 @@ class WindowsNativePlayer implements NativePlayer {
     if (value is! Map) return;
     final parameters = Map<Object?, Object?>.from(value);
     _telemetry = _copyTelemetry(
-      width: parameters['w'] as int?,
-      height: parameters['h'] as int?,
-      pixelFormat: parameters['pixelformat'] as String?,
-      hardwarePixelFormat: parameters['hw-pixelformat'] as String?,
-      primaries: parameters['primaries'] as String?,
-      gamma: parameters['gamma'] as String?,
-      colorMatrix: parameters['colormatrix'] as String?,
-      signalPeak: (parameters['sig-peak'] as num?)?.toDouble(),
+      width: parameters['w'],
+      height: parameters['h'],
+      pixelFormat: parameters['pixelformat'],
+      hardwarePixelFormat: parameters['hw-pixelformat'],
+      primaries: parameters['primaries'],
+      gamma: parameters['gamma'],
+      colorMatrix: parameters['colormatrix'],
+      signalPeak: parameters['sig-peak'],
     );
   }
 
   PlayerTelemetry _copyTelemetry({
-    String? videoOutput,
-    String? hardwareDecoder,
-    String? videoCodec,
-    String? videoFormat,
-    int? width,
-    int? height,
-    String? pixelFormat,
-    String? hardwarePixelFormat,
-    String? primaries,
-    String? gamma,
-    String? colorMatrix,
-    double? signalPeak,
+    Object? videoOutput = _unchanged,
+    Object? hardwareDecoder = _unchanged,
+    Object? videoCodec = _unchanged,
+    Object? videoFormat = _unchanged,
+    Object? width = _unchanged,
+    Object? height = _unchanged,
+    Object? pixelFormat = _unchanged,
+    Object? hardwarePixelFormat = _unchanged,
+    Object? primaries = _unchanged,
+    Object? gamma = _unchanged,
+    Object? colorMatrix = _unchanged,
+    Object? signalPeak = _unchanged,
   }) {
     return PlayerTelemetry(
-      videoOutput: videoOutput ?? _telemetry.videoOutput,
-      hardwareDecoder: hardwareDecoder ?? _telemetry.hardwareDecoder,
-      videoCodec: videoCodec ?? _telemetry.videoCodec,
-      videoFormat: videoFormat ?? _telemetry.videoFormat,
-      width: width ?? _telemetry.width,
-      height: height ?? _telemetry.height,
-      pixelFormat: pixelFormat ?? _telemetry.pixelFormat,
-      hardwarePixelFormat:
-          hardwarePixelFormat ?? _telemetry.hardwarePixelFormat,
-      primaries: primaries ?? _telemetry.primaries,
-      gamma: gamma ?? _telemetry.gamma,
-      colorMatrix: colorMatrix ?? _telemetry.colorMatrix,
-      signalPeak: signalPeak ?? _telemetry.signalPeak,
+      videoOutput: videoOutput == _unchanged
+          ? _telemetry.videoOutput
+          : videoOutput as String?,
+      hardwareDecoder: hardwareDecoder == _unchanged
+          ? _telemetry.hardwareDecoder
+          : hardwareDecoder as String?,
+      videoCodec: videoCodec == _unchanged
+          ? _telemetry.videoCodec
+          : videoCodec as String?,
+      videoFormat: videoFormat == _unchanged
+          ? _telemetry.videoFormat
+          : videoFormat as String?,
+      width: width == _unchanged ? _telemetry.width : width as int?,
+      height: height == _unchanged ? _telemetry.height : height as int?,
+      pixelFormat: pixelFormat == _unchanged
+          ? _telemetry.pixelFormat
+          : pixelFormat as String?,
+      hardwarePixelFormat: hardwarePixelFormat == _unchanged
+          ? _telemetry.hardwarePixelFormat
+          : hardwarePixelFormat as String?,
+      primaries: primaries == _unchanged
+          ? _telemetry.primaries
+          : primaries as String?,
+      gamma: gamma == _unchanged ? _telemetry.gamma : gamma as String?,
+      colorMatrix: colorMatrix == _unchanged
+          ? _telemetry.colorMatrix
+          : colorMatrix as String?,
+      signalPeak: signalPeak == _unchanged
+          ? _telemetry.signalPeak
+          : (signalPeak as num?)?.toDouble(),
     );
+  }
+
+  static const Object _unchanged = Object();
+
+  void _completePendingLoadError(Object error) {
+    final pending = _pendingLoad;
+    if (pending != null && !pending.isCompleted) pending.completeError(error);
+  }
+
+  void _resetMediaState() {
+    _position = Duration.zero;
+    _duration = Duration.zero;
+    _telemetry = const PlayerTelemetry();
+    _tracks = const [];
   }
 
   void _setStatus(PlayerState state, String message) {

@@ -14,9 +14,13 @@ initialize without the exact marker, preventing silent opaque fallback.
 Apply from the root of an exact Flutter checkout:
 
 ```powershell
-git apply --unidiff-zero --check C:\path\to\LineupDesktop\tool\flutter_engine\0001-windows-direct-composition.patch
-git apply --unidiff-zero C:\path\to\LineupDesktop\tool\flutter_engine\0001-windows-direct-composition.patch
+C:\path\to\LineupDesktop\tool\flutter_engine\apply.ps1 -FlutterRoot C:\path\to\flutter
 ```
+
+The script verifies the framework revision, pinned engine artifact revision,
+and exact committed Windows EGL manager blob before a normal, contextual `git
+apply --check`. The exact hashes and surrounding source context reject
+unsupported sources.
 
 Fetch and build the engine using Flutter's official engine setup instructions.
 On Windows this requires Visual Studio C++ with ATL, the engine-pinned Windows
@@ -24,6 +28,11 @@ SDK 10.0.22621.0, and Debugging Tools for Windows. Use the resulting
 `host_debug` build for `flutter run` and `host_release` for release builds,
 always passing `--local-engine`, the matching `--local-engine-host`, and
 `--local-engine-src-path`. Do not copy artifacts over the stock SDK cache.
+
+CI proves the patch applies to the exact framework and engine source revisions,
+builds `host_release`, and compiles the Windows application against that local
+engine. Runtime marker and DirectComposition presentation still require an
+executed Windows acceptance check.
 
 See `docs/DEVELOPMENT.md` for the exact Windows commands and required local
 libmpv layout. See `NOTICE` before redistributing a patched engine binary.

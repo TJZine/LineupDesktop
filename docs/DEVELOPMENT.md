@@ -81,7 +81,7 @@ $env:WINDOWSSDKDIR = 'C:\Program Files (x86)\Windows Kits\10'
 
 Set-Location C:\path\to\flutter
 gclient sync --no-history
-git apply --unidiff-zero C:\path\to\LineupDesktop\tool\flutter_engine\0001-windows-direct-composition.patch
+C:\path\to\LineupDesktop\tool\flutter_engine\apply.ps1 -FlutterRoot (Get-Location)
 
 Set-Location engine\src
 python .\flutter\tools\gn --runtime-mode=debug
@@ -91,8 +91,7 @@ ninja -C out\host_release
 ```
 
 The patch must be applied to the exact revisions recorded in
-`tool/flutter_engine/README.md`; run `git apply --check` first on a fresh
-checkout using `--unidiff-zero`. Select the resulting engine explicitly—do not replace Flutter's SDK
+`tool/flutter_engine/README.md`. Select the resulting engine explicitly—do not replace Flutter's SDK
 cache:
 
 ```powershell
@@ -110,20 +109,36 @@ flutter build windows `
 ```
 
 Set `LINEUP_MPV_ROOT` to an uncommitted x86-64 libmpv development directory
-containing `include\mpv\client.h`, `libmpv-2.dll`, and an MSVC-compatible
-`libmpv.lib`. Shinchiro development archives contain a GNU import library; for
-local development, generate the MSVC import library from the DLL exports with
-Visual Studio's `lib.exe`. Do not commit or redistribute the DLL, import
-library, or generated app bundle until the exact mpv/FFmpeg configuration,
-source offer, notices, license obligations, and packaging policy are approved.
+prepared from the pinned archive below. The preparation script verifies the
+archive SHA-256, generates an MSVC import library from the DLL exports, and
+writes the runtime provenance record CMake requires:
+
+```powershell
+$mpvRoot = 'C:\local\lineup-mpv'
+& .\tool\windows\prepare-mpv-dev.ps1 -Destination $mpvRoot
+$env:LINEUP_MPV_ROOT = $mpvRoot
+$env:LINEUP_ALLOW_GPL_MPV_DEV_ARTIFACT = '1'
+flutter build windows
+```
+
+`LINEUP_ALLOW_GPL_MPV_DEV_ARTIFACT=1` is an explicit local/CI-only opt-in.
+It prevents accidental packaging of this GPL-default development artifact.
+Do not commit or redistribute its DLL, import library, provenance file, or
+generated app bundle. Production needs an audited, separately approved
+dependency with its exact mpv/FFmpeg configuration, source offer, notices,
+license obligations, and packaging policy; this development asset is not such
+an approval.
 
 The development build used for this foundation is Shinchiro's official GitHub
-release `20260421`, asset
-`mpv-dev-x86_64-20260421-git-5921fe5.7z`, SHA-256
-`9DCDA280322CFEC168D42F5AFA1A58691311E6AAF81B8A0DFDDFA97A6209A5FA`.
-It reports mpv `v0.41.0-524-g5921fe50b`, FFmpeg
-`N-124056-gc92304f8c`, and libplacebo
-`v7.360.0-16-g409c9a8-dirty`. The upstream build does not pass
+release `20260813`, asset
+`mpv-dev-x86_64-20260813-git-f4d13e1c2c.7z`, SHA-256
+`4425B3E9768452FCBA31EE2EC61456514FAF9C5CF11D919B1A889D1C415C1A12`.
+It is built from mpv revision `f4d13e1c2c`. The upstream build does not pass
 `-Dgpl=false`, so treat it as mpv's default GPLv2-or-later configuration. It is
 acceptable for ignored local development here, not an approved redistributable
 Lineup dependency.
+
+CI verifies the exact framework and engine source revisions, applies the owned
+patch, builds `host_release`, and compiles the Windows application against that
+local engine. It does not execute the application, so the runtime marker and
+DirectComposition presentation still need Windows acceptance evidence.

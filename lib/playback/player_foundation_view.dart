@@ -166,31 +166,31 @@ class _PlayerFoundationViewState extends State<PlayerFoundationView> {
                         ),
                         OutlinedButton(
                           onPressed: _operation == null
-                              ? widget.player.play
+                              ? () => _run('Play', widget.player.play)
                               : null,
                           child: const Text('Play'),
                         ),
                         OutlinedButton(
                           onPressed: _operation == null
-                              ? widget.player.pause
+                              ? () => _run('Pause', widget.player.pause)
                               : null,
                           child: const Text('Pause'),
                         ),
                         OutlinedButton(
                           onPressed: _operation == null
-                              ? widget.player.stop
+                              ? () => _run('Stop', widget.player.stop)
                               : null,
                           child: const Text('Stop'),
                         ),
                         OutlinedButton(
                           onPressed: _operation == null
-                              ? () async {
-                                  _fullscreen = !_fullscreen;
-                                  await widget.player.setFullscreen(
-                                    _fullscreen,
-                                  );
-                                  if (mounted) setState(() {});
-                                }
+                              ? () => _run('Fullscreen', () async {
+                                  final fullscreen = !_fullscreen;
+                                  await widget.player.setFullscreen(fullscreen);
+                                  if (mounted) {
+                                    setState(() => _fullscreen = fullscreen);
+                                  }
+                                })
                               : null,
                           child: Text(
                             _fullscreen ? 'Exit fullscreen' : 'Fullscreen',

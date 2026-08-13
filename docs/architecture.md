@@ -113,8 +113,10 @@ actually exercised.
 The Dart package graph depends only on Flutter. Flutter built-ins are sufficient
 for this shell and are easier to debug than introducing a state framework
 before there is shared asynchronous state. The Windows runtime additionally
-links libmpv dynamically at the native boundary; its development build and
-unresolved redistribution status are documented in `docs/DEVELOPMENT.md`.
+links libmpv dynamically at the native boundary. The pinned development asset
+requires verified local provenance and an explicit GPL opt-in; it is not an
+approved redistributable dependency. `docs/DEVELOPMENT.md` records the
+production dependency requirement.
 `flutter_lints` and `flutter_test` are development dependencies under their
 SDK/BSD licenses. Re-evaluate packages when a concrete feature can show a
 material reliability or ownership advantage.

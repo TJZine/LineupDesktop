@@ -56,6 +56,13 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
                               WPARAM const wparam,
                               LPARAM const lparam) noexcept {
   if (native_player_ && native_player_->HandleWindowMessage(message)) {
+    if (native_player_->TakeWindowCloseReady()) {
+      ::DestroyWindow(hwnd);
+    }
+    return 0;
+  }
+  if (message == WM_CLOSE && native_player_ &&
+      !native_player_->BeginWindowClose()) {
     return 0;
   }
   if (message == WM_SIZE && native_player_) {

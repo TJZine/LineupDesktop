@@ -42,6 +42,12 @@ if(NOT DEFINED ENV{LINEUP_MPV_ROOT})
     "LINEUP_MPV_ROOT must point to a local libmpv development build. "
     "See docs/DEVELOPMENT.md.")
 endif()
+if(NOT "$ENV{LINEUP_ALLOW_GPL_MPV_DEV_ARTIFACT}" STREQUAL "1")
+  message(FATAL_ERROR
+    "This libmpv development artifact is GPL-default and is not an approved "
+    "redistributable dependency. Set LINEUP_ALLOW_GPL_MPV_DEV_ARTIFACT=1 only "
+    "for the documented local/CI development build.")
+endif()
 file(TO_CMAKE_PATH "$ENV{LINEUP_MPV_ROOT}" LINEUP_MPV_ROOT)
 find_path(LINEUP_MPV_INCLUDE_DIR "mpv/client.h"
   PATHS "${LINEUP_MPV_ROOT}/include" NO_DEFAULT_PATH REQUIRED)
@@ -49,6 +55,33 @@ find_library(LINEUP_MPV_LIBRARY "libmpv"
   PATHS "${LINEUP_MPV_ROOT}" NO_DEFAULT_PATH REQUIRED)
 find_file(LINEUP_MPV_DLL "libmpv-2.dll"
   PATHS "${LINEUP_MPV_ROOT}" NO_DEFAULT_PATH REQUIRED)
+set(LINEUP_MPV_PROVENANCE "${LINEUP_MPV_ROOT}/lineup-mpv-provenance.cmake")
+if(NOT EXISTS "${LINEUP_MPV_PROVENANCE}")
+  message(FATAL_ERROR
+    "LINEUP_MPV_ROOT must be prepared by tool/windows/prepare-mpv-dev.ps1.")
+endif()
+include("${LINEUP_MPV_PROVENANCE}")
+if(NOT LINEUP_MPV_ASSET_SHA256 STREQUAL
+    "4425B3E9768452FCBA31EE2EC61456514FAF9C5CF11D919B1A889D1C415C1A12")
+  message(FATAL_ERROR "LINEUP_MPV_ROOT is not the pinned mpv development asset.")
+endif()
+function(verify_lineup_mpv_file PATH EXPECTED_HASH)
+  file(SHA256 "${PATH}" ACTUAL_HASH)
+  string(TOUPPER "${ACTUAL_HASH}" ACTUAL_HASH)
+  string(TOUPPER "${EXPECTED_HASH}" EXPECTED_HASH)
+  if("${EXPECTED_HASH}" STREQUAL "" OR
+      NOT "${ACTUAL_HASH}" STREQUAL "${EXPECTED_HASH}")
+    message(FATAL_ERROR
+      "Verified mpv provenance does not match ${PATH}: expected "
+      "${EXPECTED_HASH}, found ${ACTUAL_HASH}.")
+  endif()
+endfunction()
+verify_lineup_mpv_file("${LINEUP_MPV_INCLUDE_DIR}/mpv/client.h"
+  "1ACF99EE77C8C2A6F1D1993BD81BBC8A91D27FB5924E80171670E6139A4BD353")
+verify_lineup_mpv_file("${LINEUP_MPV_DLL}"
+  "C079C7A52A1A62AB591DE3BCDB0AC46D64A496B9CFBD9CE4F69249453CDF9174")
+verify_lineup_mpv_file("${LINEUP_MPV_LIBRARY}"
+  "${LINEUP_MPV_IMPORT_LIBRARY_SHA256}")
 target_include_directories(${BINARY_NAME} PRIVATE "${LINEUP_MPV_INCLUDE_DIR}")
 target_link_libraries(${BINARY_NAME} PRIVATE "${LINEUP_MPV_LIBRARY}")
 set(LINEUP_MPV_RUNTIME_LIBRARY "${LINEUP_MPV_DLL}" PARENT_SCOPE)
