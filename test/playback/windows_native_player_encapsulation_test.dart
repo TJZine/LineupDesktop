@@ -49,10 +49,7 @@ void main() {
     });
 
     expect(player.tracks, hasLength(1));
-    expect(
-      () => player.tracks.clear(),
-      throwsA(isA<UnsupportedError>()),
-    );
+    expect(() => player.tracks.clear(), throwsA(isA<UnsupportedError>()));
     expect(player.tracks, hasLength(1));
 
     await _sendNativeEvent(messenger, {
