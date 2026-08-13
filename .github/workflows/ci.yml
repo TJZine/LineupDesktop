@@ -42,7 +42,7 @@ jobs:
 
   build-windows:
     name: Build Windows development player
-    runs-on: windows-latest
+    runs-on: windows-2022
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
@@ -57,6 +57,10 @@ jobs:
           $depotTools = Join-Path $env:RUNNER_TEMP 'depot_tools'
           git clone --filter=blob:none https://github.com/flutter/flutter.git $flutterSource
           git -C $flutterSource checkout 4cf24164269a5ebf0c16a028a00727d0e77bbb05
+          if ((git -C $flutterSource rev-parse HEAD:engine/scripts/standard.gclient).Trim() -ne 'a05a39e336335389321b8a6d855b13bd3fc7892c') {
+            throw 'Pinned Flutter standard.gclient blob does not match.'
+          }
+          Copy-Item -LiteralPath (Join-Path $flutterSource 'engine\scripts\standard.gclient') -Destination (Join-Path $flutterSource '.gclient')
           git clone --depth 1 https://chromium.googlesource.com/chromium/tools/depot_tools.git $depotTools
           $env:PATH = "$depotTools;$env:PATH"
           $env:DEPOT_TOOLS_WIN_TOOLCHAIN = '0'

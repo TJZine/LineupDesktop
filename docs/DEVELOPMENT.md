@@ -74,12 +74,17 @@ ATL, Windows SDK `10.0.22621.0`, and Debugging Tools for Windows. The pinned
 Flutter SDK is also the source checkout for the owned engine patch:
 
 ```powershell
+git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git C:\path\to\depot_tools
+git clone https://github.com/flutter/flutter.git C:\path\to\flutter
+git -C C:\path\to\flutter checkout 4cf24164269a5ebf0c16a028a00727d0e77bbb05
+
 $env:PATH = 'C:\path\to\depot_tools;C:\path\to\flutter\bin;' + $env:PATH
 $env:DEPOT_TOOLS_WIN_TOOLCHAIN = '0'
 $env:GYP_MSVS_OVERRIDE_PATH = 'C:\path\to\VisualStudio2022BuildTools'
 $env:WINDOWSSDKDIR = 'C:\Program Files (x86)\Windows Kits\10'
 
 Set-Location C:\path\to\flutter
+Copy-Item .\engine\scripts\standard.gclient .\.gclient
 gclient sync --no-history
 C:\path\to\LineupDesktop\tool\flutter_engine\apply.ps1 -FlutterRoot (Get-Location)
 
@@ -138,7 +143,9 @@ It is built from mpv revision `f4d13e1c2c`. The upstream build does not pass
 acceptable for ignored local development here, not an approved redistributable
 Lineup dependency.
 
-CI verifies the exact framework and engine source revisions, applies the owned
-patch, builds `host_release`, and compiles the Windows application against that
-local engine. It does not execute the application, so the runtime marker and
-DirectComposition presentation still need Windows acceptance evidence.
+CI runs on Windows Server 2022, bootstraps gclient from the pinned Flutter
+checkout's official `engine/scripts/standard.gclient`, verifies that config's
+blob plus the exact framework, engine, and patched source revisions, builds
+`host_release`, and compiles the Windows application against that local engine.
+It does not execute the application, so the runtime marker and DirectComposition
+presentation still need Windows acceptance evidence.

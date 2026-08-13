@@ -24,7 +24,9 @@ unsupported sources.
 
 Fetch and build the engine using Flutter's official engine setup instructions.
 On Windows this requires Visual Studio C++ with ATL, the engine-pinned Windows
-SDK 10.0.22621.0, and Debugging Tools for Windows. Use the resulting
+SDK 10.0.22621.0, and Debugging Tools for Windows. Before the first
+`gclient sync`, copy the pinned checkout's `engine/scripts/standard.gclient` to
+`.gclient` at the checkout root. Use the resulting
 `host_debug` build for `flutter run` and `host_release` for release builds,
 always passing `--local-engine`, the matching `--local-engine-host`, and
 `--local-engine-src-path`. Do not copy artifacts over the stock SDK cache.
