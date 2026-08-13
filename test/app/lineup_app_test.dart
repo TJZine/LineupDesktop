@@ -15,8 +15,6 @@ import 'package:lineup_desktop/plex/plex_models.dart';
 
 void main() {
   testWidgets('startup announcement is a labeled live region', (tester) async {
-    final semantics = tester.ensureSemantics();
-    addTearDown(semantics.dispose);
     final controller = _LoadingController();
 
     await tester.pumpWidget(
@@ -24,13 +22,14 @@ void main() {
     );
     await tester.pump();
 
-    expect(
-      tester
-          .getSemantics(find.bySemanticsLabel('Starting Lineup Desktop'))
-          .flagsCollection
-          .isLiveRegion,
-      isTrue,
+    final semantics = tester.widget<Semantics>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is Semantics &&
+            widget.properties.label == 'Starting Lineup Desktop',
+      ),
     );
+    expect(semantics.properties.liveRegion, isTrue);
 
     controller.completeInitialization();
     await tester.pumpAndSettle();

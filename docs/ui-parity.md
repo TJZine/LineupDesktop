@@ -231,12 +231,13 @@ Guide/PiP/player transitions, OSD fake-time reset/suspension/currentness,
 mini-Guide paging/replacement, state projection, unsupported macOS behavior,
 representative responsive sizes, semantics, and retry/terminal errors.
 
-Two deterministic DPR-1/Ahem-font goldens record the high-value Guide
-contracts at 1920×1080 with PiP and at compact 1280×720 with focused/current/
-tuned states. A full-player golden was evaluated but not retained because the
-Flutter test raster never completed reliably for that surface; responsive
-player/OSD/mini-Guide widget and semantics tests provide stable evidence
-without committing a hanging test or excessive tolerance.
+Host-dependent pixel goldens are not used as portable evidence. Flutter's
+test raster differs across operating systems, and a synthetic colored PiP box
+cannot validate the Windows native presentation stack. CI instead runs the
+responsive Guide/player widget, focus, semantics, and geometry suites on
+Windows in addition to the portable Dart suite. Real video composition,
+libmpv, HDR, and presentation quality still require the Windows runtime
+evidence described below.
 
 ### macOS runtime and profile evidence
 

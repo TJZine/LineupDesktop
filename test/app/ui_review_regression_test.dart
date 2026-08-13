@@ -54,7 +54,8 @@ void main() {
       ..channels = [_channel];
     final fixture = UiFixture(controller: controller);
     await tester.pumpWidget(fixture.build());
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump();
     await tester.tap(find.byIcon(Icons.view_list_outlined));
     await tester.pumpAndSettle();
 

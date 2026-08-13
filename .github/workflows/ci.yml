@@ -42,7 +42,7 @@ jobs:
       - run: flutter build macos
 
   build-windows:
-    name: Build Windows development player
+    name: Verify and build Windows development player
     runs-on: windows-2022
     timeout-minutes: 30
     steps:
@@ -52,6 +52,12 @@ jobs:
           flutter-version: 3.47.0
           channel: stable
           cache: true
+      - name: Verify portable UI on Windows
+        run: >-
+          flutter test
+          test/app/ui_parity_test.dart
+          test/guide/guide_view_test.dart
+          test/playback/player_view_test.dart
       - name: Build with the pinned libmpv development asset
         shell: pwsh
         run: |
