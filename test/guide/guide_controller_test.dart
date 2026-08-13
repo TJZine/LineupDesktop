@@ -315,6 +315,26 @@ void main() {
     lineup.dispose();
   });
 
+  test(
+    'disposed lineup rejects schedule loads without creating a worker',
+    () async {
+      final lineup = _TestLineup(_channels(1));
+      lineup.dispose();
+
+      await expectLater(
+        lineup.loadScheduleFor(lineup.channels.single),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            'Schedule worker is disposed',
+          ),
+        ),
+      );
+      expect(lineup.scheduleWorkerCreations, 0);
+    },
+  );
+
   test('disposing Guide prevents queued schedule work from starting', () async {
     final lineup = _TestLineup(_channels(10));
     final loads = <Completer<ScheduleIndex>>[];

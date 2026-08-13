@@ -110,8 +110,8 @@ class LineupSettings {
         (json['osdAutoHideSeconds'] as num?)?.toInt() ?? 4;
     return LineupSettings(
       theme: LineupThemeName.fromStorage(json['theme']),
-      guideHours: guideHours.clamp(2, 12),
-      pastMinutes: pastMinutes.clamp(0, 180),
+      guideHours: guideHours.clamp(2, 12).toInt(),
+      pastMinutes: pastMinutes.clamp(0, 180).toInt(),
       guideDensity: enumValue(
         GuideDensity.values,
         'guideDensity',
@@ -124,7 +124,7 @@ class LineupSettings {
       ),
       libraryTabsEnabled: json['libraryTabsEnabled'] != false,
       nowWatchingBanner: json['nowWatchingBanner'] != false,
-      osdAutoHideSeconds: osdAutoHideSeconds.clamp(2, 15),
+      osdAutoHideSeconds: osdAutoHideSeconds.clamp(2, 15).toInt(),
       audioSetupComplete: json['audioSetupComplete'] == true,
       reduceMotion: json['reduceMotion'] == true,
       largeFocusIndicators: json['largeFocusIndicators'] == true,

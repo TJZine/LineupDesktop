@@ -708,6 +708,9 @@ class LineupController extends ChangeNotifier {
   int get scheduleWorkerCreations => _scheduleWorkerCreations;
 
   Future<ScheduleIndex> loadScheduleFor(Channel channel) {
+    if (_disposed) {
+      return Future.error(StateError('Schedule worker is disposed'));
+    }
     if (!identical(_scheduleWorkerMedia, availableMedia) ||
         !identical(_scheduleWorkerPlaylists, availablePlaylists)) {
       _scheduleWorker?.dispose();
