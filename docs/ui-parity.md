@@ -400,34 +400,34 @@ native video/presentation acceptance.
 | Behavior | Prompt 4D classification | Evidence and disposition |
 | --- | --- | --- |
 | Splash/startup and blocking startup failure | Behavior implemented and tested | Startup has one semantic progress surface and one sanitized blocking failure. The known engine-marker failure uses fixed safe copy; arbitrary exception text is not presented. Appearance remains Prompt 4E. |
-| Authentication failure and expired PIN | Behavior implemented and tested | The onboarding owner keeps retry/new-code/cancel actions, non-overlapping polling, epoch rejection, and safe Plex messages. Secure credential writes are serialized with cancel/logout so late work cannot restore a cleared token. |
+| Authentication failure and expired PIN | Behavior implemented and tested | The onboarding owner keeps retry/new-code/cancel actions, non-overlapping polling, epoch rejection, and safe Plex messages. Secure credential writes are serialized with cancel/logout; failed secure cancellation stays visibly retryable until the queued token is cleared. |
 | Blocking, recoverable, warning, transient, and validation ownership | Intentional Desktop adaptation | Startup alone is blocking. Onboarding owns auth/server recovery, player owns playback retry/close, settings/channels/Channel Setup own write or validation failures, and ordinary success is reflected by authoritative state. No event bus, universal modal, or unused toast service was added. |
 | Persistence failures and corrupt-state recovery | Behavior implemented and tested | File state is atomically replaced and corrupt input is quarantined. Settings, channels, Channel Setup, current-channel, audio setup, selected-server clearing, and logout retain or restore prior safe state on failed writes. There is no browser quota lifecycle consumer on Desktop. |
 | Network/offline and reconnect | Behavior implemented and tested | Bounded Plex requests return actionable safe errors. Discovery and playback expose explicit retry; a failed discovery does not silently change profile scope, and a later refresh reconnects through the saved selection. Continuous connectivity polling was omitted because there is no current consumer. |
 | Profile switching | Behavior implemented and tested | Settings exposes the current Plex Home profile and enters the existing protected-PIN picker. Cancel returns to the prior route only while that recovery remains current; selecting a new profile invalidates the old action. |
 | Server switching, saved-server clearing, and disappearance | Behavior implemented and tested | Settings enters the existing server selector with reconnect, cancel, clear-saved-server, retry discovery, and switch-profile actions. Clearing removes only the profile-scoped selection and retains saved per-server lineups. A disappeared selected server clears live libraries/media/lineup instead of reusing another profile or stale endpoint. |
-| Direct/local/relay and latency facts | Behavior implemented and tested | Only a successfully selected connection is labeled. The label uses its real direct-local, direct-remote, or Plex Relay flags and its measured probe duration. At most eight advertised endpoints are probed sequentially with per-request timeout; no background health claim or fabricated status is shown. |
+| Direct/local/relay and latency facts | Behavior implemented and tested | Only a successfully selected connection is labeled. The label uses its real direct-local, direct-remote, or Plex Relay flags and its measured probe duration. Priority is applied before an eight-endpoint bound, each tier is probed concurrently with per-request timeout, and no background health claim or fabricated status is shown. |
 | Audio Setup | Intentional Desktop adaptation | The first-run step confirms system-selected audio without inventing devices or passthrough support. Output, passthrough, and capability controls remain hidden until a Windows implementation reports and consumes them accurately. |
-| Direct-play audio fallback | Behavior omitted because it has no current consumer | The legacy persisted field is not exposed. Current Dart stream selection cannot safely promise alternate-track fallback without native selected-track coordination, so the previous nonfunctional toggle was removed. |
-| Channel Setup cancellation and progress | Behavior intentionally adapted for Desktop | Proposal/review remains user-cancellable before commit; applying the accepted 1,000-channel plan is one atomic local save. Deterministic temporary-file evidence observed about 31–41 ms for validation, replacement, and persistence, so a cancellable job owner would add no meaningful user benefit. Cancellation/failure preserves the old lineup. |
+| Direct-play audio fallback | Behavior omitted because it has no current consumer | The legacy persisted field and nonfunctional toggle were removed. Current Dart stream selection cannot safely promise alternate-track fallback without native selected-track coordination. |
+| Channel Setup cancellation and progress | Behavior intentionally adapted for Desktop | Proposal/review remains user-cancellable before commit; applying the accepted 1,000-channel plan is one atomic local save. Cancellation/failure preserves the old lineup. Timing output is diagnostic only and does not establish a perceived-performance or foreground acceptance claim. |
 | Channel reorder, copy, import/export, bulk administration | Behavior omitted because it has no current consumer | Channel number editing provides ordering, provenance is visible, and deletion is confirmed. Upstream import/export internals do not establish a current Desktop workflow, so no administration suite was invented. |
 | Guide theme, layout, density/time/past window | Behavior implemented and tested | Existing persisted settings continue to update the Guide owner and rollback on write failure. Labels now include descriptions. |
 | Library filters | Behavior implemented and tested | The persisted setting shows or hides the real Guide library filter. Disabling it clears an active filter so hidden state cannot keep channels excluded. |
 | Now Watching banner | Behavior implemented and tested | The persisted setting directly controls the existing tuned channel/program context above Guide details. |
 | Player controls auto-hide | Behavior implemented and tested | A validated 2–15 second setting feeds the existing epoch-safe coordinator timer. Paused/buffering/seeking and focused controls remain untimed. |
 | Reduced motion, large focus indicators, profile picker, diagnostics | Behavior implemented and tested | These persisted settings retain their existing root theme, focus, startup, and redacted-diagnostics consumers. |
-| Subtitle mode/language/forced preference | Behavior omitted because it has no current consumer | Persisted legacy fields are not exposed. The public native track projection lacks reliable forced/default preference facts, so applying them would fabricate behavior. Manual available-track selection remains implemented. |
-| Video quality, HDR/tone mapping, audio output/passthrough controls | Deferred to Windows | Unvalidated native fields are not exposed as ordinary settings. No hardware, output-device, HDR, or passthrough capability is claimed. |
+| Subtitle mode/language/forced preference | Behavior omitted because it has no current consumer | Legacy persisted fields were removed. The public native track projection lacks reliable forced/default preference facts, so applying them would fabricate behavior. Manual available-track selection remains implemented. |
+| Video quality, HDR/tone mapping, audio output/passthrough controls | Deferred to Windows | Unvalidated fields are neither persisted nor exposed as ordinary settings. No hardware, output-device, HDR, or passthrough capability is claimed. |
 | Now Playing, current/next context, channel transition, OSD, playback options | Behavior implemented and tested | The retained player coordinator supplies current/next metadata, status-sensitive OSD, available track selectors, telemetry only when present, retry, and immediate tuning/loading presentation. A second delayed transition coordinator was unnecessary. |
 | Mini Guide, channel badge, number entry, sleep timer | Behavior implemented and tested | Five bounded rows, current/next context, tuned/focused states, direct channel-number commit, channel identity in the OSD, and cancellable sleep timers remain under the one overlay owner. |
 | Exit/back confirmation | WebOS-only/not applicable | Upstream confirmation exits to the webOS Home screen via `window.close()`. Desktop Escape/Back closes overlays or returns to Guide/menu; native desktop window closing is not replaced with a browser-style exit modal. |
-| App restart/restore and logout | Behavior implemented and tested | Temporary persistence restores profile-scoped server, libraries, a 1,000-channel lineup, current settings, and ready state. Logout is ordered after pending secure writes, clears account/profile tokens, rejects late operations, and leaves the session intact with a safe actionable error if credential cleanup fails. |
-| Stale async work and disposal | Behavior implemented and tested | One application epoch rejects PIN/profile/server/library work; settings use a current write generation; player tune/load and Guide schedule/artwork owners retain their generations; credential writes are serialized with clear; timers, subscriptions, isolates, leases, and caches retain bounded disposal. |
+| App restart/restore and logout | Behavior implemented and tested | Temporary persistence restores profile-scoped server, libraries, a 1,000-channel lineup, current settings, and ready state. The player coordinator orders successful logout with playback stop/lease release; pending secure writes are cleared first, late operations are rejected, and a cleanup failure leaves both session and playback intact with a safe retry. |
+| Stale async work and disposal | Behavior implemented and tested | One application epoch rejects PIN/profile/server/library work; settings use a current write generation; content-scope changes invalidate player tune/load work and Guide schedule/artwork caches; credential writes are serialized with clear; timers, subscriptions, isolates, leases, test streams, and caches retain bounded disposal. |
 | Diagnostic/developer upstream modules | Developer-only | Credential-safe, bounded diagnostics remains the Desktop support surface. Upstream developer overrides, raw console controls, private probes, and aggressive experimental preload are not product settings. |
 | webOS lifecycle/network/browser behavior | WebOS-only/not applicable | Browser online/offline events, localStorage quota lifecycle, background-page policy, webOS exit, and TV runtime APIs are not copied into Flutter. Equivalent current Desktop failures are handled at their real persistence or Plex seams. |
 | Native video, DirectComposition, libmpv, HDR, audio, fullscreen, packaging | Missing but Windows-native | Prompt 4D neither modifies nor validates these owners. They remain Prompt 5 and physical Windows acceptance work. |
 
-### Deterministic product-spine and performance evidence
+### Deterministic product-spine and bounded-work evidence
 
 `test/app/product_spine_test.dart` is a test-only composition. It uses a
 synthetic `PlexClient` subclass at the existing transport seam, a synthetic
@@ -439,22 +439,19 @@ credential, native handle, or private media URL.
 The scenario covers first launch, PIN creation/polling, authentication, Plex
 Home profile and protected PIN, discovery, server selection and measured
 connection facts, Audio Setup, libraries, Channel Setup, Guide scheduling,
-tune/loading/playing events, full Guide/PiP state ownership, OSD, mini Guide,
+tune/loading/playing coordinator state, OSD, mini Guide,
 track selection, settings writes, redacted playback failure, retry, network
 failure/reconnect, a 1,000-channel atomic rebuild, process-style
-dispose/recreate restore, and logout. Separate widget suites retain keyboard,
+dispose/recreate restore, and controller logout. Focused coordinator tests cover
+live playback logout and scope cleanup. Separate widget suites retain keyboard,
 controller-like logical keys, focus restoration, modal containment, semantics,
 responsive layout, and bounded visible Guide work.
 
-In the deterministic debug test process, a representative 1,000-channel
-atomic rebuild plus temporary-file persistence took about 31–41 ms. Existing
-Guide instrumentation continued to instantiate roughly 1,181–1,198 widgets
-and load/cache 13 rows for the first viewport regardless of 200, 500, or 1,000
-channels; representative first-viewport construction was about 64–145 ms
-(including the parallel full-suite run), 500 logical moves were below 1 ms
-before the following frame, and RSS growth was about 8–10 MB. These are
-controller/widget diagnostics, not profile-mode
-frame timing, perceived smoothness, or native playback evidence.
+The deterministic tests assert that first-viewport Guide loading and caches
+remain bounded independently of 200, 500, or 1,000-channel cardinality and
+that a 1,000-channel lineup survives persistence/restart. Emitted timing,
+widget-count, and RSS values remain debugging diagnostics only; they are not
+profile-mode frame timing, perceived smoothness, or native playback evidence.
 
 Prompt 4D was completed on a locked macOS host. Functional claims are based on
 source, deterministic tests and build evidence. Live visual and interaction

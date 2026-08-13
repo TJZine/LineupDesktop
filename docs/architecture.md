@@ -120,9 +120,10 @@ navigation do not enter C++.
   application controller serializes secure credential writes with logout,
   rejects stale profile/server operations, clears unavailable runtime server
   state without crossing scopes, and retains per-server lineups when a saved
-  selection is explicitly cleared. Connection probes inspect at most eight
-  advertised endpoints and retain only the selected direct/local/relay type
-  and its actually measured latency.
+  selection is explicitly cleared. One content generation invalidates Guide
+  caches and player work across committed profile, server, and library changes.
+  Connection priority is applied before an eight-endpoint probe bound; only the
+  selected direct/local/relay type and its actually measured latency are retained.
 - Upstream-shaped, remote-first onboarding for Plex QR/PIN linking, Home
   profile/PIN selection, secure server recovery, first-run audio intent, and
   Channel Setup. Channel Setup owns library selection, all eight source
