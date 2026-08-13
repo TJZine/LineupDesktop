@@ -1,9 +1,12 @@
 #include "native_player.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstring>
+#include <exception>
 #include <iostream>
+#include <limits>
 #include <optional>
 #include <utility>
 
@@ -15,6 +18,9 @@ constexpr char kChannelName[] = "lineup/native_player";
 constexpr wchar_t kCompositionMarker[] =
     L"5f77625673248ee5846fbcaf5d3e1a3878386fd7";
 constexpr size_t kMaxQueuedEvents = 256;
+constexpr size_t kMaxQueuedCommands = 64;
+constexpr size_t kMaxQueuedCommandBytes = 128 * 1024;
+constexpr size_t kMaxCorrelatedPlaylistEntries = 1024;
 constexpr size_t kMaxMetadataBytes = 64 * 1024;
 constexpr size_t kMaxMetadataStringBytes = 4096;
 constexpr int kMaxTracks = 256;
@@ -80,6 +86,40 @@ const mpv_node* FindNode(const mpv_node& map, const char* key) {
   return nullptr;
 }
 
+std::string BoundedUtf8(const char* input, size_t limit) {
+  std::string value;
+  for (size_t offset = 0; input && input[offset] && value.size() < limit;) {
+    const auto lead = static_cast<unsigned char>(input[offset]);
+    size_t length = lead < 0x80 ? 1 : lead >= 0xC2 && lead <= 0xDF ? 2
+                               : lead >= 0xE0 && lead <= 0xEF ? 3
+                               : lead >= 0xF0 && lead <= 0xF4 ? 4 : 0;
+    bool valid = length != 0;
+    for (size_t index = 1; valid && index < length; ++index) {
+      const auto byte = static_cast<unsigned char>(input[offset + index]);
+      valid = input[offset + index] && (byte & 0xC0) == 0x80;
+    }
+    if (valid && length == 3) {
+      const auto second = static_cast<unsigned char>(input[offset + 1]);
+      valid = !(lead == 0xE0 && second < 0xA0) &&
+              !(lead == 0xED && second >= 0xA0);
+    } else if (valid && length == 4) {
+      const auto second = static_cast<unsigned char>(input[offset + 1]);
+      valid = !(lead == 0xF0 && second < 0x90) &&
+              !(lead == 0xF4 && second >= 0x90);
+    }
+    if (valid && value.size() + length <= limit) {
+      value.append(input + offset, length);
+      offset += length;
+    } else if (!valid && value.size() + 3 <= limit) {
+      value.append("\xEF\xBF\xBD", 3);
+      ++offset;
+    } else {
+      break;
+    }
+  }
+  return value;
+}
+
 flutter::EncodableValue EncodeWhitelistedNode(const mpv_node* node,
                                                size_t& remaining_bytes) {
   if (!node) {
@@ -88,11 +128,10 @@ flutter::EncodableValue EncodeWhitelistedNode(const mpv_node* node,
   switch (node->format) {
     case MPV_FORMAT_STRING:
       if (node->u.string) {
-        const size_t length = strnlen(node->u.string,
-                                     std::min(kMaxMetadataStringBytes,
-                                              remaining_bytes));
-        remaining_bytes -= length;
-        return flutter::EncodableValue(std::string(node->u.string, length));
+        const size_t limit = std::min(kMaxMetadataStringBytes, remaining_bytes);
+        std::string value = BoundedUtf8(node->u.string, limit);
+        remaining_bytes -= value.size();
+        return flutter::EncodableValue(std::move(value));
       }
       return flutter::EncodableValue("");
     case MPV_FORMAT_FLAG:
@@ -111,8 +150,7 @@ std::string PropertyString(const mpv_event_property& property) {
     return {};
   }
   const char* value = *static_cast<char**>(property.data);
-  return value ? std::string(value, strnlen(value, kMaxMetadataStringBytes))
-               : "";
+  return BoundedUtf8(value, kMaxMetadataStringBytes);
 }
 
 flutter::EncodableMap StateEvent(const char* state, const char* message,
@@ -127,6 +165,18 @@ flutter::EncodableMap StateEvent(const char* state, const char* message,
         flutter::EncodableValue(*load_id);
   }
   return event;
+}
+
+bool RestoreWindowState(HWND window, LONG_PTR style,
+                        const WINDOWPLACEMENT& placement) {
+  ::SetLastError(ERROR_SUCCESS);
+  const bool style_set =
+      ::SetWindowLongPtr(window, GWL_STYLE, style) != 0 ||
+      ::GetLastError() == ERROR_SUCCESS;
+  return style_set && ::SetWindowPlacement(window, &placement) &&
+         ::SetWindowPos(window, nullptr, 0, 0, 0, 0,
+                        SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE |
+                            SWP_NOZORDER | SWP_NOOWNERZORDER);
 }
 
 }  // namespace
@@ -148,7 +198,18 @@ WindowsNativePlayer::WindowsNativePlayer(
 WindowsNativePlayer::~WindowsNativePlayer() {
   channel_->SetMethodCallHandler(nullptr);
   if (!disposed_) {
-    Dispose();
+    BeginAsyncDispose();
+    const auto deadline = std::chrono::steady_clock::now() +
+                          std::chrono::seconds(5);
+    while (!worker_finished_ && std::chrono::steady_clock::now() < deadline) {
+      ::Sleep(10);
+    }
+    if (!worker_finished_) {
+      std::terminate();
+    }
+    StopEventThread();
+    FinishDispose();
+    disposed_ = true;
   }
   dispose_result_.reset();
 }
@@ -202,11 +263,20 @@ void WindowsNativePlayer::HandleMethodCall(
       result->Error("invalid_argument", "A non-negative integer loadId is required.");
       return;
     }
-    QueueCommand({CommandType::load, *load_id, *uri});
+    if (!QueueCommand({CommandType::load, *load_id, *uri})) {
+      result->Error("command_queue_full", "The native command queue is full.");
+      return;
+    }
   } else if (method == "play") {
-    QueueCommand({CommandType::play});
+    if (!QueueCommand({CommandType::play})) {
+      result->Error("command_queue_full", "The native command queue is full.");
+      return;
+    }
   } else if (method == "pause") {
-    QueueCommand({CommandType::pause});
+    if (!QueueCommand({CommandType::pause})) {
+      result->Error("command_queue_full", "The native command queue is full.");
+      return;
+    }
   } else if (method == "seek") {
     const auto seconds = arguments ? AsNumber(Find(*arguments, "seconds"))
                                    : std::nullopt;
@@ -214,9 +284,15 @@ void WindowsNativePlayer::HandleMethodCall(
       result->Error("invalid_argument", "Seek seconds must be non-negative.");
       return;
     }
-    QueueCommand({CommandType::seek, 0, {}, *seconds});
+    if (!QueueCommand({CommandType::seek, 0, {}, *seconds})) {
+      result->Error("command_queue_full", "The native command queue is full.");
+      return;
+    }
   } else if (method == "stop") {
-    QueueCommand({CommandType::stop});
+    if (!QueueCommand({CommandType::stop})) {
+      result->Error("command_queue_full", "The native command queue is full.");
+      return;
+    }
   } else if (method == "setVideoRect") {
     if (!arguments) {
       result->Error("invalid_argument", "Video bounds are required.");
@@ -248,7 +324,10 @@ void WindowsNativePlayer::HandleMethodCall(
       result->Error("invalid_argument", "A valid track type and id are required.");
       return;
     }
-    QueueCommand(std::move(*command));
+    if (!QueueCommand(std::move(*command))) {
+      result->Error("command_queue_full", "The native command queue is full.");
+      return;
+    }
   } else if (method == "setVolume") {
     const auto volume = arguments ? AsNumber(Find(*arguments, "volume"))
                                   : std::nullopt;
@@ -256,7 +335,10 @@ void WindowsNativePlayer::HandleMethodCall(
       result->Error("invalid_argument", "Volume must be between 0 and 100.");
       return;
     }
-    QueueCommand({CommandType::volume, 0, {}, *volume});
+    if (!QueueCommand({CommandType::volume, 0, {}, *volume})) {
+      result->Error("command_queue_full", "The native command queue is full.");
+      return;
+    }
   } else {
     result->NotImplemented();
     return;
@@ -370,6 +452,7 @@ bool WindowsNativePlayer::Initialize(std::string& error) {
   disposed_ = false;
   shutdown_started_ = false;
   stopping_ = false;
+  worker_finished_ = false;
   accepting_commands_ = true;
   StartEventThread();
   QueueEvent(generation, StateEvent("idle", "Native libmpv player ready"));
@@ -385,16 +468,6 @@ void WindowsNativePlayer::BeginAsyncDispose() {
   generation_.fetch_add(1);
   accepting_commands_ = false;
   stopping_ = true;
-  if (mpv_) {
-    mpv_wakeup(mpv_);
-  }
-}
-
-void WindowsNativePlayer::Dispose() {
-  BeginAsyncDispose();
-  StopEventThread();
-  FinishDispose();
-  disposed_ = true;
 }
 
 void WindowsNativePlayer::FinishDispose() {
@@ -410,6 +483,7 @@ void WindowsNativePlayer::FinishDispose() {
   {
     std::lock_guard lock(command_mutex_);
     commands_.clear();
+    queued_command_bytes_ = 0;
   }
   {
     std::lock_guard lock(event_mutex_);
@@ -418,6 +492,7 @@ void WindowsNativePlayer::FinishDispose() {
   }
   active_load_id_.reset();
   event_load_id_.reset();
+  pending_load_ids_.clear();
   playlist_load_ids_.clear();
 }
 
@@ -486,14 +561,9 @@ bool WindowsNativePlayer::SetFullscreen(bool fullscreen, std::string& error) {
                         monitor.rcMonitor.right - monitor.rcMonitor.left,
                         monitor.rcMonitor.bottom - monitor.rcMonitor.top,
                         SWP_FRAMECHANGED | SWP_NOOWNERZORDER)) {
-      ::SetLastError(ERROR_SUCCESS);
-      const bool style_restored =
-          ::SetWindowLongPtr(top_level_window_, GWL_STYLE, window_style_) != 0 ||
-          ::GetLastError() == ERROR_SUCCESS;
-      const bool placement_restored =
-          style_restored &&
-          ::SetWindowPlacement(top_level_window_, &window_placement_);
-      error = placement_restored
+      const bool restored =
+          RestoreWindowState(top_level_window_, window_style_, window_placement_);
+      error = restored
                   ? "Windows could not size the fullscreen window."
                   : "Windows could not size or roll back the fullscreen window.";
       return false;
@@ -501,18 +571,21 @@ bool WindowsNativePlayer::SetFullscreen(bool fullscreen, std::string& error) {
     fullscreen_ = true;
   } else {
     ::SetLastError(ERROR_SUCCESS);
-    const bool style_set =
-        ::SetWindowLongPtr(top_level_window_, GWL_STYLE, window_style_) != 0 ||
-        ::GetLastError() == ERROR_SUCCESS;
-    const bool placement_set =
-        style_set && ::SetWindowPlacement(top_level_window_, &window_placement_);
-    const bool frame_set =
-        placement_set &&
-        ::SetWindowPos(top_level_window_, nullptr, 0, 0, 0, 0,
-                       SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE |
-                           SWP_NOZORDER | SWP_NOOWNERZORDER);
-    if (!frame_set) {
-      error = "Windows could not restore the window after fullscreen.";
+    const LONG_PTR fullscreen_style =
+        ::GetWindowLongPtr(top_level_window_, GWL_STYLE);
+    WINDOWPLACEMENT fullscreen_placement{sizeof(WINDOWPLACEMENT)};
+    if ((fullscreen_style == 0 && ::GetLastError() != ERROR_SUCCESS) ||
+        !::GetWindowPlacement(top_level_window_, &fullscreen_placement)) {
+      error = "Windows could not snapshot the fullscreen window.";
+      return false;
+    }
+    if (!RestoreWindowState(top_level_window_, window_style_,
+                            window_placement_)) {
+      const bool rolled_back = RestoreWindowState(
+          top_level_window_, fullscreen_style, fullscreen_placement);
+      error = rolled_back
+                  ? "Windows could not restore the window after fullscreen."
+                  : "Windows could not restore or roll back the fullscreen window.";
       return false;
     }
     fullscreen_ = false;
@@ -557,12 +630,15 @@ void WindowsNativePlayer::StartEventThread() {
   event_thread_ = std::thread([this, generation] { EventLoop(generation); });
 }
 
-void WindowsNativePlayer::QueueCommand(QueuedCommand command) {
-  {
-    std::lock_guard lock(command_mutex_);
-    commands_.push_back(std::move(command));
+bool WindowsNativePlayer::QueueCommand(QueuedCommand command) {
+  std::lock_guard lock(command_mutex_);
+  if (!accepting_commands_ || commands_.size() >= kMaxQueuedCommands ||
+      command.text.size() > kMaxQueuedCommandBytes - queued_command_bytes_) {
+    return false;
   }
-  mpv_wakeup(mpv_);
+  queued_command_bytes_ += command.text.size();
+  commands_.push_back(std::move(command));
+  return true;
 }
 
 void WindowsNativePlayer::RunCommand(const QueuedCommand& command,
@@ -570,15 +646,43 @@ void WindowsNativePlayer::RunCommand(const QueuedCommand& command,
   int status = 0;
   switch (command.type) {
     case CommandType::load: {
-      active_load_id_ = command.load_id;
-      const char* value[] = {"loadfile", command.text.c_str(), "replace",
-                             nullptr};
-      status = mpv_command(mpv_, value);
-      int64_t playlist_entry_id = 0;
-      if (status >= 0 &&
-          mpv_get_property(mpv_, "playlist/0/id", MPV_FORMAT_INT64,
-                           &playlist_entry_id) >= 0) {
-        playlist_load_ids_[playlist_entry_id] = command.load_id;
+      int paused = 0;
+      status = mpv_set_property(mpv_, "pause", MPV_FORMAT_FLAG, &paused);
+      if (status >= 0) {
+        const char* value[] = {"loadfile", command.text.c_str(), "replace",
+                               nullptr};
+        status = mpv_command(mpv_, value);
+        if (status >= 0) {
+          active_load_id_ = command.load_id;
+          int64_t playlist_entry_id = 0;
+          if (mpv_get_property(mpv_, "playlist/0/id", MPV_FORMAT_INT64,
+                               &playlist_entry_id) >= 0) {
+            const auto existing =
+                playlist_load_ids_.find(playlist_entry_id);
+            if (existing != playlist_load_ids_.end() ||
+                playlist_load_ids_.size() <
+                    kMaxCorrelatedPlaylistEntries) {
+              playlist_load_ids_[playlist_entry_id] = command.load_id;
+            } else {
+              QueueEvent(
+                  generation,
+                  StateEvent("error",
+                             "Playback correlation exceeded native limits",
+                             command.load_id));
+            }
+          } else {
+            if (pending_load_ids_.size() <
+                kMaxCorrelatedPlaylistEntries) {
+              pending_load_ids_.push_back(command.load_id);
+            } else {
+              QueueEvent(
+                  generation,
+                  StateEvent("error",
+                             "Playback correlation exceeded native limits",
+                             command.load_id));
+            }
+          }
+        }
       }
       break;
     }
@@ -631,9 +735,6 @@ void WindowsNativePlayer::RunCommand(const QueuedCommand& command,
 
 void WindowsNativePlayer::StopEventThread() {
   stopping_ = true;
-  if (mpv_) {
-    mpv_wakeup(mpv_);
-  }
   if (event_thread_.joinable()) {
     event_thread_.join();
   }
@@ -655,6 +756,7 @@ void WindowsNativePlayer::EventLoop(uint64_t generation) {
     {
       std::lock_guard lock(command_mutex_);
       std::swap(commands, commands_);
+      queued_command_bytes_ = 0;
     }
     for (const auto& command : commands) {
       RunCommand(command, generation);
@@ -675,6 +777,7 @@ void WindowsNativePlayer::EventLoop(uint64_t generation) {
          !::PostMessage(top_level_window_, kPlatformEventMessage, 0, 0)) {
     ::Sleep(10);
   }
+  worker_finished_ = true;
 }
 
 void WindowsNativePlayer::HandleMpvEvent(const mpv_event& event,
@@ -683,9 +786,23 @@ void WindowsNativePlayer::HandleMpvEvent(const mpv_event& event,
     case MPV_EVENT_START_FILE:
       if (const auto* start = static_cast<mpv_event_start_file*>(event.data)) {
         const auto load = playlist_load_ids_.find(start->playlist_entry_id);
-        event_load_id_ = load == playlist_load_ids_.end()
-                             ? std::nullopt
-                             : std::optional<int64_t>(load->second);
+        if (load != playlist_load_ids_.end()) {
+          event_load_id_ = load->second;
+        } else if (!pending_load_ids_.empty()) {
+          event_load_id_ = pending_load_ids_.front();
+          pending_load_ids_.pop_front();
+          if (playlist_load_ids_.size() >= kMaxCorrelatedPlaylistEntries) {
+            QueueEvent(generation,
+                       StateEvent("error",
+                                  "Playback correlation exceeded native limits",
+                                  event_load_id_));
+            event_load_id_.reset();
+          } else {
+            playlist_load_ids_[start->playlist_entry_id] = *event_load_id_;
+          }
+        } else {
+          event_load_id_.reset();
+        }
       }
       QueueEvent(generation,
                  StateEvent("loading", "Loading media", event_load_id_));
@@ -695,13 +812,59 @@ void WindowsNativePlayer::HandleMpvEvent(const mpv_event& event,
       break;
     case MPV_EVENT_END_FILE: {
       const auto* end = static_cast<mpv_event_end_file*>(event.data);
-      std::optional<int64_t> load_id;
+      std::optional<int64_t> load_id = event_load_id_;
       if (end) {
         const auto load = playlist_load_ids_.find(end->playlist_entry_id);
         if (load != playlist_load_ids_.end()) {
           load_id = load->second;
           playlist_load_ids_.erase(load);
         }
+      }
+      if (end && end->reason == MPV_END_FILE_REASON_REDIRECT) {
+        const int64_t first = end->playlist_insert_id;
+        const int64_t count = end->playlist_insert_num_entries;
+        const bool valid_range =
+            first >= 0 && count >= 0 &&
+            count <= static_cast<int64_t>(kMaxCorrelatedPlaylistEntries) &&
+            (count == 0 ||
+             first <= std::numeric_limits<int64_t>::max() - (count - 1));
+        size_t new_entries = 0;
+        if (valid_range) {
+          for (int64_t offset = 0; offset < count; ++offset) {
+            if (playlist_load_ids_.find(first + offset) ==
+                playlist_load_ids_.end()) {
+              ++new_entries;
+            }
+          }
+        }
+        if (!load_id || !valid_range ||
+            playlist_load_ids_.size() > kMaxCorrelatedPlaylistEntries ||
+            new_entries >
+                kMaxCorrelatedPlaylistEntries - playlist_load_ids_.size()) {
+          QueueEvent(generation,
+                     StateEvent("error",
+                                "Redirect correlation exceeded native limits",
+                                load_id));
+          break;
+        }
+        for (int64_t offset = 0; offset < count; ++offset) {
+          playlist_load_ids_[first + offset] = *load_id;
+        }
+        break;
+      }
+      if (load_id) {
+        for (auto entry = playlist_load_ids_.begin();
+             entry != playlist_load_ids_.end();) {
+          if (entry->second == *load_id) {
+            entry = playlist_load_ids_.erase(entry);
+          } else {
+            ++entry;
+          }
+        }
+        pending_load_ids_.erase(
+            std::remove(pending_load_ids_.begin(), pending_load_ids_.end(),
+                        *load_id),
+            pending_load_ids_.end());
       }
       if (end && end->error < 0) {
         QueueEvent(generation,

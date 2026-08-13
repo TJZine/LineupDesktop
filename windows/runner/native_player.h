@@ -52,9 +52,8 @@ class WindowsNativePlayer {
       std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
   bool Initialize(std::string& error);
   void BeginAsyncDispose();
-  void Dispose();
   void FinishDispose();
-  void QueueCommand(QueuedCommand command);
+  bool QueueCommand(QueuedCommand command);
   void RunCommand(const QueuedCommand& command, uint64_t generation);
   bool SetVideoRect(const flutter::EncodableMap& arguments);
   bool SetFullscreen(bool fullscreen, std::string& error);
@@ -82,14 +81,17 @@ class WindowsNativePlayer {
   std::atomic<bool> wakeup_posted_{false};
   std::mutex command_mutex_;
   std::deque<QueuedCommand> commands_;
+  size_t queued_command_bytes_ = 0;
   std::mutex event_mutex_;
   std::deque<QueuedEvent> events_;
   std::optional<int64_t> active_load_id_;
   std::optional<int64_t> event_load_id_;
+  std::deque<int64_t> pending_load_ids_;
   std::unordered_map<int64_t, int64_t> playlist_load_ids_;
   std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>>
       dispose_result_;
   std::atomic<bool> dispose_ready_{false};
+  std::atomic<bool> worker_finished_{true};
   bool shutdown_started_ = false;
   bool disposed_ = true;
   bool window_close_requested_ = false;

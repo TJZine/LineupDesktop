@@ -308,6 +308,172 @@ void main() {
     await player.dispose();
   });
 
+  test(
+    'replacement observes pending failure before delayed load reply',
+    () async {
+      final calls = <MethodCall>[];
+      final firstReply = Completer<void>();
+      messenger.setMockMethodCallHandler(channel, (call) {
+        calls.add(call);
+        if (call.method == 'load' &&
+            calls.where((item) => item.method == 'load').length == 1) {
+          return firstReply.future;
+        }
+        return null;
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+      final uncaught = <Object>[];
+      await runZonedGuarded(() async {
+        final player = WindowsNativePlayer();
+        await player.initialize();
+        final first = player.load(Uri.parse('file:///first.mp4'));
+        final firstFailure = expectLater(
+          first,
+          throwsA(isA<PlayerUnavailable>()),
+        );
+        await Future<void>.delayed(Duration.zero);
+
+        final second = player.load(Uri.parse('file:///second.mp4'));
+        await Future<void>.delayed(Duration.zero);
+        final secondCall = calls.where((call) => call.method == 'load').last;
+        await _sendNativeEvent(messenger, {
+          'type': 'state',
+          'loadId': secondCall.arguments!['loadId']! as int,
+          'state': 'playing',
+        });
+        await second;
+        firstReply.complete();
+        await firstFailure;
+        await player.dispose();
+      }, (error, _) => uncaught.add(error));
+
+      expect(uncaught, isEmpty);
+    },
+  );
+
+  test('null video parameters clear grouped telemetry and HDR', () async {
+    final calls = <MethodCall>[];
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      calls.add(call);
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+    final player = WindowsNativePlayer();
+    await player.initialize();
+    final load = player.load(Uri.parse('file:///hdr.mp4'));
+    await Future<void>.delayed(Duration.zero);
+    final loadId = calls.last.arguments!['loadId']! as int;
+    await _sendNativeEvent(messenger, {
+      'type': 'property',
+      'loadId': loadId,
+      'name': 'video-params',
+      'value': {
+        'w': 3840,
+        'h': 2160,
+        'pixelformat': 'p010',
+        'hw-pixelformat': 'd3d11',
+        'primaries': 'bt.2020',
+        'gamma': 'pq',
+        'colormatrix': 'bt.2020-ncl',
+        'sig-peak': 10.0,
+      },
+    });
+    await _sendNativeEvent(messenger, {
+      'type': 'property',
+      'loadId': loadId,
+      'name': 'video-params',
+      'value': {'w': 'invalid'},
+    });
+    expect(player.telemetry.width, 3840);
+    expect(player.telemetry.isHdr, isTrue);
+
+    await _sendNativeEvent(messenger, {
+      'type': 'property',
+      'loadId': loadId,
+      'name': 'video-params',
+      'value': null,
+    });
+    expect(player.telemetry.width, isNull);
+    expect(player.telemetry.height, isNull);
+    expect(player.telemetry.pixelFormat, isNull);
+    expect(player.telemetry.hardwarePixelFormat, isNull);
+    expect(player.telemetry.primaries, isNull);
+    expect(player.telemetry.gamma, isNull);
+    expect(player.telemetry.colorMatrix, isNull);
+    expect(player.telemetry.signalPeak, isNull);
+    expect(player.telemetry.isHdr, isFalse);
+
+    await _sendNativeEvent(messenger, {
+      'type': 'state',
+      'loadId': loadId,
+      'state': 'playing',
+    });
+    await load;
+    await player.dispose();
+  });
+
+  test('pause events remain scoped across replacement autoplay', () async {
+    final calls = <MethodCall>[];
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      calls.add(call);
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+    final player = WindowsNativePlayer();
+    await player.initialize();
+    final first = player.load(Uri.parse('file:///first.mp4'));
+    await Future<void>.delayed(Duration.zero);
+    final firstId = calls.last.arguments!['loadId']! as int;
+    await _sendNativeEvent(messenger, {
+      'type': 'state',
+      'loadId': firstId,
+      'state': 'playing',
+    });
+    await first;
+    await _sendNativeEvent(messenger, {
+      'type': 'property',
+      'loadId': firstId,
+      'name': 'pause',
+      'value': true,
+    });
+    expect(player.status.state, PlayerState.paused);
+
+    final second = player.load(Uri.parse('file:///second.mp4'));
+    await Future<void>.delayed(Duration.zero);
+    final secondId = calls.last.arguments!['loadId']! as int;
+    expect(player.status.state, PlayerState.loading);
+    await _sendNativeEvent(messenger, {
+      'type': 'property',
+      'loadId': firstId,
+      'name': 'pause',
+      'value': false,
+    });
+    await _sendNativeEvent(messenger, {
+      'type': 'property',
+      'loadId': secondId,
+      'name': 'pause',
+      'value': true,
+    });
+    expect(player.status.state, PlayerState.loading);
+    await _sendNativeEvent(messenger, {
+      'type': 'state',
+      'loadId': secondId,
+      'state': 'playing',
+    });
+    await second;
+    await _sendNativeEvent(messenger, {
+      'type': 'property',
+      'loadId': secondId,
+      'name': 'pause',
+      'value': true,
+    });
+    expect(player.status.state, PlayerState.paused);
+    await player.dispose();
+  });
+
   test('rejects a second platform-channel owner', () async {
     messenger.setMockMethodCallHandler(channel, (call) async => null);
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));

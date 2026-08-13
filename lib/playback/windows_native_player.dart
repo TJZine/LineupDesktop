@@ -82,11 +82,21 @@ class WindowsNativePlayer implements NativePlayer {
     _resetMediaState();
     _setStatus(PlayerState.loading, 'Loading media');
     try {
+      final completion = pending.future
+          .timeout(_loadTimeout)
+          .then<(Object, StackTrace)?>(
+            (_) => null,
+            onError: (Object error, StackTrace stackTrace) =>
+                (error, stackTrace),
+          );
       await _channel.invokeMethod<void>('load', {
         'uri': media.toString(),
         'loadId': loadId,
       });
-      await pending.future.timeout(_loadTimeout);
+      final failure = await completion;
+      if (failure != null) {
+        Error.throwWithStackTrace(failure.$1, failure.$2);
+      }
     } catch (error) {
       if (identical(_pendingLoad, pending)) {
         _activeLoadId = null;
@@ -283,17 +293,48 @@ class WindowsNativePlayer implements NativePlayer {
   }
 
   void _applyVideoParameters(Object? value) {
+    if (value == null) {
+      _telemetry = _copyTelemetry(
+        width: null,
+        height: null,
+        pixelFormat: null,
+        hardwarePixelFormat: null,
+        primaries: null,
+        gamma: null,
+        colorMatrix: null,
+        signalPeak: null,
+      );
+      return;
+    }
     if (value is! Map) return;
     final parameters = Map<Object?, Object?>.from(value);
+    final width = parameters['w'];
+    final height = parameters['h'];
+    final pixelFormat = parameters['pixelformat'];
+    final hardwarePixelFormat = parameters['hw-pixelformat'];
+    final primaries = parameters['primaries'];
+    final gamma = parameters['gamma'];
+    final colorMatrix = parameters['colormatrix'];
+    final signalPeak = parameters['sig-peak'];
+    if ((width != null && width is! int) ||
+        (height != null && height is! int) ||
+        (pixelFormat != null && pixelFormat is! String) ||
+        (hardwarePixelFormat != null && hardwarePixelFormat is! String) ||
+        (primaries != null && primaries is! String) ||
+        (gamma != null && gamma is! String) ||
+        (colorMatrix != null && colorMatrix is! String) ||
+        (signalPeak != null && signalPeak is! num)) {
+      return;
+    }
     _telemetry = _copyTelemetry(
-      width: parameters['w'],
-      height: parameters['h'],
-      pixelFormat: parameters['pixelformat'],
-      hardwarePixelFormat: parameters['hw-pixelformat'],
-      primaries: parameters['primaries'],
-      gamma: parameters['gamma'],
-      colorMatrix: parameters['colormatrix'],
-      signalPeak: parameters['sig-peak'],
+      width: width,
+      height: height,
+      pixelFormat: pixelFormat,
+      hardwarePixelFormat: hardwarePixelFormat,
+      primaries: primaries,
+      gamma: gamma,
+      colorMatrix: colorMatrix,
+      signalPeak: signalPeak,
     );
   }
 
