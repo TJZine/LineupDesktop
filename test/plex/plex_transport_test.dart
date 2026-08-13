@@ -202,10 +202,20 @@ void main() {
 
   test('artwork stays credential-scoped and enforces its byte bound', () async {
     late http.Request request;
+    final artworkUnavailable = throwsA(
+      isA<PlexException>().having(
+        (exception) => exception.code,
+        'code',
+        'artwork-unavailable',
+      ),
+    );
     final client = PlexClient(
       clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
       httpClient: MockClient((value) async {
         request = value;
+        if (value.url.path == '/redirect') {
+          return http.Response('', 302, headers: {'location': '/other'});
+        }
         return http.Response.bytes([1, 2, 3, 4], 200);
       }),
     );
@@ -219,20 +229,32 @@ void main() {
     expect(request.url.host, 'plex.example');
     expect(request.headers['X-Plex-Token'], 'secret');
 
+    for (final mismatchedArtwork in [
+      Uri.parse('https://attacker.example/art'),
+      Uri.parse('http://plex.example:32400/art'),
+      Uri.parse('https://plex.example:32401/art'),
+      Uri.parse('https://user@plex.example:32400/art'),
+    ]) {
+      await expectLater(
+        client.artwork(
+          Uri.parse('https://plex.example:32400'),
+          'secret',
+          mismatchedArtwork,
+        ),
+        artworkUnavailable,
+      );
+    }
+
     await expectLater(
       client.artwork(
         Uri.parse('https://plex.example:32400'),
         'secret',
-        Uri.parse('https://attacker.example/art'),
+        Uri.parse('/redirect'),
       ),
-      throwsA(
-        isA<PlexException>().having(
-          (exception) => exception.code,
-          'code',
-          'artwork-unavailable',
-        ),
-      ),
+      artworkUnavailable,
     );
+    expect(request.url.path, '/redirect');
+    expect(request.followRedirects, isFalse);
 
     await expectLater(
       client.artwork(
@@ -241,13 +263,7 @@ void main() {
         Uri.parse('/library/art/1'),
         maximumBytes: 3,
       ),
-      throwsA(
-        isA<PlexException>().having(
-          (exception) => exception.code,
-          'code',
-          'artwork-unavailable',
-        ),
-      ),
+      artworkUnavailable,
     );
   });
 

@@ -579,9 +579,13 @@ class LineupController extends ChangeNotifier {
       _scheduleWorker?.dispose();
       _scheduleWorkerMedia = availableMedia;
       _scheduleWorkerPlaylists = availablePlaylists;
-      _scheduleWorker = ScheduleWorker(availableMedia, availablePlaylists);
+      _scheduleWorker = null;
     }
-    return _scheduleWorker!.build(channel);
+    final worker = _scheduleWorker ??= ScheduleWorker(
+      availableMedia,
+      availablePlaylists,
+    );
+    return worker.build(channel);
   }
 
   LineupPlaybackRequest playbackFor(String itemId) {

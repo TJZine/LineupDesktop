@@ -165,6 +165,23 @@ void main() {
     lineup.dispose();
   });
 
+  test('tuning after disposal returns null without loading', () async {
+    final lineup = _TestLineup(_channels(1));
+    var loads = 0;
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async {
+        loads++;
+        return _schedule(channel);
+      },
+    );
+    guide.dispose();
+
+    expect(await guide.ensureCurrentProgram(lineup.channels.single.id), isNull);
+    expect(loads, 0);
+    lineup.dispose();
+  });
+
   test('artwork work stays bounded during rapid selection', () async {
     final lineup = _ArtworkLineup(_channels(1));
     final guide = GuideController(lineup: lineup);
@@ -194,13 +211,24 @@ void main() {
     }
     await _settle();
 
-    expect(lineup.artworkLoads, 4);
-    expect(await Future.wait(futures.skip(4).take(4)), everyElement(isNull));
+    expect(lineup.artworkLoads, GuideController.maximumConcurrentArtworkLoads);
+    final evictedQueuedLoads =
+        futures.length -
+        GuideController.maximumCachedArtworkEntries -
+        GuideController.maximumConcurrentArtworkLoads;
+    expect(
+      await Future.wait(
+        futures
+            .skip(GuideController.maximumConcurrentArtworkLoads)
+            .take(evictedQueuedLoads),
+      ),
+      everyElement(isNull),
+    );
 
     guide.dispose();
     lineup.completeArtwork();
     await _settle();
-    expect(lineup.artworkLoads, 4);
+    expect(lineup.artworkLoads, GuideController.maximumConcurrentArtworkLoads);
     lineup.dispose();
   });
 

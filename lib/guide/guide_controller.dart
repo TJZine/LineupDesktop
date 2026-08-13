@@ -39,6 +39,9 @@ class GuideRowData {
 }
 
 class GuideController extends ChangeNotifier {
+  static const maximumCachedArtworkEntries = 12;
+  static const maximumConcurrentArtworkLoads = 4;
+
   GuideController({
     required this.lineup,
     GuideScheduleLoader? loadSchedule,
@@ -127,6 +130,7 @@ class GuideController extends ChangeNotifier {
   }
 
   Future<GuideProgram?> ensureCurrentProgram(String channelId) async {
+    if (_disposed) return null;
     final channel = _channelById[channelId];
     if (channel == null) return null;
     if (_schedules.containsKey(channelId)) return currentProgram(channelId);
@@ -173,7 +177,7 @@ class GuideController extends ChangeNotifier {
     _pendingArtwork.add(
       _ArtworkRequest(key, program.scheduled.item, completer),
     );
-    while (_artwork.length > 12) {
+    while (_artwork.length > maximumCachedArtworkEntries) {
       final evicted = _artwork.keys.first;
       _artwork.remove(evicted);
       _pendingArtwork.removeWhere((request) {
@@ -188,7 +192,8 @@ class GuideController extends ChangeNotifier {
 
   void _pumpArtwork() {
     if (_disposed) return;
-    while (_activeArtworkLoads < 4 && _pendingArtwork.isNotEmpty) {
+    while (_activeArtworkLoads < maximumConcurrentArtworkLoads &&
+        _pendingArtwork.isNotEmpty) {
       final request = _pendingArtwork.removeFirst();
       if (!identical(_artwork[request.key], request.completer.future)) {
         if (!request.completer.isCompleted) request.completer.complete(null);
