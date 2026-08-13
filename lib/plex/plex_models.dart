@@ -79,6 +79,18 @@ class PlexLibrary {
   final PlexLibraryType type;
 }
 
+class PlexPlaylist {
+  const PlexPlaylist({
+    required this.id,
+    required this.title,
+    required this.items,
+  });
+
+  final String id;
+  final String title;
+  final List<PlexMediaItem> items;
+}
+
 class PlexTrack {
   const PlexTrack({
     required this.id,
@@ -120,6 +132,7 @@ class PlexMediaItem {
     this.dynamicRange = DynamicRange.unknown,
     this.tracks = const [],
     this.genres = const [],
+    this.collections = const [],
     this.directors = const [],
     this.actors = const [],
     this.studio,
@@ -145,6 +158,7 @@ class PlexMediaItem {
   final DynamicRange dynamicRange;
   final List<PlexTrack> tracks;
   final List<String> genres;
+  final List<String> collections;
   final List<String> directors;
   final List<String> actors;
   final String? studio;

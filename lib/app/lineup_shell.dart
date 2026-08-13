@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 
 import '../channels/channel.dart';
-import '../channels/channel_builder.dart';
 import '../channels/content_resolver.dart';
 import '../playback/native_player.dart';
 import '../playback/player_foundation_view.dart';
-import '../plex/plex_models.dart';
 import '../settings/lineup_settings.dart';
+import 'channel_setup_view.dart';
 import 'lineup_controller.dart';
+import 'onboarding_view.dart';
 
 class LineupShell extends StatefulWidget {
   const LineupShell({
@@ -45,7 +45,9 @@ class _LineupShellState extends State<LineupShell> {
   Widget build(BuildContext context) {
     final controller = widget.controller;
     if (controller.stage != SetupStage.ready) {
-      return OnboardingView(controller: controller);
+      return controller.stage == SetupStage.channelSetup
+          ? UpstreamChannelSetupView(controller: controller)
+          : UpstreamOnboardingView(controller: controller);
     }
     final views = <Widget>[
       _GuideSetupSummary(controller: controller),
@@ -129,201 +131,6 @@ class _LineupShellState extends State<LineupShell> {
   }
 }
 
-class OnboardingView extends StatefulWidget {
-  const OnboardingView({required this.controller, super.key});
-  final LineupController controller;
-  @override
-  State<OnboardingView> createState() => _OnboardingViewState();
-}
-
-class _OnboardingViewState extends State<OnboardingView> {
-  final _pin = TextEditingController();
-  final _selectedLibraries = <String>{};
-  String? _selectionServerId;
-
-  @override
-  void initState() {
-    super.initState();
-    _selectedLibraries.addAll(widget.controller.selectedLibraryIds);
-    _selectionServerId = widget.controller.server?.id;
-  }
-
-  @override
-  void dispose() {
-    _pin.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final controller = widget.controller;
-    if (_selectionServerId != controller.server?.id) {
-      _selectionServerId = controller.server?.id;
-      _selectedLibraries
-        ..clear()
-        ..addAll(controller.selectedLibraryIds);
-    }
-    return Scaffold(
-      body: SafeArea(
-        child: FocusTraversalGroup(
-          child: Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(32),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 760),
-                child: Column(
-                  children: [
-                    const _Brand(large: true),
-                    const SizedBox(height: 36),
-                    if (controller.error != null)
-                      Semantics(
-                        liveRegion: true,
-                        child: Card(
-                          child: ListTile(
-                            leading: const Icon(Icons.error_outline),
-                            title: Text(controller.error!),
-                          ),
-                        ),
-                      ),
-                    if (controller.busy)
-                      const LinearProgressIndicator(semanticsLabel: 'Working'),
-                    const SizedBox(height: 16),
-                    _stage(controller),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _stage(LineupController controller) => switch (controller.stage) {
-    SetupStage.welcome => _Panel(
-      icon: Icons.live_tv,
-      title: 'Your Plex library, scheduled like television',
-      body: 'Link Plex, select a server and libraries, then build deterministic channels.',
-      action: FilledButton.icon(
-        onPressed: controller.busy ? null : controller.startLinking,
-        icon: const Icon(Icons.link),
-        label: const Text('Link Plex account'),
-      ),
-    ),
-    SetupStage.linking => _Panel(
-      icon: Icons.phonelink_lock,
-      title: 'Enter this code at plex.tv/link',
-      body: controller.activePin?.code ?? 'Requesting a secure code…',
-      action: OutlinedButton(
-        onPressed: controller.busy ? null : controller.startLinking,
-        child: const Text('Request a new code'),
-      ),
-    ),
-    SetupStage.profiles => _ChoicePanel(
-      title: 'Who is watching?',
-      children: [
-        for (final profile in controller.profiles)
-          Card(
-            child: ListTile(
-              autofocus: profile == controller.profiles.first,
-              leading: Icon(
-                profile.protected ? Icons.lock_outline : Icons.person_outline,
-              ),
-              title: Text(profile.name),
-              subtitle: profile.protected
-                  ? const Text('Plex Home PIN required')
-                  : null,
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => _selectProfile(profile),
-            ),
-          ),
-      ],
-    ),
-    SetupStage.servers => _ChoicePanel(
-      title: 'Choose a Plex server',
-      children: [
-        for (final server in controller.servers)
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.dns_outlined),
-              title: Text(server.name),
-              subtitle: Text(server.owned ? 'Owned server' : 'Shared server'),
-              onTap: () => controller.selectServer(server),
-            ),
-          ),
-        if (controller.servers.isEmpty && !controller.busy)
-          const Padding(
-            padding: EdgeInsets.all(24),
-            child: Text('No Plex servers were discovered.'),
-          ),
-        OutlinedButton.icon(
-          onPressed: controller.busy ? null : controller.refreshServers,
-          icon: const Icon(Icons.refresh),
-          label: const Text('Refresh servers'),
-        ),
-      ],
-    ),
-    SetupStage.libraries => _ChoicePanel(
-      title: 'Select libraries for channels',
-      children: [
-        for (final library in controller.libraries)
-          CheckboxListTile(
-            value: _selectedLibraries.contains(library.id),
-            title: Text(library.title),
-            secondary: Icon(
-              library.type == PlexLibraryType.show
-                  ? Icons.tv
-                  : Icons.movie_outlined,
-            ),
-            onChanged: (selected) => setState(
-              () => selected == true
-                  ? _selectedLibraries.add(library.id)
-                  : _selectedLibraries.remove(library.id),
-            ),
-          ),
-        const SizedBox(height: 16),
-        FilledButton(
-          onPressed: _selectedLibraries.isEmpty || controller.busy
-              ? null
-              : () => controller.setLibraries(_selectedLibraries),
-          child: const Text('Load libraries'),
-        ),
-      ],
-    ),
-    SetupStage.ready => const SizedBox.shrink(),
-  };
-
-  Future<void> _selectProfile(PlexHomeUser profile) async {
-    if (!profile.protected) return widget.controller.selectProfile(profile);
-    _pin.clear();
-    final pin = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('PIN for ${profile.name}'),
-        content: TextField(
-          controller: _pin,
-          autofocus: true,
-          obscureText: true,
-          keyboardType: TextInputType.number,
-          maxLength: 4,
-          onSubmitted: (value) => Navigator.pop(context, value),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, _pin.text),
-            child: const Text('Continue'),
-          ),
-        ],
-      ),
-    );
-    if (pin != null) await widget.controller.selectProfile(profile, pin: pin);
-  }
-}
-
 class ChannelsView extends StatelessWidget {
   const ChannelsView({required this.controller, super.key});
   final LineupController controller;
@@ -334,10 +141,7 @@ class ChannelsView extends StatelessWidget {
       spacing: 8,
       children: [
         OutlinedButton.icon(
-          onPressed: () => showDialog<void>(
-            context: context,
-            builder: (_) => ChannelBuilderDialog(controller: controller),
-          ),
+          onPressed: controller.enterChannelSetup,
           icon: const Icon(Icons.auto_awesome_outlined),
           label: const Text('Channel builder'),
         ),
@@ -399,124 +203,6 @@ class ChannelsView extends StatelessWidget {
   );
 }
 
-class ChannelBuilderDialog extends StatefulWidget {
-  const ChannelBuilderDialog({required this.controller, super.key});
-  final LineupController controller;
-  @override
-  State<ChannelBuilderDialog> createState() => _ChannelBuilderDialogState();
-}
-
-class _ChannelBuilderDialogState extends State<ChannelBuilderDialog> {
-  late final List<ChannelProposal> _proposals = buildChannelProposals(
-    libraries: widget.controller.libraries
-        .where(
-          (library) =>
-              widget.controller.selectedLibraryIds.contains(library.id),
-        )
-        .toList(),
-    items: widget.controller.availableMedia,
-  );
-  late final Set<int> _selected = Set.of(
-    Iterable<int>.generate(_proposals.length.clamp(0, 12)),
-  );
-  String? _error;
-
-  @override
-  Widget build(BuildContext context) => AlertDialog(
-    title: const Text('Channel builder'),
-    content: SizedBox(
-      width: 680,
-      height: 520,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const Text(
-            'Deterministic suggestions from the metadata loaded from your selected libraries.',
-          ),
-          if (_error != null)
-            Text(
-              _error!,
-              style: TextStyle(color: Theme.of(context).colorScheme.error),
-            ),
-          const SizedBox(height: 12),
-          Expanded(
-            child: _proposals.isEmpty
-                ? const Center(
-                    child: Text(
-                      'No suggestions met the five-item minimum. You can still create a custom channel.',
-                    ),
-                  )
-                : ListView.builder(
-                    itemCount: _proposals.length,
-                    itemBuilder: (context, index) {
-                      final proposal = _proposals[index];
-                      return CheckboxListTile(
-                        value: _selected.contains(index),
-                        title: Text(proposal.name),
-                        subtitle: Text(
-                          '${proposal.strategy.name} • ${proposal.itemCount} items • ${proposal.mode.name}',
-                        ),
-                        onChanged: (value) => setState(
-                          () => value == true
-                              ? _selected.add(index)
-                              : _selected.remove(index),
-                        ),
-                      );
-                    },
-                  ),
-          ),
-        ],
-      ),
-    ),
-    actions: [
-      TextButton(
-        onPressed: () => Navigator.pop(context),
-        child: const Text('Cancel'),
-      ),
-      FilledButton(
-        onPressed: _selected.isEmpty ? null : _create,
-        child: Text('Create ${_selected.length}'),
-      ),
-    ],
-  );
-
-  Future<void> _create() async {
-    try {
-      final used = widget.controller.channels
-          .map((channel) => channel.number)
-          .toSet();
-      var next = 1;
-      for (final index in _selected.toList()..sort()) {
-        while (used.contains(next) && next <= 500) {
-          next++;
-        }
-        if (next > 500) {
-          throw const FormatException('No channel numbers remain');
-        }
-        final proposal = _proposals[index];
-        final id = createChannelId();
-        await widget.controller.saveChannel(
-          Channel(
-            id: id,
-            number: next,
-            name: proposal.name,
-            source: proposal.source,
-            playbackMode: proposal.mode,
-            anchor: DateTime.now().toUtc(),
-            shuffleSeed: id.hashCode,
-          ),
-        );
-        used.add(next++);
-      }
-      if (mounted) Navigator.pop(context);
-    } catch (error) {
-      setState(
-        () => _error = error.toString().replaceFirst('FormatException: ', ''),
-      );
-    }
-  }
-}
-
 class ChannelEditor extends StatefulWidget {
   const ChannelEditor({required this.controller, this.channel, super.key});
   final LineupController controller;
@@ -544,7 +230,7 @@ class _ChannelEditorState extends State<ChannelEditor> {
   bool _includeWatched = true;
   String? _error;
   int _nextNumber() {
-    for (var value = 1; value <= 500; value++) {
+    for (var value = 1; value <= 1000; value++) {
       if (!widget.controller.channels.any(
         (channel) => channel.number == value,
       )) {
@@ -587,7 +273,7 @@ class _ChannelEditorState extends State<ChannelEditor> {
               controller: _number,
               keyboardType: TextInputType.number,
               decoration: const InputDecoration(
-                labelText: 'Channel number (1–500)',
+                labelText: 'Channel number (1–1000)',
               ),
             ),
             const SizedBox(height: 12),
@@ -973,27 +659,6 @@ class _Panel extends StatelessWidget {
   );
 }
 
-class _ChoicePanel extends StatelessWidget {
-  const _ChoicePanel({required this.title, required this.children});
-  final String title;
-  final List<Widget> children;
-  @override
-  Widget build(BuildContext context) => Card(
-    child: Padding(
-      padding: const EdgeInsets.all(28),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(title, style: Theme.of(context).textTheme.headlineSmall),
-          const SizedBox(height: 20),
-          ...children,
-        ],
-      ),
-    ),
-  );
-}
-
 class _Section extends StatelessWidget {
   const _Section(this.title, this.children);
   final String title;
@@ -1044,8 +709,7 @@ class _Dropdown<T> extends StatelessWidget {
 }
 
 class _Brand extends StatelessWidget {
-  const _Brand({this.large = false});
-  final bool large;
+  const _Brand();
   @override
   Widget build(BuildContext context) => Semantics(
     label: 'Lineup Desktop',
@@ -1055,18 +719,15 @@ class _Brand extends StatelessWidget {
       children: [
         Image.asset(
           'assets/branding/lineup-logo-mark.png',
-          width: large ? 72 : 42,
-          height: large ? 72 : 42,
+          width: 42,
+          height: 42,
         ),
-        if (large || MediaQuery.sizeOf(context).width >= 1100) ...[
+        if (MediaQuery.sizeOf(context).width >= 1100) ...[
           const SizedBox(width: 12),
           Text(
             'LINEUP',
-            style:
-                (large
-                        ? Theme.of(context).textTheme.headlineMedium
-                        : Theme.of(context).textTheme.titleMedium)
-                    ?.copyWith(letterSpacing: 3),
+            style: Theme.of(context).textTheme.titleMedium
+                ?.copyWith(letterSpacing: 3),
           ),
         ],
       ],

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../channels/channel.dart';
+import '../channels/channel_builder.dart';
 import '../channels/content_resolver.dart';
 import '../channels/scheduler.dart';
 import '../diagnostics/diagnostics.dart';
@@ -11,7 +12,15 @@ import '../plex/plex_client.dart';
 import '../plex/plex_models.dart';
 import '../settings/lineup_settings.dart';
 
-enum SetupStage { welcome, linking, profiles, servers, libraries, ready }
+enum SetupStage {
+  welcome,
+  linking,
+  profiles,
+  servers,
+  audio,
+  channelSetup,
+  ready,
+}
 
 class LineupController extends ChangeNotifier {
   LineupController({
@@ -41,6 +50,7 @@ class LineupController extends ChangeNotifier {
   List<PlexLibrary> libraries = const [];
   Set<String> selectedLibraryIds = const {};
   List<PlexMediaItem> availableMedia = const [];
+  List<PlexPlaylist> availablePlaylists = const [];
   PlexPin? activePin;
   SetupStage stage = SetupStage.welcome;
   bool busy = false;
@@ -116,6 +126,18 @@ class LineupController extends ChangeNotifier {
     );
   }
 
+  Future<void> cancelLinking() async {
+    final pin = activePin;
+    ++_epoch;
+    _pinTimer?.cancel();
+    activePin = null;
+    busy = false;
+    error = null;
+    stage = SetupStage.welcome;
+    notifyListeners();
+    if (pin != null) await plex.cancelPin(pin);
+  }
+
   void _schedulePinPoll(int operation, PlexPin pin) {
     _pinTimer?.cancel();
     _pinTimer = Timer(pinPollInterval, () async {
@@ -186,6 +208,7 @@ class LineupController extends ChangeNotifier {
         final oldLibraries = libraries;
         final oldSelectedLibraries = selectedLibraryIds;
         final oldMedia = availableMedia;
+        final oldPlaylists = availablePlaylists;
         profile = selected;
         _profileToken = token;
         server = null;
@@ -193,6 +216,7 @@ class LineupController extends ChangeNotifier {
         libraries = const [];
         selectedLibraryIds = const {};
         availableMedia = const [];
+        availablePlaylists = const [];
         try {
           await _save();
         } catch (_) {
@@ -203,6 +227,7 @@ class LineupController extends ChangeNotifier {
           libraries = oldLibraries;
           selectedLibraryIds = oldSelectedLibraries;
           availableMedia = oldMedia;
+          availablePlaylists = oldPlaylists;
           rethrow;
         }
         await _discover(operation);
@@ -256,6 +281,7 @@ class LineupController extends ChangeNotifier {
         final oldLibraries = libraries;
         final oldSelectedLibraries = selectedLibraryIds;
         final oldMedia = availableMedia;
+        final oldPlaylists = availablePlaylists;
         server = selected;
         connection = selectedConnection;
         libraries = loadedLibraries;
@@ -272,7 +298,8 @@ class LineupController extends ChangeNotifier {
           savedLibraries.where(availableIds.contains),
         );
         availableMedia = const [];
-        stage = SetupStage.libraries;
+        availablePlaylists = const [];
+        stage = SetupStage.channelSetup;
         try {
           await _save();
         } catch (_) {
@@ -281,7 +308,15 @@ class LineupController extends ChangeNotifier {
           libraries = oldLibraries;
           selectedLibraryIds = oldSelectedLibraries;
           availableMedia = oldMedia;
+          availablePlaylists = oldPlaylists;
           rethrow;
+        }
+        if (selectedLibraryIds.isNotEmpty && channels.isNotEmpty) {
+          await _loadLibraries(operation, selectedLibraryIds);
+          if (operation != _epoch) return;
+          stage = SetupStage.ready;
+        } else if (!settings.audioSetupComplete) {
+          stage = SetupStage.audio;
         }
       },
       operation: operation,
@@ -308,30 +343,111 @@ class LineupController extends ChangeNotifier {
             'Select one or more libraries from the current server.',
           );
         }
-        final items = <PlexMediaItem>[];
-        for (final id in ids) {
-          items.addAll(await plex.libraryItems(endpoint, token, id));
-          if (operation != _epoch) return;
-        }
-        final nextMedia = List<PlexMediaItem>.unmodifiable(
-          items.where((item) => item.duration > Duration.zero),
-        );
         final oldSelectedLibraries = selectedLibraryIds;
         final oldMedia = availableMedia;
+        final oldPlaylists = availablePlaylists;
+        await _loadLibraries(operation, ids);
+        if (operation != _epoch) return;
         selectedLibraryIds = Set.unmodifiable(ids);
-        availableMedia = nextMedia;
         try {
           await _save();
-          stage = SetupStage.ready;
         } catch (_) {
           selectedLibraryIds = oldSelectedLibraries;
           availableMedia = oldMedia;
+          availablePlaylists = oldPlaylists;
           rethrow;
         }
       },
       operation: operation,
-      fallbackStage: SetupStage.libraries,
+      fallbackStage: SetupStage.channelSetup,
     );
+  }
+
+  Future<void> _loadLibraries(int operation, Set<String> ids) async {
+    final token = _profileToken ?? _accountToken;
+    final endpoint = connection?.uri;
+    if (token == null || endpoint == null) {
+      throw const PlexException('server-unreachable', 'Select a server first.');
+    }
+    final items = <PlexMediaItem>[];
+    for (final id in ids) {
+      final library = libraries.firstWhere((library) => library.id == id);
+      items.addAll(await plex.libraryItems(endpoint, token, id, library.type));
+      if (operation != _epoch) return;
+    }
+    List<PlexPlaylist> playlists;
+    try {
+      playlists = await plex.playlists(endpoint, token);
+    } on PlexException catch (exception) {
+      diagnostics.add('plex-library', 'Playlist discovery unavailable', {
+        'error': exception.toString(),
+      });
+      playlists = const [];
+    }
+    if (operation != _epoch) return;
+    availableMedia = List.unmodifiable(
+      items.where((item) => item.duration > Duration.zero),
+    );
+    availablePlaylists = playlists;
+  }
+
+  Future<void> completeAudioSetup({
+    required bool externalAudio,
+    required bool directPlayFallback,
+  }) async {
+    await updateSettings(
+      settings.copyWith(
+        audioPassthrough: externalAudio,
+        directPlayAudioFallback: directPlayFallback,
+        audioSetupComplete: true,
+      ),
+    );
+    stage = SetupStage.channelSetup;
+    notifyListeners();
+  }
+
+  Future<void> enterChannelSetup() async {
+    stage = SetupStage.channelSetup;
+    notifyListeners();
+  }
+
+  void showProfiles() {
+    stage = SetupStage.profiles;
+    error = null;
+    notifyListeners();
+  }
+
+  Future<void> applyChannelPlan(
+    List<Channel> planned, {
+    required ChannelBuildMode mode,
+  }) async {
+    final oldChannels = channels;
+    final oldCurrent = currentChannelId;
+    final next = switch (mode) {
+      ChannelBuildMode.replace => planned,
+      ChannelBuildMode.append => [...channels, ...planned],
+      ChannelBuildMode.merge => [
+        ...channels.where(
+          (existing) =>
+              !planned.any((candidate) => candidate.name == existing.name),
+        ),
+        ...planned,
+      ],
+    }..sort((a, b) => a.number.compareTo(b.number));
+    for (final channel in next) {
+      channel.validate(next);
+    }
+    channels = List.unmodifiable(next);
+    currentChannelId = channels.firstOrNull?.id;
+    try {
+      await _save();
+      stage = SetupStage.ready;
+      notifyListeners();
+    } catch (_) {
+      channels = oldChannels;
+      currentChannelId = oldCurrent;
+      rethrow;
+    }
   }
 
   Future<void> saveChannel(Channel channel) async {
@@ -408,6 +524,7 @@ class LineupController extends ChangeNotifier {
     connection = null;
     libraries = const [];
     availableMedia = const [];
+    availablePlaylists = const [];
     _accountToken = null;
     _profileToken = null;
     stage = SetupStage.welcome;

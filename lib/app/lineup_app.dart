@@ -92,10 +92,28 @@ class _StartupProgress extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Center(
-        child: Semantics(
-          label: 'Starting Lineup Desktop',
-          child: const CircularProgressIndicator(),
+      body: DecoratedBox(
+        decoration: const BoxDecoration(
+          gradient: RadialGradient(
+            center: Alignment(-0.5, -0.6),
+            radius: 1.2,
+            colors: [Color(0x1428C8A0), LineupTheme.obsidian],
+          ),
+        ),
+        child: Center(
+          child: Semantics(
+            label: 'Starting Lineup Desktop',
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Image.asset('assets/branding/lineup-logo-mark.png', height: 92),
+                const SizedBox(height: 26),
+                const SizedBox(width: 220, child: LinearProgressIndicator()),
+                const SizedBox(height: 14),
+                const Text('TUNING LINEUP'),
+              ],
+            ),
+          ),
         ),
       ),
     );

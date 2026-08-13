@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/playback/stream_policy.dart';
 import 'package:lineup_desktop/plex/plex_client.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
@@ -198,6 +199,83 @@ void main() {
     expect(descriptor.uri.queryParameters, containsPair('directStream', '1'));
     expect(descriptor.uri.queryParameters, isNot(contains('directPlay')));
   });
+
+  test(
+    'show libraries load episode rows and playlists load their items',
+    () async {
+      final requests = <Uri>[];
+      final client = PlexClient(
+        clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+        httpClient: MockClient((request) async {
+          requests.add(request.url);
+          if (request.url.path == '/library/sections/7/all') {
+            return http.Response(
+              jsonEncode({
+                'MediaContainer': {
+                  'Metadata': [
+                    {
+                      'ratingKey': 'e1',
+                      'key': '/library/metadata/e1',
+                      'title': 'Pilot',
+                      'type': 'episode',
+                      'duration': 1000,
+                    },
+                  ],
+                },
+              }),
+              200,
+            );
+          }
+          if (request.url.path == '/playlists/all') {
+            return http.Response(
+              jsonEncode({
+                'MediaContainer': {
+                  'Metadata': [
+                    {
+                      'ratingKey': 'p1',
+                      'key': '/playlists/p1',
+                      'title': 'Favorites',
+                    },
+                  ],
+                },
+              }),
+              200,
+            );
+          }
+          return http.Response(
+            jsonEncode({
+              'MediaContainer': {
+                'Metadata': [
+                  {
+                    'ratingKey': 'm1',
+                    'key': '/library/metadata/m1',
+                    'title': 'Movie',
+                    'type': 'movie',
+                    'duration': 1000,
+                  },
+                ],
+              },
+            }),
+            200,
+          );
+        }),
+      );
+      final episodes = await client.libraryItems(
+        Uri.parse('https://plex.example:32400'),
+        'secret',
+        '7',
+        PlexLibraryType.show,
+      );
+      final playlists = await client.playlists(
+        Uri.parse('https://plex.example:32400'),
+        'secret',
+      );
+      expect(episodes.single.type, 'episode');
+      expect(requests.first.queryParameters['type'], '4');
+      expect(playlists.single.title, 'Favorites');
+      expect(playlists.single.items.single.id, 'm1');
+    },
+  );
 
   test(
     'Plex Home falls back from empty v2 users and missing v2 switch',

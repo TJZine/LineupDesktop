@@ -17,11 +17,13 @@ void main() {
     const original = LineupSettings(
       guideDensity: GuideDensity.compact,
       audioPassthrough: true,
+      audioSetupComplete: true,
       reduceMotion: true,
     );
     final restored = LineupSettings.fromJson(original.toJson());
     expect(restored.guideDensity, GuideDensity.compact);
     expect(restored.audioPassthrough, isTrue);
+    expect(restored.audioSetupComplete, isTrue);
     expect(restored.reduceMotion, isTrue);
   });
 }

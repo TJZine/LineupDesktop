@@ -153,8 +153,8 @@ class Channel {
     if (id.trim().isEmpty || name.trim().isEmpty) {
       throw const FormatException('Channel name is required');
     }
-    if (number < 1 || number > 500) {
-      throw const FormatException('Channel number must be between 1 and 500');
+    if (number < 1 || number > 1000) {
+      throw const FormatException('Channel number must be between 1 and 1000');
     }
     if (existing.any(
       (channel) => channel.id != id && channel.number == number,

@@ -1,7 +1,10 @@
 import '../plex/plex_models.dart';
 import 'channel.dart';
+import 'content_resolver.dart';
 
 enum BuilderStrategy {
+  playlists,
+  collections,
   recentlyAdded,
   genres,
   studios,
@@ -9,6 +12,19 @@ enum BuilderStrategy {
   decades,
   directors,
 }
+
+enum ChannelBuildMode { replace, append, merge }
+
+const builderStrategyLabels = {
+  BuilderStrategy.playlists: 'Playlists',
+  BuilderStrategy.collections: 'Collections',
+  BuilderStrategy.recentlyAdded: 'Recently Added',
+  BuilderStrategy.genres: 'Genres',
+  BuilderStrategy.studios: 'Studios',
+  BuilderStrategy.actors: 'Actors',
+  BuilderStrategy.decades: 'Decades',
+  BuilderStrategy.directors: 'Directors',
+};
 
 class ChannelProposal {
   const ChannelProposal({
@@ -29,21 +45,15 @@ class ChannelProposal {
 List<ChannelProposal> buildChannelProposals({
   required List<PlexLibrary> libraries,
   required List<PlexMediaItem> items,
-  Set<BuilderStrategy> strategies = const {
-    BuilderStrategy.recentlyAdded,
-    BuilderStrategy.genres,
-    BuilderStrategy.studios,
-    BuilderStrategy.actors,
-    BuilderStrategy.decades,
-    BuilderStrategy.directors,
-  },
+  List<PlexPlaylist> playlists = const [],
+  Set<BuilderStrategy> strategies = const {...BuilderStrategy.values},
+  List<BuilderStrategy> strategyOrder = BuilderStrategy.values,
+  Set<BuilderStrategy> crossLibraryStrategies = const {},
   int minimumItems = 5,
   int maximumChannels = 200,
 }) {
   final proposals = <ChannelProposal>[];
-  final movieLibraries = libraries
-      .where((library) => library.type == PlexLibraryType.movie)
-      .toList();
+  final sourceLibraries = libraries.toList();
 
   void addTags(
     BuilderStrategy strategy,
@@ -51,7 +61,8 @@ List<ChannelProposal> buildChannelProposals({
     String filterKey,
   ) {
     if (!strategies.contains(strategy)) return;
-    for (final library in movieLibraries) {
+    final countsByLibrary = <PlexLibrary, Map<String, int>>{};
+    for (final library in sourceLibraries) {
       final counts = <String, int>{};
       for (final item in items.where((item) => item.libraryId == library.id)) {
         for (final tag
@@ -62,18 +73,73 @@ List<ChannelProposal> buildChannelProposals({
           counts[tag] = (counts[tag] ?? 0) + 1;
         }
       }
-      for (final entry
-          in counts.entries
-              .where((entry) => entry.value >= minimumItems)
-              .toList()
-            ..sort(
-              (a, b) => b.value.compareTo(a.value) != 0
-                  ? b.value.compareTo(a.value)
-                  : a.key.compareTo(b.key),
-            )) {
+      countsByLibrary[library] = counts;
+    }
+    bool eligible(PlexLibrary library, String tag, {bool minimum = true}) {
+      final count = countsByLibrary[library]![tag] ?? 0;
+      if (count == 0 || (minimum && count < minimumItems)) return false;
+      if (library.type != PlexLibraryType.show ||
+          !{
+            BuilderStrategy.actors,
+            BuilderStrategy.directors,
+          }.contains(strategy)) {
+        return true;
+      }
+      final series = items
+          .where(
+            (item) =>
+                item.libraryId == library.id &&
+                select(item).contains(tag) &&
+                item.grandparentTitle != null,
+          )
+          .map((item) => item.grandparentTitle)
+          .toSet();
+      return series.length >= 3;
+    }
+
+    if (crossLibraryStrategies.contains(strategy) &&
+        sourceLibraries.length > 1) {
+      final tags = <String>{
+        for (final counts in countsByLibrary.values) ...counts.keys,
+      };
+      for (final tag in tags) {
+        final sources = <ContentSource>[];
+        var count = 0;
+        for (final library in sourceLibraries) {
+          final libraryCount = countsByLibrary[library]![tag] ?? 0;
+          if (!eligible(library, tag, minimum: false)) continue;
+          count += libraryCount;
+          sources.add(
+            LibrarySource(
+              libraryId: library.id,
+              libraryType: library.type,
+              filters: {filterKey: tag},
+            ),
+          );
+        }
+        if (count >= minimumItems) {
+          proposals.add(
+            ChannelProposal(
+              name: tag,
+              source: sources.length == 1
+                  ? sources.single
+                  : MixedSource(sources: sources, interleave: true),
+              mode: PlaybackMode.shuffle,
+              itemCount: count,
+              strategy: strategy,
+            ),
+          );
+        }
+      }
+      return;
+    }
+    for (final library in sourceLibraries) {
+      for (final entry in countsByLibrary[library]!.entries.where(
+        (entry) => eligible(library, entry.key),
+      )) {
         proposals.add(
           ChannelProposal(
-            name: movieLibraries.length == 1
+            name: sourceLibraries.length == 1
                 ? entry.key
                 : '${library.title} • ${entry.key}',
             source: LibrarySource(
@@ -90,6 +156,27 @@ List<ChannelProposal> buildChannelProposals({
     }
   }
 
+  if (strategies.contains(BuilderStrategy.playlists)) {
+    for (final playlist in playlists) {
+      if (playlist.items.length < minimumItems) continue;
+      proposals.add(
+        ChannelProposal(
+          name: playlist.title,
+          source: ManualSource(
+            playlist.items.map(channelItemFor).toList(growable: false),
+          ),
+          mode: PlaybackMode.shuffle,
+          itemCount: playlist.items.length,
+          strategy: BuilderStrategy.playlists,
+        ),
+      );
+    }
+  }
+  addTags(
+    BuilderStrategy.collections,
+    (item) => item.collections,
+    'collection',
+  );
   if (strategies.contains(BuilderStrategy.recentlyAdded)) {
     for (final library in libraries) {
       final itemCount = items
@@ -120,18 +207,139 @@ List<ChannelProposal> buildChannelProposals({
   );
   addTags(BuilderStrategy.actors, (item) => item.actors, 'actor');
   addTags(BuilderStrategy.directors, (item) => item.directors, 'director');
-  if (strategies.contains(BuilderStrategy.decades)) {
-    addTags(
-      BuilderStrategy.decades,
-      (item) => [if (item.year != null) '${item.year! ~/ 10 * 10}s'],
-      'decade',
-    );
-  }
+  addTags(
+    BuilderStrategy.decades,
+    (item) => [if (item.year != null) '${item.year! ~/ 10 * 10}s'],
+    'decade',
+  );
+  final priority = {
+    for (var index = 0; index < strategyOrder.length; index++)
+      strategyOrder[index]: index,
+  };
   proposals.sort((a, b) {
-    final strategy = a.strategy.index.compareTo(b.strategy.index);
+    final strategy = (priority[a.strategy] ?? strategyOrder.length).compareTo(
+      priority[b.strategy] ?? strategyOrder.length,
+    );
     if (strategy != 0) return strategy;
     final count = b.itemCount.compareTo(a.itemCount);
     return count != 0 ? count : a.name.compareTo(b.name);
   });
-  return proposals.take(maximumChannels).toList(growable: false);
+  final buckets = [
+    for (final strategy in strategyOrder)
+      proposals.where((proposal) => proposal.strategy == strategy).toList(),
+  ];
+  final balanced = <ChannelProposal>[];
+  for (
+    var index = 0;
+    balanced.length < maximumChannels &&
+        buckets.any((bucket) => index < bucket.length);
+    index++
+  ) {
+    for (final bucket in buckets) {
+      if (index < bucket.length) balanced.add(bucket[index]);
+      if (balanced.length == maximumChannels) break;
+    }
+  }
+  return List.unmodifiable(balanced);
 }
+
+List<Channel> materializeChannelPlan({
+  required List<ChannelProposal> proposals,
+  required List<Channel> existing,
+  required ChannelBuildMode mode,
+  PlaybackMode seriesMode = PlaybackMode.shuffle,
+  int seriesBlockSize = 3,
+  int alternateCopies = 0,
+  PlaybackMode? variantMode,
+  int variantBlockSize = 3,
+  DateTime? anchor,
+}) {
+  final expanded =
+      <
+        ({
+          ChannelProposal proposal,
+          String suffix,
+          PlaybackMode mode,
+          int? blockSize,
+        })
+      >[];
+  for (final proposal in proposals) {
+    final isSeries = _containsShows(proposal.source);
+    final baseMode = isSeries ? seriesMode : proposal.mode;
+    final baseBlockSize = baseMode == PlaybackMode.block
+        ? seriesBlockSize
+        : null;
+    expanded.add((
+      proposal: proposal,
+      suffix: '',
+      mode: baseMode,
+      blockSize: baseBlockSize,
+    ));
+    final replicable =
+        isSeries &&
+        !{
+          BuilderStrategy.actors,
+          BuilderStrategy.directors,
+        }.contains(proposal.strategy);
+    if (replicable && baseMode != PlaybackMode.sequential) {
+      for (var copy = 1; copy <= alternateCopies; copy++) {
+        expanded.add((
+          proposal: proposal,
+          suffix: ' Alt $copy',
+          mode: baseMode,
+          blockSize: baseBlockSize,
+        ));
+      }
+    }
+    if (isSeries && baseMode != PlaybackMode.sequential) {
+      if (variantMode != null && variantMode != baseMode) {
+        expanded.add((
+          proposal: proposal,
+          suffix: ' ${variantMode.name}',
+          mode: variantMode,
+          blockSize: variantMode == PlaybackMode.block
+              ? variantBlockSize
+              : null,
+        ));
+      }
+    }
+  }
+  final used = mode == ChannelBuildMode.replace
+      ? <int>{}
+      : existing.map((channel) => channel.number).toSet();
+  final output = <Channel>[];
+  var next = 1;
+  for (final entry in expanded) {
+    final name = '${entry.proposal.name}${entry.suffix}';
+    final matched = mode == ChannelBuildMode.merge
+        ? existing.where((channel) => channel.name == name).firstOrNull
+        : null;
+    while (matched == null && used.contains(next) && next <= 1000) {
+      next++;
+    }
+    if (matched == null && next > 1000) break;
+    final id = matched?.id ?? createChannelId();
+    final number = matched?.number ?? next;
+    output.add(
+      Channel(
+        id: id,
+        number: number,
+        name: matched?.name ?? name,
+        source: entry.proposal.source,
+        playbackMode: entry.mode,
+        anchor: anchor ?? DateTime.now().toUtc(),
+        shuffleSeed: id.hashCode,
+        blockSize: entry.blockSize,
+      ),
+    );
+    used.add(number);
+    if (matched == null) next++;
+  }
+  return List.unmodifiable(output);
+}
+
+bool _containsShows(ContentSource source) => switch (source) {
+  LibrarySource(:final libraryType) => libraryType == PlexLibraryType.show,
+  MixedSource(:final sources) => sources.any(_containsShows),
+  ManualSource() => false,
+};

@@ -277,6 +277,7 @@ class PlexClient {
     Uri server,
     String token,
     String libraryId,
+    PlexLibraryType libraryType,
   ) async {
     final output = <PlexMediaItem>[];
     var start = 0;
@@ -286,6 +287,7 @@ class PlexClient {
           .resolve('/library/sections/$libraryId/all')
           .replace(
             queryParameters: {
+              'type': libraryType == PlexLibraryType.show ? '4' : '1',
               'X-Plex-Container-Start': '$start',
               'X-Plex-Container-Size': '$pageSize',
             },
@@ -299,6 +301,35 @@ class PlexClient {
       start += metadata.length;
     }
     return output;
+  }
+
+  Future<List<PlexPlaylist>> playlists(Uri server, String token) async {
+    final json = await _serverJson(
+      server
+          .resolve('/playlists/all')
+          .replace(queryParameters: const {'playlistType': 'video'}),
+      token,
+    );
+    final output = <PlexPlaylist>[];
+    for (final raw in _containerList(json, 'Metadata')) {
+      final playlist = _record(raw, 'playlist');
+      final key = _text(playlist['key'], 'playlist key');
+      final itemsJson = await _serverJson(server.resolve('$key/items'), token);
+      final items = _containerList(itemsJson, 'Metadata')
+          .map(parseMediaItem)
+          .where((item) => item.duration > Duration.zero)
+          .toList(growable: false);
+      if (items.isNotEmpty) {
+        output.add(
+          PlexPlaylist(
+            id: _id(playlist['ratingKey'], 'playlist id'),
+            title: _text(playlist['title'], 'playlist title'),
+            items: items,
+          ),
+        );
+      }
+    }
+    return List.unmodifiable(output);
   }
 
   PlexPlaybackDescriptor playbackDescriptor({
@@ -452,6 +483,7 @@ PlexMediaItem parseMediaItem(Object? raw, {String? libraryId}) {
     dynamicRange: _dynamicRange(media, streams),
     tracks: streams,
     genres: _tagNames(json['Genre']),
+    collections: _tagNames(json['Collection']),
     directors: _tagNames(json['Director']),
     actors: _tagNames(json['Role']),
     studio: _optionalText(json['studio']),

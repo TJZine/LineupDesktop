@@ -16,6 +16,7 @@ class LineupSettings {
     this.audioOutput = 'system',
     this.audioPassthrough = false,
     this.directPlayAudioFallback = false,
+    this.audioSetupComplete = false,
     this.subtitleMode = SubtitleMode.full,
     this.subtitleLanguage = '',
     this.preferForcedSubtitles = false,
@@ -33,6 +34,7 @@ class LineupSettings {
   final String audioOutput;
   final bool audioPassthrough;
   final bool directPlayAudioFallback;
+  final bool audioSetupComplete;
   final SubtitleMode subtitleMode;
   final String subtitleLanguage;
   final bool preferForcedSubtitles;
@@ -50,6 +52,7 @@ class LineupSettings {
     String? audioOutput,
     bool? audioPassthrough,
     bool? directPlayAudioFallback,
+    bool? audioSetupComplete,
     SubtitleMode? subtitleMode,
     String? subtitleLanguage,
     bool? preferForcedSubtitles,
@@ -67,6 +70,7 @@ class LineupSettings {
     audioPassthrough: audioPassthrough ?? this.audioPassthrough,
     directPlayAudioFallback:
         directPlayAudioFallback ?? this.directPlayAudioFallback,
+    audioSetupComplete: audioSetupComplete ?? this.audioSetupComplete,
     subtitleMode: subtitleMode ?? this.subtitleMode,
     subtitleLanguage: subtitleLanguage ?? this.subtitleLanguage,
     preferForcedSubtitles: preferForcedSubtitles ?? this.preferForcedSubtitles,
@@ -86,6 +90,7 @@ class LineupSettings {
     'audioOutput': audioOutput,
     'audioPassthrough': audioPassthrough,
     'directPlayAudioFallback': directPlayAudioFallback,
+    'audioSetupComplete': audioSetupComplete,
     'subtitleMode': subtitleMode.name,
     'subtitleLanguage': subtitleLanguage,
     'preferForcedSubtitles': preferForcedSubtitles,
@@ -126,6 +131,7 @@ class LineupSettings {
           : 'system',
       audioPassthrough: json['audioPassthrough'] == true,
       directPlayAudioFallback: json['directPlayAudioFallback'] == true,
+      audioSetupComplete: json['audioSetupComplete'] == true,
       subtitleMode: enumValue(
         SubtitleMode.values,
         'subtitleMode',

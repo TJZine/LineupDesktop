@@ -3,6 +3,20 @@ import 'package:lineup_desktop/playback/stream_policy.dart';
 import 'package:lineup_desktop/plex/plex_client.dart';
 
 void main() {
+  test('parses collection metadata for builder sources', () {
+    final item = parseMediaItem({
+      'ratingKey': '1',
+      'key': '/library/metadata/1',
+      'title': 'Movie',
+      'type': 'movie',
+      'duration': 1000,
+      'Collection': [
+        {'tag': 'Friday Night'},
+      ],
+    });
+    expect(item.collections, ['Friday Night']);
+  });
+
   test('parses media, part, streams, and Dolby Vision facts', () {
     final item = parseMediaItem({
       'ratingKey': '42',

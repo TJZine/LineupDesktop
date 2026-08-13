@@ -97,9 +97,13 @@ navigation do not enter C++.
   server discovery/probing, library and media parsing, privileged playback
   descriptors, deterministic channels/schedules, channel suggestions,
   playback policy, settings, redacted diagnostics, and durable state.
-- Production onboarding, profile/server/library selection, channel setup,
-  custom channel editing, Settings, and diagnostics screens with Flutter
-  keyboard focus and accessibility semantics.
+- Upstream-shaped, remote-first onboarding for Plex QR/PIN linking, Home
+  profile/PIN selection, secure server recovery, first-run audio intent, and
+  Channel Setup. Channel Setup owns library selection, all eight source
+  strategies, priority and cross-library scope, series variants, build mode,
+  preview/review/confirmation, and atomic application for up to 1,000
+  channels. Custom channel editing, Settings, and diagnostics remain separate
+  Flutter workflows.
 - Keychain-backed credential ownership on macOS. Unsigned development builds
   use the legacy macOS Keychain compatibility mode; production signing must
   enable and validate the data-protection Keychain. Tokens remain outside
@@ -125,9 +129,10 @@ One behaviorful `ChangeNotifier` owns the current cross-feature asynchronous
 state graph; widgets retain local form and navigation state. A separate state
 framework would add forwarding and lifecycle ceremony without improving this
 single-owner graph. `http`, `xml`, `path_provider`, and
-`flutter_secure_storage` provide maintained transport, Plex XML fallback,
-platform application-data paths, and Keychain/platform-secure credential
-storage respectively. The macOS legacy-Keychain option is an explicit bridge
+`qr_flutter`, and `flutter_secure_storage` provide maintained transport, Plex
+XML fallback, platform application-data paths, native QR rendering, and
+Keychain/platform-secure credential storage respectively. The macOS
+legacy-Keychain option is an explicit bridge
 for unsigned development, not plaintext storage or the production signing
 endpoint. No plaintext credential fallback exists.
 

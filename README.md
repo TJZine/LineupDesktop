@@ -19,8 +19,9 @@ The current branch provides:
   media loading, and secure credential ownership
 - deterministic channels, custom-channel authoring, scheduling, stream policy,
   durable settings/state, and bounded redacted diagnostics
-- production onboarding, profile/server/library selection, channel setup, and
-  Settings workflows
+- upstream-shaped TV onboarding with QR/PIN linking, profile/server/audio
+  setup, and a three-step Channel Builder supporting eight Plex source
+  strategies, review, merge/append/replace, and lineups up to 1,000 channels
 
 Guide/OSD product surfaces, remote Plex playback integration, distributable
 libmpv packaging, and final Windows hardware/HDR acceptance are not yet

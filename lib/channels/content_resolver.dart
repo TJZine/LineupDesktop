@@ -24,6 +24,9 @@ List<ChannelItem> _library(LibrarySource source, List<PlexMediaItem> media) {
   for (final filter in source.filters.entries) {
     items = switch (filter.key) {
       'genre' => items.where((item) => item.genres.contains(filter.value)),
+      'collection' => items.where(
+        (item) => item.collections.contains(filter.value),
+      ),
       'studio' => items.where((item) => item.studio == filter.value),
       'actor' => items.where((item) => item.actors.contains(filter.value)),
       'director' => items.where(
