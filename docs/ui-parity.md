@@ -341,6 +341,16 @@ sources; and `src/modules/settings/EpgPreferencesStore.ts`.
 
 No row in this matrix is classified as visual parity.
 
+An independent source/diff/test review of the Prompt 4C commit identified and
+the follow-up remediation closed these mechanical gaps: focused Mini Guide
+foreground contrast (including DirecTV), long native track-list scrolling,
+rendered 16:9 PiP constraints, persistent tuned Now Playing identity beside
+focused-program details, real welcome-button autofocus and remote activation,
+root-level reduced-motion propagation, shared large-focus width, and stronger
+persistence/contrast/layout tests. Source-only differences in exact OSD,
+mini-Guide, selector, typography, gradient, shadow, hint, and artwork treatment
+remain Prompt 4E visual-adjudication inputs rather than accepted visual claims.
+
 | Surface or state | Temporary classification | Source/test evidence and deferred acceptance |
 | --- | --- | --- |
 | Startup, auth welcome, QR/PIN, waiting, retry | Source-aligned theme mechanics implemented | Semantic theme roles reach the existing branded hierarchy; unlocked comparison remains required. |

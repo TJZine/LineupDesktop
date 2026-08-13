@@ -177,7 +177,14 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(find.byKey(const Key('guide-picture-in-picture')), findsOneWidget);
+      final picture = find.byKey(const Key('guide-picture-in-picture'));
+      expect(picture, findsOneWidget);
+      final pictureSize = tester.getSize(picture);
+      expect(
+        pictureSize.width / pictureSize.height,
+        closeTo(16 / 9, 0.001),
+        reason: '$size',
+      );
       expect(tester.takeException(), isNull, reason: '$size');
     }
 
@@ -189,6 +196,39 @@ void main() {
     expect(tunes, 1);
 
     await tester.binding.setSurfaceSize(null);
+    await tester.pumpWidget(const SizedBox.shrink());
+    guide.dispose();
+    lineup.dispose();
+  });
+
+  testWidgets('Now Playing context remains stable while Guide focus moves', (
+    tester,
+  ) async {
+    final lineup = _Lineup(2)..currentChannelId = 'channel-0';
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    )..requestViewport(0, 2);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: GuideView(
+          controller: guide,
+          onClose: () {},
+          onTune: (_) async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final context = find.byKey(const Key('guide-now-playing-context'));
+    expect(context, findsOneWidget);
+    expect(tester.widget<Text>(context).data, contains('Channel 0'));
+
+    guide.moveVertical(1);
+    await tester.pump();
+    expect(guide.focusedChannelId, 'channel-1');
+    expect(tester.widget<Text>(context).data, contains('Channel 0'));
+
     await tester.pumpWidget(const SizedBox.shrink());
     guide.dispose();
     lineup.dispose();

@@ -1084,7 +1084,7 @@ class _DiagnosticsSummaryState extends State<_DiagnosticsSummary> {
           color: _focused
               ? LineupTheme.of(context).focusBorder
               : LineupTheme.of(context).subtleBorder,
-          width: _focused ? 3 : 1,
+          width: _focused ? LineupTheme.of(context).focusBorderWidth : 1,
         ),
       ),
       child: ListTile(

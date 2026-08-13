@@ -19,12 +19,19 @@ class GuideLayoutPolicy {
 
   factory GuideLayoutPolicy.forSize(Size size, {required bool hasPicture}) {
     final compact = size.width < 1100 || size.height < 720;
+    final pictureWidth = compact ? 214.0 : (size.width >= 1800 ? 340.0 : 286.0);
+    final baseShowcaseHeight = compact ? 126.0 : 184.0;
+    final pictureHeight = pictureWidth * 9 / 16;
     return GuideLayoutPolicy._(
       compact: compact,
       padding: compact ? 12 : 20,
       channelRailWidth: compact ? 156 : (size.width >= 1800 ? 232 : 196),
-      showcaseHeight: hasPicture ? (compact ? 126 : 184) : (compact ? 92 : 142),
-      pictureWidth: compact ? 214 : (size.width >= 1800 ? 340 : 286),
+      showcaseHeight: hasPicture
+          ? (pictureHeight > baseShowcaseHeight
+                ? pictureHeight
+                : baseShowcaseHeight)
+          : (compact ? 126 : 142),
+      pictureWidth: pictureWidth,
     );
   }
 
@@ -374,17 +381,22 @@ class _GuideShowcase extends StatelessWidget {
     children: [
       if (picture != null) ...[
         SizedBox(
-          key: const Key('guide-picture-in-picture'),
           width: pictureWidth,
-          child: Semantics(
-            button: onOpenPlayer != null,
-            label: 'Now playing picture in picture. Open full player.',
-            child: InkWell(
-              onTap: onOpenPlayer,
-              borderRadius: BorderRadius.circular(12),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: AspectRatio(aspectRatio: 16 / 9, child: picture),
+          child: Align(
+            child: AspectRatio(
+              key: const Key('guide-picture-in-picture'),
+              aspectRatio: 16 / 9,
+              child: Semantics(
+                button: onOpenPlayer != null,
+                label: 'Now playing picture in picture. Open full player.',
+                child: InkWell(
+                  onTap: onOpenPlayer,
+                  borderRadius: BorderRadius.circular(12),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: picture,
+                  ),
+                ),
               ),
             ),
           ),
@@ -505,7 +517,9 @@ class _GuideRow extends StatelessWidget {
                     color: focusedChannel
                         ? LineupTheme.of(context).focusBorder
                         : Colors.transparent,
-                    width: focusedChannel ? 2 : 1,
+                    width: focusedChannel
+                        ? LineupTheme.of(context).focusBorderWidth
+                        : 1,
                   ),
                 ),
                 child: Row(
@@ -660,7 +674,6 @@ class _Programs extends StatelessWidget {
             }
           : null,
       reduceMotion: controller.lineup.settings.reduceMotion,
-      largeFocus: controller.lineup.settings.largeFocusIndicators,
     );
   }
 }
@@ -677,7 +690,6 @@ class _ProgramCell extends StatefulWidget {
     required this.width,
     required this.onTap,
     required this.reduceMotion,
-    required this.largeFocus,
     this.onDoubleTap,
     super.key,
   });
@@ -691,7 +703,6 @@ class _ProgramCell extends StatefulWidget {
   final double width;
   final VoidCallback onTap;
   final bool reduceMotion;
-  final bool largeFocus;
   final VoidCallback? onDoubleTap;
 
   @override
@@ -751,7 +762,7 @@ class _ProgramCellState extends State<_ProgramCell> {
                       ? LineupTheme.of(context).defaultBorder
                       : LineupTheme.of(context).subtleBorder,
                   width: widget.focused
-                      ? (widget.largeFocus ? 5 : 3)
+                      ? LineupTheme.of(context).focusBorderWidth
                       : widget.selected
                       ? 2
                       : 1,
@@ -810,6 +821,12 @@ class _Details extends StatelessWidget {
     final channel = controller.channels
         .where((channel) => channel.id == program?.channelId)
         .firstOrNull;
+    final tunedChannel = controller.channels
+        .where((channel) => channel.id == controller.lineup.currentChannelId)
+        .firstOrNull;
+    final tunedProgram = tunedChannel == null
+        ? null
+        : controller.currentProgram(tunedChannel.id);
     return Card(
       margin: EdgeInsets.zero,
       child: Padding(
@@ -817,88 +834,114 @@ class _Details extends StatelessWidget {
           horizontal: compact ? 12 : 18,
           vertical: compact ? 8 : 12,
         ),
-        child: program == null
-            ? Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  playbackMessage ?? 'Move to a program for details.',
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (tunedChannel != null) ...[
+              Text(
+                key: const Key('guide-now-playing-context'),
+                'NOW PLAYING  •  ${tunedChannel.number} ${tunedChannel.name}  •  ${tunedProgram?.scheduled.item.title ?? 'Schedule loading…'}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  color: LineupTheme.of(context).liveAccent,
+                  fontWeight: FontWeight.w800,
                 ),
-              )
-            : Row(
-                children: [
-                  if (!compact)
-                    SizedBox(
-                      width: 112,
-                      height: 86,
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: FutureBuilder(
-                          future: controller.artworkFor(program),
-                          builder: (context, snapshot) => snapshot.data == null
-                              ? ColoredBox(
-                                  color: LineupTheme.of(context).primarySurface,
-                                  child: const Icon(
-                                    Icons.movie_outlined,
-                                    size: 34,
-                                  ),
-                                )
-                              : Image.memory(
-                                  snapshot.data!,
-                                  fit: BoxFit.cover,
-                                  cacheWidth: 360,
-                                  semanticLabel:
-                                      'Artwork for ${program.scheduled.item.title}',
-                                  errorBuilder: (_, _, _) =>
-                                      const Icon(Icons.broken_image_outlined),
-                                ),
-                        ),
+              ),
+              const SizedBox(height: 4),
+            ],
+            Expanded(
+              child: program == null
+                  ? Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        playbackMessage ?? 'Move to a program for details.',
                       ),
-                    ),
-                  if (!compact) const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.center,
+                    )
+                  : Row(
                       children: [
-                        if (channel != null)
-                          Text(
-                            '${channel.number} • ${channel.name}',
-                            style: Theme.of(context).textTheme.labelLarge
-                                ?.copyWith(
-                                  color: LineupTheme.of(context).progressFill,
+                        if (!compact)
+                          SizedBox(
+                            width: 112,
+                            height: 86,
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: FutureBuilder(
+                                future: controller.artworkFor(program),
+                                builder: (context, snapshot) =>
+                                    snapshot.data == null
+                                    ? ColoredBox(
+                                        color: LineupTheme.of(context)
+                                            .primarySurface,
+                                        child: const Icon(
+                                          Icons.movie_outlined,
+                                          size: 34,
+                                        ),
+                                      )
+                                    : Image.memory(
+                                        snapshot.data!,
+                                        fit: BoxFit.cover,
+                                        cacheWidth: 360,
+                                        semanticLabel:
+                                            'Artwork for ${program.scheduled.item.title}',
+                                        errorBuilder: (_, _, _) => const Icon(
+                                          Icons.broken_image_outlined,
+                                        ),
+                                      ),
+                              ),
+                            ),
+                          ),
+                        if (!compact) const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              if (channel != null)
+                                Text(
+                                  '${channel.number} • ${channel.name}',
+                                  style: Theme.of(context).textTheme.labelLarge
+                                      ?.copyWith(
+                                        color: LineupTheme.of(context)
+                                            .progressFill,
+                                      ),
                                 ),
+                              Text(
+                                program.scheduled.item.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.titleLarge,
+                              ),
+                              Text(
+                                [
+                                  program.scheduled.item.showTitle,
+                                  '${_time(context, program.scheduled.start)}–${_time(context, program.scheduled.end)}',
+                                  program.isCurrentAt(controller.now)
+                                      ? 'Airing now'
+                                      : program.scheduled.end.isBefore(
+                                          controller.now,
+                                        )
+                                      ? 'Ended'
+                                      : 'Upcoming',
+                                ].nonNulls.join(' • '),
+                                maxLines: compact ? 1 : 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              if (playbackMessage != null && !compact)
+                                Text(
+                                  playbackMessage!,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                            ],
                           ),
-                        Text(
-                          program.scheduled.item.title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.titleLarge,
                         ),
-                        Text(
-                          [
-                            program.scheduled.item.showTitle,
-                            '${_time(context, program.scheduled.start)}–${_time(context, program.scheduled.end)}',
-                            program.isCurrentAt(controller.now)
-                                ? 'Airing now'
-                                : program.scheduled.end.isBefore(controller.now)
-                                ? 'Ended'
-                                : 'Upcoming',
-                          ].nonNulls.join(' • '),
-                          maxLines: compact ? 1 : 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        if (playbackMessage != null && !compact)
-                          Text(
-                            playbackMessage!,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
                       ],
                     ),
-                  ),
-                ],
-              ),
+            ),
+          ],
+        ),
       ),
     );
   }

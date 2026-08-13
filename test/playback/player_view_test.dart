@@ -13,6 +13,8 @@ import 'package:lineup_desktop/playback/native_video_surface.dart';
 import 'package:lineup_desktop/playback/player_coordinator.dart';
 import 'package:lineup_desktop/playback/player_view.dart';
 import 'package:lineup_desktop/plex/plex_client.dart';
+import 'package:lineup_desktop/settings/lineup_settings.dart';
+import 'package:lineup_desktop/ui/app_theme.dart';
 
 void main() {
   testWidgets('unsupported macOS backend keeps the Flutter player accessible', (
@@ -130,10 +132,81 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     fixture.dispose();
   });
+
+  testWidgets('playback options scroll through long native track lists', (
+    tester,
+  ) async {
+    final tracks = List.generate(
+      30,
+      (index) => PlayerTrack(
+        id: index,
+        type: PlayerTrackType.audio,
+        selected: index == 0,
+        title: 'Audio track $index',
+      ),
+    );
+    final fixture = _Fixture(PlayerState.playing, tracks: tracks);
+    for (final size in const [Size(800, 600), Size(1280, 720)]) {
+      await tester.binding.setSurfaceSize(size);
+      fixture.player.showOsd();
+      fixture.player.showTracks(PlayerTrackType.audio);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      );
+      await tester.pump();
+
+      final scrollable = find.descendant(
+        of: find.byKey(const Key('playback-options-list')),
+        matching: find.byType(Scrollable),
+      );
+      final position = tester.state<ScrollableState>(scrollable).position;
+      expect(position.maxScrollExtent, greaterThan(0));
+      position.jumpTo(position.maxScrollExtent);
+      await tester.pump();
+      expect(find.text('Audio track 29'), findsOneWidget);
+      expect(find.text('Back'), findsOneWidget);
+      expect(tester.takeException(), isNull, reason: '$size');
+    }
+
+    await tester.binding.setSurfaceSize(null);
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
+  testWidgets('focused Mini Guide uses the theme focused foreground', (
+    tester,
+  ) async {
+    final fixture = _Fixture(PlayerState.playing);
+    fixture.lineup.settings = const LineupSettings(
+      theme: LineupThemeName.directv,
+    );
+    fixture.player.showMiniGuide();
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: LineupTheme.forName(LineupThemeName.directv),
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+    await tester.pump();
+
+    expect(
+      tester.widget<Text>(find.text('Channel')).style?.color,
+      LineupTheme.of(tester.element(find.text('Channel'))).focusedText,
+    );
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
 }
 
 class _Fixture {
-  _Fixture(PlayerState state, {bool failLoad = false}) {
+  _Fixture(
+    PlayerState state, {
+    bool failLoad = false,
+    List<PlayerTrack> tracks = const [],
+  }) {
     lineup = _Lineup();
     guide = GuideController(
       lineup: lineup,
@@ -143,7 +216,7 @@ class _Fixture {
         seed: channel.shuffleSeed,
       ),
     )..requestViewport(0, 1);
-    native = _Native(state, failLoad: failLoad);
+    native = _Native(state, failLoad: failLoad, tracks: tracks);
     player = PlayerCoordinator(player: native, lineup: lineup, guide: guide);
   }
 
@@ -191,7 +264,7 @@ class _Lineup extends LineupController {
 }
 
 class _Native implements NativePlayer {
-  _Native(PlayerState state, {this.failLoad = false})
+  _Native(PlayerState state, {this.failLoad = false, this.tracks = const []})
     : status = PlayerStatus(
         state: state,
         message: state == PlayerState.unsupported
@@ -211,7 +284,7 @@ class _Native implements NativePlayer {
   @override
   PlayerTelemetry get telemetry => const PlayerTelemetry();
   @override
-  List<PlayerTrack> get tracks => const [];
+  final List<PlayerTrack> tracks;
   @override
   Stream<PlayerEvent> get events => const Stream.empty();
   @override

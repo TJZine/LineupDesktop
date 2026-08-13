@@ -75,10 +75,24 @@ class _LineupBootstrapState extends State<LineupBootstrap> {
 
   @override
   Widget build(BuildContext context) {
+    final settings = widget.controller.settings;
     return MaterialApp(
       title: 'Lineup Desktop',
       debugShowCheckedModeBanner: false,
-      theme: LineupTheme.forName(widget.controller.settings.theme),
+      theme: LineupTheme.forName(
+        settings.theme,
+        largeFocusIndicators: settings.largeFocusIndicators,
+      ),
+      themeAnimationDuration: settings.reduceMotion
+          ? Duration.zero
+          : kThemeAnimationDuration,
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(
+          disableAnimations:
+              MediaQuery.disableAnimationsOf(context) || settings.reduceMotion,
+        ),
+        child: child!,
+      ),
       home: FutureBuilder<void>(
         future: _startup,
         builder: (context, snapshot) {

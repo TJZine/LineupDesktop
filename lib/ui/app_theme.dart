@@ -17,9 +17,11 @@ class LineupThemeRoles extends ThemeExtension<LineupThemeRoles> {
     required this.secondaryText,
     required this.mutedText,
     required this.onFocus,
+    required this.focusedText,
     required this.subtleBorder,
     required this.defaultBorder,
     required this.focusBorder,
+    required this.focusBorderWidth,
     required this.progressTrack,
     required this.progressFill,
     required this.scrim,
@@ -39,9 +41,11 @@ class LineupThemeRoles extends ThemeExtension<LineupThemeRoles> {
   final Color secondaryText;
   final Color mutedText;
   final Color onFocus;
+  final Color focusedText;
   final Color subtleBorder;
   final Color defaultBorder;
   final Color focusBorder;
+  final double focusBorderWidth;
   final Color progressTrack;
   final Color progressFill;
   final Color scrim;
@@ -62,9 +66,11 @@ class LineupThemeRoles extends ThemeExtension<LineupThemeRoles> {
     Color? secondaryText,
     Color? mutedText,
     Color? onFocus,
+    Color? focusedText,
     Color? subtleBorder,
     Color? defaultBorder,
     Color? focusBorder,
+    double? focusBorderWidth,
     Color? progressTrack,
     Color? progressFill,
     Color? scrim,
@@ -83,9 +89,11 @@ class LineupThemeRoles extends ThemeExtension<LineupThemeRoles> {
     secondaryText: secondaryText ?? this.secondaryText,
     mutedText: mutedText ?? this.mutedText,
     onFocus: onFocus ?? this.onFocus,
+    focusedText: focusedText ?? this.focusedText,
     subtleBorder: subtleBorder ?? this.subtleBorder,
     defaultBorder: defaultBorder ?? this.defaultBorder,
     focusBorder: focusBorder ?? this.focusBorder,
+    focusBorderWidth: focusBorderWidth ?? this.focusBorderWidth,
     progressTrack: progressTrack ?? this.progressTrack,
     progressFill: progressFill ?? this.progressFill,
     scrim: scrim ?? this.scrim,
@@ -109,9 +117,12 @@ class LineupThemeRoles extends ThemeExtension<LineupThemeRoles> {
       secondaryText: Color.lerp(secondaryText, other.secondaryText, t)!,
       mutedText: Color.lerp(mutedText, other.mutedText, t)!,
       onFocus: Color.lerp(onFocus, other.onFocus, t)!,
+      focusedText: Color.lerp(focusedText, other.focusedText, t)!,
       subtleBorder: Color.lerp(subtleBorder, other.subtleBorder, t)!,
       defaultBorder: Color.lerp(defaultBorder, other.defaultBorder, t)!,
       focusBorder: Color.lerp(focusBorder, other.focusBorder, t)!,
+      focusBorderWidth:
+          focusBorderWidth + (other.focusBorderWidth - focusBorderWidth) * t,
       progressTrack: Color.lerp(progressTrack, other.progressTrack, t)!,
       progressFill: Color.lerp(progressFill, other.progressFill, t)!,
       scrim: Color.lerp(scrim, other.scrim, t)!,
@@ -133,8 +144,12 @@ abstract final class LineupTheme {
       Theme.of(context).extension<LineupThemeRoles>() ??
       _palette(LineupThemeName.emberSteel);
 
-  static ThemeData forName(LineupThemeName name) {
-    final palette = _palette(name);
+  static ThemeData forName(
+    LineupThemeName name, {
+    bool largeFocusIndicators = false,
+  }) {
+    final palette = _palette(name)
+        .copyWith(focusBorderWidth: largeFocusIndicators ? 5 : 3);
     final scheme = ColorScheme.dark(
       primary: palette.progressFill,
       onPrimary: palette.onFocus,
@@ -195,7 +210,10 @@ abstract final class LineupTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(palette.panelRadius),
-          borderSide: BorderSide(color: palette.focusBorder, width: 3),
+          borderSide: BorderSide(
+            color: palette.focusBorder,
+            width: palette.focusBorderWidth,
+          ),
         ),
         errorMaxLines: 2,
       ),
@@ -347,9 +365,11 @@ abstract final class LineupTheme {
       secondaryText: Colors.white.withValues(alpha: 0.70),
       mutedText: Colors.white.withValues(alpha: 0.50),
       onFocus: onFocus,
+      focusedText: focus == null ? Colors.white : onFocus,
       subtleBorder: Colors.white.withValues(alpha: 0.08),
       defaultBorder: Colors.white.withValues(alpha: 0.12),
       focusBorder: focusBorder ?? primary,
+      focusBorderWidth: 3,
       progressTrack: Colors.white.withValues(alpha: 0.12),
       progressFill: primary,
       scrim: scrim,

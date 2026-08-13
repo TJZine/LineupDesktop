@@ -21,17 +21,25 @@ class UiFixture {
 }
 
 class FixtureController extends LineupController {
-  FixtureController()
-    : super(
-        store: _MemoryStore(),
+  FixtureController({FixtureStore? store, bool restoreOnInitialize = false})
+    : this._(store ?? FixtureStore(), restoreOnInitialize);
+
+  FixtureController._(FixtureStore store, this.restoreOnInitialize)
+    : fixtureStore = store,
+      super(
+        store: store,
         credentials: _MemoryCredentials(),
         plex: PlexClient(
           clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
         ),
       );
 
+  final FixtureStore fixtureStore;
+  final bool restoreOnInitialize;
+
   @override
-  Future<void> initialize() async {}
+  Future<void> initialize() =>
+      restoreOnInitialize ? super.initialize() : Future.value();
 }
 
 class FixturePlayer implements NativePlayer {
@@ -112,14 +120,16 @@ class FixturePlayer implements NativePlayer {
   }
 }
 
-class _MemoryStore implements AppStore {
+class FixtureStore implements AppStore {
+  PersistedState state = const PersistedState();
+
   @override
   Future<String> clientIdentifier() async =>
       'lineup-desktop-test-abcdefghijklmnopqrst';
   @override
-  Future<PersistedState> load() async => const PersistedState();
+  Future<PersistedState> load() async => state;
   @override
-  Future<void> save(PersistedState state) async {}
+  Future<void> save(PersistedState value) async => state = value;
 }
 
 class _MemoryCredentials implements CredentialStore {

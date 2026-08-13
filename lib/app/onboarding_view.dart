@@ -102,19 +102,12 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
     return _HeroContent(
       title: 'Your Plex library, scheduled like television',
       subtitle: 'Link Plex once, choose who is watching, then tune Lineup to your server.',
-      child: Focus(
-        autofocus: true,
-        onKeyEvent: (_, event) {
-          if (enabled &&
-              event is KeyDownEvent &&
-              (event.logicalKey == LogicalKeyboardKey.enter ||
-                  event.logicalKey == LogicalKeyboardKey.select)) {
-            unawaited(widget.controller.startLinking());
-            return KeyEventResult.handled;
-          }
-          return KeyEventResult.ignored;
+      child: Shortcuts(
+        shortcuts: const {
+          SingleActivator(LogicalKeyboardKey.select): ActivateIntent(),
         },
         child: FilledButton.icon(
+          autofocus: true,
           onPressed: enabled ? widget.controller.startLinking : null,
           icon: const Icon(Icons.link),
           label: const Text('Sign in to Plex'),

@@ -585,6 +585,7 @@ class _MiniGuideRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final roles = LineupTheme.of(context);
     final focused = channel.id == controller.miniGuideChannelId;
+    final foreground = focused ? roles.focusedText : roles.primaryText;
     final tuned = channel.id == controller.lineup.currentChannelId;
     final unsupported = controller.status.state == PlayerState.unsupported;
     final current = controller.guide.currentProgram(channel.id);
@@ -606,7 +607,7 @@ class _MiniGuideRow extends StatelessWidget {
           borderRadius: BorderRadius.circular(10),
           side: BorderSide(
             color: focused ? roles.focusBorder : roles.subtleBorder,
-            width: focused ? 2 : 1,
+            width: focused ? roles.focusBorderWidth : 1,
           ),
         ),
         child: InkWell(
@@ -620,7 +621,8 @@ class _MiniGuideRow extends StatelessWidget {
                   width: 46,
                   child: Text(
                     '${channel.number}',
-                    style: Theme.of(context).textTheme.titleMedium,
+                    style: Theme.of(context).textTheme.titleMedium
+                        ?.copyWith(color: foreground),
                   ),
                 ),
                 Expanded(
@@ -634,15 +636,17 @@ class _MiniGuideRow extends StatelessWidget {
                               channel.name,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
+                              style: TextStyle(
+                                color: foreground,
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
                           ),
                           if (tuned)
-                            const Icon(
+                            Icon(
                               Icons.play_circle_fill,
                               size: 18,
+                              color: foreground,
                               semanticLabel: 'Now watching',
                             ),
                         ],
@@ -651,11 +655,16 @@ class _MiniGuideRow extends StatelessWidget {
                         current?.scheduled.item.title ?? 'Schedule loading…',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
+                        style: TextStyle(color: foreground),
                       ),
                       if (current != null)
                         LinearProgressIndicator(
                           value: progress.clamp(0, 1),
                           minHeight: 2,
+                          color: focused ? foreground : null,
+                          backgroundColor: focused
+                              ? foreground.withValues(alpha: 0.25)
+                              : null,
                           semanticsLabel: 'Program progress',
                         ),
                       if (next != null)
@@ -663,12 +672,21 @@ class _MiniGuideRow extends StatelessWidget {
                           'Next • ${next.scheduled.item.title}',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodySmall,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: foreground),
                         ),
                     ],
                   ),
                 ),
                 IconButton(
+                  style: focused
+                      ? IconButton.styleFrom(
+                          foregroundColor: foreground,
+                          disabledForegroundColor: foreground.withValues(
+                            alpha: 0.70,
+                          ),
+                        )
+                      : null,
                   tooltip: unsupported
                       ? 'Playback unavailable'
                       : tuned
@@ -713,7 +731,6 @@ class _Tracks extends StatelessWidget {
               child: Padding(
                 padding: const EdgeInsets.all(18),
                 child: Column(
-                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
                       type == PlayerTrackType.audio
@@ -721,34 +738,47 @@ class _Tracks extends StatelessWidget {
                           : 'Subtitles',
                       style: Theme.of(context).textTheme.titleLarge,
                     ),
-                    if (type == PlayerTrackType.subtitle)
-                      ListTile(
-                        leading: Icon(
-                          tracks.any((track) => track.selected)
-                              ? Icons.radio_button_unchecked
-                              : Icons.radio_button_checked,
-                        ),
-                        title: const Text('Off'),
-                        onTap: () => controller.selectTrack(type, null),
+                    const SizedBox(height: 12),
+                    Expanded(
+                      child: ListView(
+                        key: const Key('playback-options-list'),
+                        children: [
+                          if (type == PlayerTrackType.subtitle)
+                            ListTile(
+                              autofocus: true,
+                              leading: Icon(
+                                tracks.any((track) => track.selected)
+                                    ? Icons.radio_button_unchecked
+                                    : Icons.radio_button_checked,
+                              ),
+                              title: const Text('Off'),
+                              onTap: () => controller.selectTrack(type, null),
+                            ),
+                          for (final (index, track) in tracks.indexed)
+                            ListTile(
+                              autofocus:
+                                  type == PlayerTrackType.audio && index == 0,
+                              leading: Icon(
+                                track.selected
+                                    ? Icons.radio_button_checked
+                                    : Icons.radio_button_unchecked,
+                              ),
+                              title: Text(
+                                track.title ??
+                                    track.language ??
+                                    '${track.type.name} ${track.id}',
+                              ),
+                              subtitle: track.codec == null
+                                  ? null
+                                  : Text(track.codec!),
+                              onTap: () =>
+                                  controller.selectTrack(type, track.id),
+                            ),
+                        ],
                       ),
-                    for (final track in tracks)
-                      ListTile(
-                        leading: Icon(
-                          track.selected
-                              ? Icons.radio_button_checked
-                              : Icons.radio_button_unchecked,
-                        ),
-                        title: Text(
-                          track.title ??
-                              track.language ??
-                              '${track.type.name} ${track.id}',
-                        ),
-                        subtitle: track.codec == null
-                            ? null
-                            : Text(track.codec!),
-                        onTap: () => controller.selectTrack(type, track.id),
-                      ),
+                    ),
                     TextButton(
+                      autofocus: tracks.isEmpty,
                       onPressed: controller.closeOverlay,
                       child: const Text('Back'),
                     ),

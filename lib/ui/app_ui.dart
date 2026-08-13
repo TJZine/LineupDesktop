@@ -217,7 +217,7 @@ class _LineupSelectionCardState extends State<LineupSelectionCard> {
           color: _focused
               ? LineupTheme.of(context).focusBorder
               : Colors.transparent,
-          width: _focused ? 3 : 1,
+          width: _focused ? LineupTheme.of(context).focusBorderWidth : 1,
         ),
       ),
       child: Card(

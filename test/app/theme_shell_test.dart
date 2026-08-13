@@ -5,6 +5,7 @@ import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/playback/native_player.dart';
 import 'package:lineup_desktop/playback/player_view.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
+import 'package:lineup_desktop/ui/app_theme.dart';
 
 import '../support/ui_fixture.dart';
 
@@ -33,6 +34,31 @@ void main() {
     expect(fixture.controller.settings.theme, LineupThemeName.slatePine);
     expect(
       Theme.of(tester.element(find.text('Theme'))).colorScheme.primary,
+      const Color(0xFF809A79),
+    );
+    await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+    await tester.pump();
+    expect(
+      fixture.controller.fixtureStore.state.settings.theme,
+      LineupThemeName.slatePine,
+    );
+
+    final restored = FixtureController(
+      store: fixture.controller.fixtureStore,
+      restoreOnInitialize: true,
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpWidget(
+      UiFixture(controller: restored, player: FixturePlayer()).build(),
+    );
+    await tester.pumpAndSettle();
+    expect(restored.settings.theme, LineupThemeName.slatePine);
+    expect(
+      Theme.of(
+        tester.element(
+          find.text('Your Plex library, scheduled like television'),
+        ),
+      ).colorScheme.primary,
       const Color(0xFF809A79),
     );
   });
@@ -75,5 +101,25 @@ void main() {
     expect(find.byKey(const Key('overlay-guide')), findsOneWidget);
     expect(find.byType(PlayerSurface), findsOneWidget);
     expect(find.byType(NavigationRail), findsNothing);
+  });
+
+  testWidgets('accessibility settings propagate through the application root', (
+    tester,
+  ) async {
+    final fixture = UiFixture()
+      ..controller.stage = SetupStage.ready
+      ..controller.settings = const LineupSettings(
+        reduceMotion: true,
+        largeFocusIndicators: true,
+      );
+    await tester.pumpWidget(fixture.build());
+    await tester.pumpAndSettle();
+
+    final context = tester.element(find.byKey(const Key('classic-guide')));
+    expect(MediaQuery.disableAnimationsOf(context), isTrue);
+    expect(
+      Theme.of(context).extension<LineupThemeRoles>()!.focusBorderWidth,
+      5,
+    );
   });
 }

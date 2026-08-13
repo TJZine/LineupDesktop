@@ -22,21 +22,59 @@ void main() {
     for (final name in LineupThemeName.values) {
       final theme = LineupTheme.forName(name);
       final roles = theme.extension<LineupThemeRoles>()!;
-      expect(
-        _contrast(roles.primaryText, roles.deepBackground),
-        greaterThanOrEqualTo(4.5),
-        reason: '${name.label} primary text',
-      );
+      for (final surface in [
+        roles.deepBackground,
+        roles.primarySurface,
+        roles.elevatedSurface,
+        roles.overlaySurface,
+      ]) {
+        final paintedSurface = _paint(surface, roles.deepBackground);
+        for (final text in [
+          roles.primaryText,
+          roles.secondaryText,
+          roles.mutedText,
+        ]) {
+          expect(
+            _contrast(_paint(text, paintedSurface), paintedSurface),
+            greaterThanOrEqualTo(4.5),
+            reason: '${name.label} semantic text on surface',
+          );
+        }
+      }
       expect(
         _contrast(roles.onFocus, roles.progressFill),
-        greaterThanOrEqualTo(3),
+        greaterThanOrEqualTo(4.5),
         reason: '${name.label} focused control',
+      );
+      final focusedSurface = _paint(roles.focusedSurface, roles.primarySurface);
+      expect(
+        _contrast(_paint(roles.focusedText, focusedSurface), focusedSurface),
+        greaterThanOrEqualTo(4.5),
+        reason: '${name.label} focused surface text',
+      );
+      expect(
+        _contrast(roles.focusBorder, roles.primarySurface),
+        greaterThanOrEqualTo(3),
+        reason: '${name.label} focus outline',
       );
       expect(roles.focusBorder, isNot(roles.deepBackground));
       expect(roles.progressTrack, isNot(roles.progressFill));
     }
   });
+
+  test('large focus mode enlarges the shared semantic outline', () {
+    final normal = LineupTheme.forName(LineupThemeName.emberSteel)
+        .extension<LineupThemeRoles>()!;
+    final large = LineupTheme.forName(
+      LineupThemeName.emberSteel,
+      largeFocusIndicators: true,
+    ).extension<LineupThemeRoles>()!;
+    expect(large.focusBorderWidth, greaterThan(normal.focusBorderWidth));
+  });
 }
+
+Color _paint(Color foreground, Color background) =>
+    Color.alphaBlend(foreground, background);
 
 double _contrast(Color first, Color second) {
   double luminance(Color color) => color.computeLuminance();

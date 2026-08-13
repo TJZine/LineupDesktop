@@ -138,11 +138,41 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    expect(
+      tester.getSemantics(find.byType(FilledButton)),
+      matchesSemantics(
+        label: 'Sign in to Plex',
+        isButton: true,
+        hasEnabledState: true,
+        isEnabled: true,
+        isFocusable: true,
+        isFocused: true,
+        hasTapAction: true,
+        hasFocusAction: true,
+      ),
+    );
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pump();
 
     expect(controller.linkingRequested, isTrue);
   });
+
+  for (final key in [LogicalKeyboardKey.space, LogicalKeyboardKey.select]) {
+    testWidgets('onboarding link action accepts ${key.keyLabel}', (
+      tester,
+    ) async {
+      final controller = _FakeController();
+      await tester.pumpWidget(
+        LineupBootstrap(player: _FakePlayer(), controller: controller),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.sendKeyEvent(key);
+      await tester.pump();
+
+      expect(controller.linkingRequested, isTrue);
+    });
+  }
 
   testWidgets('Plex linking presents QR, PIN cells, and cancellation', (
     tester,
