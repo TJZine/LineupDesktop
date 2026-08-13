@@ -47,6 +47,8 @@ void main() {
       Size(1280, 720),
       Size(1600, 900),
       Size(1920, 1080),
+      Size(2560, 1440),
+      Size(3840, 2160),
     ]) {
       await tester.binding.setSurfaceSize(size);
       final fixture = UiFixture()..controller.stage = SetupStage.ready;

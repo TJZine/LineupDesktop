@@ -962,7 +962,8 @@ class _Brand extends StatelessWidget {
           width: 42,
           height: 42,
         ),
-        if (MediaQuery.sizeOf(context).width >= 1100) ...[
+        if (MediaQuery.sizeOf(context).width >=
+            LineupLayout.expandedNavigation) ...[
           const SizedBox(width: 12),
           Text(
             'LINEUP',

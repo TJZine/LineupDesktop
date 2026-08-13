@@ -74,7 +74,7 @@ TV pixel copying.
 | Dialogs and destructive confirmation | Parity | Flutter dialog semantics, Cancel-first action order, destructive styling, focus restoration, and inline error ownership are used. |
 | Transient feedback | Present but materially divergent | Repeated errors use one semantic notice primitive. A generic toast owner was not added because only persistence errors have current consumers and remain more actionable inline. |
 | Compact 800×600 management/setup layout | Parity | Headers, action groups, category selectors, empty states, and scroll owners reflow without a window-management dependency. |
-| 1280×720, 1600×900, 1920×1080 | Parity | Management content is capped and centered; Guide/player retain their specialized full-area owners. |
+| 1280×720 through 3840×2160 | Parity | Management content is capped and centered; Guide/player retain their specialized full-area owners. Flutter logical pixels also cover common Windows DPI scaling without resolution-specific branches. |
 | Windows focus, native video layering, HDR and playback | Windows-only validation | Not modified or claimed by Prompt 3B. |
 
 ## Shared portable UI ownership
@@ -115,7 +115,9 @@ or generic utility layer was added.
 
 The practical compact target is 800×600 because the macOS runner currently
 launches at that size and neither runner enforces a minimum. Windows launches
-at 1280×720. No window-management package was added.
+at 1280×720. Large-window coverage extends through 3840×2160; management
+content stays readable while Guide/player owners retain the full available
+area. No window-management or resolution-scaling package was added.
 
 ## Test-only visual states
 
@@ -132,10 +134,12 @@ Focused validation:
 ```
 
 The focused suite verifies destination order and focus entry, responsive
-management pages at 800×600, 1280×720, 1600×900 and 1920×1080, destructive
-confirmation, local editor validation, physical protected-PIN keys, Settings
-category scrolling, and all three Channel Setup stages. The full validation
-commands remain in `docs/DEVELOPMENT.md`.
+management pages at 800×600, 1280×720, 1600×900, 1920×1080, 2560×1440 and
+3840×2160, destructive confirmation, local editor validation, physical
+protected-PIN keys, Settings category scrolling, and all three Channel Setup
+stages. Flutter lays out in logical pixels, so these cases cover both native
+100% 4K layout and the smaller logical viewport produced by Windows DPI
+scaling. The full validation commands remain in `docs/DEVELOPMENT.md`.
 
 `flutter run -d macos` built, launched, attached to the Dart VM service, and
 reported the Metal Impeller backend. The host Mac was locked and could not be
