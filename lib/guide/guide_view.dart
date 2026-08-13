@@ -399,6 +399,12 @@ class _Programs extends StatelessWidget {
                   program: program,
                   selected: program.id == controller.selectedProgramId,
                   current: program.isCurrentAt(now),
+                  progress: program.isCurrentAt(now)
+                      ? now.difference(program.scheduled.start).inMilliseconds /
+                            program.scheduled.end
+                                .difference(program.scheduled.start)
+                                .inMilliseconds
+                      : 0,
                   left:
                       constraints.maxWidth *
                       program.scheduled.start
@@ -442,6 +448,7 @@ class _ProgramCell extends StatelessWidget {
     required this.program,
     required this.selected,
     required this.current,
+    required this.progress,
     required this.left,
     required this.width,
     required this.onTap,
@@ -452,6 +459,7 @@ class _ProgramCell extends StatelessWidget {
   final GuideProgram program;
   final bool selected;
   final bool current;
+  final double progress;
   final double left;
   final double width;
   final VoidCallback onTap;
@@ -492,13 +500,29 @@ class _ProgramCell extends StatelessWidget {
                 width: selected ? (largeFocus ? 5 : 3) : 1,
               ),
             ),
-            child: Text(
-              program.scheduled.item.title,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
-              ),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                if (current)
+                  FractionallySizedBox(
+                    alignment: Alignment.centerLeft,
+                    widthFactor: progress.clamp(0, 1),
+                    child: ColoredBox(
+                      color: LineupTheme.brass.withValues(alpha: 0.14),
+                    ),
+                  ),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    program.scheduled.item.title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ),
@@ -543,6 +567,8 @@ class _Details extends StatelessWidget {
                                   snapshot.data!,
                                   fit: BoxFit.cover,
                                   cacheWidth: 360,
+                                  semanticLabel:
+                                      'Artwork for ${selected.scheduled.item.title}',
                                   errorBuilder: (_, _, _) =>
                                       const Icon(Icons.broken_image_outlined),
                                 ),
