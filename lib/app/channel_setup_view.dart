@@ -85,6 +85,7 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
       child: SafeArea(
         child: Center(
           child: ConstrainedBox(
+            key: const ValueKey('channel-setup-content'),
             constraints: const BoxConstraints(maxWidth: 1440),
             child: Padding(
               padding: const EdgeInsets.all(28),
@@ -155,7 +156,7 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
 
   Widget _errorBanner() => Padding(
     padding: const EdgeInsets.only(top: 14),
-    child: LineupNotice(message: _error!, tone: NoticeTone.error),
+    child: LineupNotice(message: _error!),
   );
 
   Widget _body() => switch (_step) {

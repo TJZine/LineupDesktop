@@ -67,21 +67,21 @@ TV pixel copying.
 | Channel Setup cancellation details | Present but materially divergent | Existing setup can be cancelled when re-entered from Channels; upstream also exposes progress cancellation. Flutter atomic apply is currently short-lived and has no cancellable public seam, so no pretend cancel was added. |
 | Channels management and custom editing | Intentional Desktop adaptation | Upstream has no implemented management/editor surface. Flutter keeps the accepted owner, adds local form validation, preserves `includeWatched`, prevents duplicate save, reports failures, and confirms deletion. |
 | Channels loading and success toast | Obsolete/not applicable | Channels are persisted local product state, not a separately loaded screen. Durable success is immediately reflected by the authoritative list. |
-| Settings hierarchy | Parity | Category rail/detail pane, selected-versus-focused category state, compact horizontal categories, readable width, local saving progress, rollback error, and human-readable values. Only current Dart settings are exposed. |
+| Settings hierarchy | Parity | Category rail/detail pane, selected-versus-focused category state, compact horizontal categories, readable width, local saving progress, rollback error, and human-readable values. Only settings with current portable consumers are exposed. |
 | Upstream-only settings | Obsolete/not applicable | Theme switching, TV-only playback toggles, dev logging, and unsupported output/HDR controls are not reintroduced. Persisted Dart fields without implemented product behavior are not advertised. |
 | Diagnostics | Intentional Desktop adaptation | Upstream diagnostics is a dev surface. Desktop keeps its credential-safe support destination, with grouped summary, empty/disabled guidance, bounded contexts, and no token/URL exposure. |
-| Global navigation | Intentional Desktop adaptation | Upstream is a TV screen stack. Desktop uses Guide, Channels, Settings, Diagnostics, Player in that order, with pointer/Tab support and explicit focus entry/restoration for each destination. |
+| Global navigation | Intentional Desktop adaptation | Upstream is a TV screen stack. Desktop uses Guide, Channels, Settings, Diagnostics, Player in that order, with pointer/Tab support and visible focus entry for each destination. |
 | Dialogs and destructive confirmation | Parity | Flutter dialog semantics, Cancel-first action order, destructive styling, focus restoration, and inline error ownership are used. |
 | Transient feedback | Present but materially divergent | Repeated errors use one semantic notice primitive. A generic toast owner was not added because only persistence errors have current consumers and remain more actionable inline. |
 | Compact 800×600 management/setup layout | Parity | Headers, action groups, category selectors, empty states, and scroll owners reflow without a window-management dependency. |
-| 1280×720 through 3840×2160 | Parity | Management content is capped and centered; Guide/player retain their specialized full-area owners. Flutter logical pixels also cover common Windows DPI scaling without resolution-specific branches. |
+| 1280×720 through 3840×2160 | Intentional Desktop adaptation | Widget tests verify the capped 1,120-pixel management workspace, extended navigation, reachability, and absence of layout errors through a 3840×2160 logical viewport. Guide/player retain their specialized full-area owners. Windows runtime DPI behavior remains Windows-only validation. |
 | Windows focus, native video layering, HDR and playback | Windows-only validation | Not modified or claimed by Prompt 3B. |
 
 ## Shared portable UI ownership
 
 `lib/ui/app_theme.dart` owns the small repeated visual vocabulary: background
-and elevated surfaces, brass primary treatment, success/warning/error roles,
-radii, motion durations, and Material component states for navigation, cards,
+and elevated surfaces, brass primary treatment, the current error role, radii,
+the used focus transition, and Material component states for navigation, cards,
 forms, dialogs, chips, lists, icon actions, buttons, dividers, and progress.
 
 `lib/ui/app_ui.dart` owns only repeated application composition:
@@ -137,9 +137,13 @@ The focused suite verifies destination order and focus entry, responsive
 management pages at 800×600, 1280×720, 1600×900, 1920×1080, 2560×1440 and
 3840×2160, destructive confirmation, local editor validation, physical
 protected-PIN keys, Settings category scrolling, and all three Channel Setup
-stages. Flutter lays out in logical pixels, so these cases cover both native
-100% 4K layout and the smaller logical viewport produced by Windows DPI
-scaling. The full validation commands remain in `docs/DEVELOPMENT.md`.
+stages. At 2560×1440 and 3840×2160 the tests also assert the deliberate
+1,120-logical-pixel management workspace, 1,180-pixel onboarding workspace,
+1,440-pixel Channel Setup workspace, extended navigation, and Diagnostics
+reachability. Flutter lays out in logical pixels; a deterministic 3840×2160 at
+DPR 2 case verifies the 1920×1080 logical regime. Actual Windows DPI mapping
+and physical readability still require Windows runtime observation. The full
+validation commands remain in `docs/DEVELOPMENT.md`.
 
 `flutter run -d macos` built, launched, attached to the Dart VM service, and
 reported the Metal Impeller backend. The host Mac was locked and could not be

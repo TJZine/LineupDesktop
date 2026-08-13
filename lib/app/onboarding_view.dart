@@ -58,6 +58,7 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(32),
             child: ConstrainedBox(
+              key: const ValueKey('onboarding-content'),
               constraints: const BoxConstraints(maxWidth: 1180),
               child: FocusTraversalGroup(
                 policy: ReadingOrderTraversalPolicy(),
@@ -379,7 +380,7 @@ class _OnboardingPanel extends StatelessWidget {
         ],
         if (error != null) ...[
           const SizedBox(height: 16),
-          LineupNotice(message: error!, tone: NoticeTone.error),
+          LineupNotice(message: error!),
         ],
         const SizedBox(height: 18),
         child,

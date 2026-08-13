@@ -5,6 +5,7 @@ import 'package:lineup_desktop/app/channel_setup_view.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
+import 'package:lineup_desktop/ui/app_ui.dart';
 
 import '../support/ui_fixture.dart';
 
@@ -36,12 +37,37 @@ void main() {
       await tester.tap(find.byIcon(target.$1));
       await tester.pumpAndSettle();
       expect(FocusManager.instance.primaryFocus?.debugLabel, target.$2);
+      if (target.$2 == 'Channels') {
+        expect(
+          tester
+              .widget<OutlinedButton>(
+                find.widgetWithText(OutlinedButton, 'Channel builder'),
+              )
+              .focusNode
+              ?.hasFocus,
+          isTrue,
+        );
+      }
+      if (target.$2 == 'Settings') {
+        expect(
+          tester
+              .widget<OutlinedButton>(
+                find.widgetWithText(OutlinedButton, 'Guide'),
+              )
+              .focusNode
+              ?.hasFocus,
+          isTrue,
+        );
+      }
     }
   });
 
   testWidgets('management pages and settings reflow at desktop regimes', (
     tester,
   ) async {
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
     for (final size in const [
       Size(800, 600),
       Size(1280, 720),
@@ -50,7 +76,7 @@ void main() {
       Size(2560, 1440),
       Size(3840, 2160),
     ]) {
-      await tester.binding.setSurfaceSize(size);
+      tester.view.physicalSize = size;
       final fixture = UiFixture()..controller.stage = SetupStage.ready;
       await tester.pumpWidget(fixture.build());
       await tester.pumpAndSettle();
@@ -62,23 +88,68 @@ void main() {
 
       await tester.tap(find.byIcon(Icons.settings_outlined));
       await tester.pumpAndSettle();
-      expect(find.text('Subtitles and access'), findsOneWidget);
+      expect(find.text('Accessibility'), findsOneWidget);
+      expect(find.text('Remote quality'), findsNothing);
+      expect(find.text('HDR tone mapping'), findsNothing);
       expect(tester.takeException(), isNull, reason: 'Settings at $size');
+      if (size.width >= 2560) {
+        expect(
+          tester
+              .getSize(find.byKey(const ValueKey('lineup-page-content')))
+              .width,
+          LineupLayout.readableWidth,
+        );
+        expect(
+          tester.widget<NavigationRail>(find.byType(NavigationRail)).extended,
+          isTrue,
+        );
+      }
       if (size == const Size(800, 600)) {
-        for (final category in [
-          'Playback',
-          'Subtitles and access',
-          'Account',
-          'Support',
-        ]) {
+        for (final category in ['Accessibility', 'Account', 'Support']) {
           await tester.ensureVisible(find.text(category).first);
           await tester.tap(find.text(category).first);
           await tester.pumpAndSettle();
           expect(tester.takeException(), isNull, reason: '$category at $size');
         }
       }
+      await tester.tap(find.byIcon(Icons.monitor_heart_outlined));
+      await tester.pumpAndSettle();
+      expect(find.text('Credential-safe diagnostics'), findsOneWidget);
+      expect(tester.takeException(), isNull, reason: 'Diagnostics at $size');
     }
-    await tester.binding.setSurfaceSize(null);
+  });
+
+  testWidgets('onboarding and setup retain readable workspaces at 4k', (
+    tester,
+  ) async {
+    tester.view
+      ..devicePixelRatio = 1
+      ..physicalSize = const Size(3840, 2160);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+
+    await tester.pumpWidget(UiFixture().build());
+    await tester.pumpAndSettle();
+    expect(
+      tester.getSize(find.byKey(const ValueKey('onboarding-content'))).width,
+      1180,
+    );
+    expect(tester.takeException(), isNull);
+
+    final controller = FixtureController()
+      ..stage = SetupStage.channelSetup
+      ..libraries = const [
+        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
+      ];
+    await tester.pumpWidget(
+      MaterialApp(home: UpstreamChannelSetupView(controller: controller)),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      tester.getSize(find.byKey(const ValueKey('channel-setup-content'))).width,
+      1440,
+    );
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('channel deletion requires explicit destructive confirmation', (
@@ -101,12 +172,44 @@ void main() {
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
     expect(fixture.controller.channels, hasLength(1));
+    expect(find.byTooltip('Delete Newsroom'), findsOneWidget);
+    expect(
+      FocusManager.instance.primaryFocus?.context
+          ?.findAncestorWidgetOfExactType<IconButton>()
+          ?.tooltip,
+      'Delete Newsroom',
+    );
 
     await tester.tap(find.byTooltip('Delete Newsroom'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Delete channel'));
     await tester.pumpAndSettle();
     expect(fixture.controller.channels, isEmpty);
+  });
+
+  testWidgets('Windows-style 200 percent DPI uses the 1080p logical regime', (
+    tester,
+  ) async {
+    tester.view
+      ..devicePixelRatio = 2
+      ..physicalSize = const Size(3840, 2160);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    final fixture = UiFixture()..controller.stage = SetupStage.ready;
+
+    await tester.pumpWidget(fixture.build());
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.settings_outlined));
+    await tester.pumpAndSettle();
+
+    expect(
+      MediaQuery.sizeOf(tester.element(find.text('Settings').last)),
+      const Size(1920, 1080),
+    );
+    expect(
+      tester.getSize(find.byKey(const ValueKey('lineup-page-content'))).width,
+      LineupLayout.readableWidth,
+    );
   });
 
   testWidgets('custom channel validation stays local to the form', (
@@ -159,6 +262,7 @@ void main() {
     tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(800, 600));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     final controller = FixtureController()
       ..stage = SetupStage.channelSetup
       ..libraries = const [
@@ -171,7 +275,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Configure channels'), findsOneWidget);
     expect(tester.takeException(), isNull);
-    await tester.binding.setSurfaceSize(null);
   });
 
   testWidgets('Channel Setup retains its three-stage product structure', (

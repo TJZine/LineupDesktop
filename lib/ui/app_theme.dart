@@ -5,12 +5,9 @@ abstract final class LineupTheme {
   static const obsidian = Color(0xFF0E1017);
   static const smoke = Color(0xFF171A22);
   static const elevated = Color(0xFF20242E);
-  static const success = Color(0xFF4ADE80);
-  static const warning = Color(0xFFFBBF24);
   static const error = Color(0xFFEF4444);
 
   static const fast = Duration(milliseconds: 100);
-  static const normal = Duration(milliseconds: 200);
 
   static const radiusSmall = 8.0;
   static const radius = 12.0;

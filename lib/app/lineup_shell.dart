@@ -219,16 +219,25 @@ class ChannelsView extends StatefulWidget {
 
 class _ChannelsViewState extends State<ChannelsView> {
   String? _error;
+  final _deleteFocus = <String, FocusNode>{};
+
+  @override
+  void dispose() {
+    for (final node in _deleteFocus.values) {
+      node.dispose();
+    }
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) => LineupPage(
     title: 'Channels',
-    focusNode: widget.focusNode,
     actions: Wrap(
       spacing: 8,
       runSpacing: 8,
       children: [
         OutlinedButton.icon(
+          focusNode: widget.focusNode,
           onPressed: widget.controller.enterChannelSetup,
           icon: const Icon(Icons.auto_awesome_outlined),
           label: const Text('Channel builder'),
@@ -243,7 +252,7 @@ class _ChannelsViewState extends State<ChannelsView> {
     child: Column(
       children: [
         if (_error != null) ...[
-          LineupNotice(message: _error!, tone: NoticeTone.error),
+          LineupNotice(message: _error!),
           const SizedBox(height: 12),
         ],
         Expanded(
@@ -279,6 +288,12 @@ class _ChannelsViewState extends State<ChannelsView> {
                             ),
                             IconButton(
                               tooltip: 'Delete ${channel.name}',
+                              focusNode: _deleteFocus.putIfAbsent(
+                                channel.id,
+                                () => FocusNode(
+                                  debugLabel: 'Delete ${channel.name}',
+                                ),
+                              ),
                               onPressed: () => _delete(channel),
                               icon: const Icon(Icons.delete_outline),
                             ),
@@ -300,6 +315,7 @@ class _ChannelsViewState extends State<ChannelsView> {
   );
 
   Future<void> _delete(Channel channel) async {
+    final opener = _deleteFocus[channel.id]!;
     final confirmed = await confirmDestructiveAction(
       context,
       title: 'Delete ${channel.name}?',
@@ -307,15 +323,21 @@ class _ChannelsViewState extends State<ChannelsView> {
           'This removes channel ${channel.number} from the lineup. This action cannot be undone.',
       confirmLabel: 'Delete channel',
     );
-    if (!confirmed || !mounted) return;
+    if (!mounted) return;
+    if (!confirmed) {
+      opener.requestFocus();
+      return;
+    }
     try {
       await widget.controller.deleteChannel(channel.id);
+      widget.focusNode?.requestFocus();
     } catch (_) {
       if (mounted) {
         setState(
           () => _error =
               'The channel could not be deleted. No lineup changes were saved.',
         );
+        opener.requestFocus();
       }
     }
   }
@@ -384,7 +406,7 @@ class _ChannelEditorState extends State<ChannelEditor> {
             mainAxisSize: MainAxisSize.min,
             children: [
               if (_error != null) ...[
-                LineupNotice(message: _error!, tone: NoticeTone.error),
+                LineupNotice(message: _error!),
                 const SizedBox(height: 12),
               ],
               TextFormField(
@@ -573,7 +595,7 @@ class _ChannelEditorState extends State<ChannelEditor> {
   }
 }
 
-enum _SettingsCategory { guide, playback, accessibility, account, support }
+enum _SettingsCategory { guide, accessibility, account, support }
 
 class SettingsView extends StatefulWidget {
   const SettingsView({required this.controller, this.focusNode, super.key});
@@ -593,7 +615,6 @@ class _SettingsViewState extends State<SettingsView> {
   Widget build(BuildContext context) {
     return LineupPage(
       title: 'Settings',
-      focusNode: widget.focusNode,
       child: LayoutBuilder(
         builder: (context, constraints) {
           final compact = constraints.maxWidth < LineupLayout.compact;
@@ -606,7 +627,7 @@ class _SettingsViewState extends State<SettingsView> {
                   semanticsLabel: 'Saving settings',
                 ),
               if (_error != null) ...[
-                LineupNotice(message: _error!, tone: NoticeTone.error),
+                LineupNotice(message: _error!),
                 const SizedBox(height: 12),
               ],
               Expanded(child: _categoryDetail()),
@@ -642,6 +663,9 @@ class _SettingsViewState extends State<SettingsView> {
             selected: category == _category,
             button: true,
             child: OutlinedButton(
+              focusNode: category == _SettingsCategory.guide
+                  ? widget.focusNode
+                  : null,
               autofocus: category == _category,
               style: OutlinedButton.styleFrom(
                 alignment: Alignment.centerLeft,
@@ -704,72 +728,7 @@ class _SettingsViewState extends State<SettingsView> {
                 ),
               ),
             ],
-            _SettingsCategory.playback => [
-              _Dropdown<VideoQuality>(
-                'Remote quality',
-                value.videoQuality,
-                VideoQuality.values,
-                (item) => _enumLabel(item.name),
-                (item) => _update(
-                  widget.controller.settings.copyWith(videoQuality: item),
-                ),
-              ),
-              _Dropdown<ToneMapPolicy>(
-                'HDR tone mapping',
-                value.toneMapPolicy,
-                ToneMapPolicy.values,
-                (item) => _enumLabel(item.name),
-                (item) => _update(
-                  widget.controller.settings.copyWith(toneMapPolicy: item),
-                ),
-              ),
-              SwitchListTile(
-                title: const Text('Audio passthrough intent'),
-                subtitle: const Text(
-                  'Applied only where the native player proves support.',
-                ),
-                value: value.audioPassthrough,
-                onChanged: _saving
-                    ? null
-                    : (item) => _update(
-                        widget.controller.settings.copyWith(
-                          audioPassthrough: item,
-                        ),
-                      ),
-              ),
-              SwitchListTile(
-                title: const Text('Allow compatible audio fallback'),
-                value: value.directPlayAudioFallback,
-                onChanged: _saving
-                    ? null
-                    : (item) => _update(
-                        widget.controller.settings.copyWith(
-                          directPlayAudioFallback: item,
-                        ),
-                      ),
-              ),
-            ],
             _SettingsCategory.accessibility => [
-              _Dropdown<SubtitleMode>(
-                'Subtitle mode',
-                value.subtitleMode,
-                SubtitleMode.values,
-                (item) => _enumLabel(item.name),
-                (item) => _update(
-                  widget.controller.settings.copyWith(subtitleMode: item),
-                ),
-              ),
-              SwitchListTile(
-                title: const Text('Prefer forced subtitles'),
-                value: value.preferForcedSubtitles,
-                onChanged: _saving
-                    ? null
-                    : (item) => _update(
-                        widget.controller.settings.copyWith(
-                          preferForcedSubtitles: item,
-                        ),
-                      ),
-              ),
               SwitchListTile(
                 title: const Text('Reduce motion'),
                 value: value.reduceMotion,
@@ -847,8 +806,7 @@ class _SettingsViewState extends State<SettingsView> {
   static String _categoryLabel(_SettingsCategory category) =>
       switch (category) {
         _SettingsCategory.guide => 'Guide',
-        _SettingsCategory.playback => 'Playback',
-        _SettingsCategory.accessibility => 'Subtitles and access',
+        _SettingsCategory.accessibility => 'Accessibility',
         _SettingsCategory.account => 'Account',
         _SettingsCategory.support => 'Support',
       };
@@ -870,17 +828,13 @@ class DiagnosticsView extends StatelessWidget {
   @override
   Widget build(BuildContext context) => LineupPage(
     title: 'Diagnostics',
-    focusNode: focusNode,
     child: ListView(
       children: [
-        Card(
-          child: ListTile(
-            leading: const Icon(Icons.shield_outlined),
-            title: const Text('Credential-safe diagnostics'),
-            subtitle: Text(
-              'Playback: ${status.message}\nPlex: ${controller.server?.name ?? 'not connected'}\nEntries: ${controller.diagnostics.entries.length}',
-            ),
-          ),
+        _DiagnosticsSummary(
+          focusNode: focusNode,
+          status: status,
+          serverName: controller.server?.name,
+          entryCount: controller.diagnostics.entries.length,
         ),
         if (controller.diagnostics.entries.isEmpty)
           Padding(
@@ -915,6 +869,48 @@ class DiagnosticsView extends StatelessWidget {
               ),
             ),
       ],
+    ),
+  );
+}
+
+class _DiagnosticsSummary extends StatefulWidget {
+  const _DiagnosticsSummary({
+    required this.status,
+    required this.entryCount,
+    this.serverName,
+    this.focusNode,
+  });
+  final PlayerStatus status;
+  final int entryCount;
+  final String? serverName;
+  final FocusNode? focusNode;
+
+  @override
+  State<_DiagnosticsSummary> createState() => _DiagnosticsSummaryState();
+}
+
+class _DiagnosticsSummaryState extends State<_DiagnosticsSummary> {
+  bool _focused = false;
+
+  @override
+  Widget build(BuildContext context) => Focus(
+    focusNode: widget.focusNode,
+    onFocusChange: (focused) => setState(() => _focused = focused),
+    child: Card(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(LineupTheme.radius),
+        side: BorderSide(
+          color: _focused ? Colors.white : Colors.white12,
+          width: _focused ? 3 : 1,
+        ),
+      ),
+      child: ListTile(
+        leading: const Icon(Icons.shield_outlined),
+        title: const Text('Credential-safe diagnostics'),
+        subtitle: Text(
+          'Playback: ${widget.status.message}\nPlex: ${widget.serverName ?? 'not connected'}\nEntries: ${widget.entryCount}',
+        ),
+      ),
     ),
   );
 }

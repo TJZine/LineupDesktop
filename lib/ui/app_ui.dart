@@ -11,30 +11,16 @@ abstract final class LineupLayout {
       MediaQuery.sizeOf(context).width < compact;
 }
 
-enum NoticeTone { info, success, warning, error }
-
 class LineupNotice extends StatelessWidget {
-  const LineupNotice({
-    required this.message,
-    this.tone = NoticeTone.info,
-    this.action,
-    super.key,
-  });
+  const LineupNotice({required this.message, super.key});
 
   final String message;
-  final NoticeTone tone;
-  final Widget? action;
 
   @override
   Widget build(BuildContext context) {
-    final color = switch (tone) {
-      NoticeTone.info => Theme.of(context).colorScheme.primary,
-      NoticeTone.success => LineupTheme.success,
-      NoticeTone.warning => LineupTheme.warning,
-      NoticeTone.error => Theme.of(context).colorScheme.error,
-    };
+    final color = Theme.of(context).colorScheme.error;
     return Semantics(
-      liveRegion: tone != NoticeTone.info,
+      liveRegion: true,
       container: true,
       child: Container(
         width: double.infinity,
@@ -46,22 +32,14 @@ class LineupNotice extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Icon(_icon, color: color),
+            Icon(Icons.error_outline, color: color),
             const SizedBox(width: 12),
             Expanded(child: Text(message)),
-            ?action,
           ],
         ),
       ),
     );
   }
-
-  IconData get _icon => switch (tone) {
-    NoticeTone.info => Icons.info_outline,
-    NoticeTone.success => Icons.check_circle_outline,
-    NoticeTone.warning => Icons.warning_amber,
-    NoticeTone.error => Icons.error_outline,
-  };
 }
 
 class LineupPage extends StatelessWidget {
@@ -69,55 +47,48 @@ class LineupPage extends StatelessWidget {
     required this.title,
     required this.child,
     this.actions,
-    this.focusNode,
     super.key,
   });
 
   final String title;
   final Widget child;
   final Widget? actions;
-  final FocusNode? focusNode;
 
   @override
   Widget build(BuildContext context) => FocusTraversalGroup(
-    child: Focus(
-      focusNode: focusNode,
-      child: SafeArea(
-        child: Padding(
-          padding: EdgeInsets.all(LineupLayout.isCompact(context) ? 20 : 32),
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(
-                maxWidth: LineupLayout.readableWidth,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (LineupLayout.isCompact(context))
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        _PageTitle(title),
-                        if (actions != null) ...[
-                          const SizedBox(height: 16),
-                          Align(
-                            alignment: Alignment.centerLeft,
-                            child: actions,
-                          ),
-                        ],
+    child: SafeArea(
+      child: Padding(
+        padding: EdgeInsets.all(LineupLayout.isCompact(context) ? 20 : 32),
+        child: Center(
+          child: ConstrainedBox(
+            key: const ValueKey('lineup-page-content'),
+            constraints: const BoxConstraints(
+              maxWidth: LineupLayout.readableWidth,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (LineupLayout.isCompact(context))
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _PageTitle(title),
+                      if (actions != null) ...[
+                        const SizedBox(height: 16),
+                        Align(alignment: Alignment.centerLeft, child: actions),
                       ],
-                    )
-                  else
-                    Row(
-                      children: [
-                        Expanded(child: _PageTitle(title)),
-                        ?actions,
-                      ],
-                    ),
-                  const SizedBox(height: 24),
-                  Expanded(child: child),
-                ],
-              ),
+                    ],
+                  )
+                else
+                  Row(
+                    children: [
+                      Expanded(child: _PageTitle(title)),
+                      ?actions,
+                    ],
+                  ),
+                const SizedBox(height: 24),
+                Expanded(child: child),
+              ],
             ),
           ),
         ),
