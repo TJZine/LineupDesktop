@@ -57,6 +57,20 @@ Flutter SDK `3.47.0` (revision
 `4cf24164269a5ebf0c16a028a00727d0e77bbb05`, Dart `3.13.0`) is the reproducible
 toolchain for macOS, Windows, and CI.
 
+On macOS, install Xcode and its command-line tools on macOS 12 or newer, then
+select the exact Flutter checkout rather than a different SDK already on PATH:
+
+```sh
+git clone https://github.com/flutter/flutter.git /path/to/flutter
+git -C /path/to/flutter checkout 4cf24164269a5ebf0c16a028a00727d0e77bbb05
+export PATH=/path/to/flutter/bin:$PATH
+flutter doctor -v
+flutter config --enable-macos-desktop
+```
+
+Resolve any Xcode/macOS warnings reported by `flutter doctor` before running
+the repository commands. The application currently targets macOS 12.0.
+
 ```sh
 dart format .
 dart format --output=none --set-exit-if-changed .
@@ -70,8 +84,9 @@ flutter build windows # run on Windows
 ## Windows native player
 
 The Windows player requires Visual Studio Build Tools 2022 with Desktop C++,
-ATL, Windows SDK `10.0.22621.0`, and Debugging Tools for Windows. The pinned
-Flutter SDK is also the source checkout for the owned engine patch:
+ATL, Windows SDK `10.0.22621.0`, Debugging Tools for Windows, and 7-Zip with
+`7z.exe` on PATH. The pinned Flutter SDK is also the source checkout for the
+owned engine patch:
 
 ```powershell
 git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git C:\path\to\depot_tools
@@ -96,7 +111,19 @@ ninja -C out\host_release
 ```
 
 The patch must be applied to the exact revisions recorded in
-`tool/flutter_engine/README.md`. Select the resulting engine explicitly—do not replace Flutter's SDK
+`tool/flutter_engine/README.md`. Before configuring the application, prepare
+the ignored x86-64 libmpv development directory and set both required build
+variables:
+
+```powershell
+Set-Location C:\path\to\LineupDesktop
+$mpvRoot = 'C:\local\lineup-mpv'
+& .\tool\windows\prepare-mpv-dev.ps1 -Destination $mpvRoot
+$env:LINEUP_MPV_ROOT = $mpvRoot
+$env:LINEUP_ALLOW_GPL_MPV_DEV_ARTIFACT = '1'
+```
+
+Then select the resulting engine explicitly—do not replace Flutter's SDK
 cache:
 
 ```powershell
@@ -113,18 +140,9 @@ flutter build windows `
   --local-engine-src-path=$engineSource
 ```
 
-Set `LINEUP_MPV_ROOT` to an uncommitted x86-64 libmpv development directory
-prepared from the pinned archive below. The preparation script verifies the
-archive SHA-256, generates an MSVC import library from the DLL exports, and
-writes the runtime provenance record CMake requires:
-
-```powershell
-$mpvRoot = 'C:\local\lineup-mpv'
-& .\tool\windows\prepare-mpv-dev.ps1 -Destination $mpvRoot
-$env:LINEUP_MPV_ROOT = $mpvRoot
-$env:LINEUP_ALLOW_GPL_MPV_DEV_ARTIFACT = '1'
-flutter build windows
-```
+The preparation script verifies the archive SHA-256, generates an MSVC import
+library from the DLL exports, and writes the runtime provenance record CMake
+requires.
 
 `LINEUP_ALLOW_GPL_MPV_DEV_ARTIFACT=1` is an explicit local/CI-only opt-in.
 It prevents accidental packaging of this GPL-default development artifact.

@@ -33,6 +33,20 @@ void main() {
     expect(player.disposed, isTrue);
   });
 
+  testWidgets('onboarding link action is keyboard reachable', (tester) async {
+    final controller = _FakeController();
+    await tester.pumpWidget(
+      LineupBootstrap(player: _FakePlayer(), controller: controller),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+
+    expect(controller.linkingRequested, isTrue);
+  });
+
   testWidgets('presents initialization failures without entering the shell', (
     tester,
   ) async {
@@ -80,8 +94,15 @@ class _FakeController extends LineupController {
         ),
       );
 
+  bool linkingRequested = false;
+
   @override
   Future<void> initialize() async {}
+
+  @override
+  Future<void> startLinking() async {
+    linkingRequested = true;
+  }
 }
 
 class _MemoryStore implements AppStore {

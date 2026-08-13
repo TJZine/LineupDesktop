@@ -100,7 +100,9 @@ navigation do not enter C++.
 - Production onboarding, profile/server/library selection, channel setup,
   custom channel editing, Settings, and diagnostics screens with Flutter
   keyboard focus and accessibility semantics.
-- Keychain-backed credential ownership on macOS. Tokens remain outside
+- Keychain-backed credential ownership on macOS. Unsigned development builds
+  use the legacy macOS Keychain compatibility mode; production signing must
+  enable and validate the data-protection Keychain. Tokens remain outside
   ordinary application state and durable JSON; selected-server persistence
   stores only profile-scoped server identity.
 - A pinned, repository-owned Flutter Windows DirectComposition patch with the
@@ -125,7 +127,9 @@ framework would add forwarding and lifecycle ceremony without improving this
 single-owner graph. `http`, `xml`, `path_provider`, and
 `flutter_secure_storage` provide maintained transport, Plex XML fallback,
 platform application-data paths, and Keychain/platform-secure credential
-storage respectively. No plaintext credential fallback exists.
+storage respectively. The macOS legacy-Keychain option is an explicit bridge
+for unsigned development, not plaintext storage or the production signing
+endpoint. No plaintext credential fallback exists.
 
 The Windows runtime additionally
 links libmpv dynamically at the native boundary. The pinned development asset

@@ -1,11 +1,33 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:lineup_desktop/playback/stream_policy.dart';
 import 'package:lineup_desktop/plex/plex_client.dart';
+import 'package:lineup_desktop/plex/plex_models.dart';
 
 void main() {
+  test('transport timeouts surface a stable Plex error', () async {
+    final response = Completer<http.Response>();
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      requestTimeout: const Duration(milliseconds: 5),
+      httpClient: MockClient((_) => response.future),
+    );
+    await expectLater(
+      client.createPin(),
+      throwsA(
+        isA<PlexException>().having(
+          (exception) => exception.code,
+          'code',
+          'network-timeout',
+        ),
+      ),
+    );
+  });
+
   test('PIN requests send stable identity without a credential', () async {
     late http.Request request;
     final client = PlexClient(
@@ -55,6 +77,11 @@ void main() {
                     'relay': false,
                   },
                   {'uri': 'ftp://bad.example', 'local': true, 'relay': false},
+                  {
+                    'uri': 'http://plaintext.example',
+                    'local': true,
+                    'relay': false,
+                  },
                 ],
               },
             ]),
@@ -70,6 +97,107 @@ void main() {
       );
     },
   );
+
+  test(
+    'connection probing binds the identity to the selected server',
+    () async {
+      final probed = <String>[];
+      final client = PlexClient(
+        clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+        httpClient: MockClient((request) async {
+          probed.add(request.url.host);
+          final id = request.url.host == 'wrong.example' ? 'other' : 'expected';
+          return http.Response(
+            '<MediaContainer machineIdentifier="$id"/>',
+            200,
+          );
+        }),
+      );
+      final selected = await client.selectConnection(
+        PlexServer(
+          id: 'expected',
+          name: 'Server',
+          connections: [
+            PlexConnection(
+              uri: Uri.parse('https://wrong.example:32400'),
+              local: true,
+              relay: false,
+            ),
+            PlexConnection(
+              uri: Uri.parse('https://right.example:32400'),
+              local: true,
+              relay: false,
+            ),
+          ],
+        ),
+        'secret',
+      );
+      expect(selected.uri.host, 'right.example');
+      expect(probed, containsAll(['wrong.example', 'right.example']));
+    },
+  );
+
+  test('playback descriptors reject unsupported facts', () {
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+    );
+    expect(
+      () => client.playbackDescriptor(
+        server: Uri.parse('https://plex.example:32400'),
+        token: 'secret',
+        item: const PlexMediaItem(
+          id: '1',
+          key: '/library/metadata/1',
+          title: 'Movie',
+          type: 'movie',
+          duration: Duration(minutes: 1),
+          partPath: '/library/parts/1/file.mkv',
+          dynamicRange: DynamicRange.unknown,
+        ),
+        capabilities: const StreamCapabilities(
+          containers: {'mkv'},
+          videoCodecs: {'h264'},
+          audioCodecs: {'aac'},
+        ),
+      ),
+      throwsA(isA<PlexException>()),
+    );
+  });
+
+  test('direct stream targets the playable part with Plex HLS flags', () {
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+    );
+    final descriptor = client.playbackDescriptor(
+      server: Uri.parse('https://plex.example:32400'),
+      token: 'secret',
+      item: const PlexMediaItem(
+        id: '1',
+        key: '/library/metadata/1',
+        title: 'Movie',
+        type: 'movie',
+        duration: Duration(minutes: 1),
+        partPath: '/library/parts/1/file.mkv',
+        container: 'mkv',
+        videoCodec: 'h264',
+        audioCodec: 'aac',
+        dynamicRange: DynamicRange.sdr,
+      ),
+      capabilities: const StreamCapabilities(
+        containers: {'mp4'},
+        videoCodecs: {'h264'},
+        audioCodecs: {'aac'},
+      ),
+    );
+    expect(descriptor.decision.kind, StreamDecisionKind.directStream);
+    expect(
+      descriptor.uri.queryParameters,
+      containsPair('path', '/library/parts/1/file.mkv'),
+    );
+    expect(descriptor.uri.queryParameters, containsPair('protocol', 'hls'));
+    expect(descriptor.uri.queryParameters, containsPair('directStream', '1'));
+    expect(descriptor.uri.queryParameters, isNot(contains('directPlay')));
+  });
 
   test(
     'Plex Home falls back from empty v2 users and missing v2 switch',

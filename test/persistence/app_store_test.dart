@@ -30,12 +30,20 @@ void main() {
         channels: [channel],
         currentChannelId: channel.id,
         selectedServerByProfile: const {'profile': 'server'},
+        selectedLibraryIdsByProfileServer: const {
+          'profile': {
+            'server': ['1'],
+          },
+        },
       ),
     );
     final restored = await store.load();
     expect(restored.settings.reduceMotion, isTrue);
     expect(restored.channels.single.id, 'stable-id');
     expect(restored.selectedServerByProfile, {'profile': 'server'});
+    expect(restored.selectedLibraryIdsByProfileServer['profile']?['server'], [
+      '1',
+    ]);
     expect(
       await directory
           .list()
@@ -45,14 +53,25 @@ void main() {
     );
   });
 
-  test('corrupt state fails closed to defaults', () async {
-    final directory = await Directory.systemTemp.createTemp(
-      'lineup-store-test',
-    );
-    addTearDown(() => directory.delete(recursive: true));
-    await directory.create(recursive: true);
-    await File('${directory.path}/state.json').writeAsString('{broken');
-    final restored = await FileAppStore(directory).load();
-    expect(restored.channels, isEmpty);
-  });
+  test(
+    'corrupt state fails closed and preserves a recovery artifact',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'lineup-store-test',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      await directory.create(recursive: true);
+      await File('${directory.path}/state.json').writeAsString('{broken');
+      final restored = await FileAppStore(directory).load();
+      expect(restored.channels, isEmpty);
+      expect(
+        await directory
+            .list()
+            .where((entry) => entry.path.contains('state.json.corrupt-'))
+            .length,
+        1,
+      );
+      expect(await File('${directory.path}/state.json').exists(), isFalse);
+    },
+  );
 }

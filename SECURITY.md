@@ -16,8 +16,9 @@ Do not open public issues for vulnerabilities or secret exposure.
 
 Preferred reporting path:
 
-1. Use GitHub Security Advisories for this repository once the remote is active.
-2. If advisories are unavailable, contact the maintainer directly on GitHub.
+1. Use the repository's private [GitHub vulnerability reporting form](https://github.com/TJZine/LineupDesktop/security/advisories/new).
+2. If that private form is unavailable, do not include secret material in a
+   public issue; report only that the private reporting channel is unavailable.
 
 Include:
 

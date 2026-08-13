@@ -15,10 +15,17 @@ The current branch provides:
 - a focused development player surface for load, transport, fullscreen,
   replacement-load, lifecycle, track, and telemetry validation
 - an explicit unsupported-playback state on macOS rather than a false success
+- Plex PIN authentication, Home profiles, HTTPS server discovery, library and
+  media loading, and secure credential ownership
+- deterministic channels, custom-channel authoring, scheduling, stream policy,
+  durable settings/state, and bounded redacted diagnostics
+- production onboarding, profile/server/library selection, channel setup, and
+  Settings workflows
 
-Plex authentication, server and channel management, Guide/OSD product surfaces,
-persistence, production diagnostics, distributable libmpv packaging, and final
-Windows hardware/HDR acceptance are not yet implemented or proven.
+Guide/OSD product surfaces, remote Plex playback integration, distributable
+libmpv packaging, and final Windows hardware/HDR acceptance are not yet
+implemented or proven. Real Plex and macOS Keychain workflows still require
+manual account-specific acceptance.
 
 ## Get started
 

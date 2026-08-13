@@ -54,11 +54,8 @@ void main() {
     final source = MixedSource(
       interleave: true,
       sources: [
-        ManualSource([
-          media[0].toChannelItem(null),
-          media[1].toChannelItem(null),
-        ]),
-        ManualSource([media[2].toChannelItem(null)]),
+        ManualSource([channelItemFor(media[0]), channelItemFor(media[1])]),
+        ManualSource([channelItemFor(media[2])]),
       ],
     );
     expect(resolveContent(source, media).map((item) => item.id), [

@@ -15,7 +15,7 @@ class PersistedState {
     this.currentChannelId,
     this.profileId,
     this.selectedServerByProfile = const {},
-    this.selectedLibraryIds = const [],
+    this.selectedLibraryIdsByProfileServer = const {},
   });
 
   final LineupSettings settings;
@@ -23,7 +23,8 @@ class PersistedState {
   final String? currentChannelId;
   final String? profileId;
   final Map<String, String> selectedServerByProfile;
-  final List<String> selectedLibraryIds;
+  final Map<String, Map<String, List<String>>>
+  selectedLibraryIdsByProfileServer;
 
   Map<String, Object?> toJson() => {
     'settings': settings.toJson(),
@@ -31,11 +32,11 @@ class PersistedState {
     'currentChannelId': currentChannelId,
     'profileId': profileId,
     'selectedServerByProfile': selectedServerByProfile,
-    'selectedLibraryIds': selectedLibraryIds,
+    'selectedLibraryIdsByProfileServer': selectedLibraryIdsByProfileServer,
   };
 
   factory PersistedState.fromJson(Object? value) {
-    if (value is! Map) return const PersistedState();
+    if (value is! Map) throw const FormatException('State must be an object.');
     final json = Map<String, Object?>.from(value);
     try {
       final channels = (json['channels'] as List? ?? const [])
@@ -52,14 +53,30 @@ class PersistedState {
         selectedServerByProfile: Map<String, String>.from(
           json['selectedServerByProfile'] as Map? ?? const {},
         ),
-        selectedLibraryIds: (json['selectedLibraryIds'] as List? ?? const [])
-            .whereType<String>()
-            .toList(),
+        selectedLibraryIdsByProfileServer: _librarySelections(
+          json['selectedLibraryIdsByProfileServer'],
+        ),
       );
-    } catch (_) {
-      return const PersistedState();
+    } catch (error) {
+      throw FormatException('State contains invalid values.', error);
     }
   }
+}
+
+Map<String, Map<String, List<String>>> _librarySelections(Object? value) {
+  if (value == null) return const {};
+  if (value is! Map) throw const FormatException('Invalid library selections.');
+  return {
+    for (final profileEntry in value.entries)
+      if (profileEntry.key is String && profileEntry.value is Map)
+        profileEntry.key as String: {
+          for (final serverEntry in (profileEntry.value as Map).entries)
+            if (serverEntry.key is String && serverEntry.value is List)
+              serverEntry.key as String: (serverEntry.value as List)
+                  .whereType<String>()
+                  .toList(),
+        },
+  };
 }
 
 abstract interface class AppStore {
@@ -89,8 +106,23 @@ class FileAppStore implements AppStore {
       return PersistedState.fromJson(
         jsonDecode(await _stateFile.readAsString()),
       );
-    } catch (_) {
+    } on PathNotFoundException {
       return const PersistedState();
+    } catch (_) {
+      await _quarantineState();
+      return const PersistedState();
+    }
+  }
+
+  Future<void> _quarantineState() async {
+    if (!await _stateFile.exists()) return;
+    final quarantine = File(
+      '${_stateFile.path}.corrupt-${DateTime.now().toUtc().millisecondsSinceEpoch}',
+    );
+    try {
+      await _stateFile.rename(quarantine.path);
+    } catch (_) {
+      // Startup recovery must not fail only because preservation failed.
     }
   }
 
@@ -146,22 +178,33 @@ class KeychainCredentialStore implements CredentialStore {
   const KeychainCredentialStore([this.storage = const FlutterSecureStorage()]);
 
   final FlutterSecureStorage storage;
+  static const _macosOptions = MacOsOptions(usesDataProtectionKeychain: false);
 
   @override
-  Future<String?> readAccountToken() => storage.read(key: 'plex.account-token');
+  Future<String?> readAccountToken() =>
+      storage.read(key: 'plex.account-token', mOptions: _macosOptions);
 
   @override
-  Future<String?> readProfileToken(String profileId) =>
-      storage.read(key: 'plex.profile-token.$profileId');
+  Future<String?> readProfileToken(String profileId) => storage.read(
+    key: 'plex.profile-token.$profileId',
+    mOptions: _macosOptions,
+  );
 
   @override
-  Future<void> writeAccountToken(String token) =>
-      storage.write(key: 'plex.account-token', value: token);
+  Future<void> writeAccountToken(String token) => storage.write(
+    key: 'plex.account-token',
+    value: token,
+    mOptions: _macosOptions,
+  );
 
   @override
   Future<void> writeProfileToken(String profileId, String token) =>
-      storage.write(key: 'plex.profile-token.$profileId', value: token);
+      storage.write(
+        key: 'plex.profile-token.$profileId',
+        value: token,
+        mOptions: _macosOptions,
+      );
 
   @override
-  Future<void> clear() => storage.deleteAll();
+  Future<void> clear() => storage.deleteAll(mOptions: _macosOptions);
 }

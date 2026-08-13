@@ -22,9 +22,9 @@ worktrees/
 .env
 .env.*
 *.log
-logs/
-diagnostics/
-crash-dumps/
+/logs/
+/diagnostics/
+/crash-dumps/
 
 # Generated platform files
 macos/Flutter/ephemeral/

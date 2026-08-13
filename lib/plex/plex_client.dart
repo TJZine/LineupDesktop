@@ -11,11 +11,15 @@ import '../playback/stream_policy.dart';
 import 'plex_models.dart';
 
 class PlexClient {
-  PlexClient({required this.clientIdentifier, http.Client? httpClient})
-    : _http = httpClient ?? http.Client();
+  PlexClient({
+    required this.clientIdentifier,
+    http.Client? httpClient,
+    this.requestTimeout = const Duration(seconds: 15),
+  }) : _http = httpClient ?? http.Client();
 
   final String clientIdentifier;
   final http.Client _http;
+  final Duration requestTimeout;
 
   Map<String, String> _headers([String? token]) => {
     'Accept': 'application/json',
@@ -29,9 +33,8 @@ class PlexClient {
   };
 
   Future<PlexPin> createPin() async {
-    final response = await _http.post(
-      Uri.https('plex.tv', '/api/v2/pins'),
-      headers: _headers(),
+    final response = await _send(
+      _http.post(Uri.https('plex.tv', '/api/v2/pins'), headers: _headers()),
     );
     final json = _json(response, {200, 201});
     return PlexPin(
@@ -42,9 +45,11 @@ class PlexClient {
   }
 
   Future<String?> pollPin(PlexPin pin) async {
-    final response = await _http.get(
-      Uri.https('plex.tv', '/api/v2/pins/${pin.id}'),
-      headers: _headers(),
+    final response = await _send(
+      _http.get(
+        Uri.https('plex.tv', '/api/v2/pins/${pin.id}'),
+        headers: _headers(),
+      ),
     );
     final json = _json(response, {200});
     return _optionalText(json['authToken']);
@@ -52,17 +57,21 @@ class PlexClient {
 
   Future<void> cancelPin(PlexPin pin) async {
     try {
-      await _http.delete(
-        Uri.https('plex.tv', '/api/v2/pins/${pin.id}'),
-        headers: _headers(),
+      await _send(
+        _http.delete(
+          Uri.https('plex.tv', '/api/v2/pins/${pin.id}'),
+          headers: _headers(),
+        ),
       );
     } catch (_) {}
   }
 
   Future<PlexAccount> account(String token) async {
-    final response = await _http.get(
-      Uri.https('plex.tv', '/users/account.json'),
-      headers: _headers(token),
+    final response = await _send(
+      _http.get(
+        Uri.https('plex.tv', '/users/account.json'),
+        headers: _headers(token),
+      ),
     );
     final root = _json(response, {200});
     final json = _record(root['user'] ?? root['User'] ?? root, 'account');
@@ -80,9 +89,8 @@ class PlexClient {
 
   Future<List<PlexHomeUser>> homeUsers(String accountToken) async {
     for (final path in ['/api/v2/home/users', '/api/home/users']) {
-      final response = await _http.get(
-        Uri.https('plex.tv', path),
-        headers: _headers(accountToken),
+      final response = await _send(
+        _http.get(Uri.https('plex.tv', path), headers: _headers(accountToken)),
       );
       if (response.statusCode == 404 ||
           response.statusCode == 405 ||
@@ -107,13 +115,15 @@ class PlexClient {
       '/api/v2/home/users/$userId/switch',
       '/api/home/users/$userId/switch',
     ]) {
-      final response = await _http.post(
-        Uri.https('plex.tv', path),
-        headers: {
-          ..._headers(accountToken),
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: {if (pin != null && pin.isNotEmpty) 'pin': pin},
+      final response = await _send(
+        _http.post(
+          Uri.https('plex.tv', path),
+          headers: {
+            ..._headers(accountToken),
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: {if (pin != null && pin.isNotEmpty) 'pin': pin},
+        ),
       );
       if (response.statusCode == 401 || response.statusCode == 403) {
         throw const PlexException(
@@ -142,12 +152,14 @@ class PlexClient {
   }
 
   Future<List<PlexServer>> discoverServers(String token) async {
-    final response = await _http.get(
-      Uri.https('plex.tv', '/api/v2/resources', {
-        'includeHttps': '1',
-        'includeRelay': '1',
-      }),
-      headers: _headers(token),
+    final response = await _send(
+      _http.get(
+        Uri.https('plex.tv', '/api/v2/resources', {
+          'includeHttps': '1',
+          'includeRelay': '1',
+        }),
+        headers: _headers(token),
+      ),
     );
     final data = _jsonList(response, {200});
     final servers = <PlexServer>[];
@@ -162,7 +174,7 @@ class PlexClient {
         final connection = _record(rawConnection, 'connection');
         final uri = Uri.tryParse(_optionalText(connection['uri']) ?? '');
         if (uri == null ||
-            !{'http', 'https'}.contains(uri.scheme) ||
+            uri.scheme != 'https' ||
             uri.host.isEmpty ||
             uri.userInfo.isNotEmpty) {
           continue;
@@ -208,14 +220,17 @@ class PlexClient {
       )) {
         final watch = Stopwatch()..start();
         try {
-          final response = await _http
-              .get(
-                connection.uri.resolve('/identity'),
-                headers: _headers(token),
-              )
-              .timeout(const Duration(seconds: 4));
+          final response = await _send(
+            _http.get(
+              connection.uri.resolve('/identity'),
+              headers: _headers(token),
+            ),
+            timeout: const Duration(seconds: 4),
+          );
           if (response.statusCode >= 200 && response.statusCode < 300) {
-            reachable.add((connection, watch.elapsed));
+            if (_identityId(response.body) == server.id) {
+              reachable.add((connection, watch.elapsed));
+            }
           } else if (response.statusCode == 401) {
             throw const PlexException(
               'auth-required',
@@ -307,22 +322,21 @@ class PlexClient {
       ),
       capabilities,
     );
+    if (decision.kind == StreamDecisionKind.unsupported) {
+      throw PlexException('unsupported', decision.reasons.join(' '));
+    }
     final session = _randomId();
     final uri = decision.kind == StreamDecisionKind.directPlay
         ? server.resolve(item.partPath!)
         : server
-              .resolve('/video/:/transcode/universal/start.m3u8')
+              .resolve('/video/:/transcode/universal/start')
               .replace(
                 queryParameters: {
-                  'path': item.key,
+                  'path': item.partPath!,
+                  'protocol': 'hls',
                   'session': session,
-                  'directPlay': decision.kind == StreamDecisionKind.directStream
-                      ? '1'
-                      : '0',
-                  'directStream':
-                      decision.kind == StreamDecisionKind.directStream
-                      ? '1'
-                      : '0',
+                  if (decision.kind == StreamDecisionKind.directStream)
+                    'directStream': '1',
                 },
               );
     return PlexPlaybackDescriptor(
@@ -339,11 +353,13 @@ class PlexClient {
     required String sessionId,
   }) async {
     try {
-      await _http.get(
-        server
-            .resolve('/video/:/transcode/universal/stop')
-            .replace(queryParameters: {'session': sessionId}),
-        headers: _headers(token),
+      await _send(
+        _http.get(
+          server
+              .resolve('/video/:/transcode/universal/stop')
+              .replace(queryParameters: {'session': sessionId}),
+          headers: _headers(token),
+        ),
       );
     } catch (_) {
       // Lease cleanup is best effort and never replaces playback settlement.
@@ -351,11 +367,43 @@ class PlexClient {
   }
 
   Future<Map<String, Object?>> _serverJson(Uri uri, String token) async {
-    final response = await _http.get(uri, headers: _headers(token));
+    final response = await _send(_http.get(uri, headers: _headers(token)));
     return _json(response, {200});
   }
 
+  Future<http.Response> _send(
+    Future<http.Response> request, {
+    Duration? timeout,
+  }) async {
+    try {
+      return await request.timeout(timeout ?? requestTimeout);
+    } on TimeoutException {
+      throw const PlexException(
+        'network-timeout',
+        'Plex did not respond in time. Try again.',
+      );
+    }
+  }
+
   void close() => _http.close();
+}
+
+String? _identityId(String body) {
+  final json = _tryJson(body);
+  if (json is Map) {
+    final root = json['MediaContainer'] is Map
+        ? json['MediaContainer'] as Map
+        : json;
+    final value = root['machineIdentifier'];
+    if (value is String && value.isNotEmpty) return value;
+  }
+  try {
+    final value = XmlDocument.parse(body).rootElement
+        .getAttribute('machineIdentifier');
+    return value == null || value.isEmpty ? null : value;
+  } catch (_) {
+    return null;
+  }
 }
 
 PlexMediaItem parseMediaItem(Object? raw, {String? libraryId}) {

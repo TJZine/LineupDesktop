@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../channels/channel.dart';
 import '../channels/channel_builder.dart';
+import '../channels/content_resolver.dart';
 import '../playback/native_player.dart';
 import '../playback/player_foundation_view.dart';
 import '../plex/plex_models.dart';
@@ -138,11 +139,13 @@ class OnboardingView extends StatefulWidget {
 class _OnboardingViewState extends State<OnboardingView> {
   final _pin = TextEditingController();
   final _selectedLibraries = <String>{};
+  String? _selectionServerId;
 
   @override
   void initState() {
     super.initState();
     _selectedLibraries.addAll(widget.controller.selectedLibraryIds);
+    _selectionServerId = widget.controller.server?.id;
   }
 
   @override
@@ -154,6 +157,12 @@ class _OnboardingViewState extends State<OnboardingView> {
   @override
   Widget build(BuildContext context) {
     final controller = widget.controller;
+    if (_selectionServerId != controller.server?.id) {
+      _selectionServerId = controller.server?.id;
+      _selectedLibraries
+        ..clear()
+        ..addAll(controller.selectedLibraryIds);
+    }
     return Scaffold(
       body: SafeArea(
         child: FocusTraversalGroup(
@@ -685,7 +694,7 @@ class _ChannelEditorState extends State<ChannelEditor> {
             );
       final manualItems = widget.controller.availableMedia
           .where((item) => _manualItemIds.contains(item.id))
-          .map((item) => item.toChannelItem(null))
+          .map(channelItemFor)
           .toList();
       if (_manual && manualItems.isEmpty) {
         throw const FormatException('Select at least one program');

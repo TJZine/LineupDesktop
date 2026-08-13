@@ -151,14 +151,6 @@ class PlexMediaItem {
   final int? year;
   final DateTime? addedAt;
   final bool viewed;
-
-  ChannelItem toChannelItem(Uri? artwork) => ChannelItem(
-    id: id,
-    title: title,
-    duration: duration,
-    showTitle: grandparentTitle,
-    artwork: artwork,
-  );
 }
 
 class PlexPlaybackDescriptor {

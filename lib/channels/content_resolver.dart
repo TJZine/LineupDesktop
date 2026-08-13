@@ -43,9 +43,16 @@ List<ChannelItem> _library(LibrarySource source, List<PlexMediaItem> media) {
   }
   return items
       .where((item) => item.duration > Duration.zero)
-      .map((item) => item.toChannelItem(null))
+      .map(channelItemFor)
       .toList();
 }
+
+ChannelItem channelItemFor(PlexMediaItem item) => ChannelItem(
+  id: item.id,
+  title: item.title,
+  duration: item.duration,
+  showTitle: item.grandparentTitle,
+);
 
 List<ChannelItem> _interleave(List<List<ChannelItem>> sources) {
   final output = <ChannelItem>[];
