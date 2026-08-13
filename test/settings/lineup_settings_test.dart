@@ -6,10 +6,12 @@ void main() {
     final settings = LineupSettings.fromJson({
       'guideHours': 99,
       'pastMinutes': -5,
+      'osdAutoHideSeconds': 99,
       'subtitleMode': 'unknown',
     });
     expect(settings.guideHours, 12);
     expect(settings.pastMinutes, 0);
+    expect(settings.osdAutoHideSeconds, 15);
     expect(settings.subtitleMode, SubtitleMode.full);
     expect(settings.theme, LineupThemeName.emberSteel);
     expect(settings.guideLayoutMode, GuideLayoutMode.pictureInPicture);
@@ -23,6 +25,9 @@ void main() {
       audioPassthrough: true,
       audioSetupComplete: true,
       reduceMotion: true,
+      libraryTabsEnabled: false,
+      nowWatchingBanner: false,
+      osdAutoHideSeconds: 8,
     );
     final restored = LineupSettings.fromJson(original.toJson());
     expect(restored.guideDensity, GuideDensity.compact);
@@ -31,6 +36,9 @@ void main() {
     expect(restored.audioPassthrough, isTrue);
     expect(restored.audioSetupComplete, isTrue);
     expect(restored.reduceMotion, isTrue);
+    expect(restored.libraryTabsEnabled, isFalse);
+    expect(restored.nowWatchingBanner, isFalse);
+    expect(restored.osdAutoHideSeconds, 8);
   });
 
   test('invalid theme and Guide layout values fall back safely', () {

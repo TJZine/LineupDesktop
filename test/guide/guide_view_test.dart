@@ -256,6 +256,36 @@ void main() {
     lineup.dispose();
   });
 
+  testWidgets('Now Playing banner setting updates its Guide consumer', (
+    tester,
+  ) async {
+    final lineup = _Lineup(2)..currentChannelId = 'channel-0';
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: GuideView(
+          controller: guide,
+          onClose: () {},
+          onTune: (_) async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('guide-now-playing-context')), findsOneWidget);
+
+    lineup.settings = lineup.settings.copyWith(nowWatchingBanner: false);
+    lineup.notifyListeners();
+    await tester.pump();
+    expect(find.byKey(const Key('guide-now-playing-context')), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    guide.dispose();
+    lineup.dispose();
+  });
+
   testWidgets('vertical Guide position survives route disposal and return', (
     tester,
   ) async {

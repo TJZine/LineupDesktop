@@ -560,9 +560,14 @@ class GuideController extends ChangeNotifier {
     final settingsChanged =
         _settings.guideHours != lineup.settings.guideHours ||
         _settings.pastMinutes != lineup.settings.pastMinutes ||
-        _settings.guideDensity != lineup.settings.guideDensity;
+        _settings.guideDensity != lineup.settings.guideDensity ||
+        _settings.libraryTabsEnabled != lineup.settings.libraryTabsEnabled;
     _channels = next;
     _settings = lineup.settings;
+    if (!_settings.libraryTabsEnabled && _libraryFilterId != null) {
+      _libraryFilterId = null;
+      _updateVisibleChannels();
+    }
     if (lineupChanged) {
       _updateVisibleChannels();
       if (_libraryFilterId != null &&

@@ -20,16 +20,10 @@ class UpstreamOnboardingView extends StatefulWidget {
 
 class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
   Timer? _clock;
-  bool? _externalAudio;
-  bool _audioFallback = true;
 
   @override
   void initState() {
     super.initState();
-    _externalAudio = widget.controller.settings.audioSetupComplete
-        ? widget.controller.settings.audioPassthrough
-        : null;
-    _audioFallback = widget.controller.settings.directPlayAudioFallback;
     _clock = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted && widget.controller.stage == SetupStage.linking) {
         setState(() {});
@@ -237,6 +231,15 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
           icon: const Icon(Icons.logout),
           label: const Text('Sign out'),
         ),
+        if (widget.controller.profileSelectionCanCancel) ...[
+          const SizedBox(height: 12),
+          TextButton(
+            onPressed: widget.controller.busy
+                ? null
+                : widget.controller.cancelProfileSelection,
+            child: const Text('Cancel'),
+          ),
+        ],
       ],
     ),
   );
@@ -257,6 +260,9 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
             padding: const EdgeInsets.only(bottom: 12),
             child: _ServerCard(
               server: server,
+              connection: widget.controller.server?.id == server.id
+                  ? widget.controller.connection
+                  : null,
               onPressed: widget.controller.busy
                   ? null
                   : () => widget.controller.selectServer(server),
@@ -284,6 +290,21 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
                 icon: const Icon(Icons.switch_account),
                 label: const Text('Switch profile'),
               ),
+            if (widget.controller.server != null)
+              OutlinedButton.icon(
+                onPressed: widget.controller.busy
+                    ? null
+                    : widget.controller.clearSavedServer,
+                icon: const Icon(Icons.link_off),
+                label: const Text('Clear saved server'),
+              ),
+            if (widget.controller.serverSelectionCanCancel)
+              TextButton(
+                onPressed: widget.controller.busy
+                    ? null
+                    : widget.controller.cancelServerSelection,
+                child: const Text('Cancel'),
+              ),
           ],
         ),
       ],
@@ -293,56 +314,21 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
   Widget _audio() => _HeroContent(
     title: 'Audio Setup',
     step: 'Step 2 of 3',
-    subtitle: 'Do you have an external sound system?',
+    subtitle: 'Lineup uses the system-selected audio output on Desktop.',
     child: Column(
       children: [
-        Wrap(
-          spacing: 24,
-          runSpacing: 20,
-          alignment: WrapAlignment.center,
-          children: [
-            _AudioChoice(
-              icon: Icons.speaker_group_outlined,
-              title: 'Yes, I have a soundbar or receiver',
-              subtitle: 'Connected via HDMI eARC',
-              selected: _externalAudio == true,
-              autofocus: true,
-              onPressed: () => setState(() => _externalAudio = true),
-            ),
-            _AudioChoice(
-              icon: Icons.tv,
-              title: 'No, using TV speakers',
-              subtitle:
-                  'Best for built-in speakers. Turns off passthrough intent.',
-              selected: _externalAudio == false,
-              onPressed: () => setState(() => _externalAudio = false),
-            ),
-          ],
+        const Icon(Icons.volume_up_outlined, size: 64),
+        const SizedBox(height: 14),
+        const Text(
+          'Output devices, passthrough, and native capability controls remain hidden until the Windows player can report and consume them accurately.',
+          textAlign: TextAlign.center,
         ),
         const SizedBox(height: 28),
-        const Align(
-          alignment: Alignment.centerLeft,
-          child: Text(
-            'ADVANCED',
-            style: TextStyle(fontWeight: FontWeight.w800, letterSpacing: 1.2),
-          ),
-        ),
-        SwitchListTile(
-          value: _audioFallback,
-          title: const Text('Direct Play Audio Fallback'),
-          subtitle: const Text(
-            'Allow a compatible audio track instead of transcoding. Recommended for most users.',
-          ),
-          onChanged: (value) => setState(() => _audioFallback = value),
-        ),
-        const SizedBox(height: 18),
         FilledButton(
-          onPressed: _externalAudio == null || widget.controller.busy
+          autofocus: true,
+          onPressed: widget.controller.busy
               ? null
-              : () async => widget.controller.completeAudioSetup(
-                  externalAudio: _externalAudio!,
-                  directPlayFallback: _audioFallback,
-                ),
+              : widget.controller.completeAudioSetup,
           child: const Text('Continue'),
         ),
       ],
@@ -522,8 +508,13 @@ class _ProfileCard extends StatelessWidget {
 }
 
 class _ServerCard extends StatelessWidget {
-  const _ServerCard({required this.server, required this.onPressed});
+  const _ServerCard({
+    required this.server,
+    required this.connection,
+    required this.onPressed,
+  });
   final PlexServer server;
+  final PlexConnection? connection;
   final VoidCallback? onPressed;
   @override
   Widget build(BuildContext context) => Card(
@@ -535,58 +526,26 @@ class _ServerCard extends StatelessWidget {
         style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w700),
       ),
       subtitle: Text(
-        '${server.owned ? 'Owned server' : 'Shared server'} • ${server.connections.length} secure connection${server.connections.length == 1 ? '' : 's'}',
+        connection == null
+            ? '${server.owned ? 'Owned server' : 'Shared server'} • ${server.connections.length} secure connection${server.connections.length == 1 ? '' : 's'}'
+            : _connectionDescription(server, connection!),
       ),
       trailing: FilledButton(
         onPressed: onPressed,
-        child: const Text('Connect'),
+        child: Text(connection == null ? 'Connect' : 'Reconnect'),
       ),
     ),
   );
 }
 
-class _AudioChoice extends StatelessWidget {
-  const _AudioChoice({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.selected,
-    required this.onPressed,
-    this.autofocus = false,
-  });
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final bool selected;
-  final VoidCallback onPressed;
-  final bool autofocus;
-  @override
-  Widget build(BuildContext context) => SizedBox(
-    width: 360,
-    height: 210,
-    child: LineupSelectionCard(
-      selected: selected,
-      autofocus: autofocus,
-      onPressed: onPressed,
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 64),
-            const SizedBox(height: 14),
-            Text(
-              title,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 6),
-            Text(subtitle, textAlign: TextAlign.center),
-          ],
-        ),
-      ),
-    ),
-  );
+String _connectionDescription(PlexServer server, PlexConnection connection) {
+  final type = connection.relay
+      ? 'Plex Relay'
+      : connection.local
+      ? 'Direct local'
+      : 'Direct remote';
+  final latency = connection.latency;
+  return '${server.owned ? 'Owned server' : 'Shared server'} • $type${latency == null ? '' : ' • ${latency.inMilliseconds} ms measured'}';
 }
 
 class _ProfilePinDialog extends StatefulWidget {

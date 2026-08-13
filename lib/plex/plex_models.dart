@@ -60,11 +60,13 @@ class PlexConnection {
     required this.uri,
     required this.local,
     required this.relay,
+    this.latency,
   });
 
   final Uri uri;
   final bool local;
   final bool relay;
+  final Duration? latency;
 }
 
 class PlexLibrary {

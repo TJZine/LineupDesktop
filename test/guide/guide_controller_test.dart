@@ -369,6 +369,10 @@ void main() {
       expect(guide.channels.map((channel) => channel.id), contains('mixed'));
       expect(guide.channels.map((channel) => channel.number), contains(900));
 
+      lineup.setSettings(lineup.settings.copyWith(libraryTabsEnabled: false));
+      expect(guide.libraryFilterId, isNull);
+      expect(guide.channels, hasLength(3));
+
       guide.dispose();
       lineup.dispose();
     },

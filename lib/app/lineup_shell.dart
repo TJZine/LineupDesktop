@@ -11,6 +11,7 @@ import '../guide/guide_view.dart';
 import '../playback/native_player.dart';
 import '../playback/player_coordinator.dart';
 import '../playback/player_view.dart';
+import '../plex/plex_models.dart';
 import '../settings/lineup_settings.dart';
 import '../ui/app_ui.dart';
 import '../ui/app_theme.dart';
@@ -44,6 +45,7 @@ class _LineupShellState extends State<LineupShell> {
   final _playerFocus = FocusNode(debugLabel: 'Player');
   bool _appMenuOpen = false;
   int? _guideReturnIndex;
+  late SetupStage _lastStage = widget.controller.stage;
   @override
   void initState() {
     super.initState();
@@ -64,7 +66,15 @@ class _LineupShellState extends State<LineupShell> {
   }
 
   void _changed() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    final stage = widget.controller.stage;
+    final returnedToApp =
+        _lastStage != SetupStage.ready && stage == SetupStage.ready;
+    _lastStage = stage;
+    setState(() {});
+    if (returnedToApp) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _restoreRouteFocus());
+    }
   }
 
   @override
@@ -119,6 +129,24 @@ class _LineupShellState extends State<LineupShell> {
   void _closeAppMenu() {
     setState(() => _appMenuOpen = false);
     WidgetsBinding.instance.addPostFrameCallback((_) => _restoreRouteFocus());
+  }
+
+  Future<void> _logout() async {
+    if (await widget.controller.logout() || !mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Could not sign out'),
+        content: Text(widget.controller.error ?? 'Sign out did not complete.'),
+        actions: [
+          FilledButton(
+            autofocus: true,
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _immersiveAppMenu() => Stack(
@@ -242,7 +270,7 @@ class _LineupShellState extends State<LineupShell> {
       SettingsView(controller: controller, focusNode: _settingsFocus),
       DiagnosticsView(
         controller: controller,
-        status: widget.player.status,
+        status: _player.status,
         focusNode: _diagnosticsFocus,
       ),
       playerView,
@@ -286,7 +314,7 @@ class _LineupShellState extends State<LineupShell> {
                       padding: const EdgeInsets.only(bottom: 16),
                       child: IconButton(
                         tooltip: 'Sign out of Plex',
-                        onPressed: controller.busy ? null : controller.logout,
+                        onPressed: controller.busy ? null : _logout,
                         icon: const Icon(Icons.logout),
                       ),
                     ),
@@ -750,7 +778,7 @@ class _ChannelEditorState extends State<ChannelEditor> {
       if (mounted) {
         setState(() {
           _saving = false;
-          _error = error.toString().replaceFirst('FormatException: ', '');
+          _error = _safeFormError(error, 'The channel could not be saved.');
         });
       }
     }
@@ -865,6 +893,7 @@ class _SettingsViewState extends State<SettingsView> {
             _SettingsCategory.appearance => [
               _Dropdown<LineupThemeName>(
                 'Theme',
+                'Change the application color system immediately.',
                 value.theme,
                 LineupThemeName.values,
                 (item) => item.label,
@@ -878,6 +907,7 @@ class _SettingsViewState extends State<SettingsView> {
             _SettingsCategory.guide => [
               _Dropdown<GuideLayoutMode>(
                 'Guide presentation',
+                'Choose classic Guide with PiP or Guide over full video.',
                 value.guideLayoutMode,
                 GuideLayoutMode.values,
                 (item) => switch (item) {
@@ -894,6 +924,7 @@ class _SettingsViewState extends State<SettingsView> {
               ),
               _Dropdown<int>(
                 'Visible time range',
+                'Set how many schedule hours the Guide shows at once.',
                 value.guideHours,
                 const [2, 4, 6, 8, 12],
                 (item) => '$item hours',
@@ -905,6 +936,7 @@ class _SettingsViewState extends State<SettingsView> {
               ),
               _Dropdown<int>(
                 'Past window',
+                'Keep recently ended programs available in the Guide.',
                 value.pastMinutes,
                 const [0, 15, 30, 60, 120, 180],
                 (item) => '$item minutes',
@@ -916,6 +948,7 @@ class _SettingsViewState extends State<SettingsView> {
               ),
               _Dropdown<GuideDensity>(
                 'Row density',
+                'Choose comfortable or compact channel rows.',
                 value.guideDensity,
                 GuideDensity.values,
                 (item) => _enumLabel(item.name),
@@ -925,10 +958,55 @@ class _SettingsViewState extends State<SettingsView> {
                         widget.controller.settings.copyWith(guideDensity: item),
                       ),
               ),
+              SwitchListTile(
+                title: const Text('Library filters'),
+                subtitle: const Text(
+                  'Show a source-library filter in the Guide toolbar.',
+                ),
+                value: value.libraryTabsEnabled,
+                onChanged: _saving
+                    ? null
+                    : (item) => _update(
+                        widget.controller.settings.copyWith(
+                          libraryTabsEnabled: item,
+                        ),
+                      ),
+              ),
+              SwitchListTile(
+                title: const Text('Now Watching banner'),
+                subtitle: const Text(
+                  'Show the tuned channel and program above Guide details.',
+                ),
+                value: value.nowWatchingBanner,
+                onChanged: _saving
+                    ? null
+                    : (item) => _update(
+                        widget.controller.settings.copyWith(
+                          nowWatchingBanner: item,
+                        ),
+                      ),
+              ),
+              _Dropdown<int>(
+                'Player controls auto-hide',
+                'Set how long controls remain visible while playing.',
+                value.osdAutoHideSeconds,
+                const [2, 4, 6, 8, 10, 15],
+                (item) => '$item seconds',
+                _saving
+                    ? null
+                    : (item) => _update(
+                        widget.controller.settings.copyWith(
+                          osdAutoHideSeconds: item,
+                        ),
+                      ),
+              ),
             ],
             _SettingsCategory.accessibility => [
               SwitchListTile(
                 title: const Text('Reduce motion'),
+                subtitle: const Text(
+                  'Disable nonessential application transitions.',
+                ),
                 value: value.reduceMotion,
                 onChanged: _saving
                     ? null
@@ -938,6 +1016,9 @@ class _SettingsViewState extends State<SettingsView> {
               ),
               SwitchListTile(
                 title: const Text('Large focus indicators'),
+                subtitle: const Text(
+                  'Use thicker outlines for keyboard and controller focus.',
+                ),
                 value: value.largeFocusIndicators,
                 onChanged: _saving
                     ? null
@@ -949,6 +1030,37 @@ class _SettingsViewState extends State<SettingsView> {
               ),
             ],
             _SettingsCategory.account => [
+              ListTile(
+                title: const Text('Plex Home profile'),
+                subtitle: Text(
+                  widget.controller.profile?.name ??
+                      widget.controller.account?.name ??
+                      'Plex account',
+                ),
+                trailing: OutlinedButton.icon(
+                  onPressed: _saving || widget.controller.profiles.isEmpty
+                      ? null
+                      : widget.controller.showProfiles,
+                  icon: const Icon(Icons.switch_account),
+                  label: const Text('Switch profile'),
+                ),
+              ),
+              ListTile(
+                title: const Text('Plex Media Server'),
+                subtitle: Text(
+                  widget.controller.server == null
+                      ? 'No server selected'
+                      : _connectionDescription(
+                          widget.controller.server!,
+                          widget.controller.connection,
+                        ),
+                ),
+                trailing: OutlinedButton.icon(
+                  onPressed: _saving ? null : widget.controller.showServers,
+                  icon: const Icon(Icons.dns_outlined),
+                  label: const Text('Switch server'),
+                ),
+              ),
               SwitchListTile(
                 title: const Text('Show profile picker on startup'),
                 subtitle: const Text(
@@ -1125,12 +1237,14 @@ class _DiagnosticsSummaryState extends State<_DiagnosticsSummary> {
 class _Dropdown<T> extends StatelessWidget {
   const _Dropdown(
     this.label,
+    this.description,
     this.value,
     this.values,
     this.display,
     this.changed,
   );
   final String label;
+  final String description;
   final T value;
   final List<T> values;
   final String Function(T) display;
@@ -1138,6 +1252,7 @@ class _Dropdown<T> extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ListTile(
     title: Text(label),
+    subtitle: Text(description),
     trailing: DropdownButton<T>(
       value: value,
       items: [
@@ -1151,6 +1266,17 @@ class _Dropdown<T> extends StatelessWidget {
             },
     ),
   );
+}
+
+String _connectionDescription(PlexServer server, PlexConnection? connection) {
+  if (connection == null) return server.name;
+  final type = connection.relay
+      ? 'Plex Relay'
+      : connection.local
+      ? 'Direct local'
+      : 'Direct remote';
+  final latency = connection.latency;
+  return '${server.name} • $type${latency == null ? '' : ' • ${latency.inMilliseconds} ms measured'}';
 }
 
 class _Brand extends StatelessWidget {
@@ -1186,4 +1312,10 @@ String _sourceLabel(ContentSource source) => switch (source) {
   ManualSource() => 'manual',
   PlaylistSource() => 'playlist',
   MixedSource() => 'mixed',
+};
+
+String _safeFormError(Object error, String fallback) => switch (error) {
+  FormatException(:final message) => message.toString(),
+  PlexException(:final message) => message,
+  _ => fallback,
 };

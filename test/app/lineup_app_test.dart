@@ -81,6 +81,70 @@ void main() {
     expect(FocusManager.instance.primaryFocus?.debugLabel, 'Player');
   });
 
+  testWidgets('Settings switches profile/server routes and restores focus', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 720));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final selectedServer = PlexServer(
+      id: 'server',
+      name: 'Living Room',
+      connections: [
+        PlexConnection(
+          uri: Uri.parse('https://plex.example:32400'),
+          local: true,
+          relay: false,
+        ),
+      ],
+      owned: true,
+    );
+    final controller = _FakeController()
+      ..stage = SetupStage.ready
+      ..account = const PlexAccount(id: 'owner', name: 'Owner', email: '')
+      ..profile = const PlexHomeUser(
+        id: 'child',
+        name: 'Child',
+        protected: true,
+      )
+      ..profiles = const [
+        PlexHomeUser(id: 'owner', name: 'Owner', protected: false),
+        PlexHomeUser(id: 'child', name: 'Child', protected: true),
+      ]
+      ..servers = [selectedServer]
+      ..server = selectedServer
+      ..connection = PlexConnection(
+        uri: Uri.parse('https://plex.example:32400'),
+        local: true,
+        relay: false,
+        latency: const Duration(milliseconds: 18),
+      );
+    await tester.pumpWidget(
+      LineupBootstrap(player: _FakePlayer(), controller: controller),
+    );
+    await tester.pumpAndSettle();
+
+    await _openImmersiveDestination(tester, 'Settings');
+    await tester.tap(find.text('Account'));
+    await tester.pumpAndSettle();
+    expect(find.text('Switch profile'), findsOneWidget);
+    expect(find.text('Switch server'), findsOneWidget);
+    expect(
+      find.textContaining('Direct local • 18 ms measured'),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.text('Switch server'));
+    await tester.pumpAndSettle();
+    expect(find.text('Reconnect'), findsOneWidget);
+    expect(find.text('Clear saved server'), findsOneWidget);
+    expect(find.text('Cancel'), findsOneWidget);
+
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(find.text('Settings'), findsWidgets);
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Settings');
+  });
+
   testWidgets('Guide tune remains in PiP before opening the full player', (
     tester,
   ) async {

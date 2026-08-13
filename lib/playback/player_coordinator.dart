@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import '../app/lineup_controller.dart';
 import '../channels/channel.dart';
 import '../guide/guide_controller.dart';
+import '../plex/plex_models.dart';
 import 'native_player.dart';
 
 enum PlayerOverlay {
@@ -23,7 +24,7 @@ class PlayerCoordinator extends ChangeNotifier {
     required this.player,
     required this.lineup,
     required this.guide,
-    this.overlayTimeout = const Duration(seconds: 4),
+    this.overlayTimeout,
   }) {
     _indexChannels();
     _status = player.status;
@@ -39,7 +40,7 @@ class PlayerCoordinator extends ChangeNotifier {
   final NativePlayer player;
   final LineupController lineup;
   final GuideController guide;
-  final Duration overlayTimeout;
+  final Duration? overlayTimeout;
   late PlayerStatus _status;
   late Duration _position;
   late Duration _duration;
@@ -138,13 +139,20 @@ class PlayerCoordinator extends ChangeNotifier {
     if (event.generation != null && event.generation != _activeLoadGeneration) {
       return;
     }
-    _status = event.status;
+    _status = event.status.state == PlayerState.error
+        ? PlayerStatus(
+            state: PlayerState.error,
+            message: 'Playback error',
+            recoverable: event.status.recoverable,
+          )
+        : event.status;
     _position = event.position;
     _duration = event.duration;
     _telemetry = event.telemetry;
     _tracks = event.tracks;
     if (event.status.state == PlayerState.error) {
-      _error = event.status.message;
+      _error =
+          'Playback stopped unexpectedly. Retry or choose another channel.';
       _tuning = false;
       _canRetry = event.status.recoverable && _retryChannelId != null;
       final playback = _activePlayback;
@@ -210,7 +218,8 @@ class PlayerCoordinator extends ChangeNotifier {
       if (!_disposed && generation == _tuneGeneration) showOsd();
     } catch (error) {
       if (_disposed || generation != _tuneGeneration) return;
-      _error = error.toString();
+      _recordPlaybackFailure(error);
+      _error = _safePlaybackError(error);
       _canRetry = false;
       _setOverlay(PlayerOverlay.error, timed: false);
     }
@@ -290,7 +299,8 @@ class PlayerCoordinator extends ChangeNotifier {
       if (generation != _tuneGeneration) return;
       _tuning = false;
       _canRetry = true;
-      _error = error.toString();
+      _recordPlaybackFailure(error);
+      _error = _safePlaybackError(error);
       _setOverlay(PlayerOverlay.error, timed: false);
     }
   }
@@ -521,12 +531,17 @@ class PlayerCoordinator extends ChangeNotifier {
     _overlayTimer?.cancel();
     if (_overlayInteraction) return;
     final epoch = ++_overlayEpoch;
-    _overlayTimer = Timer(timeout ?? overlayTimeout, () {
-      if (_disposed || epoch != _overlayEpoch || _overlay != value) return;
-      _overlayTimer = null;
-      _overlay = PlayerOverlay.none;
-      notifyListeners();
-    });
+    _overlayTimer = Timer(
+      timeout ??
+          overlayTimeout ??
+          Duration(seconds: lineup.settings.osdAutoHideSeconds),
+      () {
+        if (_disposed || epoch != _overlayEpoch || _overlay != value) return;
+        _overlayTimer = null;
+        _overlay = PlayerOverlay.none;
+        notifyListeners();
+      },
+    );
   }
 
   void _cancelOverlayTimer() {
@@ -581,6 +596,19 @@ class PlayerCoordinator extends ChangeNotifier {
       // The original tune failure remains the useful error.
     }
   }
+
+  void _recordPlaybackFailure(Object error) {
+    lineup.diagnostics.add('playback', 'Playback request failed', {
+      'error': error.toString(),
+    });
+  }
+
+  static String _safePlaybackError(Object error) => switch (error) {
+    PlexException(:final message) => message,
+    PlayerUnavailable() =>
+      'Playback could not start. Retry or choose another channel.',
+    _ => 'Playback could not start. Retry or choose another channel.',
+  };
 
   void _indexChannels() {
     _indexedChannels = lineup.channels;

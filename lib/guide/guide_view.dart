@@ -317,7 +317,8 @@ class _Toolbar extends StatelessWidget {
             Text('${controller.channels.length} channels'),
           ],
           const Spacer(),
-          if (libraryIds.isNotEmpty)
+          if (controller.lineup.settings.libraryTabsEnabled &&
+              libraryIds.isNotEmpty)
             DropdownButton<String?>(
               value: controller.libraryFilterId,
               hint: const Text('All libraries'),
@@ -840,7 +841,8 @@ class _Details extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            if (tunedChannel != null) ...[
+            if (tunedChannel != null &&
+                controller.lineup.settings.nowWatchingBanner) ...[
               Text(
                 key: const Key('guide-now-playing-context'),
                 'NOW PLAYING  •  ${tunedChannel.number} ${tunedChannel.name}  •  ${tunedProgram?.scheduled.item.title ?? 'Schedule loading…'}',

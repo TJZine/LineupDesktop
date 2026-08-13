@@ -806,8 +806,11 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
       'Update matching generated channels and keep the rest.',
   };
 
-  static String _message(Object error) =>
-      error.toString().replaceFirst('FormatException: ', '');
+  static String _message(Object error) => switch (error) {
+    FormatException(:final message) => message.toString(),
+    PlexException(:final message) => message,
+    _ => 'Channel Setup could not complete that request.',
+  };
 }
 
 class _SetupSurface extends StatelessWidget {

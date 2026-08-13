@@ -56,7 +56,11 @@ void main() {
       ),
     );
 
-    expect(find.textContaining('synthetic load failure'), findsOneWidget);
+    expect(
+      find.text('Playback could not start. Retry or choose another channel.'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('synthetic load failure'), findsNothing);
 
     await tester.pumpWidget(const SizedBox.shrink());
     fixture.dispose();

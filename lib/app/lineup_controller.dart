@@ -71,6 +71,8 @@ class LineupController extends ChangeNotifier {
   SetupStage stage = SetupStage.welcome;
   bool busy = false;
   bool channelSetupCanCancel = false;
+  bool profileSelectionCanCancel = false;
+  bool serverSelectionCanCancel = false;
   String? error;
   int _epoch = 0;
   String? _accountToken;
@@ -82,6 +84,8 @@ class LineupController extends ChangeNotifier {
   List<PlexPlaylist>? _scheduleWorkerPlaylists;
   ScheduleWorker? _scheduleWorker;
   int _scheduleWorkerCreations = 0;
+  Future<void> _credentialOperations = Future.value();
+  int _settingsGeneration = 0;
 
   Future<void> initialize() async {
     _persisted = await store.load();
@@ -164,6 +168,7 @@ class LineupController extends ChangeNotifier {
     error = null;
     stage = SetupStage.welcome;
     notifyListeners();
+    await _clearCredentials();
     if (pin != null) await plex.cancelPin(pin);
   }
 
@@ -192,9 +197,10 @@ class LineupController extends ChangeNotifier {
       _pinTimer?.cancel();
       final validated = await plex.account(token);
       if (operation != _epoch) return;
-      await credentials.writeAccountToken(token);
-      if (operation != _epoch) {
-        await credentials.clear();
+      if (!await _writeCredential(
+        operation,
+        () => credentials.writeAccountToken(token),
+      )) {
         return;
       }
       account = validated;
@@ -231,9 +237,10 @@ class LineupController extends ChangeNotifier {
             ? accountToken
             : await plex.switchHomeUser(accountToken, selected.id, pin);
         if (operation != _epoch) return;
-        await credentials.writeProfileToken(selected.id, token);
-        if (operation != _epoch) {
-          await credentials.clear();
+        if (!await _writeCredential(
+          operation,
+          () => credentials.writeProfileToken(selected.id, token),
+        )) {
           return;
         }
         final oldProfile = profile;
@@ -246,6 +253,7 @@ class LineupController extends ChangeNotifier {
         final oldPlaylists = availablePlaylists;
         final oldChannels = channels;
         final oldCurrent = currentChannelId;
+        final oldCanCancel = profileSelectionCanCancel;
         profile = selected;
         _profileToken = token;
         server = null;
@@ -256,6 +264,7 @@ class LineupController extends ChangeNotifier {
         availablePlaylists = const [];
         channels = const [];
         currentChannelId = null;
+        profileSelectionCanCancel = false;
         try {
           await _save();
         } catch (_) {
@@ -269,9 +278,11 @@ class LineupController extends ChangeNotifier {
           availablePlaylists = oldPlaylists;
           channels = oldChannels;
           currentChannelId = oldCurrent;
+          profileSelectionCanCancel = oldCanCancel;
           rethrow;
         }
         await _discover(operation);
+        if (operation == _epoch) profileSelectionCanCancel = false;
       },
       operation: operation,
       fallbackStage: SetupStage.profiles,
@@ -291,7 +302,12 @@ class LineupController extends ChangeNotifier {
     final saved = servers
         .where((candidate) => candidate.id == savedId)
         .firstOrNull;
-    if (saved != null) await selectServer(saved);
+    if (saved != null) {
+      await selectServer(saved);
+    } else if (server != null) {
+      _clearServerRuntime();
+      serverSelectionCanCancel = false;
+    }
   }
 
   Future<void> refreshServers() async {
@@ -325,6 +341,7 @@ class LineupController extends ChangeNotifier {
         final oldPlaylists = availablePlaylists;
         final oldChannels = channels;
         final oldCurrent = currentChannelId;
+        final oldCanCancel = serverSelectionCanCancel;
         server = selected;
         connection = selectedConnection;
         libraries = loadedLibraries;
@@ -353,6 +370,7 @@ class LineupController extends ChangeNotifier {
             : _persisted.currentChannelByProfileServer[profileId]?[selected.id];
         stage = SetupStage.channelSetup;
         channelSetupCanCancel = false;
+        serverSelectionCanCancel = false;
         try {
           await _save();
         } catch (_) {
@@ -364,6 +382,7 @@ class LineupController extends ChangeNotifier {
           availablePlaylists = oldPlaylists;
           channels = oldChannels;
           currentChannelId = oldCurrent;
+          serverSelectionCanCancel = oldCanCancel;
           rethrow;
         }
         if (selectedLibraryIds.isNotEmpty && channels.isNotEmpty) {
@@ -373,6 +392,7 @@ class LineupController extends ChangeNotifier {
         } else if (!settings.audioSetupComplete) {
           stage = SetupStage.audio;
         }
+        serverSelectionCanCancel = false;
       },
       operation: operation,
       fallbackStage: SetupStage.servers,
@@ -454,15 +474,12 @@ class LineupController extends ChangeNotifier {
     availablePlaylists = catalog.playlists;
   }
 
-  Future<void> completeAudioSetup({
-    required bool externalAudio,
-    required bool directPlayFallback,
-  }) async {
+  Future<void> completeAudioSetup() async {
     try {
       await updateSettings(
         settings.copyWith(
-          audioPassthrough: externalAudio,
-          directPlayAudioFallback: directPlayFallback,
+          audioPassthrough: false,
+          directPlayAudioFallback: false,
           audioSetupComplete: true,
         ),
       );
@@ -494,9 +511,64 @@ class LineupController extends ChangeNotifier {
   }
 
   void showProfiles() {
+    profileSelectionCanCancel = stage == SetupStage.ready;
     stage = SetupStage.profiles;
     error = null;
     notifyListeners();
+  }
+
+  void cancelProfileSelection() {
+    if (!profileSelectionCanCancel || server == null) return;
+    profileSelectionCanCancel = false;
+    error = null;
+    stage = SetupStage.ready;
+    notifyListeners();
+  }
+
+  void showServers() {
+    serverSelectionCanCancel = stage == SetupStage.ready;
+    stage = SetupStage.servers;
+    error = null;
+    notifyListeners();
+  }
+
+  void cancelServerSelection() {
+    if (!serverSelectionCanCancel || server == null) return;
+    serverSelectionCanCancel = false;
+    error = null;
+    stage = SetupStage.ready;
+    notifyListeners();
+  }
+
+  Future<void> clearSavedServer() async {
+    final profileId = profile?.id ?? account?.id;
+    if (profileId == null) return;
+    final operation = ++_epoch;
+    await _run(
+      () async {
+        final selections = Map<String, String>.of(
+          _persisted.selectedServerByProfile,
+        )..remove(profileId);
+        final next = PersistedState(
+          settings: _persisted.settings,
+          profileId: _persisted.profileId,
+          selectedServerByProfile: selections,
+          selectedLibraryIdsByProfileServer:
+              _persisted.selectedLibraryIdsByProfileServer,
+          channelsByProfileServer: _persisted.channelsByProfileServer,
+          currentChannelByProfileServer:
+              _persisted.currentChannelByProfileServer,
+        );
+        await store.save(next);
+        if (operation != _epoch) return;
+        _persisted = next;
+        _clearServerRuntime();
+        serverSelectionCanCancel = false;
+        stage = SetupStage.servers;
+      },
+      operation: operation,
+      fallbackStage: SetupStage.servers,
+    );
   }
 
   Future<void> applyChannelPlan(
@@ -683,24 +755,36 @@ class LineupController extends ChangeNotifier {
   }
 
   Future<void> updateSettings(LineupSettings value) async {
+    final generation = ++_settingsGeneration;
     final old = settings;
     settings = value;
     try {
       await _save();
+      if (generation != _settingsGeneration) return;
       diagnostics.enabled = value.diagnosticsEnabled;
       notifyListeners();
     } catch (_) {
-      settings = old;
+      if (generation == _settingsGeneration) settings = old;
       rethrow;
     }
   }
 
-  Future<void> logout() async {
+  Future<bool> logout() async {
     ++_epoch;
+    ++_settingsGeneration;
     _pinTimer?.cancel();
     _busyOperation = null;
     busy = false;
-    await credentials.clear();
+    try {
+      await _clearCredentials();
+    } catch (exception) {
+      error = 'Lineup could not securely sign out. Check system credential storage and try again.';
+      diagnostics.add('application', 'Credential cleanup failed', {
+        'error': exception.toString(),
+      });
+      notifyListeners();
+      return false;
+    }
     account = null;
     profile = null;
     profiles = const [];
@@ -718,11 +802,14 @@ class LineupController extends ChangeNotifier {
     channels = const [];
     currentChannelId = null;
     channelSetupCanCancel = false;
+    profileSelectionCanCancel = false;
+    serverSelectionCanCancel = false;
     _accountToken = null;
     _profileToken = null;
     stage = SetupStage.welcome;
     error = null;
     notifyListeners();
+    return true;
   }
 
   Future<void> _save() async {
@@ -774,6 +861,42 @@ class LineupController extends ChangeNotifier {
     _persisted = next;
   }
 
+  Future<bool> _writeCredential(
+    int operation,
+    Future<void> Function() write,
+  ) async {
+    var current = false;
+    final next = _credentialOperations.then((_) async {
+      if (operation != _epoch) return;
+      await write();
+      current = operation == _epoch;
+    });
+    _credentialOperations = next.catchError((_) {});
+    await next;
+    return current;
+  }
+
+  Future<void> _clearCredentials() {
+    final next = _credentialOperations.then((_) => credentials.clear());
+    _credentialOperations = next.catchError((_) {});
+    return next;
+  }
+
+  void _clearServerRuntime() {
+    server = null;
+    connection = null;
+    libraries = const [];
+    selectedLibraryIds = const {};
+    availableMedia = const [];
+    availablePlaylists = const [];
+    channels = const [];
+    currentChannelId = null;
+    _scheduleWorker?.dispose();
+    _scheduleWorker = null;
+    _scheduleWorkerMedia = null;
+    _scheduleWorkerPlaylists = null;
+  }
+
   Future<bool> _run(
     Future<void> Function() body, {
     required int operation,
@@ -808,6 +931,7 @@ class LineupController extends ChangeNotifier {
   @override
   void dispose() {
     ++_epoch;
+    ++_settingsGeneration;
     _pinTimer?.cancel();
     _scheduleWorker?.dispose();
     final pin = activePin;

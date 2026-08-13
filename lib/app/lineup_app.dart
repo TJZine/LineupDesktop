@@ -97,7 +97,12 @@ class _LineupBootstrapState extends State<LineupBootstrap> {
         future: _startup,
         builder: (context, snapshot) {
           if (snapshot.hasError) {
-            return _StartupFailureBody(error: snapshot.error);
+            final error = snapshot.error;
+            return _StartupFailureBody(
+              requiredEngineFailure:
+                  error is PlatformException &&
+                  error.code == 'initialize_failed',
+            );
           }
           if (snapshot.connectionState != ConnectionState.done) {
             return const _StartupProgress();
@@ -154,9 +159,9 @@ class _StartupProgress extends StatelessWidget {
 }
 
 class _StartupFailureBody extends StatelessWidget {
-  const _StartupFailureBody({required this.error});
+  const _StartupFailureBody({required this.requiredEngineFailure});
 
-  final Object? error;
+  final bool requiredEngineFailure;
 
   @override
   Widget build(BuildContext context) {
@@ -177,10 +182,8 @@ class _StartupFailureBody extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  error is PlatformException &&
-                          (error as PlatformException).code ==
-                              'initialize_failed'
-                      ? (error as PlatformException).message ?? 'The required Windows native player could not initialize.'
+                  requiredEngineFailure
+                      ? 'The required Lineup DirectComposition Flutter engine is not active.'
                       : 'No settings or media were changed. Restart the app, and check diagnostics if the problem continues.',
                   textAlign: TextAlign.center,
                 ),

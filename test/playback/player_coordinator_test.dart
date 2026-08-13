@@ -147,6 +147,32 @@ void main() {
     },
   );
 
+  testWidgets('OSD timeout reads the persisted setting consumer', (
+    tester,
+  ) async {
+    final lineup = _TestLineup();
+    lineup.settings = lineup.settings.copyWith(osdAutoHideSeconds: 2);
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    final coordinator = PlayerCoordinator(
+      player: _Player(),
+      lineup: lineup,
+      guide: guide,
+    );
+
+    coordinator.showOsd();
+    await tester.pump(const Duration(milliseconds: 1999));
+    expect(coordinator.overlay, PlayerOverlay.osd);
+    await tester.pump(const Duration(milliseconds: 2));
+    expect(coordinator.overlay, PlayerOverlay.none);
+
+    coordinator.dispose();
+    guide.dispose();
+    lineup.dispose();
+  });
+
   test(
     'stale generated native events are rejected at the Dart owner',
     () async {
@@ -387,7 +413,11 @@ void main() {
     await coordinator.loadInitialMedia(media);
 
     expect(player.loads, [media]);
-    expect(coordinator.error, contains('load failed after dispatch'));
+    expect(
+      coordinator.error,
+      'Playback could not start. Retry or choose another channel.',
+    );
+    expect(coordinator.error, isNot(contains('load failed after dispatch')));
     expect(coordinator.overlay, PlayerOverlay.error);
 
     coordinator.dispose();

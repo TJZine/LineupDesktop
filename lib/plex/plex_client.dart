@@ -210,7 +210,7 @@ class PlexClient {
     PlexServer server,
     String token,
   ) async {
-    final candidates = List<PlexConnection>.of(server.connections)
+    final candidates = List<PlexConnection>.of(server.connections.take(8))
       ..sort((a, b) => _connectionTier(a).compareTo(_connectionTier(b)));
     for (final tier in {
       for (final connection in candidates) _connectionTier(connection),
@@ -249,7 +249,13 @@ class PlexClient {
       }
       if (reachable.isNotEmpty) {
         reachable.sort((a, b) => a.$2.compareTo(b.$2));
-        return reachable.first.$1;
+        final selected = reachable.first;
+        return PlexConnection(
+          uri: selected.$1.uri,
+          local: selected.$1.local,
+          relay: selected.$1.relay,
+          latency: selected.$2,
+        );
       }
     }
     throw const PlexException(

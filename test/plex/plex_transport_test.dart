@@ -134,7 +134,44 @@ void main() {
         'secret',
       );
       expect(selected.uri.host, 'right.example');
+      expect(selected.latency, isNotNull);
       expect(probed, containsAll(['wrong.example', 'right.example']));
+    },
+  );
+
+  test(
+    'connection probing is bounded to eight advertised candidates',
+    () async {
+      var probes = 0;
+      final client = PlexClient(
+        clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+        httpClient: MockClient((_) async {
+          probes++;
+          return http.Response(
+            '<MediaContainer machineIdentifier="other"/>',
+            200,
+          );
+        }),
+      );
+      await expectLater(
+        client.selectConnection(
+          PlexServer(
+            id: 'expected',
+            name: 'Server',
+            connections: List.generate(
+              20,
+              (index) => PlexConnection(
+                uri: Uri.parse('https://server-$index.example:32400'),
+                local: true,
+                relay: false,
+              ),
+            ),
+          ),
+          'secret',
+        ),
+        throwsA(isA<PlexException>()),
+      );
+      expect(probes, 8);
     },
   );
 

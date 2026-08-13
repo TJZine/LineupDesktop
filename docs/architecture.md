@@ -116,6 +116,13 @@ navigation do not enter C++.
   server discovery/probing, library and media parsing, privileged playback
   descriptors, deterministic channels/schedules, channel suggestions,
   playback policy, settings, redacted diagnostics, and durable state.
+- Profile and selected-server state remains scoped by Plex profile. The
+  application controller serializes secure credential writes with logout,
+  rejects stale profile/server operations, clears unavailable runtime server
+  state without crossing scopes, and retains per-server lineups when a saved
+  selection is explicitly cleared. Connection probes inspect at most eight
+  advertised endpoints and retain only the selected direct/local/relay type
+  and its actually measured latency.
 - Upstream-shaped, remote-first onboarding for Plex QR/PIN linking, Home
   profile/PIN selection, secure server recovery, first-run audio intent, and
   Channel Setup. Channel Setup owns library selection, all eight source
@@ -128,6 +135,10 @@ navigation do not enter C++.
   enable and validate the data-protection Keychain. Tokens remain outside
   ordinary application state and durable JSON; selected-server persistence
   stores only profile-scoped server identity.
+- Persisted Guide preferences own library-filter visibility, the Now Watching
+  context banner, and player-control auto-hide duration. Their existing Guide
+  and player coordinators consume updates directly; there is no second
+  settings or overlay owner.
 - A pinned, repository-owned Flutter Windows DirectComposition patch with the
   adapted BSD notice and an exact runtime compatibility check.
 - Flutter format, analysis, tests, and macOS/Windows scaffold builds in CI.

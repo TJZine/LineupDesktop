@@ -33,6 +33,9 @@ class LineupSettings {
     this.pastMinutes = 30,
     this.guideDensity = GuideDensity.comfortable,
     this.guideLayoutMode = GuideLayoutMode.pictureInPicture,
+    this.libraryTabsEnabled = true,
+    this.nowWatchingBanner = true,
+    this.osdAutoHideSeconds = 4,
     this.videoQuality = VideoQuality.original,
     this.toneMapPolicy = ToneMapPolicy.automatic,
     this.audioOutput = 'system',
@@ -53,6 +56,9 @@ class LineupSettings {
   final int pastMinutes;
   final GuideDensity guideDensity;
   final GuideLayoutMode guideLayoutMode;
+  final bool libraryTabsEnabled;
+  final bool nowWatchingBanner;
+  final int osdAutoHideSeconds;
   final VideoQuality videoQuality;
   final ToneMapPolicy toneMapPolicy;
   final String audioOutput;
@@ -73,6 +79,9 @@ class LineupSettings {
     int? pastMinutes,
     GuideDensity? guideDensity,
     GuideLayoutMode? guideLayoutMode,
+    bool? libraryTabsEnabled,
+    bool? nowWatchingBanner,
+    int? osdAutoHideSeconds,
     VideoQuality? videoQuality,
     ToneMapPolicy? toneMapPolicy,
     String? audioOutput,
@@ -92,6 +101,9 @@ class LineupSettings {
     pastMinutes: pastMinutes ?? this.pastMinutes,
     guideDensity: guideDensity ?? this.guideDensity,
     guideLayoutMode: guideLayoutMode ?? this.guideLayoutMode,
+    libraryTabsEnabled: libraryTabsEnabled ?? this.libraryTabsEnabled,
+    nowWatchingBanner: nowWatchingBanner ?? this.nowWatchingBanner,
+    osdAutoHideSeconds: osdAutoHideSeconds ?? this.osdAutoHideSeconds,
     videoQuality: videoQuality ?? this.videoQuality,
     toneMapPolicy: toneMapPolicy ?? this.toneMapPolicy,
     audioOutput: audioOutput ?? this.audioOutput,
@@ -115,6 +127,9 @@ class LineupSettings {
     'pastMinutes': pastMinutes,
     'guideDensity': guideDensity.name,
     'guideLayoutMode': guideLayoutMode.name,
+    'libraryTabsEnabled': libraryTabsEnabled,
+    'nowWatchingBanner': nowWatchingBanner,
+    'osdAutoHideSeconds': osdAutoHideSeconds,
     'videoQuality': videoQuality.name,
     'toneMapPolicy': toneMapPolicy.name,
     'audioOutput': audioOutput,
@@ -138,6 +153,8 @@ class LineupSettings {
         fallback;
     final guideHours = (json['guideHours'] as num?)?.toInt() ?? 4;
     final pastMinutes = (json['pastMinutes'] as num?)?.toInt() ?? 30;
+    final osdAutoHideSeconds =
+        (json['osdAutoHideSeconds'] as num?)?.toInt() ?? 4;
     return LineupSettings(
       theme: LineupThemeName.fromStorage(json['theme']),
       guideHours: guideHours.clamp(2, 12),
@@ -152,6 +169,9 @@ class LineupSettings {
         'guideLayoutMode',
         GuideLayoutMode.pictureInPicture,
       ),
+      libraryTabsEnabled: json['libraryTabsEnabled'] != false,
+      nowWatchingBanner: json['nowWatchingBanner'] != false,
+      osdAutoHideSeconds: osdAutoHideSeconds.clamp(2, 15),
       videoQuality: enumValue(
         VideoQuality.values,
         'videoQuality',
