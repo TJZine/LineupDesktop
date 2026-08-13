@@ -4,25 +4,29 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/lineup_app.dart';
+import 'package:lineup_desktop/app/lineup_controller.dart';
+import 'package:lineup_desktop/persistence/app_store.dart';
 import 'package:lineup_desktop/playback/native_player.dart';
+import 'package:lineup_desktop/plex/plex_client.dart';
 
 void main() {
   testWidgets('shows honest empty states and supports shell navigation', (
     tester,
   ) async {
     final player = _FakePlayer();
+    final controller = _FakeController()..stage = SetupStage.ready;
 
-    await tester.pumpWidget(LineupBootstrap(player: player));
+    await tester.pumpWidget(
+      LineupBootstrap(player: player, controller: controller),
+    );
     await tester.pumpAndSettle();
 
-    expect(find.text('Your guide is ready for setup'), findsOneWidget);
-    expect(find.text('Playback test backend ready'), findsOneWidget);
+    expect(find.text('Create a channel to build your Guide'), findsOneWidget);
 
     await tester.tap(find.byIcon(Icons.settings_outlined));
     await tester.pumpAndSettle();
 
-    expect(find.text('Settings are not available yet'), findsOneWidget);
-    expect(find.text('No channels yet'), findsNothing);
+    expect(find.text('Visible time range'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
@@ -32,7 +36,9 @@ void main() {
   testWidgets('presents initialization failures without entering the shell', (
     tester,
   ) async {
-    await tester.pumpWidget(LineupBootstrap(player: _FailingPlayer()));
+    await tester.pumpWidget(
+      LineupBootstrap(player: _FailingPlayer(), controller: _FakeController()),
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('Lineup Desktop could not start'), findsOneWidget);
@@ -48,7 +54,10 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      LineupBootstrap(player: _RequiredEngineFailingPlayer()),
+      LineupBootstrap(
+        player: _RequiredEngineFailingPlayer(),
+        controller: _FakeController(),
+      ),
     );
     await tester.pumpAndSettle();
 
@@ -59,6 +68,43 @@ void main() {
       findsOneWidget,
     );
   });
+}
+
+class _FakeController extends LineupController {
+  _FakeController()
+    : super(
+        store: _MemoryStore(),
+        credentials: _MemoryCredentials(),
+        plex: PlexClient(
+          clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+        ),
+      );
+
+  @override
+  Future<void> initialize() async {}
+}
+
+class _MemoryStore implements AppStore {
+  @override
+  Future<String> clientIdentifier() async =>
+      'lineup-desktop-test-abcdefghijklmnopqrst';
+  @override
+  Future<PersistedState> load() async => const PersistedState();
+  @override
+  Future<void> save(PersistedState state) async {}
+}
+
+class _MemoryCredentials implements CredentialStore {
+  @override
+  Future<void> clear() async {}
+  @override
+  Future<String?> readAccountToken() async => null;
+  @override
+  Future<String?> readProfileToken(String profileId) async => null;
+  @override
+  Future<void> writeAccountToken(String token) async {}
+  @override
+  Future<void> writeProfileToken(String profileId, String token) async {}
 }
 
 class _FakePlayer implements NativePlayer {

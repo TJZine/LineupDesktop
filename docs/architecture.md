@@ -93,14 +93,23 @@ navigation do not enter C++.
   fullscreen/resize/minimize handling, and clean recreation controls.
 - A focused Flutter player surface that proves transparent text and an
   interactive translucent panel remain in Flutter above native video.
+- A Dart product engine for Plex PIN authentication, Plex Home profiles,
+  server discovery/probing, library and media parsing, privileged playback
+  descriptors, deterministic channels/schedules, channel suggestions,
+  playback policy, settings, redacted diagnostics, and durable state.
+- Production onboarding, profile/server/library selection, channel setup,
+  custom channel editing, Settings, and diagnostics screens with Flutter
+  keyboard focus and accessibility semantics.
+- Keychain-backed credential ownership on macOS. Tokens remain outside
+  ordinary application state and durable JSON; selected-server persistence
+  stores only profile-scoped server identity.
 - A pinned, repository-owned Flutter Windows DirectComposition patch with the
   adapted BSD notice and an exact runtime compatibility check.
 - Flutter format, analysis, tests, and macOS/Windows scaffold builds in CI.
 
 ## Not implemented yet
 
-Plex access, secure persistence, channels, scheduling, full Guide/OSD screens,
-and production diagnostics are not implemented. HDR display switching and
+Full Guide/OSD screens are not implemented. HDR display switching and
 tone-mapping policy, audio passthrough, broad codec/container coverage, remote
 Plex streams, packaging/licensing of a redistributable libmpv build, and the
 final media acceptance campaign remain integration work. The focused Windows
@@ -110,9 +119,15 @@ actually exercised.
 
 ## Dependency decision
 
-The Dart package graph depends only on Flutter. Flutter built-ins are sufficient
-for this shell and are easier to debug than introducing a state framework
-before there is shared asynchronous state. The Windows runtime additionally
+One behaviorful `ChangeNotifier` owns the current cross-feature asynchronous
+state graph; widgets retain local form and navigation state. A separate state
+framework would add forwarding and lifecycle ceremony without improving this
+single-owner graph. `http`, `xml`, `path_provider`, and
+`flutter_secure_storage` provide maintained transport, Plex XML fallback,
+platform application-data paths, and Keychain/platform-secure credential
+storage respectively. No plaintext credential fallback exists.
+
+The Windows runtime additionally
 links libmpv dynamically at the native boundary. The pinned development asset
 requires verified local provenance and an explicit GPL opt-in; it is not an
 approved redistributable dependency. `docs/DEVELOPMENT.md` records the

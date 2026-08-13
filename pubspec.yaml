@@ -9,6 +9,10 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_secure_storage: ^11.0.0
+  http: ^1.6.0
+  path_provider: ^2.1.6
+  xml: ^7.0.1
 
 dev_dependencies:
   flutter_test:

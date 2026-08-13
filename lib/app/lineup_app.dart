@@ -3,16 +3,19 @@ import 'package:flutter/services.dart';
 
 import '../playback/native_player.dart';
 import '../ui/app_theme.dart';
+import 'lineup_controller.dart';
 import 'lineup_shell.dart';
 
 class LineupBootstrap extends StatefulWidget {
   const LineupBootstrap({
     required this.player,
+    required this.controller,
     this.initialMediaPath,
     super.key,
   });
 
   final NativePlayer player;
+  final LineupController controller;
   final String? initialMediaPath;
 
   @override
@@ -45,11 +48,15 @@ class LineupRuntimeFailure extends StatelessWidget {
 }
 
 class _LineupBootstrapState extends State<LineupBootstrap> {
-  late final Future<void> _startup = widget.player.initialize();
+  late final Future<void> _startup = Future.wait([
+    widget.player.initialize(),
+    widget.controller.initialize(),
+  ]);
 
   @override
   void dispose() {
     widget.player.dispose();
+    widget.controller.dispose();
     super.dispose();
   }
 
@@ -70,6 +77,7 @@ class _LineupBootstrapState extends State<LineupBootstrap> {
           }
           return LineupShell(
             player: widget.player,
+            controller: widget.controller,
             initialMediaPath: widget.initialMediaPath,
           );
         },
