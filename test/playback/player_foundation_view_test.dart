@@ -67,20 +67,18 @@ bool _hasArea(PlayerVideoRect rect) => rect.width > 0 && rect.height > 0;
 
 class _RecordingPlayer implements NativePlayer {
   _RecordingPlayer({
-    PlayerStatus status = const PlayerStatus(
+    this.status = const PlayerStatus(
       state: PlayerState.idle,
       message: 'Test player ready',
     ),
-  }) : _status = status;
+  });
 
   final List<PlayerVideoRect> videoRects = [];
   final List<bool> fullscreenCalls = [];
-  PlayerStatus _status;
+  @override
+  PlayerStatus status;
   int initializeCalls = 0;
   int disposeCalls = 0;
-
-  @override
-  PlayerStatus get status => _status;
 
   @override
   Duration get position => Duration.zero;
@@ -100,7 +98,7 @@ class _RecordingPlayer implements NativePlayer {
   @override
   Future<void> initialize() async {
     initializeCalls += 1;
-    _status = const PlayerStatus(
+    status = const PlayerStatus(
       state: PlayerState.idle,
       message: 'Test player ready',
     );
@@ -140,7 +138,7 @@ class _RecordingPlayer implements NativePlayer {
   @override
   Future<void> dispose() async {
     disposeCalls += 1;
-    _status = const PlayerStatus(
+    status = const PlayerStatus(
       state: PlayerState.stopped,
       message: 'Test player disposed',
     );

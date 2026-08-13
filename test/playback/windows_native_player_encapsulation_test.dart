@@ -1,8 +1,5 @@
-import 'dart:async';
-
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:lineup_desktop/playback/native_player.dart';
 import 'package:lineup_desktop/playback/windows_native_player.dart';
 
 void main() {
