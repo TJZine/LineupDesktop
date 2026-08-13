@@ -203,6 +203,133 @@ void main() {
       lineup.dispose();
     },
   );
+
+  test('load side effects roll back when load later fails', () async {
+    final lineup = _TestLineup();
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    )..requestViewport(0, 2);
+    await Future<void>.delayed(Duration.zero);
+    final player = _LoadFailurePlayer();
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+    );
+
+    await coordinator.tune('channel-b');
+
+    expect(player.loads, hasLength(1));
+    expect(player.stops, 1);
+    expect(lineup.releases, 1);
+    expect(lineup.currentChannelId, 'channel-0');
+    expect(coordinator.overlay, PlayerOverlay.error);
+
+    coordinator.dispose();
+    guide.dispose();
+    lineup.dispose();
+  });
+
+  test('terminal error during seek cannot settle tune as successful', () async {
+    final lineup = _TestLineup();
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    )..requestViewport(0, 2);
+    await Future<void>.delayed(Duration.zero);
+    final player = _BlockingSeekPlayer();
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+    );
+
+    final tune = coordinator.tune('channel-b');
+    await player.seekStarted.future;
+    player.emitError();
+    await Future<void>.delayed(Duration.zero);
+    player.releaseSeek.complete();
+    await tune;
+
+    expect(lineup.currentChannelId, 'channel-0');
+    expect(lineup.releases, 1);
+    expect(coordinator.overlay, PlayerOverlay.error);
+
+    coordinator.dispose();
+    await player.close();
+    guide.dispose();
+    lineup.dispose();
+  });
+
+  test(
+    'terminal error during persistence restores the previous channel',
+    () async {
+      final lineup = _BlockingLineup();
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => _schedule(channel),
+      )..requestViewport(0, 2);
+      await Future<void>.delayed(Duration.zero);
+      final player = _EventPlayer();
+      final coordinator = PlayerCoordinator(
+        player: player,
+        lineup: lineup,
+        guide: guide,
+      );
+
+      final tune = coordinator.tune('channel-b');
+      await lineup.persistenceStarted.future;
+      player.emitError();
+      await Future<void>.delayed(Duration.zero);
+      lineup.releasePersistence.complete();
+      await tune;
+
+      expect(lineup.currentChannelId, 'channel-0');
+      expect(lineup.releases, 1);
+      expect(coordinator.overlay, PlayerOverlay.error);
+
+      coordinator.dispose();
+      await player.close();
+      guide.dispose();
+      lineup.dispose();
+    },
+  );
+
+  test('mini Guide reconciles deletion and reloads its visible rows', () async {
+    final lineup = _TestLineup(count: 1000);
+    var loads = 0;
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async {
+        loads++;
+        return _schedule(channel);
+      },
+    );
+    final coordinator = PlayerCoordinator(
+      player: _Player(),
+      lineup: lineup,
+      guide: guide,
+    );
+    coordinator.showMiniGuide();
+    coordinator.moveMiniGuide(500);
+    await Future<void>.delayed(Duration.zero);
+    final removed = coordinator.miniGuideChannelId;
+    final before = loads;
+
+    lineup.replaceChannels(
+      lineup.channels.where((channel) => channel.id != removed).toList(),
+    );
+    await Future<void>.delayed(Duration.zero);
+
+    expect(coordinator.miniGuideChannelId, isNot(removed));
+    expect(coordinator.miniGuideChannelIndex, 500);
+    expect(loads, greaterThan(before));
+
+    coordinator.dispose();
+    guide.dispose();
+    lineup.dispose();
+  });
 }
 
 ScheduleIndex _schedule(Channel channel) => buildSchedule(
@@ -244,6 +371,11 @@ class _TestLineup extends LineupController {
 
   int releases = 0;
 
+  void replaceChannels(List<Channel> value) {
+    channels = List.unmodifiable(value);
+    notifyListeners();
+  }
+
   @override
   LineupPlaybackRequest playbackFor(String itemId) =>
       LineupPlaybackRequest(Uri.parse('https://media.test/program'), () async {
@@ -251,9 +383,26 @@ class _TestLineup extends LineupController {
       });
 
   @override
-  Future<void> setCurrentChannel(String id) async {
+  Future<void> setCurrentChannel(String? id) async {
     currentChannelId = id;
     notifyListeners();
+  }
+}
+
+class _BlockingLineup extends _TestLineup {
+  final persistenceStarted = Completer<void>();
+  final releasePersistence = Completer<void>();
+  bool _blocked = false;
+
+  @override
+  Future<void> setCurrentChannel(String? id) async {
+    currentChannelId = id;
+    notifyListeners();
+    if (!_blocked) {
+      _blocked = true;
+      persistenceStarted.complete();
+      await releasePersistence.future;
+    }
   }
 }
 
@@ -320,6 +469,14 @@ class _ControlledPlayer extends _Player {
   }
 }
 
+class _LoadFailurePlayer extends _Player {
+  @override
+  Future<void> load(Uri media) async {
+    loads.add(media);
+    throw StateError('load failed after dispatch');
+  }
+}
+
 class _EventPlayer extends _Player {
   final _events = StreamController<PlayerEvent>();
   bool failStop = false;
@@ -346,6 +503,18 @@ class _EventPlayer extends _Player {
   }
 
   Future<void> close() => _events.close();
+}
+
+class _BlockingSeekPlayer extends _EventPlayer {
+  final seekStarted = Completer<void>();
+  final releaseSeek = Completer<void>();
+
+  @override
+  Future<void> seek(Duration value) async {
+    seeks.add(value);
+    seekStarted.complete();
+    await releaseSeek.future;
+  }
 }
 
 class _MemoryStore implements AppStore {

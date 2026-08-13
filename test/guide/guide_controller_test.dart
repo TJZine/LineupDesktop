@@ -9,6 +9,7 @@ import 'package:lineup_desktop/channels/scheduler.dart';
 import 'package:lineup_desktop/guide/guide_controller.dart';
 import 'package:lineup_desktop/persistence/app_store.dart';
 import 'package:lineup_desktop/plex/plex_client.dart';
+import 'package:lineup_desktop/plex/plex_models.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 
 void main() {
@@ -196,8 +197,70 @@ void main() {
     expect(lineup.artworkLoads, 4);
     expect(await Future.wait(futures.skip(4).take(4)), everyElement(isNull));
 
-    lineup.completeArtwork();
     guide.dispose();
+    lineup.completeArtwork();
+    await _settle();
+    expect(lineup.artworkLoads, 4);
+    lineup.dispose();
+  });
+
+  test('production schedules use the persistent catalog worker', () async {
+    final channel = Channel(
+      id: 'library-channel',
+      number: 1,
+      name: 'Library',
+      source: const LibrarySource(
+        libraryId: 'library',
+        libraryType: PlexLibraryType.movie,
+      ),
+      playbackMode: PlaybackMode.sequential,
+      anchor: DateTime(2026, 8, 13),
+      shuffleSeed: 1,
+    );
+    final lineup = _TestLineup([channel])
+      ..availableMedia = List.unmodifiable(
+        List.generate(
+          2000,
+          (index) => PlexMediaItem(
+            id: 'item-$index',
+            key: '/library/metadata/$index',
+            title: 'Item $index',
+            type: 'movie',
+            duration: const Duration(minutes: 30),
+            libraryId: 'library',
+          ),
+        ),
+      );
+
+    final first = await lineup.loadScheduleFor(channel);
+    final second = await lineup.loadScheduleFor(channel);
+
+    expect(first.items, hasLength(2000));
+    expect(second.items, hasLength(2000));
+    lineup.dispose();
+  });
+
+  test('disposing Guide prevents queued schedule work from starting', () async {
+    final lineup = _TestLineup(_channels(10));
+    final loads = <Completer<ScheduleIndex>>[];
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) {
+        final completer = Completer<ScheduleIndex>();
+        loads.add(completer);
+        return completer.future;
+      },
+    );
+    guide.requestViewport(0, 5);
+    expect(loads, hasLength(4));
+
+    guide.dispose();
+    for (var index = 0; index < 4; index++) {
+      loads[index].complete(_schedule(lineup.channels[index]));
+    }
+    await _settle();
+
+    expect(loads, hasLength(4));
     lineup.dispose();
   });
 

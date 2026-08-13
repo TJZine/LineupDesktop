@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:isolate';
 
 import 'package:flutter/foundation.dart';
 
@@ -7,6 +6,7 @@ import '../channels/channel.dart';
 import '../channels/channel_builder.dart';
 import '../channels/content_resolver.dart';
 import '../channels/scheduler.dart';
+import '../channels/schedule_worker.dart';
 import '../diagnostics/diagnostics.dart';
 import '../persistence/app_store.dart';
 import '../playback/stream_policy.dart';
@@ -23,22 +23,6 @@ enum SetupStage {
   channelSetup,
   ready,
 }
-
-Set<String> _sourceLibraryIds(ContentSource source) => switch (source) {
-  LibrarySource(:final libraryId) => {libraryId},
-  MixedSource(:final sources) => {
-    for (final source in sources) ..._sourceLibraryIds(source),
-  },
-  ManualSource() || PlaylistSource() => const {},
-};
-
-Set<String> _sourcePlaylistIds(ContentSource source) => switch (source) {
-  PlaylistSource(:final playlistId) => {playlistId},
-  MixedSource(:final sources) => {
-    for (final source in sources) ..._sourcePlaylistIds(source),
-  },
-  ManualSource() || LibrarySource() => const {},
-};
 
 class LineupPlaybackRequest {
   LineupPlaybackRequest(this.uri, this._release);
@@ -94,8 +78,9 @@ class LineupController extends ChangeNotifier {
   PersistedState _persisted = const PersistedState();
   Timer? _pinTimer;
   int? _busyOperation;
-  List<PlexMediaItem>? _indexedMedia;
-  Map<String, List<PlexMediaItem>> _mediaByLibrary = const {};
+  List<PlexMediaItem>? _scheduleWorkerMedia;
+  List<PlexPlaylist>? _scheduleWorkerPlaylists;
+  ScheduleWorker? _scheduleWorker;
 
   Future<void> initialize() async {
     _persisted = await store.load();
@@ -581,39 +566,14 @@ class LineupController extends ChangeNotifier {
   );
 
   Future<ScheduleIndex> loadScheduleFor(Channel channel) {
-    final media = <PlexMediaItem>[
-      for (final id in _sourceLibraryIds(channel.source))
-        ...(_indexedMediaByLibrary[id] ?? const []),
-    ];
-    final playlistIds = _sourcePlaylistIds(channel.source);
-    final playlists = availablePlaylists
-        .where((playlist) => playlistIds.contains(playlist.id))
-        .toList(growable: false);
-    return Isolate.run(
-      () => buildSchedule(
-        resolveContent(channel.source, media, playlists),
-        mode: channel.playbackMode,
-        seed: channel.shuffleSeed,
-        blockSize: channel.blockSize ?? 3,
-      ),
-    );
-  }
-
-  Map<String, List<PlexMediaItem>> get _indexedMediaByLibrary {
-    if (identical(_indexedMedia, availableMedia)) return _mediaByLibrary;
-    final grouped = <String, List<PlexMediaItem>>{};
-    for (final item in availableMedia) {
-      final libraryId = item.libraryId;
-      if (libraryId != null) {
-        grouped.putIfAbsent(libraryId, () => []).add(item);
-      }
+    if (!identical(_scheduleWorkerMedia, availableMedia) ||
+        !identical(_scheduleWorkerPlaylists, availablePlaylists)) {
+      _scheduleWorker?.dispose();
+      _scheduleWorkerMedia = availableMedia;
+      _scheduleWorkerPlaylists = availablePlaylists;
+      _scheduleWorker = ScheduleWorker(availableMedia, availablePlaylists);
     }
-    _indexedMedia = availableMedia;
-    _mediaByLibrary = {
-      for (final entry in grouped.entries)
-        entry.key: List.unmodifiable(entry.value),
-    };
-    return _mediaByLibrary;
+    return _scheduleWorker!.build(channel);
   }
 
   LineupPlaybackRequest playbackFor(String itemId) {
@@ -670,9 +630,9 @@ class LineupController extends ChangeNotifier {
     return plex.artwork(endpoint, token, artwork);
   }
 
-  Future<void> setCurrentChannel(String id) async {
+  Future<void> setCurrentChannel(String? id) async {
     if (id == currentChannelId ||
-        !channels.any((channel) => channel.id == id)) {
+        (id != null && !channels.any((channel) => channel.id == id))) {
       return;
     }
     final old = currentChannelId;
@@ -734,6 +694,10 @@ class LineupController extends ChangeNotifier {
     libraries = const [];
     availableMedia = const [];
     availablePlaylists = const [];
+    _scheduleWorker?.dispose();
+    _scheduleWorker = null;
+    _scheduleWorkerMedia = null;
+    _scheduleWorkerPlaylists = null;
     selectedLibraryIds = const {};
     channels = const [];
     currentChannelId = null;
@@ -829,6 +793,7 @@ class LineupController extends ChangeNotifier {
   void dispose() {
     ++_epoch;
     _pinTimer?.cancel();
+    _scheduleWorker?.dispose();
     final pin = activePin;
     if (pin == null) {
       plex.close();

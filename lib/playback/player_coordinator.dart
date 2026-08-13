@@ -60,6 +60,7 @@ class PlayerCoordinator extends ChangeNotifier {
   Duration? _sleepDuration;
   int _tuneGeneration = 0;
   Future<void> _tuneOperations = Future.value();
+  bool _disposed = false;
   LineupPlaybackRequest? _activePlayback;
   List<Channel> _indexedChannels = const [];
   Map<String, int> _channelIndexById = const {};
@@ -102,6 +103,7 @@ class PlayerCoordinator extends ChangeNotifier {
     _tracks = event.tracks;
     if (event.status.state == PlayerState.error) {
       _error = event.status.message;
+      _tuning = false;
       final playback = _activePlayback;
       _activePlayback = null;
       unawaited(_release(playback));
@@ -142,10 +144,12 @@ class PlayerCoordinator extends ChangeNotifier {
       return;
     }
     LineupPlaybackRequest? request;
+    final previousChannelId = lineup.currentChannelId;
     try {
       request = lineup.playbackFor(program.scheduled.item.id);
       await player.load(request.uri);
       if (generation != _tuneGeneration) {
+        if (_disposed) await _stopQuietly();
         await _release(request);
         return;
       }
@@ -156,27 +160,43 @@ class PlayerCoordinator extends ChangeNotifier {
       if (elapsed > const Duration(seconds: 2)) await player.seek(elapsed);
       if (generation != _tuneGeneration) {
         if (identical(_activePlayback, request)) _activePlayback = null;
+        if (_disposed) await _stopQuietly();
+        await _release(request);
+        return;
+      }
+      if (!identical(_activePlayback, request)) {
+        await _stopQuietly();
         await _release(request);
         return;
       }
       await lineup.setCurrentChannel(channelId);
       if (generation != _tuneGeneration) {
         if (identical(_activePlayback, request)) _activePlayback = null;
+        if (lineup.currentChannelId == channelId &&
+            previousChannelId != channelId) {
+          await lineup.setCurrentChannel(previousChannelId);
+        }
+        if (_disposed) await _stopQuietly();
+        await _release(request);
+        return;
+      }
+      if (!identical(_activePlayback, request)) {
+        if (lineup.currentChannelId == channelId &&
+            previousChannelId != channelId) {
+          await lineup.setCurrentChannel(previousChannelId);
+        }
+        await _stopQuietly();
         await _release(request);
         return;
       }
       _tuning = false;
       showOsd();
     } catch (error) {
-      await _release(request);
       if (identical(_activePlayback, request)) {
         _activePlayback = null;
-        try {
-          await player.stop();
-        } catch (_) {
-          // The original playback failure remains the useful error.
-        }
       }
+      if (request != null) await _stopQuietly();
+      await _release(request);
       if (generation != _tuneGeneration) return;
       _tuning = false;
       _error = error.toString();
@@ -364,10 +384,22 @@ class PlayerCoordinator extends ChangeNotifier {
   }
 
   void _lineupChanged() {
+    final previousMiniIndex = miniGuideChannelIndex;
     if (!identical(_indexedChannels, lineup.channels)) _indexChannels();
+    if (!_channelIndexById.containsKey(_miniGuideChannelId)) {
+      if (_indexedChannels.isEmpty) {
+        _miniGuideChannelId = null;
+      } else {
+        final fallback = previousMiniIndex < 0
+            ? 0
+            : previousMiniIndex.clamp(0, _indexedChannels.length - 1);
+        _miniGuideChannelId = _indexedChannels[fallback].id;
+      }
+    }
     if (currentChannel == null && lineup.channels.isNotEmpty) {
       _error = null;
     }
+    if (_overlay == PlayerOverlay.miniGuide) _requestMiniGuideRows();
     notifyListeners();
   }
 
@@ -394,6 +426,14 @@ class PlayerCoordinator extends ChangeNotifier {
     }
   }
 
+  Future<void> _stopQuietly() async {
+    try {
+      await player.stop();
+    } catch (_) {
+      // The original tune failure remains the useful error.
+    }
+  }
+
   void _indexChannels() {
     _indexedChannels = lineup.channels;
     _channelIndexById = {
@@ -407,6 +447,7 @@ class PlayerCoordinator extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
     ++_tuneGeneration;
     _tuning = false;
     lineup.removeListener(_lineupChanged);

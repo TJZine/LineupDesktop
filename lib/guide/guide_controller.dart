@@ -67,6 +67,7 @@ class GuideController extends ChangeNotifier {
   final Queue<Channel> _pending = Queue();
   final Set<String> _queuedIds = {};
   final Queue<_ArtworkRequest> _pendingArtwork = Queue();
+  final Set<Completer<void>> _rowWaiters = {};
   List<Channel> _channels = const [];
   Map<String, Channel> _channelById = const {};
   List<Channel> _visibleChannels = const [];
@@ -81,6 +82,7 @@ class GuideController extends ChangeNotifier {
   int _generation = 0;
   int _activeLoads = 0;
   int _activeArtworkLoads = 0;
+  bool _disposed = false;
 
   List<Channel> get channels => _visibleChannels;
 
@@ -132,6 +134,7 @@ class GuideController extends ChangeNotifier {
     if (existing?.state == GuideLoadState.error) _rows.remove(channelId);
     _request(channel);
     final completer = Completer<void>();
+    _rowWaiters.add(completer);
     void changed() {
       final value = _rows[channelId];
       if (value != null && value.state != GuideLoadState.loading) {
@@ -146,6 +149,7 @@ class GuideController extends ChangeNotifier {
     try {
       await completer.future.timeout(const Duration(seconds: 15));
     } finally {
+      _rowWaiters.remove(completer);
       removeListener(changed);
     }
     return currentProgram(channelId);
@@ -154,6 +158,7 @@ class GuideController extends ChangeNotifier {
   Set<String> get availableLibraryIds => _availableLibraryIds;
 
   Future<Uint8List?> artworkFor(GuideProgram program) {
+    if (_disposed) return Future.value();
     final path = program.scheduled.item.artwork;
     if (path == null || path.toString().isEmpty) return Future.value();
     final key = '${program.scheduled.item.id}|$path';
@@ -182,6 +187,7 @@ class GuideController extends ChangeNotifier {
   }
 
   void _pumpArtwork() {
+    if (_disposed) return;
     while (_activeArtworkLoads < 4 && _pendingArtwork.isNotEmpty) {
       final request = _pendingArtwork.removeFirst();
       if (!identical(_artwork[request.key], request.completer.future)) {
@@ -197,7 +203,7 @@ class GuideController extends ChangeNotifier {
           )
           .whenComplete(() {
             _activeArtworkLoads--;
-            _pumpArtwork();
+            if (!_disposed) _pumpArtwork();
           });
     }
   }
@@ -318,12 +324,14 @@ class GuideController extends ChangeNotifier {
   }
 
   void _request(Channel channel) {
+    if (_disposed) return;
     if (_rows.containsKey(channel.id) || !_queuedIds.add(channel.id)) return;
     _pending.add(channel);
     _pump();
   }
 
   void _pump() {
+    if (_disposed) return;
     while (_activeLoads < maximumConcurrentLoads && _pending.isNotEmpty) {
       final channel = _pending.removeFirst();
       _queuedIds.remove(channel.id);
@@ -338,7 +346,8 @@ class GuideController extends ChangeNotifier {
       loading
           .then(
             (schedule) {
-              if (generation != _generation ||
+              if (_disposed ||
+                  generation != _generation ||
                   !_channelById.containsKey(channel.id)) {
                 return;
               }
@@ -365,7 +374,7 @@ class GuideController extends ChangeNotifier {
               notifyListeners();
             },
             onError: (Object error) {
-              if (generation != _generation) return;
+              if (_disposed || generation != _generation) return;
               _putRow(
                 channel.id,
                 GuideRowData(state: GuideLoadState.error, error: error),
@@ -375,7 +384,7 @@ class GuideController extends ChangeNotifier {
           )
           .whenComplete(() {
             _activeLoads--;
-            _pump();
+            if (!_disposed) _pump();
           });
     }
   }
@@ -479,8 +488,20 @@ class GuideController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
     lineup.removeListener(_reconcileLineup);
     _generation++;
+    _pending.clear();
+    _queuedIds.clear();
+    for (final request in _pendingArtwork) {
+      if (!request.completer.isCompleted) request.completer.complete(null);
+    }
+    _pendingArtwork.clear();
+    _artwork.clear();
+    for (final waiter in _rowWaiters) {
+      if (!waiter.isCompleted) waiter.complete();
+    }
+    _rowWaiters.clear();
     super.dispose();
   }
 }
