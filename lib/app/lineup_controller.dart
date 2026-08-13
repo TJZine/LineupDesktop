@@ -81,6 +81,7 @@ class LineupController extends ChangeNotifier {
   List<PlexMediaItem>? _scheduleWorkerMedia;
   List<PlexPlaylist>? _scheduleWorkerPlaylists;
   ScheduleWorker? _scheduleWorker;
+  int _scheduleWorkerCreations = 0;
 
   Future<void> initialize() async {
     _persisted = await store.load();
@@ -573,6 +574,9 @@ class LineupController extends ChangeNotifier {
     blockSize: channel.blockSize ?? 3,
   );
 
+  @visibleForTesting
+  int get scheduleWorkerCreations => _scheduleWorkerCreations;
+
   Future<ScheduleIndex> loadScheduleFor(Channel channel) {
     if (!identical(_scheduleWorkerMedia, availableMedia) ||
         !identical(_scheduleWorkerPlaylists, availablePlaylists)) {
@@ -581,10 +585,10 @@ class LineupController extends ChangeNotifier {
       _scheduleWorkerPlaylists = availablePlaylists;
       _scheduleWorker = null;
     }
-    final worker = _scheduleWorker ??= ScheduleWorker(
-      availableMedia,
-      availablePlaylists,
-    );
+    final worker = _scheduleWorker ??= () {
+      _scheduleWorkerCreations++;
+      return ScheduleWorker(availableMedia, availablePlaylists);
+    }();
     return worker.build(channel);
   }
 

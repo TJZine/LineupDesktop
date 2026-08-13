@@ -88,7 +88,10 @@ class _LineupShellState extends State<LineupShell> {
     } else if (_player.overlay == PlayerOverlay.fullGuide) {
       _player.closeOverlay();
     }
-    setState(() => _selectedIndex = index);
+    setState(() {
+      _selectedIndex = index;
+      _appMenuOpen = false;
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) => _restoreRouteFocus());
   }
 
@@ -130,7 +133,7 @@ class _LineupShellState extends State<LineupShell> {
         alignment: Alignment.topRight,
         child: SafeArea(
           minimum: const EdgeInsets.all(16),
-          child: Focus(
+          child: FocusScope(
             autofocus: true,
             onKeyEvent: (_, event) {
               if (event is KeyDownEvent &&
@@ -141,45 +144,45 @@ class _LineupShellState extends State<LineupShell> {
               }
               return KeyEventResult.ignored;
             },
-            child: Card(
-              key: const Key('immersive-app-menu'),
-              child: SizedBox(
-                width: 280,
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Text(
-                          'Lineup',
-                          style: Theme.of(context).textTheme.titleLarge,
-                        ),
-                      ),
-                      for (final destination in const [
-                        (0, Icons.live_tv_outlined, 'Guide'),
-                        (1, Icons.view_list_outlined, 'Channels'),
-                        (2, Icons.settings_outlined, 'Settings'),
-                        (3, Icons.monitor_heart_outlined, 'Diagnostics'),
-                        (4, Icons.play_circle_outline, 'Player'),
-                      ])
-                        TextButton.icon(
-                          style: TextButton.styleFrom(
-                            alignment: Alignment.centerLeft,
-                            backgroundColor: _selectedIndex == destination.$1
-                                ? LineupTheme.of(context).selectedSurface
-                                : null,
+            child: FocusTraversalGroup(
+              policy: WidgetOrderTraversalPolicy(),
+              child: Card(
+                key: const Key('immersive-app-menu'),
+                child: SizedBox(
+                  width: 280,
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Text(
+                            'Lineup',
+                            style: Theme.of(context).textTheme.titleLarge,
                           ),
-                          onPressed: () {
-                            _appMenuOpen = false;
-                            _select(destination.$1);
-                          },
-                          icon: Icon(destination.$2),
-                          label: Text(destination.$3),
                         ),
-                    ],
+                        for (final destination in const [
+                          (0, Icons.live_tv_outlined, 'Guide'),
+                          (1, Icons.view_list_outlined, 'Channels'),
+                          (2, Icons.settings_outlined, 'Settings'),
+                          (3, Icons.monitor_heart_outlined, 'Diagnostics'),
+                          (4, Icons.play_circle_outline, 'Player'),
+                        ])
+                          TextButton.icon(
+                            style: TextButton.styleFrom(
+                              alignment: Alignment.centerLeft,
+                              backgroundColor: _selectedIndex == destination.$1
+                                  ? LineupTheme.of(context).selectedSurface
+                                  : null,
+                            ),
+                            onPressed: () => _select(destination.$1),
+                            icon: Icon(destination.$2),
+                            label: Text(destination.$3),
+                          ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -250,7 +253,10 @@ class _LineupShellState extends State<LineupShell> {
         body: Stack(
           fit: StackFit.expand,
           children: [
-            SafeArea(child: views[_selectedIndex]),
+            ExcludeFocus(
+              excluding: _appMenuOpen,
+              child: SafeArea(child: views[_selectedIndex]),
+            ),
             if (_appMenuOpen) _immersiveAppMenu(),
           ],
         ),
@@ -591,7 +597,16 @@ class _ChannelEditorState extends State<ChannelEditor> {
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
-                initialValue: _libraryId,
+                initialValue:
+                    widget.controller.libraries.any(
+                      (library) =>
+                          library.id == _libraryId &&
+                          widget.controller.selectedLibraryIds.contains(
+                            library.id,
+                          ),
+                    )
+                    ? _libraryId
+                    : null,
                 decoration: const InputDecoration(labelText: 'Content library'),
                 items: [
                   for (final library in widget.controller.libraries.where(
@@ -692,9 +707,18 @@ class _ChannelEditorState extends State<ChannelEditor> {
       }
       final library = _manual
           ? null
-          : widget.controller.libraries.firstWhere(
-              (library) => library.id == id,
-            );
+          : widget.controller.libraries
+                .where(
+                  (library) =>
+                      library.id == id &&
+                      widget.controller.selectedLibraryIds.contains(library.id),
+                )
+                .firstOrNull;
+      if (!_manual && library == null) {
+        throw const FormatException(
+          'The selected library is no longer available. Choose another library.',
+        );
+      }
       final manualItems = widget.controller.availableMedia
           .where((item) => _manualItemIds.contains(item.id))
           .map(channelItemFor)

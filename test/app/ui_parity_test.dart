@@ -21,6 +21,16 @@ void main() {
     await tester.tap(find.byKey(const Key('guide-app-menu')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('immersive-app-menu')), findsOneWidget);
+    for (var index = 0; index < 12; index++) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+      expect(
+        FocusManager.instance.primaryFocus?.context
+            ?.findAncestorWidgetOfExactType<Card>()
+            ?.key,
+        const Key('immersive-app-menu'),
+      );
+    }
     for (final label in [
       'Guide',
       'Channels',

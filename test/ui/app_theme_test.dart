@@ -71,6 +71,18 @@ void main() {
     ).extension<LineupThemeRoles>()!;
     expect(large.focusBorderWidth, greaterThan(normal.focusBorderWidth));
   });
+
+  test('equivalent semantic role extensions use value equality', () {
+    final first = LineupTheme.forName(LineupThemeName.emberSteel)
+        .extension<LineupThemeRoles>()!;
+    final second = LineupTheme.forName(LineupThemeName.emberSteel)
+        .extension<LineupThemeRoles>()!;
+    final changed = second.copyWith(panelRadius: second.panelRadius + 1);
+
+    expect(first, equals(second));
+    expect(first.hashCode, second.hashCode);
+    expect(first, isNot(equals(changed)));
+  });
 }
 
 Color _paint(Color foreground, Color background) =>

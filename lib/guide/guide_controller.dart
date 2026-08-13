@@ -20,16 +20,19 @@ abstract final class GuideGeometry {
   }) {
     final total = windowEnd.difference(windowStart).inMicroseconds;
     if (total <= 0 || viewportWidth <= 0) return (left: 0, width: 0);
-    return (
-      left:
-          viewportWidth *
-          programStart.difference(windowStart).inMicroseconds /
-          total,
-      width:
-          viewportWidth *
-          programEnd.difference(programStart).inMicroseconds /
-          total,
-    );
+    final left =
+        (viewportWidth *
+                programStart.difference(windowStart).inMicroseconds /
+                total)
+            .clamp(0.0, viewportWidth)
+            .toDouble();
+    final right =
+        (viewportWidth *
+                programEnd.difference(windowStart).inMicroseconds /
+                total)
+            .clamp(0.0, viewportWidth)
+            .toDouble();
+    return (left: left, width: (right - left).clamp(0.0, viewportWidth));
   }
 
   static ({int first, int count}) visibleRows({

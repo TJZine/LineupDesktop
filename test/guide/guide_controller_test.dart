@@ -261,10 +261,12 @@ void main() {
       );
 
     final first = await lineup.loadScheduleFor(channel);
+    expect(lineup.scheduleWorkerCreations, 1);
     final second = await lineup.loadScheduleFor(channel);
 
     expect(first.items, hasLength(2000));
     expect(second.items, hasLength(2000));
+    expect(lineup.scheduleWorkerCreations, 1);
     lineup.dispose();
   });
 
@@ -383,6 +385,33 @@ void main() {
     );
     expect(rect.left, 200);
     expect(rect.width, 200);
+
+    final spanning = GuideGeometry.programRect(
+      windowStart: start,
+      windowEnd: start.add(const Duration(hours: 2)),
+      programStart: start.subtract(const Duration(hours: 1)),
+      programEnd: start.add(const Duration(hours: 3)),
+      viewportWidth: 800,
+    );
+    expect(spanning, (left: 0.0, width: 800.0));
+
+    final before = GuideGeometry.programRect(
+      windowStart: start,
+      windowEnd: start.add(const Duration(hours: 2)),
+      programStart: start.subtract(const Duration(hours: 2)),
+      programEnd: start.subtract(const Duration(hours: 1)),
+      viewportWidth: 800,
+    );
+    expect(before, (left: 0.0, width: 0.0));
+
+    final reversed = GuideGeometry.programRect(
+      windowStart: start,
+      windowEnd: start.add(const Duration(hours: 2)),
+      programStart: start.add(const Duration(minutes: 90)),
+      programEnd: start.add(const Duration(minutes: 30)),
+      viewportWidth: 800,
+    );
+    expect(reversed, (left: 600.0, width: 0.0));
 
     final rows = GuideGeometry.visibleRows(
       scrollOffset: 245,

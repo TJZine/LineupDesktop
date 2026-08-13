@@ -116,6 +116,36 @@ void main() {
     );
   });
 
+  testWidgets('channel editor reports a library removed while it is open', (
+    tester,
+  ) async {
+    final fixture = UiFixture()
+      ..controller.stage = SetupStage.ready
+      ..controller.libraries = const [
+        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
+      ]
+      ..controller.selectedLibraryIds = const {'movies'};
+    await tester.pumpWidget(fixture.build());
+    await tester.pumpAndSettle();
+    await _openImmersiveDestination(tester, 'Channels');
+    await tester.tap(find.text('Create channel'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextFormField).first, 'Movies');
+
+    fixture.controller
+      ..libraries = const []
+      ..selectedLibraryIds = const {};
+    await tester.tap(find.text('Save channel'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text(
+        'The selected library is no longer available. Choose another library.',
+      ),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('settings dropdowns stay disabled until persistence completes', (
     tester,
   ) async {
@@ -169,11 +199,11 @@ void main() {
     await tester.tap(find.text('Child'));
     await tester.pumpAndSettle();
 
-    expect(
-      FocusManager.instance.primaryFocus?.context
-          ?.findAncestorWidgetOfExactType<FilledButton>(),
-      isNull,
+    final keyboardOwner = tester.widget<Focus>(
+      find.byKey(const Key('profile-pin-keyboard-owner')),
     );
+    expect(keyboardOwner.focusNode, isNotNull);
+    expect(keyboardOwner.focusNode!.hasFocus, isTrue);
   });
 
   testWidgets('Channel Setup footer uses its available width', (tester) async {

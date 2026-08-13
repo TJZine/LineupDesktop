@@ -422,11 +422,14 @@ class _TimeHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final slots = controller.guideHours * 2;
+    if (slots <= 0) return const SizedBox(height: 38);
     return SizedBox(
       height: 38,
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final slotWidth = (constraints.maxWidth - railWidth) / slots;
+          final timelineWidth = constraints.maxWidth - railWidth;
+          if (timelineWidth <= 0) return const SizedBox.shrink();
+          final slotWidth = timelineWidth / slots;
           final stride = (68 / slotWidth).ceil().clamp(1, slots);
           return Row(
             children: [

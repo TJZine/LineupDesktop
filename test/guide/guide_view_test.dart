@@ -10,8 +10,30 @@ import 'package:lineup_desktop/guide/guide_controller.dart';
 import 'package:lineup_desktop/guide/guide_view.dart';
 import 'package:lineup_desktop/persistence/app_store.dart';
 import 'package:lineup_desktop/plex/plex_client.dart';
+import 'package:lineup_desktop/settings/lineup_settings.dart';
 
 void main() {
+  testWidgets('non-positive timeline slots render safely', (tester) async {
+    final lineup = _Lineup(1)..settings = const LineupSettings(guideHours: 0);
+    final guide = GuideController(lineup: lineup);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: GuideView(
+          controller: guide,
+          onClose: () {},
+          onTune: (_) async {},
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    guide.dispose();
+    lineup.dispose();
+  });
+
   testWidgets('established viewport work is independent of lineup cardinality', (
     tester,
   ) async {

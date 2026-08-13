@@ -1,7 +1,8 @@
 # Portable UI parity
 
 This document is the source record for Prompt 3B and Prompt 4B portable UI
-parity. It does not claim Windows media validation.
+parity, with Prompt 4C recorded as supplemental source, diff, and test coverage.
+It does not claim Windows media validation.
 
 The earlier “Parity” classifications below are historical records of those
 accepted source-based passes. Prompt 4C does not promote them to live visual
@@ -365,7 +366,7 @@ remain Prompt 4E visual-adjudication inputs rather than accepted visual claims.
 | Overlay Guide | Source-aligned structure implemented | Persisted secondary layout layers Guide over `PlayerSurface`; scrim/readability and transitions require unlocked visual acceptance. |
 | OSD, mini Guide, channel entry, track selectors, loading/error | Source-aligned structure implemented | Hierarchy, safe area, right rail, digit buffer, bounded shelf, truthful telemetry, and timer behavior are testable; visual motion/contrast requires unlocked acceptance. |
 | Five-theme coverage across major surfaces | Source-aligned theme mechanics implemented | Inventory/default/persistence/immediate update/semantic roles/contrast are deterministic. Visual balance of every theme requires unlocked acceptance. |
-| Responsive 1280×720, 1600×900, 1920×1080 | Requires unlocked visual acceptance | Existing layout tests exercise these logical regimes; no live side-by-side state was observed. |
+| Responsive 1280×720, 1600×900, 1920×1080 | Visual acceptance must occur on an unlocked host | Existing layout tests exercise these logical regimes; no live side-by-side state was observed. |
 | Native video, transparency, HDR, hardware decode, fullscreen | Requires Windows-native validation | No Windows, C++, engine, libmpv, or native-presentation source changed or was claimed. |
 
 No new golden baselines were generated or accepted. Existing approved goldens

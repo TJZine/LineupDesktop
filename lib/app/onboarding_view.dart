@@ -598,6 +598,14 @@ class _ProfilePinDialog extends StatefulWidget {
 
 class _ProfilePinDialogState extends State<_ProfilePinDialog> {
   String _pin = '';
+  final _keyboardFocus = FocusNode(debugLabel: 'Profile PIN keyboard owner');
+
+  @override
+  void dispose() {
+    _keyboardFocus.dispose();
+    super.dispose();
+  }
+
   void _digit(int digit) {
     if (_pin.length >= 4) return;
     setState(() => _pin += '$digit');
@@ -641,6 +649,8 @@ class _ProfilePinDialogState extends State<_ProfilePinDialog> {
 
   @override
   Widget build(BuildContext context) => Focus(
+    key: const Key('profile-pin-keyboard-owner'),
+    focusNode: _keyboardFocus,
     autofocus: true,
     onKeyEvent: _key,
     child: AlertDialog(

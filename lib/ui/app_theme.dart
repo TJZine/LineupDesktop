@@ -131,6 +131,59 @@ class LineupThemeRoles extends ThemeExtension<LineupThemeRoles> {
           overlaySafeArea + (other.overlaySafeArea - overlaySafeArea) * t,
     );
   }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is LineupThemeRoles &&
+          deepBackground == other.deepBackground &&
+          primarySurface == other.primarySurface &&
+          elevatedSurface == other.elevatedSurface &&
+          overlaySurface == other.overlaySurface &&
+          focusedSurface == other.focusedSurface &&
+          selectedSurface == other.selectedSurface &&
+          tunedSurface == other.tunedSurface &&
+          liveAccent == other.liveAccent &&
+          primaryText == other.primaryText &&
+          secondaryText == other.secondaryText &&
+          mutedText == other.mutedText &&
+          onFocus == other.onFocus &&
+          focusedText == other.focusedText &&
+          subtleBorder == other.subtleBorder &&
+          defaultBorder == other.defaultBorder &&
+          focusBorder == other.focusBorder &&
+          focusBorderWidth == other.focusBorderWidth &&
+          progressTrack == other.progressTrack &&
+          progressFill == other.progressFill &&
+          scrim == other.scrim &&
+          panelRadius == other.panelRadius &&
+          overlaySafeArea == other.overlaySafeArea;
+
+  @override
+  int get hashCode => Object.hashAll([
+    deepBackground,
+    primarySurface,
+    elevatedSurface,
+    overlaySurface,
+    focusedSurface,
+    selectedSurface,
+    tunedSurface,
+    liveAccent,
+    primaryText,
+    secondaryText,
+    mutedText,
+    onFocus,
+    focusedText,
+    subtleBorder,
+    defaultBorder,
+    focusBorder,
+    focusBorderWidth,
+    progressTrack,
+    progressFill,
+    scrim,
+    panelRadius,
+    overlaySafeArea,
+  ]);
 }
 
 abstract final class LineupTheme {
