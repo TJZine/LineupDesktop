@@ -31,10 +31,16 @@ SDK 10.0.22621.0, and Debugging Tools for Windows. Before the first
 always passing `--local-engine`, the matching `--local-engine-host`, and
 `--local-engine-src-path`. Do not copy artifacts over the stock SDK cache.
 
-CI proves the patch applies to the exact framework and engine source revisions,
-builds `host_release`, and compiles the Windows application against that local
-engine. Runtime marker and DirectComposition presentation still require an
-executed Windows acceptance check.
+Routine CI compiles the Windows application with the pinned stock Flutter SDK
+and the verified libmpv development asset so ordinary PR changes still receive
+Windows C++/CMake integration proof without rebuilding Flutter itself. The
+expensive patched-engine job in `.github/workflows/ci.yml` is gated to the
+actual engine inputs: `.metadata`, `tool/flutter_engine/apply.ps1`, and
+`tool/flutter_engine/0001-windows-direct-composition.patch`. A manual workflow
+dispatch also forces that proof. When selected, CI verifies the exact framework
+and engine source revisions, applies this patch, builds `host_release`, and
+compiles Lineup against that local engine. Runtime marker and DirectComposition
+presentation still require an executed Windows acceptance check.
 
 See `docs/DEVELOPMENT.md` for the exact Windows commands and required local
 libmpv layout. See `NOTICE` before redistributing a patched engine binary.
