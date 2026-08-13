@@ -316,7 +316,6 @@ class LineupController extends ChangeNotifier {
       channels: channels,
       currentChannelId: currentChannelId,
       profileId: profile?.id,
-      profileName: profile?.name,
       selectedServerByProfile: selectedServers,
       selectedLibraryIds: selectedLibraryIds.toList(),
     );

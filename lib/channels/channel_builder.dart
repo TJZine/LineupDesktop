@@ -2,8 +2,6 @@ import '../plex/plex_models.dart';
 import 'channel.dart';
 
 enum BuilderStrategy {
-  playlists,
-  collections,
   recentlyAdded,
   genres,
   studios,

@@ -22,24 +22,6 @@ sealed class ContentSource {
         includeWatched: json['includeWatched'] == true,
         filters: Map<String, String>.from(json['filters'] as Map? ?? const {}),
       ),
-      'collection' => CollectionSource(
-        libraryId: _string(json['libraryId']),
-        collectionId: _string(json['collectionId']),
-        title: _string(json['title']),
-      ),
-      'show' => ShowSource(
-        libraryId: _string(json['libraryId']),
-        showId: _string(json['showId']),
-        title: _string(json['title']),
-        seasons: (json['seasons'] as List? ?? const [])
-            .whereType<num>()
-            .map((value) => value.toInt())
-            .toList(),
-      ),
-      'playlist' => PlaylistSource(
-        playlistId: _string(json['playlistId']),
-        title: _string(json['title']),
-      ),
       'manual' => ManualSource(
         (json['items'] as List? ?? const []).map(ChannelItem.fromJson).toList(),
       ),
@@ -74,63 +56,6 @@ class LibrarySource extends ContentSource {
     'libraryType': libraryType.name,
     'includeWatched': includeWatched,
     if (filters.isNotEmpty) 'filters': filters,
-  };
-}
-
-class CollectionSource extends ContentSource {
-  const CollectionSource({
-    required this.libraryId,
-    required this.collectionId,
-    required this.title,
-  });
-
-  final String libraryId;
-  final String collectionId;
-  final String title;
-
-  @override
-  Map<String, Object?> toJson() => {
-    'type': 'collection',
-    'libraryId': libraryId,
-    'collectionId': collectionId,
-    'title': title,
-  };
-}
-
-class ShowSource extends ContentSource {
-  const ShowSource({
-    required this.libraryId,
-    required this.showId,
-    required this.title,
-    this.seasons = const [],
-  });
-
-  final String libraryId;
-  final String showId;
-  final String title;
-  final List<int> seasons;
-
-  @override
-  Map<String, Object?> toJson() => {
-    'type': 'show',
-    'libraryId': libraryId,
-    'showId': showId,
-    'title': title,
-    'seasons': seasons,
-  };
-}
-
-class PlaylistSource extends ContentSource {
-  const PlaylistSource({required this.playlistId, required this.title});
-
-  final String playlistId;
-  final String title;
-
-  @override
-  Map<String, Object?> toJson() => {
-    'type': 'playlist',
-    'playlistId': playlistId,
-    'title': title,
   };
 }
 
@@ -289,18 +214,6 @@ void _validateSource(ContentSource source, int depth) {
   switch (source) {
     case LibrarySource(:final libraryId):
       if (libraryId.isEmpty) throw const FormatException('Library is required');
-    case CollectionSource(:final collectionId):
-      if (collectionId.isEmpty) {
-        throw const FormatException('Collection is required');
-      }
-    case ShowSource(:final showId, :final seasons):
-      if (showId.isEmpty || seasons.any((season) => season < 1)) {
-        throw const FormatException('Show source is invalid');
-      }
-    case PlaylistSource(:final playlistId):
-      if (playlistId.isEmpty) {
-        throw const FormatException('Playlist is required');
-      }
     case ManualSource(:final items):
       if (items.isEmpty ||
           items.any((item) => item.duration <= Duration.zero)) {

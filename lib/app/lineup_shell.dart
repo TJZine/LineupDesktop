@@ -138,6 +138,13 @@ class OnboardingView extends StatefulWidget {
 class _OnboardingViewState extends State<OnboardingView> {
   final _pin = TextEditingController();
   final _selectedLibraries = <String>{};
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedLibraries.addAll(widget.controller.selectedLibraryIds);
+  }
+
   @override
   void dispose() {
     _pin.dispose();
@@ -247,39 +254,32 @@ class _OnboardingViewState extends State<OnboardingView> {
         ),
       ],
     ),
-    SetupStage.libraries => StatefulBuilder(
-      builder: (context, setLocalState) {
-        if (_selectedLibraries.isEmpty) {
-          _selectedLibraries.addAll(controller.selectedLibraryIds);
-        }
-        return _ChoicePanel(
-          title: 'Select libraries for channels',
-          children: [
-            for (final library in controller.libraries)
-              CheckboxListTile(
-                value: _selectedLibraries.contains(library.id),
-                title: Text(library.title),
-                secondary: Icon(
-                  library.type == PlexLibraryType.show
-                      ? Icons.tv
-                      : Icons.movie_outlined,
-                ),
-                onChanged: (selected) => setLocalState(
-                  () => selected == true
-                      ? _selectedLibraries.add(library.id)
-                      : _selectedLibraries.remove(library.id),
-                ),
-              ),
-            const SizedBox(height: 16),
-            FilledButton(
-              onPressed: _selectedLibraries.isEmpty || controller.busy
-                  ? null
-                  : () => controller.setLibraries(_selectedLibraries),
-              child: const Text('Load libraries'),
+    SetupStage.libraries => _ChoicePanel(
+      title: 'Select libraries for channels',
+      children: [
+        for (final library in controller.libraries)
+          CheckboxListTile(
+            value: _selectedLibraries.contains(library.id),
+            title: Text(library.title),
+            secondary: Icon(
+              library.type == PlexLibraryType.show
+                  ? Icons.tv
+                  : Icons.movie_outlined,
             ),
-          ],
-        );
-      },
+            onChanged: (selected) => setState(
+              () => selected == true
+                  ? _selectedLibraries.add(library.id)
+                  : _selectedLibraries.remove(library.id),
+            ),
+          ),
+        const SizedBox(height: 16),
+        FilledButton(
+          onPressed: _selectedLibraries.isEmpty || controller.busy
+              ? null
+              : () => controller.setLibraries(_selectedLibraries),
+          child: const Text('Load libraries'),
+        ),
+      ],
     ),
     SetupStage.ready => const SizedBox.shrink(),
   };
@@ -1067,9 +1067,6 @@ class _Brand extends StatelessWidget {
 
 String _sourceLabel(ContentSource source) => switch (source) {
   LibrarySource() => 'library',
-  CollectionSource() => 'collection',
-  ShowSource() => 'show',
-  PlaylistSource() => 'playlist',
   ManualSource() => 'manual',
   MixedSource() => 'mixed',
 };

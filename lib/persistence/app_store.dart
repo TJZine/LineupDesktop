@@ -14,7 +14,6 @@ class PersistedState {
     this.channels = const [],
     this.currentChannelId,
     this.profileId,
-    this.profileName,
     this.selectedServerByProfile = const {},
     this.selectedLibraryIds = const [],
   });
@@ -23,7 +22,6 @@ class PersistedState {
   final List<Channel> channels;
   final String? currentChannelId;
   final String? profileId;
-  final String? profileName;
   final Map<String, String> selectedServerByProfile;
   final List<String> selectedLibraryIds;
 
@@ -32,7 +30,6 @@ class PersistedState {
     'channels': channels.map((channel) => channel.toJson()).toList(),
     'currentChannelId': currentChannelId,
     'profileId': profileId,
-    'profileName': profileName,
     'selectedServerByProfile': selectedServerByProfile,
     'selectedLibraryIds': selectedLibraryIds,
   };
@@ -52,7 +49,6 @@ class PersistedState {
         channels: channels,
         currentChannelId: json['currentChannelId'] as String?,
         profileId: json['profileId'] as String?,
-        profileName: json['profileName'] as String?,
         selectedServerByProfile: Map<String, String>.from(
           json['selectedServerByProfile'] as Map? ?? const {},
         ),

@@ -286,8 +286,6 @@ class PlexClient {
     return output;
   }
 
-  Uri artworkUri(Uri server, String path) => server.resolve(path);
-
   PlexPlaybackDescriptor playbackDescriptor({
     required Uri server,
     required String token,

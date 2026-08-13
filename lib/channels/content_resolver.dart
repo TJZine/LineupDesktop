@@ -14,9 +14,6 @@ List<ChannelItem> resolveContent(
               sources.map((source) => resolveContent(source, media)).toList(),
             )
           : [for (final source in sources) ...resolveContent(source, media)],
-    CollectionSource() ||
-    ShowSource() ||
-    PlaylistSource() => const <ChannelItem>[],
   };
   return List.unmodifiable(resolved);
 }
