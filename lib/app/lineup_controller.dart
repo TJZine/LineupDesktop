@@ -8,6 +8,7 @@ import '../channels/content_resolver.dart';
 import '../channels/scheduler.dart';
 import '../diagnostics/diagnostics.dart';
 import '../persistence/app_store.dart';
+import '../playback/stream_policy.dart';
 import '../plex/plex_client.dart';
 import '../plex/plex_models.dart';
 import '../settings/lineup_settings.dart';
@@ -477,6 +478,9 @@ class LineupController extends ChangeNotifier {
   }) async {
     final oldChannels = channels;
     final oldCurrent = currentChannelId;
+    final oldCurrentIndex = oldChannels.indexWhere(
+      (channel) => channel.id == oldCurrent,
+    );
     final next = switch (mode) {
       ChannelBuildMode.replace => planned,
       ChannelBuildMode.append => [...channels, ...planned],
@@ -495,7 +499,11 @@ class LineupController extends ChangeNotifier {
       channel.validate(next);
     }
     channels = List.unmodifiable(next);
-    currentChannelId = channels.firstOrNull?.id;
+    currentChannelId = channels.any((channel) => channel.id == oldCurrent)
+        ? oldCurrent
+        : channels.isEmpty
+        ? null
+        : channels[oldCurrentIndex.clamp(0, channels.length - 1)].id;
     try {
       await _save();
       stage = SetupStage.ready;
@@ -539,11 +547,78 @@ class LineupController extends ChangeNotifier {
     blockSize: channel.blockSize ?? 3,
   );
 
+  Uri playbackUriFor(String itemId) {
+    final endpoint = connection?.uri;
+    final token = _profileToken ?? _accountToken;
+    final item = availableMedia
+        .where((value) => value.id == itemId)
+        .firstOrNull;
+    if (endpoint == null || token == null || item == null) {
+      throw const PlexException(
+        'playback-unavailable',
+        'This program is not available from the current Plex session.',
+      );
+    }
+    final descriptor = plex.playbackDescriptor(
+      server: endpoint,
+      token: token,
+      item: item,
+      capabilities: const StreamCapabilities(
+        containers: {'mkv', 'mp4', 'mpegts', 'avi', 'webm'},
+        videoCodecs: {'h264', 'hevc', 'mpeg2video', 'vp9', 'av1'},
+        audioCodecs: {'aac', 'ac3', 'eac3', 'dca', 'opus', 'mp3', 'flac'},
+        hdr10: true,
+        hlg: true,
+        dolbyVision: true,
+      ),
+    );
+    return descriptor.uri.replace(
+      queryParameters: {
+        ...descriptor.uri.queryParameters,
+        'X-Plex-Token': token,
+      },
+    );
+  }
+
+  Future<Uint8List?> artworkFor(ChannelItem item) async {
+    final endpoint = connection?.uri;
+    final token = _profileToken ?? _accountToken;
+    final artwork = item.artwork;
+    if (endpoint == null ||
+        token == null ||
+        artwork == null ||
+        artwork.toString().isEmpty) {
+      return null;
+    }
+    return plex.artwork(endpoint, token, artwork);
+  }
+
+  Future<void> setCurrentChannel(String id) async {
+    if (id == currentChannelId ||
+        !channels.any((channel) => channel.id == id)) {
+      return;
+    }
+    final old = currentChannelId;
+    currentChannelId = id;
+    try {
+      await _save();
+      notifyListeners();
+    } catch (_) {
+      currentChannelId = old;
+      rethrow;
+    }
+  }
+
   Future<void> deleteChannel(String id) async {
     final old = channels;
     final oldCurrent = currentChannelId;
+    final removedIndex = channels.indexWhere((channel) => channel.id == id);
     channels = List.unmodifiable(channels.where((channel) => channel.id != id));
-    if (currentChannelId == id) currentChannelId = channels.firstOrNull?.id;
+    if (currentChannelId == id) {
+      currentChannelId = channels.isEmpty
+          ? null
+          : channels[removedIndex.clamp(0, channels.length - 1)].id;
+    }
     try {
       await _save();
       notifyListeners();

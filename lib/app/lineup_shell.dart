@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 
 import '../channels/channel.dart';
 import '../channels/content_resolver.dart';
+import '../guide/guide_controller.dart';
+import '../guide/guide_view.dart';
 import '../playback/native_player.dart';
-import '../playback/player_foundation_view.dart';
+import '../playback/player_coordinator.dart';
+import '../playback/player_view.dart';
 import '../settings/lineup_settings.dart';
 import 'channel_setup_view.dart';
 import 'lineup_controller.dart';
@@ -25,9 +28,19 @@ class LineupShell extends StatefulWidget {
 
 class _LineupShellState extends State<LineupShell> {
   late int _selectedIndex = widget.initialMediaPath == null ? 0 : 4;
+  late final GuideController _guide;
+  late final PlayerCoordinator _player;
+  final _playerKey = GlobalKey();
   @override
   void initState() {
     super.initState();
+    _guide = GuideController(lineup: widget.controller);
+    _player = PlayerCoordinator(
+      player: widget.player,
+      lineup: widget.controller,
+      guide: _guide,
+    );
+    if (_selectedIndex == 0) _player.showFullGuide();
     widget.controller.addListener(_changed);
   }
 
@@ -38,7 +51,18 @@ class _LineupShellState extends State<LineupShell> {
   @override
   void dispose() {
     widget.controller.removeListener(_changed);
+    _player.dispose();
+    _guide.dispose();
     super.dispose();
+  }
+
+  void _select(int index) {
+    if (index == 0) {
+      _player.showFullGuide();
+    } else if (_player.overlay == PlayerOverlay.fullGuide) {
+      _player.closeOverlay();
+    }
+    setState(() => _selectedIndex = index);
   }
 
   @override
@@ -49,15 +73,31 @@ class _LineupShellState extends State<LineupShell> {
           ? UpstreamChannelSetupView(controller: controller)
           : UpstreamOnboardingView(controller: controller);
     }
+    final playerView = PlayerView(
+      key: _playerKey,
+      controller: _player,
+      initialMediaPath: widget.initialMediaPath,
+      openGuide: () => _select(0),
+    );
     final views = <Widget>[
-      _GuideSetupSummary(controller: controller),
+      Stack(
+        fit: StackFit.expand,
+        children: [
+          playerView,
+          GuideView(
+            controller: _guide,
+            onClose: () => _select(4),
+            onTune: (channelId) async {
+              await _player.tune(channelId);
+              if (_player.error == null) _select(4);
+            },
+          ),
+        ],
+      ),
       ChannelsView(controller: controller),
       SettingsView(controller: controller),
       DiagnosticsView(controller: controller, status: widget.player.status),
-      PlayerFoundationView(
-        player: widget.player,
-        initialMediaPath: widget.initialMediaPath,
-      ),
+      playerView,
     ];
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -68,8 +108,7 @@ class _LineupShellState extends State<LineupShell> {
               color: Theme.of(context).scaffoldBackgroundColor,
               child: NavigationRail(
                 selectedIndex: _selectedIndex,
-                onDestinationSelected: (index) =>
-                    setState(() => _selectedIndex = index),
+                onDestinationSelected: _select,
                 extended: MediaQuery.sizeOf(context).width >= 1100,
                 leading: const Padding(
                   padding: EdgeInsets.fromLTRB(12, 16, 12, 28),
@@ -566,25 +605,6 @@ class DiagnosticsView extends StatelessWidget {
             ),
           ),
       ],
-    ),
-  );
-}
-
-class _GuideSetupSummary extends StatelessWidget {
-  const _GuideSetupSummary({required this.controller});
-  final LineupController controller;
-  @override
-  Widget build(BuildContext context) => _Page(
-    title: 'Guide',
-    child: Center(
-      child: _Panel(
-        icon: Icons.live_tv,
-        title: controller.channels.isEmpty
-            ? 'Create a channel to build your Guide'
-            : '${controller.channels.length} channels ready',
-        body: 'Guide rendering and player overlays remain the next product slice. Plex, scheduling, channel authoring, and persistence are active.',
-        action: const SizedBox.shrink(),
-      ),
     ),
   );
 }

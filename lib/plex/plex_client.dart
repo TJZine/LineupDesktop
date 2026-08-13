@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 import 'package:xml/xml.dart';
@@ -393,6 +394,37 @@ class PlexClient {
       decision: decision,
       sessionId: session,
     );
+  }
+
+  Future<Uint8List> artwork(
+    Uri server,
+    String token,
+    Uri path, {
+    int maximumBytes = 4 * 1024 * 1024,
+  }) async {
+    final request = http.Request(
+      'GET',
+      path.hasScheme ? path : server.resolveUri(path),
+    )..headers.addAll(_headers(token));
+    final response = await _http.send(request).timeout(requestTimeout);
+    if (response.statusCode != 200 ||
+        (response.contentLength ?? 0) > maximumBytes) {
+      throw const PlexException(
+        'artwork-unavailable',
+        'Program artwork is unavailable.',
+      );
+    }
+    final bytes = BytesBuilder(copy: false);
+    await for (final chunk in response.stream.timeout(requestTimeout)) {
+      if (bytes.length + chunk.length > maximumBytes) {
+        throw const PlexException(
+          'artwork-too-large',
+          'Program artwork is too large.',
+        );
+      }
+      bytes.add(chunk);
+    }
+    return bytes.takeBytes();
   }
 
   Future<void> releasePlaybackSession({

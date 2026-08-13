@@ -84,15 +84,21 @@ navigation do not enter C++.
 - Root Flutter project targeting only macOS and Windows.
 - Application bootstrap, theme tokens, keyboard-focus-aware Material controls,
   semantic labels, navigation shell, and explicit startup failure surface.
-- Feature entry points for Guide, Channels, Settings, and Diagnostics without
-  fake product data.
+- Production Guide, Channels, Settings, Diagnostics, and shared player routes
+  consuming the persisted Channel Builder lineup without fixture-only paths.
 - The Dart native-player seam and an explicit macOS unsupported development
   backend. It never reports successful playback.
 - A Windows C++ libmpv owner, native child presentation, command/property/event
   channel, track projection, decoder/output and quality/HDR observations,
   fullscreen/resize/minimize handling, and clean recreation controls.
-- A focused Flutter player surface that proves transparent text and an
-  interactive translucent panel remain in Flutter above native video.
+- A retained Flutter Guide with lazy fixed-extent rows, shared time geometry,
+  stable logical channel/program focus, bounded schedule and artwork caches,
+  stale-result rejection, library filters, accessible visible-cell semantics,
+  and full Guide presentation above continuing native video.
+- One Flutter player coordinator and overlay model for the OSD, now-playing
+  information, mini Guide, full Guide, channel entry, audio/subtitle tracks,
+  errors/retry, sleep timer, fullscreen intent, cursor timeout, and input/focus
+  restoration. Product state does not move into the native player.
 - A Dart product engine for Plex PIN authentication, Plex Home profiles,
   server discovery/probing, library and media parsing, privileged playback
   descriptors, deterministic channels/schedules, channel suggestions,
@@ -115,12 +121,12 @@ navigation do not enter C++.
 
 ## Not implemented yet
 
-Full Guide/OSD screens are not implemented. HDR display switching and
-tone-mapping policy, audio passthrough, broad codec/container coverage, remote
-Plex streams, packaging/licensing of a redistributable libmpv build, and the
-final media acceptance campaign remain integration work. The focused Windows
-checks and exact observations completed for this foundation are recorded in
-the development closeout rather than generalized beyond the media and machine
+HDR display switching and tone-mapping policy, audio passthrough, broad
+codec/container acceptance, production approval of remote Plex playback,
+packaging/licensing of a redistributable libmpv build, and the final Windows
+media acceptance campaign remain integration work. The focused Windows checks
+and exact observations completed for this foundation are recorded in the
+development closeout rather than generalized beyond the media and machine
 actually exercised.
 
 ## Dependency decision

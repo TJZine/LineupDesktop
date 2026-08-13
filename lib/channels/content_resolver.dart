@@ -67,6 +67,8 @@ ChannelItem channelItemFor(PlexMediaItem item) => ChannelItem(
   title: item.title,
   duration: item.duration,
   showTitle: item.grandparentTitle,
+  showThumb: item.thumbPath,
+  artwork: Uri.tryParse(item.artPath ?? item.thumbPath ?? ''),
 );
 
 List<ChannelItem> _interleave(List<List<ChannelItem>> sources) {

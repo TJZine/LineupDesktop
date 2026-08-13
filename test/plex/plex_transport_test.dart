@@ -200,6 +200,42 @@ void main() {
     expect(descriptor.uri.queryParameters, isNot(contains('directPlay')));
   });
 
+  test('artwork stays credential-scoped and enforces its byte bound', () async {
+    late http.Request request;
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      httpClient: MockClient((value) async {
+        request = value;
+        return http.Response.bytes([1, 2, 3, 4], 200);
+      }),
+    );
+    final bytes = await client.artwork(
+      Uri.parse('https://plex.example:32400'),
+      'secret',
+      Uri.parse('/library/art/1'),
+      maximumBytes: 4,
+    );
+    expect(bytes, [1, 2, 3, 4]);
+    expect(request.url.host, 'plex.example');
+    expect(request.headers['X-Plex-Token'], 'secret');
+
+    await expectLater(
+      client.artwork(
+        Uri.parse('https://plex.example:32400'),
+        'secret',
+        Uri.parse('/library/art/1'),
+        maximumBytes: 3,
+      ),
+      throwsA(
+        isA<PlexException>().having(
+          (exception) => exception.code,
+          'code',
+          'artwork-unavailable',
+        ),
+      ),
+    );
+  });
+
   test(
     'show libraries load episode rows and playlists load their items',
     () async {

@@ -12,8 +12,8 @@ The current branch provides:
 - native child-window video presentation beneath Flutter overlays
 - an owned Flutter 3.47.0 DirectComposition engine patch and reproducible
   Windows development build path
-- a focused development player surface for load, transport, fullscreen,
-  replacement-load, lifecycle, track, and telemetry validation
+- a shared Flutter player, OSD, mini Guide, full Guide, track menus, channel
+  entry, sleep timer, fullscreen intent, and deterministic overlay ownership
 - an explicit unsupported-playback state on macOS rather than a false success
 - Plex PIN authentication, Home profiles, HTTPS server discovery, library and
   media loading, and secure credential ownership
@@ -22,11 +22,13 @@ The current branch provides:
 - upstream-shaped TV onboarding with QR/PIN linking, profile/server/audio
   setup, and a three-step Channel Builder supporting eight Plex source
   strategies, review, merge/append/replace, and lineups up to 1,000 channels
+- a lazy Guide with stable logical focus, bounded schedule/artwork caches,
+  library filters, configurable time/density, and keyboard/remote/mouse input
 
-Guide/OSD product surfaces, remote Plex playback integration, distributable
-libmpv packaging, and final Windows hardware/HDR acceptance are not yet
-implemented or proven. Real Plex and macOS Keychain workflows still require
-manual account-specific acceptance.
+Remote Plex playback still requires Windows acceptance. Distributable libmpv
+packaging and final Windows hardware/HDR acceptance are not yet implemented or
+proven. Real Plex and macOS Keychain workflows still require manual
+account-specific acceptance.
 
 ## Get started
 
