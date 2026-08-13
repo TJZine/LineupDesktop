@@ -99,6 +99,35 @@ void main() {
     expect(controller.error, contains('Could not save audio settings'));
   });
 
+  test(
+    'profile picker preference is honored before saved profile restore',
+    () async {
+      final store = _MemoryStore(
+        const PersistedState(
+          settings: LineupSettings(profilePickerOnStartup: true),
+          profileId: 'owner',
+        ),
+      );
+      final plex = _FakePlex()
+        ..homeUsersResult = const [
+          PlexHomeUser(id: 'owner', name: 'Owner', protected: false),
+          PlexHomeUser(id: 'child', name: 'Child', protected: true),
+        ];
+      final controller = LineupController(
+        store: store,
+        credentials: _MemoryCredentials(accountToken: 'owner-token'),
+        plex: plex,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+
+      expect(controller.stage, SetupStage.profiles);
+      expect(controller.profile, isNull);
+      expect(plex.discoveredTokens, isEmpty);
+    },
+  );
+
   test('a stale failure cannot overwrite logout state', () async {
     final account = Completer<PlexAccount>();
     final controller = LineupController(

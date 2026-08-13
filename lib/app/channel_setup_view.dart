@@ -4,6 +4,7 @@ import '../channels/channel.dart';
 import '../channels/channel_builder.dart';
 import '../plex/plex_models.dart';
 import '../ui/app_theme.dart';
+import '../ui/app_ui.dart';
 import 'lineup_controller.dart';
 
 enum _SetupCategory {
@@ -103,42 +104,58 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
     ),
   );
 
-  Widget _header() => Row(
-    children: [
-      Image.asset('assets/branding/lineup-logo-mark.png', height: 58),
-      const SizedBox(width: 20),
-      Expanded(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Channel Setup',
-              style: Theme.of(context).textTheme.headlineMedium
-                  ?.copyWith(fontWeight: FontWeight.w800),
+  Widget _header() => LayoutBuilder(
+    builder: (context, constraints) {
+      final title = Row(
+        children: [
+          Image.asset('assets/branding/lineup-logo-mark.png', height: 50),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Semantics(
+                  header: true,
+                  child: Text(
+                    'Channel Setup',
+                    style: Theme.of(context).textTheme.headlineMedium
+                        ?.copyWith(fontWeight: FontWeight.w800),
+                  ),
+                ),
+                const Text(
+                  'Build a clean, remote-first channel lineup for this server.',
+                  style: TextStyle(color: Colors.white60),
+                ),
+              ],
             ),
-            const Text(
-              'Build a clean, remote-first channel lineup for this server.',
-              style: TextStyle(color: Colors.white60),
+          ),
+        ],
+      );
+      if (constraints.maxWidth < LineupLayout.compact) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            title,
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerRight,
+              child: _StepPill(step: _step),
             ),
           ],
-        ),
-      ),
-      _StepPill(step: _step),
-    ],
+        );
+      }
+      return Row(
+        children: [
+          Expanded(child: title),
+          _StepPill(step: _step),
+        ],
+      );
+    },
   );
 
-  Widget _errorBanner() => Semantics(
-    liveRegion: true,
-    child: Container(
-      margin: const EdgeInsets.only(top: 14),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.red.withValues(alpha: 0.08),
-        border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Text(_error!),
-    ),
+  Widget _errorBanner() => Padding(
+    padding: const EdgeInsets.only(top: 14),
+    child: LineupNotice(message: _error!, tone: NoticeTone.error),
   );
 
   Widget _body() => switch (_step) {
@@ -150,116 +167,103 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
   Widget _libraryStep() => _SetupSurface(
     title: 'Select Plex libraries',
     subtitle: 'Lineup will scan the selected movie and show libraries for channel ideas.',
-    footer: Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Wrap(
-          spacing: 10,
-          children: [
-            if (widget.controller.channelSetupCanCancel)
-              OutlinedButton(
-                onPressed: widget.controller.cancelChannelSetup,
-                child: const Text('Cancel'),
-              ),
-            OutlinedButton(
-              onPressed: () => setState(
-                () => _selectedLibraries.addAll(
-                  widget.controller.libraries.map((library) => library.id),
-                ),
-              ),
-              child: const Text('Select All'),
-            ),
-            OutlinedButton(
-              onPressed: () => setState(_selectedLibraries.clear),
-              child: const Text('Clear All'),
-            ),
-          ],
-        ),
-        FilledButton.icon(
-          onPressed: _selectedLibraries.isEmpty || widget.controller.busy
-              ? null
-              : _continueFromLibraries,
-          icon: const Icon(Icons.arrow_forward),
-          label: const Text('Configure channels'),
-        ),
-      ],
-    ),
-    child: GridView.builder(
-      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: 340,
-        mainAxisExtent: 120,
-        crossAxisSpacing: 14,
-        mainAxisSpacing: 14,
-      ),
-      itemCount: widget.controller.libraries.length,
-      itemBuilder: (_, index) {
-        final library = widget.controller.libraries[index];
-        final selected = _selectedLibraries.contains(library.id);
-        return Semantics(
-          button: true,
-          selected: selected,
-          child: Card(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
-              side: BorderSide(
-                color: selected ? LineupTheme.brass : Colors.white12,
-                width: selected ? 2 : 1,
-              ),
-            ),
-            child: InkWell(
-              autofocus: index == 0,
-              borderRadius: BorderRadius.circular(14),
-              onTap: () => setState(
-                () => selected
-                    ? _selectedLibraries.remove(library.id)
-                    : _selectedLibraries.add(library.id),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(18),
-                child: Row(
-                  children: [
-                    Icon(
-                      library.type == PlexLibraryType.show
-                          ? Icons.tv
-                          : Icons.movie_outlined,
-                      size: 38,
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            library.title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          Text(
-                            library.type == PlexLibraryType.show
-                                ? 'TV Shows'
-                                : 'Movies',
-                            style: const TextStyle(color: Colors.white54),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Icon(
-                      selected ? Icons.check_circle : Icons.circle_outlined,
-                      color: selected ? LineupTheme.brass : Colors.white30,
-                    ),
-                  ],
-                ),
-              ),
+    footer: _SetupFooter(
+      secondary: [
+        if (widget.controller.channelSetupCanCancel)
+          OutlinedButton(
+            onPressed: widget.controller.cancelChannelSetup,
+            child: const Text('Cancel'),
+          ),
+        OutlinedButton(
+          onPressed: () => setState(
+            () => _selectedLibraries.addAll(
+              widget.controller.libraries.map((library) => library.id),
             ),
           ),
-        );
-      },
+          child: const Text('Select All'),
+        ),
+        OutlinedButton(
+          onPressed: () => setState(_selectedLibraries.clear),
+          child: const Text('Clear All'),
+        ),
+      ],
+      primary: FilledButton.icon(
+        onPressed: _selectedLibraries.isEmpty || widget.controller.busy
+            ? null
+            : _continueFromLibraries,
+        icon: const Icon(Icons.arrow_forward),
+        label: const Text('Configure channels'),
+      ),
     ),
+    child: widget.controller.libraries.isEmpty
+        ? const LineupEmptyState(
+            icon: Icons.video_library_outlined,
+            title: 'No movie or show libraries found',
+            message: 'Choose another Plex server with accessible movie or show libraries.',
+          )
+        : GridView.builder(
+            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+              maxCrossAxisExtent: 340,
+              mainAxisExtent: 120,
+              crossAxisSpacing: 14,
+              mainAxisSpacing: 14,
+            ),
+            itemCount: widget.controller.libraries.length,
+            itemBuilder: (_, index) {
+              final library = widget.controller.libraries[index];
+              final selected = _selectedLibraries.contains(library.id);
+              return LineupSelectionCard(
+                selected: selected,
+                autofocus: index == 0,
+                onPressed: () => setState(
+                  () => selected
+                      ? _selectedLibraries.remove(library.id)
+                      : _selectedLibraries.add(library.id),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(18),
+                  child: Row(
+                    children: [
+                      Icon(
+                        library.type == PlexLibraryType.show
+                            ? Icons.tv
+                            : Icons.movie_outlined,
+                        size: 38,
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              library.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            Text(
+                              library.type == PlexLibraryType.show
+                                  ? 'TV Shows'
+                                  : 'Movies',
+                              style: const TextStyle(color: Colors.white54),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Icon(
+                        selected ? Icons.check_circle : Icons.circle_outlined,
+                        color: selected ? LineupTheme.brass : Colors.white30,
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
   );
 
   Future<void> _continueFromLibraries() async {
@@ -282,25 +286,24 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
   Widget _strategyStep() => _SetupSurface(
     title: 'Configure the lineup',
     subtitle: 'Choose source families, ordering and limits. Estimates update from loaded Plex metadata.',
-    footer: Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
+    footer: _SetupFooter(
+      secondary: [
         OutlinedButton(
           onPressed: () => setState(() => _step = 1),
           child: const Text('Back'),
         ),
-        FilledButton.icon(
-          onPressed: _proposals.isEmpty ? null : _prepareReview,
-          icon: const Icon(Icons.preview_outlined),
-          label: Text(
-            widget.controller.channels.isEmpty ? 'Build Channels' : 'Review',
-          ),
-        ),
       ],
+      primary: FilledButton.icon(
+        onPressed: _proposals.isEmpty ? null : _prepareReview,
+        icon: const Icon(Icons.preview_outlined),
+        label: Text(
+          widget.controller.channels.isEmpty ? 'Build Channels' : 'Review',
+        ),
+      ),
     ),
     child: LayoutBuilder(
       builder: (_, constraints) {
-        final compact = constraints.maxWidth < 900;
+        final compact = constraints.maxWidth < LineupLayout.compact;
         final rail = _categoryRail(compact);
         final details = _categoryDetails();
         return Column(
@@ -339,13 +342,16 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
           child: _RailButton(
             label: _categoryLabel(category),
             selected: category == _category,
-            autofocus: category == _SetupCategory.contentSources,
+            autofocus: category == _category,
             onPressed: () => setState(() => _category = category),
           ),
         ),
     ];
     return compact
-        ? Wrap(spacing: 8, runSpacing: 8, children: children)
+        ? SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(children: children),
+          )
         : ListView(children: children);
   }
 
@@ -638,28 +644,27 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
           : '${_modeLabel(_mode)} • ${_strategies.length} enabled source families',
       footer: _building
           ? const SizedBox.shrink()
-          : Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
+          : _SetupFooter(
+              secondary: [
                 OutlinedButton(
                   onPressed: () => setState(() => _step = 2),
                   child: const Text('Back'),
                 ),
-                FilledButton.icon(
-                  onPressed:
-                      planned.isEmpty ||
-                          (_mode == ChannelBuildMode.replace &&
-                              !_replaceConfirmed)
-                      ? null
-                      : () => _build(planned),
-                  icon: const Icon(Icons.auto_awesome),
-                  label: Text(
-                    _mode == ChannelBuildMode.replace
-                        ? 'Confirm & Replace'
-                        : 'Confirm & Build',
-                  ),
-                ),
               ],
+              primary: FilledButton.icon(
+                onPressed:
+                    planned.isEmpty ||
+                        (_mode == ChannelBuildMode.replace &&
+                            !_replaceConfirmed)
+                    ? null
+                    : () => _build(planned),
+                icon: const Icon(Icons.auto_awesome),
+                label: Text(
+                  _mode == ChannelBuildMode.replace
+                      ? 'Confirm & Replace'
+                      : 'Confirm & Build',
+                ),
+              ),
             ),
       child: _building
           ? const _BuildProgress()
@@ -801,28 +806,60 @@ class _SetupSurface extends StatelessWidget {
   final Widget child;
   final Widget footer;
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(26),
-    decoration: BoxDecoration(
-      color: Colors.white.withValues(alpha: 0.035),
-      borderRadius: BorderRadius.circular(16),
-      border: Border(
-        bottom: BorderSide(color: LineupTheme.brass.withValues(alpha: 0.12)),
+  Widget build(BuildContext context) => Material(
+    color: Colors.white.withValues(alpha: 0.035),
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(LineupTheme.radiusLarge),
+      side: BorderSide(color: LineupTheme.brass.withValues(alpha: 0.12)),
+    ),
+    child: Padding(
+      padding: const EdgeInsets.all(26),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(title, style: Theme.of(context).textTheme.headlineSmall),
+          const SizedBox(height: 5),
+          Text(subtitle, style: const TextStyle(color: Colors.white60)),
+          const SizedBox(height: 20),
+          Expanded(child: child),
+          const SizedBox(height: 18),
+          footer,
+        ],
       ),
     ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(title, style: Theme.of(context).textTheme.headlineSmall),
-        const SizedBox(height: 5),
-        Text(subtitle, style: const TextStyle(color: Colors.white60)),
-        const SizedBox(height: 20),
-        Expanded(child: child),
-        const SizedBox(height: 18),
-        footer,
-      ],
-    ),
   );
+}
+
+class _SetupFooter extends StatelessWidget {
+  const _SetupFooter({required this.secondary, required this.primary});
+  final List<Widget> secondary;
+  final Widget primary;
+
+  @override
+  Widget build(BuildContext context) {
+    final secondaryActions = Wrap(
+      spacing: 10,
+      runSpacing: 10,
+      children: secondary,
+    );
+    if (LineupLayout.isCompact(context)) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          secondaryActions,
+          const SizedBox(height: 10),
+          Align(alignment: Alignment.centerRight, child: primary),
+        ],
+      );
+    }
+    return Row(
+      children: [
+        Expanded(child: secondaryActions),
+        const SizedBox(width: 16),
+        primary,
+      ],
+    );
+  }
 }
 
 class _StepPill extends StatelessWidget {
@@ -883,16 +920,23 @@ class _ImpactCard extends StatelessWidget {
           children: [
             Icon(icon, size: 32),
             const SizedBox(width: 14),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '$value',
-                  style: Theme.of(context).textTheme.headlineMedium
-                      ?.copyWith(fontWeight: FontWeight.w800),
-                ),
-                Text(label, style: const TextStyle(color: Colors.white60)),
-              ],
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '$value',
+                    style: Theme.of(context).textTheme.headlineMedium
+                        ?.copyWith(fontWeight: FontWeight.w800),
+                  ),
+                  Text(
+                    label,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Colors.white60),
+                  ),
+                ],
+              ),
             ),
           ],
         ),

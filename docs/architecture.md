@@ -82,8 +82,10 @@ navigation do not enter C++.
 ## Implemented now
 
 - Root Flutter project targeting only macOS and Windows.
-- Application bootstrap, theme tokens, keyboard-focus-aware Material controls,
-  semantic labels, navigation shell, and explicit startup failure surface.
+- Application bootstrap, a compact shared visual vocabulary, responsive page,
+  section, notice, empty-state and confirmation primitives, focus-aware
+  Material controls, semantic labels, navigation shell, and explicit startup
+  failure surface.
 - Production Guide, Channels, Settings, Diagnostics, and shared player routes
   consuming the persisted Channel Builder lineup without fixture-only paths.
 - The Dart native-player seam and an explicit macOS unsupported development

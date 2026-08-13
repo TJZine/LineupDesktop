@@ -1,10 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../plex/plex_models.dart';
 import '../ui/app_theme.dart';
+import '../ui/app_ui.dart';
 import 'lineup_controller.dart';
 
 class UpstreamOnboardingView extends StatefulWidget {
@@ -211,7 +213,9 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
               _ProfileCard(
                 user: user,
                 autofocus: user == widget.controller.profiles.first,
-                onPressed: () => _selectProfile(user),
+                onPressed: widget.controller.busy
+                    ? null
+                    : () => _selectProfile(user),
               ),
           ],
         ),
@@ -231,7 +235,7 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
     child: Column(
       children: [
         if (widget.controller.servers.isEmpty && !widget.controller.busy)
-          const _EmptyState(
+          const LineupEmptyState(
             icon: Icons.dns_outlined,
             title: 'No servers found',
             message: 'Make sure Plex Media Server is online and reachable, then retry discovery.',
@@ -375,19 +379,7 @@ class _OnboardingPanel extends StatelessWidget {
         ],
         if (error != null) ...[
           const SizedBox(height: 16),
-          Semantics(
-            liveRegion: true,
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: Colors.red.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
-              ),
-              child: Text(error!, textAlign: TextAlign.center),
-            ),
-          ),
+          LineupNotice(message: error!, tone: NoticeTone.error),
         ],
         const SizedBox(height: 18),
         child,
@@ -411,11 +403,14 @@ class _HeroContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Column(
     children: [
-      Text(
-        title,
-        textAlign: TextAlign.center,
-        style: Theme.of(context).textTheme.headlineMedium
-            ?.copyWith(fontWeight: FontWeight.w800),
+      Semantics(
+        header: true,
+        child: Text(
+          title,
+          textAlign: TextAlign.center,
+          style: Theme.of(context).textTheme.headlineMedium
+              ?.copyWith(fontWeight: FontWeight.w800),
+        ),
       ),
       if (step != null) ...[
         const SizedBox(height: 8),
@@ -466,53 +461,48 @@ class _ProfileCard extends StatelessWidget {
   });
   final PlexHomeUser user;
   final bool autofocus;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
   @override
   Widget build(BuildContext context) => SizedBox(
-    width: 170,
-    height: 236,
-    child: Card(
-      child: InkWell(
-        autofocus: autofocus,
-        borderRadius: BorderRadius.circular(16),
-        onTap: onPressed,
-        child: Padding(
-          padding: const EdgeInsets.all(18),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              CircleAvatar(
-                radius: 48,
-                backgroundImage: user.thumb?.isAbsolute == true
-                    ? NetworkImage(user.thumb.toString())
-                    : null,
-                child: user.thumb?.isAbsolute == true
-                    ? null
-                    : Text(
-                        user.name.characters.first.toUpperCase(),
-                        style: const TextStyle(fontSize: 34),
-                      ),
-              ),
-              const SizedBox(height: 14),
-              Text(
-                user.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
+    width: 178,
+    height: 244,
+    child: LineupSelectionCard(
+      selected: false,
+      autofocus: autofocus,
+      onPressed: onPressed,
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircleAvatar(
+              radius: 48,
+              backgroundImage: user.thumb?.isAbsolute == true
+                  ? NetworkImage(user.thumb.toString())
+                  : null,
+              child: user.thumb?.isAbsolute == true
+                  ? null
+                  : Text(
+                      user.name.characters.first.toUpperCase(),
+                      style: const TextStyle(fontSize: 34),
+                    ),
+            ),
+            const SizedBox(height: 14),
+            Text(
+              user.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+            ),
+            if (user.protected)
+              const Padding(
+                padding: EdgeInsets.only(top: 8),
+                child: Chip(
+                  avatar: Icon(Icons.lock, size: 15),
+                  label: Text('PIN'),
                 ),
               ),
-              if (user.protected)
-                const Padding(
-                  padding: EdgeInsets.only(top: 8),
-                  child: Chip(
-                    avatar: Icon(Icons.lock, size: 15),
-                    label: Text('PIN'),
-                  ),
-                ),
-            ],
-          ),
+          ],
         ),
       ),
     ),
@@ -559,70 +549,30 @@ class _AudioChoice extends StatelessWidget {
   final VoidCallback onPressed;
   final bool autofocus;
   @override
-  Widget build(BuildContext context) => Semantics(
-    button: true,
-    selected: selected,
-    child: SizedBox(
-      width: 360,
-      height: 210,
-      child: Card(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: BorderSide(
-            color: selected ? LineupTheme.brass : Colors.white12,
-            width: selected ? 2 : 1,
-          ),
-        ),
-        child: InkWell(
-          autofocus: autofocus,
-          borderRadius: BorderRadius.circular(16),
-          onTap: onPressed,
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(icon, size: 64),
-                const SizedBox(height: 14),
-                Text(
-                  title,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(subtitle, textAlign: TextAlign.center),
-              ],
+  Widget build(BuildContext context) => SizedBox(
+    width: 360,
+    height: 210,
+    child: LineupSelectionCard(
+      selected: selected,
+      autofocus: autofocus,
+      onPressed: onPressed,
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 64),
+            const SizedBox(height: 14),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
             ),
-          ),
+            const SizedBox(height: 6),
+            Text(subtitle, textAlign: TextAlign.center),
+          ],
         ),
       ),
-    ),
-  );
-}
-
-class _EmptyState extends StatelessWidget {
-  const _EmptyState({
-    required this.icon,
-    required this.title,
-    required this.message,
-  });
-  final IconData icon;
-  final String title;
-  final String message;
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.all(30),
-    child: Column(
-      children: [
-        Icon(icon, size: 60, color: Colors.white38),
-        const SizedBox(height: 12),
-        Text(title, style: Theme.of(context).textTheme.titleLarge),
-        const SizedBox(height: 8),
-        Text(message, textAlign: TextAlign.center),
-      ],
     ),
   );
 }
@@ -642,49 +592,91 @@ class _ProfilePinDialogState extends State<_ProfilePinDialog> {
     if (_pin.length == 4) Navigator.pop(context, _pin);
   }
 
+  KeyEventResult _key(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    final digit = <LogicalKeyboardKey, int>{
+      LogicalKeyboardKey.digit0: 0,
+      LogicalKeyboardKey.digit1: 1,
+      LogicalKeyboardKey.digit2: 2,
+      LogicalKeyboardKey.digit3: 3,
+      LogicalKeyboardKey.digit4: 4,
+      LogicalKeyboardKey.digit5: 5,
+      LogicalKeyboardKey.digit6: 6,
+      LogicalKeyboardKey.digit7: 7,
+      LogicalKeyboardKey.digit8: 8,
+      LogicalKeyboardKey.digit9: 9,
+      LogicalKeyboardKey.numpad0: 0,
+      LogicalKeyboardKey.numpad1: 1,
+      LogicalKeyboardKey.numpad2: 2,
+      LogicalKeyboardKey.numpad3: 3,
+      LogicalKeyboardKey.numpad4: 4,
+      LogicalKeyboardKey.numpad5: 5,
+      LogicalKeyboardKey.numpad6: 6,
+      LogicalKeyboardKey.numpad7: 7,
+      LogicalKeyboardKey.numpad8: 8,
+      LogicalKeyboardKey.numpad9: 9,
+    }[event.logicalKey];
+    if (digit != null) {
+      _digit(digit);
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.backspace && _pin.isNotEmpty) {
+      setState(() => _pin = _pin.substring(0, _pin.length - 1));
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
   @override
-  Widget build(BuildContext context) => AlertDialog(
-    title: Text('Enter PIN for ${widget.user.name}'),
-    content: SizedBox(
-      width: 360,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            '${List.filled(_pin.length, '●').join()}${List.filled(4 - _pin.length, '○').join()}',
-            style: const TextStyle(fontSize: 30, letterSpacing: 12),
-          ),
-          const SizedBox(height: 18),
-          GridView.count(
-            shrinkWrap: true,
-            crossAxisCount: 3,
-            childAspectRatio: 1.8,
-            mainAxisSpacing: 10,
-            crossAxisSpacing: 10,
-            children: [
-              for (var digit = 1; digit <= 9; digit++)
-                FilledButton(
-                  autofocus: digit == 5,
-                  onPressed: () => _digit(digit),
-                  child: Text('$digit'),
+  Widget build(BuildContext context) => Focus(
+    autofocus: true,
+    onKeyEvent: _key,
+    child: AlertDialog(
+      title: Text('Enter PIN for ${widget.user.name}'),
+      content: SizedBox(
+        width: 360,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '${List.filled(_pin.length, '●').join()}${List.filled(4 - _pin.length, '○').join()}',
+              style: const TextStyle(fontSize: 30, letterSpacing: 12),
+            ),
+            const SizedBox(height: 18),
+            GridView.count(
+              shrinkWrap: true,
+              crossAxisCount: 3,
+              childAspectRatio: 1.8,
+              mainAxisSpacing: 10,
+              crossAxisSpacing: 10,
+              children: [
+                for (var digit = 1; digit <= 9; digit++)
+                  FilledButton(
+                    autofocus: digit == 5,
+                    onPressed: () => _digit(digit),
+                    child: Text('$digit'),
+                  ),
+                IconButton(
+                  tooltip: 'Backspace',
+                  onPressed: _pin.isEmpty
+                      ? null
+                      : () => setState(
+                          () => _pin = _pin.substring(0, _pin.length - 1),
+                        ),
+                  icon: const Icon(Icons.backspace_outlined),
                 ),
-              IconButton(
-                tooltip: 'Backspace',
-                onPressed: _pin.isEmpty
-                    ? null
-                    : () => setState(
-                        () => _pin = _pin.substring(0, _pin.length - 1),
-                      ),
-                icon: const Icon(Icons.backspace_outlined),
-              ),
-              FilledButton(onPressed: () => _digit(0), child: const Text('0')),
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel'),
-              ),
-            ],
-          ),
-        ],
+                FilledButton(
+                  onPressed: () => _digit(0),
+                  child: const Text('0'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     ),
   );

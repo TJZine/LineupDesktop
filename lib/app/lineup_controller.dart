@@ -104,6 +104,10 @@ class LineupController extends ChangeNotifier {
         _accountToken = token;
         profiles = await plex.homeUsers(token);
         if (operation != _epoch) return;
+        if (settings.profilePickerOnStartup && profiles.length > 1) {
+          stage = SetupStage.profiles;
+          return;
+        }
         final profileId = _persisted.profileId;
         if (profileId != null) {
           final restoredProfile = profiles
@@ -121,6 +125,10 @@ class LineupController extends ChangeNotifier {
             profile = restoredProfile;
             _profileToken = profileToken;
           }
+        }
+        if (profile == null && profiles.length > 1) {
+          stage = SetupStage.profiles;
+          return;
         }
         await _discover(operation);
       },

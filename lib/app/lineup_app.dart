@@ -103,15 +103,22 @@ class _StartupProgress extends StatelessWidget {
         child: Center(
           child: Semantics(
             label: 'Starting Lineup Desktop',
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Image.asset('assets/branding/lineup-logo-mark.png', height: 92),
-                const SizedBox(height: 26),
-                const SizedBox(width: 220, child: LinearProgressIndicator()),
-                const SizedBox(height: 14),
-                const Text('TUNING LINEUP'),
-              ],
+            child: Semantics(
+              liveRegion: true,
+              container: true,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Image.asset(
+                    'assets/branding/lineup-logo-mark.png',
+                    height: 92,
+                  ),
+                  const SizedBox(height: 26),
+                  const SizedBox(width: 220, child: LinearProgressIndicator()),
+                  const SizedBox(height: 14),
+                  const Text('TUNING LINEUP'),
+                ],
+              ),
             ),
           ),
         ),
