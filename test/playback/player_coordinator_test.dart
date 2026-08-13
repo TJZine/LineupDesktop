@@ -9,6 +9,7 @@ import 'package:lineup_desktop/persistence/app_store.dart';
 import 'package:lineup_desktop/playback/native_player.dart';
 import 'package:lineup_desktop/playback/player_coordinator.dart';
 import 'package:lineup_desktop/plex/plex_client.dart';
+import 'package:lineup_desktop/settings/lineup_settings.dart';
 
 void main() {
   test(
@@ -37,6 +38,95 @@ void main() {
       expect(lineup.releases, 0);
       await coordinator.stop();
       await coordinator.stop();
+      expect(lineup.releases, 1);
+
+      coordinator.dispose();
+      guide.dispose();
+      lineup.dispose();
+    },
+  );
+
+  test('scope change stops playback and releases its lease once', () async {
+    final lineup = _TestLineup();
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    )..requestViewport(0, 2);
+    await Future<void>.delayed(Duration.zero);
+    final nativePlayer = _Player();
+    final coordinator = PlayerCoordinator(
+      player: nativePlayer,
+      lineup: lineup,
+      guide: guide,
+    );
+
+    await coordinator.tune('channel-b');
+    coordinator.showMiniGuide();
+    coordinator.cycleSleepTimer();
+    lineup.changeContentScope();
+    await Future<void>.delayed(Duration.zero);
+
+    expect(nativePlayer.stops, 1);
+    expect(lineup.releases, 1);
+    expect(coordinator.overlay, PlayerOverlay.none);
+    expect(coordinator.sleepDuration, isNull);
+    coordinator.dispose();
+    guide.dispose();
+    lineup.dispose();
+  });
+
+  test(
+    'removing the active channel stops playback and releases its lease',
+    () async {
+      final lineup = _TestLineup();
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => _schedule(channel),
+      )..requestViewport(0, 2);
+      await Future<void>.delayed(Duration.zero);
+      final nativePlayer = _Player();
+      final coordinator = PlayerCoordinator(
+        player: nativePlayer,
+        lineup: lineup,
+        guide: guide,
+      );
+
+      await coordinator.tune('channel-b');
+      lineup.replaceChannels(
+        lineup.channels.where((channel) => channel.id != 'channel-b').toList(),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      expect(nativePlayer.stops, 1);
+      expect(lineup.releases, 1);
+      coordinator.dispose();
+      guide.dispose();
+      lineup.dispose();
+    },
+  );
+
+  test(
+    'coordinated logout preserves playback on failure and drains on retry',
+    () async {
+      final lineup = _LogoutLineup();
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => _schedule(channel),
+      )..requestViewport(0, 2);
+      await Future<void>.delayed(Duration.zero);
+      final nativePlayer = _Player();
+      final coordinator = PlayerCoordinator(
+        player: nativePlayer,
+        lineup: lineup,
+        guide: guide,
+      );
+      await coordinator.tune('channel-b');
+
+      expect(await coordinator.logout(), isFalse);
+      expect(nativePlayer.stops, 0);
+      expect(lineup.releases, 0);
+      expect(await coordinator.logout(), isTrue);
+      expect(nativePlayer.stops, 1);
       expect(lineup.releases, 1);
 
       coordinator.dispose();
@@ -163,6 +253,33 @@ void main() {
     );
 
     coordinator.showOsd();
+    await tester.pump(const Duration(milliseconds: 1999));
+    expect(coordinator.overlay, PlayerOverlay.osd);
+    await tester.pump(const Duration(milliseconds: 2));
+    expect(coordinator.overlay, PlayerOverlay.none);
+
+    coordinator.dispose();
+    guide.dispose();
+    lineup.dispose();
+  });
+
+  testWidgets('an OSD settings change reschedules the visible controls', (
+    tester,
+  ) async {
+    final lineup = _TestLineup();
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    final coordinator = PlayerCoordinator(
+      player: _Player(),
+      lineup: lineup,
+      guide: guide,
+    );
+
+    coordinator.showOsd();
+    await tester.pump(const Duration(seconds: 1));
+    lineup.setSettings(lineup.settings.copyWith(osdAutoHideSeconds: 2));
     await tester.pump(const Duration(milliseconds: 1999));
     expect(coordinator.overlay, PlayerOverlay.osd);
     await tester.pump(const Duration(milliseconds: 2));
@@ -594,9 +711,23 @@ class _TestLineup extends LineupController {
   }
 
   int releases = 0;
+  int _testContentGeneration = 0;
+
+  @override
+  int get contentGeneration => _testContentGeneration;
+
+  void changeContentScope() {
+    _testContentGeneration++;
+    notifyListeners();
+  }
 
   void replaceChannels(List<Channel> value) {
     channels = List.unmodifiable(value);
+    notifyListeners();
+  }
+
+  void setSettings(LineupSettings value) {
+    settings = value;
     notifyListeners();
   }
 
@@ -610,6 +741,18 @@ class _TestLineup extends LineupController {
   Future<void> setCurrentChannel(String? id) async {
     currentChannelId = id;
     notifyListeners();
+  }
+}
+
+class _LogoutLineup extends _TestLineup {
+  var logoutCalls = 0;
+
+  @override
+  Future<bool> logout() async {
+    logoutCalls++;
+    if (logoutCalls == 1) return false;
+    changeContentScope();
+    return true;
   }
 }
 

@@ -20,12 +20,6 @@ enum LineupThemeName {
   );
 }
 
-enum VideoQuality { original, high, medium, low }
-
-enum ToneMapPolicy { automatic, always, never }
-
-enum SubtitleMode { off, forced, full }
-
 class LineupSettings {
   const LineupSettings({
     this.theme = LineupThemeName.emberSteel,
@@ -36,15 +30,7 @@ class LineupSettings {
     this.libraryTabsEnabled = true,
     this.nowWatchingBanner = true,
     this.osdAutoHideSeconds = 4,
-    this.videoQuality = VideoQuality.original,
-    this.toneMapPolicy = ToneMapPolicy.automatic,
-    this.audioOutput = 'system',
-    this.audioPassthrough = false,
-    this.directPlayAudioFallback = false,
     this.audioSetupComplete = false,
-    this.subtitleMode = SubtitleMode.full,
-    this.subtitleLanguage = '',
-    this.preferForcedSubtitles = false,
     this.reduceMotion = false,
     this.largeFocusIndicators = false,
     this.profilePickerOnStartup = false,
@@ -59,15 +45,7 @@ class LineupSettings {
   final bool libraryTabsEnabled;
   final bool nowWatchingBanner;
   final int osdAutoHideSeconds;
-  final VideoQuality videoQuality;
-  final ToneMapPolicy toneMapPolicy;
-  final String audioOutput;
-  final bool audioPassthrough;
-  final bool directPlayAudioFallback;
   final bool audioSetupComplete;
-  final SubtitleMode subtitleMode;
-  final String subtitleLanguage;
-  final bool preferForcedSubtitles;
   final bool reduceMotion;
   final bool largeFocusIndicators;
   final bool profilePickerOnStartup;
@@ -82,15 +60,7 @@ class LineupSettings {
     bool? libraryTabsEnabled,
     bool? nowWatchingBanner,
     int? osdAutoHideSeconds,
-    VideoQuality? videoQuality,
-    ToneMapPolicy? toneMapPolicy,
-    String? audioOutput,
-    bool? audioPassthrough,
-    bool? directPlayAudioFallback,
     bool? audioSetupComplete,
-    SubtitleMode? subtitleMode,
-    String? subtitleLanguage,
-    bool? preferForcedSubtitles,
     bool? reduceMotion,
     bool? largeFocusIndicators,
     bool? profilePickerOnStartup,
@@ -104,16 +74,7 @@ class LineupSettings {
     libraryTabsEnabled: libraryTabsEnabled ?? this.libraryTabsEnabled,
     nowWatchingBanner: nowWatchingBanner ?? this.nowWatchingBanner,
     osdAutoHideSeconds: osdAutoHideSeconds ?? this.osdAutoHideSeconds,
-    videoQuality: videoQuality ?? this.videoQuality,
-    toneMapPolicy: toneMapPolicy ?? this.toneMapPolicy,
-    audioOutput: audioOutput ?? this.audioOutput,
-    audioPassthrough: audioPassthrough ?? this.audioPassthrough,
-    directPlayAudioFallback:
-        directPlayAudioFallback ?? this.directPlayAudioFallback,
     audioSetupComplete: audioSetupComplete ?? this.audioSetupComplete,
-    subtitleMode: subtitleMode ?? this.subtitleMode,
-    subtitleLanguage: subtitleLanguage ?? this.subtitleLanguage,
-    preferForcedSubtitles: preferForcedSubtitles ?? this.preferForcedSubtitles,
     reduceMotion: reduceMotion ?? this.reduceMotion,
     largeFocusIndicators: largeFocusIndicators ?? this.largeFocusIndicators,
     profilePickerOnStartup:
@@ -130,15 +91,7 @@ class LineupSettings {
     'libraryTabsEnabled': libraryTabsEnabled,
     'nowWatchingBanner': nowWatchingBanner,
     'osdAutoHideSeconds': osdAutoHideSeconds,
-    'videoQuality': videoQuality.name,
-    'toneMapPolicy': toneMapPolicy.name,
-    'audioOutput': audioOutput,
-    'audioPassthrough': audioPassthrough,
-    'directPlayAudioFallback': directPlayAudioFallback,
     'audioSetupComplete': audioSetupComplete,
-    'subtitleMode': subtitleMode.name,
-    'subtitleLanguage': subtitleLanguage,
-    'preferForcedSubtitles': preferForcedSubtitles,
     'reduceMotion': reduceMotion,
     'largeFocusIndicators': largeFocusIndicators,
     'profilePickerOnStartup': profilePickerOnStartup,
@@ -172,31 +125,7 @@ class LineupSettings {
       libraryTabsEnabled: json['libraryTabsEnabled'] != false,
       nowWatchingBanner: json['nowWatchingBanner'] != false,
       osdAutoHideSeconds: osdAutoHideSeconds.clamp(2, 15),
-      videoQuality: enumValue(
-        VideoQuality.values,
-        'videoQuality',
-        VideoQuality.original,
-      ),
-      toneMapPolicy: enumValue(
-        ToneMapPolicy.values,
-        'toneMapPolicy',
-        ToneMapPolicy.automatic,
-      ),
-      audioOutput: json['audioOutput'] is String
-          ? json['audioOutput']! as String
-          : 'system',
-      audioPassthrough: json['audioPassthrough'] == true,
-      directPlayAudioFallback: json['directPlayAudioFallback'] == true,
       audioSetupComplete: json['audioSetupComplete'] == true,
-      subtitleMode: enumValue(
-        SubtitleMode.values,
-        'subtitleMode',
-        SubtitleMode.full,
-      ),
-      subtitleLanguage: json['subtitleLanguage'] is String
-          ? json['subtitleLanguage']! as String
-          : '',
-      preferForcedSubtitles: json['preferForcedSubtitles'] == true,
       reduceMotion: json['reduceMotion'] == true,
       largeFocusIndicators: json['largeFocusIndicators'] == true,
       profilePickerOnStartup: json['profilePickerOnStartup'] == true,

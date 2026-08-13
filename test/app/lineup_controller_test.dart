@@ -238,6 +238,44 @@ void main() {
   });
 
   test(
+    'failed PIN cancellation stays retryable without hiding a late token',
+    () async {
+      final credentials = _BlockingFailOnceClearCredentials();
+      final plex = _FakePlex()
+        ..pinResult = PlexPin(
+          id: 8,
+          code: 'WXYZ',
+          expiresAt: DateTime.now().add(const Duration(minutes: 1)),
+        )
+        ..pollHandler = (_) async => 'late-token';
+      final controller = LineupController(
+        store: _MemoryStore(),
+        credentials: credentials,
+        plex: plex,
+        pinPollInterval: const Duration(milliseconds: 1),
+      );
+      addTearDown(controller.dispose);
+
+      await controller.startLinking();
+      await credentials.writeStarted.future;
+      final cancelled = controller.cancelLinking();
+      credentials.finishWrite.complete();
+
+      expect(await cancelled, isFalse);
+      expect(controller.stage, SetupStage.linking);
+      expect(controller.error, contains('securely cancel'));
+      expect(controller.error, isNot(contains('late-token')));
+      expect(credentials.accountToken, 'late-token');
+      expect(plex.cancelPinCalls, 1);
+
+      expect(await controller.cancelLinking(), isTrue);
+      expect(controller.stage, SetupStage.welcome);
+      expect(credentials.accountToken, isNull);
+      expect(plex.cancelPinCalls, 2);
+    },
+  );
+
+  test(
     'credential cleanup failure keeps the session and gives safe recovery',
     () async {
       final controller =
@@ -262,6 +300,70 @@ void main() {
       expect(controller.error, isNot(contains('keychain-token-secret')));
     },
   );
+
+  test('failed secure logout can be retried successfully', () async {
+    final credentials = _FailOnceClearCredentials(accountToken: 'token');
+    final controller =
+        LineupController(
+            store: _MemoryStore(),
+            credentials: credentials,
+            plex: _FakePlex(),
+          )
+          ..stage = SetupStage.ready
+          ..account = const PlexAccount(id: 'owner', name: 'Owner', email: '');
+    addTearDown(controller.dispose);
+
+    expect(await controller.logout(), isFalse);
+    expect(controller.stage, SetupStage.ready);
+    expect(await controller.logout(), isTrue);
+    expect(controller.stage, SetupStage.welcome);
+    expect(credentials.accountToken, isNull);
+  });
+
+  test('failed logout does not stale an in-flight settings consumer', () async {
+    final store = _BlockingSaveStore();
+    final controller =
+        LineupController(
+            store: store,
+            credentials: _FailingClearCredentials(accountToken: 'token'),
+            plex: _FakePlex(),
+          )
+          ..stage = SetupStage.ready
+          ..account = const PlexAccount(id: 'owner', name: 'Owner', email: '');
+    addTearDown(controller.dispose);
+
+    final settings = controller.updateSettings(
+      const LineupSettings(diagnosticsEnabled: true),
+    );
+    await store.saveStarted.future;
+    final logout = controller.logout();
+    store.finishSave.complete();
+
+    await settings;
+    expect(await logout, isFalse);
+    expect(controller.settings.diagnosticsEnabled, isTrue);
+    expect(controller.diagnostics.enabled, isTrue);
+    expect(store.state.settings.diagnosticsEnabled, isTrue);
+  });
+
+  test('disposal rejects startup work completing after store load', () async {
+    final store = _BlockingLoadStore();
+    final controller = LineupController(
+      store: store,
+      credentials: _MemoryCredentials(accountToken: 'token'),
+      plex: _FakePlex(),
+    );
+
+    final initialization = controller.initialize();
+    controller.dispose();
+    store.finishLoad.complete(
+      const PersistedState(profileId: 'should-not-restore'),
+    );
+    await initialization;
+
+    expect(controller.account, isNull);
+    expect(controller.stage, SetupStage.welcome);
+  });
 
   test(
     'server management preserves scoped lineups when selection is cleared',
@@ -311,6 +413,76 @@ void main() {
       );
     },
   );
+
+  test('server recovery cancellation rejects stale probe work', () async {
+    final probe = Completer<PlexConnection>();
+    final oldServer = _server('old');
+    final nextServer = _server('next');
+    final plex = _FakePlex()
+      ..homeUsersResult = const [
+        PlexHomeUser(id: 'owner', name: 'Owner', protected: false),
+      ]
+      ..selectConnectionHandler = (_, _) => probe.future;
+    final controller = LineupController(
+      store: _MemoryStore(),
+      credentials: _MemoryCredentials(accountToken: 'token'),
+      plex: plex,
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+    controller
+      ..server = oldServer
+      ..connection = oldServer.connections.single
+      ..stage = SetupStage.ready
+      ..showServers();
+
+    final selection = controller.selectServer(nextServer);
+    await Future<void>.delayed(Duration.zero);
+    expect(controller.busy, isTrue);
+    controller.cancelServerSelection();
+    expect(controller.stage, SetupStage.ready);
+    expect(controller.server?.id, 'old');
+    probe.complete(nextServer.connections.single);
+    await selection;
+
+    expect(controller.server?.id, 'old');
+    expect(plex.librariesCalls, 0);
+  });
+
+  test('profile recovery cancellation rejects stale switch work', () async {
+    final switched = Completer<String>();
+    final oldServer = _server('old');
+    const owner = PlexHomeUser(id: 'owner', name: 'Owner', protected: false);
+    const child = PlexHomeUser(id: 'child', name: 'Child', protected: true);
+    final plex = _FakePlex()
+      ..homeUsersResult = const [owner, child]
+      ..switchHomeUserHandler = (_, _, _) => switched.future;
+    final controller = LineupController(
+      store: _MemoryStore(),
+      credentials: _MemoryCredentials(accountToken: 'token'),
+      plex: plex,
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+    controller
+      ..profile = owner
+      ..server = oldServer
+      ..connection = oldServer.connections.single
+      ..stage = SetupStage.ready
+      ..showProfiles();
+
+    final selection = controller.selectProfile(child, pin: '1234');
+    await Future<void>.delayed(Duration.zero);
+    expect(controller.busy, isTrue);
+    controller.cancelProfileSelection();
+    expect(controller.stage, SetupStage.ready);
+    expect(controller.profile?.id, 'owner');
+    switched.complete('child-token');
+    await selection;
+
+    expect(controller.profile?.id, 'owner');
+    expect(controller.server?.id, 'old');
+  });
 
   test('discovery clears an unavailable runtime server without crossing profile scope', () async {
     final selected = _server('server-a');
@@ -461,6 +633,17 @@ class _BlockingCredentials extends _MemoryCredentials {
   }
 }
 
+class _BlockingFailOnceClearCredentials extends _BlockingCredentials {
+  var clearCalls = 0;
+
+  @override
+  Future<void> clear() async {
+    clearCalls++;
+    if (clearCalls == 1) throw StateError('keychain-token-secret');
+    await super.clear();
+  }
+}
+
 class _FailingClearCredentials extends _MemoryCredentials {
   _FailingClearCredentials({super.accountToken});
 
@@ -468,6 +651,38 @@ class _FailingClearCredentials extends _MemoryCredentials {
   Future<void> clear() async {
     throw StateError('keychain-token-secret');
   }
+}
+
+class _FailOnceClearCredentials extends _MemoryCredentials {
+  _FailOnceClearCredentials({super.accountToken});
+
+  var clearCalls = 0;
+
+  @override
+  Future<void> clear() async {
+    clearCalls++;
+    if (clearCalls == 1) throw StateError('keychain-token-secret');
+    await super.clear();
+  }
+}
+
+class _BlockingSaveStore extends _MemoryStore {
+  final saveStarted = Completer<void>();
+  final finishSave = Completer<void>();
+
+  @override
+  Future<void> save(PersistedState value) async {
+    saveStarted.complete();
+    await finishSave.future;
+    await super.save(value);
+  }
+}
+
+class _BlockingLoadStore extends _MemoryStore {
+  final finishLoad = Completer<PersistedState>();
+
+  @override
+  Future<PersistedState> load() => finishLoad.future;
 }
 
 class _ConcurrentStore implements AppStore {
@@ -518,8 +733,12 @@ class _FakePlex extends PlexClient {
   final discoveredTokens = <String>[];
   List<PlexServer> serversResult = const [];
   PlexConnection? connectionResult;
+  Future<PlexConnection> Function(PlexServer, String)? selectConnectionHandler;
+  Future<String> Function(String, String, String?)? switchHomeUserHandler;
   List<PlexLibrary> librariesResult = const [];
   int pollCalls = 0;
+  int cancelPinCalls = 0;
+  int librariesCalls = 0;
 
   @override
   Future<PlexAccount> account(String token) =>
@@ -528,6 +747,17 @@ class _FakePlex extends PlexClient {
   @override
   Future<List<PlexHomeUser>> homeUsers(String accountToken) async =>
       homeUsersResult;
+
+  @override
+  Future<String> switchHomeUser(
+    String accountToken,
+    String userId,
+    String? pin,
+  ) async {
+    final handler = switchHomeUserHandler;
+    if (handler != null) return handler(accountToken, userId, pin);
+    return 'profile-token';
+  }
 
   @override
   Future<List<PlexServer>> discoverServers(String token) async {
@@ -539,11 +769,17 @@ class _FakePlex extends PlexClient {
   Future<PlexConnection> selectConnection(
     PlexServer server,
     String token,
-  ) async => connectionResult ?? server.connections.first;
+  ) async {
+    final handler = selectConnectionHandler;
+    if (handler != null) return handler(server, token);
+    return connectionResult ?? server.connections.first;
+  }
 
   @override
-  Future<List<PlexLibrary>> libraries(Uri server, String token) async =>
-      librariesResult;
+  Future<List<PlexLibrary>> libraries(Uri server, String token) async {
+    librariesCalls++;
+    return librariesResult;
+  }
 
   @override
   Future<PlexPin> createPin() async => pinResult!;
@@ -555,7 +791,9 @@ class _FakePlex extends PlexClient {
   }
 
   @override
-  Future<void> cancelPin(PlexPin pin) async {}
+  Future<void> cancelPin(PlexPin pin) async {
+    cancelPinCalls++;
+  }
 
   @override
   Future<List<PlexMediaItem>> libraryItems(

@@ -117,6 +117,51 @@ void main() {
     lineup.dispose();
   });
 
+  test('content scope invalidates same-shaped schedules and artwork', () async {
+    final lineup = _ArtworkLineup(_channels(1));
+    var loads = 0;
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async {
+        loads++;
+        return _schedule(channel);
+      },
+    )..requestViewport(0, 1);
+    await _settle();
+    expect(loads, 1);
+
+    final start = DateTime(2026, 8, 13, 12);
+    final staleArtwork = guide.artworkFor(
+      GuideProgram(
+        channelId: lineup.channels.single.id,
+        scheduled: ScheduledProgram(
+          item: ChannelItem(
+            id: 'old-art',
+            title: 'Old artwork',
+            duration: Duration(hours: 1),
+            artwork: Uri.parse('/old'),
+          ),
+          start: start,
+          end: start.add(const Duration(hours: 1)),
+          elapsed: Duration.zero,
+          index: 0,
+          loop: 0,
+        ),
+      ),
+    );
+
+    lineup.changeContentScope();
+    lineup.completeArtwork();
+    guide.requestViewport(0, 1);
+    await _settle();
+
+    expect(loads, 2);
+    expect(await staleArtwork, isNull);
+    expect(guide.row(lineup.channels.single.id).state, GuideLoadState.ready);
+    guide.dispose();
+    lineup.dispose();
+  });
+
   test('time navigation reuses the bounded schedule index cache', () async {
     final lineup = _TestLineup(_channels(1));
     var loads = 0;
@@ -555,6 +600,16 @@ class _TestLineup extends LineupController {
     channels = value;
     stage = SetupStage.ready;
     settings = const LineupSettings(guideHours: 4, pastMinutes: 30);
+  }
+
+  int _testContentGeneration = 0;
+
+  @override
+  int get contentGeneration => _testContentGeneration;
+
+  void changeContentScope() {
+    _testContentGeneration++;
+    notifyListeners();
   }
 
   void setChannels(List<Channel> value) {

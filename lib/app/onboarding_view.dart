@@ -10,9 +10,14 @@ import '../ui/app_ui.dart';
 import 'lineup_controller.dart';
 
 class UpstreamOnboardingView extends StatefulWidget {
-  const UpstreamOnboardingView({required this.controller, super.key});
+  const UpstreamOnboardingView({
+    required this.controller,
+    required this.onLogout,
+    super.key,
+  });
 
   final LineupController controller;
+  final Future<void> Function() onLogout;
 
   @override
   State<UpstreamOnboardingView> createState() => _UpstreamOnboardingViewState();
@@ -190,12 +195,22 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
                 autofocus: pin == null,
                 onPressed: widget.controller.busy
                     ? null
+                    : widget.controller.secureCancellationRequired
+                    ? widget.controller.cancelLinking
                     : widget.controller.startLinking,
-                child: Text(pin == null ? 'Request PIN' : 'Request a new code'),
+                child: Text(
+                  widget.controller.secureCancellationRequired
+                      ? 'Retry secure cancellation'
+                      : pin == null
+                      ? 'Request PIN'
+                      : 'Request a new code',
+                ),
               ),
-              if (pin != null)
+              if (pin != null && !widget.controller.secureCancellationRequired)
                 TextButton(
-                  onPressed: widget.controller.cancelLinking,
+                  onPressed: widget.controller.busy
+                      ? null
+                      : widget.controller.cancelLinking,
                   child: const Text('Cancel'),
                 ),
             ],
@@ -227,16 +242,14 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
         ),
         const SizedBox(height: 28),
         OutlinedButton.icon(
-          onPressed: widget.controller.busy ? null : widget.controller.logout,
+          onPressed: widget.controller.busy ? null : widget.onLogout,
           icon: const Icon(Icons.logout),
           label: const Text('Sign out'),
         ),
         if (widget.controller.profileSelectionCanCancel) ...[
           const SizedBox(height: 12),
           TextButton(
-            onPressed: widget.controller.busy
-                ? null
-                : widget.controller.cancelProfileSelection,
+            onPressed: widget.controller.cancelProfileSelection,
             child: const Text('Cancel'),
           ),
         ],
@@ -300,9 +313,7 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
               ),
             if (widget.controller.serverSelectionCanCancel)
               TextButton(
-                onPressed: widget.controller.busy
-                    ? null
-                    : widget.controller.cancelServerSelection,
+                onPressed: widget.controller.cancelServerSelection,
                 child: const Text('Cancel'),
               ),
           ],

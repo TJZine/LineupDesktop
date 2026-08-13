@@ -152,6 +152,7 @@ void main() {
       print('PRODUCT_SPINE rebuild1000Us=${rebuild.elapsedMicroseconds}');
 
       player.dispose();
+      await nativePlayer.dispose();
       guide.dispose();
       controller.dispose();
 
@@ -168,10 +169,29 @@ void main() {
       expect(controller.channels, hasLength(1000));
       expect(controller.settings.osdAutoHideSeconds, 8);
 
-      await controller.logout();
+      final restoredGuide = GuideController(
+        lineup: controller,
+        clock: () => _ProductPlex.now,
+      )..requestViewport(0, 1);
+      await _until(
+        () =>
+            restoredGuide.currentProgram(controller.channels.first.id) != null,
+      );
+      final restoredNativePlayer = _ProductPlayer(events);
+      final restoredPlayer = PlayerCoordinator(
+        player: restoredNativePlayer,
+        lineup: controller,
+        guide: restoredGuide,
+      );
+      await restoredPlayer.tune(controller.channels.first.id);
+      expect(await restoredPlayer.logout(), isTrue);
       expect(controller.stage, SetupStage.welcome);
       expect(credentials.accountToken, isNull);
       expect(credentials.profileTokens, isEmpty);
+      expect(events, contains('playback:release'));
+      restoredPlayer.dispose();
+      await restoredNativePlayer.dispose();
+      restoredGuide.dispose();
       controller.dispose();
 
       expect(

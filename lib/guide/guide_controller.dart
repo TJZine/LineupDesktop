@@ -94,6 +94,7 @@ class GuideController extends ChangeNotifier {
   }) : _loadSchedule = loadSchedule ?? lineup.loadScheduleFor,
        _clock = clock ?? DateTime.now {
     _channels = lineup.channels;
+    _contentGeneration = lineup.contentGeneration;
     _updateVisibleChannels();
     _settings = lineup.settings;
     _windowStart = _initialWindowStart;
@@ -128,6 +129,7 @@ class GuideController extends ChangeNotifier {
   String? _selectedProgramId;
   String? _libraryFilterId;
   int _generation = 0;
+  late int _contentGeneration;
   int _activeLoads = 0;
   int _activeArtworkLoads = 0;
   bool _disposed = false;
@@ -247,7 +249,7 @@ class GuideController extends ChangeNotifier {
     final loading = completer.future;
     _artwork[key] = loading;
     _pendingArtwork.add(
-      _ArtworkRequest(key, program.scheduled.item, completer),
+      _ArtworkRequest(key, program.scheduled.item, completer, _generation),
     );
     while (_artwork.length > maximumCachedArtworkEntries) {
       final evicted = _artwork.keys.first;
@@ -274,10 +276,12 @@ class GuideController extends ChangeNotifier {
       _activeArtworkLoads++;
       lineup
           .artworkFor(request.item)
-          .then(
-            request.completer.complete,
-            onError: (_) => request.completer.complete(null),
-          )
+          .then((value) {
+            final current =
+                request.generation == _generation &&
+                identical(_artwork[request.key], request.completer.future);
+            request.completer.complete(current ? value : null);
+          }, onError: (_) => request.completer.complete(null))
           .whenComplete(() {
             _activeArtworkLoads--;
             if (!_disposed) _pumpArtwork();
@@ -551,12 +555,15 @@ class GuideController extends ChangeNotifier {
     final old = _channels;
     final focusedIndex = focusedChannelIndex;
     final next = lineup.channels;
+    final contentChanged = _contentGeneration != lineup.contentGeneration;
+    _contentGeneration = lineup.contentGeneration;
     final lineupChanged =
-        !identical(old, next) &&
-        !listEquals(
-          old.map(_channelFingerprint).toList(),
-          next.map(_channelFingerprint).toList(),
-        );
+        contentChanged ||
+        (!identical(old, next) &&
+            !listEquals(
+              old.map(_channelFingerprint).toList(),
+              next.map(_channelFingerprint).toList(),
+            ));
     final settingsChanged =
         _settings.guideHours != lineup.settings.guideHours ||
         _settings.pastMinutes != lineup.settings.pastMinutes ||
@@ -564,6 +571,12 @@ class GuideController extends ChangeNotifier {
         _settings.libraryTabsEnabled != lineup.settings.libraryTabsEnabled;
     _channels = next;
     _settings = lineup.settings;
+    if (contentChanged) {
+      _libraryFilterId = null;
+      _focusedProgramId = null;
+      _selectedChannelId = null;
+      _selectedProgramId = null;
+    }
     if (!_settings.libraryTabsEnabled && _libraryFilterId != null) {
       _libraryFilterId = null;
       _updateVisibleChannels();
@@ -642,11 +655,12 @@ class GuideController extends ChangeNotifier {
 }
 
 class _ArtworkRequest {
-  const _ArtworkRequest(this.key, this.item, this.completer);
+  const _ArtworkRequest(this.key, this.item, this.completer, this.generation);
 
   final String key;
   final ChannelItem item;
   final Completer<Uint8List?> completer;
+  final int generation;
 }
 
 String _channelFingerprint(Channel channel) =>

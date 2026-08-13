@@ -32,6 +32,8 @@ class PlayerCoordinator extends ChangeNotifier {
     _duration = player.duration;
     _telemetry = player.telemetry;
     _tracks = player.tracks;
+    _contentGeneration = lineup.contentGeneration;
+    _osdAutoHideSeconds = lineup.settings.osdAutoHideSeconds;
     _subscription = player.events.listen(_event);
     lineup.addListener(_lineupChanged);
     guide.addListener(_guideChanged);
@@ -65,11 +67,16 @@ class PlayerCoordinator extends ChangeNotifier {
   int _tuneGeneration = 0;
   int? _activeLoadGeneration;
   Future<void> _tuneOperations = Future.value();
+  Future<void> _scopeCleanup = Future.value();
+  bool _scopeCleanupPending = false;
   bool _disposed = false;
   bool _initialMediaRequested = false;
   LineupPlaybackRequest? _activePlayback;
+  Channel? _activeChannel;
   String? _retryChannelId;
   List<Channel> _indexedChannels = const [];
+  late int _contentGeneration;
+  late int _osdAutoHideSeconds;
   Map<String, int> _channelIndexById = const {};
   Map<int, Channel> _channelByNumber = const {};
 
@@ -157,6 +164,7 @@ class PlayerCoordinator extends ChangeNotifier {
       _canRetry = event.status.recoverable && _retryChannelId != null;
       final playback = _activePlayback;
       _activePlayback = null;
+      _activeChannel = null;
       unawaited(_release(playback));
       _setOverlay(PlayerOverlay.error, timed: false);
     } else {
@@ -180,6 +188,7 @@ class PlayerCoordinator extends ChangeNotifier {
           _overlay = PlayerOverlay.none;
           final playback = _activePlayback;
           _activePlayback = null;
+          _activeChannel = null;
           unawaited(_release(playback));
           break;
         case PlayerState.idle:
@@ -253,11 +262,17 @@ class PlayerCoordinator extends ChangeNotifier {
       }
       final replaced = _activePlayback;
       _activePlayback = request;
+      _activeChannel = lineup.channels
+          .where((channel) => channel.id == channelId)
+          .firstOrNull;
       unawaited(_release(replaced));
       final elapsed = DateTime.now().difference(program.scheduled.start);
       if (elapsed > const Duration(seconds: 2)) await player.seek(elapsed);
       if (generation != _tuneGeneration) {
-        if (identical(_activePlayback, request)) _activePlayback = null;
+        if (identical(_activePlayback, request)) {
+          _activePlayback = null;
+          _activeChannel = null;
+        }
         if (_disposed) await _stopQuietly();
         await _release(request);
         return;
@@ -293,6 +308,7 @@ class PlayerCoordinator extends ChangeNotifier {
     } catch (error) {
       if (identical(_activePlayback, request)) {
         _activePlayback = null;
+        _activeChannel = null;
       }
       if (request != null) await _stopQuietly();
       await _release(request);
@@ -338,6 +354,7 @@ class PlayerCoordinator extends ChangeNotifier {
     final operation = _tuneOperations.then((_) async {
       final playback = _activePlayback;
       _activePlayback = null;
+      _activeChannel = null;
       try {
         await player.stop();
       } finally {
@@ -346,6 +363,12 @@ class PlayerCoordinator extends ChangeNotifier {
     });
     _tuneOperations = operation.catchError((_) {});
     await operation;
+  }
+
+  Future<bool> logout() async {
+    if (!await lineup.logout()) return false;
+    await _scopeCleanup;
+    return true;
   }
 
   Future<void> seekBy(Duration offset) {
@@ -551,6 +574,34 @@ class PlayerCoordinator extends ChangeNotifier {
   }
 
   void _lineupChanged() {
+    final activeChannelChanged =
+        _activeChannel != null &&
+        !lineup.channels.any((channel) => identical(channel, _activeChannel));
+    if (_contentGeneration != lineup.contentGeneration ||
+        activeChannelChanged) {
+      _contentGeneration = lineup.contentGeneration;
+      if (_activePlayback != null || _tuning || _activeLoadGeneration != null) {
+        if (!_scopeCleanupPending) {
+          _scopeCleanupPending = true;
+          _scopeCleanup = _stopForScopeChange()
+              .catchError((Object error) {
+                _recordPlaybackFailure(error);
+              })
+              .whenComplete(() => _scopeCleanupPending = false);
+        }
+      } else {
+        _resetScopeState();
+      }
+    }
+    if (_osdAutoHideSeconds != lineup.settings.osdAutoHideSeconds) {
+      _osdAutoHideSeconds = lineup.settings.osdAutoHideSeconds;
+      if (overlayTimeout == null &&
+          _overlay == PlayerOverlay.osd &&
+          _status.state == PlayerState.playing &&
+          !_overlayInteraction) {
+        _scheduleOverlayHide(_overlay);
+      }
+    }
     final previousMiniIndex = miniGuideChannelIndex;
     if (!identical(_indexedChannels, lineup.channels)) _indexChannels();
     if (!_channelIndexById.containsKey(_miniGuideChannelId)) {
@@ -574,6 +625,39 @@ class PlayerCoordinator extends ChangeNotifier {
     if (_overlay == PlayerOverlay.miniGuide || _overlay == PlayerOverlay.osd) {
       notifyListeners();
     }
+  }
+
+  Future<void> _stopForScopeChange() async {
+    final wasFullscreen = _fullscreen;
+    _resetScopeState();
+    if (wasFullscreen) {
+      try {
+        await player.setFullscreen(false);
+      } catch (error) {
+        _recordPlaybackFailure(error);
+      }
+    }
+    await stop();
+  }
+
+  void _resetScopeState() {
+    _cancelOverlayTimer();
+    _sleepTimer?.cancel();
+    _sleepTimer = null;
+    _sleepDuration = null;
+    _numberTimer?.cancel();
+    _numberTimer = null;
+    _channelNumber = '';
+    _cursorTimer?.cancel();
+    _cursorTimer = null;
+    _cursorVisible = true;
+    _overlayInteraction = false;
+    _overlay = PlayerOverlay.none;
+    _miniGuideChannelId = null;
+    _retryChannelId = null;
+    _activeChannel = null;
+    _error = null;
+    _fullscreen = false;
   }
 
   void _requestMiniGuideRows() {

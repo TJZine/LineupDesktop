@@ -132,7 +132,7 @@ class _LineupShellState extends State<LineupShell> {
   }
 
   Future<void> _logout() async {
-    if (await widget.controller.logout() || !mounted) return;
+    if (await _player.logout() || !mounted) return;
     await showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
@@ -227,7 +227,7 @@ class _LineupShellState extends State<LineupShell> {
     if (controller.stage != SetupStage.ready) {
       return controller.stage == SetupStage.channelSetup
           ? UpstreamChannelSetupView(controller: controller)
-          : UpstreamOnboardingView(controller: controller);
+          : UpstreamOnboardingView(controller: controller, onLogout: _logout);
     }
     final playerView = PlayerView(
       key: _playerKey,

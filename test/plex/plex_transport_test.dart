@@ -175,6 +175,80 @@ void main() {
     },
   );
 
+  test('connection priority is applied before the probe bound', () async {
+    final probed = <String>[];
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      httpClient: MockClient((request) async {
+        probed.add(request.url.host);
+        return http.Response(
+          '<MediaContainer machineIdentifier="expected"/>',
+          200,
+        );
+      }),
+    );
+    final selected = await client.selectConnection(
+      PlexServer(
+        id: 'expected',
+        name: 'Server',
+        connections: [
+          for (var index = 0; index < 8; index++)
+            PlexConnection(
+              uri: Uri.parse('https://relay-$index.example:32400'),
+              local: false,
+              relay: true,
+            ),
+          PlexConnection(
+            uri: Uri.parse('https://local.example:32400'),
+            local: true,
+            relay: false,
+          ),
+        ],
+      ),
+      'secret',
+    );
+
+    expect(selected.uri.host, 'local.example');
+    expect(probed, contains('local.example'));
+    expect(probed.length, lessThanOrEqualTo(8));
+  });
+
+  test('the probe bound reserves a reachable fallback tier', () async {
+    final probed = <String>[];
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      httpClient: MockClient((request) async {
+        probed.add(request.url.host);
+        final id = request.url.host == 'relay.example' ? 'expected' : 'other';
+        return http.Response('<MediaContainer machineIdentifier="$id"/>', 200);
+      }),
+    );
+    final selected = await client.selectConnection(
+      PlexServer(
+        id: 'expected',
+        name: 'Server',
+        connections: [
+          for (var index = 0; index < 8; index++)
+            PlexConnection(
+              uri: Uri.parse('https://local-$index.example:32400'),
+              local: true,
+              relay: false,
+            ),
+          PlexConnection(
+            uri: Uri.parse('https://relay.example:32400'),
+            local: false,
+            relay: true,
+          ),
+        ],
+      ),
+      'secret',
+    );
+
+    expect(selected.uri.host, 'relay.example');
+    expect(probed, contains('relay.example'));
+    expect(probed.length, 8);
+  });
+
   test('playback descriptors reject unsupported facts', () {
     final client = PlexClient(
       clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',

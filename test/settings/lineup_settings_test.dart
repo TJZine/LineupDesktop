@@ -7,12 +7,10 @@ void main() {
       'guideHours': 99,
       'pastMinutes': -5,
       'osdAutoHideSeconds': 99,
-      'subtitleMode': 'unknown',
     });
     expect(settings.guideHours, 12);
     expect(settings.pastMinutes, 0);
     expect(settings.osdAutoHideSeconds, 15);
-    expect(settings.subtitleMode, SubtitleMode.full);
     expect(settings.theme, LineupThemeName.emberSteel);
     expect(settings.guideLayoutMode, GuideLayoutMode.pictureInPicture);
   });
@@ -22,7 +20,6 @@ void main() {
       theme: LineupThemeName.slatePine,
       guideDensity: GuideDensity.compact,
       guideLayoutMode: GuideLayoutMode.overlay,
-      audioPassthrough: true,
       audioSetupComplete: true,
       reduceMotion: true,
       libraryTabsEnabled: false,
@@ -33,7 +30,6 @@ void main() {
     expect(restored.guideDensity, GuideDensity.compact);
     expect(restored.theme, LineupThemeName.slatePine);
     expect(restored.guideLayoutMode, GuideLayoutMode.overlay);
-    expect(restored.audioPassthrough, isTrue);
     expect(restored.audioSetupComplete, isTrue);
     expect(restored.reduceMotion, isTrue);
     expect(restored.libraryTabsEnabled, isFalse);

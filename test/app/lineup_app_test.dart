@@ -287,10 +287,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Lineup Desktop could not start'), findsOneWidget);
-    expect(
-      find.textContaining('No settings or media were changed'),
-      findsOneWidget,
-    );
+    expect(find.textContaining('Restart the app'), findsOneWidget);
     expect(find.textContaining('player initialization failed'), findsNothing);
     expect(find.text('Guide'), findsNothing);
   });
@@ -349,8 +346,9 @@ class _FakeController extends LineupController {
   }
 
   @override
-  Future<void> cancelLinking() async {
+  Future<bool> cancelLinking() async {
     linkingCanceled = true;
+    return true;
   }
 
   @override

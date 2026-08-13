@@ -210,43 +210,29 @@ class PlexClient {
     PlexServer server,
     String token,
   ) async {
-    final candidates = List<PlexConnection>.of(server.connections.take(8))
-      ..sort((a, b) => _connectionTier(a).compareTo(_connectionTier(b)));
+    final byTier = <int, List<PlexConnection>>{};
+    for (final connection in server.connections) {
+      byTier.putIfAbsent(_connectionTier(connection), () => []).add(connection);
+    }
+    final tiers = byTier.keys.toList()..sort();
+    final candidates = <PlexConnection>[];
+    for (
+      var index = 0;
+      index < tiers.length && candidates.length < 8;
+      index++
+    ) {
+      final laterFallbacks = tiers.length - index - 1;
+      final availableSlots = 8 - candidates.length - laterFallbacks;
+      candidates.addAll(byTier[tiers[index]]!.take(availableSlots));
+    }
     for (final tier in {
       for (final connection in candidates) _connectionTier(connection),
     }) {
-      final reachable = <(PlexConnection, Duration)>[];
-      for (final connection in candidates.where(
-        (candidate) => _connectionTier(candidate) == tier,
-      )) {
-        final watch = Stopwatch()..start();
-        try {
-          final response = await _send(
-            _http.get(
-              connection.uri.resolve('/identity'),
-              headers: _headers(token),
-            ),
-            timeout: const Duration(seconds: 4),
-          );
-          if (response.statusCode >= 200 && response.statusCode < 300) {
-            if (_identityId(response.body) == server.id) {
-              reachable.add((connection, watch.elapsed));
-            }
-          } else if (response.statusCode == 401) {
-            throw const PlexException(
-              'auth-required',
-              'The Plex server requires authentication.',
-            );
-          } else if (response.statusCode == 403) {
-            throw const PlexException(
-              'access-denied',
-              'This Plex profile cannot access that server.',
-            );
-          }
-        } catch (error) {
-          if (error is PlexException) rethrow;
-        }
-      }
+      final reachable = (await Future.wait(
+        candidates
+            .where((candidate) => _connectionTier(candidate) == tier)
+            .map((connection) => _probeConnection(server, connection, token)),
+      )).nonNulls.toList();
       if (reachable.isNotEmpty) {
         reachable.sort((a, b) => a.$2.compareTo(b.$2));
         final selected = reachable.first;
@@ -262,6 +248,43 @@ class PlexClient {
       'server-unreachable',
       'No reachable connection was found for this server.',
     );
+  }
+
+  Future<(PlexConnection, Duration)?> _probeConnection(
+    PlexServer server,
+    PlexConnection connection,
+    String token,
+  ) async {
+    final watch = Stopwatch()..start();
+    try {
+      final response = await _send(
+        _http.get(
+          connection.uri.resolve('/identity'),
+          headers: _headers(token),
+        ),
+        timeout: const Duration(seconds: 4),
+      );
+      if (response.statusCode == 401) {
+        throw const PlexException(
+          'auth-required',
+          'The Plex server requires authentication.',
+        );
+      }
+      if (response.statusCode == 403) {
+        throw const PlexException(
+          'access-denied',
+          'This Plex profile cannot access that server.',
+        );
+      }
+      if (response.statusCode >= 200 &&
+          response.statusCode < 300 &&
+          _identityId(response.body) == server.id) {
+        return (connection, watch.elapsed);
+      }
+    } catch (error) {
+      if (error is PlexException) rethrow;
+    }
+    return null;
   }
 
   Future<List<PlexLibrary>> libraries(Uri server, String token) async {

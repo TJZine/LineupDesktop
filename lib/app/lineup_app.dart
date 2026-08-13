@@ -184,7 +184,7 @@ class _StartupFailureBody extends StatelessWidget {
                 Text(
                   requiredEngineFailure
                       ? 'The required Lineup DirectComposition Flutter engine is not active.'
-                      : 'No settings or media were changed. Restart the app, and check diagnostics if the problem continues.',
+                      : 'Restart the app, and check diagnostics if the problem continues.',
                   textAlign: TextAlign.center,
                 ),
               ],

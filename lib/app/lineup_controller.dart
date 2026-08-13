@@ -73,6 +73,7 @@ class LineupController extends ChangeNotifier {
   bool channelSetupCanCancel = false;
   bool profileSelectionCanCancel = false;
   bool serverSelectionCanCancel = false;
+  bool secureCancellationRequired = false;
   String? error;
   int _epoch = 0;
   String? _accountToken;
@@ -86,21 +87,28 @@ class LineupController extends ChangeNotifier {
   int _scheduleWorkerCreations = 0;
   Future<void> _credentialOperations = Future.value();
   int _settingsGeneration = 0;
+  int _contentGeneration = 0;
+  bool _disposed = false;
+
+  int get contentGeneration => _contentGeneration;
 
   Future<void> initialize() async {
-    _persisted = await store.load();
+    final operation = ++_epoch;
+    final persisted = await store.load();
+    if (!_isCurrent(operation)) return;
+    _persisted = persisted;
     settings = _persisted.settings;
     diagnostics.enabled = settings.diagnosticsEnabled;
     channels = const [];
     currentChannelId = null;
     selectedLibraryIds = const {};
     final token = await credentials.readAccountToken();
+    if (!_isCurrent(operation)) return;
     if (token == null) {
       stage = SetupStage.welcome;
       notifyListeners();
       return;
     }
-    final operation = ++_epoch;
     await _run(
       () async {
         final restoredAccount = await plex.account(token);
@@ -143,6 +151,10 @@ class LineupController extends ChangeNotifier {
   }
 
   Future<void> startLinking() async {
+    if (secureCancellationRequired) {
+      await cancelLinking();
+      return;
+    }
     final operation = ++_epoch;
     _pinTimer?.cancel();
     await _run(
@@ -159,17 +171,45 @@ class LineupController extends ChangeNotifier {
     );
   }
 
-  Future<void> cancelLinking() async {
+  Future<bool> cancelLinking() async {
     final pin = activePin;
     ++_epoch;
     _pinTimer?.cancel();
-    activePin = null;
-    busy = false;
+    _busyOperation = null;
+    busy = true;
     error = null;
+    notifyListeners();
+    Object? cleanupFailure;
+    try {
+      await _clearCredentials();
+    } catch (exception) {
+      cleanupFailure = exception;
+      diagnostics.add('application', 'Credential cleanup failed', {
+        'error': exception.toString(),
+      });
+    }
+    if (pin != null) {
+      try {
+        await plex.cancelPin(pin);
+      } catch (exception) {
+        diagnostics.add('plex-auth', 'PIN cancellation failed', {
+          'error': exception.toString(),
+        });
+      }
+    }
+    if (_disposed) return false;
+    busy = false;
+    if (cleanupFailure != null) {
+      secureCancellationRequired = true;
+      error = 'Lineup could not securely cancel sign-in. Check system credential storage and try again.';
+      notifyListeners();
+      return false;
+    }
+    activePin = null;
+    secureCancellationRequired = false;
     stage = SetupStage.welcome;
     notifyListeners();
-    await _clearCredentials();
-    if (pin != null) await plex.cancelPin(pin);
+    return true;
   }
 
   void _schedulePinPoll(int operation, PlexPin pin) {
@@ -281,6 +321,9 @@ class LineupController extends ChangeNotifier {
           profileSelectionCanCancel = oldCanCancel;
           rethrow;
         }
+        if (!_isCurrent(operation)) return;
+        _contentGeneration++;
+        notifyListeners();
         await _discover(operation);
         if (operation == _epoch) profileSelectionCanCancel = false;
       },
@@ -292,8 +335,9 @@ class LineupController extends ChangeNotifier {
   Future<void> _discover(int operation) async {
     final token = _profileToken ?? _accountToken;
     if (token == null) return;
-    servers = await plex.discoverServers(token);
-    if (operation != _epoch) return;
+    final discovered = await plex.discoverServers(token);
+    if (!_isCurrent(operation)) return;
+    servers = discovered;
     stage = SetupStage.servers;
     final profileId = profile?.id ?? account?.id;
     final savedId = profileId == null
@@ -328,11 +372,12 @@ class LineupController extends ChangeNotifier {
           throw const PlexException('auth-required', 'Link Plex first.');
         }
         final selectedConnection = await plex.selectConnection(selected, token);
+        if (!_isCurrent(operation)) return;
         final loadedLibraries = await plex.libraries(
           selectedConnection.uri,
           token,
         );
-        if (operation != _epoch) return;
+        if (!_isCurrent(operation)) return;
         final oldServer = server;
         final oldConnection = connection;
         final oldLibraries = libraries;
@@ -385,6 +430,9 @@ class LineupController extends ChangeNotifier {
           serverSelectionCanCancel = oldCanCancel;
           rethrow;
         }
+        if (!_isCurrent(operation)) return;
+        _contentGeneration++;
+        notifyListeners();
         if (selectedLibraryIds.isNotEmpty && channels.isNotEmpty) {
           await _loadLibraries(operation, selectedLibraryIds);
           if (operation != _epoch) return;
@@ -424,6 +472,9 @@ class LineupController extends ChangeNotifier {
           availablePlaylists = oldPlaylists;
           rethrow;
         }
+        if (!_isCurrent(operation)) return;
+        _contentGeneration++;
+        notifyListeners();
       },
       operation: operation,
       fallbackStage: SetupStage.channelSetup,
@@ -476,13 +527,8 @@ class LineupController extends ChangeNotifier {
 
   Future<void> completeAudioSetup() async {
     try {
-      await updateSettings(
-        settings.copyWith(
-          audioPassthrough: false,
-          directPlayAudioFallback: false,
-          audioSetupComplete: true,
-        ),
-      );
+      await updateSettings(settings.copyWith(audioSetupComplete: true));
+      if (_disposed) return;
       stage = SetupStage.channelSetup;
       notifyListeners();
     } catch (exception) {
@@ -519,6 +565,11 @@ class LineupController extends ChangeNotifier {
 
   void cancelProfileSelection() {
     if (!profileSelectionCanCancel || server == null) return;
+    if (busy) {
+      ++_epoch;
+      _busyOperation = null;
+      busy = false;
+    }
     profileSelectionCanCancel = false;
     error = null;
     stage = SetupStage.ready;
@@ -534,6 +585,11 @@ class LineupController extends ChangeNotifier {
 
   void cancelServerSelection() {
     if (!serverSelectionCanCancel || server == null) return;
+    if (busy) {
+      ++_epoch;
+      _busyOperation = null;
+      busy = false;
+    }
     serverSelectionCanCancel = false;
     error = null;
     stage = SetupStage.ready;
@@ -605,6 +661,7 @@ class LineupController extends ChangeNotifier {
         : channels[oldCurrentIndex.clamp(0, channels.length - 1)].id;
     try {
       await _save();
+      if (_disposed) return;
       stage = SetupStage.ready;
       notifyListeners();
     } catch (_) {
@@ -631,6 +688,7 @@ class LineupController extends ChangeNotifier {
     currentChannelId ??= channel.id;
     try {
       await _save();
+      if (_disposed) return;
       notifyListeners();
     } catch (_) {
       channels = old;
@@ -727,6 +785,7 @@ class LineupController extends ChangeNotifier {
     currentChannelId = id;
     try {
       await _save();
+      if (_disposed) return;
       notifyListeners();
     } catch (_) {
       currentChannelId = old;
@@ -746,6 +805,7 @@ class LineupController extends ChangeNotifier {
     }
     try {
       await _save();
+      if (_disposed) return;
       notifyListeners();
     } catch (_) {
       channels = old;
@@ -771,13 +831,13 @@ class LineupController extends ChangeNotifier {
 
   Future<bool> logout() async {
     ++_epoch;
-    ++_settingsGeneration;
     _pinTimer?.cancel();
     _busyOperation = null;
     busy = false;
     try {
       await _clearCredentials();
     } catch (exception) {
+      if (_disposed) return false;
       error = 'Lineup could not securely sign out. Check system credential storage and try again.';
       diagnostics.add('application', 'Credential cleanup failed', {
         'error': exception.toString(),
@@ -785,6 +845,7 @@ class LineupController extends ChangeNotifier {
       notifyListeners();
       return false;
     }
+    if (_disposed) return false;
     account = null;
     profile = null;
     profiles = const [];
@@ -806,6 +867,8 @@ class LineupController extends ChangeNotifier {
     serverSelectionCanCancel = false;
     _accountToken = null;
     _profileToken = null;
+    secureCancellationRequired = false;
+    _contentGeneration++;
     stage = SetupStage.welcome;
     error = null;
     notifyListeners();
@@ -858,7 +921,7 @@ class LineupController extends ChangeNotifier {
       currentChannelByProfileServer: currentSelections,
     );
     await store.save(next);
-    _persisted = next;
+    if (!_disposed) _persisted = next;
   }
 
   Future<bool> _writeCredential(
@@ -895,6 +958,7 @@ class LineupController extends ChangeNotifier {
     _scheduleWorker = null;
     _scheduleWorkerMedia = null;
     _scheduleWorkerPlaylists = null;
+    _contentGeneration++;
   }
 
   Future<bool> _run(
@@ -902,15 +966,16 @@ class LineupController extends ChangeNotifier {
     required int operation,
     required SetupStage fallbackStage,
   }) async {
+    if (!_isCurrent(operation)) return false;
     _busyOperation = operation;
     busy = true;
     error = null;
     notifyListeners();
     try {
       await body();
-      return operation == _epoch;
+      return _isCurrent(operation);
     } catch (exception) {
-      if (operation != _epoch) return false;
+      if (!_isCurrent(operation)) return false;
       error = exception is PlexException
           ? exception.message
           : 'Lineup could not complete that request.';
@@ -920,7 +985,7 @@ class LineupController extends ChangeNotifier {
       });
       return false;
     } finally {
-      if (_busyOperation == operation) {
+      if (!_disposed && _busyOperation == operation) {
         _busyOperation = null;
         busy = false;
         notifyListeners();
@@ -928,17 +993,30 @@ class LineupController extends ChangeNotifier {
     }
   }
 
+  bool _isCurrent(int operation) => !_disposed && operation == _epoch;
+
+  @override
+  void notifyListeners() {
+    if (!_disposed) super.notifyListeners();
+  }
+
   @override
   void dispose() {
+    if (_disposed) return;
+    _disposed = true;
     ++_epoch;
     ++_settingsGeneration;
     _pinTimer?.cancel();
+    _busyOperation = null;
+    busy = false;
     _scheduleWorker?.dispose();
     final pin = activePin;
     if (pin == null) {
       plex.close();
     } else {
-      unawaited(plex.cancelPin(pin).whenComplete(plex.close));
+      unawaited(
+        plex.cancelPin(pin).onError((_, _) {}).whenComplete(plex.close),
+      );
     }
     super.dispose();
   }
