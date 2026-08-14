@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "source": "inferred",
+  "inputs": [
+    {
+      "path": "AGENTS.md",
+      "sha256": "2e56e8b3a0a57a3ce9c7823967bbc6e807b8c22a1abb13ff30cc4f6790f67e03"
+    },
+    {
+      "path": "docs/DEVELOPMENT.md",
+      "sha256": "6633496b8bb77f0016de4bd5a92c76e5b98f3422c9430219a8496c24d08f0b26"
+    },
+    {
+      "path": "docs/architecture.md",
+      "sha256": "7dd9a9747b353af6cbd40caba602fe3cfcb050962ac7e1d0cbbbdc487a3c0a45"
+    },
+    {
+      "path": "pubspec.yaml",
+      "sha256": "54be633ad367624cd1ac66d6384756e84c7651eed4747785d9f8b269ec433350"
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "sha256": "06e6183a33f8fe967d492855791748700830fbb3b9ffc01f3811a4b2ba5d4e2b"
+    }
+  ]
+}
