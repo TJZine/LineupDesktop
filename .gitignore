@@ -21,6 +21,7 @@ worktrees/
 # Local configuration and sensitive output
 .codanna/*
 !.codanna/settings.toml
+.codex/cache/
 .env
 .env.*
 *.log

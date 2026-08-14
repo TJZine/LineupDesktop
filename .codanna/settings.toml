@@ -2,14 +2,11 @@
 version = 1
 index_path = ".codanna/index"
 
-# Codanna 0.13.2 compares configured roots with canonical index metadata during
-# startup sync. Keep these absolute to prevent a relative root duplicating rows.
-workspace_root = "/Users/tristan/Software/LineupDesktop"
-
 [indexing]
 parallelism = 10
 tantivy_heap_mb = 50
-indexed_paths = ["/Users/tristan/Software/LineupDesktop"]
+# Relative paths resolve from the process working directory.
+indexed_paths = ["."]
 
 [semantic_search]
 enabled = true
