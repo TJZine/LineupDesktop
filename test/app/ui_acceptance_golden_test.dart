@@ -174,8 +174,7 @@ Future<void> _pump(WidgetTester tester, Widget child) async {
   addTearDown(tester.view.resetDevicePixelRatio);
   addTearDown(tester.view.resetPhysicalSize);
   await tester.pumpWidget(RepaintBoundary(key: _goldenKey, child: child));
-  await tester.pump();
-  await tester.pump(const Duration(milliseconds: 250));
+  await tester.pumpAndSettle();
 }
 
 Future<void> _match(WidgetTester tester, String name) =>
