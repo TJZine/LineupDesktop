@@ -1,0 +1,6 @@
+[mcp_servers.codanna]
+url = "http://127.0.0.1:8082/mcp"
+http_headers = { Authorization = "Bearer mcp-access-token-dummy" }
+enabled = true
+required = false
+default_tools_approval_mode = "approve"

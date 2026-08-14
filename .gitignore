@@ -19,6 +19,8 @@ coverage/
 worktrees/
 
 # Local configuration and sensitive output
+.codanna/*
+!.codanna/settings.toml
 .env
 .env.*
 *.log
