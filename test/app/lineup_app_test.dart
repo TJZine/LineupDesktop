@@ -467,7 +467,10 @@ class _FakePlayer implements NativePlayer {
 class _FailingPlayer extends _FakePlayer {
   @override
   Future<void> initialize() async {
-    throw StateError('player initialization failed');
+    throw PlatformException(
+      code: 'initialize_failed',
+      message: 'libmpv could not create a client.',
+    );
   }
 }
 

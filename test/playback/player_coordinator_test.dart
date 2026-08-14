@@ -423,6 +423,83 @@ void main() {
   });
 
   test(
+    'replacement failure stops superseded media before releasing its lease',
+    () async {
+      final lineup = _TestLineup(failSecondPlaybackRequest: true);
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => _schedule(channel),
+      )..requestViewport(0, 2);
+      await Future<void>.delayed(Duration.zero);
+      final player = _BlockingEventPlayer();
+      final coordinator = PlayerCoordinator(
+        player: player,
+        lineup: lineup,
+        guide: guide,
+      );
+
+      final first = coordinator.tune('channel-0');
+      await player.firstLoadStarted.future;
+      final replacement = coordinator.tune('channel-b');
+      player.releaseFirstLoad.complete();
+      await Future.wait([first, replacement]);
+      player.emitStatus(
+        PlayerState.stopped,
+        generation: player.loadGenerations.single,
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      expect(player.loads, hasLength(1));
+      expect(player.stops, 1);
+      expect(lineup.releases, 1);
+      expect(lineup.currentChannelId, 'channel-0');
+      expect(coordinator.status.state, PlayerState.stopped);
+      expect(coordinator.hasPlaybackIntent, isFalse);
+      expect(coordinator.overlay, PlayerOverlay.error);
+
+      coordinator.dispose();
+      await player.close();
+      guide.dispose();
+      lineup.dispose();
+    },
+  );
+
+  test('generated stopped event settles coordinator playback state', () async {
+    final lineup = _TestLineup();
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    )..requestViewport(0, 2);
+    await Future<void>.delayed(Duration.zero);
+    final player = _EventPlayer();
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+    );
+
+    await coordinator.tune('channel-b');
+    expect(coordinator.hasPlaybackIntent, isTrue);
+
+    await coordinator.stop();
+    player.emitStatus(
+      PlayerState.stopped,
+      generation: player.loadGenerations.single,
+    );
+    await Future<void>.delayed(Duration.zero);
+
+    expect(player.stops, 1);
+    expect(coordinator.status.state, PlayerState.stopped);
+    expect(coordinator.hasPlaybackIntent, isFalse);
+    expect(lineup.releases, 1);
+
+    coordinator.dispose();
+    await player.close();
+    guide.dispose();
+    lineup.dispose();
+  });
+
+  test(
     'terminal player errors and failed stops still release leases',
     () async {
       final lineup = _TestLineup();
@@ -680,7 +757,7 @@ ScheduleIndex _schedule(Channel channel) => buildSchedule(
 );
 
 class _TestLineup extends LineupController {
-  _TestLineup({int count = 2})
+  _TestLineup({int count = 2, this.failSecondPlaybackRequest = false})
     : super(
         store: _MemoryStore(),
         credentials: _Credentials(),
@@ -711,6 +788,8 @@ class _TestLineup extends LineupController {
   }
 
   int releases = 0;
+  final bool failSecondPlaybackRequest;
+  int playbackRequests = 0;
   int _testContentGeneration = 0;
 
   @override
@@ -732,10 +811,18 @@ class _TestLineup extends LineupController {
   }
 
   @override
-  LineupPlaybackRequest playbackFor(String itemId) =>
-      LineupPlaybackRequest(Uri.parse('https://media.test/program'), () async {
+  LineupPlaybackRequest playbackFor(String itemId) {
+    playbackRequests++;
+    if (failSecondPlaybackRequest && playbackRequests == 2) {
+      throw StateError('Replacement playback request is unavailable.');
+    }
+    return LineupPlaybackRequest(
+      Uri.parse('https://media.test/program'),
+      () async {
         releases++;
-      });
+      },
+    );
+  }
 
   @override
   Future<void> setCurrentChannel(String? id) async {
@@ -893,6 +980,20 @@ class _EventPlayer extends _Player {
   }
 
   Future<void> close() => _events.close();
+}
+
+class _BlockingEventPlayer extends _EventPlayer {
+  final firstLoadStarted = Completer<void>();
+  final releaseFirstLoad = Completer<void>();
+
+  @override
+  Future<void> load(Uri media, {int? generation}) async {
+    await super.load(media, generation: generation);
+    if (loads.length == 1) {
+      firstLoadStarted.complete();
+      await releaseFirstLoad.future;
+    }
+  }
 }
 
 class _BlockingSeekPlayer extends _EventPlayer {
