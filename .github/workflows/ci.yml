@@ -52,7 +52,7 @@ jobs:
       - run: flutter build macos
 
   build-windows:
-    name: Verify and build Windows development player
+    name: Verify and build Windows player
     runs-on: windows-2022
     timeout-minutes: 30
     steps:
@@ -68,13 +68,12 @@ jobs:
           test/app/ui_parity_test.dart
           test/guide/guide_view_test.dart
           test/playback/player_view_test.dart
-      - name: Build with the pinned libmpv development asset
+      - name: Build with the pinned LGPL libmpv runtime
         shell: pwsh
         run: |
           $mpvRoot = Join-Path $env:RUNNER_TEMP 'lineup-mpv'
-          & .\tool\windows\prepare-mpv-dev.ps1 -Destination $mpvRoot
+          & .\tool\windows\prepare-mpv.ps1 -Destination $mpvRoot
           $env:LINEUP_MPV_ROOT = $mpvRoot
-          $env:LINEUP_ALLOW_GPL_MPV_DEV_ARTIFACT = '1'
           flutter build windows
 
   engine-inputs:
@@ -161,11 +160,17 @@ jobs:
         shell: pwsh
         run: |
           $mpvRoot = Join-Path $env:RUNNER_TEMP 'lineup-mpv'
-          & .\tool\windows\prepare-mpv-dev.ps1 -Destination $mpvRoot
+          & .\tool\windows\prepare-mpv.ps1 -Destination $mpvRoot
           $env:LINEUP_MPV_ROOT = $mpvRoot
-          $env:LINEUP_ALLOW_GPL_MPV_DEV_ARTIFACT = '1'
           $engineSource = Join-Path $env:RUNNER_TEMP 'lineup-flutter-source\engine\src'
           flutter build windows `
             --local-engine=host_release `
             --local-engine-host=host_release `
             --local-engine-src-path=$engineSource
+          & .\tool\windows\package.ps1
+      - name: Upload portable Windows package
+        uses: actions/upload-artifact@v4
+        with:
+          name: LineupDesktop-windows-x64
+          path: build/package/LineupDesktop-0.1.0-1-windows-x64.zip
+          if-no-files-found: error

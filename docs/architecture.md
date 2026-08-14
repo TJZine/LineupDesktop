@@ -146,10 +146,9 @@ navigation do not enter C++.
 
 ## Not implemented yet
 
-HDR display switching and tone-mapping policy, audio passthrough, broad
-codec/container acceptance, production approval of remote Plex playback,
-packaging/licensing of a redistributable libmpv build, and the final Windows
-media acceptance campaign remain integration work. The focused Windows checks
+HDR display switching, audio passthrough, broad codec/container acceptance,
+packaged-runtime validation, and the final Windows media acceptance campaign
+remain integration work. The focused Windows checks
 and exact observations completed for this foundation are recorded in the
 development closeout rather than generalized beyond the media and machine
 actually exercised.
@@ -168,11 +167,11 @@ legacy-Keychain option is an explicit bridge
 for unsigned development, not plaintext storage or the production signing
 endpoint. No plaintext credential fallback exists.
 
-The Windows runtime additionally
-links libmpv dynamically at the native boundary. The pinned development asset
-requires verified local provenance and an explicit GPL opt-in; it is not an
-approved redistributable dependency. `docs/DEVELOPMENT.md` records the
-production dependency requirement.
+The Windows runtime additionally links libmpv dynamically at the native
+boundary. The pinned production asset uses mpv's LGPL mode and an LGPLv3
+FFmpeg configuration, with exact acquisition and binary checksums enforced by
+the preparation script and CMake. `docs/windows-runtime.md` records the source,
+configuration, obligations, and package policy.
 `flutter_lints` and `flutter_test` are development dependencies under their
 SDK/BSD licenses. Re-evaluate packages when a concrete feature can show a
 material reliability or ownership advantage.

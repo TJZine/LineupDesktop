@@ -112,15 +112,13 @@ ninja -C out\host_release
 
 The patch must be applied to the exact revisions recorded in
 `tool/flutter_engine/README.md`. Before configuring the application, prepare
-the ignored x86-64 libmpv development directory and set both required build
-variables:
+the ignored x86-64 LGPL libmpv directory and set the required build variable:
 
 ```powershell
 Set-Location C:\path\to\LineupDesktop
 $mpvRoot = 'C:\local\lineup-mpv'
-& .\tool\windows\prepare-mpv-dev.ps1 -Destination $mpvRoot
+& .\tool\windows\prepare-mpv.ps1 -Destination $mpvRoot
 $env:LINEUP_MPV_ROOT = $mpvRoot
-$env:LINEUP_ALLOW_GPL_MPV_DEV_ARTIFACT = '1'
 ```
 
 Then select the resulting engine explicitly—do not replace Flutter's SDK
@@ -144,22 +142,18 @@ The preparation script verifies the archive SHA-256, generates an MSVC import
 library from the DLL exports, and writes the runtime provenance record CMake
 requires.
 
-`LINEUP_ALLOW_GPL_MPV_DEV_ARTIFACT=1` is an explicit local/CI-only opt-in.
-It prevents accidental packaging of this GPL-default development artifact.
-Do not commit or redistribute its DLL, import library, provenance file, or
-generated app bundle. Production needs an audited, separately approved
-dependency with its exact mpv/FFmpeg configuration, source offer, notices,
-license obligations, and packaging policy; this development asset is not such
-an approval.
-
-The development build used for this foundation is Shinchiro's official GitHub
-release `20260813`, asset
-`mpv-dev-x86_64-20260813-git-f4d13e1c2c.7z`, SHA-256
-`4425B3E9768452FCBA31EE2EC61456514FAF9C5CF11D919B1A889D1C415C1A12`.
-It is built from mpv revision `f4d13e1c2c`. The upstream build does not pass
-`-Dgpl=false`, so treat it as mpv's default GPLv2-or-later configuration. It is
-acceptable for ignored local development here, not an approved redistributable
-Lineup dependency.
+The preparation script pins and verifies zhongfly's x86-64 LGPL build from
+release `2026-08-13-7b8915bc1d`. The asset is
+`mpv-dev-lgpl-x86_64-20260813-git-7b8915bc1d.7z`, SHA-256
+`13723530C3A719577A27EA19E0127175CE6A047071F8D988ADC1B0DD400B3D18`.
+It contains mpv `v0.41.0-923-g7b8915bc1` configured with `-Dgpl=false`, FFmpeg
+`N-126123-g8b4fad11a` configured without GPL components, and libplacebo
+`v7.371.0-111-g22ee762`. CMake verifies the archive identity, header, DLL,
+redistribution marker, and locally generated MSVC import library before linking.
+See `docs/windows-runtime.md` for provenance and redistribution obligations.
+The selected DLL also imports the Khronos Vulkan loader even when Lineup uses
+D3D11 output, so test and package machines need a current GPU driver or Vulkan
+Runtime that provides `vulkan-1.dll`.
 
 CI runs on Windows Server 2022, bootstraps gclient from the pinned Flutter
 checkout's official `engine/scripts/standard.gclient`, verifies that config's

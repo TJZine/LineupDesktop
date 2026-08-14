@@ -4,10 +4,17 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$asset = 'mpv-dev-x86_64-20260813-git-f4d13e1c2c.7z'
-$sha256 = '4425B3E9768452FCBA31EE2EC61456514FAF9C5CF11D919B1A889D1C415C1A12'
-$url = "https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/20260813/$asset"
+$asset = 'mpv-dev-lgpl-x86_64-20260813-git-7b8915bc1d.7z'
+$sha256 = '13723530C3A719577A27EA19E0127175CE6A047071F8D988ADC1B0DD400B3D18'
+$url = "https://github.com/zhongfly/mpv-winbuild/releases/download/2026-08-13-7b8915bc1d/$asset"
 $Destination = [IO.Path]::GetFullPath($Destination)
+if (Test-Path -LiteralPath $Destination) {
+  if (Get-ChildItem -LiteralPath $Destination -Force | Select-Object -First 1) {
+    throw "Preparation destination must be new or empty: $Destination"
+  }
+} else {
+  New-Item -ItemType Directory -Path $Destination | Out-Null
+}
 $temporaryDirectory = if ($env:RUNNER_TEMP) {
   $env:RUNNER_TEMP
 } else {
@@ -15,7 +22,6 @@ $temporaryDirectory = if ($env:RUNNER_TEMP) {
 }
 $archive = Join-Path $temporaryDirectory $asset
 
-New-Item -ItemType Directory -Force -Path $Destination | Out-Null
 Invoke-WebRequest -Uri $url -OutFile $archive
 if ((Get-FileHash -Algorithm SHA256 $archive).Hash -ne $sha256) {
   throw "SHA-256 mismatch for $asset."
@@ -36,6 +42,39 @@ $dll = Join-Path $root 'libmpv-2.dll'
 if (-not (Test-Path -LiteralPath $header) -or -not (Test-Path -LiteralPath $dll)) {
   throw 'The verified archive did not contain the expected libmpv header and DLL.'
 }
+if ((Get-FileHash -Algorithm SHA256 $header).Hash -ne
+  '1ACF99EE77C8C2A6F1D1993BD81BBC8A91D27FB5924E80171670E6139A4BD353' -or
+  (Get-FileHash -Algorithm SHA256 $dll).Hash -ne
+  '353D527E569F69D822A9D679B28D2E975C6B22A82AB9924D533110E1C21C8508') {
+  throw 'The verified archive contents do not match the pinned Lineup runtime.'
+}
+
+$licenseDirectory = Join-Path $root 'licenses'
+New-Item -ItemType Directory -Force -Path $licenseDirectory | Out-Null
+$licenses = @(
+  @{
+    Name = 'mpv-LICENSE.LGPL'
+    Uri = 'https://raw.githubusercontent.com/mpv-player/mpv/7b8915bc1d04c7e1b61184e00c7fbfaab1911e75/LICENSE.LGPL'
+    Sha256 = '72B672113D642CBB8EF5DCC76938DB801983C56E50B1400AB930F1A64D6DC8D9'
+  },
+  @{
+    Name = 'FFmpeg-COPYING.LGPLv3'
+    Uri = 'https://raw.githubusercontent.com/FFmpeg/FFmpeg/8b4fad11acfc958dfde29fb0799d3ca1818bbbf7/COPYING.LGPLv3'
+    Sha256 = 'DA7EABB7BAFDF7D3AE5E9F223AA5BDC1EECE45AC569DC21B3B037520B4464768'
+  },
+  @{
+    Name = 'libplacebo-LICENSE'
+    Uri = 'https://raw.githubusercontent.com/haasn/libplacebo/22ee762e8e0890fc54068beb670310f0edce7263/LICENSE'
+    Sha256 = 'B3AA400ACA6D2BA1F0BD03BD98D03D1FE7489A3BBB26969D72016360AF8A5C9D'
+  }
+)
+foreach ($license in $licenses) {
+  $path = Join-Path $licenseDirectory $license.Name
+  Invoke-WebRequest -Uri $license.Uri -OutFile $path
+  if ((Get-FileHash -Algorithm SHA256 $path).Hash -ne $license.Sha256) {
+    throw "SHA-256 mismatch for $($license.Name)."
+  }
+}
 
 $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
 $vs = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
@@ -55,7 +94,12 @@ if ($LASTEXITCODE) { throw 'Could not create the MSVC libmpv import library.' }
 
 $provenance = Join-Path $root 'lineup-mpv-provenance.cmake'
 @(
+  'set(LINEUP_MPV_DISTRIBUTION "production")',
+  'set(LINEUP_MPV_LICENSE "LGPL-2.1-or-later")',
+  'set(LINEUP_MPV_VERSION "mpv-v0.41.0-923-g7b8915bc1")',
+  'set(LINEUP_MPV_FFMPEG_VERSION "N-126123-g8b4fad11a")',
+  'set(LINEUP_MPV_LIBPLACEBO_VERSION "v7.371.0-111-g22ee762")',
   "set(LINEUP_MPV_ASSET_SHA256 `"$sha256`")",
   "set(LINEUP_MPV_IMPORT_LIBRARY_SHA256 `"$((Get-FileHash -Algorithm SHA256 (Join-Path $root 'libmpv.lib')).Hash)`")"
 ) | Set-Content -Encoding ascii $provenance
-Write-Host "Prepared verified libmpv development files at $root"
+Write-Host "Prepared verified LGPL libmpv production files at $root"

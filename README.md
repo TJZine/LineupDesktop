@@ -25,9 +25,9 @@ The current branch provides:
 - a lazy Guide with stable logical focus, bounded schedule/artwork caches,
   library filters, configurable time/density, and keyboard/remote/mouse input
 
-Remote Plex playback still requires Windows acceptance. Distributable libmpv
-packaging and final Windows hardware/HDR acceptance are not yet implemented or
-proven. Real Plex and macOS Keychain workflows still require manual
+Remote Plex playback and the pinned LGPL libmpv runtime have been exercised on
+Windows. The broader hardware/HDR and packaged-runtime acceptance matrix is
+still in progress. Real Plex and macOS Keychain workflows require manual
 account-specific acceptance.
 
 ## Get started
@@ -43,7 +43,7 @@ flutter test
 flutter run -d macos
 ```
 
-The Windows player requires the pinned libmpv development asset and patched
+The Windows player requires the pinned LGPL libmpv runtime and patched
 Flutter engine documented in [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md).
 
 See [`docs/architecture.md`](docs/architecture.md) for component ownership and

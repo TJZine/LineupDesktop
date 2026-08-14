@@ -32,7 +32,7 @@ always passing `--local-engine`, the matching `--local-engine-host`, and
 `--local-engine-src-path`. Do not copy artifacts over the stock SDK cache.
 
 Routine CI compiles the Windows application with the pinned stock Flutter SDK
-and the verified libmpv development asset so ordinary PR changes still receive
+and the verified LGPL libmpv runtime so ordinary PR changes still receive
 Windows C++/CMake integration proof without rebuilding Flutter itself. The
 expensive patched-engine job in `.github/workflows/ci.yml` is gated to the
 actual engine inputs: `.metadata`, `tool/flutter_engine/apply.ps1`, and
