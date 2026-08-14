@@ -2,8 +2,10 @@
 library;
 
 import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
@@ -62,6 +64,7 @@ void main() {
   testWidgets('Guide without playback', (tester) async {
     final fixture = _readyFixture();
     await _pump(tester, fixture.build());
+    await _expectClassicOpacity(tester);
     await _match(tester, 'guide-no-playback-1280x720.png');
   });
 
@@ -73,6 +76,10 @@ void main() {
       ),
     );
     await _pump(tester, fixture.build());
+    await _expectClassicOpacity(
+      tester,
+      aperture: find.byKey(const Key('guide-picture-in-picture')),
+    );
     await _match(tester, 'guide-pip-1280x720.png');
   });
 
@@ -178,8 +185,71 @@ Future<void> _pump(WidgetTester tester, Widget child) async {
   await tester.pump(const Duration(milliseconds: 250));
 }
 
-Future<void> _match(WidgetTester tester, String name) =>
-    expectLater(find.byKey(_goldenKey), matchesGoldenFile('goldens/$name'));
+Future<void> _match(WidgetTester tester, String name) async {
+  final guide = name.startsWith('guide-');
+  if (guide) {
+    final context = tester.element(find.byKey(_goldenKey));
+    await tester.runAsync(
+      () => precacheImage(
+        const AssetImage('assets/branding/lineup-logo-mark.png'),
+        context,
+      ),
+    );
+  }
+  if (guide || name == 'player-osd-1280x720.png') {
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump(const Duration(milliseconds: 400));
+  }
+  await expectLater(find.byKey(_goldenKey), matchesGoldenFile('goldens/$name'));
+}
+
+Future<void> _expectClassicOpacity(
+  WidgetTester tester, {
+  Finder? aperture,
+}) async {
+  final boundaryFinder = find.byKey(_goldenKey);
+  final boundary = tester.renderObject<RenderRepaintBoundary>(boundaryFinder);
+  final capture = await tester.runAsync(() async {
+    final image = await boundary.toImage(pixelRatio: 1);
+    final pixels = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+    final result = (width: image.width, height: image.height, pixels: pixels);
+    image.dispose();
+    return result;
+  });
+  if (capture == null || capture.pixels == null) {
+    fail('Classic Guide pixels could not be read.');
+  }
+  final width = capture.width;
+  final height = capture.height;
+  final pixels = capture.pixels!;
+
+  final boundaryOrigin = tester.getTopLeft(boundaryFinder);
+  final allowed = aperture == null
+      ? null
+      : (tester.getTopLeft(aperture) - boundaryOrigin) &
+            tester.getSize(aperture);
+  Offset? firstUnexpectedTransparency;
+  var transparentPixels = 0;
+  for (var y = 0; y < height; y++) {
+    for (var x = 0; x < width; x++) {
+      if (pixels.getUint8((y * width + x) * 4 + 3) == 255) continue;
+      transparentPixels++;
+      final point = Offset(x + 0.5, y + 0.5);
+      if (allowed == null || !allowed.inflate(1).contains(point)) {
+        firstUnexpectedTransparency ??= point;
+      }
+    }
+  }
+
+  expect(
+    firstUnexpectedTransparency,
+    isNull,
+    reason:
+        'Classic Guide transparency escaped the PlayerSurface aperture at '
+        '$firstUnexpectedTransparency.',
+  );
+  expect(transparentPixels, allowed == null ? 0 : greaterThan(0));
+}
 
 Future<void> _openDestination(WidgetTester tester, String destination) async {
   await tester.tap(find.byKey(const Key('guide-app-menu')));
