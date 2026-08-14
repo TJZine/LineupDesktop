@@ -306,7 +306,10 @@ abstract final class LineupTheme {
           foregroundColor: palette.onFocus,
           minimumSize: const Size(148, 54),
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-          textStyle: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+          textStyle: textTheme.labelLarge?.copyWith(
+            fontSize: 17,
+            fontWeight: FontWeight.w700,
+          ),
           shape: controlShape,
         ),
       ),
@@ -315,7 +318,10 @@ abstract final class LineupTheme {
           minimumSize: const Size(148, 54),
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
           side: BorderSide(color: palette.defaultBorder),
-          textStyle: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+          textStyle: textTheme.labelLarge?.copyWith(
+            fontSize: 17,
+            fontWeight: FontWeight.w600,
+          ),
           shape: controlShape,
         ),
       ),

@@ -10,14 +10,22 @@ import 'package:lineup_desktop/plex/plex_client.dart';
 /// Deterministic UI states for widget tests. This file is not imported by the
 /// production composition root.
 class UiFixture {
-  UiFixture({FixtureController? controller, FixturePlayer? player})
-    : controller = controller ?? FixtureController(),
-      player = player ?? FixturePlayer();
+  UiFixture({
+    FixtureController? controller,
+    FixturePlayer? player,
+    this.guideClock,
+  }) : controller = controller ?? FixtureController(),
+       player = player ?? FixturePlayer();
 
   final FixtureController controller;
   final FixturePlayer player;
+  final DateTime Function()? guideClock;
 
-  Widget build() => LineupBootstrap(player: player, controller: controller);
+  Widget build() => LineupBootstrap(
+    player: player,
+    controller: controller,
+    guideClock: guideClock,
+  );
 }
 
 class FixtureController extends LineupController {

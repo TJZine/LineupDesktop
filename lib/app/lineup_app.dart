@@ -14,12 +14,14 @@ class LineupBootstrap extends StatefulWidget {
     required this.player,
     required this.controller,
     this.initialMediaPath,
+    this.guideClock,
     super.key,
   });
 
   final NativePlayer player;
   final LineupController controller;
   final String? initialMediaPath;
+  final DateTime Function()? guideClock;
 
   @override
   State<LineupBootstrap> createState() => _LineupBootstrapState();
@@ -115,6 +117,7 @@ class _LineupBootstrapState extends State<LineupBootstrap> {
             player: widget.player,
             controller: widget.controller,
             initialMediaPath: widget.initialMediaPath,
+            guideClock: widget.guideClock,
           );
         },
       ),

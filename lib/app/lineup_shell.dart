@@ -24,11 +24,13 @@ class LineupShell extends StatefulWidget {
     required this.player,
     required this.controller,
     this.initialMediaPath,
+    this.guideClock,
     super.key,
   });
   final NativePlayer player;
   final LineupController controller;
   final String? initialMediaPath;
+  final DateTime Function()? guideClock;
   @override
   State<LineupShell> createState() => _LineupShellState();
 }
@@ -49,7 +51,10 @@ class _LineupShellState extends State<LineupShell> {
   @override
   void initState() {
     super.initState();
-    _guide = GuideController(lineup: widget.controller);
+    _guide = GuideController(
+      lineup: widget.controller,
+      clock: widget.guideClock,
+    );
     _player = PlayerCoordinator(
       player: widget.player,
       lineup: widget.controller,

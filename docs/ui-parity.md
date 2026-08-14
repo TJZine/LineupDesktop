@@ -463,3 +463,156 @@ all five themes, Guide library/Now Watching states, PiP/overlay, tuning/loading,
 OSD timing, mini Guide, track selectors, errors, focus visibility, pointer and
 keyboard/controller behavior at 1280×720, 1600×900, and 1920×1080. Windows
 native acceptance remains Prompt 5.
+
+## Prompt 4E unlocked portable visual acceptance
+
+### Provenance and evidence boundary
+
+- LineupDesktop started at
+  `2f5cbbe1dafacc35be5163545109871f27ffcbe7` on
+  `replatform/flutter-native`. The ending SHA is the commit containing this
+  record; closeout reports the exact pushed value.
+- The authoritative implemented upstream remains the read-only sibling
+  `TJZine/Lineup` branch `origin/code-health` at
+  `f5f587c93cbea74f6c23f2df86ddae15fcb40e65`. The local `code-health` branch
+  had one unrelated tooling commit, so comparisons used the exact remote SHA.
+  `origin/main` remains the README-only
+  `5f01be6a719174ae1f89a70b8cab1095bf17c8b9`.
+- Upstream ran with `npm run dev` (`vite`) at a clean local origin. It has Jest
+  mocks and synthetic test data but no production-reachable demo/fixture
+  switch. Account-only onboarding was inspected through the user's existing
+  authenticated browser session; private names, server/library labels, media,
+  credentials, and artwork URLs were neither committed nor retained.
+- LineupDesktop used the repository-pinned Flutter framework
+  `4cf24164269a5ebf0c16a028a00727d0e77bbb05` (Flutter 3.47.0, Dart 3.13.0).
+  `test_driver/ui_harness.dart` supplied 1,000 synthetic channels with 12
+  synthetic programs each and the existing fake-player seam. It remains
+  unreachable from the production composition root.
+
+### Viewports and accepted evidence
+
+Upstream was visually inspected at exact logical 1280×720, 1600×900,
+1920×1080, and compact 1100×800 browser viewports. Flutter was observed in its
+initial 800×600, compact 1100×800, large 1600×900, and maximized 1728×1084
+macOS windows, while deterministic layout tests exercised 1280×720, 1600×900,
+1920×1080, compact desktop, 4K, and Windows-style 200 percent DPR regimes. The
+accepted golden viewport is 1280×720 at DPR 1 with pinned Flutter
+Roboto/Material Icons, synthetic assets and media, a fixed UTC Guide clock,
+and a fake player.
+
+Working browser/window captures remained in ignored temporary storage. Every
+committed baseline was regenerated after font and theme correction and then
+opened and visually inspected. The accepted focused contracts are:
+
+- profile selection;
+- Channel Setup review;
+- Ember & Steel Guide without playback;
+- Ember & Steel Guide with deterministic PiP allocation;
+- overlay Guide;
+- full-width Player OSD;
+- full-width mini-Guide shelf;
+- Settings in representative alternate Slate & Pine.
+
+QR/PIN authentication was rendered live upstream and remains covered by
+Flutter widget tests, but it was deliberately not accepted as a golden because
+the production expiry countdown reads wall-clock time. A moving countdown is
+not a deterministic baseline, and adding a second time architecture solely for
+one image would be disproportionate.
+
+### Visual acceptance classification
+
+"Insufficient evidence" below means the state retained source/test coverage but
+was not both rendered and visually adjudicated during the unlocked interval.
+It does not mean the state is absent.
+
+| Surface or state | Final Prompt 4E classification | Evidence and disposition |
+| --- | --- | --- |
+| Splash/startup | Structural parity with acceptable Flutter adaptation | Branded Flutter startup and upstream startup sources were inspected; Flutter's native-process startup is intentionally not a browser boot sequence. |
+| Auth welcome | Structural parity with acceptable Flutter adaptation | Upstream rendered live; Flutter branded hierarchy, primary action, focus and responsive cases rendered in deterministic tests. |
+| QR/PIN waiting | Structural parity with acceptable Flutter adaptation | Upstream rendered live and Flutter rendered in tests. QR remains white for scan contrast; no golden was accepted because the countdown is not frozen. |
+| Auth failure/retry | Insufficient evidence | Recovery ownership and tests passed, but no credential-safe live failure was induced during this pass. |
+| Profile selection | Visual parity | Deterministic golden accepted after direct inspection; protected state is distinct without exposing a real profile. |
+| Protected-profile PIN | Structural parity with acceptable Flutter adaptation | Focus containment, autofocus, semantics, cancel and completion are tested; the complete keypad was not accepted as a separate golden. |
+| Server discovery/selection | Structural parity with acceptable Flutter adaptation | Upstream server selection rendered live; Flutter fixture/tests retain measured connection facts without private server data. |
+| Server error/retry | Insufficient evidence | Safe retry behavior is deterministic, but a live private-account failure was not manufactured. |
+| Audio Setup | Structural parity with acceptable Flutter adaptation | Upstream rendered live. Flutter intentionally offers truthful system-selected audio rather than unsupported device/passthrough controls. |
+| Channel Setup libraries, strategies/options, progress and completion | Structural parity with acceptable Flutter adaptation | Upstream rendered live through all stages including completion; Flutter stages and progress are exercised by tests. |
+| Channel Setup review | Visual parity | Inspected deterministic golden accepted. The staged header/workspace/footer and destructive replacement priority are preserved. |
+| Channels empty/populated, editor and destructive confirmation | Intentional Desktop adaptation | Responsive management layout and explicit confirmation are rendered/tested. Upstream has no equivalent implemented desktop channel editor. |
+| Settings | Structural parity with acceptable Flutter adaptation | Category/detail hierarchy rendered; alternate-theme golden accepted; immediate persistence and rollback tests passed. |
+| Diagnostics | Intentional Desktop adaptation | Credential-safe support surface retained; upstream has no consumer-equivalent management page. |
+| Persistence failure | Structural parity with acceptable Flutter adaptation | Local error ownership and rollback rendered in widget tests; no destructive live disk failure was induced. |
+| Guide no channels, loading, loading row, error/retry row | Structural parity with acceptable Flutter adaptation | Empty/loading/error rows, retry focus and bounded geometry are rendered in deterministic tests. |
+| Guide populated without playback | Visual parity | Ember & Steel golden accepted and live 1,000-channel harness inspected. |
+| Default active-playback PiP | Structural parity with acceptable Flutter adaptation | Golden accepts only the Flutter 16:9 allocation and information hierarchy. It does not claim video composition. |
+| Overlay Guide | Structural parity with acceptable Flutter adaptation | Golden accepted; the same Guide and player surface are layered without another layout owner. |
+| Focused current/future, tuned distinct from focus, current-time indicator | Visual parity | Live keyboard traversal and golden evidence show separate focus, tuned and current-time roles. |
+| Library filter/tabs and information/showcase | Structural parity with acceptable Flutter adaptation | Existing filtered Guide and detail-region tests passed; private upstream library names were not captured. |
+| Compact/comfortable density and 1,000-channel navigation | Structural parity with acceptable Flutter adaptation | Responsive and bounded-work tests passed; unlocked debug traversal showed no blank rows or obvious focus lag. |
+| Full player shell | Structural parity with acceptable Flutter adaptation | Deterministic player surface is truthful on macOS; real media remains Windows-native. |
+| OSD | Visual parity | Corrected from a centered generic card to the upstream-recognizable bottom safe-area gradient; inspected golden accepted. |
+| Mini Guide | Visual parity | Corrected from a centered list dialog to a full-width top shelf with row-level focus; inspected golden accepted. |
+| Audio/subtitle selectors, number entry and sleep timer | Structural parity with acceptable Flutter adaptation | Keyboard, scrolling, availability, digit timeout, and timer tests passed; no unsupported controls were added. |
+| Loading/buffering and playback error/retry | Structural parity with acceptable Flutter adaptation | Truthful fake-player states and recovery are tested; no native playback claim is made. |
+| Unsupported macOS backend | Intentional Desktop adaptation | The user-facing unsupported state remains explicit and disables controls that cannot work. |
+| Ember & Steel primary matrix | Structural parity with acceptable Flutter adaptation | Primary Guide/player/onboarding/setup surfaces were inspected; browser-specific gradients, font raster and shadows were not treated as defects. |
+| Slate & Pine representative matrix | Structural parity with acceptable Flutter adaptation | Settings golden accepted and all representative theme-role surfaces pass shared contrast/layout tests. |
+| Swiss Minimal, DirecTV Classic and Glassmorphism representative states | Structural parity with acceptable Flutter adaptation | Settings, Guide/PiP, OSD and focused controls were switched and inspected live in each theme. Shared onboarding/error roles, contrast and responsive behavior remain deterministic-test evidence rather than separate accepted goldens. |
+
+### Focused corrections and intentional adaptations
+
+The only demonstrated composition changes were localized to the Player. OSD
+content now spans the bottom safe area over a vertical gradient with responsive
+horizontal insets. The mini Guide now spans the top edge, removes the generic
+card/heading treatment, and uses row separators plus a dedicated focus edge.
+Existing coordinator, focus, semantics, track, timing, and fake-player owners
+were retained. Button typography now derives from the application's text theme,
+which removed a cross-surface family mismatch exposed by deterministic
+rendering. The existing Guide clock seam is passed through the bootstrap only
+for deterministic test composition; no service, dependency, or alternate state
+owner was introduced.
+
+Management navigation remains a Desktop adaptation. Guide and Player remain
+immersive and do not inherit the management rail. PiP is a Flutter allocation
+only, diagnostics remains Desktop-specific, and audio setup continues to omit
+unimplemented platform claims.
+
+### Interaction and profile observations
+
+During the unlocked debug run, keyboard navigation exercised vertical and
+horizontal Guide movement, Page Down, jump/play-to-now, tune, Guide-to-player,
+OSD, mini Guide, Escape/Back, and overlay closure. Focused details changed with
+navigation, the tuned channel remained distinct, and focus restoration did not
+show a dead endpoint. Browser pointer interaction exercised upstream profile,
+server, audio and Channel Setup progression. Widget acceptance additionally
+covers profile/server/PIN cancellation, management/Settings navigation,
+dialogs, track selectors, theme switching, resize regimes, pointer actions,
+focus restoration, and controller-style logical keys. No physical gamepad was
+available; Windows gamepad acceptance remains Prompt 5.
+
+The profile harness built a 74.2 MB bundle and launched with Metal Impeller.
+The fixture contained 1,000 channels × 12 programs. Forty Page Down events
+reached channel 401; 80 right moves, 20 left moves, jump-to-now, tune,
+player/OSD/mini-Guide transitions, theme changes, and compact/large resizing
+were exercised in the foreground. No obvious blank rows, clipping, focus lag,
+or visual jank was observed. Two rapid route-and-window resize attempts emitted
+`Resize timed out`; the application remained responsive and the same compact
+and large sizes rendered correctly when inspected after the route settled.
+Process RSS moved from about 167 MB after launch to 221 MB after traversal,
+overlay, resize, and five-theme work. No growing cache, blank-cell, or process
+failure was visible, but these observations are not sampled frame timings.
+
+Deterministic 1,000-channel instrumentation at 1280×800 reported about 94 ms
+for first viewport construction, 1.4 ms for 500 logical navigation moves before
+the following frame, 1,181 widgets, 13 cached rows, and about 9.9 MB RSS growth
+in the test process. These figures are diagnostics, not Windows-native or
+profile-frame proof.
+
+### Remaining Windows-native validation
+
+No `windows/**`, engine, C++, DirectComposition, libmpv, D3D11, decode, HDR,
+tone-mapping, passthrough, native fullscreen, packaging, or native video-layer
+work changed. The macOS deterministic player rectangle proves Flutter layout
+only. Prompt 5 remains solely responsible for real video inside that region,
+Windows media behavior, native PiP composition, hardware performance and
+gamepad acceptance.

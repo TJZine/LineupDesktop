@@ -293,6 +293,10 @@ class _Osd extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final roles = LineupTheme.of(context);
+    final horizontalInset = (MediaQuery.sizeOf(context).width * 0.05).clamp(
+      24.0,
+      96.0,
+    );
     final channel = controller.currentChannel;
     final program = controller.currentProgram;
     final next = controller.nextProgram;
@@ -314,194 +318,201 @@ class _Osd extends StatelessWidget {
       child: Align(
         alignment: Alignment.bottomCenter,
         child: SafeArea(
-          minimum: const EdgeInsets.all(16),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 1180),
-            child: Container(
-              padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
-              decoration: BoxDecoration(
-                color: roles.overlaySurface,
-                borderRadius: BorderRadius.circular(roles.panelRadius),
-                border: Border.all(color: roles.defaultBorder),
-                boxShadow: [BoxShadow(color: roles.scrim, blurRadius: 24)],
+          top: false,
+          minimum: EdgeInsets.only(bottom: roles.overlaySafeArea),
+          child: Container(
+            key: const Key('player-osd-surface'),
+            width: double.infinity,
+            padding: EdgeInsets.fromLTRB(
+              horizontalInset,
+              72,
+              horizontalInset,
+              10,
+            ),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.transparent,
+                  roles.overlaySurface.withValues(alpha: 0.82),
+                  roles.overlaySurface,
+                ],
+                stops: const [0, 0.42, 1],
               ),
-              child: Semantics(
-                container: true,
-                label: 'Playback controls',
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Row(
-                      children: [
-                        if (channel != null)
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 8,
-                            ),
-                            decoration: BoxDecoration(
-                              color: roles.progressFill,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              '${channel.number}',
-                              style: TextStyle(
-                                color: roles.onFocus,
-                                fontWeight: FontWeight.w900,
-                              ),
+            ),
+            child: Semantics(
+              container: true,
+              label: 'Playback controls',
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      if (channel != null)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            color: roles.progressFill,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            '${channel.number}',
+                            style: TextStyle(
+                              color: roles.onFocus,
+                              fontWeight: FontWeight.w900,
                             ),
                           ),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                program?.scheduled.item.title ??
-                                    channel?.name ??
-                                    'Nothing playing',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context).textTheme.titleLarge,
-                              ),
-                              Text(
-                                [
-                                  program?.scheduled.item.showTitle,
-                                  _statusLabel(controller.status.state),
-                                  if (quality.isNotEmpty) quality,
-                                ].nonNulls.join(' • '),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ],
-                          ),
                         ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Semantics(
-                      label: 'Playback progress',
-                      value:
-                          '${_duration(controller.position)} of ${_duration(controller.duration)}',
-                      child: Slider(
-                        value: position.toDouble(),
-                        max: (duration <= 0 ? 1 : duration).toDouble(),
-                        onChanged: duration <= 0 || unsupported
-                            ? null
-                            : (value) => controller.seekTo(
-                                Duration(milliseconds: value.round()),
-                              ),
-                      ),
-                    ),
-                    Row(
-                      children: [
-                        Text(
-                          '${_duration(controller.position)} / ${_duration(controller.duration)}',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                        const Spacer(),
-                        if (next != null &&
-                            MediaQuery.sizeOf(context).width >= 900)
-                          Flexible(
-                            child: Text(
-                              'Up next • ${next.scheduled.item.title}',
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              program?.scheduled.item.title ??
+                                  channel?.name ??
+                                  'Nothing playing',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context).textTheme.bodySmall,
+                              style: Theme.of(context).textTheme.titleLarge,
                             ),
-                          ),
-                      ],
+                            Text(
+                              [
+                                program?.scheduled.item.showTitle,
+                                _statusLabel(controller.status.state),
+                                if (quality.isNotEmpty) quality,
+                              ].nonNulls.join(' • '),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Semantics(
+                    label: 'Playback progress',
+                    value:
+                        '${_duration(controller.position)} of ${_duration(controller.duration)}',
+                    child: Slider(
+                      value: position.toDouble(),
+                      max: (duration <= 0 ? 1 : duration).toDouble(),
+                      onChanged: duration <= 0 || unsupported
+                          ? null
+                          : (value) => controller.seekTo(
+                              Duration(milliseconds: value.round()),
+                            ),
                     ),
-                    Row(
-                      children: [
-                        IconButton(
-                          tooltip: 'Previous channel',
-                          onPressed: unsupported
-                              ? null
-                              : controller.previousChannel,
-                          icon: const Icon(Icons.skip_previous),
-                        ),
-                        IconButton(
-                          tooltip:
-                              controller.status.state == PlayerState.playing
-                              ? 'Pause'
-                              : 'Play',
-                          onPressed: unsupported
-                              ? null
-                              : controller.togglePlayback,
-                          icon: Icon(
-                            controller.status.state == PlayerState.playing
-                                ? Icons.pause
-                                : Icons.play_arrow,
+                  ),
+                  Row(
+                    children: [
+                      Text(
+                        '${_duration(controller.position)} / ${_duration(controller.duration)}',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                      const Spacer(),
+                      if (next != null &&
+                          MediaQuery.sizeOf(context).width >= 900)
+                        Flexible(
+                          child: Text(
+                            'Up next • ${next.scheduled.item.title}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.bodySmall,
                           ),
                         ),
-                        IconButton(
-                          tooltip: 'Next channel',
-                          onPressed: unsupported
-                              ? null
-                              : controller.nextChannel,
-                          icon: const Icon(Icons.skip_next),
+                    ],
+                  ),
+                  Row(
+                    children: [
+                      IconButton(
+                        tooltip: 'Previous channel',
+                        onPressed: unsupported
+                            ? null
+                            : controller.previousChannel,
+                        icon: const Icon(Icons.skip_previous),
+                      ),
+                      IconButton(
+                        tooltip: controller.status.state == PlayerState.playing
+                            ? 'Pause'
+                            : 'Play',
+                        onPressed: unsupported
+                            ? null
+                            : controller.togglePlayback,
+                        icon: Icon(
+                          controller.status.state == PlayerState.playing
+                              ? Icons.pause
+                              : Icons.play_arrow,
                         ),
-                        IconButton(
-                          tooltip: audioAvailable
-                              ? 'Audio tracks'
-                              : 'Audio tracks unavailable',
-                          onPressed: audioAvailable
-                              ? () =>
-                                    controller.showTracks(PlayerTrackType.audio)
-                              : null,
-                          icon: const Icon(Icons.audiotrack),
+                      ),
+                      IconButton(
+                        tooltip: 'Next channel',
+                        onPressed: unsupported ? null : controller.nextChannel,
+                        icon: const Icon(Icons.skip_next),
+                      ),
+                      IconButton(
+                        tooltip: audioAvailable
+                            ? 'Audio tracks'
+                            : 'Audio tracks unavailable',
+                        onPressed: audioAvailable
+                            ? () => controller.showTracks(PlayerTrackType.audio)
+                            : null,
+                        icon: const Icon(Icons.audiotrack),
+                      ),
+                      IconButton(
+                        tooltip: subtitlesAvailable
+                            ? 'Subtitles'
+                            : 'Subtitles unavailable',
+                        onPressed: subtitlesAvailable
+                            ? () => controller.showTracks(
+                                PlayerTrackType.subtitle,
+                              )
+                            : null,
+                        icon: const Icon(Icons.subtitles_outlined),
+                      ),
+                      IconButton(
+                        tooltip: 'Sleep timer',
+                        onPressed: controller.cycleSleepTimer,
+                        icon: const Icon(Icons.bedtime_outlined),
+                      ),
+                      if (MediaQuery.sizeOf(context).width >= 900)
+                        Text(
+                          controller.sleepDuration == null
+                              ? 'Sleep off'
+                              : 'Sleep ${controller.sleepDuration!.inMinutes}m',
                         ),
+                      const Spacer(),
+                      if (openMenu != null)
                         IconButton(
-                          tooltip: subtitlesAvailable
-                              ? 'Subtitles'
-                              : 'Subtitles unavailable',
-                          onPressed: subtitlesAvailable
-                              ? () => controller.showTracks(
-                                  PlayerTrackType.subtitle,
-                                )
-                              : null,
-                          icon: const Icon(Icons.subtitles_outlined),
+                          key: const Key('player-app-menu'),
+                          tooltip: 'Open Lineup menu',
+                          onPressed: openMenu,
+                          icon: const Icon(Icons.menu),
                         ),
-                        IconButton(
-                          tooltip: 'Sleep timer',
-                          onPressed: controller.cycleSleepTimer,
-                          icon: const Icon(Icons.bedtime_outlined),
+                      IconButton(
+                        tooltip: unsupported
+                            ? 'Fullscreen unavailable without playback'
+                            : controller.fullscreen
+                            ? 'Exit fullscreen'
+                            : 'Fullscreen',
+                        onPressed: unsupported
+                            ? null
+                            : controller.toggleFullscreen,
+                        icon: Icon(
+                          controller.fullscreen
+                              ? Icons.fullscreen_exit
+                              : Icons.fullscreen,
                         ),
-                        if (MediaQuery.sizeOf(context).width >= 900)
-                          Text(
-                            controller.sleepDuration == null
-                                ? 'Sleep off'
-                                : 'Sleep ${controller.sleepDuration!.inMinutes}m',
-                          ),
-                        const Spacer(),
-                        if (openMenu != null)
-                          IconButton(
-                            key: const Key('player-app-menu'),
-                            tooltip: 'Open Lineup menu',
-                            onPressed: openMenu,
-                            icon: const Icon(Icons.menu),
-                          ),
-                        IconButton(
-                          tooltip: unsupported
-                              ? 'Fullscreen unavailable without playback'
-                              : controller.fullscreen
-                              ? 'Exit fullscreen'
-                              : 'Fullscreen',
-                          onPressed: unsupported
-                              ? null
-                              : controller.toggleFullscreen,
-                          icon: Icon(
-                            controller.fullscreen
-                                ? Icons.fullscreen_exit
-                                : Icons.fullscreen,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ),
           ),
@@ -524,48 +535,48 @@ class _MiniGuide extends StatelessWidget {
       child: Align(
         alignment: Alignment.topCenter,
         child: SafeArea(
-          minimum: const EdgeInsets.all(16),
-          child: Material(
+          bottom: false,
+          child: Container(
             key: const Key('mini-guide-shelf'),
-            color: roles.overlaySurface,
-            borderRadius: BorderRadius.circular(roles.panelRadius),
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                maxWidth: 1180,
-                maxHeight: MediaQuery.sizeOf(context).height - 32,
+            width: double.infinity,
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.sizeOf(context).height,
+            ),
+            padding: EdgeInsets.fromLTRB(
+              roles.overlaySafeArea,
+              12,
+              roles.overlaySafeArea,
+              16,
+            ),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  roles.overlaySurface,
+                  roles.overlaySurface.withValues(alpha: 0.88),
+                  Colors.transparent,
+                ],
+                stops: const [0, 0.78, 1],
               ),
-              child: SizedBox(
-                width: double.infinity,
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Semantics(
-                    container: true,
-                    explicitChildNodes: true,
-                    label: 'Mini Guide',
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Text(
-                          'On now',
-                          style: Theme.of(context).textTheme.titleLarge,
-                        ),
-                        const SizedBox(height: 8),
-                        for (final channel in channels)
-                          _MiniGuideRow(
-                            controller: controller,
-                            channel: channel,
-                          ),
-                        const SizedBox(height: 8),
-                        const Text(
-                          'UP/DOWN Browse • CH± Page • OK Watch • RIGHT Full Guide • BACK Close',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(fontSize: 12),
-                        ),
-                      ],
-                    ),
+            ),
+            child: Semantics(
+              container: true,
+              explicitChildNodes: true,
+              label: 'Mini Guide',
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (final channel in channels)
+                    _MiniGuideRow(controller: controller, channel: channel),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'UP/DOWN Browse • CH± Page • OK Watch • RIGHT Full Guide • BACK Close',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 12),
                   ),
-                ),
+                ],
               ),
             ),
           ),
@@ -601,103 +612,107 @@ class _MiniGuideRow extends StatelessWidget {
       selected: focused,
       label:
           'Channel ${channel.number}, ${channel.name}. Now ${current?.scheduled.item.title ?? 'schedule loading'}.${next == null ? '' : ' Next ${next.scheduled.item.title}.'}${tuned ? ' Now watching.' : ''}',
-      child: Card(
-        color: focused ? roles.focusedSurface : Colors.transparent,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-          side: BorderSide(
-            color: focused ? roles.focusBorder : roles.subtleBorder,
-            width: focused ? roles.focusBorderWidth : 1,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: focused ? roles.focusedSurface : Colors.transparent,
+          border: Border(
+            left: BorderSide(
+              color: focused ? roles.focusBorder : Colors.transparent,
+              width: focused ? roles.focusBorderWidth : 3,
+            ),
+            bottom: BorderSide(color: roles.subtleBorder),
           ),
         ),
-        child: InkWell(
-          onTap: () => controller.focusMiniGuideChannel(channel.id),
-          borderRadius: BorderRadius.circular(10),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            child: Row(
-              children: [
-                SizedBox(
-                  width: 46,
-                  child: Text(
-                    '${channel.number}',
-                    style: Theme.of(context).textTheme.titleMedium
-                        ?.copyWith(color: foreground),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () => controller.focusMiniGuideChannel(channel.id),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 46,
+                    child: Text(
+                      '${channel.number}',
+                      style: Theme.of(context).textTheme.titleMedium
+                          ?.copyWith(color: foreground),
+                    ),
                   ),
-                ),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              channel.name,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: foreground,
-                                fontWeight: FontWeight.w700,
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                channel.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: foreground,
+                                  fontWeight: FontWeight.w700,
+                                ),
                               ),
                             ),
-                          ),
-                          if (tuned)
-                            Icon(
-                              Icons.play_circle_fill,
-                              size: 18,
-                              color: foreground,
-                              semanticLabel: 'Now watching',
-                            ),
-                        ],
-                      ),
-                      Text(
-                        current?.scheduled.item.title ?? 'Schedule loading…',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(color: foreground),
-                      ),
-                      if (current != null)
-                        LinearProgressIndicator(
-                          value: progress.clamp(0, 1),
-                          minHeight: 2,
-                          color: focused ? foreground : null,
-                          backgroundColor: focused
-                              ? foreground.withValues(alpha: 0.25)
-                              : null,
-                          semanticsLabel: 'Program progress',
+                            if (tuned)
+                              Icon(
+                                Icons.play_circle_fill,
+                                size: 18,
+                                color: foreground,
+                                semanticLabel: 'Now watching',
+                              ),
+                          ],
                         ),
-                      if (next != null)
                         Text(
-                          'Next • ${next.scheduled.item.title}',
+                          current?.scheduled.item.title ?? 'Schedule loading…',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(color: foreground),
+                          style: TextStyle(color: foreground),
                         ),
-                    ],
-                  ),
-                ),
-                IconButton(
-                  style: focused
-                      ? IconButton.styleFrom(
-                          foregroundColor: foreground,
-                          disabledForegroundColor: foreground.withValues(
-                            alpha: 0.70,
+                        if (current != null)
+                          LinearProgressIndicator(
+                            value: progress.clamp(0, 1),
+                            minHeight: 2,
+                            color: focused ? foreground : null,
+                            backgroundColor: focused
+                                ? foreground.withValues(alpha: 0.25)
+                                : null,
+                            semanticsLabel: 'Program progress',
                           ),
-                        )
-                      : null,
-                  tooltip: unsupported
-                      ? 'Playback unavailable'
-                      : tuned
-                      ? 'Watching this channel'
-                      : 'Watch channel',
-                  onPressed: tuned || unsupported
-                      ? null
-                      : () => controller.tune(channel.id),
-                  icon: const Icon(Icons.play_arrow),
-                ),
-              ],
+                        if (next != null)
+                          Text(
+                            'Next • ${next.scheduled.item.title}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(color: foreground),
+                          ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    style: focused
+                        ? IconButton.styleFrom(
+                            foregroundColor: foreground,
+                            disabledForegroundColor: foreground.withValues(
+                              alpha: 0.70,
+                            ),
+                          )
+                        : null,
+                    tooltip: unsupported
+                        ? 'Playback unavailable'
+                        : tuned
+                        ? 'Watching this channel'
+                        : 'Watch channel',
+                    onPressed: tuned || unsupported
+                        ? null
+                        : () => controller.tune(channel.id),
+                    icon: const Icon(Icons.play_arrow),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

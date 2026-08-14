@@ -124,12 +124,20 @@ void main() {
         find.bySemanticsLabel(RegExp('Playback controls')),
         findsOneWidget,
       );
+      expect(
+        tester.getSize(find.byKey(const Key('player-osd-surface'))).width,
+        size.width,
+      );
       expect(tester.takeException(), isNull, reason: '$size');
     }
 
     fixture.player.showMiniGuide();
     await tester.pump();
     expect(find.bySemanticsLabel(RegExp('Mini Guide')), findsOneWidget);
+    expect(
+      tester.getSize(find.byKey(const Key('mini-guide-shelf'))).width,
+      1360,
+    );
     expect(find.textContaining('UP/DOWN Browse'), findsOneWidget);
 
     await tester.binding.setSurfaceSize(null);
