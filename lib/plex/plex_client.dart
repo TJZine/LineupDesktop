@@ -382,7 +382,6 @@ class PlexClient {
 
   PlexPlaybackDescriptor playbackDescriptor({
     required Uri server,
-    required String token,
     required PlexMediaItem item,
     required StreamCapabilities capabilities,
   }) {
@@ -408,19 +407,32 @@ class PlexClient {
     final uri = decision.kind == StreamDecisionKind.directPlay
         ? server.resolve(item.partPath!)
         : server
-              .resolve('/video/:/transcode/universal/start')
+              .resolve('/video/:/transcode/universal/start.m3u8')
               .replace(
                 queryParameters: {
-                  'path': item.partPath!,
+                  'path': item.key,
+                  'mediaIndex': '0',
+                  'partIndex': '0',
                   'protocol': 'hls',
                   'session': session,
-                  if (decision.kind == StreamDecisionKind.directStream)
-                    'directStream': '1',
+                  'directPlay': '0',
+                  'directStream':
+                      decision.kind == StreamDecisionKind.directStream
+                      ? '1'
+                      : '0',
+                  'directStreamAudio':
+                      decision.kind == StreamDecisionKind.directStream
+                      ? '1'
+                      : '0',
+                  'fastSeek': '1',
+                  'X-Plex-Client-Identifier': clientIdentifier,
+                  'X-Plex-Product': 'Lineup Desktop',
+                  'X-Plex-Version': '0.1.0',
+                  'X-Plex-Platform': Platform.operatingSystem,
                 },
               );
     return PlexPlaybackDescriptor(
       uri: uri,
-      headers: {'X-Plex-Token': token},
       decision: decision,
       sessionId: session,
     );

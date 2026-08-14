@@ -1,6 +1,7 @@
 #include "native_player.h"
 
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <cmath>
 #include <cstring>
@@ -165,6 +166,66 @@ flutter::EncodableMap StateEvent(const char* state, const char* message,
         flutter::EncodableValue(*load_id);
   }
   return event;
+}
+
+std::string LowerAscii(const char* input) {
+  std::string value = BoundedUtf8(input, kMaxMetadataStringBytes);
+  std::transform(value.begin(), value.end(), value.begin(), [](char byte) {
+    return static_cast<char>(
+        std::tolower(static_cast<unsigned char>(byte)));
+  });
+  return value;
+}
+
+std::optional<std::string> ClassifyMpvFailure(
+    const mpv_event_log_message& message) {
+  const std::string prefix = LowerAscii(message.prefix);
+  const std::string text = LowerAscii(message.text);
+  const auto contains = [&](const char* value) {
+    return text.find(value) != std::string::npos;
+  };
+  if (const size_t start = text.find("http error");
+      start != std::string::npos) {
+    for (size_t index = start; index + 2 < text.size(); ++index) {
+      if (std::isdigit(static_cast<unsigned char>(text[index])) &&
+          std::isdigit(static_cast<unsigned char>(text[index + 1])) &&
+          std::isdigit(static_cast<unsigned char>(text[index + 2]))) {
+        const std::string status = text.substr(index, 3);
+        if (status[0] == '4' || status[0] == '5') {
+          return "Media server returned HTTP " + status;
+        }
+      }
+    }
+    return "Media server rejected the request";
+  }
+  if (contains("connection refused") || contains("connection timed out") ||
+      contains("network is unreachable") || contains("failed to resolve") ||
+      contains("tls") || contains("certificate")) {
+    return "Media server connection failed";
+  }
+  if (contains("audio") &&
+      (contains("decode") || contains("decoder") || contains("codec"))) {
+    return "Audio decoding failed";
+  }
+  if (contains("video") &&
+      (contains("decode") || contains("decoder") || contains("codec"))) {
+    return "Video decoding failed";
+  }
+  if (prefix.rfind("ao/", 0) == 0 || contains("audio output")) {
+    return "Audio output could not start";
+  }
+  if (prefix.rfind("vo/", 0) == 0 || contains("video output")) {
+    return "Video output could not start";
+  }
+  if (contains("failed to open") || contains("cannot open") ||
+      contains("could not open")) {
+    return "Media source could not be opened";
+  }
+  if (prefix.find("demux") != std::string::npos ||
+      contains("demuxer") || contains("invalid data found")) {
+    return "Media container could not be read";
+  }
+  return std::nullopt;
 }
 
 bool RestoreWindowState(HWND window, LONG_PTR style,
@@ -417,6 +478,7 @@ bool WindowsNativePlayer::Initialize(std::string& error) {
   }
   std::cerr << "[lineup-player] libmpv initialized client-api="
             << mpv_client_api_version() << std::endl;
+  mpv_request_log_messages(mpv_, "warn");
 
   struct Observation {
     uint64_t id;
@@ -784,6 +846,7 @@ void WindowsNativePlayer::HandleMpvEvent(const mpv_event& event,
                                          uint64_t generation) {
   switch (event.event_id) {
     case MPV_EVENT_START_FILE:
+      last_failure_detail_.clear();
       if (const auto* start = static_cast<mpv_event_start_file*>(event.data)) {
         const auto load = playlist_load_ids_.find(start->playlist_entry_id);
         if (load != playlist_load_ids_.end()) {
@@ -867,15 +930,27 @@ void WindowsNativePlayer::HandleMpvEvent(const mpv_event& event,
             pending_load_ids_.end());
       }
       if (end && end->error < 0) {
+        std::string message = mpv_error_string(end->error);
+        if (!last_failure_detail_.empty()) {
+          message += ": " + last_failure_detail_;
+        }
         QueueEvent(generation,
-                   StateEvent("error", mpv_error_string(end->error),
-                              load_id));
+                   StateEvent("error", message.c_str(), load_id));
       } else {
         QueueEvent(generation,
                    StateEvent("stopped", "Playback stopped", load_id));
       }
+      last_failure_detail_.clear();
       break;
     }
+    case MPV_EVENT_LOG_MESSAGE:
+      if (const auto* message =
+              static_cast<mpv_event_log_message*>(event.data)) {
+        if (const auto detail = ClassifyMpvFailure(*message)) {
+          last_failure_detail_ = *detail;
+        }
+      }
+      break;
     case MPV_EVENT_QUEUE_OVERFLOW:
       QueueEvent(generation,
                  StateEvent("error", "The libmpv event queue overflowed",

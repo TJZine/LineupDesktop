@@ -327,7 +327,6 @@ void main() {
     expect(
       () => client.playbackDescriptor(
         server: Uri.parse('https://plex.example:32400'),
-        token: 'secret',
         item: const PlexMediaItem(
           id: '1',
           key: '/library/metadata/1',
@@ -347,13 +346,12 @@ void main() {
     );
   });
 
-  test('direct stream targets the playable part with Plex HLS flags', () {
+  test('direct stream uses the Plex universal HLS contract', () {
     final client = PlexClient(
       clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
     );
     final descriptor = client.playbackDescriptor(
       server: Uri.parse('https://plex.example:32400'),
-      token: 'secret',
       item: const PlexMediaItem(
         id: '1',
         key: '/library/metadata/1',
@@ -375,11 +373,54 @@ void main() {
     expect(descriptor.decision.kind, StreamDecisionKind.directStream);
     expect(
       descriptor.uri.queryParameters,
-      containsPair('path', '/library/parts/1/file.mkv'),
+      containsPair('path', '/library/metadata/1'),
     );
+    expect(descriptor.uri.path, '/video/:/transcode/universal/start.m3u8');
     expect(descriptor.uri.queryParameters, containsPair('protocol', 'hls'));
+    expect(descriptor.uri.queryParameters, containsPair('mediaIndex', '0'));
+    expect(descriptor.uri.queryParameters, containsPair('partIndex', '0'));
+    expect(descriptor.uri.queryParameters, containsPair('directPlay', '0'));
     expect(descriptor.uri.queryParameters, containsPair('directStream', '1'));
-    expect(descriptor.uri.queryParameters, isNot(contains('directPlay')));
+    expect(
+      descriptor.uri.queryParameters,
+      containsPair(
+        'X-Plex-Client-Identifier',
+        'lineup-desktop-test-abcdefghijklmnopqrst',
+      ),
+    );
+  });
+
+  test('transcode disables direct play and direct stream', () {
+    final descriptor =
+        PlexClient(clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst')
+            .playbackDescriptor(
+              server: Uri.parse('https://plex.example:32400'),
+              item: const PlexMediaItem(
+                id: '1',
+                key: '/library/metadata/1',
+                title: 'Movie',
+                type: 'movie',
+                duration: Duration(minutes: 1),
+                partPath: '/library/parts/1/file.mkv',
+                container: 'mkv',
+                videoCodec: 'vc1',
+                audioCodec: 'dca',
+                dynamicRange: DynamicRange.sdr,
+              ),
+              capabilities: const StreamCapabilities(
+                containers: {'mkv'},
+                videoCodecs: {'h264'},
+                audioCodecs: {'dca'},
+              ),
+            );
+
+    expect(descriptor.decision.kind, StreamDecisionKind.transcode);
+    expect(descriptor.uri.queryParameters, containsPair('directPlay', '0'));
+    expect(descriptor.uri.queryParameters, containsPair('directStream', '0'));
+    expect(
+      descriptor.uri.queryParameters,
+      containsPair('directStreamAudio', '0'),
+    );
   });
 
   test('artwork stays credential-scoped and enforces its byte bound', () async {

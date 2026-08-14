@@ -4,12 +4,36 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/testing.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/channels/channel.dart';
+import 'package:lineup_desktop/channels/channel_builder.dart';
 import 'package:lineup_desktop/persistence/app_store.dart';
 import 'package:lineup_desktop/plex/plex_client.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 
 void main() {
+  test(
+    'replace applies the immutable plan produced by Channel Setup',
+    () async {
+      final controller = LineupController(
+        store: _MemoryStore(),
+        credentials: _MemoryCredentials(),
+        plex: _FakePlex(),
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+      final planned = List<Channel>.unmodifiable([_channel('planned')]);
+
+      await controller.applyChannelPlan(
+        planned,
+        mode: ChannelBuildMode.replace,
+      );
+
+      expect(controller.channels.single.id, 'planned');
+      expect(controller.stage, SetupStage.ready);
+    },
+  );
+
   test(
     'missing managed-profile token never falls back to owner scope',
     () async {

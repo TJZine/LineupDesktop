@@ -200,42 +200,31 @@ void main() {
     },
   );
 
-  testWidgets(
-    'OSD timeout resets, suspends for focus, and rejects stale timers',
-    (tester) async {
-      final lineup = _TestLineup();
-      final guide = GuideController(
-        lineup: lineup,
-        loadSchedule: (channel) async => _schedule(channel),
-      );
-      final coordinator = PlayerCoordinator(
-        player: _Player(),
-        lineup: lineup,
-        guide: guide,
-        overlayTimeout: const Duration(seconds: 4),
-      );
+  testWidgets('OSD timeout resets and rejects stale timers', (tester) async {
+    final lineup = _TestLineup();
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    final coordinator = PlayerCoordinator(
+      player: _Player(),
+      lineup: lineup,
+      guide: guide,
+      overlayTimeout: const Duration(seconds: 4),
+    );
 
-      coordinator.showOsd();
-      await tester.pump(const Duration(seconds: 3));
-      coordinator.showOsd();
-      await tester.pump(const Duration(seconds: 2));
-      expect(coordinator.overlay, PlayerOverlay.osd);
-      await tester.pump(const Duration(seconds: 3));
-      expect(coordinator.overlay, PlayerOverlay.none);
+    coordinator.showOsd();
+    await tester.pump(const Duration(seconds: 3));
+    coordinator.showOsd();
+    await tester.pump(const Duration(seconds: 2));
+    expect(coordinator.overlay, PlayerOverlay.osd);
+    await tester.pump(const Duration(seconds: 3));
+    expect(coordinator.overlay, PlayerOverlay.none);
 
-      coordinator.showOsd();
-      coordinator.setOverlayInteraction(true);
-      await tester.pump(const Duration(seconds: 10));
-      expect(coordinator.overlay, PlayerOverlay.osd);
-      coordinator.setOverlayInteraction(false);
-      await tester.pump(const Duration(seconds: 4));
-      expect(coordinator.overlay, PlayerOverlay.none);
-
-      coordinator.dispose();
-      guide.dispose();
-      lineup.dispose();
-    },
-  );
+    coordinator.dispose();
+    guide.dispose();
+    lineup.dispose();
+  });
 
   testWidgets('OSD timeout reads the persisted setting consumer', (
     tester,
@@ -534,6 +523,7 @@ void main() {
 
   test('recoverable player errors retain the retry action', () async {
     final lineup = _TestLineup();
+    lineup.diagnostics.enabled = true;
     final guide = GuideController(
       lineup: lineup,
       loadSchedule: (channel) async => _schedule(channel),
@@ -550,11 +540,15 @@ void main() {
     player.emitError(
       recoverable: true,
       generation: player.loadGenerations.single,
+      audioCodec: 'truehd',
     );
     await Future<void>.delayed(Duration.zero);
 
     expect(coordinator.canRetry, isTrue);
     expect(coordinator.overlay, PlayerOverlay.error);
+    expect(lineup.diagnostics.entries.single.message, 'Native playback failed');
+    expect(lineup.diagnostics.entries.single.context['reason'], 'Failed');
+    expect(lineup.diagnostics.entries.single.context['audioCodec'], 'truehd');
 
     coordinator.dispose();
     await player.close();
@@ -943,7 +937,11 @@ class _EventPlayer extends _Player {
   @override
   Stream<PlayerEvent> get events => _events.stream;
 
-  void emitError({bool recoverable = false, int? generation}) {
+  void emitError({
+    bool recoverable = false,
+    int? generation,
+    String? audioCodec,
+  }) {
     _events.add(
       PlayerEvent(
         status: PlayerStatus(
@@ -954,7 +952,16 @@ class _EventPlayer extends _Player {
         position: Duration.zero,
         duration: Duration.zero,
         telemetry: const PlayerTelemetry(),
-        tracks: const [],
+        tracks: audioCodec == null
+            ? const []
+            : [
+                PlayerTrack(
+                  id: 1,
+                  type: PlayerTrackType.audio,
+                  selected: true,
+                  codec: audioCodec,
+                ),
+              ],
         generation: generation,
       ),
     );

@@ -62,7 +62,6 @@ class PlayerCoordinator extends ChangeNotifier {
   bool _cursorVisible = true;
   bool _tuning = false;
   bool _canRetry = false;
-  bool _overlayInteraction = false;
   Duration? _sleepDuration;
   int _tuneGeneration = 0;
   int? _activeLoadGeneration;
@@ -158,6 +157,19 @@ class PlayerCoordinator extends ChangeNotifier {
     _telemetry = event.telemetry;
     _tracks = event.tracks;
     if (event.status.state == PlayerState.error) {
+      final audioCodec = event.tracks
+          .where(
+            (track) => track.type == PlayerTrackType.audio && track.selected,
+          )
+          .firstOrNull
+          ?.codec;
+      lineup.diagnostics.add('playback', 'Native playback failed', {
+        'reason': event.status.message,
+        'videoCodec': event.telemetry.videoCodec,
+        'audioCodec': audioCodec,
+        'videoOutput': event.telemetry.videoOutput,
+        'hardwareDecoder': event.telemetry.hardwareDecoder,
+      });
       _activeLoadGeneration = null;
       _error =
           'Playback stopped unexpectedly. Retry or choose another channel.';
@@ -451,7 +463,6 @@ class PlayerCoordinator extends ChangeNotifier {
       return;
     }
     _cancelOverlayTimer();
-    _overlayInteraction = false;
     _overlay = PlayerOverlay.none;
     notifyListeners();
   }
@@ -522,30 +533,12 @@ class PlayerCoordinator extends ChangeNotifier {
     }
   }
 
-  void setOverlayInteraction(bool interacting) {
-    if (_overlayInteraction == interacting) return;
-    _overlayInteraction = interacting;
-    if (interacting) {
-      _cancelOverlayTimer();
-    } else if (_status.state == PlayerState.playing &&
-        (_overlay == PlayerOverlay.osd ||
-            _overlay == PlayerOverlay.miniGuide)) {
-      _scheduleOverlayHide(
-        _overlay,
-        timeout: _overlay == PlayerOverlay.miniGuide
-            ? const Duration(seconds: 8)
-            : null,
-      );
-    }
-  }
-
   void _setOverlay(
     PlayerOverlay value, {
     bool timed = true,
     Duration? timeout,
   }) {
     _cancelOverlayTimer();
-    if (_overlay != value) _overlayInteraction = false;
     _overlay = value;
     notifyListeners();
     if (timed && _status.state == PlayerState.playing) {
@@ -555,7 +548,6 @@ class PlayerCoordinator extends ChangeNotifier {
 
   void _scheduleOverlayHide(PlayerOverlay value, {Duration? timeout}) {
     _overlayTimer?.cancel();
-    if (_overlayInteraction) return;
     final epoch = ++_overlayEpoch;
     _overlayTimer = Timer(
       timeout ??
@@ -600,8 +592,7 @@ class PlayerCoordinator extends ChangeNotifier {
       _osdAutoHideSeconds = lineup.settings.osdAutoHideSeconds;
       if (overlayTimeout == null &&
           _overlay == PlayerOverlay.osd &&
-          _status.state == PlayerState.playing &&
-          !_overlayInteraction) {
+          _status.state == PlayerState.playing) {
         _scheduleOverlayHide(_overlay);
       }
     }
@@ -654,7 +645,6 @@ class PlayerCoordinator extends ChangeNotifier {
     _cursorTimer?.cancel();
     _cursorTimer = null;
     _cursorVisible = true;
-    _overlayInteraction = false;
     _overlay = PlayerOverlay.none;
     _miniGuideChannelId = null;
     _retryChannelId = null;

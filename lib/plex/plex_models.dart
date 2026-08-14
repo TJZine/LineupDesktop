@@ -178,13 +178,11 @@ class PlexMediaItem {
 class PlexPlaybackDescriptor {
   const PlexPlaybackDescriptor({
     required this.uri,
-    required this.headers,
     required this.decision,
     required this.sessionId,
   });
 
   final Uri uri;
-  final Map<String, String> headers;
   final StreamDecision decision;
   final String sessionId;
 }

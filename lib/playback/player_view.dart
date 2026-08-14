@@ -187,27 +187,59 @@ class _PlayerViewState extends State<PlayerView> {
               fit: StackFit.expand,
               children: [
                 PlayerSurface(controller: controller),
-                switch (controller.overlay) {
-                  PlayerOverlay.osd => _Osd(
-                    controller: controller,
-                    openMenu: widget.openMenu,
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 350),
+                  reverseDuration: const Duration(milliseconds: 350),
+                  transitionBuilder: (child, animation) {
+                    final fade = CurvedAnimation(
+                      parent: animation,
+                      curve: Curves.easeOut,
+                      reverseCurve: Curves.easeIn,
+                    );
+                    final transitioned = FadeTransition(
+                      opacity: fade,
+                      child: child,
+                    );
+                    if (child.key != const ValueKey(PlayerOverlay.osd)) {
+                      return child;
+                    }
+                    return SlideTransition(
+                      position: Tween(
+                        begin: const Offset(0, 1),
+                        end: Offset.zero,
+                      ).animate(fade),
+                      child: transitioned,
+                    );
+                  },
+                  child: KeyedSubtree(
+                    key: ValueKey(controller.overlay),
+                    child: switch (controller.overlay) {
+                      PlayerOverlay.osd => _Osd(
+                        controller: controller,
+                        openMenu: widget.openMenu,
+                      ),
+                      PlayerOverlay.miniGuide => _MiniGuide(
+                        controller: controller,
+                      ),
+                      PlayerOverlay.audioTracks => _Tracks(
+                        controller: controller,
+                        type: PlayerTrackType.audio,
+                      ),
+                      PlayerOverlay.subtitleTracks => _Tracks(
+                        controller: controller,
+                        type: PlayerTrackType.subtitle,
+                      ),
+                      PlayerOverlay.channelNumber => _ChannelNumber(
+                        controller: controller,
+                      ),
+                      PlayerOverlay.error => _ErrorOverlay(
+                        controller: controller,
+                      ),
+                      PlayerOverlay.none ||
+                      PlayerOverlay.fullGuide => const SizedBox.shrink(),
+                    },
                   ),
-                  PlayerOverlay.miniGuide => _MiniGuide(controller: controller),
-                  PlayerOverlay.audioTracks => _Tracks(
-                    controller: controller,
-                    type: PlayerTrackType.audio,
-                  ),
-                  PlayerOverlay.subtitleTracks => _Tracks(
-                    controller: controller,
-                    type: PlayerTrackType.subtitle,
-                  ),
-                  PlayerOverlay.channelNumber => _ChannelNumber(
-                    controller: controller,
-                  ),
-                  PlayerOverlay.error => _ErrorOverlay(controller: controller),
-                  PlayerOverlay.none ||
-                  PlayerOverlay.fullGuide => const SizedBox.shrink(),
-                },
+                ),
               ],
             ),
           ),
@@ -313,207 +345,200 @@ class _Osd extends StatelessWidget {
     );
     final unsupported = controller.status.state == PlayerState.unsupported;
     final quality = _quality(controller.telemetry);
-    return Focus(
-      onFocusChange: controller.setOverlayInteraction,
-      child: Align(
-        alignment: Alignment.bottomCenter,
-        child: SafeArea(
-          top: false,
-          minimum: EdgeInsets.only(bottom: roles.overlaySafeArea),
-          child: Container(
-            key: const Key('player-osd-surface'),
-            width: double.infinity,
-            padding: EdgeInsets.fromLTRB(
-              horizontalInset,
-              72,
-              horizontalInset,
-              10,
+    return Align(
+      alignment: Alignment.bottomCenter,
+      child: SafeArea(
+        top: false,
+        child: Container(
+          key: const Key('player-osd-surface'),
+          width: double.infinity,
+          padding: EdgeInsets.fromLTRB(
+            horizontalInset,
+            72,
+            horizontalInset,
+            10,
+          ),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Colors.transparent,
+                roles.scrim.withValues(alpha: 0.14),
+                roles.scrim.withValues(alpha: 0.38),
+                roles.scrim.withValues(alpha: 0.56),
+              ],
+              stops: const [0, 0.20, 0.60, 1],
             ),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Colors.transparent,
-                  roles.overlaySurface.withValues(alpha: 0.82),
-                  roles.overlaySurface,
-                ],
-                stops: const [0, 0.42, 1],
-              ),
-            ),
-            child: Semantics(
-              container: true,
-              label: 'Playback controls',
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(
-                    children: [
-                      if (channel != null)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 8,
-                          ),
-                          decoration: BoxDecoration(
-                            color: roles.progressFill,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            '${channel.number}',
-                            style: TextStyle(
-                              color: roles.onFocus,
-                              fontWeight: FontWeight.w900,
-                            ),
+          ),
+          child: Semantics(
+            container: true,
+            label: 'Playback controls',
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    if (channel != null)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: roles.progressFill,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          '${channel.number}',
+                          style: TextStyle(
+                            color: roles.onFocus,
+                            fontWeight: FontWeight.w900,
                           ),
                         ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              program?.scheduled.item.title ??
-                                  channel?.name ??
-                                  'Nothing playing',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context).textTheme.titleLarge,
-                            ),
-                            Text(
-                              [
-                                program?.scheduled.item.showTitle,
-                                _statusLabel(controller.status.state),
-                                if (quality.isNotEmpty) quality,
-                              ].nonNulls.join(' • '),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ],
-                        ),
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Semantics(
-                    label: 'Playback progress',
-                    value:
-                        '${_duration(controller.position)} of ${_duration(controller.duration)}',
-                    child: Slider(
-                      value: position.toDouble(),
-                      max: (duration <= 0 ? 1 : duration).toDouble(),
-                      onChanged: duration <= 0 || unsupported
-                          ? null
-                          : (value) => controller.seekTo(
-                              Duration(milliseconds: value.round()),
-                            ),
-                    ),
-                  ),
-                  Row(
-                    children: [
-                      Text(
-                        '${_duration(controller.position)} / ${_duration(controller.duration)}',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                      const Spacer(),
-                      if (next != null &&
-                          MediaQuery.sizeOf(context).width >= 900)
-                        Flexible(
-                          child: Text(
-                            'Up next • ${next.scheduled.item.title}',
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            program?.scheduled.item.title ??
+                                channel?.name ??
+                                'Nothing playing',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.bodySmall,
+                            style: Theme.of(context).textTheme.titleLarge,
                           ),
-                        ),
-                    ],
+                          Text(
+                            [
+                              program?.scheduled.item.showTitle,
+                              _statusLabel(controller.status.state),
+                              if (quality.isNotEmpty) quality,
+                            ].nonNulls.join(' • '),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Semantics(
+                  label: 'Playback progress',
+                  value:
+                      '${_duration(controller.position)} of ${_duration(controller.duration)}',
+                  child: Slider(
+                    value: position.toDouble(),
+                    max: (duration <= 0 ? 1 : duration).toDouble(),
+                    onChanged: duration <= 0 || unsupported
+                        ? null
+                        : (value) => controller.seekTo(
+                            Duration(milliseconds: value.round()),
+                          ),
                   ),
-                  Row(
-                    children: [
-                      IconButton(
-                        tooltip: 'Previous channel',
-                        onPressed: unsupported
-                            ? null
-                            : controller.previousChannel,
-                        icon: const Icon(Icons.skip_previous),
-                      ),
-                      IconButton(
-                        tooltip: controller.status.state == PlayerState.playing
-                            ? 'Pause'
-                            : 'Play',
-                        onPressed: unsupported
-                            ? null
-                            : controller.togglePlayback,
-                        icon: Icon(
-                          controller.status.state == PlayerState.playing
-                              ? Icons.pause
-                              : Icons.play_arrow,
+                ),
+                Row(
+                  children: [
+                    Text(
+                      '${_duration(controller.position)} / ${_duration(controller.duration)}',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    const Spacer(),
+                    if (next != null && MediaQuery.sizeOf(context).width >= 900)
+                      Flexible(
+                        child: Text(
+                          'Up next • ${next.scheduled.item.title}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodySmall,
                         ),
                       ),
-                      IconButton(
-                        tooltip: 'Next channel',
-                        onPressed: unsupported ? null : controller.nextChannel,
-                        icon: const Icon(Icons.skip_next),
+                  ],
+                ),
+                Row(
+                  children: [
+                    IconButton(
+                      tooltip: 'Previous channel',
+                      onPressed: unsupported
+                          ? null
+                          : controller.previousChannel,
+                      icon: const Icon(Icons.skip_previous),
+                    ),
+                    IconButton(
+                      tooltip: controller.status.state == PlayerState.playing
+                          ? 'Pause'
+                          : 'Play',
+                      onPressed: unsupported ? null : controller.togglePlayback,
+                      icon: Icon(
+                        controller.status.state == PlayerState.playing
+                            ? Icons.pause
+                            : Icons.play_arrow,
                       ),
-                      IconButton(
-                        tooltip: audioAvailable
-                            ? 'Audio tracks'
-                            : 'Audio tracks unavailable',
-                        onPressed: audioAvailable
-                            ? () => controller.showTracks(PlayerTrackType.audio)
-                            : null,
-                        icon: const Icon(Icons.audiotrack),
+                    ),
+                    IconButton(
+                      tooltip: 'Next channel',
+                      onPressed: unsupported ? null : controller.nextChannel,
+                      icon: const Icon(Icons.skip_next),
+                    ),
+                    IconButton(
+                      tooltip: audioAvailable
+                          ? 'Audio tracks'
+                          : 'Audio tracks unavailable',
+                      onPressed: audioAvailable
+                          ? () => controller.showTracks(PlayerTrackType.audio)
+                          : null,
+                      icon: const Icon(Icons.audiotrack),
+                    ),
+                    IconButton(
+                      tooltip: subtitlesAvailable
+                          ? 'Subtitles'
+                          : 'Subtitles unavailable',
+                      onPressed: subtitlesAvailable
+                          ? () =>
+                                controller.showTracks(PlayerTrackType.subtitle)
+                          : null,
+                      icon: const Icon(Icons.subtitles_outlined),
+                    ),
+                    IconButton(
+                      tooltip: 'Sleep timer',
+                      onPressed: controller.cycleSleepTimer,
+                      icon: const Icon(Icons.bedtime_outlined),
+                    ),
+                    if (MediaQuery.sizeOf(context).width >= 900)
+                      Text(
+                        controller.sleepDuration == null
+                            ? 'Sleep off'
+                            : 'Sleep ${controller.sleepDuration!.inMinutes}m',
                       ),
+                    const Spacer(),
+                    if (openMenu != null)
                       IconButton(
-                        tooltip: subtitlesAvailable
-                            ? 'Subtitles'
-                            : 'Subtitles unavailable',
-                        onPressed: subtitlesAvailable
-                            ? () => controller.showTracks(
-                                PlayerTrackType.subtitle,
-                              )
-                            : null,
-                        icon: const Icon(Icons.subtitles_outlined),
+                        key: const Key('player-app-menu'),
+                        tooltip: 'Open Lineup menu',
+                        onPressed: openMenu,
+                        icon: const Icon(Icons.menu),
                       ),
-                      IconButton(
-                        tooltip: 'Sleep timer',
-                        onPressed: controller.cycleSleepTimer,
-                        icon: const Icon(Icons.bedtime_outlined),
+                    IconButton(
+                      tooltip: unsupported
+                          ? 'Fullscreen unavailable without playback'
+                          : controller.fullscreen
+                          ? 'Exit fullscreen'
+                          : 'Fullscreen',
+                      onPressed: unsupported
+                          ? null
+                          : controller.toggleFullscreen,
+                      icon: Icon(
+                        controller.fullscreen
+                            ? Icons.fullscreen_exit
+                            : Icons.fullscreen,
                       ),
-                      if (MediaQuery.sizeOf(context).width >= 900)
-                        Text(
-                          controller.sleepDuration == null
-                              ? 'Sleep off'
-                              : 'Sleep ${controller.sleepDuration!.inMinutes}m',
-                        ),
-                      const Spacer(),
-                      if (openMenu != null)
-                        IconButton(
-                          key: const Key('player-app-menu'),
-                          tooltip: 'Open Lineup menu',
-                          onPressed: openMenu,
-                          icon: const Icon(Icons.menu),
-                        ),
-                      IconButton(
-                        tooltip: unsupported
-                            ? 'Fullscreen unavailable without playback'
-                            : controller.fullscreen
-                            ? 'Exit fullscreen'
-                            : 'Fullscreen',
-                        onPressed: unsupported
-                            ? null
-                            : controller.toggleFullscreen,
-                        icon: Icon(
-                          controller.fullscreen
-                              ? Icons.fullscreen_exit
-                              : Icons.fullscreen,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
         ),
@@ -530,54 +555,51 @@ class _MiniGuide extends StatelessWidget {
   Widget build(BuildContext context) {
     final channels = controller.miniGuideChannels;
     final roles = LineupTheme.of(context);
-    return Focus(
-      onFocusChange: controller.setOverlayInteraction,
-      child: Align(
-        alignment: Alignment.topCenter,
-        child: SafeArea(
-          bottom: false,
-          child: Container(
-            key: const Key('mini-guide-shelf'),
-            width: double.infinity,
-            constraints: BoxConstraints(
-              maxHeight: MediaQuery.sizeOf(context).height,
+    return Align(
+      alignment: Alignment.topCenter,
+      child: SafeArea(
+        bottom: false,
+        child: Container(
+          key: const Key('mini-guide-shelf'),
+          width: double.infinity,
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(context).height,
+          ),
+          padding: EdgeInsets.fromLTRB(
+            roles.overlaySafeArea,
+            12,
+            roles.overlaySafeArea,
+            16,
+          ),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                roles.overlaySurface,
+                roles.overlaySurface.withValues(alpha: 0.88),
+                Colors.transparent,
+              ],
+              stops: const [0, 0.78, 1],
             ),
-            padding: EdgeInsets.fromLTRB(
-              roles.overlaySafeArea,
-              12,
-              roles.overlaySafeArea,
-              16,
-            ),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  roles.overlaySurface,
-                  roles.overlaySurface.withValues(alpha: 0.88),
-                  Colors.transparent,
-                ],
-                stops: const [0, 0.78, 1],
-              ),
-            ),
-            child: Semantics(
-              container: true,
-              explicitChildNodes: true,
-              label: 'Mini Guide',
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  for (final channel in channels)
-                    _MiniGuideRow(controller: controller, channel: channel),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'UP/DOWN Browse • CH± Page • OK Watch • RIGHT Full Guide • BACK Close',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 12),
-                  ),
-                ],
-              ),
+          ),
+          child: Semantics(
+            container: true,
+            explicitChildNodes: true,
+            label: 'Mini Guide',
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (final channel in channels)
+                  _MiniGuideRow(controller: controller, channel: channel),
+                const SizedBox(height: 8),
+                const Text(
+                  'UP/DOWN Browse • CH± Page • OK Watch • RIGHT Full Guide • BACK Close',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 12),
+                ),
+              ],
             ),
           ),
         ),
@@ -732,73 +754,69 @@ class _Tracks extends StatelessWidget {
         .where((track) => track.type == type)
         .toList();
     final roles = LineupTheme.of(context);
-    return Focus(
-      onFocusChange: controller.setOverlayInteraction,
-      child: Align(
-        alignment: Alignment.centerRight,
-        child: SafeArea(
-          minimum: EdgeInsets.all(roles.overlaySafeArea),
-          child: Card(
-            key: const Key('playback-options-rail'),
-            child: SizedBox(
-              width: 460,
-              height: double.infinity,
-              child: Padding(
-                padding: const EdgeInsets.all(18),
-                child: Column(
-                  children: [
-                    Text(
-                      type == PlayerTrackType.audio
-                          ? 'Audio tracks'
-                          : 'Subtitles',
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                    const SizedBox(height: 12),
-                    Expanded(
-                      child: ListView(
-                        key: const Key('playback-options-list'),
-                        children: [
-                          if (type == PlayerTrackType.subtitle)
-                            ListTile(
-                              autofocus: true,
-                              leading: Icon(
-                                tracks.any((track) => track.selected)
-                                    ? Icons.radio_button_unchecked
-                                    : Icons.radio_button_checked,
-                              ),
-                              title: const Text('Off'),
-                              onTap: () => controller.selectTrack(type, null),
+    return Align(
+      alignment: Alignment.centerRight,
+      child: SafeArea(
+        minimum: EdgeInsets.all(roles.overlaySafeArea),
+        child: Card(
+          key: const Key('playback-options-rail'),
+          child: SizedBox(
+            width: 460,
+            height: double.infinity,
+            child: Padding(
+              padding: const EdgeInsets.all(18),
+              child: Column(
+                children: [
+                  Text(
+                    type == PlayerTrackType.audio
+                        ? 'Audio tracks'
+                        : 'Subtitles',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: 12),
+                  Expanded(
+                    child: ListView(
+                      key: const Key('playback-options-list'),
+                      children: [
+                        if (type == PlayerTrackType.subtitle)
+                          ListTile(
+                            autofocus: true,
+                            leading: Icon(
+                              tracks.any((track) => track.selected)
+                                  ? Icons.radio_button_unchecked
+                                  : Icons.radio_button_checked,
                             ),
-                          for (final (index, track) in tracks.indexed)
-                            ListTile(
-                              autofocus:
-                                  type == PlayerTrackType.audio && index == 0,
-                              leading: Icon(
-                                track.selected
-                                    ? Icons.radio_button_checked
-                                    : Icons.radio_button_unchecked,
-                              ),
-                              title: Text(
-                                track.title ??
-                                    track.language ??
-                                    '${track.type.name} ${track.id}',
-                              ),
-                              subtitle: track.codec == null
-                                  ? null
-                                  : Text(track.codec!),
-                              onTap: () =>
-                                  controller.selectTrack(type, track.id),
+                            title: const Text('Off'),
+                            onTap: () => controller.selectTrack(type, null),
+                          ),
+                        for (final (index, track) in tracks.indexed)
+                          ListTile(
+                            autofocus:
+                                type == PlayerTrackType.audio && index == 0,
+                            leading: Icon(
+                              track.selected
+                                  ? Icons.radio_button_checked
+                                  : Icons.radio_button_unchecked,
                             ),
-                        ],
-                      ),
+                            title: Text(
+                              track.title ??
+                                  track.language ??
+                                  '${track.type.name} ${track.id}',
+                            ),
+                            subtitle: track.codec == null
+                                ? null
+                                : Text(track.codec!),
+                            onTap: () => controller.selectTrack(type, track.id),
+                          ),
+                      ],
                     ),
-                    TextButton(
-                      autofocus: tracks.isEmpty,
-                      onPressed: controller.closeOverlay,
-                      child: const Text('Back'),
-                    ),
-                  ],
-                ),
+                  ),
+                  TextButton(
+                    autofocus: tracks.isEmpty,
+                    onPressed: controller.closeOverlay,
+                    child: const Text('Back'),
+                  ),
+                ],
               ),
             ),
           ),

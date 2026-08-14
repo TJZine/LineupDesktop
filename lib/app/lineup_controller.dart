@@ -637,7 +637,7 @@ class LineupController extends ChangeNotifier {
       (channel) => channel.id == oldCurrent,
     );
     final next = switch (mode) {
-      ChannelBuildMode.replace => planned,
+      ChannelBuildMode.replace => [...planned],
       ChannelBuildMode.append => [...channels, ...planned],
       ChannelBuildMode.merge => [
         ...channels.where(
@@ -739,12 +739,21 @@ class LineupController extends ChangeNotifier {
     }
     final descriptor = plex.playbackDescriptor(
       server: endpoint,
-      token: token,
       item: item,
       capabilities: const StreamCapabilities(
         containers: {'mkv', 'mp4', 'mpegts', 'avi', 'webm'},
         videoCodecs: {'h264', 'hevc', 'mpeg2video', 'vp9', 'av1'},
-        audioCodecs: {'aac', 'ac3', 'eac3', 'dca', 'opus', 'mp3', 'flac'},
+        audioCodecs: {
+          'aac',
+          'ac3',
+          'eac3',
+          'dca',
+          'dca-ma',
+          'truehd',
+          'opus',
+          'mp3',
+          'flac',
+        },
         hdr10: true,
         hlg: true,
         dolbyVision: true,
@@ -756,6 +765,14 @@ class LineupController extends ChangeNotifier {
         'X-Plex-Token': token,
       },
     );
+    diagnostics.add('playback', 'Plex playback selected', {
+      'mode': descriptor.decision.kind.name,
+      'container': item.container,
+      'videoCodec': item.videoCodec,
+      'audioCodec': item.audioCodec,
+      'dynamicRange': item.dynamicRange.name,
+      'reason': descriptor.decision.reasons.join(','),
+    });
     return LineupPlaybackRequest(
       uri,
       () => plex.releasePlaybackSession(
