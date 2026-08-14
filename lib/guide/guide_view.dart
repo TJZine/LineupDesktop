@@ -120,7 +120,6 @@ class _GuideViewState extends State<GuideView> {
   Timer? _clockTimer;
   int _visibleRows = 8;
   double? _effectiveRowHeight;
-  double? _pendingRowPosition;
   bool _rowHeightAdjustmentScheduled = false;
   bool _revealScheduled = false;
   String? _lastFocusedChannelId;
@@ -163,28 +162,25 @@ class _GuideViewState extends State<GuideView> {
       return existing;
     }
 
-    _pendingRowPosition ??= existing.hasClients
-        ? existing.offset / previousRowHeight
-        : widget.controller.verticalOffsetFor(1);
+    if (!_rowHeightAdjustmentScheduled && existing.hasClients) {
+      widget.controller.rememberVerticalOffset(
+        existing.offset,
+        previousRowHeight,
+      );
+    }
     _effectiveRowHeight = rowHeight;
     if (!_rowHeightAdjustmentScheduled) {
       _rowHeightAdjustmentScheduled = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _rowHeightAdjustmentScheduled = false;
-        final position = _pendingRowPosition;
-        _pendingRowPosition = null;
         final currentRowHeight = _effectiveRowHeight;
-        if (!mounted ||
-            position == null ||
-            currentRowHeight == null ||
-            !existing.hasClients) {
+        if (!mounted || currentRowHeight == null || !existing.hasClients) {
           return;
         }
         existing.jumpTo(
-          (position * currentRowHeight).clamp(
-            0.0,
-            existing.position.maxScrollExtent,
-          ),
+          widget.controller
+              .verticalOffsetFor(currentRowHeight)
+              .clamp(0.0, existing.position.maxScrollExtent),
         );
         _requestViewport();
       });
@@ -443,19 +439,6 @@ class _ClassicGuideSurface extends StatelessWidget {
   // cannot leave an alpha seam outside the PlayerSurface aperture.
   static const _paintOverlap = 2.0;
 
-  Widget _gutter() => SizedBox(
-    width: padding,
-    child: OverflowBox(
-      alignment: Alignment.center,
-      minHeight: showcaseHeight + _paintOverlap,
-      maxHeight: showcaseHeight + _paintOverlap,
-      child: ColoredBox(
-        color: color,
-        child: SizedBox(width: padding, height: showcaseHeight + _paintOverlap),
-      ),
-    ),
-  );
-
   @override
   Widget build(BuildContext context) => Column(
     children: [
@@ -473,23 +456,27 @@ class _ClassicGuideSurface extends StatelessWidget {
       if (showcase != null)
         SizedBox(
           height: showcaseHeight,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _gutter(),
-              Expanded(
-                child: OverflowBox(
-                  alignment: Alignment.center,
-                  minHeight: showcaseHeight + _paintOverlap,
-                  maxHeight: showcaseHeight + _paintOverlap,
-                  child: SizedBox(
-                    height: showcaseHeight + _paintOverlap,
-                    child: showcase!,
+          child: OverflowBox(
+            alignment: Alignment.center,
+            minHeight: showcaseHeight + _paintOverlap,
+            maxHeight: showcaseHeight + _paintOverlap,
+            child: SizedBox(
+              height: showcaseHeight + _paintOverlap,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  ColoredBox(
+                    color: color,
+                    child: SizedBox(width: padding),
                   ),
-                ),
+                  Expanded(child: showcase!),
+                  ColoredBox(
+                    color: color,
+                    child: SizedBox(width: padding),
+                  ),
+                ],
               ),
-              _gutter(),
-            ],
+            ),
           ),
         ),
       Expanded(

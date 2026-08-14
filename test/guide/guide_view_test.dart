@@ -468,6 +468,15 @@ void main() {
     Widget buildGuide() => MaterialApp(
       home: GuideView(controller: guide, onClose: () {}, onTune: (_) async {}),
     );
+    void expectFocusedRowVisible() {
+      final list = tester.widget<ListView>(find.byType(ListView));
+      final scrollable = tester.state<ScrollableState>(find.byType(Scrollable));
+      final first = (scrollable.position.pixels / list.itemExtent!).floor();
+      final visible = (scrollable.position.viewportDimension / list.itemExtent!)
+          .ceil();
+      expect(first, lessThanOrEqualTo(guide.focusedChannelIndex));
+      expect(guide.focusedChannelIndex, lessThan(first + visible));
+    }
 
     await tester.binding.setSurfaceSize(const Size(1280, 900));
     await tester.pumpWidget(buildGuide());
@@ -484,19 +493,7 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(1280, 899));
     await tester.pump();
     await tester.pump();
-    var list = tester.widget<ListView>(find.byType(ListView));
-    var scrollable = tester.state<ScrollableState>(find.byType(Scrollable));
-    expect(
-      (scrollable.position.pixels / list.itemExtent!).floor(),
-      lessThanOrEqualTo(guide.focusedChannelIndex),
-    );
-    expect(
-      guide.focusedChannelIndex,
-      lessThan(
-        (scrollable.position.pixels / list.itemExtent!).floor() +
-            (scrollable.position.viewportDimension / list.itemExtent!).ceil(),
-      ),
-    );
+    expectFocusedRowVisible();
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump();
@@ -504,19 +501,7 @@ void main() {
     await tester.pumpWidget(buildGuide());
     await tester.pump();
     await tester.pump();
-    list = tester.widget<ListView>(find.byType(ListView));
-    scrollable = tester.state<ScrollableState>(find.byType(Scrollable));
-    expect(
-      (scrollable.position.pixels / list.itemExtent!).floor(),
-      lessThanOrEqualTo(guide.focusedChannelIndex),
-    );
-    expect(
-      guide.focusedChannelIndex,
-      lessThan(
-        (scrollable.position.pixels / list.itemExtent!).floor() +
-            (scrollable.position.viewportDimension / list.itemExtent!).ceil(),
-      ),
-    );
+    expectFocusedRowVisible();
 
     await tester.binding.setSurfaceSize(null);
     await tester.pumpWidget(const SizedBox.shrink());
