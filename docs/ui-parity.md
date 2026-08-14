@@ -470,8 +470,9 @@ native acceptance remains Prompt 5.
 
 - LineupDesktop started at
   `2f5cbbe1dafacc35be5163545109871f27ffcbe7` on
-  `replatform/flutter-native`. The ending SHA is the commit containing this
-  record; closeout reports the exact pushed value.
+  `replatform/flutter-native`. The implementation and accepted visual evidence
+  ended at `db6234952cec6b799fe90daeb0cbdb948a3b7a74`; the following docs-only
+  closeout commit records that immutable implementation SHA.
 - The authoritative implemented upstream remains the read-only sibling
   `TJZine/Lineup` branch `origin/code-health` at
   `f5f587c93cbea74f6c23f2df86ddae15fcb40e65`. The local `code-health` branch
