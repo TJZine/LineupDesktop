@@ -179,12 +179,13 @@ void main() {
     );
     var tunes = 0;
 
-    for (final size in const [
-      Size(1280, 720),
-      Size(1600, 900),
-      Size(1920, 1080),
-      Size(3840, 2160),
-      Size(1360, 840),
+    for (final (size, expectedWidth) in const [
+      (Size(800, 600), 420.0),
+      (Size(1280, 720), 500.0),
+      (Size(1360, 840), 593.0),
+      (Size(1600, 900), 640.0),
+      (Size(1920, 1080), 672.0),
+      (Size(3840, 2160), 672.0),
     ]) {
       await tester.binding.setSurfaceSize(size);
       await tester.pumpWidget(
@@ -207,6 +208,24 @@ void main() {
         closeTo(16 / 9, 0.001),
         reason: '$size',
       );
+      expect(pictureSize.width, closeTo(expectedWidth, 1), reason: '$size');
+      final policy = GuideLayoutPolicy.forSize(
+        size,
+        hasPicture: true,
+        density: guide.density,
+      );
+      final scheduleHeight = tester
+          .getSize(find.byKey(const Key('guide-schedule-list')))
+          .height;
+      expect(
+        (scheduleHeight / policy.rowHeight).floor(),
+        greaterThanOrEqualTo(policy.minimumRows),
+        reason: '$size',
+      );
+      expect(
+        tester.widget<Material>(find.byKey(const Key('classic-guide'))).color,
+        Colors.transparent,
+      );
       expect(tester.takeException(), isNull, reason: '$size');
     }
 
@@ -216,6 +235,36 @@ void main() {
     await tester.pump();
     expect(guide.selectedProgramId, guide.focusedProgramId);
     expect(tunes, 1);
+
+    await tester.binding.setSurfaceSize(const Size(1280, 720));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: GuideView(
+          controller: guide,
+          overlayMode: true,
+          onClose: () {},
+          onTune: (_) async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('guide-focused-artwork')), findsOneWidget);
+    expect(
+      tester.getSize(find.byKey(const Key('guide-focused-artwork'))).width,
+      greaterThanOrEqualTo(170),
+    );
+    final overlayPolicy = GuideLayoutPolicy.forSize(
+      const Size(1280, 720),
+      hasPicture: false,
+      overlayMode: true,
+      density: guide.density,
+    );
+    expect(
+      (tester.getSize(find.byKey(const Key('guide-schedule-list'))).height /
+              overlayPolicy.rowHeight)
+          .floor(),
+      greaterThanOrEqualTo(overlayPolicy.minimumRows),
+    );
 
     await tester.binding.setSurfaceSize(null);
     await tester.pumpWidget(const SizedBox.shrink());
@@ -302,14 +351,14 @@ void main() {
     await tester.pumpWidget(buildGuide());
     await tester.pumpAndSettle();
     await tester.drag(find.byType(ListView), const Offset(0, -1200));
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 50));
     final remembered = guide.verticalOffset;
     expect(remembered, greaterThan(500));
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump();
     await tester.pumpWidget(buildGuide());
-    await tester.pumpAndSettle();
+    await tester.pump();
     final scrollable = tester.state<ScrollableState>(find.byType(Scrollable));
     expect(scrollable.position.pixels, closeTo(remembered, 1));
 

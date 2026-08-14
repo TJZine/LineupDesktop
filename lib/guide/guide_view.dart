@@ -15,23 +15,61 @@ class GuideLayoutPolicy {
     required this.channelRailWidth,
     required this.showcaseHeight,
     required this.pictureWidth,
+    required this.rowHeight,
+    required this.minimumRows,
+    required this.showSecondaryMetadata,
+    required this.artworkWidth,
   });
 
-  factory GuideLayoutPolicy.forSize(Size size, {required bool hasPicture}) {
-    final compact = size.width < 1100 || size.height < 720;
-    final pictureWidth = compact ? 214.0 : (size.width >= 1800 ? 340.0 : 286.0);
-    final baseShowcaseHeight = compact ? 126.0 : 184.0;
-    final pictureHeight = pictureWidth * 9 / 16;
+  factory GuideLayoutPolicy.forSize(
+    Size size, {
+    required bool hasPicture,
+    bool overlayMode = false,
+    GuideDensity density = GuideDensity.comfortable,
+  }) {
+    final compact = size.width < 1100 || size.height < 900;
+    final padding = size.width < 1100 || size.height < 720 ? 12.0 : 20.0;
+    final minimumRows = size.height < 720
+        ? 4
+        : size.height < 1080
+        ? 5
+        : 7;
+    final rowHeight = size.height < 900 || density == GuideDensity.compact
+        ? 58.0
+        : 78.0;
+    final rowBudget =
+        size.height -
+        (padding * 2 + 48 + 10 + 8 + 38) -
+        minimumRows * rowHeight;
+    final availableShowcaseHeight = rowBudget.clamp(0.0, double.infinity);
+    final targetPictureHeight = size.height < 720
+        ? _lerp(236.25, 281.25, (size.height - 600) / 120)
+        : size.height < 900
+        ? _lerp(281.25, 360, (size.height - 720) / 180)
+        : size.height < 1080
+        ? _lerp(360, 378, (size.height - 900) / 180)
+        : 378.0;
+    final richShowcase = hasPicture || overlayMode;
+    var showcaseHeight = richShowcase
+        ? targetPictureHeight.clamp(0.0, availableShowcaseHeight)
+        : (compact ? 126.0 : 142.0).clamp(0.0, availableShowcaseHeight);
+    var pictureWidth = showcaseHeight * 16 / 9;
+    if (hasPicture) {
+      final minimumDetailsWidth = compact ? 300.0 : 360.0;
+      final widthBudget = size.width - padding * 2 - 12 - minimumDetailsWidth;
+      pictureWidth = pictureWidth.clamp(0.0, widthBudget.clamp(0.0, 672.0));
+      showcaseHeight = pictureWidth * 9 / 16;
+    }
     return GuideLayoutPolicy._(
       compact: compact,
-      padding: compact ? 12 : 20,
+      padding: padding,
       channelRailWidth: compact ? 156 : (size.width >= 1800 ? 232 : 196),
-      showcaseHeight: hasPicture
-          ? (pictureHeight > baseShowcaseHeight
-                ? pictureHeight
-                : baseShowcaseHeight)
-          : (compact ? 126 : 142),
+      showcaseHeight: showcaseHeight,
       pictureWidth: pictureWidth,
+      rowHeight: rowHeight,
+      minimumRows: minimumRows,
+      showSecondaryMetadata: size.height >= 900,
+      artworkWidth: (showcaseHeight * 0.62).clamp(132.0, 224.0),
     );
   }
 
@@ -40,7 +78,14 @@ class GuideLayoutPolicy {
   final double channelRailWidth;
   final double showcaseHeight;
   final double pictureWidth;
+  final double rowHeight;
+  final int minimumRows;
+  final bool showSecondaryMetadata;
+  final double artworkWidth;
 }
+
+double _lerp(double start, double end, double t) =>
+    start + (end - start) * t.clamp(0.0, 1.0);
 
 class GuideView extends StatefulWidget {
   const GuideView({
@@ -74,11 +119,11 @@ class _GuideViewState extends State<GuideView> {
   late final ScrollController _scroll;
   Timer? _clockTimer;
   int _visibleRows = 8;
+  double _effectiveRowHeight = 78;
   bool _revealScheduled = false;
   String? _lastFocusedChannelId;
 
-  double get _rowHeight =>
-      widget.controller.density == GuideDensity.compact ? 58 : 78;
+  double get _rowHeight => _effectiveRowHeight;
 
   @override
   void initState() {
@@ -181,6 +226,64 @@ class _GuideViewState extends State<GuideView> {
     return KeyEventResult.handled;
   }
 
+  Widget _toolbar(GuideLayoutPolicy policy) => _Toolbar(
+    controller: widget.controller,
+    onClose: widget.onClose,
+    onOpenMenu: widget.onOpenMenu,
+    compact: policy.compact,
+  );
+
+  Widget _showcase(GuideLayoutPolicy policy) => SizedBox(
+    height: policy.showcaseHeight,
+    child: _GuideShowcase(
+      controller: widget.controller,
+      picture: widget.pictureInPicture,
+      pictureWidth: policy.pictureWidth,
+      compact: policy.compact,
+      overlayMode: widget.overlayMode,
+      showSecondaryMetadata: policy.showSecondaryMetadata,
+      artworkWidth: policy.artworkWidth,
+      playbackMessage: widget.playbackMessage,
+      onOpenPlayer: widget.onOpenPlayer,
+    ),
+  );
+
+  Widget _schedule(GuideLayoutPolicy policy, List<Channel> channels) => Column(
+    children: [
+      _TimeHeader(
+        controller: widget.controller,
+        railWidth: policy.channelRailWidth,
+      ),
+      Expanded(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            _visibleRows = GuideGeometry.visibleRows(
+              scrollOffset: _scroll.hasClients ? _scroll.offset : 0,
+              viewportHeight: constraints.maxHeight,
+              rowHeight: policy.rowHeight,
+              totalRows: channels.length,
+            ).count;
+            WidgetsBinding.instance.addPostFrameCallback(
+              (_) => _requestViewport(),
+            );
+            return ListView.builder(
+              key: const Key('guide-schedule-list'),
+              controller: _scroll,
+              itemExtent: policy.rowHeight,
+              itemCount: channels.length,
+              itemBuilder: (context, index) => _GuideRow(
+                channel: channels[index],
+                controller: widget.controller,
+                railWidth: policy.channelRailWidth,
+                onTune: widget.onTune,
+              ),
+            );
+          },
+        ),
+      ),
+    ],
+  );
+
   @override
   Widget build(BuildContext context) {
     final channels = widget.controller.channels;
@@ -191,101 +294,131 @@ class _GuideViewState extends State<GuideView> {
       onKeyEvent: _key,
       child: Material(
         key: Key(widget.overlayMode ? 'overlay-guide' : 'classic-guide'),
-        color: widget.overlayMode ? Colors.transparent : roles.deepBackground,
+        color: Colors.transparent,
         child: LayoutBuilder(
           builder: (context, outer) {
             final policy = GuideLayoutPolicy.forSize(
               outer.biggest,
               hasPicture: widget.pictureInPicture != null,
+              overlayMode: widget.overlayMode,
+              density: widget.controller.density,
             );
-            return DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: widget.overlayMode
-                    ? LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          Colors.transparent,
-                          roles.scrim.withValues(alpha: 0.82),
-                          roles.scrim,
-                        ],
-                        stops: const [0, 0.28, 0.62],
-                      )
-                    : null,
-              ),
-              child: Padding(
-                padding: EdgeInsets.all(policy.padding),
-                child: Column(
-                  children: [
-                    _Toolbar(
-                      controller: widget.controller,
-                      onClose: widget.onClose,
-                      onOpenMenu: widget.onOpenMenu,
-                      compact: policy.compact,
+            _effectiveRowHeight = policy.rowHeight;
+            final schedule = channels.isEmpty
+                ? const _EmptyGuide()
+                : _schedule(policy, channels);
+            final content = Column(
+              children: [
+                _toolbar(policy),
+                const SizedBox(height: 10),
+                if (channels.isEmpty)
+                  Expanded(child: schedule)
+                else
+                  Expanded(
+                    child: Column(
+                      children: [
+                        _showcase(policy),
+                        const SizedBox(height: 8),
+                        Expanded(child: schedule),
+                      ],
                     ),
-                    const SizedBox(height: 10),
-                    if (channels.isEmpty)
-                      const Expanded(child: _EmptyGuide())
-                    else
-                      Expanded(
-                        child: Column(
-                          children: [
-                            SizedBox(
-                              height: policy.showcaseHeight,
-                              child: _GuideShowcase(
-                                controller: widget.controller,
-                                picture: widget.pictureInPicture,
-                                pictureWidth: policy.pictureWidth,
-                                compact: policy.compact,
-                                playbackMessage: widget.playbackMessage,
-                                onOpenPlayer: widget.onOpenPlayer,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            _TimeHeader(
-                              controller: widget.controller,
-                              railWidth: policy.channelRailWidth,
-                            ),
-                            Expanded(
-                              child: LayoutBuilder(
-                                builder: (context, constraints) {
-                                  _visibleRows = GuideGeometry.visibleRows(
-                                    scrollOffset: _scroll.hasClients
-                                        ? _scroll.offset
-                                        : 0,
-                                    viewportHeight: constraints.maxHeight,
-                                    rowHeight: _rowHeight,
-                                    totalRows: channels.length,
-                                  ).count;
-                                  WidgetsBinding.instance.addPostFrameCallback(
-                                    (_) => _requestViewport(),
-                                  );
-                                  return ListView.builder(
-                                    controller: _scroll,
-                                    itemExtent: _rowHeight,
-                                    itemCount: channels.length,
-                                    itemBuilder: (context, index) => _GuideRow(
-                                      channel: channels[index],
-                                      controller: widget.controller,
-                                      railWidth: policy.channelRailWidth,
-                                      onTune: widget.onTune,
-                                    ),
-                                  );
-                                },
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                  ],
+                  ),
+              ],
+            );
+            if (widget.overlayMode) {
+              return DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      roles.scrim.withValues(alpha: 0.36),
+                      roles.scrim.withValues(alpha: 0.82),
+                      roles.scrim,
+                    ],
+                    stops: const [0, 0.28, 0.62],
+                  ),
                 ),
-              ),
+                child: Padding(
+                  padding: EdgeInsets.all(policy.padding),
+                  child: content,
+                ),
+              );
+            }
+            return _ClassicGuideSurface(
+              color: roles.deepBackground,
+              padding: policy.padding,
+              showcaseHeight: policy.showcaseHeight,
+              toolbar: _toolbar(policy),
+              showcase: channels.isEmpty ? null : _showcase(policy),
+              body: schedule,
             );
           },
         ),
       ),
     );
   }
+}
+
+class _ClassicGuideSurface extends StatelessWidget {
+  const _ClassicGuideSurface({
+    required this.color,
+    required this.padding,
+    required this.showcaseHeight,
+    required this.toolbar,
+    required this.showcase,
+    required this.body,
+  });
+
+  final Color color;
+  final double padding;
+  final double showcaseHeight;
+  final Widget toolbar;
+  final Widget? showcase;
+  final Widget body;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    children: [
+      ColoredBox(
+        color: color,
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(padding, padding, padding, 0),
+          child: toolbar,
+        ),
+      ),
+      ColoredBox(color: color, child: const SizedBox(height: 10)),
+      if (showcase != null)
+        SizedBox(
+          height: showcaseHeight,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              ColoredBox(
+                color: color,
+                child: SizedBox(width: padding),
+              ),
+              Expanded(child: showcase!),
+              ColoredBox(
+                color: color,
+                child: SizedBox(width: padding),
+              ),
+            ],
+          ),
+        ),
+      if (showcase != null)
+        ColoredBox(color: color, child: const SizedBox(height: 8)),
+      Expanded(
+        child: ColoredBox(
+          color: color,
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(padding, 0, padding, padding),
+            child: body,
+          ),
+        ),
+      ),
+    ],
+  );
 }
 
 class _Toolbar extends StatelessWidget {
@@ -365,6 +498,9 @@ class _GuideShowcase extends StatelessWidget {
     required this.picture,
     required this.pictureWidth,
     required this.compact,
+    required this.overlayMode,
+    required this.showSecondaryMetadata,
+    required this.artworkWidth,
     required this.playbackMessage,
     required this.onOpenPlayer,
   });
@@ -373,6 +509,9 @@ class _GuideShowcase extends StatelessWidget {
   final Widget? picture;
   final double pictureWidth;
   final bool compact;
+  final bool overlayMode;
+  final bool showSecondaryMetadata;
+  final double artworkWidth;
   final String? playbackMessage;
   final VoidCallback? onOpenPlayer;
 
@@ -402,13 +541,27 @@ class _GuideShowcase extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(width: 12),
+        if (overlayMode)
+          const SizedBox(width: 12)
+        else
+          ColoredBox(
+            color: LineupTheme.of(context).deepBackground,
+            child: const SizedBox(width: 12),
+          ),
       ],
       Expanded(
-        child: _Details(
-          controller: controller,
-          compact: compact,
-          playbackMessage: playbackMessage,
+        child: ColoredBox(
+          color: overlayMode
+              ? Colors.transparent
+              : LineupTheme.of(context).deepBackground,
+          child: _Details(
+            controller: controller,
+            compact: compact,
+            showArtwork: overlayMode,
+            showSecondaryMetadata: showSecondaryMetadata,
+            artworkWidth: artworkWidth,
+            playbackMessage: playbackMessage,
+          ),
         ),
       ),
     ],
@@ -813,10 +966,16 @@ class _Details extends StatelessWidget {
   const _Details({
     required this.controller,
     required this.compact,
+    required this.showArtwork,
+    required this.showSecondaryMetadata,
+    required this.artworkWidth,
     required this.playbackMessage,
   });
   final GuideController controller;
   final bool compact;
+  final bool showArtwork;
+  final bool showSecondaryMetadata;
+  final double artworkWidth;
   final String? playbackMessage;
 
   @override
@@ -865,10 +1024,11 @@ class _Details extends StatelessWidget {
                     )
                   : Row(
                       children: [
-                        if (!compact)
+                        if (showArtwork)
                           SizedBox(
-                            width: 112,
-                            height: 86,
+                            key: const Key('guide-focused-artwork'),
+                            width: artworkWidth,
+                            height: double.infinity,
                             child: ClipRRect(
                               borderRadius: BorderRadius.circular(8),
                               child: FutureBuilder(
@@ -896,7 +1056,7 @@ class _Details extends StatelessWidget {
                               ),
                             ),
                           ),
-                        if (!compact) const SizedBox(width: 14),
+                        if (showArtwork) const SizedBox(width: 14),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -913,9 +1073,17 @@ class _Details extends StatelessWidget {
                                 ),
                               Text(
                                 program.scheduled.item.title,
-                                maxLines: 1,
+                                maxLines: showSecondaryMetadata ? 2 : 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context).textTheme.titleLarge,
+                                style:
+                                    (showSecondaryMetadata
+                                            ? Theme.of(context)
+                                                  .textTheme
+                                                  .headlineSmall
+                                            : Theme.of(context)
+                                                  .textTheme
+                                                  .titleLarge)
+                                        ?.copyWith(fontWeight: FontWeight.w700),
                               ),
                               Text(
                                 [
@@ -929,10 +1097,11 @@ class _Details extends StatelessWidget {
                                       ? 'Ended'
                                       : 'Upcoming',
                                 ].nonNulls.join(' • '),
-                                maxLines: compact ? 1 : 2,
+                                maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
-                              if (playbackMessage != null && !compact)
+                              if (playbackMessage != null &&
+                                  showSecondaryMetadata)
                                 Text(
                                   playbackMessage!,
                                   maxLines: 1,
