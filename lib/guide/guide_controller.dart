@@ -666,13 +666,12 @@ class _ArtworkRequest {
 String _channelFingerprint(Channel channel) =>
     '${channel.id}|${channel.number}|${channel.name}|${channel.anchor.microsecondsSinceEpoch}|${channel.shuffleSeed}|${channel.blockSize}|${channel.playbackMode}|${channel.source.toJson()}';
 
-DateTime _floorHalfHour(DateTime value) => DateTime(
-  value.year,
-  value.month,
-  value.day,
-  value.hour,
-  value.minute < 30 ? 0 : 30,
-);
+DateTime _floorHalfHour(DateTime value) {
+  final minute = value.minute < 30 ? 0 : 30;
+  return value.isUtc
+      ? DateTime.utc(value.year, value.month, value.day, value.hour, minute)
+      : DateTime(value.year, value.month, value.day, value.hour, minute);
+}
 
 Set<String> _sourceLibraryIds(ContentSource source) => switch (source) {
   LibrarySource(:final libraryId) => {libraryId},
