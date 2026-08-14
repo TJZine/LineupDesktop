@@ -383,7 +383,7 @@ void main() {
   });
 
   test('artwork stays credential-scoped and enforces its byte bound', () async {
-    late http.Request request;
+    late http.BaseRequest request;
     final artworkUnavailable = throwsA(
       isA<PlexException>().having(
         (exception) => exception.code,
@@ -391,14 +391,29 @@ void main() {
         'artwork-unavailable',
       ),
     );
+    final artworkTooLarge = throwsA(
+      isA<PlexException>().having(
+        (exception) => exception.code,
+        'code',
+        'artwork-too-large',
+      ),
+    );
     final client = PlexClient(
       clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
-      httpClient: MockClient((value) async {
+      httpClient: MockClient.streaming((value, _) async {
         request = value;
         if (value.url.path == '/redirect') {
-          return http.Response('', 302, headers: {'location': '/other'});
+          return http.StreamedResponse(
+            Stream<List<int>>.empty(),
+            302,
+            headers: {'location': '/other'},
+          );
         }
-        return http.Response.bytes([1, 2, 3, 4], 200);
+        return http.StreamedResponse(
+          Stream.value([1, 2, 3, 4]),
+          200,
+          contentLength: value.url.path == '/stream-overflow' ? null : 4,
+        );
       }),
     );
     final bytes = await client.artwork(
@@ -446,6 +461,16 @@ void main() {
         maximumBytes: 3,
       ),
       artworkUnavailable,
+    );
+
+    await expectLater(
+      client.artwork(
+        Uri.parse('https://plex.example:32400'),
+        'secret',
+        Uri.parse('/stream-overflow'),
+        maximumBytes: 3,
+      ),
+      artworkTooLarge,
     );
   });
 

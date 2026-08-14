@@ -46,7 +46,7 @@ void main() {
     final titleBounds = tester.getRect(find.text('Constrained page'));
     expect(contentBounds.intersect(actionBounds), actionBounds);
     expect(contentBounds.intersect(titleBounds), titleBounds);
-    expect(actionBounds.top, greaterThan(titleBounds.top));
+    expect(actionBounds.top, greaterThan(titleBounds.bottom));
   });
 
   testWidgets('successful channel deletion clears a prior failure', (
