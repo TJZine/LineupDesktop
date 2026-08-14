@@ -13,6 +13,38 @@ import 'package:lineup_desktop/plex/plex_client.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 
 void main() {
+  test(
+    'layout policy stays bounded for degenerate constraints and density',
+    () {
+      for (final size in const [
+        Size.zero,
+        Size(320, 240),
+        Size(double.infinity, 720),
+        Size(1280, double.infinity),
+      ]) {
+        final policy = GuideLayoutPolicy.forSize(size, hasPicture: true);
+        expect(policy.showcaseHeight, isNonNegative, reason: '$size');
+        expect(policy.showcaseHeight.isFinite, isTrue, reason: '$size');
+        expect(policy.pictureWidth, isNonNegative, reason: '$size');
+        expect(policy.pictureWidth.isFinite, isTrue, reason: '$size');
+      }
+
+      final comfortable = GuideLayoutPolicy.forSize(
+        const Size(1920, 1080),
+        hasPicture: true,
+      );
+      final compact = GuideLayoutPolicy.forSize(
+        const Size(1920, 1080),
+        hasPicture: true,
+        density: GuideDensity.compact,
+      );
+      expect(comfortable.rowHeight, 78);
+      expect(compact.rowHeight, 58);
+      expect(comfortable.minimumRows, 7);
+      expect(compact.minimumRows, 7);
+    },
+  );
+
   testWidgets('non-positive timeline slots render safely', (tester) async {
     final lineup = _Lineup(1)..settings = const LineupSettings(guideHours: 0);
     final guide = GuideController(lineup: lineup);
@@ -179,13 +211,18 @@ void main() {
     );
     var tunes = 0;
 
-    for (final (size, expectedWidth) in const [
-      (Size(800, 600), 420.0),
-      (Size(1280, 720), 500.0),
-      (Size(1360, 840), 593.0),
-      (Size(1600, 900), 640.0),
-      (Size(1920, 1080), 672.0),
-      (Size(3840, 2160), 672.0),
+    for (final (size, expectedWidth, minimumRows) in const [
+      (Size(800, 600), 420.0, 4),
+      (Size(1920, 719), 499.33, 4),
+      (Size(1280, 720), 500.0, 5),
+      (Size(800, 720), 464.0, 5),
+      (Size(600, 720), 264.0, 5),
+      (Size(1360, 840), 593.33, 5),
+      (Size(1920, 899), 639.22, 5),
+      (Size(1600, 900), 640.0, 5),
+      (Size(1920, 1079), 671.82, 5),
+      (Size(1920, 1080), 672.0, 7),
+      (Size(3840, 2160), 672.0, 7),
     ]) {
       await tester.binding.setSurfaceSize(size);
       await tester.pumpWidget(
@@ -209,17 +246,15 @@ void main() {
         reason: '$size',
       );
       expect(pictureSize.width, closeTo(expectedWidth, 1), reason: '$size');
-      final policy = GuideLayoutPolicy.forSize(
-        size,
-        hasPicture: true,
-        density: guide.density,
+      final list = tester.widget<ListView>(
+        find.byKey(const Key('guide-schedule-list')),
       );
       final scheduleHeight = tester
           .getSize(find.byKey(const Key('guide-schedule-list')))
           .height;
       expect(
-        (scheduleHeight / policy.rowHeight).floor(),
-        greaterThanOrEqualTo(policy.minimumRows),
+        (scheduleHeight / list.itemExtent!).floor(),
+        greaterThanOrEqualTo(minimumRows),
         reason: '$size',
       );
       expect(
@@ -253,20 +288,66 @@ void main() {
       tester.getSize(find.byKey(const Key('guide-focused-artwork'))).width,
       greaterThanOrEqualTo(170),
     );
-    final overlayPolicy = GuideLayoutPolicy.forSize(
-      const Size(1280, 720),
-      hasPicture: false,
-      overlayMode: true,
-      density: guide.density,
+    final overlayList = tester.widget<ListView>(
+      find.byKey(const Key('guide-schedule-list')),
     );
     expect(
       (tester.getSize(find.byKey(const Key('guide-schedule-list'))).height /
-              overlayPolicy.rowHeight)
+              overlayList.itemExtent!)
           .floor(),
-      greaterThanOrEqualTo(overlayPolicy.minimumRows),
+      greaterThanOrEqualTo(5),
     );
 
     await tester.binding.setSurfaceSize(null);
+    await tester.pumpWidget(const SizedBox.shrink());
+    guide.dispose();
+    lineup.dispose();
+  });
+
+  testWidgets('physical 4K at DPR 2 uses the 1080p Guide row budget', (
+    tester,
+  ) async {
+    tester.view
+      ..devicePixelRatio = 2
+      ..physicalSize = const Size(3840, 2160);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    final lineup = _Lineup(20);
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: GuideView(
+          controller: guide,
+          pictureInPicture: const ColoredBox(color: Colors.black),
+          onClose: () {},
+          onTune: (_) async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      MediaQuery.sizeOf(tester.element(find.byType(GuideView))),
+      const Size(1920, 1080),
+    );
+    expect(
+      tester.getSize(find.byKey(const Key('guide-picture-in-picture'))).width,
+      closeTo(672, 0.01),
+    );
+    final list = tester.widget<ListView>(
+      find.byKey(const Key('guide-schedule-list')),
+    );
+    expect(
+      (tester.getSize(find.byKey(const Key('guide-schedule-list'))).height /
+              list.itemExtent!)
+          .floor(),
+      greaterThanOrEqualTo(7),
+    );
+
     await tester.pumpWidget(const SizedBox.shrink());
     guide.dispose();
     lineup.dispose();
@@ -350,17 +431,92 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(1280, 720));
     await tester.pumpWidget(buildGuide());
     await tester.pumpAndSettle();
-    await tester.drag(find.byType(ListView), const Offset(0, -1200));
-    await tester.pump(const Duration(milliseconds: 50));
-    final remembered = guide.verticalOffset;
+    final initialScrollable = tester.state<ScrollableState>(
+      find.byType(Scrollable),
+    );
+    initialScrollable.position.jumpTo(1200);
+    await tester.pump();
+    final rowHeight = tester
+        .widget<ListView>(find.byType(ListView))
+        .itemExtent!;
+    final remembered = guide.verticalOffsetFor(rowHeight);
     expect(remembered, greaterThan(500));
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump();
     await tester.pumpWidget(buildGuide());
     await tester.pump();
+    await tester.pump();
     final scrollable = tester.state<ScrollableState>(find.byType(Scrollable));
     expect(scrollable.position.pixels, closeTo(remembered, 1));
+
+    await tester.binding.setSurfaceSize(null);
+    await tester.pumpWidget(const SizedBox.shrink());
+    guide.dispose();
+    lineup.dispose();
+  });
+
+  testWidgets('focused row survives row-height resize and route recreation', (
+    tester,
+  ) async {
+    final lineup = _Lineup(100)
+      ..settings = const LineupSettings(reduceMotion: true);
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    Widget buildGuide() => MaterialApp(
+      home: GuideView(controller: guide, onClose: () {}, onTune: (_) async {}),
+    );
+
+    await tester.binding.setSurfaceSize(const Size(1280, 900));
+    await tester.pumpWidget(buildGuide());
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 120));
+    await tester.pump();
+    for (var index = 0; index < 20; index++) {
+      guide.moveVertical(1);
+    }
+    await tester.pump();
+    await tester.pump();
+    expect(guide.focusedChannelIndex, 20);
+
+    await tester.binding.setSurfaceSize(const Size(1280, 899));
+    await tester.pump();
+    await tester.pump();
+    var list = tester.widget<ListView>(find.byType(ListView));
+    var scrollable = tester.state<ScrollableState>(find.byType(Scrollable));
+    expect(
+      (scrollable.position.pixels / list.itemExtent!).floor(),
+      lessThanOrEqualTo(guide.focusedChannelIndex),
+    );
+    expect(
+      guide.focusedChannelIndex,
+      lessThan(
+        (scrollable.position.pixels / list.itemExtent!).floor() +
+            (scrollable.position.viewportDimension / list.itemExtent!).ceil(),
+      ),
+    );
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+    await tester.binding.setSurfaceSize(const Size(1280, 900));
+    await tester.pumpWidget(buildGuide());
+    await tester.pump();
+    await tester.pump();
+    list = tester.widget<ListView>(find.byType(ListView));
+    scrollable = tester.state<ScrollableState>(find.byType(Scrollable));
+    expect(
+      (scrollable.position.pixels / list.itemExtent!).floor(),
+      lessThanOrEqualTo(guide.focusedChannelIndex),
+    );
+    expect(
+      guide.focusedChannelIndex,
+      lessThan(
+        (scrollable.position.pixels / list.itemExtent!).floor() +
+            (scrollable.position.viewportDimension / list.itemExtent!).ceil(),
+      ),
+    );
 
     await tester.binding.setSurfaceSize(null);
     await tester.pumpWidget(const SizedBox.shrink());

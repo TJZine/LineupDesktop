@@ -116,24 +116,20 @@ class GuideView extends StatefulWidget {
 }
 
 class _GuideViewState extends State<GuideView> {
-  late final ScrollController _scroll;
+  ScrollController? _scroll;
   Timer? _clockTimer;
   int _visibleRows = 8;
-  double _effectiveRowHeight = 78;
+  double? _effectiveRowHeight;
+  double? _pendingRowPosition;
+  bool _rowHeightAdjustmentScheduled = false;
   bool _revealScheduled = false;
   String? _lastFocusedChannelId;
-
-  double get _rowHeight => _effectiveRowHeight;
 
   @override
   void initState() {
     super.initState();
-    _scroll = ScrollController(
-      initialScrollOffset: widget.controller.verticalOffset,
-    );
     _lastFocusedChannelId = widget.controller.focusedChannelId;
     widget.controller.addListener(_changed);
-    _scroll.addListener(_requestViewport);
     _clockTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (mounted) setState(() {});
     });
@@ -145,9 +141,55 @@ class _GuideViewState extends State<GuideView> {
     widget.controller.removeListener(_changed);
     _clockTimer?.cancel();
     _scroll
-      ..removeListener(_requestViewport)
+      ?..removeListener(_requestViewport)
       ..dispose();
     super.dispose();
+  }
+
+  ScrollController _scrollFor(double rowHeight) {
+    final existing = _scroll;
+    if (existing == null) {
+      _effectiveRowHeight = rowHeight;
+      final created = ScrollController(
+        initialScrollOffset: widget.controller.verticalOffsetFor(rowHeight),
+      )..addListener(_requestViewport);
+      _scroll = created;
+      return created;
+    }
+
+    final previousRowHeight = _effectiveRowHeight;
+    if (previousRowHeight == null || previousRowHeight == rowHeight) {
+      _effectiveRowHeight = rowHeight;
+      return existing;
+    }
+
+    _pendingRowPosition ??= existing.hasClients
+        ? existing.offset / previousRowHeight
+        : widget.controller.verticalOffsetFor(1);
+    _effectiveRowHeight = rowHeight;
+    if (!_rowHeightAdjustmentScheduled) {
+      _rowHeightAdjustmentScheduled = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _rowHeightAdjustmentScheduled = false;
+        final position = _pendingRowPosition;
+        _pendingRowPosition = null;
+        final currentRowHeight = _effectiveRowHeight;
+        if (!mounted ||
+            position == null ||
+            currentRowHeight == null ||
+            !existing.hasClients) {
+          return;
+        }
+        existing.jumpTo(
+          (position * currentRowHeight).clamp(
+            0.0,
+            existing.position.maxScrollExtent,
+          ),
+        );
+        _requestViewport();
+      });
+    }
+    return existing;
   }
 
   void _changed() {
@@ -161,30 +203,48 @@ class _GuideViewState extends State<GuideView> {
     _revealScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _revealScheduled = false;
-      if (!mounted || !_scroll.hasClients) return;
+      final scroll = _scroll;
+      final rowHeight = _effectiveRowHeight;
+      if (!mounted ||
+          scroll == null ||
+          !scroll.hasClients ||
+          rowHeight == null) {
+        return;
+      }
       final index = widget.controller.focusedChannelIndex;
       if (index < 0) return;
-      final first = (_scroll.offset / _rowHeight).floor();
+      final first = (scroll.offset / rowHeight).floor();
       if (index < first || index >= first + _visibleRows) {
-        _scroll.animateTo(
-          (index * _rowHeight).clamp(0, _scroll.position.maxScrollExtent),
-          duration: widget.controller.lineup.settings.reduceMotion
-              ? Duration.zero
-              : const Duration(milliseconds: 120),
-          curve: Curves.easeOut,
+        final target = (index * rowHeight).clamp(
+          0.0,
+          scroll.position.maxScrollExtent,
         );
+        if (widget.controller.lineup.settings.reduceMotion) {
+          scroll.jumpTo(target);
+        } else {
+          scroll.animateTo(
+            target,
+            duration: const Duration(milliseconds: 120),
+            curve: Curves.easeOut,
+          );
+        }
       }
       _requestViewport();
     });
   }
 
   void _requestViewport() {
-    if (!mounted) return;
-    final first = _scroll.hasClients
-        ? (_scroll.offset / _rowHeight).floor()
-        : 0;
-    if (_scroll.hasClients) {
-      widget.controller.rememberVerticalOffset(_scroll.offset);
+    final scroll = _scroll;
+    final rowHeight = _effectiveRowHeight;
+    if (!mounted ||
+        scroll == null ||
+        rowHeight == null ||
+        _rowHeightAdjustmentScheduled) {
+      return;
+    }
+    final first = scroll.hasClients ? (scroll.offset / rowHeight).floor() : 0;
+    if (scroll.hasClients) {
+      widget.controller.rememberVerticalOffset(scroll.offset, rowHeight);
     }
     widget.controller.requestViewport(first, _visibleRows);
   }
@@ -248,41 +308,44 @@ class _GuideViewState extends State<GuideView> {
     ),
   );
 
-  Widget _schedule(GuideLayoutPolicy policy, List<Channel> channels) => Column(
-    children: [
-      _TimeHeader(
-        controller: widget.controller,
-        railWidth: policy.channelRailWidth,
-      ),
-      Expanded(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            _visibleRows = GuideGeometry.visibleRows(
-              scrollOffset: _scroll.hasClients ? _scroll.offset : 0,
-              viewportHeight: constraints.maxHeight,
-              rowHeight: policy.rowHeight,
-              totalRows: channels.length,
-            ).count;
-            WidgetsBinding.instance.addPostFrameCallback(
-              (_) => _requestViewport(),
-            );
-            return ListView.builder(
-              key: const Key('guide-schedule-list'),
-              controller: _scroll,
-              itemExtent: policy.rowHeight,
-              itemCount: channels.length,
-              itemBuilder: (context, index) => _GuideRow(
-                channel: channels[index],
-                controller: widget.controller,
-                railWidth: policy.channelRailWidth,
-                onTune: widget.onTune,
-              ),
-            );
-          },
+  Widget _schedule(GuideLayoutPolicy policy, List<Channel> channels) {
+    final scroll = _scrollFor(policy.rowHeight);
+    return Column(
+      children: [
+        _TimeHeader(
+          controller: widget.controller,
+          railWidth: policy.channelRailWidth,
         ),
-      ),
-    ],
-  );
+        Expanded(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              _visibleRows = GuideGeometry.visibleRows(
+                scrollOffset: scroll.hasClients ? scroll.offset : 0,
+                viewportHeight: constraints.maxHeight,
+                rowHeight: policy.rowHeight,
+                totalRows: channels.length,
+              ).count;
+              WidgetsBinding.instance.addPostFrameCallback(
+                (_) => _requestViewport(),
+              );
+              return ListView.builder(
+                key: const Key('guide-schedule-list'),
+                controller: scroll,
+                itemExtent: policy.rowHeight,
+                itemCount: channels.length,
+                itemBuilder: (context, index) => _GuideRow(
+                  channel: channels[index],
+                  controller: widget.controller,
+                  railWidth: policy.channelRailWidth,
+                  onTune: widget.onTune,
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -303,7 +366,6 @@ class _GuideViewState extends State<GuideView> {
               overlayMode: widget.overlayMode,
               density: widget.controller.density,
             );
-            _effectiveRowHeight = policy.rowHeight;
             final schedule = channels.isEmpty
                 ? const _EmptyGuide()
                 : _schedule(policy, channels);
@@ -377,6 +439,23 @@ class _ClassicGuideSurface extends StatelessWidget {
   final Widget? showcase;
   final Widget body;
 
+  // Overlap opaque neighbors across fractional 16:9 edges so rasterization
+  // cannot leave an alpha seam outside the PlayerSurface aperture.
+  static const _paintOverlap = 2.0;
+
+  Widget _gutter() => SizedBox(
+    width: padding,
+    child: OverflowBox(
+      alignment: Alignment.center,
+      minHeight: showcaseHeight + _paintOverlap,
+      maxHeight: showcaseHeight + _paintOverlap,
+      child: ColoredBox(
+        color: color,
+        child: SizedBox(width: padding, height: showcaseHeight + _paintOverlap),
+      ),
+    ),
+  );
+
   @override
   Widget build(BuildContext context) => Column(
     children: [
@@ -387,32 +466,42 @@ class _ClassicGuideSurface extends StatelessWidget {
           child: toolbar,
         ),
       ),
-      ColoredBox(color: color, child: const SizedBox(height: 10)),
+      ColoredBox(
+        color: color,
+        child: const SizedBox(width: double.infinity, height: 10),
+      ),
       if (showcase != null)
         SizedBox(
           height: showcaseHeight,
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              ColoredBox(
-                color: color,
-                child: SizedBox(width: padding),
+              _gutter(),
+              Expanded(
+                child: OverflowBox(
+                  alignment: Alignment.center,
+                  minHeight: showcaseHeight + _paintOverlap,
+                  maxHeight: showcaseHeight + _paintOverlap,
+                  child: SizedBox(
+                    height: showcaseHeight + _paintOverlap,
+                    child: showcase!,
+                  ),
+                ),
               ),
-              Expanded(child: showcase!),
-              ColoredBox(
-                color: color,
-                child: SizedBox(width: padding),
-              ),
+              _gutter(),
             ],
           ),
         ),
-      if (showcase != null)
-        ColoredBox(color: color, child: const SizedBox(height: 8)),
       Expanded(
         child: ColoredBox(
           color: color,
           child: Padding(
-            padding: EdgeInsets.fromLTRB(padding, 0, padding, padding),
+            padding: EdgeInsets.fromLTRB(
+              padding,
+              showcase == null ? 0 : 8,
+              padding,
+              padding,
+            ),
             child: body,
           ),
         ),

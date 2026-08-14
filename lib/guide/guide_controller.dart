@@ -133,7 +133,7 @@ class GuideController extends ChangeNotifier {
   int _activeLoads = 0;
   int _activeArtworkLoads = 0;
   bool _disposed = false;
-  double _verticalOffset = 0;
+  double _verticalRowPosition = 0;
 
   List<Channel> get channels => _visibleChannels;
 
@@ -151,7 +151,10 @@ class GuideController extends ChangeNotifier {
   int get guideHours => _settings.guideHours;
   int get cachedRowCount => _rows.length;
   int get activeLoadCount => _activeLoads;
-  double get verticalOffset => _verticalOffset;
+  double verticalOffsetFor(double rowHeight) =>
+      rowHeight.isFinite && rowHeight > 0
+      ? _verticalRowPosition * rowHeight
+      : 0;
   int get focusedChannelIndex =>
       _visibleIndexById[_focusedChannelId] ??
       (_visibleChannels.isEmpty ? -1 : 0);
@@ -333,8 +336,10 @@ class GuideController extends ChangeNotifier {
     return program;
   }
 
-  void rememberVerticalOffset(double value) {
-    if (value.isFinite && value >= 0) _verticalOffset = value;
+  void rememberVerticalOffset(double value, double rowHeight) {
+    if (value.isFinite && value >= 0 && rowHeight.isFinite && rowHeight > 0) {
+      _verticalRowPosition = value / rowHeight;
+    }
   }
 
   void moveVertical(int offset) {
