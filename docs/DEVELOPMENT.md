@@ -153,7 +153,7 @@ release `2026-08-13-7b8915bc1d`. The asset is
 `13723530C3A719577A27EA19E0127175CE6A047071F8D988ADC1B0DD400B3D18`.
 It contains mpv `v0.41.0-923-g7b8915bc1` configured with `-Dgpl=false`, FFmpeg
 `N-126123-g8b4fad11a` configured without GPL components, and libplacebo
-`v7.371.0` (`v7.360.0-111-g22ee762-dirty`). CMake verifies the archive identity,
+`v7.371.0 (v7.360.0-111-g22ee762-dirty)`. CMake verifies the archive identity,
 header, DLL, redistribution marker, and locally generated MSVC import library
 before linking.
 See `docs/windows-runtime.md` for provenance and redistribution obligations.

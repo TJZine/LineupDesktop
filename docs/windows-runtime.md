@@ -11,7 +11,7 @@ binaries; `tool/windows/prepare-mpv.ps1` downloads and verifies them.
 | --- | --- | --- |
 | libmpv | mpv `v0.41.0-923-g7b8915bc1`, full commit `7b8915bc1d04c7e1b61184e00c7fbfaab1911e75`; configured with `-Dgpl=false`; DLL SHA-256 `353D527E569F69D822A9D679B28D2E975C6B22A82AB9924D533110E1C21C8508` | LGPL-2.1-or-later; selected for dynamic bundling with license, source/build links, and replacement permitted. |
 | FFmpeg | `N-126123-g8b4fad11a`, full commit `8b4fad11acfc958dfde29fb0799d3ca1818bbbf7`; builder removes `--enable-gpl` and GPL dependencies and retains `--enable-version3` | LGPLv3; statically combined into the replaceable libmpv DLL. Package the LGPLv3 text and exact source/build recipe. |
-| libplacebo | `v7.371.0` (`v7.360.0-111-g22ee762-dirty`), full commit `22ee762e8e0890fc54068beb670310f0edce7263` | LGPL-2.1-or-later; statically combined into the replaceable libmpv DLL. Package its license and exact source/build link. |
+| libplacebo | Embedded build version `v7.371.0 (v7.360.0-111-g22ee762-dirty)`; full source commit `22ee762e8e0890fc54068beb670310f0edce7263` | LGPL-2.1-or-later; statically combined into the replaceable libmpv DLL. Package its license and exact source/build link. |
 | Windows build | zhongfly/mpv-winbuild commit `a237017af09e72a689882afdf0adf6108c33c0fd`, successful run `31738744791`, LGPL x86-64 job `94576668176` | Reproducible public build recipe. Its LGPL patch disables x264, x265, Rubber Band, DVD navigation, and other incompatible components while retaining decode, D3D11, gpu-next, hardware decode, HDR/tone mapping, and subtitles. |
 | Release asset | `mpv-dev-lgpl-x86_64-20260813-git-7b8915bc1d.7z` | SHA-256 `13723530C3A719577A27EA19E0127175CE6A047071F8D988ADC1B0DD400B3D18`; pinned acquisition. |
 

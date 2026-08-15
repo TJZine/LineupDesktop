@@ -184,6 +184,19 @@ jobs:
             --local-engine=host_release `
             --local-engine-host=host_release `
             --local-engine-src-path=$engineSource
+          $license = Join-Path $mpvRoot 'licenses\mpv-LICENSE.LGPL'
+          $licenseBytes = [IO.File]::ReadAllBytes($license)
+          try {
+            Add-Content -LiteralPath $license -Value 'tampered'
+            try {
+              & .\tool\windows\package.ps1 -Destination 'build/package/provenance-tamper-check'
+              throw 'Packaging accepted a modified runtime license.'
+            } catch {
+              if ($_.Exception.Message -notlike '*runtime license does not match*') { throw }
+            }
+          } finally {
+            [IO.File]::WriteAllBytes($license, $licenseBytes)
+          }
           & .\tool\windows\package.ps1
       - name: Upload portable Windows package
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

@@ -12,5 +12,5 @@
   # pinned at each build consumer so generated provenance is never trusted.
   MpvVersion = 'mpv-v0.41.0-923-g7b8915bc1'
   FfmpegVersion = 'N-126123-g8b4fad11a'
-  LibplaceboVersion = 'v7.371.0-111-g22ee762'
+  LibplaceboVersion = 'v7.371.0 (v7.360.0-111-g22ee762-dirty)'
 }

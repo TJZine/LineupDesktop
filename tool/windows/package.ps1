@@ -50,6 +50,16 @@ $provenanceDllHash = (Get-ProvenanceValue 'LINEUP_MPV_DLL_SHA256').ToUpperInvari
 if ($provenanceDllHash -ne $pinnedMpvDllHash) {
   throw 'Prepared production runtime provenance does not match the pinned libmpv runtime.'
 }
+$expectedProvenance = @{
+  LINEUP_MPV_DISTRIBUTION = 'production'
+  LINEUP_MPV_LICENSE = 'LGPL-2.1-or-later'
+  LINEUP_MPV_ASSET_SHA256 = '13723530C3A719577A27EA19E0127175CE6A047071F8D988ADC1B0DD400B3D18'
+}
+foreach ($entry in $expectedProvenance.GetEnumerator()) {
+  if ((Get-ProvenanceValue $entry.Key) -ne $entry.Value) {
+    throw "Prepared production runtime provenance does not match $($entry.Key)."
+  }
+}
 $descriptiveRevisions = @{
   LINEUP_MPV_VERSION = $metadata.MpvVersion
   LINEUP_MPV_FFMPEG_VERSION = $metadata.FfmpegVersion
@@ -58,6 +68,28 @@ $descriptiveRevisions = @{
 foreach ($entry in $descriptiveRevisions.GetEnumerator()) {
   if ((Get-ProvenanceValue $entry.Key) -ne $entry.Value) {
     throw "Prepared production runtime provenance does not match $($entry.Key)."
+  }
+}
+$licenseMetadata = @{
+  'mpv-LICENSE.LGPL' = @{
+    Provenance = 'LINEUP_MPV_MPV_LICENSE_SHA256'
+    Sha256 = '72B672113D642CBB8EF5DCC76938DB801983C56E50B1400AB930F1A64D6DC8D9'
+  }
+  'FFmpeg-COPYING.LGPLv3' = @{
+    Provenance = 'LINEUP_MPV_FFMPEG_LICENSE_SHA256'
+    Sha256 = 'DA7EABB7BAFDF7D3AE5E9F223AA5BDC1EECE45AC569DC21B3B037520B4464768'
+  }
+  'libplacebo-LICENSE' = @{
+    Provenance = 'LINEUP_MPV_LIBPLACEBO_LICENSE_SHA256'
+    Sha256 = 'B3AA400ACA6D2BA1F0BD03BD98D03D1FE7489A3BBB26969D72016360AF8A5C9D'
+  }
+}
+foreach ($entry in $licenseMetadata.GetEnumerator()) {
+  $license = Join-Path $env:LINEUP_MPV_ROOT "licenses/$($entry.Key)"
+  if ((Get-ProvenanceValue $entry.Value.Provenance) -ne $entry.Value.Sha256 -or
+    -not (Test-Path -LiteralPath $license) -or
+    (Get-FileHash -Algorithm SHA256 -LiteralPath $license).Hash -ne $entry.Value.Sha256) {
+    throw "Prepared production runtime license does not match $($entry.Key)."
   }
 }
 
@@ -90,7 +122,7 @@ New-Item -ItemType Directory -Path $licenses | Out-Null
 Copy-Item -LiteralPath (Join-Path $repository 'LICENSE') -Destination (Join-Path $licenses 'Lineup-Desktop-Apache-2.0.txt')
 Copy-Item -LiteralPath (Join-Path $repository 'tool/flutter_engine/NOTICE') -Destination (Join-Path $licenses 'Flutter-engine-patch-NOTICE.txt')
 Copy-Item -LiteralPath (Join-Path $repository 'docs/windows-runtime.md') -Destination (Join-Path $licenses 'Windows-runtime-provenance.md')
-foreach ($file in @('mpv-LICENSE.LGPL', 'FFmpeg-COPYING.LGPLv3', 'libplacebo-LICENSE')) {
+foreach ($file in $licenseMetadata.Keys) {
   Copy-Item -LiteralPath (Join-Path $env:LINEUP_MPV_ROOT "licenses/$file") -Destination $licenses
 }
 

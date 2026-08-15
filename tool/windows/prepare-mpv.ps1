@@ -70,12 +70,14 @@ $licenses = @(
     Sha256 = 'B3AA400ACA6D2BA1F0BD03BD98D03D1FE7489A3BBB26969D72016360AF8A5C9D'
   }
 )
+$licenseHashes = @{}
 foreach ($license in $licenses) {
   $path = Join-Path $licenseDirectory $license.Name
   Invoke-WebRequest -Uri $license.Uri -OutFile $path
   if ((Get-FileHash -Algorithm SHA256 $path).Hash -ne $license.Sha256) {
     throw "SHA-256 mismatch for $($license.Name)."
   }
+  $licenseHashes[$license.Name] = $license.Sha256
 }
 
 $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
@@ -103,6 +105,9 @@ $provenance = Join-Path $root 'lineup-mpv-provenance.cmake'
   "set(LINEUP_MPV_LIBPLACEBO_VERSION `"$($metadata.LibplaceboVersion)`")",
   "set(LINEUP_MPV_ASSET_SHA256 `"$sha256`")",
   "set(LINEUP_MPV_DLL_SHA256 `"$((Get-FileHash -Algorithm SHA256 $dll).Hash)`")",
-  "set(LINEUP_MPV_IMPORT_LIBRARY_SHA256 `"$((Get-FileHash -Algorithm SHA256 (Join-Path $root 'libmpv.lib')).Hash)`")"
+  "set(LINEUP_MPV_IMPORT_LIBRARY_SHA256 `"$((Get-FileHash -Algorithm SHA256 (Join-Path $root 'libmpv.lib')).Hash)`")",
+  "set(LINEUP_MPV_MPV_LICENSE_SHA256 `"$($licenseHashes['mpv-LICENSE.LGPL'])`")",
+  "set(LINEUP_MPV_FFMPEG_LICENSE_SHA256 `"$($licenseHashes['FFmpeg-COPYING.LGPLv3'])`")",
+  "set(LINEUP_MPV_LIBPLACEBO_LICENSE_SHA256 `"$($licenseHashes['libplacebo-LICENSE'])`")"
 ) | Set-Content -Encoding ascii $provenance
 Write-Host "Prepared verified LGPL libmpv production files at $root"
