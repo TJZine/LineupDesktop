@@ -106,8 +106,20 @@ foreach ($file in @(
 Copy-Item -LiteralPath (Join-Path $BuildDirectory 'data') -Destination $Destination -Recurse
 
 $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-$vs = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
-$redistVersion = Get-ChildItem -Directory (Join-Path $vs 'VC/Redist/MSVC') |
+if (-not (Test-Path -LiteralPath $vswhere)) {
+  throw 'Visual Studio Installer vswhere.exe was not found.'
+}
+$vsOutput = @(& $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath)
+$vsExit = $LASTEXITCODE
+$vs = $vsOutput | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -First 1
+if ($vsExit -or -not $vs) {
+  throw 'Visual Studio with the MSVC x64 tools component was not found.'
+}
+$redistRoot = Join-Path $vs.Trim() 'VC/Redist/MSVC'
+if (-not (Test-Path -LiteralPath $redistRoot)) {
+  throw "MSVC redistributable directory was not found: $redistRoot"
+}
+$redistVersion = Get-ChildItem -LiteralPath $redistRoot -Directory |
   Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName 'x64/Microsoft.VC143.CRT') } |
   Sort-Object { [version]$_.Name } -Descending |
   Select-Object -First 1
@@ -131,13 +143,22 @@ $vcVersions = @('msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll') | ForE
   "$($file.Name)=$($file.VersionInfo.FileVersion)"
 }
 $sourceCommit = (git -C $repository rev-parse HEAD).Trim()
-git -C $repository diff --quiet
-$sourceDirty = $LASTEXITCODE -ne 0
-git -C $repository diff --cached --quiet
-$sourceDirty = $sourceDirty -or $LASTEXITCODE -ne 0
-$sourceDirty = $sourceDirty -or @(
-  git -C $repository ls-files --others --exclude-standard
-).Count -ne 0
+$sourceDirty = & {
+  $PSNativeCommandUseErrorActionPreference = $false
+
+  git -C $repository diff --quiet
+  $worktreeExit = $LASTEXITCODE
+  if ($worktreeExit -gt 1) { throw "git diff failed with exit code $worktreeExit." }
+
+  git -C $repository diff --cached --quiet
+  $indexExit = $LASTEXITCODE
+  if ($indexExit -gt 1) { throw "git diff --cached failed with exit code $indexExit." }
+
+  $untracked = @(git -C $repository ls-files --others --exclude-standard)
+  if ($LASTEXITCODE) { throw 'git ls-files failed while computing source provenance.' }
+
+  $worktreeExit -eq 1 -or $indexExit -eq 1 -or $untracked.Count -ne 0
+}
 @(
   "Lineup Desktop $pubspecVersion Windows x64",
   "source-commit=$sourceCommit",

@@ -25,7 +25,7 @@ $temporaryDirectory = if ($env:RUNNER_TEMP) {
 $archive = Join-Path $temporaryDirectory $asset
 
 Invoke-WebRequest -Uri $url -OutFile $archive
-if ((Get-FileHash -Algorithm SHA256 $archive).Hash -ne $sha256) {
+if ((Get-FileHash -Algorithm SHA256 -LiteralPath $archive).Hash -ne $sha256) {
   throw "SHA-256 mismatch for $asset."
 }
 
@@ -44,9 +44,9 @@ $dll = Join-Path $root 'libmpv-2.dll'
 if (-not (Test-Path -LiteralPath $header) -or -not (Test-Path -LiteralPath $dll)) {
   throw 'The verified archive did not contain the expected libmpv header and DLL.'
 }
-if ((Get-FileHash -Algorithm SHA256 $header).Hash -ne
+if ((Get-FileHash -Algorithm SHA256 -LiteralPath $header).Hash -ne
   '1ACF99EE77C8C2A6F1D1993BD81BBC8A91D27FB5924E80171670E6139A4BD353' -or
-  (Get-FileHash -Algorithm SHA256 $dll).Hash -ne
+  (Get-FileHash -Algorithm SHA256 -LiteralPath $dll).Hash -ne
   '353D527E569F69D822A9D679B28D2E975C6B22A82AB9924D533110E1C21C8508') {
   throw 'The verified archive contents do not match the pinned Lineup runtime.'
 }
@@ -74,18 +74,35 @@ $licenseHashes = @{}
 foreach ($license in $licenses) {
   $path = Join-Path $licenseDirectory $license.Name
   Invoke-WebRequest -Uri $license.Uri -OutFile $path
-  if ((Get-FileHash -Algorithm SHA256 $path).Hash -ne $license.Sha256) {
+  if ((Get-FileHash -Algorithm SHA256 -LiteralPath $path).Hash -ne $license.Sha256) {
     throw "SHA-256 mismatch for $($license.Name)."
   }
   $licenseHashes[$license.Name] = $license.Sha256
 }
 
 $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-$vs = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
-$tools = Get-ChildItem -Directory (Join-Path $vs 'VC/Tools/MSVC') | Sort-Object Name -Descending | Select-Object -First 1
+if (-not (Test-Path -LiteralPath $vswhere)) {
+  throw 'Visual Studio Installer vswhere.exe was not found.'
+}
+$vsOutput = @(& $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath)
+$vsExit = $LASTEXITCODE
+$vs = $vsOutput | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -First 1
+if ($vsExit -or -not $vs) {
+  throw 'Visual Studio with the MSVC x64 tools component was not found.'
+}
+$toolsRoot = Join-Path $vs.Trim() 'VC/Tools/MSVC'
+if (-not (Test-Path -LiteralPath $toolsRoot)) {
+  throw "MSVC tools directory was not found: $toolsRoot"
+}
+$tools = Get-ChildItem -LiteralPath $toolsRoot -Directory |
+  Sort-Object { [version]$_.Name } -Descending |
+  Select-Object -First 1
+if (-not $tools) { throw 'No installed MSVC toolset was found.' }
 $lib = Join-Path $tools.FullName 'bin/Hostx64/x64/lib.exe'
 $dumpbin = Join-Path $tools.FullName 'bin/Hostx64/x64/dumpbin.exe'
-if (-not (Test-Path $lib) -or -not (Test-Path $dumpbin)) { throw 'MSVC x64 lib.exe and dumpbin.exe are required.' }
+if (-not (Test-Path -LiteralPath $lib) -or -not (Test-Path -LiteralPath $dumpbin)) {
+  throw 'MSVC x64 lib.exe and dumpbin.exe are required.'
+}
 
 $exports = & $dumpbin /exports $dll | ForEach-Object {
   if ($_ -match '^\s*\d+\s+[0-9A-F]+\s+[0-9A-F]+\s+(.+)$') { $Matches[1].Trim() }
@@ -104,8 +121,8 @@ $provenance = Join-Path $root 'lineup-mpv-provenance.cmake'
   "set(LINEUP_MPV_FFMPEG_VERSION `"$($metadata.FfmpegVersion)`")",
   "set(LINEUP_MPV_LIBPLACEBO_VERSION `"$($metadata.LibplaceboVersion)`")",
   "set(LINEUP_MPV_ASSET_SHA256 `"$sha256`")",
-  "set(LINEUP_MPV_DLL_SHA256 `"$((Get-FileHash -Algorithm SHA256 $dll).Hash)`")",
-  "set(LINEUP_MPV_IMPORT_LIBRARY_SHA256 `"$((Get-FileHash -Algorithm SHA256 (Join-Path $root 'libmpv.lib')).Hash)`")",
+  "set(LINEUP_MPV_DLL_SHA256 `"$((Get-FileHash -Algorithm SHA256 -LiteralPath $dll).Hash)`")",
+  "set(LINEUP_MPV_IMPORT_LIBRARY_SHA256 `"$((Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $root 'libmpv.lib')).Hash)`")",
   "set(LINEUP_MPV_MPV_LICENSE_SHA256 `"$($licenseHashes['mpv-LICENSE.LGPL'])`")",
   "set(LINEUP_MPV_FFMPEG_LICENSE_SHA256 `"$($licenseHashes['FFmpeg-COPYING.LGPLv3'])`")",
   "set(LINEUP_MPV_LIBPLACEBO_LICENSE_SHA256 `"$($licenseHashes['libplacebo-LICENSE'])`")"

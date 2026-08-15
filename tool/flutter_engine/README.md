@@ -17,10 +17,12 @@ Apply from the root of an exact Flutter checkout:
 C:\path\to\LineupDesktop\tool\flutter_engine\apply.ps1 -FlutterRoot C:\path\to\flutter
 ```
 
-The script verifies the framework revision, pinned engine artifact revision,
-and exact committed Windows EGL manager blob before a normal, contextual `git
-apply --check`. The exact hashes and surrounding source context reject
-unsupported sources.
+The script requires committed metadata and patch inputs, verifies the patch's
+SHA-256, rejects staged or unstaged tracked changes in the Flutter checkout,
+and verifies the framework revision, pinned engine artifact revision, and exact
+committed Windows EGL manager blob before a normal, contextual `git apply
+--check`. Expected untracked gclient dependencies and build outputs are not
+treated as source modifications.
 
 Fetch and build the engine using Flutter's official engine setup instructions.
 On Windows this requires Visual Studio C++ with ATL, the engine-pinned Windows
@@ -35,7 +37,8 @@ Routine CI compiles the Windows application with the pinned stock Flutter SDK
 and the verified LGPL libmpv runtime so ordinary PR changes still receive
 Windows C++/CMake integration proof without rebuilding Flutter itself. The
 expensive patched-engine job in `.github/workflows/ci.yml` is gated to the
-actual engine inputs: `.metadata`, `tool/flutter_engine/apply.ps1`, and
+actual engine inputs: `.metadata`, `tool/windows/build-metadata.psd1`,
+`tool/flutter_engine/apply.ps1`, and
 `tool/flutter_engine/0001-windows-direct-composition.patch`. A manual workflow
 dispatch also forces that proof. When selected, CI verifies the exact framework
 and engine source revisions, applies this patch, builds `host_release`, and
