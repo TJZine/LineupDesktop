@@ -146,6 +146,7 @@ jobs:
       - name: Validate exact Flutter and engine sources and build the patched engine
         shell: pwsh
         run: |
+          $PSNativeCommandUseErrorActionPreference = $true
           $metadata = Import-PowerShellDataFile -LiteralPath (Join-Path $env:GITHUB_WORKSPACE 'tool/windows/build-metadata.psd1')
           $flutterSource = Join-Path $env:RUNNER_TEMP 'lineup-flutter-source'
           $depotTools = Join-Path $env:RUNNER_TEMP 'depot_tools'
@@ -161,8 +162,9 @@ jobs:
           if ((git -C $depotTools rev-parse HEAD).Trim() -ne $metadata.DepotToolsRevision) {
             throw 'depot_tools did not resolve to the pinned revision.'
           }
-          $env:DEPOT_TOOLS_UPDATE = '0'
           $env:PATH = "$depotTools;$env:PATH"
+          & (Join-Path $depotTools 'bootstrap\win_tools.bat')
+          $env:DEPOT_TOOLS_UPDATE = '0'
           $env:DEPOT_TOOLS_WIN_TOOLCHAIN = '0'
           $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
           $env:GYP_MSVS_OVERRIDE_PATH = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
