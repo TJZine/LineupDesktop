@@ -34,6 +34,8 @@ void main() {
         plex: plex,
         pinPollInterval: const Duration(milliseconds: 1),
       );
+      final initialController = controller;
+      addTearDown(initialController.dispose);
 
       await controller.initialize();
       expect(controller.stage, SetupStage.welcome);
@@ -66,13 +68,16 @@ void main() {
         lineup: controller,
         clock: () => _ProductPlex.now,
       )..requestViewport(0, 1);
+      addTearDown(guide.dispose);
       await _until(() => guide.currentProgram(channel.id) != null);
       final nativePlayer = _ProductPlayer(events);
+      addTearDown(nativePlayer.dispose);
       final player = PlayerCoordinator(
         player: nativePlayer,
         lineup: controller,
         guide: guide,
       );
+      addTearDown(player.dispose);
 
       await player.tune(channel.id);
       expect(player.error, isNull);
@@ -151,17 +156,14 @@ void main() {
       // ignore: avoid_print
       print('PRODUCT_SPINE rebuild1000Us=${rebuild.elapsedMicroseconds}');
 
-      player.dispose();
-      await nativePlayer.dispose();
-      guide.dispose();
-      controller.dispose();
-
       final restoredPlex = _ProductPlex(events)..authorized = true;
       controller = LineupController(
         store: store,
         credentials: credentials,
         plex: restoredPlex,
       );
+      final restoredController = controller;
+      addTearDown(restoredController.dispose);
       await controller.initialize();
       expect(controller.stage, SetupStage.ready);
       expect(controller.profile?.id, 'child');
@@ -173,27 +175,25 @@ void main() {
         lineup: controller,
         clock: () => _ProductPlex.now,
       )..requestViewport(0, 1);
+      addTearDown(restoredGuide.dispose);
       await _until(
         () =>
             restoredGuide.currentProgram(controller.channels.first.id) != null,
       );
       final restoredNativePlayer = _ProductPlayer(events);
+      addTearDown(restoredNativePlayer.dispose);
       final restoredPlayer = PlayerCoordinator(
         player: restoredNativePlayer,
         lineup: controller,
         guide: restoredGuide,
       );
+      addTearDown(restoredPlayer.dispose);
       await restoredPlayer.tune(controller.channels.first.id);
       expect(await restoredPlayer.logout(), isTrue);
       expect(controller.stage, SetupStage.welcome);
       expect(credentials.accountToken, isNull);
       expect(credentials.profileTokens, isEmpty);
       expect(events, contains('playback:release'));
-      restoredPlayer.dispose();
-      await restoredNativePlayer.dispose();
-      restoredGuide.dispose();
-      controller.dispose();
-
       expect(
         events,
         containsAllInOrder([
@@ -216,7 +216,8 @@ void main() {
 }
 
 Future<void> _until(bool Function() condition) async {
-  for (var attempt = 0; attempt < 200; attempt++) {
+  final elapsed = Stopwatch()..start();
+  while (elapsed.elapsed < const Duration(seconds: 5)) {
     if (condition()) return;
     await Future<void>.delayed(const Duration(milliseconds: 1));
   }

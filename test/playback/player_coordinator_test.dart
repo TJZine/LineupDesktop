@@ -75,6 +75,58 @@ void main() {
     lineup.dispose();
   });
 
+  test('scope cleanup does not notify after disposal', () async {
+    final lineup = _TestLineup()..diagnostics.enabled = true;
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    )..requestViewport(0, 2);
+    await Future<void>.delayed(Duration.zero);
+    final nativePlayer = _BlockingFullscreenPlayer(blockOn: false);
+    final coordinator = PlayerCoordinator(
+      player: nativePlayer,
+      lineup: lineup,
+      guide: guide,
+    );
+
+    await coordinator.tune('channel-b');
+    await coordinator.toggleFullscreen();
+    lineup.changeContentScope();
+    await nativePlayer.fullscreenStarted.future;
+    coordinator.dispose();
+    nativePlayer.releaseFullscreen.complete();
+    await Future<void>.delayed(Duration.zero);
+
+    expect(lineup.releases, 1);
+    expect(lineup.diagnostics.entries, isEmpty);
+    guide.dispose();
+    lineup.dispose();
+  });
+
+  test('pending fullscreen changes do not notify after disposal', () async {
+    final lineup = _TestLineup();
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    final nativePlayer = _BlockingFullscreenPlayer(blockOn: true);
+    final coordinator = PlayerCoordinator(
+      player: nativePlayer,
+      lineup: lineup,
+      guide: guide,
+    );
+
+    final fullscreen = coordinator.toggleFullscreen();
+    await nativePlayer.fullscreenStarted.future;
+    coordinator.dispose();
+    nativePlayer.releaseFullscreen.complete();
+
+    await fullscreen;
+    expect(coordinator.fullscreen, isFalse);
+    guide.dispose();
+    lineup.dispose();
+  });
+
   test(
     'removing the active channel stops playback and releases its lease',
     () async {
@@ -919,6 +971,21 @@ class _ControlledPlayer extends _Player {
       firstLoadStarted.complete();
       await releaseFirstLoad.future;
     }
+  }
+}
+
+class _BlockingFullscreenPlayer extends _Player {
+  _BlockingFullscreenPlayer({required this.blockOn});
+
+  final bool blockOn;
+  final fullscreenStarted = Completer<void>();
+  final releaseFullscreen = Completer<void>();
+
+  @override
+  Future<void> setFullscreen(bool fullscreen) async {
+    if (fullscreen != blockOn) return;
+    fullscreenStarted.complete();
+    await releaseFullscreen.future;
   }
 }
 

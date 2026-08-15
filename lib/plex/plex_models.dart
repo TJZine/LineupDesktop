@@ -69,6 +69,16 @@ class PlexConnection {
   final Duration? latency;
 }
 
+String plexConnectionDescription(PlexConnection connection) {
+  final type = connection.relay
+      ? 'Plex Relay'
+      : connection.local
+      ? 'Direct local'
+      : 'Direct remote';
+  final latency = connection.latency;
+  return '$type${latency == null ? '' : ' • ${latency.inMilliseconds} ms measured'}';
+}
+
 class PlexLibrary {
   const PlexLibrary({
     required this.id,

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/channel_setup_view.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
+import 'package:lineup_desktop/app/lineup_shell.dart';
 import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/persistence/app_store.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
@@ -57,6 +58,7 @@ void main() {
     final controller = FixtureController(store: _FailNextSaveStore())
       ..stage = SetupStage.ready
       ..channels = [_channel];
+    addTearDown(controller.dispose);
     final fixture = UiFixture(controller: controller);
     await tester.pumpWidget(fixture.build());
     await tester.pump();
@@ -151,6 +153,69 @@ void main() {
     );
   });
 
+  testWidgets('manual channel edits retain unavailable selected items', (
+    tester,
+  ) async {
+    const availableItem = ChannelItem(
+      id: 'available',
+      title: 'Available program',
+      duration: Duration(minutes: 30),
+    );
+    const unavailableItem = ChannelItem(
+      id: 'unavailable',
+      title: 'Unavailable program',
+      duration: Duration(minutes: 45),
+    );
+    final channel = Channel(
+      id: 'manual',
+      number: 8,
+      name: 'Manual channel',
+      source: const ManualSource([availableItem, unavailableItem]),
+      playbackMode: PlaybackMode.sequential,
+      anchor: DateTime.utc(2026),
+      shuffleSeed: 8,
+    );
+    final controller = FixtureController()
+      ..stage = SetupStage.ready
+      ..channels = [channel]
+      ..availableMedia = [
+        PlexMediaItem(
+          id: 'available',
+          key: '/library/metadata/available',
+          title: 'Available program',
+          type: 'movie',
+          duration: const Duration(minutes: 30),
+          libraryId: 'movies',
+          addedAt: DateTime.utc(2026),
+        ),
+      ];
+
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => TextButton(
+            onPressed: () => showDialog<void>(
+              context: context,
+              builder: (_) =>
+                  ChannelEditor(controller: controller, channel: channel),
+            ),
+            child: const Text('Open editor'),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Open editor'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Unavailable • retained until removed'), findsOneWidget);
+    await tester.tap(find.text('Save channel'));
+    await tester.pumpAndSettle();
+
+    final source = controller.channels.single.source as ManualSource;
+    expect(source.items.map((item) => item.id), ['available', 'unavailable']);
+  });
+
   testWidgets('settings dropdowns stay disabled until persistence completes', (
     tester,
   ) async {
@@ -231,6 +296,41 @@ void main() {
       greaterThan(tester.getTopLeft(find.text('Select All')).dy),
     );
   });
+
+  testWidgets(
+    'Channel Setup autofocus does not reclaim focus after scrolling',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(700, 500));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final controller = FixtureController()
+        ..stage = SetupStage.channelSetup
+        ..libraries = List.generate(
+          30,
+          (index) => PlexLibrary(
+            id: 'library-$index',
+            title: 'Library $index',
+            type: PlexLibraryType.movie,
+          ),
+        );
+      addTearDown(controller.dispose);
+
+      await tester.pumpWidget(
+        MaterialApp(home: UpstreamChannelSetupView(controller: controller)),
+      );
+      await tester.pumpAndSettle();
+      Focus.of(tester.element(find.text('Select All'))).requestFocus();
+      await tester.pump();
+      final intendedFocus = FocusManager.instance.primaryFocus;
+      expect(intendedFocus, isNotNull);
+
+      await tester.drag(find.byType(GridView), const Offset(0, -2400));
+      await tester.pumpAndSettle();
+      await tester.drag(find.byType(GridView), const Offset(0, 2400));
+      await tester.pumpAndSettle();
+
+      expect(FocusManager.instance.primaryFocus, same(intendedFocus));
+    },
+  );
 }
 
 Future<void> _openImmersiveDestination(

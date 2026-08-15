@@ -884,23 +884,25 @@ class _Programs extends StatelessWidget {
       programEnd: program.scheduled.end,
       viewportWidth: viewportWidth,
     );
+    final current = program.isCurrentAt(now);
+    final totalMicroseconds = program.scheduled.end
+        .difference(program.scheduled.start)
+        .inMicroseconds;
     return _ProgramCell(
       key: ValueKey(program.id),
       program: program,
       focused: program.id == controller.focusedProgramId,
       selected: program.id == controller.selectedProgramId,
-      current: program.isCurrentAt(now),
+      current: current,
       past: !program.scheduled.end.isAfter(now),
-      progress: program.isCurrentAt(now)
-          ? now.difference(program.scheduled.start).inMilliseconds /
-                program.scheduled.end
-                    .difference(program.scheduled.start)
-                    .inMilliseconds
+      progress: current && totalMicroseconds > 0
+          ? now.difference(program.scheduled.start).inMicroseconds /
+                totalMicroseconds
           : 0,
       left: rect.left,
       width: rect.width,
       onTap: () => controller.focusProgram(program),
-      onDoubleTap: program.isCurrentAt(now)
+      onDoubleTap: current
           ? () {
               controller.selectProgram(program);
               unawaited(onTune(channel.id));

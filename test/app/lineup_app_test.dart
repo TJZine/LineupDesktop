@@ -288,7 +288,10 @@ void main() {
 
     expect(find.text('Lineup Desktop could not start'), findsOneWidget);
     expect(find.textContaining('Restart the app'), findsOneWidget);
-    expect(find.textContaining('player initialization failed'), findsNothing);
+    expect(
+      find.textContaining('libmpv could not create a client.'),
+      findsNothing,
+    );
     expect(find.text('Guide'), findsNothing);
   });
 

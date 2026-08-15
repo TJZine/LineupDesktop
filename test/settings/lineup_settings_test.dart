@@ -15,6 +15,12 @@ void main() {
     expect(settings.guideLayoutMode, GuideLayoutMode.pictureInPicture);
   });
 
+  test('clamps OSD auto-hide below its documented minimum', () {
+    final settings = LineupSettings.fromJson({'osdAutoHideSeconds': 1});
+
+    expect(settings.osdAutoHideSeconds, 2);
+  });
+
   test('round trips meaningful preferences', () {
     const original = LineupSettings(
       theme: LineupThemeName.slatePine,

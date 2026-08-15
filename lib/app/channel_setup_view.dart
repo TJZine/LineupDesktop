@@ -44,6 +44,7 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
   int _variantBlockSize = 3;
   bool _replaceConfirmed = false;
   bool _building = false;
+  bool _libraryFocusPlaced = false;
   String? _error;
   List<Channel>? _planned;
 
@@ -55,6 +56,9 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
           ? widget.controller.libraries.map((library) => library.id)
           : widget.controller.selectedLibraryIds,
     );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _libraryFocusPlaced = true;
+    });
   }
 
   List<PlexLibrary> get _libraries => widget.controller.libraries
@@ -220,7 +224,7 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
               final selected = _selectedLibraries.contains(library.id);
               return LineupSelectionCard(
                 selected: selected,
-                autofocus: index == 0,
+                autofocus: index == 0 && !_libraryFocusPlaced,
                 onPressed: () => setState(
                   () => selected
                       ? _selectedLibraries.remove(library.id)

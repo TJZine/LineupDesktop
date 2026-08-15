@@ -53,7 +53,10 @@ void main() {
         reason: '${name.label} focused surface text',
       );
       expect(
-        _contrast(roles.focusBorder, roles.primarySurface),
+        _contrast(
+          roles.focusBorder,
+          _paint(roles.primarySurface, roles.deepBackground),
+        ),
         greaterThanOrEqualTo(3),
         reason: '${name.label} focus outline',
       );

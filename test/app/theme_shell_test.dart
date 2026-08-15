@@ -47,6 +47,7 @@ void main() {
       store: fixture.controller.fixtureStore,
       restoreOnInitialize: true,
     );
+    addTearDown(restored.dispose);
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpWidget(
       UiFixture(controller: restored, player: FixturePlayer()).build(),

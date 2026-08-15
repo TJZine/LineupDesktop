@@ -539,7 +539,7 @@ class _ServerCard extends StatelessWidget {
       subtitle: Text(
         connection == null
             ? '${server.owned ? 'Owned server' : 'Shared server'} • ${server.connections.length} secure connection${server.connections.length == 1 ? '' : 's'}'
-            : _connectionDescription(server, connection!),
+            : '${server.owned ? 'Owned server' : 'Shared server'} • ${plexConnectionDescription(connection!)}',
       ),
       trailing: FilledButton(
         onPressed: onPressed,
@@ -547,16 +547,6 @@ class _ServerCard extends StatelessWidget {
       ),
     ),
   );
-}
-
-String _connectionDescription(PlexServer server, PlexConnection connection) {
-  final type = connection.relay
-      ? 'Plex Relay'
-      : connection.local
-      ? 'Direct local'
-      : 'Direct remote';
-  final latency = connection.latency;
-  return '${server.owned ? 'Owned server' : 'Shared server'} • $type${latency == null ? '' : ' • ${latency.inMilliseconds} ms measured'}';
 }
 
 class _ProfilePinDialog extends StatefulWidget {

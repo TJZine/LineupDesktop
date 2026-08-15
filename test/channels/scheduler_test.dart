@@ -34,6 +34,34 @@ void main() {
     expect(before.elapsed, const Duration(minutes: 19));
   });
 
+  test('program lookup preserves sub-millisecond durations', () {
+    final schedule = buildSchedule(
+      const [
+        ChannelItem(
+          id: 'tiny-a',
+          title: 'Tiny A',
+          duration: Duration(microseconds: 1),
+        ),
+        ChannelItem(
+          id: 'tiny-b',
+          title: 'Tiny B',
+          duration: Duration(microseconds: 2),
+        ),
+      ],
+      mode: PlaybackMode.sequential,
+      seed: 1,
+    );
+
+    final program = programAt(
+      anchor.add(const Duration(microseconds: 2)),
+      anchor,
+      schedule,
+    );
+
+    expect(program.item.id, 'tiny-b');
+    expect(program.elapsed, const Duration(microseconds: 1));
+  });
+
   test('seeded shuffle is stable and preserves every item', () {
     final first = seededShuffle(items, 90210);
     final second = seededShuffle(items, 90210);

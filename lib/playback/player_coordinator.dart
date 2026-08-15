@@ -215,7 +215,7 @@ class PlayerCoordinator extends ChangeNotifier {
           break;
       }
     }
-    notifyListeners();
+    if (!_disposed) notifyListeners();
   }
 
   Future<void> tune(String channelId) {
@@ -365,7 +365,7 @@ class PlayerCoordinator extends ChangeNotifier {
     ++_tuneGeneration;
     _tuning = false;
     _canRetry = false;
-    notifyListeners();
+    if (!_disposed) notifyListeners();
     final operation = _tuneOperations.then((_) async {
       final playback = _activePlayback;
       _activePlayback = null;
@@ -409,6 +409,7 @@ class PlayerCoordinator extends ChangeNotifier {
   Future<void> toggleFullscreen() async {
     final next = !_fullscreen;
     await player.setFullscreen(next);
+    if (_disposed) return;
     _fullscreen = next;
     notifyListeners();
   }
@@ -628,9 +629,10 @@ class PlayerCoordinator extends ChangeNotifier {
       try {
         await player.setFullscreen(false);
       } catch (error) {
-        _recordPlaybackFailure(error);
+        if (!_disposed) _recordPlaybackFailure(error);
       }
     }
+    if (_disposed) return;
     await stop();
   }
 

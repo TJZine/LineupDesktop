@@ -391,6 +391,18 @@ class ChannelsView extends StatefulWidget {
 class _ChannelsViewState extends State<ChannelsView> {
   String? _error;
   final _deleteFocus = <String, FocusNode>{};
+  bool _deleteFocusPruneScheduled = false;
+
+  void _pruneDeleteFocus() {
+    _deleteFocusPruneScheduled = false;
+    final channelIds = widget.controller.channels
+        .map((channel) => channel.id)
+        .toSet();
+    for (final id
+        in _deleteFocus.keys.where((id) => !channelIds.contains(id)).toList()) {
+      _deleteFocus.remove(id)?.dispose();
+    }
+  }
 
   @override
   void dispose() {
@@ -401,83 +413,99 @@ class _ChannelsViewState extends State<ChannelsView> {
   }
 
   @override
-  Widget build(BuildContext context) => LineupPage(
-    title: 'Channels',
-    actions: Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: [
-        OutlinedButton.icon(
-          focusNode: widget.focusNode,
-          onPressed: widget.controller.enterChannelSetup,
-          icon: const Icon(Icons.auto_awesome_outlined),
-          label: const Text('Channel builder'),
-        ),
-        FilledButton.icon(
-          onPressed: _showEditor,
-          icon: const Icon(Icons.add),
-          label: const Text('Create channel'),
-        ),
-      ],
-    ),
-    child: Column(
-      children: [
-        if (_error != null) ...[
-          LineupNotice(message: _error!),
-          const SizedBox(height: 12),
+  Widget build(BuildContext context) {
+    final channelIds = widget.controller.channels
+        .map((channel) => channel.id)
+        .toSet();
+    if (!_deleteFocusPruneScheduled &&
+        _deleteFocus.keys.any((id) => !channelIds.contains(id))) {
+      _deleteFocusPruneScheduled = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _pruneDeleteFocus();
+        }
+      });
+    }
+    return LineupPage(
+      title: 'Channels',
+      actions: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          OutlinedButton.icon(
+            focusNode: widget.focusNode,
+            onPressed: widget.controller.enterChannelSetup,
+            icon: const Icon(Icons.auto_awesome_outlined),
+            label: const Text('Channel builder'),
+          ),
+          FilledButton.icon(
+            onPressed: _showEditor,
+            icon: const Icon(Icons.add),
+            label: const Text('Create channel'),
+          ),
         ],
-        Expanded(
-          child: widget.controller.channels.isEmpty
-              ? LineupEmptyState(
-                  icon: Icons.view_list,
-                  title: 'Build your first channel',
-                  message: 'Choose library content, ordering, and a stable channel number.',
-                  action: FilledButton.icon(
-                    onPressed: widget.controller.enterChannelSetup,
-                    icon: const Icon(Icons.auto_awesome_outlined),
-                    label: const Text('Open Channel builder'),
-                  ),
-                )
-              : ListView.separated(
-                  itemCount: widget.controller.channels.length,
-                  separatorBuilder: (_, _) => const SizedBox(height: 8),
-                  itemBuilder: (context, index) {
-                    final channel = widget.controller.channels[index];
-                    return Card(
-                      child: ListTile(
-                        leading: CircleAvatar(child: Text('${channel.number}')),
-                        title: Text(channel.name),
-                        subtitle: Text(
-                          '${channel.playbackMode.name} • ${_sourceLabel(channel.source)}',
-                        ),
-                        trailing: Wrap(
-                          children: [
-                            IconButton(
-                              tooltip: 'Edit ${channel.name}',
-                              onPressed: () => _showEditor(channel),
-                              icon: const Icon(Icons.edit_outlined),
-                            ),
-                            IconButton(
-                              tooltip: 'Delete ${channel.name}',
-                              focusNode: _deleteFocus.putIfAbsent(
-                                channel.id,
-                                () => FocusNode(
-                                  debugLabel: 'Delete ${channel.name}',
-                                ),
+      ),
+      child: Column(
+        children: [
+          if (_error != null) ...[
+            LineupNotice(message: _error!),
+            const SizedBox(height: 12),
+          ],
+          Expanded(
+            child: widget.controller.channels.isEmpty
+                ? LineupEmptyState(
+                    icon: Icons.view_list,
+                    title: 'Build your first channel',
+                    message: 'Choose library content, ordering, and a stable channel number.',
+                    action: FilledButton.icon(
+                      onPressed: widget.controller.enterChannelSetup,
+                      icon: const Icon(Icons.auto_awesome_outlined),
+                      label: const Text('Open Channel builder'),
+                    ),
+                  )
+                : ListView.separated(
+                    itemCount: widget.controller.channels.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 8),
+                    itemBuilder: (context, index) {
+                      final channel = widget.controller.channels[index];
+                      return Card(
+                        child: ListTile(
+                          leading: CircleAvatar(
+                            child: Text('${channel.number}'),
+                          ),
+                          title: Text(channel.name),
+                          subtitle: Text(
+                            '${channel.playbackMode.name} • ${_sourceLabel(channel.source)}',
+                          ),
+                          trailing: Wrap(
+                            children: [
+                              IconButton(
+                                tooltip: 'Edit ${channel.name}',
+                                onPressed: () => _showEditor(channel),
+                                icon: const Icon(Icons.edit_outlined),
                               ),
-                              onPressed: () => _delete(channel),
-                              icon: const Icon(Icons.delete_outline),
-                            ),
-                          ],
+                              IconButton(
+                                tooltip: 'Delete ${channel.name}',
+                                focusNode: _deleteFocus.putIfAbsent(
+                                  channel.id,
+                                  () => FocusNode(
+                                    debugLabel: 'Delete ${channel.name}',
+                                  ),
+                                ),
+                                onPressed: () => _delete(channel),
+                                icon: const Icon(Icons.delete_outline),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                    );
-                  },
-                ),
-        ),
-      ],
-    ),
-  );
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
 
   Future<void> _showEditor([Channel? channel]) => showDialog<void>(
     context: context,
@@ -540,6 +568,11 @@ class _ChannelEditorState extends State<ChannelEditor> {
     ManualSource(:final items) => items.map((item) => item.id).toSet(),
     _ => <String>{},
   };
+  late final Map<String, ChannelItem> _originalManualItems =
+      switch (widget.channel?.source) {
+        ManualSource(:final items) => {for (final item in items) item.id: item},
+        _ => const {},
+      };
   late String? _libraryId = switch (widget.channel?.source) {
     LibrarySource(:final libraryId) => libraryId,
     _ => widget.controller.selectedLibraryIds.firstOrNull,
@@ -660,22 +693,51 @@ class _ChannelEditorState extends State<ChannelEditor> {
                 const SizedBox(height: 12),
                 SizedBox(
                   height: 240,
-                  child: ListView.builder(
-                    itemCount: widget.controller.availableMedia.length,
-                    itemBuilder: (context, index) {
-                      final item = widget.controller.availableMedia[index];
-                      return CheckboxListTile(
-                        dense: true,
-                        value: _manualItemIds.contains(item.id),
-                        title: Text(item.title),
-                        subtitle: item.grandparentTitle == null
-                            ? null
-                            : Text(item.grandparentTitle!),
-                        onChanged: (selected) => setState(
-                          () => selected == true
-                              ? _manualItemIds.add(item.id)
-                              : _manualItemIds.remove(item.id),
-                        ),
+                  child: Builder(
+                    builder: (context) {
+                      final available = widget.controller.availableMedia;
+                      final availableIds = available
+                          .map((item) => item.id)
+                          .toSet();
+                      final unavailable = _originalManualItems.values
+                          .where(
+                            (item) =>
+                                _manualItemIds.contains(item.id) &&
+                                !availableIds.contains(item.id),
+                          )
+                          .toList();
+                      return ListView.builder(
+                        itemCount: unavailable.length + available.length,
+                        itemBuilder: (context, index) {
+                          if (index < unavailable.length) {
+                            final item = unavailable[index];
+                            return CheckboxListTile(
+                              dense: true,
+                              value: true,
+                              title: Text(item.title),
+                              subtitle: const Text(
+                                'Unavailable • retained until removed',
+                              ),
+                              onChanged: (_) => setState(
+                                () => _manualItemIds.remove(item.id),
+                              ),
+                            );
+                          }
+                          final item = available[index - unavailable.length];
+                          return CheckboxListTile(
+                            dense: true,
+                            value: _manualItemIds.contains(item.id),
+                            title: Text(item.title),
+                            subtitle: item.grandparentTitle == null
+                                ? null
+                                : Text(item.grandparentTitle!),
+                            onChanged: (selected) => setState(
+                              () => selected == true
+                                  ? _manualItemIds.add(item.id)
+                                  : _manualItemIds.remove(item.id),
+                            ),
+                          );
+                        },
                       );
                     },
                   ),
@@ -752,10 +814,14 @@ class _ChannelEditorState extends State<ChannelEditor> {
           'The selected library is no longer available. Choose another library.',
         );
       }
-      final manualItems = widget.controller.availableMedia
-          .where((item) => _manualItemIds.contains(item.id))
-          .map(channelItemFor)
-          .toList();
+      final availableManualItems = {
+        for (final item in widget.controller.availableMedia)
+          if (_manualItemIds.contains(item.id)) item.id: channelItemFor(item),
+      };
+      final manualItems = [
+        for (final id in _manualItemIds)
+          ?(availableManualItems[id] ?? _originalManualItems[id]),
+      ];
       if (_manual && manualItems.isEmpty) {
         throw const FormatException('Select at least one program');
       }
@@ -1055,10 +1121,9 @@ class _SettingsViewState extends State<SettingsView> {
                 subtitle: Text(
                   widget.controller.server == null
                       ? 'No server selected'
-                      : _connectionDescription(
-                          widget.controller.server!,
-                          widget.controller.connection,
-                        ),
+                      : widget.controller.connection == null
+                      ? widget.controller.server!.name
+                      : '${widget.controller.server!.name} • ${plexConnectionDescription(widget.controller.connection!)}',
                 ),
                 trailing: OutlinedButton.icon(
                   onPressed: _saving ? null : widget.controller.showServers,
@@ -1271,17 +1336,6 @@ class _Dropdown<T> extends StatelessWidget {
             },
     ),
   );
-}
-
-String _connectionDescription(PlexServer server, PlexConnection? connection) {
-  if (connection == null) return server.name;
-  final type = connection.relay
-      ? 'Plex Relay'
-      : connection.local
-      ? 'Direct local'
-      : 'Direct remote';
-  final latency = connection.latency;
-  return '${server.name} • $type${latency == null ? '' : ' • ${latency.inMilliseconds} ms measured'}';
 }
 
 class _Brand extends StatelessWidget {
