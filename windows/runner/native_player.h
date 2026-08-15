@@ -14,8 +14,10 @@
 #include <mutex>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <unordered_map>
+#include <utility>
 
 class WindowsNativePlayer {
  public:
@@ -40,12 +42,40 @@ class WindowsNativePlayer {
   };
 
   enum class CommandType { load, play, pause, seek, stop, track, volume };
+  class PlexHeader {
+   public:
+    PlexHeader() = default;
+    explicit PlexHeader(std::string_view token);
+    ~PlexHeader();
+
+    PlexHeader(const PlexHeader&) = delete;
+    PlexHeader& operator=(const PlexHeader&) = delete;
+    PlexHeader(PlexHeader&& other) noexcept;
+    PlexHeader& operator=(PlexHeader&& other) noexcept;
+
+    char* data() { return data_.get(); }
+    size_t size() const { return size_; }
+    bool empty() const { return data_ == nullptr; }
+    void Clear() noexcept;
+
+   private:
+    std::unique_ptr<char[]> data_;
+    size_t size_ = 0;
+  };
+
   struct QueuedCommand {
+    QueuedCommand(CommandType type, int64_t load_id = 0,
+                  std::string text = {}, double number = 0)
+        : type(type),
+          load_id(load_id),
+          text(std::move(text)),
+          number(number) {}
+
     CommandType type;
     int64_t load_id = 0;
     std::string text;
     double number = 0;
-    std::string plex_token;
+    PlexHeader plex_header;
   };
 
   void HandleMethodCall(

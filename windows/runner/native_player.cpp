@@ -100,16 +100,42 @@ bool IsValidPlexToken(std::string_view value) {
   return true;
 }
 
-std::string FixedLengthMpvString(std::string value) {
-  return "%" + std::to_string(value.size()) + "%" + std::move(value);
+constexpr bool IsHttpStatusSeparator(char value) {
+  return value == ' ' || value == '\t' || value == '\r' || value == '\n' ||
+         value == ':' || value == '=' || value == '-';
 }
 
-void WipePlexToken(std::string& token) {
-  if (!token.empty()) {
-    ::SecureZeroMemory(token.data(), token.size());
-    token.clear();
-  }
+constexpr bool IsAsciiDigit(char value) {
+  return value >= '0' && value <= '9';
 }
+
+constexpr std::optional<int64_t> ParseHttpErrorStatus(std::string_view text) {
+  constexpr std::string_view marker = "http error";
+  const size_t start = text.find(marker);
+  if (start == std::string_view::npos) {
+    return std::nullopt;
+  }
+  size_t cursor = start + marker.size();
+  while (cursor < text.size() && IsHttpStatusSeparator(text[cursor])) {
+    ++cursor;
+  }
+  const size_t digit_start = cursor;
+  while (cursor < text.size() && IsAsciiDigit(text[cursor])) {
+    ++cursor;
+  }
+  if (cursor - digit_start != 3 ||
+      (text[digit_start] != '4' && text[digit_start] != '5')) {
+    return std::nullopt;
+  }
+  return (text[digit_start] - '0') * 100 +
+         (text[digit_start + 1] - '0') * 10 +
+         (text[digit_start + 2] - '0');
+}
+
+static_assert(ParseHttpErrorStatus("http error: 404") == 404);
+static_assert(ParseHttpErrorStatus("http error = 503") == 503);
+static_assert(!ParseHttpErrorStatus("http error: 4040"));
+static_assert(!ParseHttpErrorStatus("http error while opening; retry 503"));
 
 const mpv_node* FindNode(const mpv_node& map, const char* key) {
   if (map.format != MPV_FORMAT_NODE_MAP || !map.u.list) {
@@ -241,17 +267,8 @@ std::optional<ClassifiedFailure> ClassifyMpvFailure(
   };
   if (const size_t start = text.find("http error");
       start != std::string::npos) {
-    for (size_t index = start; index + 2 < text.size(); ++index) {
-      if (std::isdigit(static_cast<unsigned char>(text[index])) &&
-          std::isdigit(static_cast<unsigned char>(text[index + 1])) &&
-          std::isdigit(static_cast<unsigned char>(text[index + 2]))) {
-        if (text[index] == '4' || text[index] == '5') {
-          const int64_t status = (text[index] - '0') * 100 +
-                                 (text[index + 1] - '0') * 10 +
-                                 (text[index + 2] - '0');
-          return ClassifiedFailure{"http_error", status};
-        }
-      }
+    if (const auto status = ParseHttpErrorStatus(text)) {
+      return ClassifiedFailure{"http_error", status};
     }
     return ClassifiedFailure{"http_error", std::nullopt};
   }
@@ -298,6 +315,48 @@ bool RestoreWindowState(HWND window, LONG_PTR style,
 }
 
 }  // namespace
+
+WindowsNativePlayer::PlexHeader::PlexHeader(std::string_view token) {
+  constexpr std::string_view prefix = "X-Plex-Token: ";
+  const size_t field_size = prefix.size() + token.size();
+  const std::string length = std::to_string(field_size);
+  size_ = length.size() + field_size + 2;
+  data_ = std::make_unique<char[]>(size_ + 1);
+  char* output = data_.get();
+  *output++ = '%';
+  std::memcpy(output, length.data(), length.size());
+  output += length.size();
+  *output++ = '%';
+  std::memcpy(output, prefix.data(), prefix.size());
+  output += prefix.size();
+  std::memcpy(output, token.data(), token.size());
+  output[token.size()] = '\0';
+}
+
+WindowsNativePlayer::PlexHeader::~PlexHeader() {
+  Clear();
+}
+
+WindowsNativePlayer::PlexHeader::PlexHeader(PlexHeader&& other) noexcept
+    : data_(std::move(other.data_)), size_(std::exchange(other.size_, 0)) {}
+
+WindowsNativePlayer::PlexHeader& WindowsNativePlayer::PlexHeader::operator=(
+    PlexHeader&& other) noexcept {
+  if (this != &other) {
+    Clear();
+    data_ = std::move(other.data_);
+    size_ = std::exchange(other.size_, 0);
+  }
+  return *this;
+}
+
+void WindowsNativePlayer::PlexHeader::Clear() noexcept {
+  if (data_) {
+    ::SecureZeroMemory(data_.get(), size_);
+    data_.reset();
+    size_ = 0;
+  }
+}
 
 WindowsNativePlayer::WindowsNativePlayer(
     HWND top_level_window, HWND flutter_view,
@@ -400,7 +459,7 @@ void WindowsNativePlayer::HandleMethodCall(
     }
     QueuedCommand command{CommandType::load, *load_id, *uri};
     if (plex_token) {
-      command.plex_token = *plex_token;
+      command.plex_header = PlexHeader(*plex_token);
     }
     if (!QueueCommand(std::move(command))) {
       result->Error("command_queue_full", "The native command queue is full.");
@@ -625,9 +684,6 @@ void WindowsNativePlayer::FinishDispose() {
   video_rect_set_ = false;
   {
     std::lock_guard lock(command_mutex_);
-    for (auto& command : commands_) {
-      WipePlexToken(command.plex_token);
-    }
     commands_.clear();
     queued_command_bytes_ = 0;
   }
@@ -782,16 +838,14 @@ void WindowsNativePlayer::StartEventThread() {
 bool WindowsNativePlayer::QueueCommand(QueuedCommand command) {
   std::lock_guard lock(command_mutex_);
   if (command.text.size() > kMaxQueuedCommandBytes ||
-      command.plex_token.size() >
+      command.plex_header.size() >
           kMaxQueuedCommandBytes - command.text.size()) {
-    WipePlexToken(command.plex_token);
     return false;
   }
-  const size_t command_bytes = command.text.size() + command.plex_token.size();
+  const size_t command_bytes = command.text.size() + command.plex_header.size();
   if (!accepting_commands_ || commands_.size() >= kMaxQueuedCommands ||
       queued_command_bytes_ > kMaxQueuedCommandBytes ||
       command_bytes > kMaxQueuedCommandBytes - queued_command_bytes_) {
-    WipePlexToken(command.plex_token);
     return false;
   }
   queued_command_bytes_ += command_bytes;
@@ -807,13 +861,11 @@ void WindowsNativePlayer::RunCommand(QueuedCommand& command,
       int paused = 0;
       status = mpv_set_property(mpv_, "pause", MPV_FORMAT_FLAG, &paused);
       if (status >= 0) {
-        if (command.plex_token.empty()) {
+        if (command.plex_header.empty()) {
           const char* value[] = {"loadfile", command.text.c_str(), "replace",
                                  nullptr};
           status = mpv_command(mpv_, value);
         } else {
-          std::string header_fields = FixedLengthMpvString(
-              "X-Plex-Token: " + command.plex_token);
           char* command_name = const_cast<char*>("loadfile");
           char* uri = const_cast<char*>(command.text.c_str());
           char* flags = const_cast<char*>("replace");
@@ -829,7 +881,7 @@ void WindowsNativePlayer::RunCommand(QueuedCommand& command,
           values[4].format = MPV_FORMAT_NODE_MAP;
           mpv_node option_value{};
           option_value.format = MPV_FORMAT_STRING;
-          option_value.u.string = const_cast<char*>(header_fields.c_str());
+          option_value.u.string = command.plex_header.data();
           char* option_key = const_cast<char*>("http-header-fields");
           mpv_node_list option_list{1, &option_value, &option_key};
           values[4].u.list = &option_list;
@@ -838,9 +890,6 @@ void WindowsNativePlayer::RunCommand(QueuedCommand& command,
           command_node.format = MPV_FORMAT_NODE_ARRAY;
           command_node.u.list = &command_list;
           status = mpv_command_node(mpv_, &command_node, nullptr);
-          if (!header_fields.empty()) {
-            ::SecureZeroMemory(header_fields.data(), header_fields.size());
-          }
         }
         if (status >= 0) {
           active_load_id_ = command.load_id;
@@ -950,7 +999,7 @@ void WindowsNativePlayer::EventLoop(uint64_t generation) {
     }
     for (auto& command : commands) {
       RunCommand(command, generation);
-      WipePlexToken(command.plex_token);
+      command.plex_header.Clear();
     }
     const mpv_event* event = mpv_wait_event(mpv_, 0.05);
     if (stopping_) {
