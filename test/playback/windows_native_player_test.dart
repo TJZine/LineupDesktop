@@ -150,6 +150,47 @@ void main() {
   );
 
   test(
+    'maps structured native failures without exposing native prose',
+    () async {
+      final calls = <MethodCall>[];
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        calls.add(call);
+        return null;
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+      final player = WindowsNativePlayer();
+      await player.initialize();
+      final load = player.load(Uri.parse('https://plex.example/media'));
+      await Future<void>.delayed(Duration.zero);
+      final loadId = calls.last.arguments!['loadId']! as int;
+      final expectation = expectLater(
+        load,
+        throwsA(
+          isA<PlayerUnavailable>().having(
+            (error) => error.message,
+            'message',
+            'Media server returned HTTP 503',
+          ),
+        ),
+      );
+
+      await _sendNativeEvent(messenger, {
+        'type': 'state',
+        'loadId': loadId,
+        'state': 'error',
+        'message': 'raw native detail that must not reach Dart UI',
+        'failureCode': 'http_error',
+        'httpStatus': 503,
+      });
+
+      await expectation;
+      expect(player.status.message, 'Media server returned HTTP 503');
+      await player.dispose();
+    },
+  );
+
+  test(
     'ignores stale or unscoped events and clears facts for replacement',
     () async {
       final calls = <MethodCall>[];

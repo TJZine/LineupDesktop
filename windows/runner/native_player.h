@@ -88,7 +88,9 @@ class WindowsNativePlayer {
   std::optional<int64_t> event_load_id_;
   std::deque<int64_t> pending_load_ids_;
   std::unordered_map<int64_t, int64_t> playlist_load_ids_;
-  std::string last_failure_detail_;
+  std::optional<int64_t> last_failure_load_id_;
+  std::string last_failure_code_;
+  std::optional<int64_t> last_failure_http_status_;
   std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>>
       dispose_result_;
   std::atomic<bool> dispose_ready_{false};

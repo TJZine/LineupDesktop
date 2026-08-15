@@ -106,6 +106,8 @@ class WindowsNativePlayer implements NativePlayer {
           PlayerState.error,
           error is TimeoutException
               ? 'Media load timed out'
+              : error is PlayerUnavailable
+              ? error.message
               : 'Media load failed',
           recoverable: true,
         );
@@ -221,7 +223,9 @@ class WindowsNativePlayer implements NativePlayer {
       'error' => PlayerState.error,
       _ => PlayerState.idle,
     };
-    final message = event['message'] as String? ?? state.name;
+    final message = event['failureCode'] is String
+        ? _nativeFailureMessage(event)
+        : event['message'] as String? ?? state.name;
     _setStatus(state, message, recoverable: state == PlayerState.error);
     if (state == PlayerState.playing) {
       final pending = _pendingLoad;
@@ -230,6 +234,21 @@ class WindowsNativePlayer implements NativePlayer {
       _completePendingLoadError(PlayerUnavailable(message));
     }
   }
+
+  String _nativeFailureMessage(Map<Object?, Object?> event) =>
+      switch (event['failureCode']) {
+        'http_error' when event['httpStatus'] is int =>
+          'Media server returned HTTP ${event['httpStatus']}',
+        'http_error' => 'Media server rejected the request',
+        'network_error' => 'Media server connection failed',
+        'audio_decode_error' => 'Audio decoding failed',
+        'video_decode_error' => 'Video decoding failed',
+        'audio_output_error' => 'Audio output could not start',
+        'video_output_error' => 'Video output could not start',
+        'source_open_error' => 'Media source could not be opened',
+        'container_error' => 'Media container could not be read',
+        _ => 'Media playback failed',
+      };
 
   void _handleProperty(String? name, Object? value) {
     switch (name) {

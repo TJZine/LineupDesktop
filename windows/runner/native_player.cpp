@@ -168,6 +168,19 @@ flutter::EncodableMap StateEvent(const char* state, const char* message,
   return event;
 }
 
+flutter::EncodableMap FailureStateEvent(
+    const std::string& code, std::optional<int64_t> http_status,
+    std::optional<int64_t> load_id) {
+  auto event = StateEvent("error", "Media playback failed", load_id);
+  event[flutter::EncodableValue("failureCode")] =
+      flutter::EncodableValue(code);
+  if (http_status) {
+    event[flutter::EncodableValue("httpStatus")] =
+        flutter::EncodableValue(*http_status);
+  }
+  return event;
+}
+
 std::string LowerAscii(const char* input) {
   std::string value = BoundedUtf8(input, kMaxMetadataStringBytes);
   std::transform(value.begin(), value.end(), value.begin(), [](char byte) {
@@ -177,7 +190,12 @@ std::string LowerAscii(const char* input) {
   return value;
 }
 
-std::optional<std::string> ClassifyMpvFailure(
+struct ClassifiedFailure {
+  std::string code;
+  std::optional<int64_t> http_status;
+};
+
+std::optional<ClassifiedFailure> ClassifyMpvFailure(
     const mpv_event_log_message& message) {
   const std::string prefix = LowerAscii(message.prefix);
   const std::string text = LowerAscii(message.text);
@@ -190,40 +208,42 @@ std::optional<std::string> ClassifyMpvFailure(
       if (std::isdigit(static_cast<unsigned char>(text[index])) &&
           std::isdigit(static_cast<unsigned char>(text[index + 1])) &&
           std::isdigit(static_cast<unsigned char>(text[index + 2]))) {
-        const std::string status = text.substr(index, 3);
-        if (status[0] == '4' || status[0] == '5') {
-          return "Media server returned HTTP " + status;
+        if (text[index] == '4' || text[index] == '5') {
+          const int64_t status = (text[index] - '0') * 100 +
+                                 (text[index + 1] - '0') * 10 +
+                                 (text[index + 2] - '0');
+          return ClassifiedFailure{"http_error", status};
         }
       }
     }
-    return "Media server rejected the request";
+    return ClassifiedFailure{"http_error", std::nullopt};
   }
   if (contains("connection refused") || contains("connection timed out") ||
       contains("network is unreachable") || contains("failed to resolve") ||
       contains("tls") || contains("certificate")) {
-    return "Media server connection failed";
+    return ClassifiedFailure{"network_error", std::nullopt};
   }
   if (contains("audio") &&
       (contains("decode") || contains("decoder") || contains("codec"))) {
-    return "Audio decoding failed";
+    return ClassifiedFailure{"audio_decode_error", std::nullopt};
   }
   if (contains("video") &&
       (contains("decode") || contains("decoder") || contains("codec"))) {
-    return "Video decoding failed";
+    return ClassifiedFailure{"video_decode_error", std::nullopt};
   }
   if (prefix.rfind("ao/", 0) == 0 || contains("audio output")) {
-    return "Audio output could not start";
+    return ClassifiedFailure{"audio_output_error", std::nullopt};
   }
   if (prefix.rfind("vo/", 0) == 0 || contains("video output")) {
-    return "Video output could not start";
+    return ClassifiedFailure{"video_output_error", std::nullopt};
   }
   if (contains("failed to open") || contains("cannot open") ||
       contains("could not open")) {
-    return "Media source could not be opened";
+    return ClassifiedFailure{"source_open_error", std::nullopt};
   }
   if (prefix.find("demux") != std::string::npos ||
       contains("demuxer") || contains("invalid data found")) {
-    return "Media container could not be read";
+    return ClassifiedFailure{"container_error", std::nullopt};
   }
   return std::nullopt;
 }
@@ -556,6 +576,9 @@ void WindowsNativePlayer::FinishDispose() {
   event_load_id_.reset();
   pending_load_ids_.clear();
   playlist_load_ids_.clear();
+  last_failure_load_id_.reset();
+  last_failure_code_.clear();
+  last_failure_http_status_.reset();
 }
 
 bool WindowsNativePlayer::SetVideoRect(
@@ -846,7 +869,6 @@ void WindowsNativePlayer::HandleMpvEvent(const mpv_event& event,
                                          uint64_t generation) {
   switch (event.event_id) {
     case MPV_EVENT_START_FILE:
-      last_failure_detail_.clear();
       if (const auto* start = static_cast<mpv_event_start_file*>(event.data)) {
         const auto load = playlist_load_ids_.find(start->playlist_entry_id);
         if (load != playlist_load_ids_.end()) {
@@ -866,6 +888,11 @@ void WindowsNativePlayer::HandleMpvEvent(const mpv_event& event,
         } else {
           event_load_id_.reset();
         }
+      }
+      if (last_failure_load_id_ == event_load_id_) {
+        last_failure_load_id_.reset();
+        last_failure_code_.clear();
+        last_failure_http_status_.reset();
       }
       QueueEvent(generation,
                  StateEvent("loading", "Loading media", event_load_id_));
@@ -930,24 +957,40 @@ void WindowsNativePlayer::HandleMpvEvent(const mpv_event& event,
             pending_load_ids_.end());
       }
       if (end && end->error < 0) {
-        std::string message = mpv_error_string(end->error);
-        if (!last_failure_detail_.empty()) {
-          message += ": " + last_failure_detail_;
-        }
-        QueueEvent(generation,
-                   StateEvent("error", message.c_str(), load_id));
+        const bool has_detail = load_id && last_failure_load_id_ == load_id &&
+                                !last_failure_code_.empty();
+        QueueEvent(
+            generation,
+            FailureStateEvent(has_detail ? last_failure_code_ : "mpv_error",
+                              has_detail ? last_failure_http_status_
+                                         : std::nullopt,
+                              load_id));
       } else {
         QueueEvent(generation,
                    StateEvent("stopped", "Playback stopped", load_id));
       }
-      last_failure_detail_.clear();
+      if (last_failure_load_id_ == load_id) {
+        last_failure_load_id_.reset();
+        last_failure_code_.clear();
+        last_failure_http_status_.reset();
+      }
+      if (active_load_id_ == load_id) {
+        active_load_id_.reset();
+      }
+      if (event_load_id_ == load_id) {
+        event_load_id_.reset();
+      }
       break;
     }
     case MPV_EVENT_LOG_MESSAGE:
       if (const auto* message =
               static_cast<mpv_event_log_message*>(event.data)) {
-        if (const auto detail = ClassifyMpvFailure(*message)) {
-          last_failure_detail_ = *detail;
+        if (event_load_id_ && event_load_id_ == active_load_id_) {
+          if (const auto detail = ClassifyMpvFailure(*message)) {
+            last_failure_load_id_ = event_load_id_;
+            last_failure_code_ = detail->code;
+            last_failure_http_status_ = detail->http_status;
+          }
         }
       }
       break;
