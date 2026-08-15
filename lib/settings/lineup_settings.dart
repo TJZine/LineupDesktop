@@ -104,10 +104,14 @@ class LineupSettings {
     T enumValue<T extends Enum>(List<T> values, String key, T fallback) =>
         values.where((value) => value.name == json[key]).firstOrNull ??
         fallback;
-    final guideHours = (json['guideHours'] as num?)?.toInt() ?? 4;
-    final pastMinutes = (json['pastMinutes'] as num?)?.toInt() ?? 30;
-    final osdAutoHideSeconds =
-        (json['osdAutoHideSeconds'] as num?)?.toInt() ?? 4;
+    int number(String key, int fallback) {
+      final value = json[key];
+      return value is num && value.isFinite ? value.toInt() : fallback;
+    }
+
+    final guideHours = number('guideHours', 4);
+    final pastMinutes = number('pastMinutes', 30);
+    final osdAutoHideSeconds = number('osdAutoHideSeconds', 4);
     return LineupSettings(
       theme: LineupThemeName.fromStorage(json['theme']),
       guideHours: guideHours.clamp(2, 12).toInt(),

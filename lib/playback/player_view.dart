@@ -201,7 +201,7 @@ class _PlayerViewState extends State<PlayerView> {
                       child: child,
                     );
                     if (child.key != const ValueKey(PlayerOverlay.osd)) {
-                      return child;
+                      return transitioned;
                     }
                     return SlideTransition(
                       position: Tween(

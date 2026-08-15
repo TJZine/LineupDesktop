@@ -286,9 +286,13 @@ class _LineupShellState extends State<LineupShell> {
         body: Stack(
           fit: StackFit.expand,
           children: [
-            ExcludeFocus(
+            ExcludeSemantics(
+              key: const Key('immersive-route-semantics'),
               excluding: _appMenuOpen,
-              child: SafeArea(child: views[_selectedIndex]),
+              child: ExcludeFocus(
+                excluding: _appMenuOpen,
+                child: SafeArea(child: views[_selectedIndex]),
+              ),
             ),
             if (_appMenuOpen) _immersiveAppMenu(),
           ],

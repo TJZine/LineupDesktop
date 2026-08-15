@@ -19,6 +19,8 @@ enum _SetupCategory {
 class UpstreamChannelSetupView extends StatefulWidget {
   const UpstreamChannelSetupView({required this.controller, super.key});
 
+  static const maxContentWidth = 1440.0;
+
   final LineupController controller;
 
   @override
@@ -93,7 +95,9 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
         child: Center(
           child: ConstrainedBox(
             key: const ValueKey('channel-setup-content'),
-            constraints: const BoxConstraints(maxWidth: 1440),
+            constraints: const BoxConstraints(
+              maxWidth: UpstreamChannelSetupView.maxContentWidth,
+            ),
             child: Padding(
               padding: const EdgeInsets.all(28),
               child: Column(

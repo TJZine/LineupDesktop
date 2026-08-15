@@ -79,4 +79,33 @@ void main() {
     expect(decision.kind, StreamDecisionKind.unsupported);
     expect(decision.reasons, contains('dynamic-range-incompatible'));
   });
+
+  test('unrestricted backends accept reported formats and HDR', () {
+    final decision = decideStream(
+      const StreamFacts(
+        container: 'future-container',
+        videoCodec: 'future-video',
+        audioCodec: 'truehd',
+        dynamicRange: DynamicRange.dolbyVision,
+      ),
+      const StreamCapabilities.unrestricted(),
+    );
+
+    expect(decision.kind, StreamDecisionKind.directPlay);
+  });
+
+  test('unrestricted backends try streams with incomplete metadata', () {
+    final decision = decideStream(
+      const StreamFacts(
+        container: null,
+        videoCodec: null,
+        audioCodec: null,
+        dynamicRange: DynamicRange.unknown,
+      ),
+      const StreamCapabilities.unrestricted(),
+    );
+
+    expect(decision.kind, StreamDecisionKind.directPlay);
+    expect(decision.unknowns, isNotEmpty);
+  });
 }

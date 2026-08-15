@@ -651,13 +651,13 @@ class _BlockingCredentials extends _MemoryCredentials {
 
   @override
   Future<void> writeAccountToken(String token) async {
-    writeStarted.complete();
+    if (!writeStarted.isCompleted) writeStarted.complete();
     await finishWrite.future;
     await super.writeAccountToken(token);
   }
 }
 
-class _BlockingFailOnceClearCredentials extends _BlockingCredentials {
+mixin _FailOnceClear on _MemoryCredentials {
   var clearCalls = 0;
 
   @override
@@ -667,6 +667,9 @@ class _BlockingFailOnceClearCredentials extends _BlockingCredentials {
     await super.clear();
   }
 }
+
+class _BlockingFailOnceClearCredentials extends _BlockingCredentials
+    with _FailOnceClear {}
 
 class _FailingClearCredentials extends _MemoryCredentials {
   _FailingClearCredentials({super.accountToken});
@@ -677,17 +680,8 @@ class _FailingClearCredentials extends _MemoryCredentials {
   }
 }
 
-class _FailOnceClearCredentials extends _MemoryCredentials {
+class _FailOnceClearCredentials extends _MemoryCredentials with _FailOnceClear {
   _FailOnceClearCredentials({super.accountToken});
-
-  var clearCalls = 0;
-
-  @override
-  Future<void> clear() async {
-    clearCalls++;
-    if (clearCalls == 1) throw StateError('keychain-token-secret');
-    await super.clear();
-  }
 }
 
 class _BlockingSaveStore extends _MemoryStore {

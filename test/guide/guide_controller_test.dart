@@ -106,6 +106,54 @@ void main() {
     },
   );
 
+  test(
+    'lineup comparison reuses source identity without serializing it',
+    () async {
+      final channel = _channels(1).single;
+      final lineup = _TestLineup([channel]);
+      var loads = 0;
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async {
+          loads++;
+          return _schedule(channel);
+        },
+      )..requestViewport(0, 1);
+      await _settle();
+
+      Channel copy(ContentSource source) => Channel(
+        id: channel.id,
+        number: channel.number,
+        name: channel.name,
+        source: source,
+        playbackMode: channel.playbackMode,
+        anchor: channel.anchor,
+        shuffleSeed: channel.shuffleSeed,
+        blockSize: channel.blockSize,
+      );
+
+      lineup.setChannels([copy(channel.source)]);
+      guide.requestViewport(0, 1);
+      await _settle();
+      expect(loads, 1);
+
+      lineup.setChannels([
+        copy(
+          const LibrarySource(
+            libraryId: 'library-0',
+            libraryType: PlexLibraryType.movie,
+          ),
+        ),
+      ]);
+      guide.requestViewport(0, 1);
+      await _settle();
+      expect(loads, 2);
+
+      guide.dispose();
+      lineup.dispose();
+    },
+  );
+
   test('stale schedule result cannot repopulate a replaced lineup', () async {
     final old = _channels(1).single;
     final next = _channels(1, idPrefix: 'new').single;
@@ -332,6 +380,7 @@ void main() {
               ),
             ),
           );
+    addTearDown(lineup.dispose);
 
     final first = await lineup.loadScheduleFor(channel);
     expect(workerCreations, 1);
@@ -524,6 +573,31 @@ void main() {
       totalRows: 1000,
     );
     expect(rows, (first: 3, count: 5));
+  });
+
+  test('paging an empty Guide is a no-op', () {
+    final lineup = _TestLineup(const []);
+    final guide = GuideController(lineup: lineup);
+
+    guide.page(-1, 5);
+    guide.page(1, 5);
+
+    expect(guide.focusedChannelId, isNull);
+    guide.dispose();
+    lineup.dispose();
+  });
+
+  test('left navigation cannot move focus before the earliest window', () {
+    final now = DateTime(2026, 8, 13, 12);
+    final lineup = _TestLineup(_channels(1));
+    final guide = GuideController(lineup: lineup, clock: () => now);
+
+    guide.moveHorizontal(-1);
+    guide.moveHorizontal(-1);
+
+    expect(guide.focusTime, guide.windowStart);
+    guide.dispose();
+    lineup.dispose();
   });
 
   test('focus movement does not silently select a program', () async {

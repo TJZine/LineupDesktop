@@ -86,6 +86,7 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 1));
     expect(find.bySemanticsLabel(RegExp('Mini Guide')), findsOneWidget);
 
     await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
@@ -131,8 +132,10 @@ void main() {
       expect(tester.takeException(), isNull, reason: '$size');
     }
 
+    await tester.binding.setSurfaceSize(const Size(1360, 840));
     fixture.player.showMiniGuide();
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 1));
     expect(find.bySemanticsLabel(RegExp('Mini Guide')), findsOneWidget);
     expect(
       tester.getSize(find.byKey(const Key('mini-guide-shelf'))).width,
@@ -141,6 +144,39 @@ void main() {
     expect(find.textContaining('UP/DOWN Browse'), findsOneWidget);
 
     await tester.binding.setSurfaceSize(null);
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
+  testWidgets('all player overlays fade and only the OSD slides', (
+    tester,
+  ) async {
+    final fixture = _Fixture(PlayerState.playing);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+
+    final switcher = tester.widget<AnimatedSwitcher>(
+      find.byType(AnimatedSwitcher),
+    );
+    const animation = AlwaysStoppedAnimation<double>(1);
+    final miniGuide = switcher.transitionBuilder(
+      const KeyedSubtree(
+        key: ValueKey(PlayerOverlay.miniGuide),
+        child: SizedBox(),
+      ),
+      animation,
+    );
+    final osd = switcher.transitionBuilder(
+      const KeyedSubtree(key: ValueKey(PlayerOverlay.osd), child: SizedBox()),
+      animation,
+    );
+
+    expect(miniGuide, isA<FadeTransition>());
+    expect(osd, isA<SlideTransition>());
+    expect((osd as SlideTransition).child, isA<FadeTransition>());
     await tester.pumpWidget(const SizedBox.shrink());
     fixture.dispose();
   });

@@ -270,7 +270,11 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Child'));
     await tester.pumpAndSettle();
-    for (final digit in ['1', '2', '3', '4']) {
+    expect(find.bySemanticsLabel('0 of 4 digits entered'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, '1'));
+    await tester.pump();
+    expect(find.bySemanticsLabel('1 of 4 digits entered'), findsOneWidget);
+    for (final digit in ['2', '3', '4']) {
       await tester.tap(find.widgetWithText(FilledButton, digit));
       await tester.pump();
     }

@@ -355,8 +355,10 @@ class GuideController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void page(int offset, int visibleRows) =>
-      moveVertical(offset * visibleRows.clamp(1, channels.length));
+  void page(int offset, int visibleRows) {
+    if (channels.isEmpty) return;
+    moveVertical(offset * visibleRows.clamp(1, channels.length));
+  }
 
   void moveHorizontal(int offset) {
     final programs = _focusedChannelId == null
@@ -378,6 +380,15 @@ class GuideController extends ChangeNotifier {
     } else {
       _focusTime = _focusTime.add(Duration(minutes: 30 * offset));
       _shiftWindow(offset);
+      final latest = windowEnd.isAfter(_windowStart)
+          ? windowEnd.subtract(const Duration(microseconds: 1))
+          : _windowStart;
+      if (_focusTime.isBefore(_windowStart)) {
+        _focusTime = _windowStart;
+      } else if (_focusTime.isAfter(latest)) {
+        _focusTime = latest;
+      }
+      _selectAtFocusTime();
     }
     notifyListeners();
   }
@@ -641,6 +652,7 @@ class GuideController extends ChangeNotifier {
 
   @override
   void dispose() {
+    if (_disposed) return;
     _disposed = true;
     lineup.removeListener(_reconcileLineup);
     _generation++;
@@ -668,8 +680,16 @@ class _ArtworkRequest {
   final int generation;
 }
 
-String _channelFingerprint(Channel channel) =>
-    '${channel.id}|${channel.number}|${channel.name}|${channel.anchor.microsecondsSinceEpoch}|${channel.shuffleSeed}|${channel.blockSize}|${channel.playbackMode}|${channel.source.toJson()}';
+Object _channelFingerprint(Channel channel) => (
+  id: channel.id,
+  number: channel.number,
+  name: channel.name,
+  anchor: channel.anchor,
+  shuffleSeed: channel.shuffleSeed,
+  blockSize: channel.blockSize,
+  playbackMode: channel.playbackMode,
+  source: channel.source,
+);
 
 DateTime _floorHalfHour(DateTime value) {
   final minute = value.minute < 30 ? 0 : 30;

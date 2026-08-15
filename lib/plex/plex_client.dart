@@ -225,14 +225,36 @@ class PlexClient {
       final availableSlots = 8 - candidates.length - laterFallbacks;
       candidates.addAll(byTier[tiers[index]]!.take(availableSlots));
     }
+    PlexException? authorizationError;
     for (final tier in {
       for (final connection in candidates) _connectionTier(connection),
     }) {
-      final reachable = (await Future.wait(
-        candidates
-            .where((candidate) => _connectionTier(candidate) == tier)
-            .map((connection) => _probeConnection(server, connection, token)),
-      )).nonNulls.toList();
+      final results = await Future.wait(
+        candidates.where((candidate) => _connectionTier(candidate) == tier).map(
+          (connection) async {
+            try {
+              return (
+                probe: await _probeConnection(server, connection, token),
+                authorizationError: null as PlexException?,
+              );
+            } on PlexException catch (error) {
+              if (error.code != 'auth-required' &&
+                  error.code != 'access-denied') {
+                rethrow;
+              }
+              return (
+                probe: null as (PlexConnection, Duration)?,
+                authorizationError: error,
+              );
+            }
+          },
+        ),
+      );
+      authorizationError ??= results
+          .map((result) => result.authorizationError)
+          .nonNulls
+          .firstOrNull;
+      final reachable = results.map((result) => result.probe).nonNulls.toList();
       if (reachable.isNotEmpty) {
         reachable.sort((a, b) => a.$2.compareTo(b.$2));
         final selected = reachable.first;
@@ -244,6 +266,7 @@ class PlexClient {
         );
       }
     }
+    if (authorizationError != null) throw authorizationError;
     throw const PlexException(
       'server-unreachable',
       'No reachable connection was found for this server.',

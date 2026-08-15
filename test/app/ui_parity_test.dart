@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/channel_setup_view.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
+import 'package:lineup_desktop/app/onboarding_view.dart';
 import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
 import 'package:lineup_desktop/ui/app_ui.dart';
@@ -18,9 +19,25 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(NavigationRail), findsNothing);
+    expect(
+      tester
+          .widget<ExcludeSemantics>(
+            find.byKey(const Key('immersive-route-semantics')),
+          )
+          .excluding,
+      isFalse,
+    );
     await tester.tap(find.byKey(const Key('guide-app-menu')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('immersive-app-menu')), findsOneWidget);
+    expect(
+      tester
+          .widget<ExcludeSemantics>(
+            find.byKey(const Key('immersive-route-semantics')),
+          )
+          .excluding,
+      isTrue,
+    );
     for (var index = 0; index < 12; index++) {
       await tester.sendKeyEvent(LogicalKeyboardKey.tab);
       await tester.pump();
@@ -48,9 +65,7 @@ void main() {
       (Icons.settings_outlined, 'Settings'),
       (Icons.monitor_heart_outlined, 'Diagnostics'),
     ]) {
-      if (target.$2 == 'Channels') {
-        // The menu transition above already selected this destination.
-      } else {
+      if (target.$2 != 'Channels') {
         await tester.tap(find.byIcon(target.$1));
       }
       await tester.pumpAndSettle();
@@ -150,7 +165,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(
       tester.getSize(find.byKey(const ValueKey('onboarding-content'))).width,
-      1180,
+      UpstreamOnboardingView.maxContentWidth,
     );
     expect(tester.takeException(), isNull);
 
@@ -166,7 +181,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(
       tester.getSize(find.byKey(const ValueKey('channel-setup-content'))).width,
-      1440,
+      UpstreamChannelSetupView.maxContentWidth,
     );
     expect(tester.takeException(), isNull);
   });

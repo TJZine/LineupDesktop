@@ -98,12 +98,12 @@ class PlayerCoordinator extends ChangeNotifier {
     final selected = miniGuideChannelIndex;
     if (channels.isEmpty || selected < 0) return const [];
     final count = channels.length.clamp(0, 5);
+    final start = channels.length <= 5
+        ? 0
+        : (selected - 2 + channels.length) % channels.length;
     return List.generate(
       count,
-      (offset) =>
-          channels[((selected - 2 + offset) % channels.length +
-                  channels.length) %
-              channels.length],
+      (offset) => channels[(start + offset) % channels.length],
       growable: false,
     );
   }
@@ -702,6 +702,7 @@ class PlayerCoordinator extends ChangeNotifier {
 
   @override
   void dispose() {
+    if (_disposed) return;
     _disposed = true;
     ++_tuneGeneration;
     _activeLoadGeneration = null;

@@ -47,7 +47,10 @@ void main() {
 
   testWidgets('non-positive timeline slots render safely', (tester) async {
     final lineup = _Lineup(1)..settings = const LineupSettings(guideHours: 0);
-    final guide = GuideController(lineup: lineup);
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
     await tester.pumpWidget(
       MaterialApp(
         home: GuideView(
@@ -431,13 +434,17 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(1280, 720));
     await tester.pumpWidget(buildGuide());
     await tester.pumpAndSettle();
+    const scheduleList = Key('guide-schedule-list');
     final initialScrollable = tester.state<ScrollableState>(
-      find.byType(Scrollable),
+      find.descendant(
+        of: find.byKey(scheduleList),
+        matching: find.byType(Scrollable),
+      ),
     );
     initialScrollable.position.jumpTo(1200);
     await tester.pump();
     final rowHeight = tester
-        .widget<ListView>(find.byType(ListView))
+        .widget<ListView>(find.byKey(scheduleList))
         .itemExtent!;
     final remembered = guide.verticalOffsetFor(rowHeight);
     expect(remembered, greaterThan(500));
@@ -447,7 +454,12 @@ void main() {
     await tester.pumpWidget(buildGuide());
     await tester.pump();
     await tester.pump();
-    final scrollable = tester.state<ScrollableState>(find.byType(Scrollable));
+    final scrollable = tester.state<ScrollableState>(
+      find.descendant(
+        of: find.byKey(scheduleList),
+        matching: find.byType(Scrollable),
+      ),
+    );
     expect(scrollable.position.pixels, closeTo(remembered, 1));
 
     await tester.binding.setSurfaceSize(null);
@@ -469,8 +481,15 @@ void main() {
       home: GuideView(controller: guide, onClose: () {}, onTune: (_) async {}),
     );
     void expectFocusedRowVisible() {
-      final list = tester.widget<ListView>(find.byType(ListView));
-      final scrollable = tester.state<ScrollableState>(find.byType(Scrollable));
+      final list = tester.widget<ListView>(
+        find.byKey(const Key('guide-schedule-list')),
+      );
+      final scrollable = tester.state<ScrollableState>(
+        find.descendant(
+          of: find.byKey(const Key('guide-schedule-list')),
+          matching: find.byType(Scrollable),
+        ),
+      );
       final first = (scrollable.position.pixels / list.itemExtent!).floor();
       final visible = (scrollable.position.viewportDimension / list.itemExtent!)
           .ceil();

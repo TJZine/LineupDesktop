@@ -211,6 +211,86 @@ void main() {
   }
 
   test(
+    'authorization failure does not hide a reachable same-tier endpoint',
+    () async {
+      final client = PlexClient(
+        clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+        httpClient: MockClient((request) async {
+          if (request.url.host == 'unauthorized.example') {
+            return http.Response('', 401);
+          }
+          return http.Response(
+            '<MediaContainer machineIdentifier="expected"/>',
+            200,
+          );
+        }),
+      );
+
+      final selected = await client.selectConnection(
+        PlexServer(
+          id: 'expected',
+          name: 'Server',
+          connections: [
+            PlexConnection(
+              uri: Uri.parse('https://unauthorized.example:32400'),
+              local: true,
+              relay: false,
+            ),
+            PlexConnection(
+              uri: Uri.parse('https://reachable.example:32400'),
+              local: true,
+              relay: false,
+            ),
+          ],
+        ),
+        'secret',
+      );
+
+      expect(selected.uri.host, 'reachable.example');
+    },
+  );
+
+  test(
+    'authorization failure does not prevent a reachable fallback tier',
+    () async {
+      final client = PlexClient(
+        clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+        httpClient: MockClient((request) async {
+          if (request.url.host == 'local.example') {
+            return http.Response('', 403);
+          }
+          return http.Response(
+            '<MediaContainer machineIdentifier="expected"/>',
+            200,
+          );
+        }),
+      );
+
+      final selected = await client.selectConnection(
+        PlexServer(
+          id: 'expected',
+          name: 'Server',
+          connections: [
+            PlexConnection(
+              uri: Uri.parse('https://local.example:32400'),
+              local: true,
+              relay: false,
+            ),
+            PlexConnection(
+              uri: Uri.parse('https://relay.example:32400'),
+              local: false,
+              relay: true,
+            ),
+          ],
+        ),
+        'secret',
+      );
+
+      expect(selected.uri.host, 'relay.example');
+    },
+  );
+
+  test(
     'connection probing is bounded to eight advertised candidates',
     () async {
       var probes = 0;

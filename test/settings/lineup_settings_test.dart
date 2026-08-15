@@ -51,4 +51,18 @@ void main() {
     expect(restored.theme, LineupThemeName.emberSteel);
     expect(restored.guideLayoutMode, GuideLayoutMode.pictureInPicture);
   });
+
+  test('invalid numeric settings fall back without rejecting other state', () {
+    final restored = LineupSettings.fromJson({
+      'guideHours': 'many',
+      'pastMinutes': false,
+      'osdAutoHideSeconds': double.nan,
+      'nowWatchingBanner': false,
+    });
+
+    expect(restored.guideHours, 4);
+    expect(restored.pastMinutes, 30);
+    expect(restored.osdAutoHideSeconds, 4);
+    expect(restored.nowWatchingBanner, isFalse);
+  });
 }

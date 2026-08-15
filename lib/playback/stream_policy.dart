@@ -36,9 +36,26 @@ class StreamCapabilities {
     },
   });
 
-  final Set<String> containers;
-  final Set<String> videoCodecs;
-  final Set<String> audioCodecs;
+  const StreamCapabilities.unrestricted({
+    this.remux = true,
+    this.transcode = true,
+    this.subtitleDeliveries = const {
+      SubtitleDelivery.embedded,
+      SubtitleDelivery.sidecar,
+      SubtitleDelivery.external,
+      SubtitleDelivery.unknown,
+    },
+  }) : containers = null,
+       videoCodecs = null,
+       audioCodecs = null,
+       hdr10 = true,
+       hlg = true,
+       dolbyVision = true;
+
+  // A null set accepts any reported value in that category.
+  final Set<String>? containers;
+  final Set<String>? videoCodecs;
+  final Set<String>? audioCodecs;
   final Set<SubtitleDelivery> subtitleDeliveries;
   final bool hdr10;
   final bool hlg;
@@ -67,14 +84,18 @@ StreamDecision decideStream(
     if (facts.subtitleDelivery == SubtitleDelivery.unknown)
       'subtitle-delivery-unknown',
   ];
-  if (unknowns.isNotEmpty) {
+  final unrestricted =
+      capabilities.containers == null &&
+      capabilities.videoCodecs == null &&
+      capabilities.audioCodecs == null;
+  if (unknowns.isNotEmpty && !unrestricted) {
     return StreamDecision(StreamDecisionKind.unsupported, const [
       'candidate-facts-incomplete',
     ], unknowns: unknowns);
   }
-  final container = capabilities.containers.contains(facts.container);
-  final video = capabilities.videoCodecs.contains(facts.videoCodec);
-  final audio = capabilities.audioCodecs.contains(facts.audioCodec);
+  final container = capabilities.containers?.contains(facts.container) ?? true;
+  final video = capabilities.videoCodecs?.contains(facts.videoCodec) ?? true;
+  final audio = capabilities.audioCodecs?.contains(facts.audioCodec) ?? true;
   final subtitle =
       facts.subtitleDelivery == null ||
       capabilities.subtitleDeliveries.contains(facts.subtitleDelivery);
@@ -83,12 +104,12 @@ StreamDecision decideStream(
     DynamicRange.hdr10 => capabilities.hdr10,
     DynamicRange.hlg => capabilities.hlg,
     DynamicRange.dolbyVision => capabilities.dolbyVision,
-    DynamicRange.unknown => false,
+    DynamicRange.unknown => unrestricted,
   };
   if (container && video && audio && subtitle && hdr) {
-    return const StreamDecision(StreamDecisionKind.directPlay, [
+    return StreamDecision(StreamDecisionKind.directPlay, const [
       'direct-play-supported',
-    ]);
+    ], unknowns: unknowns);
   }
   final incompatible = <String>[
     if (!container) 'container-incompatible',

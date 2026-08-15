@@ -28,6 +28,9 @@ void main() {
         lineup: lineup,
         guide: guide,
       );
+      addTearDown(lineup.dispose);
+      addTearDown(guide.dispose);
+      addTearDown(coordinator.dispose);
 
       await coordinator.tune('channel-b');
 
@@ -45,8 +48,6 @@ void main() {
       expect(lineup.releases, 1);
 
       coordinator.dispose();
-      guide.dispose();
-      lineup.dispose();
     },
   );
 
@@ -63,6 +64,9 @@ void main() {
       lineup: lineup,
       guide: guide,
     );
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
 
     await coordinator.tune('channel-b');
     coordinator.showMiniGuide();
@@ -75,8 +79,6 @@ void main() {
     expect(coordinator.overlay, PlayerOverlay.none);
     expect(coordinator.sleepDuration, isNull);
     coordinator.dispose();
-    guide.dispose();
-    lineup.dispose();
   });
 
   test('scope cleanup does not notify after disposal', () async {
@@ -92,6 +94,9 @@ void main() {
       lineup: lineup,
       guide: guide,
     );
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
 
     await coordinator.tune('channel-b');
     await coordinator.toggleFullscreen();
@@ -103,8 +108,6 @@ void main() {
 
     expect(lineup.releases, 1);
     expect(lineup.diagnostics.entries, isEmpty);
-    guide.dispose();
-    lineup.dispose();
   });
 
   test('pending fullscreen changes do not notify after disposal', () async {
@@ -119,6 +122,9 @@ void main() {
       lineup: lineup,
       guide: guide,
     );
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
 
     final fullscreen = coordinator.toggleFullscreen();
     await nativePlayer.fullscreenStarted.future;
@@ -127,8 +133,6 @@ void main() {
 
     await fullscreen;
     expect(coordinator.fullscreen, isFalse);
-    guide.dispose();
-    lineup.dispose();
   });
 
   test(
@@ -146,6 +150,9 @@ void main() {
         lineup: lineup,
         guide: guide,
       );
+      addTearDown(lineup.dispose);
+      addTearDown(guide.dispose);
+      addTearDown(coordinator.dispose);
 
       await coordinator.tune('channel-b');
       lineup.replaceChannels(
@@ -156,8 +163,6 @@ void main() {
       expect(nativePlayer.stops, 1);
       expect(lineup.releases, 1);
       coordinator.dispose();
-      guide.dispose();
-      lineup.dispose();
     },
   );
 
@@ -176,6 +181,9 @@ void main() {
         lineup: lineup,
         guide: guide,
       );
+      addTearDown(lineup.dispose);
+      addTearDown(guide.dispose);
+      addTearDown(coordinator.dispose);
       await coordinator.tune('channel-b');
 
       expect(await coordinator.logout(), isFalse);
@@ -186,8 +194,6 @@ void main() {
       expect(lineup.releases, 1);
 
       coordinator.dispose();
-      guide.dispose();
-      lineup.dispose();
     },
   );
 
@@ -206,6 +212,9 @@ void main() {
         lineup: lineup,
         guide: guide,
       );
+      addTearDown(lineup.dispose);
+      addTearDown(guide.dispose);
+      addTearDown(coordinator.dispose);
 
       coordinator.showOsd();
       coordinator.showTracks(PlayerTrackType.subtitle);
@@ -219,8 +228,6 @@ void main() {
       expect(lineup.currentChannelId, 'channel-b');
 
       coordinator.dispose();
-      guide.dispose();
-      lineup.dispose();
     },
   );
 
@@ -241,6 +248,9 @@ void main() {
         lineup: lineup,
         guide: guide,
       );
+      addTearDown(lineup.dispose);
+      addTearDown(guide.dispose);
+      addTearDown(coordinator.dispose);
 
       coordinator.showMiniGuide();
       coordinator.moveMiniGuide(500);
@@ -251,10 +261,58 @@ void main() {
       expect(guide.cachedRowCount, lessThanOrEqualTo(14));
 
       coordinator.dispose();
-      guide.dispose();
-      lineup.dispose();
     },
   );
+
+  test('mini Guide preserves lineup order when every channel fits', () {
+    for (var count = 1; count <= 5; count++) {
+      final lineup = _TestLineup(count: count);
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => _schedule(channel),
+      );
+      final coordinator = PlayerCoordinator(
+        player: _Player(),
+        lineup: lineup,
+        guide: guide,
+      );
+      addTearDown(lineup.dispose);
+      addTearDown(guide.dispose);
+      addTearDown(coordinator.dispose);
+
+      coordinator.moveMiniGuide(count - 1);
+
+      expect(
+        coordinator.miniGuideChannels.map((channel) => channel.id),
+        lineup.channels.map((channel) => channel.id),
+      );
+      coordinator.dispose();
+    }
+  });
+
+  test('larger mini Guides wrap around the centered selection', () {
+    final lineup = _TestLineup(count: 6);
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    final coordinator = PlayerCoordinator(
+      player: _Player(),
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
+
+    expect(coordinator.miniGuideChannels.map((channel) => channel.id), [
+      'channel-4',
+      'channel-5',
+      'channel-0',
+      'channel-b',
+      'channel-2',
+    ]);
+  });
 
   testWidgets('OSD timeout resets and rejects stale timers', (tester) async {
     final lineup = _TestLineup();
@@ -268,6 +326,9 @@ void main() {
       guide: guide,
       overlayTimeout: const Duration(seconds: 4),
     );
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
 
     coordinator.showOsd();
     await tester.pump(const Duration(seconds: 3));
@@ -278,8 +339,6 @@ void main() {
     expect(coordinator.overlay, PlayerOverlay.none);
 
     coordinator.dispose();
-    guide.dispose();
-    lineup.dispose();
   });
 
   testWidgets('OSD timeout reads the persisted setting consumer', (
@@ -296,6 +355,9 @@ void main() {
       lineup: lineup,
       guide: guide,
     );
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
 
     coordinator.showOsd();
     await tester.pump(const Duration(milliseconds: 1999));
@@ -304,8 +366,6 @@ void main() {
     expect(coordinator.overlay, PlayerOverlay.none);
 
     coordinator.dispose();
-    guide.dispose();
-    lineup.dispose();
   });
 
   testWidgets('an OSD settings change reschedules the visible controls', (
@@ -321,6 +381,9 @@ void main() {
       lineup: lineup,
       guide: guide,
     );
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
 
     coordinator.showOsd();
     await tester.pump(const Duration(seconds: 1));
@@ -331,8 +394,6 @@ void main() {
     expect(coordinator.overlay, PlayerOverlay.none);
 
     coordinator.dispose();
-    guide.dispose();
-    lineup.dispose();
   });
 
   test(
@@ -349,6 +410,9 @@ void main() {
         lineup: lineup,
         guide: guide,
       );
+      addTearDown(lineup.dispose);
+      addTearDown(guide.dispose);
+      addTearDown(coordinator.dispose);
 
       await coordinator.loadInitialMedia(Uri.parse('lineup-test://generation'));
       final generation = player.loadGenerations.single!;
@@ -364,8 +428,6 @@ void main() {
 
       coordinator.dispose();
       await player.close();
-      guide.dispose();
-      lineup.dispose();
     },
   );
 
@@ -382,6 +444,9 @@ void main() {
       lineup: lineup,
       guide: guide,
     );
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
 
     final first = coordinator.tune('channel-0');
     await player.firstLoadStarted.future;
@@ -397,8 +462,6 @@ void main() {
     expect(lineup.releases, 2);
 
     coordinator.dispose();
-    guide.dispose();
-    lineup.dispose();
   });
 
   test(
@@ -416,6 +479,9 @@ void main() {
         lineup: lineup,
         guide: guide,
       );
+      addTearDown(lineup.dispose);
+      addTearDown(guide.dispose);
+      addTearDown(coordinator.dispose);
 
       final first = coordinator.tune('channel-0');
       await player.firstLoadStarted.future;
@@ -433,8 +499,6 @@ void main() {
       );
 
       coordinator.dispose();
-      guide.dispose();
-      lineup.dispose();
     },
   );
 
@@ -451,6 +515,9 @@ void main() {
       lineup: lineup,
       guide: guide,
     );
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
 
     final tune = coordinator.tune('channel-b');
     await player.firstLoadStarted.future;
@@ -463,8 +530,6 @@ void main() {
     expect(lineup.releases, 1);
 
     coordinator.dispose();
-    guide.dispose();
-    lineup.dispose();
   });
 
   test(
@@ -482,6 +547,9 @@ void main() {
         lineup: lineup,
         guide: guide,
       );
+      addTearDown(lineup.dispose);
+      addTearDown(guide.dispose);
+      addTearDown(coordinator.dispose);
 
       final first = coordinator.tune('channel-0');
       await player.firstLoadStarted.future;
@@ -504,8 +572,6 @@ void main() {
 
       coordinator.dispose();
       await player.close();
-      guide.dispose();
-      lineup.dispose();
     },
   );
 
@@ -522,6 +588,9 @@ void main() {
       lineup: lineup,
       guide: guide,
     );
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
 
     await coordinator.tune('channel-b');
     expect(coordinator.hasPlaybackIntent, isTrue);
@@ -540,8 +609,6 @@ void main() {
 
     coordinator.dispose();
     await player.close();
-    guide.dispose();
-    lineup.dispose();
   });
 
   test(
@@ -559,6 +626,9 @@ void main() {
         lineup: lineup,
         guide: guide,
       );
+      addTearDown(lineup.dispose);
+      addTearDown(guide.dispose);
+      addTearDown(coordinator.dispose);
 
       await coordinator.tune('channel-b');
       player.emitError();
@@ -572,8 +642,6 @@ void main() {
 
       coordinator.dispose();
       await player.close();
-      guide.dispose();
-      lineup.dispose();
     },
   );
 
@@ -591,6 +659,9 @@ void main() {
       lineup: lineup,
       guide: guide,
     );
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
 
     await coordinator.tune('channel-b');
     player.emitError(
@@ -608,8 +679,6 @@ void main() {
 
     coordinator.dispose();
     await player.close();
-    guide.dispose();
-    lineup.dispose();
   });
 
   test('load side effects roll back when load later fails', () async {
@@ -625,6 +694,9 @@ void main() {
       lineup: lineup,
       guide: guide,
     );
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
 
     await coordinator.tune('channel-b');
 
@@ -635,8 +707,6 @@ void main() {
     expect(coordinator.overlay, PlayerOverlay.error);
 
     coordinator.dispose();
-    guide.dispose();
-    lineup.dispose();
   });
 
   test('initial media is loaded once and exposes failures', () async {
@@ -651,6 +721,9 @@ void main() {
       lineup: lineup,
       guide: guide,
     );
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
 
     final media = Uri.parse('lineup-test://initial');
     await coordinator.loadInitialMedia(media);
@@ -665,8 +738,6 @@ void main() {
     expect(coordinator.overlay, PlayerOverlay.error);
 
     coordinator.dispose();
-    guide.dispose();
-    lineup.dispose();
   });
 
   test('a tune supersedes a pending initial media load', () async {
@@ -682,6 +753,9 @@ void main() {
       lineup: lineup,
       guide: guide,
     );
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
 
     final initial = coordinator.loadInitialMedia(
       Uri.parse('lineup-test://initial'),
@@ -695,8 +769,6 @@ void main() {
     expect(coordinator.error, isNull);
 
     coordinator.dispose();
-    guide.dispose();
-    lineup.dispose();
   });
 
   test('terminal error during seek cannot settle tune as successful', () async {
@@ -712,6 +784,9 @@ void main() {
       lineup: lineup,
       guide: guide,
     );
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
 
     final tune = coordinator.tune('channel-b');
     await player.seekStarted.future;
@@ -726,8 +801,6 @@ void main() {
 
     coordinator.dispose();
     await player.close();
-    guide.dispose();
-    lineup.dispose();
   });
 
   test(
@@ -745,6 +818,9 @@ void main() {
         lineup: lineup,
         guide: guide,
       );
+      addTearDown(lineup.dispose);
+      addTearDown(guide.dispose);
+      addTearDown(coordinator.dispose);
 
       final tune = coordinator.tune('channel-b');
       await lineup.persistenceStarted.future;
@@ -759,8 +835,6 @@ void main() {
 
       coordinator.dispose();
       await player.close();
-      guide.dispose();
-      lineup.dispose();
     },
   );
 
@@ -779,6 +853,9 @@ void main() {
       lineup: lineup,
       guide: guide,
     );
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
     coordinator.showMiniGuide();
     coordinator.moveMiniGuide(500);
     await Future<void>.delayed(Duration.zero);
@@ -795,8 +872,6 @@ void main() {
     expect(loads, greaterThan(before));
 
     coordinator.dispose();
-    guide.dispose();
-    lineup.dispose();
   });
 }
 
@@ -969,7 +1044,7 @@ class _Player implements NativePlayer {
   Future<void> dispose() async {}
 }
 
-class _ControlledPlayer extends _Player {
+mixin _BlocksFirstLoad on _Player {
   final firstLoadStarted = Completer<void>();
   final releaseFirstLoad = Completer<void>();
 
@@ -983,6 +1058,8 @@ class _ControlledPlayer extends _Player {
   }
 }
 
+class _ControlledPlayer extends _Player with _BlocksFirstLoad {}
+
 class _BlockingFullscreenPlayer extends _Player {
   _BlockingFullscreenPlayer({required this.blockOn});
 
@@ -993,7 +1070,7 @@ class _BlockingFullscreenPlayer extends _Player {
   @override
   Future<void> setFullscreen(bool fullscreen) async {
     if (fullscreen != blockOn) return;
-    fullscreenStarted.complete();
+    if (!fullscreenStarted.isCompleted) fullscreenStarted.complete();
     await releaseFullscreen.future;
   }
 }
@@ -1065,19 +1142,7 @@ class _EventPlayer extends _Player {
   Future<void> close() => _events.close();
 }
 
-class _BlockingEventPlayer extends _EventPlayer {
-  final firstLoadStarted = Completer<void>();
-  final releaseFirstLoad = Completer<void>();
-
-  @override
-  Future<void> load(Uri media, {String? plexToken, int? generation}) async {
-    await super.load(media, plexToken: plexToken, generation: generation);
-    if (loads.length == 1) {
-      firstLoadStarted.complete();
-      await releaseFirstLoad.future;
-    }
-  }
-}
+class _BlockingEventPlayer extends _EventPlayer with _BlocksFirstLoad {}
 
 class _BlockingSeekPlayer extends _EventPlayer {
   final seekStarted = Completer<void>();

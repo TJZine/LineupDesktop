@@ -16,6 +16,8 @@ class UpstreamOnboardingView extends StatefulWidget {
     super.key,
   });
 
+  static const maxContentWidth = 1180.0;
+
   final LineupController controller;
   final Future<void> Function() onLogout;
 
@@ -61,7 +63,9 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
             padding: const EdgeInsets.all(32),
             child: ConstrainedBox(
               key: const ValueKey('onboarding-content'),
-              constraints: const BoxConstraints(maxWidth: 1180),
+              constraints: const BoxConstraints(
+                maxWidth: UpstreamOnboardingView.maxContentWidth,
+              ),
               child: FocusTraversalGroup(
                 policy: ReadingOrderTraversalPolicy(),
                 child: AnimatedSwitcher(
@@ -620,9 +624,15 @@ class _ProfilePinDialogState extends State<_ProfilePinDialog> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              '${List.filled(_pin.length, '●').join()}${List.filled(4 - _pin.length, '○').join()}',
-              style: const TextStyle(fontSize: 30, letterSpacing: 12),
+            Semantics(
+              liveRegion: true,
+              label: '${_pin.length} of 4 digits entered',
+              child: ExcludeSemantics(
+                child: Text(
+                  '${List.filled(_pin.length, '●').join()}${List.filled(4 - _pin.length, '○').join()}',
+                  style: const TextStyle(fontSize: 30, letterSpacing: 12),
+                ),
+              ),
             ),
             const SizedBox(height: 18),
             GridView.count(

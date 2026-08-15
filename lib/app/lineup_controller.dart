@@ -752,24 +752,7 @@ class LineupController extends ChangeNotifier {
     final descriptor = plex.playbackDescriptor(
       server: endpoint,
       item: item,
-      capabilities: const StreamCapabilities(
-        containers: {'mkv', 'mp4', 'mpegts', 'avi', 'webm'},
-        videoCodecs: {'h264', 'hevc', 'mpeg2video', 'vp9', 'av1'},
-        audioCodecs: {
-          'aac',
-          'ac3',
-          'eac3',
-          'dca',
-          'dca-ma',
-          'truehd',
-          'opus',
-          'mp3',
-          'flac',
-        },
-        hdr10: true,
-        hlg: true,
-        dolbyVision: true,
-      ),
+      capabilities: const StreamCapabilities.unrestricted(),
     );
     diagnostics.add('playback', 'Plex playback selected', {
       'mode': descriptor.decision.kind.name,

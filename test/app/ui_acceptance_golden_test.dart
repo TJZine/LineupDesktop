@@ -65,7 +65,12 @@ void main() {
     final fixture = _readyFixture();
     await _pump(tester, fixture.build());
     await _expectClassicOpacity(tester);
-    await _match(tester, 'guide-no-playback-1280x720.png');
+    await _match(
+      tester,
+      'guide-no-playback-1280x720.png',
+      precacheLogo: true,
+      additionalPumps: 2,
+    );
   });
 
   testWidgets('Guide with PiP allocation', (tester) async {
@@ -80,7 +85,12 @@ void main() {
       tester,
       aperture: find.byKey(const Key('guide-picture-in-picture')),
     );
-    await _match(tester, 'guide-pip-1280x720.png');
+    await _match(
+      tester,
+      'guide-pip-1280x720.png',
+      precacheLogo: true,
+      additionalPumps: 2,
+    );
   });
 
   testWidgets('overlay Guide', (tester) async {
@@ -95,7 +105,12 @@ void main() {
             guideLayoutMode: GuideLayoutMode.overlay,
           );
     await _pump(tester, fixture.build());
-    await _match(tester, 'guide-overlay-1280x720.png');
+    await _match(
+      tester,
+      'guide-overlay-1280x720.png',
+      precacheLogo: true,
+      additionalPumps: 2,
+    );
   });
 
   testWidgets('player OSD', (tester) async {
@@ -111,7 +126,7 @@ void main() {
     await tester.pump();
 
     expect(find.byKey(const Key('player-osd-surface')), findsOneWidget);
-    await _match(tester, 'player-osd-1280x720.png');
+    await _match(tester, 'player-osd-1280x720.png', additionalPumps: 2);
   });
 
   testWidgets('Mini Guide', (tester) async {
@@ -127,7 +142,7 @@ void main() {
     await tester.pump();
 
     expect(find.byKey(const Key('mini-guide-shelf')), findsOneWidget);
-    await _match(tester, 'mini-guide-1280x720.png');
+    await _match(tester, 'mini-guide-1280x720.png', additionalPumps: 2);
   });
 
   testWidgets('Settings in alternate theme', (tester) async {
@@ -192,9 +207,13 @@ Future<void> _pump(WidgetTester tester, Widget child) async {
   await tester.pump(const Duration(milliseconds: 250));
 }
 
-Future<void> _match(WidgetTester tester, String name) async {
-  final guide = name.startsWith('guide-');
-  if (guide) {
+Future<void> _match(
+  WidgetTester tester,
+  String name, {
+  bool precacheLogo = false,
+  int additionalPumps = 0,
+}) async {
+  if (precacheLogo) {
     final context = tester.element(find.byKey(_goldenKey));
     await tester.runAsync(
       () => precacheImage(
@@ -203,8 +222,7 @@ Future<void> _match(WidgetTester tester, String name) async {
       ),
     );
   }
-  if (guide || name == 'player-osd-1280x720.png') {
-    await tester.pump(const Duration(milliseconds: 400));
+  for (var index = 0; index < additionalPumps; index++) {
     await tester.pump(const Duration(milliseconds: 400));
   }
   await expectLater(find.byKey(_goldenKey), matchesGoldenFile('goldens/$name'));
