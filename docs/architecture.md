@@ -146,12 +146,11 @@ navigation do not enter C++.
 
 ## Not implemented yet
 
-HDR display switching, audio passthrough, broad codec/container acceptance,
-packaged-runtime validation, and the final Windows media acceptance campaign
-remain integration work. The focused Windows checks
-and exact observations completed for this foundation are recorded in the
-development closeout rather than generalized beyond the media and machine
-actually exercised.
+Remote Plex playback through the pinned LGPL libmpv runtime has been exercised
+on Windows. HDR display switching, audio passthrough, broad codec/container and
+hardware acceptance, packaged-runtime validation, and the final Windows media
+acceptance matrix remain integration work. Completed observations are not
+generalized beyond the media and machine actually exercised.
 
 ## Dependency decision
 
