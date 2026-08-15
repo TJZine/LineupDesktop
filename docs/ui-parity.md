@@ -1,13 +1,18 @@
 # Portable UI parity
 
 This document is the source record for Prompt 3B and Prompt 4B portable UI
-parity, with Prompt 4C recorded as supplemental source, diff, and test coverage.
-It does not claim Windows media validation.
+parity, the full Prompt 4C source-defined theme and shell refinement, Prompt 4D
+portable functionality and recovery hardening, and Prompt 4E unlocked portable
+visual acceptance. Historical parity classifications belong to the Prompt 3B
+and Prompt 4B sections that contain them; Prompt 4C, 4D, and 4E claims are
+limited to their named sections. None of these sections claims Windows media
+validation; that remains Prompt 5 work.
 
-The earlier “Parity” classifications below are historical records of those
-accepted source-based passes. Prompt 4C does not promote them to live visual
-acceptance; its current locked-host classification matrix is recorded at the
-end of this document.
+The earlier “Parity” classifications below are historical records of the
+Prompt 3B and Prompt 4B source-based passes. Prompt 4C does not promote those
+historical classifications to live visual acceptance; its locked-host
+classification matrix is recorded in the Prompt 4C section below. Prompt 4E's
+visual classifications are recorded only in its own visual-acceptance section.
 
 ## Provenance and authority
 
@@ -262,10 +267,11 @@ logical downward moves before the following frame, and roughly 7–10 MB RSS
 growth. These are diagnostic observations, not profile-mode frame claims and
 not Windows evidence.
 
-Remaining acceptance is the unlocked-host manual campaign plus all Windows-only
-native presentation/media items already listed above. In particular, these
-portable tests and macOS builds do not prove DirectComposition layering,
-transparent video, HDR, hardware decode, fullscreen/multi-monitor behavior,
+For Prompt 4B, remaining acceptance is the unlocked-host manual campaign plus
+all Windows-only native presentation/media items already listed above. In
+particular, those portable tests and macOS builds do not prove
+DirectComposition layering, transparent video, HDR, hardware decode,
+fullscreen/multi-monitor behavior,
 remote Plex streams, audio passthrough, lifecycle, packaging, signing, or
 installer behavior.
 

@@ -330,10 +330,17 @@ at the intended aperture before changing architecture.
 
 ## New-session handoff
 
-Work in `C:\Software\LineupDesktop` on branch
-`replatform/flutter-native`. The investigation baseline was clean and pushed at
+Work from the repository root on branch `replatform/flutter-native`. The
+investigation baseline was clean and pushed at
 `430264b897cb5a6e435eb4fe9a4ee2ad41bb7aaf`; fetch and fast-forward before
 starting, then report the actual HEAD and worktree state.
+
+Before implementation, compare the current HEAD with that baseline. If the
+referenced sources, ownership boundaries, dependencies, or documentation have
+materially changed since the baseline, stop and update or re-review this
+specification before using its diagnosis or implementation instructions.
+Preserve the implementation scope and non-goals unless that freshness review
+explicitly revises them.
 
 Read `AGENTS.md`, `docs/DEVELOPMENT.md`, `docs/architecture.md`,
 `docs/ui-parity.md`, this specification, and GitHub issue #30 before editing.
