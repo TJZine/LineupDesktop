@@ -9,6 +9,7 @@
 #include <iostream>
 #include <limits>
 #include <optional>
+#include <string_view>
 #include <utility>
 
 #include <flutter/standard_method_codec.h>
@@ -21,6 +22,7 @@ constexpr wchar_t kCompositionMarker[] =
 constexpr size_t kMaxQueuedEvents = 256;
 constexpr size_t kMaxQueuedCommands = 64;
 constexpr size_t kMaxQueuedCommandBytes = 128 * 1024;
+constexpr size_t kMaxPlexTokenBytes = 8 * 1024;
 constexpr size_t kMaxCorrelatedPlaylistEntries = 1024;
 constexpr size_t kMaxMetadataBytes = 64 * 1024;
 constexpr size_t kMaxMetadataStringBytes = 4096;
@@ -72,6 +74,41 @@ std::optional<int64_t> AsInt(const flutter::EncodableValue* value) {
     return *number;
   }
   return std::nullopt;
+}
+
+bool IsHttpUri(std::string_view uri) {
+  const size_t separator = uri.find(':');
+  if (separator == std::string_view::npos || separator == 0) {
+    return false;
+  }
+  std::string scheme(uri.substr(0, separator));
+  std::transform(scheme.begin(), scheme.end(), scheme.begin(), [](char byte) {
+    return static_cast<char>(std::tolower(static_cast<unsigned char>(byte)));
+  });
+  return scheme == "http" || scheme == "https";
+}
+
+bool IsValidPlexToken(std::string_view value) {
+  if (value.empty() || value.size() > kMaxPlexTokenBytes) {
+    return false;
+  }
+  for (const unsigned char byte : value) {
+    if (byte < 0x21 || byte > 0x7e) {
+      return false;
+    }
+  }
+  return true;
+}
+
+std::string FixedLengthMpvString(std::string value) {
+  return "%" + std::to_string(value.size()) + "%" + std::move(value);
+}
+
+void WipePlexToken(std::string& token) {
+  if (!token.empty()) {
+    ::SecureZeroMemory(token.data(), token.size());
+    token.clear();
+  }
 }
 
 const mpv_node* FindNode(const mpv_node& map, const char* key) {
@@ -301,8 +338,9 @@ void WindowsNativePlayer::HandleMethodCall(
   const std::string& method = call.method_name();
   if (method == "initialize") {
     std::string error;
-    if (!Initialize(error)) {
-      result->Error("initialize_failed", error);
+    std::string error_code;
+    if (!Initialize(error, error_code)) {
+      result->Error(error_code, error);
       return;
     }
     flutter::EncodableMap details{
@@ -344,7 +382,27 @@ void WindowsNativePlayer::HandleMethodCall(
       result->Error("invalid_argument", "A non-negative integer loadId is required.");
       return;
     }
-    if (!QueueCommand({CommandType::load, *load_id, *uri})) {
+    const auto* token_value =
+        arguments ? Find(*arguments, "plexToken") : nullptr;
+    const bool token_supplied =
+        token_value && !std::holds_alternative<std::monostate>(*token_value);
+    const auto* plex_token =
+        token_supplied ? std::get_if<std::string>(token_value) : nullptr;
+    if (token_supplied &&
+        (!plex_token || !IsValidPlexToken(*plex_token))) {
+      result->Error("invalid_argument", "The Plex token is invalid.");
+      return;
+    }
+    if (plex_token && !IsHttpUri(*uri)) {
+      result->Error("invalid_argument",
+                    "Plex authentication requires an HTTP or HTTPS media URI.");
+      return;
+    }
+    QueuedCommand command{CommandType::load, *load_id, *uri};
+    if (plex_token) {
+      command.plex_token = *plex_token;
+    }
+    if (!QueueCommand(std::move(command))) {
       result->Error("command_queue_full", "The native command queue is full.");
       return;
     }
@@ -428,7 +486,9 @@ void WindowsNativePlayer::HandleMethodCall(
   result->Success();
 }
 
-bool WindowsNativePlayer::Initialize(std::string& error) {
+bool WindowsNativePlayer::Initialize(std::string& error,
+                                     std::string& error_code) {
+  error_code = "initialize_failed";
   if (accepting_commands_) {
     return true;
   }
@@ -441,6 +501,7 @@ bool WindowsNativePlayer::Initialize(std::string& error) {
   if (::GetEnvironmentVariableW(L"LINEUP_FLUTTER_DCOMP_ACTIVE", marker,
                                 static_cast<DWORD>(std::size(marker))) == 0 ||
       std::wstring(marker) != kCompositionMarker) {
+    error_code = "required_engine_unavailable";
     error = "The required Lineup DirectComposition Flutter engine is not active.";
     return false;
   }
@@ -564,6 +625,9 @@ void WindowsNativePlayer::FinishDispose() {
   video_rect_set_ = false;
   {
     std::lock_guard lock(command_mutex_);
+    for (auto& command : commands_) {
+      WipePlexToken(command.plex_token);
+    }
     commands_.clear();
     queued_command_bytes_ = 0;
   }
@@ -717,16 +781,25 @@ void WindowsNativePlayer::StartEventThread() {
 
 bool WindowsNativePlayer::QueueCommand(QueuedCommand command) {
   std::lock_guard lock(command_mutex_);
-  if (!accepting_commands_ || commands_.size() >= kMaxQueuedCommands ||
-      command.text.size() > kMaxQueuedCommandBytes - queued_command_bytes_) {
+  if (command.text.size() > kMaxQueuedCommandBytes ||
+      command.plex_token.size() >
+          kMaxQueuedCommandBytes - command.text.size()) {
+    WipePlexToken(command.plex_token);
     return false;
   }
-  queued_command_bytes_ += command.text.size();
+  const size_t command_bytes = command.text.size() + command.plex_token.size();
+  if (!accepting_commands_ || commands_.size() >= kMaxQueuedCommands ||
+      queued_command_bytes_ > kMaxQueuedCommandBytes ||
+      command_bytes > kMaxQueuedCommandBytes - queued_command_bytes_) {
+    WipePlexToken(command.plex_token);
+    return false;
+  }
+  queued_command_bytes_ += command_bytes;
   commands_.push_back(std::move(command));
   return true;
 }
 
-void WindowsNativePlayer::RunCommand(const QueuedCommand& command,
+void WindowsNativePlayer::RunCommand(QueuedCommand& command,
                                      uint64_t generation) {
   int status = 0;
   switch (command.type) {
@@ -734,9 +807,41 @@ void WindowsNativePlayer::RunCommand(const QueuedCommand& command,
       int paused = 0;
       status = mpv_set_property(mpv_, "pause", MPV_FORMAT_FLAG, &paused);
       if (status >= 0) {
-        const char* value[] = {"loadfile", command.text.c_str(), "replace",
-                               nullptr};
-        status = mpv_command(mpv_, value);
+        if (command.plex_token.empty()) {
+          const char* value[] = {"loadfile", command.text.c_str(), "replace",
+                                 nullptr};
+          status = mpv_command(mpv_, value);
+        } else {
+          std::string header_fields = FixedLengthMpvString(
+              "X-Plex-Token: " + command.plex_token);
+          char* command_name = const_cast<char*>("loadfile");
+          char* uri = const_cast<char*>(command.text.c_str());
+          char* flags = const_cast<char*>("replace");
+          mpv_node values[5]{};
+          values[0].format = MPV_FORMAT_STRING;
+          values[0].u.string = command_name;
+          values[1].format = MPV_FORMAT_STRING;
+          values[1].u.string = uri;
+          values[2].format = MPV_FORMAT_STRING;
+          values[2].u.string = flags;
+          values[3].format = MPV_FORMAT_INT64;
+          values[3].u.int64 = -1;
+          values[4].format = MPV_FORMAT_NODE_MAP;
+          mpv_node option_value{};
+          option_value.format = MPV_FORMAT_STRING;
+          option_value.u.string = const_cast<char*>(header_fields.c_str());
+          char* option_key = const_cast<char*>("http-header-fields");
+          mpv_node_list option_list{1, &option_value, &option_key};
+          values[4].u.list = &option_list;
+          mpv_node_list command_list{5, values, nullptr};
+          mpv_node command_node{};
+          command_node.format = MPV_FORMAT_NODE_ARRAY;
+          command_node.u.list = &command_list;
+          status = mpv_command_node(mpv_, &command_node, nullptr);
+          if (!header_fields.empty()) {
+            ::SecureZeroMemory(header_fields.data(), header_fields.size());
+          }
+        }
         if (status >= 0) {
           active_load_id_ = command.load_id;
           int64_t playlist_entry_id = 0;
@@ -843,8 +948,9 @@ void WindowsNativePlayer::EventLoop(uint64_t generation) {
       std::swap(commands, commands_);
       queued_command_bytes_ = 0;
     }
-    for (const auto& command : commands) {
+    for (auto& command : commands) {
       RunCommand(command, generation);
+      WipePlexToken(command.plex_token);
     }
     const mpv_event* event = mpv_wait_event(mpv_, 0.05);
     if (stopping_) {
@@ -985,6 +1091,10 @@ void WindowsNativePlayer::HandleMpvEvent(const mpv_event& event,
     case MPV_EVENT_LOG_MESSAGE:
       if (const auto* message =
               static_cast<mpv_event_log_message*>(event.data)) {
+        if (message->log_level != MPV_LOG_LEVEL_ERROR &&
+            message->log_level != MPV_LOG_LEVEL_FATAL) {
+          break;
+        }
         if (event_load_id_ && event_load_id_ == active_load_id_) {
           if (const auto detail = ClassifyMpvFailure(*message)) {
             last_failure_load_id_ = event_load_id_;

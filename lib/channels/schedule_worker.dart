@@ -6,6 +6,11 @@ import 'channel.dart';
 import 'content_resolver.dart';
 import 'scheduler.dart';
 
+typedef ScheduleWorkerFactory = ScheduleWorker Function(
+  List<PlexMediaItem> media,
+  List<PlexPlaylist> playlists,
+);
+
 class ScheduleWorker {
   ScheduleWorker(this.media, this.playlists);
 
@@ -15,6 +20,7 @@ class ScheduleWorker {
   Future<SendPort>? _starting;
   Isolate? _isolate;
   ReceivePort? _responses;
+  SendPort? _requests;
   int _nextRequest = 0;
   bool _disposed = false;
 
@@ -22,6 +28,9 @@ class ScheduleWorker {
     if (_disposed) throw StateError('Schedule worker is disposed');
     final port = await (_starting ??= _start());
     if (_disposed) throw StateError('Schedule worker is disposed');
+    if (!identical(_requests, port)) {
+      throw StateError('Schedule worker is unavailable');
+    }
     final id = ++_nextRequest;
     final completer = Completer<ScheduleIndex>();
     _pending[id] = completer;
@@ -49,12 +58,14 @@ class ScheduleWorker {
       _pending.clear();
       _isolate?.kill(priority: Isolate.immediate);
       _isolate = null;
+      _requests = null;
       _starting = null;
       _responses = null;
       responses.close();
     }
 
     responses.listen((message) {
+      if (!identical(_responses, responses)) return;
       if (message == null) {
         fail(StateError('Schedule worker exited unexpectedly'));
         return;
@@ -68,6 +79,7 @@ class ScheduleWorker {
         return;
       }
       if (message is SendPort) {
+        _requests = message;
         if (!ready.isCompleted) ready.complete(message);
         return;
       }
@@ -101,6 +113,7 @@ class ScheduleWorker {
       if (identical(_responses, responses)) {
         _responses = null;
         _isolate = null;
+        _requests = null;
         _starting = null;
         responses.close();
       }
@@ -151,6 +164,10 @@ class ScheduleWorker {
     _disposed = true;
     _isolate?.kill(priority: Isolate.immediate);
     _responses?.close();
+    _isolate = null;
+    _responses = null;
+    _requests = null;
+    _starting = null;
     for (final completer in _pending.values) {
       if (!completer.isCompleted) {
         completer.completeError(StateError('Schedule worker was disposed'));

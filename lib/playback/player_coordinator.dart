@@ -270,7 +270,7 @@ class PlayerCoordinator extends ChangeNotifier {
     final previousChannelId = lineup.currentChannelId;
     try {
       request = lineup.playbackFor(program.scheduled.item.id);
-      await _load(request.uri, generation);
+      await _load(request.uri, generation, plexToken: request.plexToken);
       if (generation != _tuneGeneration) {
         if (_tuning || _disposed) await _stopQuietly();
         await _release(request);
@@ -342,9 +342,9 @@ class PlayerCoordinator extends ChangeNotifier {
     if (id != null) await tune(id);
   }
 
-  Future<void> _load(Uri media, int generation) {
+  Future<void> _load(Uri media, int generation, {String? plexToken}) {
     _activeLoadGeneration = generation;
-    return player.load(media, generation: generation);
+    return player.load(media, plexToken: plexToken, generation: generation);
   }
 
   Future<void> previousChannel() => _tuneOffset(-1);

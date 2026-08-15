@@ -25,11 +25,24 @@ enum SetupStage {
 }
 
 class LineupPlaybackRequest {
-  LineupPlaybackRequest(this.uri, this._release);
+  LineupPlaybackRequest(Uri uri, this._release, {this.plexToken})
+    : uri = _withoutPlexToken(uri);
 
   final Uri uri;
+  final String? plexToken;
   final Future<void> Function() _release;
   bool _released = false;
+
+  static Uri _withoutPlexToken(Uri uri) {
+    final query = Map<String, List<String>>.fromEntries(
+      uri.queryParametersAll.entries.where(
+        (entry) => entry.key.toLowerCase() != 'x-plex-token',
+      ),
+    );
+    return query.length == uri.queryParametersAll.length
+        ? uri
+        : uri.replace(queryParameters: query);
+  }
 
   Future<void> release() async {
     if (_released) return;
@@ -45,7 +58,9 @@ class LineupController extends ChangeNotifier {
     required this.plex,
     Diagnostics? diagnostics,
     this.pinPollInterval = const Duration(seconds: 1),
-  }) : diagnostics = diagnostics ?? Diagnostics();
+    ScheduleWorkerFactory? scheduleWorkerFactory,
+  }) : diagnostics = diagnostics ?? Diagnostics(),
+       _scheduleWorkerFactory = scheduleWorkerFactory ?? ScheduleWorker.new;
 
   final AppStore store;
   final CredentialStore credentials;
@@ -84,7 +99,7 @@ class LineupController extends ChangeNotifier {
   List<PlexMediaItem>? _scheduleWorkerMedia;
   List<PlexPlaylist>? _scheduleWorkerPlaylists;
   ScheduleWorker? _scheduleWorker;
-  int _scheduleWorkerCreations = 0;
+  final ScheduleWorkerFactory _scheduleWorkerFactory;
   Future<void> _credentialOperations = Future.value();
   int _settingsGeneration = 0;
   int _contentGeneration = 0;
@@ -704,9 +719,6 @@ class LineupController extends ChangeNotifier {
     blockSize: channel.blockSize ?? 3,
   );
 
-  @visibleForTesting
-  int get scheduleWorkerCreations => _scheduleWorkerCreations;
-
   Future<ScheduleIndex> loadScheduleFor(Channel channel) {
     if (_disposed) {
       return Future.error(StateError('Schedule worker is disposed'));
@@ -718,10 +730,10 @@ class LineupController extends ChangeNotifier {
       _scheduleWorkerPlaylists = availablePlaylists;
       _scheduleWorker = null;
     }
-    final worker = _scheduleWorker ??= () {
-      _scheduleWorkerCreations++;
-      return ScheduleWorker(availableMedia, availablePlaylists);
-    }();
+    final worker = _scheduleWorker ??= _scheduleWorkerFactory(
+      availableMedia,
+      availablePlaylists,
+    );
     return worker.build(channel);
   }
 
@@ -759,12 +771,6 @@ class LineupController extends ChangeNotifier {
         dolbyVision: true,
       ),
     );
-    final uri = descriptor.uri.replace(
-      queryParameters: {
-        ...descriptor.uri.queryParameters,
-        'X-Plex-Token': token,
-      },
-    );
     diagnostics.add('playback', 'Plex playback selected', {
       'mode': descriptor.decision.kind.name,
       'container': item.container,
@@ -774,12 +780,13 @@ class LineupController extends ChangeNotifier {
       'reason': descriptor.decision.reasons.join(','),
     });
     return LineupPlaybackRequest(
-      uri,
+      descriptor.uri,
       () => plex.releasePlaybackSession(
         server: endpoint,
         token: token,
         sessionId: descriptor.sessionId,
       ),
+      plexToken: token,
     );
   }
 

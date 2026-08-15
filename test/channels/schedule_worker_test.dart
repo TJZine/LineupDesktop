@@ -8,12 +8,12 @@ import 'package:lineup_desktop/plex/plex_models.dart';
 void main() {
   test('spawn failure does not prevent a later build', () async {
     final unsendable = ReceivePort();
+    addTearDown(unsendable.close);
     final media = <PlexMediaItem>[_UnsendableMediaItem(unsendable)];
     final worker = ScheduleWorker(media, const []);
     addTearDown(worker.dispose);
 
     await expectLater(worker.build(_channel), throwsA(anything));
-    unsendable.close();
     media
       ..clear()
       ..add(_mediaItem);
@@ -25,6 +25,7 @@ void main() {
 
   test('send failure does not retain the failed operation', () async {
     final unsendable = ReceivePort();
+    addTearDown(unsendable.close);
     final worker = ScheduleWorker(const [], const []);
     addTearDown(worker.dispose);
 
@@ -32,8 +33,6 @@ void main() {
       worker.build(_manualChannel(_UnsendableChannelItem(unsendable))),
       throwsA(anything),
     );
-    unsendable.close();
-
     final schedule = await worker.build(
       _manualChannel(
         const ChannelItem(

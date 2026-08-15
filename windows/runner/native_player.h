@@ -45,16 +45,17 @@ class WindowsNativePlayer {
     int64_t load_id = 0;
     std::string text;
     double number = 0;
+    std::string plex_token;
   };
 
   void HandleMethodCall(
       const flutter::MethodCall<flutter::EncodableValue>& call,
       std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
-  bool Initialize(std::string& error);
+  bool Initialize(std::string& error, std::string& error_code);
   void BeginAsyncDispose();
   void FinishDispose();
   bool QueueCommand(QueuedCommand command);
-  void RunCommand(const QueuedCommand& command, uint64_t generation);
+  void RunCommand(QueuedCommand& command, uint64_t generation);
   bool SetVideoRect(const flutter::EncodableMap& arguments);
   bool SetFullscreen(bool fullscreen, std::string& error);
   std::optional<QueuedCommand> ParseTrack(

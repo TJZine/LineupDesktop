@@ -302,7 +302,7 @@ class _Native implements NativePlayer {
   @override
   Future<void> initialize() async {}
   @override
-  Future<void> load(Uri media, {int? generation}) async {
+  Future<void> load(Uri media, {String? plexToken, int? generation}) async {
     if (failLoad) throw StateError('synthetic load failure');
   }
 

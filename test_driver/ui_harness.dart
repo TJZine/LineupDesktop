@@ -123,7 +123,7 @@ class HarnessPlayer implements NativePlayer {
   @override
   Future<void> initialize() async {}
   @override
-  Future<void> load(Uri media, {int? generation}) async {
+  Future<void> load(Uri media, {String? plexToken, int? generation}) async {
     if (_disposed) return;
     _generation = generation;
     _status = const PlayerStatus(

@@ -70,7 +70,7 @@ class WindowsNativePlayer implements NativePlayer {
   });
 
   @override
-  Future<void> load(Uri media, {int? generation}) async {
+  Future<void> load(Uri media, {String? plexToken, int? generation}) async {
     await _lifecycle;
     _requireInitialized();
     final loadId = ++_nextLoadId;
@@ -93,6 +93,7 @@ class WindowsNativePlayer implements NativePlayer {
           );
       await _channel.invokeMethod<void>('load', {
         'uri': media.toString(),
+        'plexToken': plexToken,
         'loadId': loadId,
       });
       final failure = await completion;

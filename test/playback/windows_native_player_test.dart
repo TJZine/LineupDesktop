@@ -26,9 +26,13 @@ void main() {
 
       final player = WindowsNativePlayer();
       await player.initialize();
-      final load = player.load(Uri.file(r'C:\media\sample.mp4'));
+      final load = player.load(
+        Uri.parse('https://plex.example/media/sample.mp4'),
+        plexToken: 'test-token',
+      );
       await Future<void>.delayed(Duration.zero);
       final loadId = calls.last.arguments!['loadId']! as int;
+      expect(calls.last.arguments!['plexToken'], 'test-token');
 
       await _sendNativeEvent(messenger, {
         'type': 'property',

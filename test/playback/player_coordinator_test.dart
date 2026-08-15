@@ -31,7 +31,11 @@ void main() {
 
       await coordinator.tune('channel-b');
 
-      expect(player.loads.single, Uri.parse('https://media.test/program'));
+      expect(
+        player.loads.single,
+        Uri.parse('https://media.test/program?quality=original'),
+      );
+      expect(player.loadPlexTokens.single, 'test-token');
       expect(player.seeks.single, greaterThanOrEqualTo(Duration.zero));
       expect(lineup.currentChannelId, 'channel-b');
       expect(coordinator.overlay, PlayerOverlay.osd);
@@ -863,10 +867,13 @@ class _TestLineup extends LineupController {
       throw StateError('Replacement playback request is unavailable.');
     }
     return LineupPlaybackRequest(
-      Uri.parse('https://media.test/program'),
+      Uri.parse(
+        'https://media.test/program?x-PLEX-token=must-not-leak&quality=original',
+      ),
       () async {
         releases++;
       },
+      plexToken: 'test-token',
     );
   }
 
@@ -908,6 +915,7 @@ class _BlockingLineup extends _TestLineup {
 
 class _Player implements NativePlayer {
   final loads = <Uri>[];
+  final loadPlexTokens = <String?>[];
   final loadGenerations = <int?>[];
   final seeks = <Duration>[];
   final selectedTracks = <(PlayerTrackType, int?)>[];
@@ -931,8 +939,9 @@ class _Player implements NativePlayer {
   @override
   Future<void> initialize() async {}
   @override
-  Future<void> load(Uri media, {int? generation}) async {
+  Future<void> load(Uri media, {String? plexToken, int? generation}) async {
     loads.add(media);
+    loadPlexTokens.add(plexToken);
     loadGenerations.add(generation);
   }
 
@@ -965,8 +974,8 @@ class _ControlledPlayer extends _Player {
   final releaseFirstLoad = Completer<void>();
 
   @override
-  Future<void> load(Uri media, {int? generation}) async {
-    await super.load(media, generation: generation);
+  Future<void> load(Uri media, {String? plexToken, int? generation}) async {
+    await super.load(media, plexToken: plexToken, generation: generation);
     if (loads.length == 1) {
       firstLoadStarted.complete();
       await releaseFirstLoad.future;
@@ -991,8 +1000,8 @@ class _BlockingFullscreenPlayer extends _Player {
 
 class _LoadFailurePlayer extends _Player {
   @override
-  Future<void> load(Uri media, {int? generation}) async {
-    await super.load(media, generation: generation);
+  Future<void> load(Uri media, {String? plexToken, int? generation}) async {
+    await super.load(media, plexToken: plexToken, generation: generation);
     throw StateError('load failed after dispatch');
   }
 }
@@ -1061,8 +1070,8 @@ class _BlockingEventPlayer extends _EventPlayer {
   final releaseFirstLoad = Completer<void>();
 
   @override
-  Future<void> load(Uri media, {int? generation}) async {
-    await super.load(media, generation: generation);
+  Future<void> load(Uri media, {String? plexToken, int? generation}) async {
+    await super.load(media, plexToken: plexToken, generation: generation);
     if (loads.length == 1) {
       firstLoadStarted.complete();
       await releaseFirstLoad.future;

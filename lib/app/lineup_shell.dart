@@ -542,7 +542,11 @@ class _ChannelsViewState extends State<ChannelsView> {
     if (!mounted) return;
     final deletedFocus = _deleteFocus.remove(channel.id);
     setState(() => _error = null);
-    deletedFocus?.dispose();
+    if (deletedFocus != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        deletedFocus.dispose();
+      });
+    }
     widget.focusNode?.requestFocus();
   }
 }

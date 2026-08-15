@@ -106,8 +106,7 @@ class _LineupBootstrapState extends State<LineupBootstrap> {
             return _StartupFailureBody(
               requiredEngineFailure:
                   error is PlatformException &&
-                  error.code == 'initialize_failed' &&
-                  error.message == _requiredEngineFailureMessage,
+                  error.code == 'required_engine_unavailable',
             );
           }
           if (snapshot.connectionState != ConnectionState.done) {

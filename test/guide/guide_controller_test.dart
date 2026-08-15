@@ -6,6 +6,7 @@ import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/channels/channel_builder.dart';
 import 'package:lineup_desktop/channels/scheduler.dart';
+import 'package:lineup_desktop/channels/schedule_worker.dart';
 import 'package:lineup_desktop/guide/guide_controller.dart';
 import 'package:lineup_desktop/persistence/app_store.dart';
 import 'package:lineup_desktop/plex/plex_client.dart';
@@ -245,7 +246,11 @@ void main() {
     final lineup = _ArtworkLineup(_channels(1));
     final guide = GuideController(lineup: lineup);
     final futures = <Future<Uint8List?>>[];
-    for (var index = 0; index < 20; index++) {
+    final requestCount =
+        GuideController.maximumCachedArtworkEntries +
+        GuideController.maximumConcurrentArtworkLoads +
+        4;
+    for (var index = 0; index < requestCount; index++) {
       final start = DateTime(2026, 8, 13, 12).add(Duration(hours: index));
       futures.add(
         guide.artworkFor(
@@ -272,9 +277,10 @@ void main() {
 
     expect(lineup.artworkLoads, GuideController.maximumConcurrentArtworkLoads);
     final evictedQueuedLoads =
-        futures.length -
+        requestCount -
         GuideController.maximumCachedArtworkEntries -
         GuideController.maximumConcurrentArtworkLoads;
+    expect(evictedQueuedLoads, greaterThan(0));
     expect(
       await Future.wait(
         futures
@@ -304,35 +310,50 @@ void main() {
       anchor: DateTime(2026, 8, 13),
       shuffleSeed: 1,
     );
-    final lineup = _TestLineup([channel])
-      ..availableMedia = List.unmodifiable(
-        List.generate(
-          2000,
-          (index) => PlexMediaItem(
-            id: 'item-$index',
-            key: '/library/metadata/$index',
-            title: 'Item $index',
-            type: 'movie',
-            duration: const Duration(minutes: 30),
-            libraryId: 'library',
-          ),
-        ),
-      );
+    var workerCreations = 0;
+    final lineup =
+        _TestLineup(
+            [channel],
+            scheduleWorkerFactory: (media, playlists) {
+              workerCreations++;
+              return ScheduleWorker(media, playlists);
+            },
+          )
+          ..availableMedia = List.unmodifiable(
+            List.generate(
+              2000,
+              (index) => PlexMediaItem(
+                id: 'item-$index',
+                key: '/library/metadata/$index',
+                title: 'Item $index',
+                type: 'movie',
+                duration: const Duration(minutes: 30),
+                libraryId: 'library',
+              ),
+            ),
+          );
 
     final first = await lineup.loadScheduleFor(channel);
-    expect(lineup.scheduleWorkerCreations, 1);
+    expect(workerCreations, 1);
     final second = await lineup.loadScheduleFor(channel);
 
     expect(first.items, hasLength(2000));
     expect(second.items, hasLength(2000));
-    expect(lineup.scheduleWorkerCreations, 1);
+    expect(workerCreations, 1);
     lineup.dispose();
   });
 
   test(
     'disposed lineup rejects schedule loads without creating a worker',
     () async {
-      final lineup = _TestLineup(_channels(1));
+      var workerCreations = 0;
+      final lineup = _TestLineup(
+        _channels(1),
+        scheduleWorkerFactory: (media, playlists) {
+          workerCreations++;
+          return ScheduleWorker(media, playlists);
+        },
+      );
       lineup.dispose();
 
       await expectLater(
@@ -345,7 +366,7 @@ void main() {
           ),
         ),
       );
-      expect(lineup.scheduleWorkerCreations, 0);
+      expect(workerCreations, 0);
     },
   );
 
@@ -623,7 +644,7 @@ ScheduleIndex _schedule(Channel channel) {
 Future<void> _settle() => Future<void>.delayed(Duration.zero);
 
 class _TestLineup extends LineupController {
-  _TestLineup(List<Channel> value)
+  _TestLineup(List<Channel> value, {super.scheduleWorkerFactory})
     : super(
         store: _MemoryStore(),
         credentials: _MemoryCredentials(),

@@ -433,7 +433,7 @@ class _FakePlayer implements NativePlayer {
   Future<void> initialize() async {}
 
   @override
-  Future<void> load(Uri media, {int? generation}) async {
+  Future<void> load(Uri media, {String? plexToken, int? generation}) async {
     loads++;
   }
 
@@ -481,9 +481,8 @@ class _RequiredEngineFailingPlayer extends _FakePlayer {
   @override
   Future<void> initialize() async {
     throw PlatformException(
-      code: 'initialize_failed',
-      message:
-          'The required Lineup DirectComposition Flutter engine is not active.',
+      code: 'required_engine_unavailable',
+      message: 'native wording is not part of the application contract',
     );
   }
 }

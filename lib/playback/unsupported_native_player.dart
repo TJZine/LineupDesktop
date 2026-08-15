@@ -36,7 +36,8 @@ class UnsupportedNativePlayer implements NativePlayer {
   );
 
   @override
-  Future<void> load(Uri media, {int? generation}) async => _unavailable();
+  Future<void> load(Uri media, {String? plexToken, int? generation}) async =>
+      _unavailable();
 
   @override
   Future<void> play() async => _unavailable();

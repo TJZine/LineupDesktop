@@ -82,6 +82,11 @@ void main() {
       await player.tune(channel.id);
       expect(player.error, isNull);
       expect(controller.currentChannelId, channel.id);
+      expect(
+        nativePlayer.loadedUri?.queryParameters,
+        isNot(contains('X-Plex-Token')),
+      );
+      expect(nativePlayer.loadedPlexToken, 'child-token');
       nativePlayer.emit(
         PlayerState.playing,
         generation: nativePlayer.generation,
@@ -387,6 +392,8 @@ class _ProductPlayer implements NativePlayer {
   final List<String> eventLog;
   final _events = StreamController<PlayerEvent>();
   final selectedTracks = <(PlayerTrackType, int?)>[];
+  Uri? loadedUri;
+  String? loadedPlexToken;
   int generation = 0;
   PlayerStatus _status = const PlayerStatus(
     state: PlayerState.idle,
@@ -411,8 +418,10 @@ class _ProductPlayer implements NativePlayer {
   Future<void> initialize() async {}
 
   @override
-  Future<void> load(Uri media, {int? generation}) async {
+  Future<void> load(Uri media, {String? plexToken, int? generation}) async {
     this.generation = generation ?? this.generation + 1;
+    loadedUri = media;
+    loadedPlexToken = plexToken;
     eventLog.add('player:load');
   }
 
