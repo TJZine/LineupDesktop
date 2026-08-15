@@ -41,22 +41,21 @@ void main() {
           );
         }
       }
+      final primarySurface = _paint(roles.primarySurface, roles.deepBackground);
+      final progressSurface = _paint(roles.progressFill, primarySurface);
       expect(
-        _contrast(roles.onFocus, roles.progressFill),
+        _contrast(_paint(roles.onFocus, progressSurface), progressSurface),
         greaterThanOrEqualTo(4.5),
         reason: '${name.label} focused control',
       );
-      final focusedSurface = _paint(roles.focusedSurface, roles.primarySurface);
+      final focusedSurface = _paint(roles.focusedSurface, primarySurface);
       expect(
         _contrast(_paint(roles.focusedText, focusedSurface), focusedSurface),
         greaterThanOrEqualTo(4.5),
         reason: '${name.label} focused surface text',
       );
       expect(
-        _contrast(
-          roles.focusBorder,
-          _paint(roles.primarySurface, roles.deepBackground),
-        ),
+        _contrast(_paint(roles.focusBorder, primarySurface), primarySurface),
         greaterThanOrEqualTo(3),
         reason: '${name.label} focus outline',
       );

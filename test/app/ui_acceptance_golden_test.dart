@@ -151,9 +151,16 @@ Future<void> _loadPinnedTestFont() async {
   }
   final fontDirectory =
       '${flutterRoot.path}/bin/cache/artifacts/material_fonts';
-  final roboto = File('$fontDirectory/Roboto-Regular.ttf');
-  if (!roboto.existsSync()) {
-    throw StateError('Pinned Flutter test fonts were not found.');
+  final requiredFonts = [
+    'Roboto-Regular.ttf',
+    'Roboto-Medium.ttf',
+    'Roboto-Bold.ttf',
+    'MaterialIcons-Regular.otf',
+  ];
+  for (final filename in requiredFonts) {
+    if (!File('$fontDirectory/$filename').existsSync()) {
+      throw StateError('Pinned Flutter test font is missing: $filename');
+    }
   }
   for (final family in ['Roboto', '.AppleSystemUIFont']) {
     final loader = FontLoader(family);

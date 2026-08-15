@@ -7,7 +7,9 @@ void main() {
     final production = Directory('lib')
         .listSync(recursive: true)
         .whereType<File>()
-        .where((file) => file.path.endsWith('.dart'));
+        .where((file) => file.path.endsWith('.dart'))
+        .toList();
+    expect(production, isNotEmpty);
 
     for (final file in production) {
       final source = file.readAsStringSync();
