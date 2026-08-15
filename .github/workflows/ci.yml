@@ -136,6 +136,8 @@ jobs:
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
           flutter-version: 3.47.0
@@ -144,15 +146,22 @@ jobs:
       - name: Validate exact Flutter and engine sources and build the patched engine
         shell: pwsh
         run: |
+          $metadata = Import-PowerShellDataFile -LiteralPath (Join-Path $env:GITHUB_WORKSPACE 'tool/windows/build-metadata.psd1')
           $flutterSource = Join-Path $env:RUNNER_TEMP 'lineup-flutter-source'
           $depotTools = Join-Path $env:RUNNER_TEMP 'depot_tools'
           git clone --filter=blob:none https://github.com/flutter/flutter.git $flutterSource
-          git -C $flutterSource checkout 4cf24164269a5ebf0c16a028a00727d0e77bbb05
-          if ((git -C $flutterSource rev-parse HEAD:engine/scripts/standard.gclient).Trim() -ne 'a05a39e336335389321b8a6d855b13bd3fc7892c') {
+          git -C $flutterSource checkout $metadata.FlutterFrameworkRevision
+          if ((git -C $flutterSource rev-parse HEAD:engine/scripts/standard.gclient).Trim() -ne $metadata.FlutterStandardGclientBlob) {
             throw 'Pinned Flutter standard.gclient blob does not match.'
           }
           Copy-Item -LiteralPath (Join-Path $flutterSource 'engine\scripts\standard.gclient') -Destination (Join-Path $flutterSource '.gclient')
-          git clone --depth 1 https://chromium.googlesource.com/chromium/tools/depot_tools.git $depotTools
+          git clone --depth 1 --no-checkout https://chromium.googlesource.com/chromium/tools/depot_tools.git $depotTools
+          git -C $depotTools fetch --depth 1 origin $metadata.DepotToolsRevision
+          git -C $depotTools checkout --detach $metadata.DepotToolsRevision
+          if ((git -C $depotTools rev-parse HEAD).Trim() -ne $metadata.DepotToolsRevision) {
+            throw 'depot_tools did not resolve to the pinned revision.'
+          }
+          $env:DEPOT_TOOLS_UPDATE = '0'
           $env:PATH = "$depotTools;$env:PATH"
           $env:DEPOT_TOOLS_WIN_TOOLCHAIN = '0'
           $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"

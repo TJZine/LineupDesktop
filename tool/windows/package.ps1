@@ -6,6 +6,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $repository = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
+$metadata = Import-PowerShellDataFile -LiteralPath (Join-Path $repository 'tool/windows/build-metadata.psd1')
 $versionMatch = Select-String -LiteralPath (Join-Path $repository 'pubspec.yaml') -Pattern '^version:\s*(\S+)\s*$'
 if (-not $versionMatch) { throw 'pubspec.yaml does not contain a version.' }
 $pubspecVersion = $versionMatch.Matches[0].Groups[1].Value
@@ -23,13 +24,41 @@ if (-not (Test-Path -LiteralPath $BuildDirectory)) { throw 'Release build direct
 if (Test-Path -LiteralPath $Destination) { throw "Package destination already exists: $Destination" }
 
 $runtime = Join-Path $BuildDirectory 'libmpv-2.dll'
-if ((Get-FileHash -Algorithm SHA256 -LiteralPath $runtime).Hash -ne
-  '353D527E569F69D822A9D679B28D2E975C6B22A82AB9924D533110E1C21C8508') {
+$pinnedMpvDllHash = '353D527E569F69D822A9D679B28D2E975C6B22A82AB9924D533110E1C21C8508'
+if ((Get-FileHash -Algorithm SHA256 -LiteralPath $runtime).Hash.ToUpperInvariant() -ne $pinnedMpvDllHash) {
   throw 'Release build does not contain the pinned LGPL libmpv runtime.'
 }
 if (-not $env:LINEUP_MPV_ROOT -or
   -not (Test-Path -LiteralPath (Join-Path $env:LINEUP_MPV_ROOT 'licenses'))) {
   throw 'LINEUP_MPV_ROOT must point to the prepared production runtime.'
+}
+$provenancePath = Join-Path $env:LINEUP_MPV_ROOT 'lineup-mpv-provenance.cmake'
+if (-not (Test-Path -LiteralPath $provenancePath)) {
+  throw 'Prepared production runtime provenance is missing.'
+}
+$provenance = Get-Content -LiteralPath $provenancePath
+function Get-ProvenanceValue {
+  param([Parameter(Mandatory)] [string] $Name)
+  foreach ($line in $provenance) {
+    if ($line -match ('^set\(' + [regex]::Escape($Name) + ' "([^"]+)"\)$')) {
+      return $Matches[1]
+    }
+  }
+  throw "Prepared production runtime provenance is missing $Name."
+}
+$provenanceDllHash = (Get-ProvenanceValue 'LINEUP_MPV_DLL_SHA256').ToUpperInvariant()
+if ($provenanceDllHash -ne $pinnedMpvDllHash) {
+  throw 'Prepared production runtime provenance does not match the pinned libmpv runtime.'
+}
+$descriptiveRevisions = @{
+  LINEUP_MPV_VERSION = $metadata.MpvVersion
+  LINEUP_MPV_FFMPEG_VERSION = $metadata.FfmpegVersion
+  LINEUP_MPV_LIBPLACEBO_VERSION = $metadata.LibplaceboVersion
+}
+foreach ($entry in $descriptiveRevisions.GetEnumerator()) {
+  if ((Get-ProvenanceValue $entry.Key) -ne $entry.Value) {
+    throw "Prepared production runtime provenance does not match $($entry.Key)."
+  }
 }
 
 New-Item -ItemType Directory -Path $Destination | Out-Null
@@ -81,12 +110,12 @@ $sourceDirty = $sourceDirty -or @(
   "Lineup Desktop $pubspecVersion Windows x64",
   "source-commit=$sourceCommit",
   "source-dirty=$($sourceDirty.ToString().ToLowerInvariant())",
-  'flutter-framework=4cf24164269a5ebf0c16a028a00727d0e77bbb05',
-  'flutter-engine=5f77625673248ee5846fbcaf5d3e1a3878386fd7',
-  'flutter-engine-patch=tool/flutter_engine/0001-windows-direct-composition.patch',
-  'mpv=mpv-v0.41.0-923-g7b8915bc1',
-  'ffmpeg=N-126123-g8b4fad11a',
-  'libplacebo=v7.371.0-111-g22ee762',
+  "flutter-framework=$($metadata.FlutterFrameworkRevision)",
+  "flutter-engine=$($metadata.FlutterEngineRevision)",
+  "flutter-engine-patch=$($metadata.FlutterEnginePatchPath)",
+  "mpv=$($metadata.MpvVersion)",
+  "ffmpeg=$($metadata.FfmpegVersion)",
+  "libplacebo=$($metadata.LibplaceboVersion)",
   'system-requirement=vulkan-1.dll supplied by a current GPU driver or Vulkan Runtime',
   $vcVersions
 ) | Set-Content -LiteralPath (Join-Path $Destination 'BUILD-INFO.txt') -Encoding ascii

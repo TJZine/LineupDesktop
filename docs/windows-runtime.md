@@ -32,6 +32,27 @@ is an engineering inventory, not legal advice.
 | Khronos Vulkan loader | `vulkan-1.dll` supplied by the installed GPU driver or Vulkan Runtime | System prerequisite. The selected libmpv DLL imports the loader even though Lineup selects D3D11. The portable package records this requirement instead of copying a machine-specific display-driver file. |
 | Universal C Runtime and Windows SDK | Windows 10/11 system components | Do not bundle for the supported Windows baseline. |
 
+## Vulkan-loader release gate
+
+The selected libmpv DLL imports `vulkan-1.dll` even when Lineup selects D3D11
+output. The portable package records this as a system prerequisite and does
+not copy a machine-specific display-driver DLL.
+
+The following acceptance evidence is still required before a packaged Windows
+release is declared supported:
+
+- [ ] On the supported Windows baseline, the packaged application launches and
+      plays the acceptance media with a current GPU driver or Vulkan Runtime
+      that supplies `vulkan-1.dll`.
+- [ ] In an isolated disposable Windows environment with the loader absent, the
+      observed process/startup failure is recorded, including the actionable
+      user-facing guidance that is actually possible before process startup.
+- [ ] The packaged application is re-tested after restoring the loader; no
+      loader DLL is copied from a test machine into the package.
+
+No loader-present or loader-absent runtime result is claimed by this document
+until those Windows observations are recorded.
+
 `dartjni.dll` can appear in Flutter's raw Windows build because an Android
 transitive package advertises a Windows FFI asset. Lineup does not register or
 load it on Windows, and the native asset manifest is empty, so the portable

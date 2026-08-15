@@ -4,6 +4,8 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+$repository = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
+$metadata = Import-PowerShellDataFile -LiteralPath (Join-Path $repository 'tool/windows/build-metadata.psd1')
 $asset = 'mpv-dev-lgpl-x86_64-20260813-git-7b8915bc1d.7z'
 $sha256 = '13723530C3A719577A27EA19E0127175CE6A047071F8D988ADC1B0DD400B3D18'
 $url = "https://github.com/zhongfly/mpv-winbuild/releases/download/2026-08-13-7b8915bc1d/$asset"
@@ -96,10 +98,11 @@ $provenance = Join-Path $root 'lineup-mpv-provenance.cmake'
 @(
   'set(LINEUP_MPV_DISTRIBUTION "production")',
   'set(LINEUP_MPV_LICENSE "LGPL-2.1-or-later")',
-  'set(LINEUP_MPV_VERSION "mpv-v0.41.0-923-g7b8915bc1")',
-  'set(LINEUP_MPV_FFMPEG_VERSION "N-126123-g8b4fad11a")',
-  'set(LINEUP_MPV_LIBPLACEBO_VERSION "v7.371.0-111-g22ee762")',
+  "set(LINEUP_MPV_VERSION `"$($metadata.MpvVersion)`")",
+  "set(LINEUP_MPV_FFMPEG_VERSION `"$($metadata.FfmpegVersion)`")",
+  "set(LINEUP_MPV_LIBPLACEBO_VERSION `"$($metadata.LibplaceboVersion)`")",
   "set(LINEUP_MPV_ASSET_SHA256 `"$sha256`")",
+  "set(LINEUP_MPV_DLL_SHA256 `"$((Get-FileHash -Algorithm SHA256 $dll).Hash)`")",
   "set(LINEUP_MPV_IMPORT_LIBRARY_SHA256 `"$((Get-FileHash -Algorithm SHA256 (Join-Path $root 'libmpv.lib')).Hash)`")"
 ) | Set-Content -Encoding ascii $provenance
 Write-Host "Prepared verified LGPL libmpv production files at $root"

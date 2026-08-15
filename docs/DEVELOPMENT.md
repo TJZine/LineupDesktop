@@ -89,11 +89,16 @@ ATL, Windows SDK `10.0.22621.0`, Debugging Tools for Windows, and 7-Zip with
 owned engine patch:
 
 ```powershell
-git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git C:\path\to\depot_tools
+$metadata = Import-PowerShellDataFile C:\path\to\LineupDesktop\tool\windows\build-metadata.psd1
+git clone --depth 1 --no-checkout https://chromium.googlesource.com/chromium/tools/depot_tools.git C:\path\to\depot_tools
+git -C C:\path\to\depot_tools fetch --depth 1 origin $metadata.DepotToolsRevision
+git -C C:\path\to\depot_tools checkout --detach $metadata.DepotToolsRevision
+if ((git -C C:\path\to\depot_tools rev-parse HEAD).Trim() -ne $metadata.DepotToolsRevision) { throw 'depot_tools revision mismatch.' }
 git clone https://github.com/flutter/flutter.git C:\path\to\flutter
-git -C C:\path\to\flutter checkout 4cf24164269a5ebf0c16a028a00727d0e77bbb05
+git -C C:\path\to\flutter checkout $metadata.FlutterFrameworkRevision
 
 $env:PATH = 'C:\path\to\depot_tools;C:\path\to\flutter\bin;' + $env:PATH
+$env:DEPOT_TOOLS_UPDATE = '0'
 $env:DEPOT_TOOLS_WIN_TOOLCHAIN = '0'
 $env:GYP_MSVS_OVERRIDE_PATH = 'C:\path\to\VisualStudio2022BuildTools'
 $env:WINDOWSSDKDIR = 'C:\Program Files (x86)\Windows Kits\10'
