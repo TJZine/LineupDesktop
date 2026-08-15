@@ -146,15 +146,14 @@ navigation do not enter C++.
 
 ## Not implemented yet
 
-Remote Plex playback through the pinned LGPL libmpv runtime has been exercised
-on Windows. HDR display switching, audio passthrough, broad codec/container and
-hardware acceptance, packaged-runtime validation, and the final Windows media
-acceptance matrix remain integration work. Completed observations are not
-generalized beyond the media and machine actually exercised. This evidence
-boundary limits support claims, not playback attempts: the Windows libmpv
-backend accepts original Plex streams without a codec, container, or HDR
-allowlist and without treating native audio passthrough as a decode gate. It
-lets libmpv decode, convert audio to PCM, render, or tone-map as needed.
+Live remote Plex playback acceptance through the pinned LGPL libmpv runtime,
+HDR display switching, audio passthrough, broad codec/container and hardware
+acceptance, packaged-runtime validation, and the final Windows media acceptance
+matrix remain integration work. This evidence boundary limits support claims,
+not playback attempts: the Windows libmpv backend accepts original Plex streams
+without a codec, container, or HDR allowlist and without treating native audio
+passthrough as a decode gate. It lets libmpv decode, convert audio to PCM,
+render, or tone-map as needed.
 
 ## Dependency decision
 

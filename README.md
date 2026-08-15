@@ -25,10 +25,10 @@ The current branch provides:
 - a lazy Guide with stable logical focus, bounded schedule/artwork caches,
   library filters, configurable time/density, and keyboard/remote/mouse input
 
-Remote Plex playback and the pinned LGPL libmpv runtime have been exercised on
-Windows. The broader hardware/HDR and packaged-runtime acceptance matrix is
-still in progress. Real Plex and macOS Keychain workflows require manual
-account-specific acceptance.
+The pinned LGPL libmpv runtime is downloaded, integrity-validated, linked, and
+packaged by Windows CI. Live remote Plex playback, broader hardware/HDR
+coverage, and packaged-runtime acceptance remain pending. Real Plex and macOS
+Keychain workflows require manual account-specific acceptance.
 
 ## Get started
 
