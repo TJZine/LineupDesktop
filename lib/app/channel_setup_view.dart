@@ -5,6 +5,7 @@ import '../channels/channel_builder.dart';
 import '../plex/plex_models.dart';
 import '../ui/app_theme.dart';
 import '../ui/app_ui.dart';
+import 'form_error.dart';
 import 'lineup_controller.dart';
 
 enum _SetupCategory {
@@ -297,7 +298,14 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
         }
       });
     } catch (error) {
-      if (mounted) setState(() => _error = _message(error));
+      if (mounted) {
+        setState(
+          () => _error = safeFormError(
+            error,
+            'Channel Setup could not complete that request.',
+          ),
+        );
+      }
     }
   }
 
@@ -812,12 +820,6 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
     ChannelBuildMode.append => 'Keep existing channels and use free numbers.',
     ChannelBuildMode.merge =>
       'Update matching generated channels and keep the rest.',
-  };
-
-  static String _message(Object error) => switch (error) {
-    FormatException(:final message) => message.toString(),
-    PlexException(:final message) => message,
-    _ => 'Channel Setup could not complete that request.',
   };
 }
 

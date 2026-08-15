@@ -815,7 +815,8 @@ class _Tracks extends StatelessWidget {
                     ),
                   ),
                   TextButton(
-                    autofocus: tracks.isEmpty,
+                    autofocus:
+                        tracks.isEmpty && type != PlayerTrackType.subtitle,
                     onPressed: controller.closeOverlay,
                     child: const Text('Back'),
                   ),

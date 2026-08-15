@@ -16,6 +16,7 @@ import '../settings/lineup_settings.dart';
 import '../ui/app_ui.dart';
 import '../ui/app_theme.dart';
 import 'channel_setup_view.dart';
+import 'form_error.dart';
 import 'lineup_controller.dart';
 import 'onboarding_view.dart';
 
@@ -857,7 +858,7 @@ class _ChannelEditorState extends State<ChannelEditor> {
       if (mounted) {
         setState(() {
           _saving = false;
-          _error = _safeFormError(error, 'The channel could not be saved.');
+          _error = safeFormError(error, 'The channel could not be saved.');
         });
       }
     }
@@ -1379,10 +1380,4 @@ String _sourceLabel(ContentSource source) => switch (source) {
   ManualSource() => 'manual',
   PlaylistSource() => 'playlist',
   MixedSource() => 'mixed',
-};
-
-String _safeFormError(Object error, String fallback) => switch (error) {
-  FormatException(:final message) => message.toString(),
-  PlexException(:final message) => message,
-  _ => fallback,
 };

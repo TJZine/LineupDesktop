@@ -223,6 +223,43 @@ void main() {
     fixture.dispose();
   });
 
+  testWidgets('empty track menus assign one intentional autofocus target', (
+    tester,
+  ) async {
+    final fixture = _Fixture(PlayerState.playing);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+
+    fixture.player.showTracks(PlayerTrackType.subtitle);
+    await tester.pump();
+    expect(
+      tester.widget<ListTile>(find.widgetWithText(ListTile, 'Off')).autofocus,
+      isTrue,
+    );
+    expect(
+      tester
+          .widget<TextButton>(find.widgetWithText(TextButton, 'Back'))
+          .autofocus,
+      isFalse,
+    );
+
+    fixture.player.showTracks(PlayerTrackType.audio);
+    await tester.pump();
+    expect(find.text('Off'), findsNothing);
+    expect(
+      tester
+          .widget<TextButton>(find.widgetWithText(TextButton, 'Back'))
+          .autofocus,
+      isTrue,
+    );
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
   testWidgets('focused Mini Guide uses the theme focused foreground', (
     tester,
   ) async {

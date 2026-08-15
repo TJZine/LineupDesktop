@@ -14,12 +14,14 @@ void main() {
     tester,
   ) async {
     final fixture = UiFixture()..controller.stage = SetupStage.ready;
+    final emberSteel = LineupTheme.forName(LineupThemeName.emberSteel);
+    final slatePine = LineupTheme.forName(LineupThemeName.slatePine);
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
 
     expect(
       Theme.of(tester.element(find.text('Guide').first)).colorScheme.primary,
-      const Color(0xFFE0782A),
+      emberSteel.colorScheme.primary,
     );
 
     await tester.tap(find.byKey(const Key('guide-app-menu')));
@@ -34,7 +36,7 @@ void main() {
     expect(fixture.controller.settings.theme, LineupThemeName.slatePine);
     expect(
       Theme.of(tester.element(find.text('Theme'))).colorScheme.primary,
-      const Color(0xFF809A79),
+      slatePine.colorScheme.primary,
     );
     await tester.runAsync(() => Future<void>.delayed(Duration.zero));
     await tester.pump();
@@ -60,7 +62,7 @@ void main() {
           find.text('Your Plex library, scheduled like television'),
         ),
       ).colorScheme.primary,
-      const Color(0xFF809A79),
+      slatePine.colorScheme.primary,
     );
   });
 
@@ -117,10 +119,14 @@ void main() {
     await tester.pumpAndSettle();
 
     final context = tester.element(find.byKey(const Key('classic-guide')));
+    final expectedTheme = LineupTheme.forName(
+      LineupThemeName.emberSteel,
+      largeFocusIndicators: true,
+    );
     expect(MediaQuery.disableAnimationsOf(context), isTrue);
     expect(
       Theme.of(context).extension<LineupThemeRoles>()!.focusBorderWidth,
-      5,
+      expectedTheme.extension<LineupThemeRoles>()!.focusBorderWidth,
     );
   });
 }

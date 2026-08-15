@@ -690,7 +690,7 @@ class _BlockingSaveStore extends _MemoryStore {
 
   @override
   Future<void> save(PersistedState value) async {
-    saveStarted.complete();
+    if (!saveStarted.isCompleted) saveStarted.complete();
     await finishSave.future;
     await super.save(value);
   }

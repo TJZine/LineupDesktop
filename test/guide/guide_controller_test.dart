@@ -431,15 +431,15 @@ void main() {
       },
     );
     guide.requestViewport(0, 5);
-    expect(loads, hasLength(4));
+    expect(loads, hasLength(guide.maximumConcurrentLoads));
 
     guide.dispose();
-    for (var index = 0; index < 4; index++) {
+    for (var index = 0; index < guide.maximumConcurrentLoads; index++) {
       loads[index].complete(_schedule(lineup.channels[index]));
     }
     await _settle();
 
-    expect(loads, hasLength(4));
+    expect(loads, hasLength(guide.maximumConcurrentLoads));
     lineup.dispose();
   });
 

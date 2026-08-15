@@ -468,6 +468,10 @@ void main() {
         'lineup-desktop-test-abcdefghijklmnopqrst',
       ),
     );
+    expect(
+      descriptor.uri.queryParameters.keys.map((key) => key.toLowerCase()),
+      isNot(contains('x-plex-token')),
+    );
   });
 
   test('transcode disables direct play and direct stream', () {
