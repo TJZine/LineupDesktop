@@ -100,6 +100,14 @@ bool IsValidPlexToken(std::string_view value) {
   return true;
 }
 
+constexpr bool EscapeMpvStringListByte(char value) {
+  return value == '\\' || value == ',';
+}
+
+static_assert(!EscapeMpvStringListByte('a'));
+static_assert(EscapeMpvStringListByte(','));
+static_assert(EscapeMpvStringListByte('\\'));
+
 constexpr bool IsHttpStatusSeparator(char value) {
   return value == ' ' || value == '\t' || value == '\r' || value == '\n' ||
          value == ':' || value == '=' || value == '-';
@@ -258,14 +266,13 @@ struct ClassifiedFailure {
   std::optional<int64_t> http_status;
 };
 
-constexpr bool ShouldReplaceFailure(bool same_load, bool current_has_http,
-                                    bool candidate_has_http) {
-  return !same_load || !current_has_http || candidate_has_http;
+constexpr bool ShouldReplaceFailure(bool same_load, bool candidate_has_http) {
+  return !same_load || candidate_has_http;
 }
 
-static_assert(!ShouldReplaceFailure(true, true, false));
-static_assert(ShouldReplaceFailure(true, false, true));
-static_assert(ShouldReplaceFailure(false, true, false));
+static_assert(!ShouldReplaceFailure(true, false));
+static_assert(ShouldReplaceFailure(true, true));
+static_assert(ShouldReplaceFailure(false, false));
 
 std::optional<ClassifiedFailure> ClassifyMpvFailure(
     const mpv_event_log_message& message) {
@@ -327,19 +334,20 @@ bool RestoreWindowState(HWND window, LONG_PTR style,
 
 WindowsNativePlayer::PlexHeader::PlexHeader(std::string_view token) {
   constexpr std::string_view prefix = "X-Plex-Token: ";
-  const size_t field_size = prefix.size() + token.size();
-  const std::string length = std::to_string(field_size);
-  size_ = length.size() + field_size + 2;
+  const size_t escapes = std::count_if(token.begin(), token.end(),
+                                       EscapeMpvStringListByte);
+  size_ = prefix.size() + token.size() + escapes;
   data_ = std::make_unique<char[]>(size_ + 1);
   char* output = data_.get();
-  *output++ = '%';
-  std::memcpy(output, length.data(), length.size());
-  output += length.size();
-  *output++ = '%';
   std::memcpy(output, prefix.data(), prefix.size());
   output += prefix.size();
-  std::memcpy(output, token.data(), token.size());
-  output[token.size()] = '\0';
+  for (const char byte : token) {
+    if (EscapeMpvStringListByte(byte)) {
+      *output++ = '\\';
+    }
+    *output++ = byte;
+  }
+  *output = '\0';
 }
 
 WindowsNativePlayer::PlexHeader::~PlexHeader() {
@@ -1156,9 +1164,8 @@ void WindowsNativePlayer::HandleMpvEvent(const mpv_event& event,
         if (event_load_id_ && event_load_id_ == active_load_id_) {
           if (const auto detail = ClassifyMpvFailure(*message)) {
             const bool same_load = last_failure_load_id_ == event_load_id_;
-            if (ShouldReplaceFailure(
-                    same_load, last_failure_http_status_.has_value(),
-                    detail->http_status.has_value())) {
+            if (ShouldReplaceFailure(same_load,
+                                     detail->http_status.has_value())) {
               last_failure_load_id_ = event_load_id_;
               last_failure_code_ = detail->code;
               last_failure_http_status_ = detail->http_status;

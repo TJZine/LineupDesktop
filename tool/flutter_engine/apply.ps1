@@ -11,10 +11,15 @@ $metadataPath = Join-Path $repositoryRoot $metadataRelativePath
 function Assert-CommittedInput {
   param([Parameter(Mandatory)] [string] $RelativePath)
 
-  $committed = (& git -C $repositoryRoot rev-parse "HEAD:$RelativePath").Trim()
+  $committed = & git -C $repositoryRoot rev-parse "HEAD:$RelativePath"
   if ($LASTEXITCODE) { throw "Required committed input is missing: $RelativePath" }
-  $working = (& git -C $repositoryRoot hash-object -- $RelativePath).Trim()
-  if ($LASTEXITCODE -or $working -ne $committed) {
+  $committed = $committed.Trim()
+  $working = & git -C $repositoryRoot hash-object -- $RelativePath
+  if ($LASTEXITCODE) {
+    throw "Build input must match its committed revision: $RelativePath"
+  }
+  $working = $working.Trim()
+  if ($working -ne $committed) {
     throw "Build input must match its committed revision: $RelativePath"
   }
 }

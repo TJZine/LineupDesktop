@@ -109,7 +109,7 @@ $exports = & $dumpbin /exports $dll | ForEach-Object {
 } | Where-Object { $_ -and $_ -notmatch '^\[' }
 if (-not $exports) { throw 'Could not read libmpv DLL exports.' }
 $def = Join-Path $root 'libmpv-2.def'
-@('LIBRARY libmpv-2.dll', 'EXPORTS') + $exports | Set-Content -NoNewline:$false -Encoding ascii $def
+@('LIBRARY libmpv-2.dll', 'EXPORTS') + $exports | Set-Content -LiteralPath $def -NoNewline:$false -Encoding ascii
 & $lib "/def:$def" /machine:x64 "/out:$root/libmpv.lib" | Out-Null
 if ($LASTEXITCODE) { throw 'Could not create the MSVC libmpv import library.' }
 
@@ -126,5 +126,5 @@ $provenance = Join-Path $root 'lineup-mpv-provenance.cmake'
   "set(LINEUP_MPV_MPV_LICENSE_SHA256 `"$($licenseHashes['mpv-LICENSE.LGPL'])`")",
   "set(LINEUP_MPV_FFMPEG_LICENSE_SHA256 `"$($licenseHashes['FFmpeg-COPYING.LGPLv3'])`")",
   "set(LINEUP_MPV_LIBPLACEBO_LICENSE_SHA256 `"$($licenseHashes['libplacebo-LICENSE'])`")"
-) | Set-Content -Encoding ascii $provenance
+) | Set-Content -LiteralPath $provenance -Encoding ascii
 Write-Host "Prepared verified LGPL libmpv production files at $root"

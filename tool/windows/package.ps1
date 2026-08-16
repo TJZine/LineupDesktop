@@ -121,7 +121,7 @@ foreach ($entry in $licenseMetadata.GetEnumerator()) {
   }
 }
 
-New-Item -ItemType Directory -Path $Destination | Out-Null
+[IO.Directory]::CreateDirectory($Destination) | Out-Null
 foreach ($file in @(
     'lineup_desktop.exe',
     'flutter_windows.dll',
@@ -158,7 +158,7 @@ foreach ($file in @('msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll')) {
 }
 
 $licenses = Join-Path $Destination 'licenses'
-New-Item -ItemType Directory -Path $licenses | Out-Null
+[IO.Directory]::CreateDirectory($licenses) | Out-Null
 Copy-Item -LiteralPath (Join-Path $repository 'LICENSE') -Destination (Join-Path $licenses 'Lineup-Desktop-Apache-2.0.txt')
 Copy-Item -LiteralPath (Join-Path $repository 'tool/flutter_engine/NOTICE') -Destination (Join-Path $licenses 'Flutter-engine-patch-NOTICE.txt')
 Copy-Item -LiteralPath (Join-Path $repository 'docs/windows-runtime.md') -Destination (Join-Path $licenses 'Windows-runtime-provenance.md')
