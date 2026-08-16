@@ -22,6 +22,12 @@ and corresponding sources and preserve their notices. Independent legal review
 is recommended before distribution beyond private alpha because this document
 is an engineering inventory, not legal advice.
 
+The verified archive currently remains hosted by the third-party builder.
+Before public distribution, mirror those exact bytes in an immutable
+project-controlled release, confirm the recorded archive SHA-256 is unchanged,
+and update `tool/windows/prepare-mpv.ps1` to use that release. Do not substitute
+a rebuilt archive under the existing provenance identity.
+
 ## Other native runtime components
 
 | Component | Provenance | Package policy |

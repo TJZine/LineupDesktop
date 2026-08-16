@@ -15,7 +15,7 @@ if (Test-Path -LiteralPath $Destination) {
     throw "Preparation destination must be new or empty: $Destination"
   }
 } else {
-  New-Item -ItemType Directory -Path $Destination | Out-Null
+  [IO.Directory]::CreateDirectory($Destination) | Out-Null
 }
 $temporaryDirectory = if ($env:RUNNER_TEMP) {
   $env:RUNNER_TEMP
@@ -52,7 +52,7 @@ if ((Get-FileHash -Algorithm SHA256 -LiteralPath $header).Hash -ne
 }
 
 $licenseDirectory = Join-Path $root 'licenses'
-New-Item -ItemType Directory -Force -Path $licenseDirectory | Out-Null
+[IO.Directory]::CreateDirectory($licenseDirectory) | Out-Null
 $licenses = @(
   @{
     Name = 'mpv-LICENSE.LGPL'
