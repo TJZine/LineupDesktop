@@ -38,12 +38,12 @@ and the verified LGPL libmpv runtime so ordinary PR changes still receive
 Windows C++/CMake integration proof without rebuilding Flutter itself. The
 expensive patched-engine job in `.github/workflows/ci.yml` is gated to the
 actual engine inputs: `.metadata`, `tool/windows/build-metadata.psd1`,
-`tool/flutter_engine/apply.ps1`, and
-`tool/flutter_engine/0001-windows-direct-composition.patch`. A manual workflow
-dispatch also forces that proof. When selected, CI verifies the exact framework
-and engine source revisions, applies this patch, builds `host_release`, and
-compiles Lineup against that local engine. Runtime marker and DirectComposition
-presentation still require an executed Windows acceptance check.
+`tool/flutter_engine/apply.ps1`, and the patch path read from
+`FlutterEnginePatchPath`. A manual workflow dispatch also forces that proof.
+When selected, CI verifies the exact framework and engine source revisions,
+applies this patch, builds `host_release`, and compiles Lineup against that
+local engine. Runtime marker and DirectComposition presentation still require
+an executed Windows acceptance check.
 
 See `docs/DEVELOPMENT.md` for the exact Windows commands and required local
 libmpv layout. See `NOTICE` before redistributing a patched engine binary.

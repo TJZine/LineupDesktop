@@ -617,9 +617,9 @@ profile-frame proof.
 
 ### Remaining Windows-native validation
 
-No `windows/**`, engine, C++, DirectComposition, libmpv, D3D11, decode, HDR,
-tone-mapping, passthrough, native fullscreen, packaging, or native video-layer
-work changed. The macOS deterministic player rectangle proves Flutter layout
-only. Prompt 5 remains solely responsible for real video inside that region,
-Windows media behavior, native PiP composition, hardware performance and
-gamepad acceptance.
+Prompt 4E did not modify or validate `windows/**`, the patched engine, C++,
+DirectComposition, libmpv, D3D11, decode, HDR, tone-mapping, passthrough,
+native fullscreen, packaging, or the native video layer. The macOS
+deterministic player rectangle proves Flutter layout only. Prompt 5 remains
+solely responsible for real video inside that region, Windows media behavior,
+native PiP composition, hardware performance and gamepad acceptance.

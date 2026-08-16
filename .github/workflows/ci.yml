@@ -86,6 +86,7 @@ jobs:
   engine-inputs:
     name: Detect Windows engine inputs
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     outputs:
       required: ${{ steps.detect.outputs.required }}
     steps:
@@ -93,6 +94,18 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      - id: metadata
+        name: Read engine patch path
+        shell: pwsh
+        run: |
+          $metadata = Import-PowerShellDataFile -LiteralPath ./tool/windows/build-metadata.psd1
+          $path = $metadata.FlutterEnginePatchPath
+          if ($path -notmatch '^[A-Za-z0-9._/-]+$' -or
+              [IO.Path]::IsPathRooted($path) -or
+              ($path -split '/') -contains '..') {
+            throw 'FlutterEnginePatchPath must be a safe repository-relative path.'
+          }
+          "patch-path=$path" >> $env:GITHUB_OUTPUT
       - id: detect
         name: Detect engine changes
         shell: bash
@@ -102,6 +115,7 @@ jobs:
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PUSH_BEFORE: ${{ github.event.before }}
           CURRENT_SHA: ${{ github.sha }}
+          ENGINE_PATCH_PATH: ${{ steps.metadata.outputs.patch-path }}
         run: |
           if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
             echo "required=true" >> "$GITHUB_OUTPUT"
@@ -123,7 +137,8 @@ jobs:
           fi
 
           changed_files="$(git diff --name-only "$base" "$head")"
-          if grep -Eq '^(\.metadata|tool/windows/build-metadata\.psd1|tool/flutter_engine/(apply\.ps1|0001-windows-direct-composition\.patch))$' <<<"$changed_files"; then
+          if grep -Eq '^(\.metadata|tool/windows/build-metadata\.psd1|tool/flutter_engine/apply\.ps1)$' <<<"$changed_files" ||
+             grep -Fxq "$ENGINE_PATCH_PATH" <<<"$changed_files"; then
             echo "required=true" >> "$GITHUB_OUTPUT"
           else
             echo "required=false" >> "$GITHUB_OUTPUT"

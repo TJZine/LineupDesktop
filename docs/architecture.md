@@ -142,7 +142,10 @@ navigation do not enter C++.
   settings or overlay owner.
 - A pinned, repository-owned Flutter Windows DirectComposition patch with the
   adapted BSD notice and an exact runtime compatibility check.
-- Flutter format, analysis, tests, and macOS/Windows scaffold builds in CI.
+- Flutter format, analysis, tests, focused macOS golden verification and
+  application builds, focused Windows widget tests, pinned LGPL libmpv
+  application builds, conditional patched-engine builds, packaging rejection
+  checks, and portable Windows package uploads in CI.
 
 ## Integration and acceptance status
 
