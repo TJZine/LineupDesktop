@@ -96,6 +96,12 @@ git -C C:\path\to\depot_tools checkout --detach $metadata.DepotToolsRevision
 if ((git -C C:\path\to\depot_tools rev-parse HEAD).Trim() -ne $metadata.DepotToolsRevision) { throw 'depot_tools revision mismatch.' }
 git clone https://github.com/flutter/flutter.git C:\path\to\flutter
 git -C C:\path\to\flutter checkout $metadata.FlutterFrameworkRevision
+if (
+  (git -C C:\path\to\flutter rev-parse HEAD).Trim() -ne
+  $metadata.FlutterFrameworkRevision
+) {
+  throw 'Flutter framework revision mismatch.'
+}
 
 $env:PATH = 'C:\path\to\depot_tools;C:\path\to\flutter\bin;' + $env:PATH
 $env:DEPOT_TOOLS_UPDATE = '0'

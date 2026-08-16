@@ -61,8 +61,8 @@ ScheduledProgram programAt(
 ) {
   final elapsed = time.toUtc().difference(anchor.toUtc()).inMicroseconds;
   final loopUs = schedule.loopDuration.inMicroseconds;
-  final loop = (elapsed / loopUs).floor();
   final position = ((elapsed % loopUs) + loopUs) % loopUs;
+  final loop = (elapsed - position) ~/ loopUs;
   var low = 0;
   var high = schedule.offsets.length - 1;
   while (low < high) {

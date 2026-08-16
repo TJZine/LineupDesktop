@@ -11,7 +11,7 @@ reviews:
 
   pre_merge_checks:
     docstrings:
-      mode: off
+      mode: "off"
 
   path_filters:
     - "!macos/Flutter/GeneratedPluginRegistrant.swift"

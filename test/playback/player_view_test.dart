@@ -105,6 +105,8 @@ void main() {
     tester,
   ) async {
     final fixture = _Fixture(PlayerState.playing);
+    await tester.binding.setSurfaceSize(const Size(800, 600));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     for (final size in const [
       Size(800, 600),
       Size(1280, 720),
@@ -143,7 +145,6 @@ void main() {
     );
     expect(find.textContaining('UP/DOWN Browse'), findsOneWidget);
 
-    await tester.binding.setSurfaceSize(null);
     await tester.pumpWidget(const SizedBox.shrink());
     fixture.dispose();
   });
@@ -194,6 +195,8 @@ void main() {
       ),
     );
     final fixture = _Fixture(PlayerState.playing, tracks: tracks);
+    await tester.binding.setSurfaceSize(const Size(800, 600));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     for (final size in const [Size(800, 600), Size(1280, 720)]) {
       await tester.binding.setSurfaceSize(size);
       fixture.player.showOsd();
@@ -218,7 +221,6 @@ void main() {
       expect(tester.takeException(), isNull, reason: '$size');
     }
 
-    await tester.binding.setSurfaceSize(null);
     await tester.pumpWidget(const SizedBox.shrink());
     fixture.dispose();
   });
@@ -233,6 +235,7 @@ void main() {
       ),
     );
 
+    fixture.player.showOsd();
     fixture.player.showTracks(PlayerTrackType.subtitle);
     await tester.pump();
     expect(
@@ -246,6 +249,7 @@ void main() {
       isFalse,
     );
 
+    fixture.player.closeOverlay();
     fixture.player.showTracks(PlayerTrackType.audio);
     await tester.pump();
     expect(find.text('Off'), findsNothing);

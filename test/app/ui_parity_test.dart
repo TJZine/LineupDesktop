@@ -114,8 +114,7 @@ void main() {
       await tester.pumpWidget(fixture.build());
       await tester.pumpAndSettle();
 
-      await _openImmersiveDestination(tester, 'Channels');
-      await tester.pumpAndSettle();
+      await openDestination(tester, 'Channels');
       expect(find.text('Open Channel builder'), findsOneWidget);
       expect(tester.takeException(), isNull, reason: 'Channels at $size');
 
@@ -197,8 +196,7 @@ void main() {
     await tester.pumpWidget(fixture.build());
     await tester.pump();
     await tester.pump();
-    await _openImmersiveDestination(tester, 'Channels');
-    await tester.pumpAndSettle();
+    await openDestination(tester, 'Channels');
 
     await tester.tap(find.byTooltip('Delete Newsroom'));
     await tester.pumpAndSettle();
@@ -233,8 +231,7 @@ void main() {
 
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
-    await _openImmersiveDestination(tester, 'Settings');
-    await tester.pumpAndSettle();
+    await openDestination(tester, 'Settings');
 
     expect(
       MediaQuery.sizeOf(tester.element(find.text('Settings').last)),
@@ -257,8 +254,7 @@ void main() {
       ..controller.selectedLibraryIds = const {'movies'};
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
-    await _openImmersiveDestination(tester, 'Channels');
-    await tester.pumpAndSettle();
+    await openDestination(tester, 'Channels');
     await tester.tap(find.text('Create channel'));
     await tester.pumpAndSettle();
 
@@ -340,25 +336,6 @@ void main() {
     expect(find.text('Review expected changes'), findsOneWidget);
     expect(find.text('Confirm & Replace'), findsOneWidget);
   });
-}
-
-Future<void> _openImmersiveDestination(
-  WidgetTester tester,
-  String destination,
-) async {
-  if (find.byKey(const Key('guide-app-menu')).evaluate().isNotEmpty) {
-    await tester.tap(find.byKey(const Key('guide-app-menu')));
-    await tester.pump(const Duration(milliseconds: 250));
-    await tester.tap(find.text(destination).last);
-  } else {
-    await tester.tap(
-      find.descendant(
-        of: find.byType(NavigationRail),
-        matching: find.text(destination),
-      ),
-    );
-  }
-  await tester.pumpAndSettle();
 }
 
 class _ProfileFixtureController extends FixtureController {

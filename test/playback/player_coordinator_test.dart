@@ -135,6 +135,56 @@ void main() {
     expect(coordinator.fullscreen, isFalse);
   });
 
+  test('pending seek does not notify after disposal', () async {
+    final lineup = _TestLineup();
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    final player = _BlockingControlPlayer();
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
+
+    final seek = coordinator.seekTo(const Duration(seconds: 1));
+    await player.seekStarted.future;
+    coordinator.dispose();
+    player.releaseSeek.complete();
+
+    await seek;
+    expect(coordinator.overlay, PlayerOverlay.none);
+  });
+
+  test('pending track selection does not notify after disposal', () async {
+    final lineup = _TestLineup();
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    final player = _BlockingControlPlayer();
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
+
+    final select = coordinator.selectTrack(PlayerTrackType.audio, 1);
+    await player.selectStarted.future;
+    coordinator.dispose();
+    player.releaseSelect.complete();
+
+    await select;
+    expect(coordinator.overlay, PlayerOverlay.none);
+  });
+
   test(
     'removing the active channel stops playback and releases its lease',
     () async {
@@ -778,7 +828,7 @@ void main() {
       loadSchedule: (channel) async => _schedule(channel),
     )..requestViewport(0, 2);
     await Future<void>.delayed(Duration.zero);
-    final player = _BlockingSeekPlayer();
+    final player = _BlockingControlPlayer();
     final coordinator = PlayerCoordinator(
       player: player,
       lineup: lineup,
@@ -1144,15 +1194,24 @@ class _EventPlayer extends _Player {
 
 class _BlockingEventPlayer extends _EventPlayer with _BlocksFirstLoad {}
 
-class _BlockingSeekPlayer extends _EventPlayer {
+class _BlockingControlPlayer extends _EventPlayer {
   final seekStarted = Completer<void>();
   final releaseSeek = Completer<void>();
+  final selectStarted = Completer<void>();
+  final releaseSelect = Completer<void>();
 
   @override
   Future<void> seek(Duration value) async {
     seeks.add(value);
-    seekStarted.complete();
+    if (!seekStarted.isCompleted) seekStarted.complete();
     await releaseSeek.future;
+  }
+
+  @override
+  Future<void> selectTrack(PlayerTrackType type, int? id) async {
+    selectedTracks.add((type, id));
+    if (!selectStarted.isCompleted) selectStarted.complete();
+    await releaseSelect.future;
   }
 }
 

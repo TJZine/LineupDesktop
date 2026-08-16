@@ -794,7 +794,10 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
       if (mounted) {
         setState(() {
           _building = false;
-          _error = _message(error);
+          _error = safeFormError(
+            error,
+            'The channel plan could not be applied.',
+          );
         });
       }
     }

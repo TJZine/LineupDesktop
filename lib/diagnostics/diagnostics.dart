@@ -31,9 +31,9 @@ class Diagnostics {
       if (_forbiddenKey.hasMatch(entry.key)) continue;
       final value = entry.value;
       if (value is String || value is num || value is bool) {
-        safe[entry.key.substring(0, entry.key.length.clamp(0, 64))] = redact(
-          value.toString(),
-        ).substring(0, redact(value.toString()).length.clamp(0, 500));
+        final redacted = redact(value.toString());
+        safe[entry.key.substring(0, entry.key.length.clamp(0, 64))] = redacted
+            .substring(0, redacted.length.clamp(0, 500));
       }
     }
     _entries.add(
@@ -45,16 +45,23 @@ class Diagnostics {
   static String redact(String input) => input
       .replaceAll(
         RegExp(
-          r'(X-Plex-Token|Authorization|token|password|pin)\s*[:=]\s*[^\s,&}]+',
+          r'("?\bAuthorization"?\s*[:=]\s*)(?:Bearer|Basic)\s+\S+',
           caseSensitive: false,
         ),
-        r'$1=[REDACTED]',
+        r'$1[REDACTED]',
       )
-      .replaceAll(RegExp(r'https?://[^\s]+', caseSensitive: false), '[URL]')
       .replaceAll(
         RegExp(r'\b(Bearer|Basic)\s+\S+', caseSensitive: false),
         r'$1 [REDACTED]',
       )
+      .replaceAll(
+        RegExp(
+          r'("?(?:X-Plex-Token|Authorization|authToken|token|password|pin)"?\s*[:=]\s*)("[^"]*"|[^\s,&}]+)',
+          caseSensitive: false,
+        ),
+        r'$1[REDACTED]',
+      )
+      .replaceAll(RegExp(r'https?://[^\s]+', caseSensitive: false), '[URL]')
       .replaceAll(RegExp(r'(?:/[\w .-]+){2,}'), '[PATH]')
       .replaceAll(
         RegExp(r'\b[A-Z]:\\[^\r\n]+', caseSensitive: false),

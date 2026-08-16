@@ -17,6 +17,18 @@ void main() {
     expect(entry.context, {'server': 'ok'});
   });
 
+  test('redacts authorization schemes and JSON auth tokens', () {
+    for (final input in [
+      'Authorization: Bearer bearer-secret',
+      'Authorization: Basic basic-secret',
+      '{"authToken":"json-secret"}',
+    ]) {
+      final output = Diagnostics.redact(input);
+      expect(output, contains('[REDACTED]'));
+      expect(output, isNot(contains('secret')));
+    }
+  });
+
   test('disabled diagnostics retain nothing and clear existing entries', () {
     final diagnostics = Diagnostics();
     diagnostics.add('plex', 'not retained');

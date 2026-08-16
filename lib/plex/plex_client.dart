@@ -481,11 +481,16 @@ class PlexClient {
       ..followRedirects = false
       ..headers.addAll(_headers(token));
     final response = await _http.send(request).timeout(requestTimeout);
-    if (response.statusCode != 200 ||
-        (response.contentLength ?? 0) > maximumBytes) {
+    if (response.statusCode != 200) {
       throw const PlexException(
         'artwork-unavailable',
         'Program artwork is unavailable.',
+      );
+    }
+    if ((response.contentLength ?? 0) > maximumBytes) {
+      throw const PlexException(
+        'artwork-too-large',
+        'Program artwork is too large.',
       );
     }
     final bytes = BytesBuilder(copy: false);

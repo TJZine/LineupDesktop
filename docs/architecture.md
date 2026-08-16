@@ -144,7 +144,7 @@ navigation do not enter C++.
   adapted BSD notice and an exact runtime compatibility check.
 - Flutter format, analysis, tests, and macOS/Windows scaffold builds in CI.
 
-## Not implemented yet
+## Integration and acceptance status
 
 Live remote Plex playback acceptance through the pinned LGPL libmpv runtime,
 HDR display switching, audio passthrough, broad codec/container and hardware

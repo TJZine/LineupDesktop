@@ -73,6 +73,7 @@ void main() {
     tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(1280, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     for (final count in [200, 500, 1000]) {
       final lineup = _Lineup(count);
       var loads = 0;
@@ -105,7 +106,6 @@ void main() {
       guide.dispose();
       lineup.dispose();
     }
-    await tester.binding.setSurfaceSize(null);
   });
 
   testWidgets('1000-channel Guide builds a bounded accessible viewport', (
@@ -123,6 +123,7 @@ void main() {
     final rssBefore = ProcessInfo.currentRss;
     final firstViewport = Stopwatch()..start();
     await tester.binding.setSurfaceSize(const Size(1280, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(
       MaterialApp(
         home: GuideView(
@@ -160,7 +161,6 @@ void main() {
     expect(guide.focusedChannelId, isNot('channel-0'));
     expect(loads, lessThan(40));
 
-    await tester.binding.setSurfaceSize(null);
     await tester.pumpWidget(const SizedBox.shrink());
     guide.dispose();
     lineup.dispose();
@@ -214,6 +214,8 @@ void main() {
     );
     var tunes = 0;
 
+    await tester.binding.setSurfaceSize(const Size(800, 600));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     for (final (size, expectedWidth, minimumRows) in const [
       (Size(800, 600), 420.0, 4),
       (Size(1920, 719), 499.33, 4),
@@ -301,7 +303,6 @@ void main() {
       greaterThanOrEqualTo(5),
     );
 
-    await tester.binding.setSurfaceSize(null);
     await tester.pumpWidget(const SizedBox.shrink());
     guide.dispose();
     lineup.dispose();
@@ -432,6 +433,7 @@ void main() {
     );
 
     await tester.binding.setSurfaceSize(const Size(1280, 720));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(buildGuide());
     await tester.pumpAndSettle();
     const scheduleList = Key('guide-schedule-list');
@@ -462,7 +464,6 @@ void main() {
     );
     expect(scrollable.position.pixels, closeTo(remembered, 1));
 
-    await tester.binding.setSurfaceSize(null);
     await tester.pumpWidget(const SizedBox.shrink());
     guide.dispose();
     lineup.dispose();
@@ -498,6 +499,7 @@ void main() {
     }
 
     await tester.binding.setSurfaceSize(const Size(1280, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(buildGuide());
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 120));
@@ -522,7 +524,6 @@ void main() {
     await tester.pump();
     expectFocusedRowVisible();
 
-    await tester.binding.setSurfaceSize(null);
     await tester.pumpWidget(const SizedBox.shrink());
     guide.dispose();
     lineup.dispose();

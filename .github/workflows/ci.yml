@@ -134,7 +134,7 @@ jobs:
     needs: engine-inputs
     if: needs.engine-inputs.outputs.required == 'true'
     runs-on: windows-2022
-    timeout-minutes: 120
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
@@ -174,11 +174,16 @@ jobs:
           gclient sync --no-history
           & "$env:GITHUB_WORKSPACE\tool\flutter_engine\apply.ps1" -FlutterRoot $flutterSource
           Set-Location (Join-Path $flutterSource 'engine\src')
-          python .\flutter\tools\gn --runtime-mode=release
+          python .\flutter\tools\gn `
+            --runtime-mode=release `
+            --no-enable-unittests `
+            --no-build-embedder-examples
           ninja -C out\host_release
       - name: Compile Lineup against the patched engine
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
           $mpvRoot = Join-Path $env:RUNNER_TEMP 'lineup-mpv'
           & .\tool\windows\prepare-mpv.ps1 -Destination $mpvRoot
           $env:LINEUP_MPV_ROOT = $mpvRoot

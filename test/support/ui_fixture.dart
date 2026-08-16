@@ -1,6 +1,8 @@
 import 'dart:async';
 
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:http/testing.dart';
 import 'package:lineup_desktop/app/lineup_app.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/persistence/app_store.dart';
@@ -39,6 +41,9 @@ class FixtureController extends LineupController {
         credentials: _MemoryCredentials(),
         plex: PlexClient(
           clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+          httpClient: MockClient(
+            (_) async => throw StateError('unexpected HTTP'),
+          ),
         ),
       );
 
@@ -48,6 +53,23 @@ class FixtureController extends LineupController {
   @override
   Future<void> initialize() =>
       restoreOnInitialize ? super.initialize() : Future.value();
+}
+
+Future<void> openDestination(WidgetTester tester, String destination) async {
+  final menu = find.byKey(const Key('guide-app-menu'));
+  if (menu.evaluate().isNotEmpty) {
+    await tester.tap(menu);
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.tap(find.text(destination).last);
+  } else {
+    await tester.tap(
+      find.descendant(
+        of: find.byType(NavigationRail),
+        matching: find.text(destination),
+      ),
+    );
+  }
+  await tester.pumpAndSettle();
 }
 
 class FixturePlayer implements NativePlayer {

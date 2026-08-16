@@ -398,11 +398,13 @@ class PlayerCoordinator extends ChangeNotifier {
 
   Future<void> seekTo(Duration position) async {
     await player.seek(position);
+    if (_disposed) return;
     showOsd();
   }
 
   Future<void> selectTrack(PlayerTrackType type, int? id) async {
     await player.selectTrack(type, id);
+    if (_disposed) return;
     showOsd();
   }
 

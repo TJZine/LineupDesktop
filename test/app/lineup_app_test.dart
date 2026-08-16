@@ -13,6 +13,8 @@ import 'package:lineup_desktop/playback/native_video_surface.dart';
 import 'package:lineup_desktop/plex/plex_client.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
 
+import '../support/ui_fixture.dart';
+
 void main() {
   testWidgets('startup announcement is a labeled live region', (tester) async {
     final controller = _LoadingController();
@@ -48,8 +50,7 @@ void main() {
 
     expect(find.text('Create a channel to build your Guide'), findsOneWidget);
 
-    await _openImmersiveDestination(tester, 'Settings');
-    await tester.pumpAndSettle();
+    await openDestination(tester, 'Settings');
 
     expect(find.text('Theme'), findsOneWidget);
 
@@ -68,8 +69,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(FocusManager.instance.primaryFocus?.debugLabel, 'Guide');
 
-    await _openImmersiveDestination(tester, 'Player');
-    await tester.pumpAndSettle();
+    await openDestination(tester, 'Player');
     expect(FocusManager.instance.primaryFocus?.debugLabel, 'Player');
 
     await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
@@ -123,7 +123,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await _openImmersiveDestination(tester, 'Settings');
+    await openDestination(tester, 'Settings');
     await tester.tap(find.text('Account'));
     await tester.pumpAndSettle();
     expect(find.text('Switch profile'), findsOneWidget);
@@ -171,8 +171,8 @@ void main() {
     await tester.pumpWidget(
       LineupBootstrap(player: player, controller: controller),
     );
-    await tester.pump();
-    await tester.pump();
+    await tester.pumpAndSettle();
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Guide');
 
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pumpAndSettle();
@@ -317,16 +317,6 @@ void main() {
       findsOneWidget,
     );
   });
-}
-
-Future<void> _openImmersiveDestination(
-  WidgetTester tester,
-  String destination,
-) async {
-  await tester.tap(find.byKey(const Key('guide-app-menu')));
-  await tester.pump(const Duration(milliseconds: 250));
-  await tester.tap(find.text(destination).last);
-  await tester.pumpAndSettle();
 }
 
 class _FakeController extends LineupController {

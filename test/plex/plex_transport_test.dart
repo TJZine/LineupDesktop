@@ -585,7 +585,7 @@ void main() {
         Uri.parse('/library/art/1'),
         maximumBytes: 3,
       ),
-      artworkUnavailable,
+      artworkTooLarge,
     );
 
     await expectLater(
