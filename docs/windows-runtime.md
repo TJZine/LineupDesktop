@@ -32,6 +32,11 @@ is an engineering inventory, not legal advice.
 | Khronos Vulkan loader | `vulkan-1.dll` supplied by the installed GPU driver or Vulkan Runtime | System prerequisite. The selected libmpv DLL imports the loader even though Lineup selects D3D11. The portable package records this requirement instead of copying a machine-specific display-driver file. |
 | Universal C Runtime and Windows SDK | Windows 10/11 system components | Do not bundle for the supported Windows baseline. |
 
+`tool/windows/package.ps1` creates a distributable portable package and accepts
+only a clean Git source tree. It verifies the source commit and tracked,
+staged, and untracked state before creating package output; `BUILD-INFO.txt`
+records the verified commit and `source-dirty=false` attestation.
+
 ## Vulkan-loader release gate
 
 The selected libmpv DLL imports `vulkan-1.dll` even when Lineup selects D3D11

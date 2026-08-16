@@ -192,6 +192,22 @@ jobs:
             --local-engine=host_release `
             --local-engine-host=host_release `
             --local-engine-src-path=$engineSource
+          $dirtyProbe = Join-Path $env:GITHUB_WORKSPACE 'PACKAGE-DIRTY-PROBE'
+          $dirtyDestination = 'build/package/dirty-source-check'
+          Set-Content -LiteralPath $dirtyProbe -Value 'dirty'
+          try {
+            try {
+              & .\tool\windows\package.ps1 -Destination $dirtyDestination
+              throw 'Packaging unexpectedly accepted the source-state probe.'
+            } catch {
+              if ($_.Exception.Message -notlike '*dirty source tree*') { throw }
+            }
+            if (Test-Path -LiteralPath $dirtyDestination) {
+              throw 'Dirty-source packaging wrote package output before failing.'
+            }
+          } finally {
+            Remove-Item -LiteralPath $dirtyProbe
+          }
           $license = Join-Path $mpvRoot 'licenses\mpv-LICENSE.LGPL'
           $licenseBytes = [IO.File]::ReadAllBytes($license)
           try {

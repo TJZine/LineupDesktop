@@ -23,6 +23,34 @@ if (-not $Destination.StartsWith($packageRoot + [IO.Path]::DirectorySeparatorCha
 if (-not (Test-Path -LiteralPath $BuildDirectory)) { throw 'Release build directory does not exist.' }
 if (Test-Path -LiteralPath $Destination) { throw "Package destination already exists: $Destination" }
 
+$sourceCommit = & {
+  $PSNativeCommandUseErrorActionPreference = $false
+  $output = @(git -C $repository rev-parse --verify HEAD)
+  if ($LASTEXITCODE -or $output.Count -ne 1 -or [string]::IsNullOrWhiteSpace($output[0])) {
+    throw 'git rev-parse failed while computing source provenance.'
+  }
+  $output[0].Trim()
+}
+$sourceDirty = & {
+  $PSNativeCommandUseErrorActionPreference = $false
+
+  git -C $repository diff --quiet
+  $worktreeExit = $LASTEXITCODE
+  if ($worktreeExit -gt 1) { throw "git diff failed with exit code $worktreeExit." }
+
+  git -C $repository diff --cached --quiet
+  $indexExit = $LASTEXITCODE
+  if ($indexExit -gt 1) { throw "git diff --cached failed with exit code $indexExit." }
+
+  $untracked = @(git -C $repository ls-files --others --exclude-standard)
+  if ($LASTEXITCODE) { throw 'git ls-files failed while computing source provenance.' }
+
+  $worktreeExit -eq 1 -or $indexExit -eq 1 -or $untracked.Count -ne 0
+}
+if ($sourceDirty) {
+  throw 'Refusing to create a release package from a dirty source tree. Commit or stash all tracked and untracked changes first.'
+}
+
 $runtime = Join-Path $BuildDirectory 'libmpv-2.dll'
 $pinnedMpvDllHash = '353D527E569F69D822A9D679B28D2E975C6B22A82AB9924D533110E1C21C8508'
 if ((Get-FileHash -Algorithm SHA256 -LiteralPath $runtime).Hash.ToUpperInvariant() -ne $pinnedMpvDllHash) {
@@ -141,23 +169,6 @@ foreach ($file in $licenseMetadata.Keys) {
 $vcVersions = @('msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll') | ForEach-Object {
   $file = Get-Item -LiteralPath (Join-Path $Destination $_)
   "$($file.Name)=$($file.VersionInfo.FileVersion)"
-}
-$sourceCommit = (git -C $repository rev-parse HEAD).Trim()
-$sourceDirty = & {
-  $PSNativeCommandUseErrorActionPreference = $false
-
-  git -C $repository diff --quiet
-  $worktreeExit = $LASTEXITCODE
-  if ($worktreeExit -gt 1) { throw "git diff failed with exit code $worktreeExit." }
-
-  git -C $repository diff --cached --quiet
-  $indexExit = $LASTEXITCODE
-  if ($indexExit -gt 1) { throw "git diff --cached failed with exit code $indexExit." }
-
-  $untracked = @(git -C $repository ls-files --others --exclude-standard)
-  if ($LASTEXITCODE) { throw 'git ls-files failed while computing source provenance.' }
-
-  $worktreeExit -eq 1 -or $indexExit -eq 1 -or $untracked.Count -ne 0
 }
 @(
   "Lineup Desktop $pubspecVersion Windows x64",
