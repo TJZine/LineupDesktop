@@ -7,6 +7,7 @@ void main() {
     'synthetic player does not resume load emissions after disposal',
     () async {
       final player = HarnessPlayer();
+      addTearDown(player.dispose);
       var events = 0;
       player.events.listen((_) => events++);
 

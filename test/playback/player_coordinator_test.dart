@@ -142,6 +142,7 @@ void main() {
       loadSchedule: (channel) async => _schedule(channel),
     );
     final player = _BlockingControlPlayer();
+    addTearDown(player.close);
     final coordinator = PlayerCoordinator(
       player: player,
       lineup: lineup,
@@ -167,6 +168,7 @@ void main() {
       loadSchedule: (channel) async => _schedule(channel),
     );
     final player = _BlockingControlPlayer();
+    addTearDown(player.close);
     final coordinator = PlayerCoordinator(
       player: player,
       lineup: lineup,
@@ -455,6 +457,7 @@ void main() {
         loadSchedule: (channel) async => _schedule(channel),
       );
       final player = _EventPlayer();
+      addTearDown(player.close);
       final coordinator = PlayerCoordinator(
         player: player,
         lineup: lineup,
@@ -477,7 +480,6 @@ void main() {
       expect(coordinator.overlay, PlayerOverlay.osd);
 
       coordinator.dispose();
-      await player.close();
     },
   );
 
@@ -592,6 +594,7 @@ void main() {
       )..requestViewport(0, 2);
       await Future<void>.delayed(Duration.zero);
       final player = _BlockingEventPlayer();
+      addTearDown(player.close);
       final coordinator = PlayerCoordinator(
         player: player,
         lineup: lineup,
@@ -621,7 +624,6 @@ void main() {
       expect(coordinator.overlay, PlayerOverlay.error);
 
       coordinator.dispose();
-      await player.close();
     },
   );
 
@@ -633,6 +635,7 @@ void main() {
     )..requestViewport(0, 2);
     await Future<void>.delayed(Duration.zero);
     final player = _EventPlayer();
+    addTearDown(player.close);
     final coordinator = PlayerCoordinator(
       player: player,
       lineup: lineup,
@@ -658,7 +661,6 @@ void main() {
     expect(lineup.releases, 1);
 
     coordinator.dispose();
-    await player.close();
   });
 
   test(
@@ -671,6 +673,7 @@ void main() {
       )..requestViewport(0, 2);
       await Future<void>.delayed(Duration.zero);
       final player = _EventPlayer();
+      addTearDown(player.close);
       final coordinator = PlayerCoordinator(
         player: player,
         lineup: lineup,
@@ -691,7 +694,6 @@ void main() {
       expect(lineup.releases, 2);
 
       coordinator.dispose();
-      await player.close();
     },
   );
 
@@ -704,6 +706,7 @@ void main() {
     )..requestViewport(0, 2);
     await Future<void>.delayed(Duration.zero);
     final player = _EventPlayer();
+    addTearDown(player.close);
     final coordinator = PlayerCoordinator(
       player: player,
       lineup: lineup,
@@ -728,7 +731,6 @@ void main() {
     expect(lineup.diagnostics.entries.single.context['audioCodec'], 'truehd');
 
     coordinator.dispose();
-    await player.close();
   });
 
   test('load side effects roll back when load later fails', () async {
@@ -829,6 +831,7 @@ void main() {
     )..requestViewport(0, 2);
     await Future<void>.delayed(Duration.zero);
     final player = _BlockingControlPlayer();
+    addTearDown(player.close);
     final coordinator = PlayerCoordinator(
       player: player,
       lineup: lineup,
@@ -850,7 +853,6 @@ void main() {
     expect(coordinator.overlay, PlayerOverlay.error);
 
     coordinator.dispose();
-    await player.close();
   });
 
   test(
@@ -863,6 +865,7 @@ void main() {
       )..requestViewport(0, 2);
       await Future<void>.delayed(Duration.zero);
       final player = _EventPlayer();
+      addTearDown(player.close);
       final coordinator = PlayerCoordinator(
         player: player,
         lineup: lineup,
@@ -884,7 +887,6 @@ void main() {
       expect(coordinator.overlay, PlayerOverlay.error);
 
       coordinator.dispose();
-      await player.close();
     },
   );
 
