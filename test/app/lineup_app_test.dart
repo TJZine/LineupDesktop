@@ -257,6 +257,67 @@ void main() {
     expect(controller.linkingCanceled, isTrue);
   });
 
+  testWidgets('linking cancellation failure moves focus to secure retry', (
+    tester,
+  ) async {
+    final controller = _FakeController()
+      ..stage = SetupStage.linking
+      ..activePin = PlexPin(
+        id: 1,
+        code: 'ABCD',
+        expiresAt: DateTime.now().add(const Duration(minutes: 2)),
+      );
+    await tester.pumpWidget(
+      LineupBootstrap(player: _FakePlayer(), controller: controller),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    final focusedButton = FocusManager.instance.primaryFocus?.context
+        ?.findAncestorWidgetOfExactType<TextButton>();
+    expect(focusedButton, isNotNull);
+    expect((focusedButton!.child as Text).data, 'Cancel');
+
+    controller.requireSecureCancellation();
+    await tester.pump();
+    await tester.pump();
+
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'Retry secure cancellation',
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    expect(controller.linkingCanceled, isTrue);
+  });
+
+  testWidgets('busy profile selection moves focus to its enabled cancel', (
+    tester,
+  ) async {
+    const child = PlexHomeUser(id: 'child', name: 'Child', protected: false);
+    final controller = _FakeController()
+      ..stage = SetupStage.profiles
+      ..profiles = const [child]
+      ..profileSelectionCanCancel = true;
+    await tester.pumpWidget(
+      LineupBootstrap(player: _FakePlayer(), controller: controller),
+    );
+    await tester.pumpAndSettle();
+
+    controller.beginCancellableProfileSelection();
+    await tester.pump();
+    await tester.pump();
+
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'Cancel profile selection',
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    expect(controller.profileSelectionCanceled, isTrue);
+  });
+
   testWidgets('protected profile PIN submits after four remote digits', (
     tester,
   ) async {
@@ -331,6 +392,7 @@ class _FakeController extends LineupController {
 
   bool linkingRequested = false;
   bool linkingCanceled = false;
+  bool profileSelectionCanceled = false;
   PlexHomeUser? selectedProfile;
   String? selectedPin;
 
@@ -346,6 +408,21 @@ class _FakeController extends LineupController {
   Future<bool> cancelLinking() async {
     linkingCanceled = true;
     return true;
+  }
+
+  void requireSecureCancellation() {
+    secureCancellationRequired = true;
+    notifyListeners();
+  }
+
+  void beginCancellableProfileSelection() {
+    busy = true;
+    notifyListeners();
+  }
+
+  @override
+  void cancelProfileSelection() {
+    profileSelectionCanceled = true;
   }
 
   @override

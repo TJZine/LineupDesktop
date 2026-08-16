@@ -317,6 +317,8 @@ class LineupController extends ChangeNotifier {
         final oldChannels = channels;
         final oldCurrent = currentChannelId;
         final oldCanCancel = profileSelectionCanCancel;
+        profileSelectionCanCancel = false;
+        notifyListeners();
         profile = selected;
         _profileToken = token;
         server = null;
@@ -327,7 +329,6 @@ class LineupController extends ChangeNotifier {
         availablePlaylists = const [];
         channels = const [];
         currentChannelId = null;
-        profileSelectionCanCancel = false;
         try {
           await _save();
         } catch (_) {
@@ -410,6 +411,8 @@ class LineupController extends ChangeNotifier {
         final oldChannels = channels;
         final oldCurrent = currentChannelId;
         final oldCanCancel = serverSelectionCanCancel;
+        serverSelectionCanCancel = false;
+        notifyListeners();
         server = selected;
         connection = selectedConnection;
         libraries = loadedLibraries;
@@ -438,7 +441,6 @@ class LineupController extends ChangeNotifier {
             : _persisted.currentChannelByProfileServer[profileId]?[selected.id];
         stage = SetupStage.channelSetup;
         channelSetupCanCancel = false;
-        serverSelectionCanCancel = false;
         try {
           await _save();
         } catch (_) {

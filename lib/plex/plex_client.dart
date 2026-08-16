@@ -482,12 +482,14 @@ class PlexClient {
       ..headers.addAll(_headers(token));
     final response = await _http.send(request).timeout(requestTimeout);
     if (response.statusCode != 200) {
+      _cancel(response.stream);
       throw const PlexException(
         'artwork-unavailable',
         'Program artwork is unavailable.',
       );
     }
     if ((response.contentLength ?? 0) > maximumBytes) {
+      _cancel(response.stream);
       throw const PlexException(
         'artwork-too-large',
         'Program artwork is too large.',
@@ -504,6 +506,14 @@ class PlexClient {
       bytes.add(chunk);
     }
     return bytes.takeBytes();
+  }
+
+  void _cancel(Stream<List<int>> stream) {
+    final subscription = stream.listen(
+      null,
+      onError: (Object _, StackTrace _) {},
+    );
+    unawaited(subscription.cancel().onError((_, _) {}));
   }
 
   Future<void> releasePlaybackSession({

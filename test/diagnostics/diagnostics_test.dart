@@ -18,12 +18,17 @@ void main() {
   });
 
   test('redacts authorization schemes and JSON auth tokens', () {
-    for (final input in [
-      'Authorization: Bearer bearer-secret',
-      'Authorization: Basic basic-secret',
-      '{"authToken":"json-secret"}',
-    ]) {
-      final output = Diagnostics.redact(input);
+    for (final value in {
+      'Authorization: Bearer bearer-secret': 'Authorization: Bearer [REDACTED]',
+      'Authorization: Basic basic-secret': 'Authorization: Basic [REDACTED]',
+      'Authorization: opaque-secret': 'Authorization: [REDACTED]',
+      'Bearer bearer-secret': 'Bearer [REDACTED]',
+      'Basic basic-secret': 'Basic [REDACTED]',
+      '{"authToken":"json-secret"}': '{"authToken":[REDACTED]}',
+      'X-Plex-Token=plex-secret': 'X-Plex-Token=[REDACTED]',
+    }.entries) {
+      final output = Diagnostics.redact(value.key);
+      expect(output, value.value);
       expect(output, contains('[REDACTED]'));
       expect(output, isNot(contains('secret')));
     }

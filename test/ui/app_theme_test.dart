@@ -22,13 +22,14 @@ void main() {
     for (final name in LineupThemeName.values) {
       final theme = LineupTheme.forName(name);
       final roles = theme.extension<LineupThemeRoles>()!;
+      final base = _paint(roles.deepBackground, Colors.black);
       for (final surface in [
         roles.deepBackground,
         roles.primarySurface,
         roles.elevatedSurface,
         roles.overlaySurface,
       ]) {
-        final paintedSurface = _paint(surface, roles.deepBackground);
+        final paintedSurface = _paint(surface, base);
         for (final text in [
           roles.primaryText,
           roles.secondaryText,
@@ -41,7 +42,7 @@ void main() {
           );
         }
       }
-      final primarySurface = _paint(roles.primarySurface, roles.deepBackground);
+      final primarySurface = _paint(roles.primarySurface, base);
       final progressSurface = _paint(roles.progressFill, primarySurface);
       expect(
         _contrast(_paint(roles.onFocus, progressSurface), progressSurface),

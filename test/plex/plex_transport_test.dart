@@ -507,96 +507,122 @@ void main() {
     );
   });
 
-  test('artwork stays credential-scoped and enforces its byte bound', () async {
-    late http.BaseRequest request;
-    final artworkUnavailable = throwsA(
-      isA<PlexException>().having(
-        (exception) => exception.code,
-        'code',
-        'artwork-unavailable',
-      ),
+  group('artwork transport', () {
+    Matcher plexError(String code) => throwsA(
+      isA<PlexException>().having((exception) => exception.code, 'code', code),
     );
-    final artworkTooLarge = throwsA(
-      isA<PlexException>().having(
-        (exception) => exception.code,
-        'code',
-        'artwork-too-large',
-      ),
-    );
-    final client = PlexClient(
+
+    PlexClient client(
+      Future<http.StreamedResponse> Function(http.BaseRequest, http.ByteStream)
+      handler,
+    ) => PlexClient(
       clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
-      httpClient: MockClient.streaming((value, _) async {
+      httpClient: MockClient.streaming(handler),
+    );
+
+    test('scopes credentials to the selected server', () async {
+      late http.BaseRequest request;
+      final plex = client((value, _) async {
         request = value;
-        if (value.url.path == '/redirect') {
-          return http.StreamedResponse(
-            Stream<List<int>>.empty(),
-            302,
-            headers: {'location': '/other'},
-          );
-        }
-        return http.StreamedResponse(
-          Stream.value([1, 2, 3, 4]),
-          200,
-          contentLength: value.url.path == '/stream-overflow' ? null : 4,
-        );
-      }),
-    );
-    final bytes = await client.artwork(
-      Uri.parse('https://plex.example:32400'),
-      'secret',
-      Uri.parse('/library/art/1'),
-      maximumBytes: 4,
-    );
-    expect(bytes, [1, 2, 3, 4]);
-    expect(request.url.host, 'plex.example');
-    expect(request.headers['X-Plex-Token'], 'secret');
+        return http.StreamedResponse(Stream.value([1, 2, 3, 4]), 200);
+      });
 
-    for (final mismatchedArtwork in [
-      Uri.parse('https://attacker.example/art'),
-      Uri.parse('http://plex.example:32400/art'),
-      Uri.parse('https://plex.example:32401/art'),
-      Uri.parse('https://user@plex.example:32400/art'),
-    ]) {
-      await expectLater(
-        client.artwork(
-          Uri.parse('https://plex.example:32400'),
-          'secret',
-          mismatchedArtwork,
-        ),
-        artworkUnavailable,
-      );
-    }
-
-    await expectLater(
-      client.artwork(
-        Uri.parse('https://plex.example:32400'),
-        'secret',
-        Uri.parse('/redirect'),
-      ),
-      artworkUnavailable,
-    );
-    expect(request.url.path, '/redirect');
-    expect(request.followRedirects, isFalse);
-
-    await expectLater(
-      client.artwork(
+      final bytes = await plex.artwork(
         Uri.parse('https://plex.example:32400'),
         'secret',
         Uri.parse('/library/art/1'),
-        maximumBytes: 3,
-      ),
-      artworkTooLarge,
-    );
+        maximumBytes: 4,
+      );
 
-    await expectLater(
-      client.artwork(
-        Uri.parse('https://plex.example:32400'),
-        'secret',
-        Uri.parse('/stream-overflow'),
-        maximumBytes: 3,
-      ),
-      artworkTooLarge,
-    );
+      expect(bytes, [1, 2, 3, 4]);
+      expect(request.url.host, 'plex.example');
+      expect(request.headers['X-Plex-Token'], 'secret');
+    });
+
+    for (final mismatch in {
+      'host': 'https://attacker.example/art',
+      'scheme': 'http://plex.example:32400/art',
+      'port': 'https://plex.example:32401/art',
+      'userinfo': 'https://user@plex.example:32400/art',
+    }.entries) {
+      test('rejects ${mismatch.key} mismatch before sending', () async {
+        final plex = client((_, _) async => throw StateError('sent request'));
+
+        await expectLater(
+          plex.artwork(
+            Uri.parse('https://plex.example:32400'),
+            'secret',
+            Uri.parse(mismatch.value),
+          ),
+          plexError('artwork-unavailable'),
+        );
+      });
+    }
+
+    test('rejects redirects and cancels the response stream', () async {
+      late http.BaseRequest request;
+      final canceled = Completer<void>();
+      final stream = StreamController<List<int>>(onCancel: canceled.complete);
+      final plex = client((value, _) async {
+        request = value;
+        return http.StreamedResponse(
+          stream.stream,
+          302,
+          headers: {'location': '/other'},
+        );
+      });
+
+      await expectLater(
+        plex.artwork(
+          Uri.parse('https://plex.example:32400'),
+          'secret',
+          Uri.parse('/redirect'),
+        ),
+        plexError('artwork-unavailable'),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      expect(request.followRedirects, isFalse);
+      expect(canceled.isCompleted, isTrue);
+    });
+
+    test('rejects declared-length overflow and cancels the stream', () async {
+      final canceled = Completer<void>();
+      final stream = StreamController<List<int>>(onCancel: canceled.complete);
+      final plex = client(
+        (_, _) async =>
+            http.StreamedResponse(stream.stream, 200, contentLength: 4),
+      );
+
+      await expectLater(
+        plex.artwork(
+          Uri.parse('https://plex.example:32400'),
+          'secret',
+          Uri.parse('/library/art/1'),
+          maximumBytes: 3,
+        ),
+        plexError('artwork-too-large'),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      expect(canceled.isCompleted, isTrue);
+    });
+
+    test('rejects streamed overflow', () async {
+      final plex = client(
+        (_, _) async => http.StreamedResponse(Stream.value([1, 2, 3, 4]), 200),
+      );
+
+      await expectLater(
+        plex.artwork(
+          Uri.parse('https://plex.example:32400'),
+          'secret',
+          Uri.parse('/library/art/1'),
+          maximumBytes: 3,
+        ),
+        plexError('artwork-too-large'),
+      );
+    });
   });
 
   test(

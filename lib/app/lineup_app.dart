@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../playback/native_player.dart';
+import '../settings/lineup_settings.dart';
 import '../ui/app_theme.dart';
 import 'lineup_controller.dart';
 import 'lineup_shell.dart';
@@ -55,10 +56,12 @@ class LineupRuntimeFailure extends StatelessWidget {
 
 class _LineupBootstrapState extends State<LineupBootstrap> {
   late final Future<void> _startup;
+  late LineupSettings _settings;
 
   @override
   void initState() {
     super.initState();
+    _settings = widget.controller.settings;
     widget.controller.addListener(_changed);
     _startup = Future.wait([
       widget.player.initialize(),
@@ -67,7 +70,13 @@ class _LineupBootstrapState extends State<LineupBootstrap> {
   }
 
   void _changed() {
-    if (mounted) setState(() {});
+    final settings = widget.controller.settings;
+    if (settings.theme == _settings.theme &&
+        settings.largeFocusIndicators == _settings.largeFocusIndicators &&
+        settings.reduceMotion == _settings.reduceMotion) {
+      return;
+    }
+    if (mounted) setState(() => _settings = settings);
   }
 
   @override
@@ -80,7 +89,7 @@ class _LineupBootstrapState extends State<LineupBootstrap> {
 
   @override
   Widget build(BuildContext context) {
-    final settings = widget.controller.settings;
+    final settings = _settings;
     return MaterialApp(
       title: 'Lineup Desktop',
       debugShowCheckedModeBanner: false,

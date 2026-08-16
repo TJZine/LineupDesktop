@@ -533,6 +533,71 @@ void main() {
     expect(controller.server?.id, 'old');
   });
 
+  test(
+    'profile cancellation is hidden before the save commit window',
+    () async {
+      final store = _BlockingSaveStore();
+      const owner = PlexHomeUser(id: 'owner', name: 'Owner', protected: false);
+      const child = PlexHomeUser(id: 'child', name: 'Child', protected: false);
+      final controller = LineupController(
+        store: store,
+        credentials: _MemoryCredentials(accountToken: 'token'),
+        plex: _FakePlex()..homeUsersResult = const [owner, child],
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+      controller
+        ..profile = owner
+        ..server = _server('old')
+        ..stage = SetupStage.ready
+        ..showProfiles();
+      var hiddenWhileBusy = false;
+      controller.addListener(() {
+        hiddenWhileBusy |=
+            controller.busy && !controller.profileSelectionCanCancel;
+      });
+
+      final selection = controller.selectProfile(child);
+      await store.saveStarted.future;
+
+      expect(hiddenWhileBusy, isTrue);
+      expect(controller.profileSelectionCanCancel, isFalse);
+      store.finishSave.complete();
+      await selection;
+    },
+  );
+
+  test('server cancellation is hidden before the save commit window', () async {
+    final store = _BlockingSaveStore();
+    final oldServer = _server('old');
+    final nextServer = _server('next');
+    final controller = LineupController(
+      store: store,
+      credentials: _MemoryCredentials(accountToken: 'token'),
+      plex: _FakePlex()..connectionResult = nextServer.connections.single,
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+    controller
+      ..server = oldServer
+      ..connection = oldServer.connections.single
+      ..stage = SetupStage.ready
+      ..showServers();
+    var hiddenWhileBusy = false;
+    controller.addListener(() {
+      hiddenWhileBusy |=
+          controller.busy && !controller.serverSelectionCanCancel;
+    });
+
+    final selection = controller.selectServer(nextServer);
+    await store.saveStarted.future;
+
+    expect(hiddenWhileBusy, isTrue);
+    expect(controller.serverSelectionCanCancel, isFalse);
+    store.finishSave.complete();
+    await selection;
+  });
+
   test('discovery clears an unavailable runtime server without crossing profile scope', () async {
     final selected = _server('server-a');
     final plex = _FakePlex()

@@ -389,7 +389,6 @@ void main() {
     expect(first.items, hasLength(2000));
     expect(second.items, hasLength(2000));
     expect(workerCreations, 1);
-    lineup.dispose();
   });
 
   test(

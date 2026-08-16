@@ -27,10 +27,17 @@ class UpstreamOnboardingView extends StatefulWidget {
 
 class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
   Timer? _clock;
+  final _linkActionFocus = FocusNode(debugLabel: 'Retry secure cancellation');
+  final _profileCancelFocus = FocusNode(debugLabel: 'Cancel profile selection');
+  late bool _secureCancellationRequired;
+  late bool _busy;
 
   @override
   void initState() {
     super.initState();
+    _secureCancellationRequired = widget.controller.secureCancellationRequired;
+    _busy = widget.controller.busy;
+    widget.controller.addListener(_controllerChanged);
     _clock = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted && widget.controller.stage == SetupStage.linking) {
         setState(() {});
@@ -39,8 +46,44 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
   }
 
   @override
+  void didUpdateWidget(UpstreamOnboardingView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller == widget.controller) return;
+    oldWidget.controller.removeListener(_controllerChanged);
+    _secureCancellationRequired = widget.controller.secureCancellationRequired;
+    _busy = widget.controller.busy;
+    widget.controller.addListener(_controllerChanged);
+  }
+
+  void _controllerChanged() {
+    final controller = widget.controller;
+    final retryNeedsFocus =
+        !_secureCancellationRequired && controller.secureCancellationRequired;
+    final cancelNeedsFocus =
+        !_busy &&
+        controller.busy &&
+        controller.stage == SetupStage.profiles &&
+        controller.profileSelectionCanCancel;
+    _secureCancellationRequired = controller.secureCancellationRequired;
+    _busy = controller.busy;
+    final target = retryNeedsFocus
+        ? _linkActionFocus
+        : cancelNeedsFocus
+        ? _profileCancelFocus
+        : null;
+    if (target != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && target.canRequestFocus) target.requestFocus();
+      });
+    }
+  }
+
+  @override
   void dispose() {
+    widget.controller.removeListener(_controllerChanged);
     _clock?.cancel();
+    _linkActionFocus.dispose();
+    _profileCancelFocus.dispose();
     super.dispose();
   }
 
@@ -196,6 +239,7 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
             alignment: WrapAlignment.center,
             children: [
               OutlinedButton(
+                focusNode: _linkActionFocus,
                 autofocus: pin == null,
                 onPressed: widget.controller.busy
                     ? null
@@ -253,6 +297,7 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
         if (widget.controller.profileSelectionCanCancel) ...[
           const SizedBox(height: 12),
           TextButton(
+            focusNode: _profileCancelFocus,
             onPressed: widget.controller.cancelProfileSelection,
             child: const Text('Cancel'),
           ),

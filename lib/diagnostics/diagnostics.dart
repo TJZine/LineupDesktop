@@ -43,23 +43,23 @@ class Diagnostics {
   }
 
   static String redact(String input) => input
-      .replaceAll(
+      .replaceAllMapped(
         RegExp(
-          r'("?\bAuthorization"?\s*[:=]\s*)(?:Bearer|Basic)\s+\S+',
+          r'("?\bAuthorization"?\s*[:=]\s*)((?:Bearer|Basic)\s+)?("[^"]*"|[^\s,&}]+)',
           caseSensitive: false,
         ),
-        r'$1[REDACTED]',
+        (match) => '${match[1]}${match[2] ?? ''}[REDACTED]',
       )
-      .replaceAll(
+      .replaceAllMapped(
         RegExp(r'\b(Bearer|Basic)\s+\S+', caseSensitive: false),
-        r'$1 [REDACTED]',
+        (match) => '${match[1]} [REDACTED]',
       )
-      .replaceAll(
+      .replaceAllMapped(
         RegExp(
-          r'("?(?:X-Plex-Token|Authorization|authToken|token|password|pin)"?\s*[:=]\s*)("[^"]*"|[^\s,&}]+)',
+          r'("?(?:X-Plex-Token|authToken|token|password|pin)"?\s*[:=]\s*)("[^"]*"|[^\s,&}]+)',
           caseSensitive: false,
         ),
-        r'$1[REDACTED]',
+        (match) => '${match[1]}[REDACTED]',
       )
       .replaceAll(RegExp(r'https?://[^\s]+', caseSensitive: false), '[URL]')
       .replaceAll(RegExp(r'(?:/[\w .-]+){2,}'), '[PATH]')
