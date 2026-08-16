@@ -46,8 +46,6 @@ void main() {
       ..libraries = const [
         PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
       ];
-    addTearDown(controller.dispose);
-
     await _pump(
       tester,
       UiFixture(controller: controller, guideClock: () => _fixedNow).build(),

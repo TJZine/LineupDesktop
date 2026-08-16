@@ -112,7 +112,6 @@ void main() {
     final controller = FixtureController(store: _FailNextSaveStore())
       ..stage = SetupStage.ready
       ..channels = [_channel];
-    addTearDown(controller.dispose);
     final fixture = UiFixture(controller: controller);
     await tester.pumpWidget(fixture.build());
     await tester.pump();
@@ -272,7 +271,6 @@ void main() {
     tester,
   ) async {
     final controller = _SettingsFixtureController()..stage = SetupStage.ready;
-    addTearDown(controller.dispose);
     final fixture = UiFixture(controller: controller);
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
@@ -316,7 +314,6 @@ void main() {
     final controller = _ProfileFixtureController()
       ..stage = SetupStage.profiles
       ..profiles = const [profile];
-    addTearDown(controller.dispose);
     await tester.pumpWidget(UiFixture(controller: controller).build());
     await tester.pumpAndSettle();
     await tester.tap(find.text('Child'));

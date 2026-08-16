@@ -132,6 +132,7 @@ class FixturePlayer implements NativePlayer {
     List<PlayerTrack>? tracks,
     int? eventGeneration,
   }) {
+    if (_events.isClosed) return;
     _status = status;
     _position = position ?? _position;
     _duration = duration ?? _duration;
