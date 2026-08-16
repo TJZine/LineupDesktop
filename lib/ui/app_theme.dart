@@ -210,6 +210,7 @@ abstract final class LineupTheme {
       surface: palette.primarySurface,
       surfaceContainer: palette.elevatedSurface,
       error: const Color(0xFFEF4444),
+      onError: Colors.black,
       outline: palette.defaultBorder,
       outlineVariant: palette.subtleBorder,
     );

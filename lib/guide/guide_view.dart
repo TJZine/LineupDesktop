@@ -365,24 +365,6 @@ class _GuideViewState extends State<GuideView> {
             final schedule = channels.isEmpty
                 ? const _EmptyGuide()
                 : _schedule(policy, channels);
-            final content = Column(
-              children: [
-                _toolbar(policy),
-                const SizedBox(height: 10),
-                if (channels.isEmpty)
-                  Expanded(child: schedule)
-                else
-                  Expanded(
-                    child: Column(
-                      children: [
-                        _showcase(policy),
-                        const SizedBox(height: 8),
-                        Expanded(child: schedule),
-                      ],
-                    ),
-                  ),
-              ],
-            );
             if (widget.overlayMode) {
               return DecoratedBox(
                 decoration: BoxDecoration(
@@ -399,7 +381,24 @@ class _GuideViewState extends State<GuideView> {
                 ),
                 child: Padding(
                   padding: EdgeInsets.all(policy.padding),
-                  child: content,
+                  child: Column(
+                    children: [
+                      _toolbar(policy),
+                      const SizedBox(height: 10),
+                      if (channels.isEmpty)
+                        Expanded(child: schedule)
+                      else
+                        Expanded(
+                          child: Column(
+                            children: [
+                              _showcase(policy),
+                              const SizedBox(height: 8),
+                              Expanded(child: schedule),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               );
             }
