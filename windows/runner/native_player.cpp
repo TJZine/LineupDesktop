@@ -258,6 +258,15 @@ struct ClassifiedFailure {
   std::optional<int64_t> http_status;
 };
 
+constexpr bool ShouldReplaceFailure(bool same_load, bool current_has_http,
+                                    bool candidate_has_http) {
+  return !same_load || !current_has_http || candidate_has_http;
+}
+
+static_assert(!ShouldReplaceFailure(true, true, false));
+static_assert(ShouldReplaceFailure(true, false, true));
+static_assert(ShouldReplaceFailure(false, true, false));
+
 std::optional<ClassifiedFailure> ClassifyMpvFailure(
     const mpv_event_log_message& message) {
   const std::string prefix = LowerAscii(message.prefix);
@@ -618,7 +627,7 @@ bool WindowsNativePlayer::Initialize(std::string& error,
   }
   std::cerr << "[lineup-player] libmpv initialized client-api="
             << mpv_client_api_version() << std::endl;
-  mpv_request_log_messages(mpv_, "warn");
+  mpv_request_log_messages(mpv_, "error");
 
   struct Observation {
     uint64_t id;
@@ -1146,9 +1155,14 @@ void WindowsNativePlayer::HandleMpvEvent(const mpv_event& event,
         }
         if (event_load_id_ && event_load_id_ == active_load_id_) {
           if (const auto detail = ClassifyMpvFailure(*message)) {
-            last_failure_load_id_ = event_load_id_;
-            last_failure_code_ = detail->code;
-            last_failure_http_status_ = detail->http_status;
+            const bool same_load = last_failure_load_id_ == event_load_id_;
+            if (ShouldReplaceFailure(
+                    same_load, last_failure_http_status_.has_value(),
+                    detail->http_status.has_value())) {
+              last_failure_load_id_ = event_load_id_;
+              last_failure_code_ = detail->code;
+              last_failure_http_status_ = detail->http_status;
+            }
           }
         }
       }
