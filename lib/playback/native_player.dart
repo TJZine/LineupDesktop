@@ -9,6 +9,15 @@ abstract interface class NativePlayer {
   Stream<PlayerEvent> get events;
 
   Future<void> initialize();
+
+  /// Loads [media] for the caller's optional [generation].
+  ///
+  /// [generation] identifies the current load and may be projected on emitted
+  /// events so callers can reject stale work.
+  ///
+  /// [plexToken] is sensitive authentication material. Implementations that
+  /// perform HTTP media loads must send it only as an `X-Plex-Token` request
+  /// header. They must never log it or append it to [media].
   Future<void> load(Uri media, {String? plexToken, int? generation});
   Future<void> play();
   Future<void> pause();
