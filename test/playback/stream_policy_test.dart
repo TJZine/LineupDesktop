@@ -108,4 +108,23 @@ void main() {
     expect(decision.kind, StreamDecisionKind.directPlay);
     expect(decision.unknowns, isNotEmpty);
   });
+
+  test('nullable capability sets do not imply unrestricted mode', () {
+    final decision = decideStream(
+      const StreamFacts(
+        container: null,
+        videoCodec: null,
+        audioCodec: null,
+        dynamicRange: DynamicRange.unknown,
+      ),
+      const StreamCapabilities(
+        containers: null,
+        videoCodecs: null,
+        audioCodecs: null,
+      ),
+    );
+
+    expect(decision.kind, StreamDecisionKind.unsupported);
+    expect(decision.reasons, contains('candidate-facts-incomplete'));
+  });
 }

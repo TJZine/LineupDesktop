@@ -34,7 +34,7 @@ class StreamCapabilities {
       SubtitleDelivery.embedded,
       SubtitleDelivery.sidecar,
     },
-  });
+  }) : _unrestricted = false;
 
   const StreamCapabilities.unrestricted({
     this.remux = true,
@@ -45,7 +45,8 @@ class StreamCapabilities {
       SubtitleDelivery.external,
       SubtitleDelivery.unknown,
     },
-  }) : containers = null,
+  }) : _unrestricted = true,
+       containers = null,
        videoCodecs = null,
        audioCodecs = null,
        hdr10 = true,
@@ -62,6 +63,7 @@ class StreamCapabilities {
   final bool dolbyVision;
   final bool remux;
   final bool transcode;
+  final bool _unrestricted;
 }
 
 class StreamDecision {
@@ -84,10 +86,7 @@ StreamDecision decideStream(
     if (facts.subtitleDelivery == SubtitleDelivery.unknown)
       'subtitle-delivery-unknown',
   ];
-  final unrestricted =
-      capabilities.containers == null &&
-      capabilities.videoCodecs == null &&
-      capabilities.audioCodecs == null;
+  final unrestricted = capabilities._unrestricted;
   if (unknowns.isNotEmpty && !unrestricted) {
     return StreamDecision(StreamDecisionKind.unsupported, const [
       'candidate-facts-incomplete',

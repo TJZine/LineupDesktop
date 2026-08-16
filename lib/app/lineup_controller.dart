@@ -39,8 +39,16 @@ class LineupPlaybackRequest {
         (entry) => entry.key.toLowerCase() != 'x-plex-token',
       ),
     );
-    return query.length == uri.queryParametersAll.length
-        ? uri
+    if (query.length == uri.queryParametersAll.length) return uri;
+    return query.isEmpty
+        ? Uri(
+            scheme: uri.scheme,
+            userInfo: uri.userInfo,
+            host: uri.hasAuthority ? uri.host : null,
+            port: uri.hasPort ? uri.port : null,
+            path: uri.path,
+            fragment: uri.hasFragment ? uri.fragment : null,
+          )
         : uri.replace(queryParameters: query);
   }
 

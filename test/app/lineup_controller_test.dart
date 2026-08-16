@@ -11,6 +11,31 @@ import 'package:lineup_desktop/plex/plex_models.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 
 void main() {
+  test('playback requests remove Plex tokens without an empty query', () {
+    final tokenOnly = LineupPlaybackRequest(
+      Uri.parse(
+        'https://user@plex.example:32400/video%2Fpart?X-Plex-Token=secret#section%2Fone',
+      ),
+      () async {},
+    );
+    final mixed = LineupPlaybackRequest(
+      Uri.parse(
+        'https://plex.example/video?quality=original&X-Plex-Token=secret&quality=mobile#part',
+      ),
+      () async {},
+    );
+
+    expect(
+      tokenOnly.uri,
+      Uri.parse('https://user@plex.example:32400/video%2Fpart#section%2Fone'),
+    );
+    expect(tokenOnly.uri.hasQuery, isFalse);
+    expect(mixed.uri.fragment, 'part');
+    expect(mixed.uri.queryParametersAll, {
+      'quality': ['original', 'mobile'],
+    });
+  });
+
   test(
     'replace applies the immutable plan produced by Channel Setup',
     () async {
