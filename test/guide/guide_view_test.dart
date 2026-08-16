@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
@@ -170,6 +171,33 @@ void main() {
     tester,
   ) async {
     final lineup = _Lineup(1);
+    lineup.channels = [
+      Channel(
+        id: 'semantic-channel',
+        number: 1,
+        name: 'Semantic Channel',
+        source: const ManualSource([
+          ChannelItem(
+            id: 'ended-program',
+            title: 'Ended Program',
+            duration: Duration(minutes: 30),
+          ),
+          ChannelItem(
+            id: 'current-program',
+            title: 'Current Program',
+            duration: Duration(minutes: 30),
+          ),
+          ChannelItem(
+            id: 'upcoming-program',
+            title: 'Upcoming Program',
+            duration: Duration(minutes: 30),
+          ),
+        ]),
+        playbackMode: PlaybackMode.sequential,
+        anchor: DateTime.now().subtract(const Duration(minutes: 45)),
+        shuffleSeed: 1,
+      ),
+    ];
     var fail = true;
     final guide = GuideController(
       lineup: lineup,
@@ -197,7 +225,13 @@ void main() {
     await tester.tap(find.text('Schedule unavailable — select to retry'));
     await tester.pumpAndSettle();
 
-    expect(find.bySemanticsLabel(RegExp('currently airing')), findsWidgets);
+    for (final status in ['currently airing', 'ended', 'upcoming']) {
+      final program = find.bySemanticsLabel(RegExp(status)).first;
+      expect(program, findsOneWidget);
+      final semantics = tester.getSemantics(program).getSemanticsData();
+      expect(semantics.flagsCollection.isButton, isTrue);
+      expect(semantics.hasAction(SemanticsAction.tap), isTrue);
+    }
 
     await tester.pumpWidget(const SizedBox.shrink());
     guide.dispose();

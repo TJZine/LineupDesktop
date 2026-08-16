@@ -202,41 +202,43 @@ class _LineupSelectionCardState extends State<LineupSelectionCard> {
   bool _focused = false;
 
   @override
-  Widget build(BuildContext context) => Semantics(
-    button: true,
-    selected: widget.selected,
-    enabled: widget.onPressed != null,
-    child: AnimatedContainer(
-      duration: MediaQuery.disableAnimationsOf(context)
-          ? Duration.zero
-          : LineupTheme.fast,
-      padding: const EdgeInsets.all(3),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(LineupTheme.radiusLarge + 3),
-        border: Border.all(
-          color: _focused
-              ? LineupTheme.of(context).focusBorder
-              : Colors.transparent,
-          width: _focused ? LineupTheme.of(context).focusBorderWidth : 1,
-        ),
-      ),
-      child: Card(
-        margin: EdgeInsets.zero,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(LineupTheme.radiusLarge),
-          side: BorderSide(
-            color: widget.selected
-                ? LineupTheme.of(context).progressFill
-                : LineupTheme.of(context).subtleBorder,
-            width: widget.selected ? 2 : 1,
+  Widget build(BuildContext context) => MergeSemantics(
+    child: Semantics(
+      button: true,
+      selected: widget.selected,
+      enabled: widget.onPressed != null,
+      child: AnimatedContainer(
+        duration: MediaQuery.disableAnimationsOf(context)
+            ? Duration.zero
+            : LineupTheme.fast,
+        padding: const EdgeInsets.all(3),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(LineupTheme.radiusLarge + 3),
+          border: Border.all(
+            color: _focused
+                ? LineupTheme.of(context).focusBorder
+                : Colors.transparent,
+            width: _focused ? LineupTheme.of(context).focusBorderWidth : 1,
           ),
         ),
-        child: InkWell(
-          autofocus: widget.autofocus,
-          borderRadius: BorderRadius.circular(LineupTheme.radiusLarge),
-          onFocusChange: (focused) => setState(() => _focused = focused),
-          onTap: widget.onPressed,
-          child: widget.child,
+        child: Card(
+          margin: EdgeInsets.zero,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(LineupTheme.radiusLarge),
+            side: BorderSide(
+              color: widget.selected
+                  ? LineupTheme.of(context).progressFill
+                  : LineupTheme.of(context).subtleBorder,
+              width: widget.selected ? 2 : 1,
+            ),
+          ),
+          child: InkWell(
+            autofocus: widget.autofocus,
+            borderRadius: BorderRadius.circular(LineupTheme.radiusLarge),
+            onFocusChange: (focused) => setState(() => _focused = focused),
+            onTap: widget.onPressed,
+            child: widget.child,
+          ),
         ),
       ),
     ),

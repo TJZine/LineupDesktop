@@ -14,6 +14,60 @@ import 'package:lineup_desktop/ui/app_ui.dart';
 import '../support/ui_fixture.dart';
 
 void main() {
+  testWidgets('selection cards expose one complete semantic control', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LineupSelectionCard(
+          selected: true,
+          onPressed: () {},
+          child: const Text('Movies'),
+        ),
+      ),
+    );
+
+    expect(
+      tester.getSemantics(find.byType(LineupSelectionCard)),
+      matchesSemantics(
+        label: 'Movies',
+        hasEnabledState: true,
+        isEnabled: true,
+        hasSelectedState: true,
+        isSelected: true,
+        isButton: true,
+        isFocusable: true,
+        hasTapAction: true,
+        hasFocusAction: true,
+      ),
+    );
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: LineupSelectionCard(
+          selected: false,
+          onPressed: null,
+          child: Text('Movies'),
+        ),
+      ),
+    );
+
+    expect(
+      tester.getSemantics(find.byType(LineupSelectionCard)),
+      matchesSemantics(
+        label: 'Movies',
+        hasEnabledState: true,
+        isEnabled: false,
+        hasSelectedState: true,
+        isSelected: false,
+        isButton: true,
+        isFocusable: true,
+        hasTapAction: false,
+        hasFocusAction: true,
+      ),
+    );
+  });
+
   testWidgets('management pages use their available width for compact layout', (
     tester,
   ) async {

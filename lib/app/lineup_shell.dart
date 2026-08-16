@@ -1006,7 +1006,7 @@ class _SettingsViewState extends State<SettingsView> {
                 'Visible time range',
                 'Set how many schedule hours the Guide shows at once.',
                 value.guideHours,
-                const [2, 4, 6, 8, 12],
+                LineupSettings.guideHoursOptions,
                 (item) => '$item hours',
                 _saving
                     ? null
@@ -1018,7 +1018,7 @@ class _SettingsViewState extends State<SettingsView> {
                 'Past window',
                 'Keep recently ended programs available in the Guide.',
                 value.pastMinutes,
-                const [0, 15, 30, 60, 120, 180],
+                LineupSettings.pastMinutesOptions,
                 (item) => '$item minutes',
                 _saving
                     ? null
@@ -1070,7 +1070,7 @@ class _SettingsViewState extends State<SettingsView> {
                 'Player controls auto-hide',
                 'Set how long controls remain visible while playing.',
                 value.osdAutoHideSeconds,
-                const [2, 4, 6, 8, 10, 15],
+                LineupSettings.osdAutoHideSecondsOptions,
                 (item) => '$item seconds',
                 _saving
                     ? null

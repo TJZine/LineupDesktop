@@ -2,7 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 
 void main() {
-  test('restores defaults and clamps unsafe ranges', () {
+  test('restores defaults and snaps unsafe ranges', () {
     final settings = LineupSettings.fromJson({
       'guideHours': 99,
       'pastMinutes': -5,
@@ -15,10 +15,22 @@ void main() {
     expect(settings.guideLayoutMode, GuideLayoutMode.pictureInPicture);
   });
 
-  test('clamps OSD auto-hide below its documented minimum', () {
+  test('snaps OSD auto-hide below its documented minimum', () {
     final settings = LineupSettings.fromJson({'osdAutoHideSeconds': 1});
 
     expect(settings.osdAutoHideSeconds, 2);
+  });
+
+  test('snaps restored numeric settings to selectable options', () {
+    final settings = LineupSettings.fromJson({
+      'guideHours': 3,
+      'pastMinutes': 45,
+      'osdAutoHideSeconds': 5,
+    });
+
+    expect(settings.guideHours, 4);
+    expect(settings.pastMinutes, 60);
+    expect(settings.osdAutoHideSeconds, 6);
   });
 
   test('round trips meaningful preferences', () {

@@ -956,9 +956,10 @@ class _ProgramCellState extends State<_ProgramCell> {
     child: Padding(
       padding: const EdgeInsets.only(right: 3),
       child: Semantics(
-        button: widget.current,
+        button: true,
         selected: widget.selected,
         focused: widget.focused,
+        onTap: widget.onTap,
         label:
             '${widget.program.scheduled.item.title}, ${_time(context, widget.program.scheduled.start)} to ${_time(context, widget.program.scheduled.end)}${widget.current
                 ? ', currently airing'
@@ -969,6 +970,7 @@ class _ProgramCellState extends State<_ProgramCell> {
           onEnter: (_) => setState(() => _hovered = true),
           onExit: (_) => setState(() => _hovered = false),
           child: InkWell(
+            excludeFromSemantics: true,
             onTap: widget.onTap,
             onDoubleTap: widget.onDoubleTap,
             child: AnimatedContainer(

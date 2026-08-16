@@ -21,6 +21,10 @@ enum LineupThemeName {
 }
 
 class LineupSettings {
+  static const guideHoursOptions = [2, 4, 6, 8, 12];
+  static const pastMinutesOptions = [0, 15, 30, 60, 120, 180];
+  static const osdAutoHideSecondsOptions = [2, 4, 6, 8, 10, 15];
+
   const LineupSettings({
     this.theme = LineupThemeName.emberSteel,
     this.guideHours = 4,
@@ -109,13 +113,19 @@ class LineupSettings {
       return value is num && value.isFinite ? value.toInt() : fallback;
     }
 
-    final guideHours = number('guideHours', 4);
-    final pastMinutes = number('pastMinutes', 30);
-    final osdAutoHideSeconds = number('osdAutoHideSeconds', 4);
+    int option(String key, int fallback, List<int> options) {
+      final value = number(key, fallback);
+      return options.reduce((best, candidate) {
+        final bestDistance = (best - value).abs();
+        final candidateDistance = (candidate - value).abs();
+        return candidateDistance <= bestDistance ? candidate : best;
+      });
+    }
+
     return LineupSettings(
       theme: LineupThemeName.fromStorage(json['theme']),
-      guideHours: guideHours.clamp(2, 12).toInt(),
-      pastMinutes: pastMinutes.clamp(0, 180).toInt(),
+      guideHours: option('guideHours', 4, guideHoursOptions),
+      pastMinutes: option('pastMinutes', 30, pastMinutesOptions),
       guideDensity: enumValue(
         GuideDensity.values,
         'guideDensity',
@@ -128,7 +138,11 @@ class LineupSettings {
       ),
       libraryTabsEnabled: json['libraryTabsEnabled'] != false,
       nowWatchingBanner: json['nowWatchingBanner'] != false,
-      osdAutoHideSeconds: osdAutoHideSeconds.clamp(2, 15).toInt(),
+      osdAutoHideSeconds: option(
+        'osdAutoHideSeconds',
+        4,
+        osdAutoHideSecondsOptions,
+      ),
       audioSetupComplete: json['audioSetupComplete'] == true,
       reduceMotion: json['reduceMotion'] == true,
       largeFocusIndicators: json['largeFocusIndicators'] == true,
