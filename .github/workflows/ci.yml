@@ -137,7 +137,7 @@ jobs:
           fi
 
           changed_files="$(git diff --name-only "$base" "$head")"
-          if grep -Eq '^(\.metadata|tool/windows/build-metadata\.psd1|tool/flutter_engine/apply\.ps1)$' <<<"$changed_files" ||
+          if grep -Eq '^(\.gitattributes|\.metadata|tool/windows/build-metadata\.psd1|tool/flutter_engine/apply\.ps1)$' <<<"$changed_files" ||
              grep -Fxq "$ENGINE_PATCH_PATH" <<<"$changed_files"; then
             echo "required=true" >> "$GITHUB_OUTPUT"
           else

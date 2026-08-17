@@ -37,8 +37,9 @@ Routine CI compiles the Windows application with the pinned stock Flutter SDK
 and the verified LGPL libmpv runtime so ordinary PR changes still receive
 Windows C++/CMake integration proof without rebuilding Flutter itself. The
 expensive patched-engine job in `.github/workflows/ci.yml` is gated to the
-actual engine inputs: `.metadata`, `tool/windows/build-metadata.psd1`,
-`tool/flutter_engine/apply.ps1`, and the patch path read from
+actual engine inputs: `.gitattributes`, `.metadata`,
+`tool/windows/build-metadata.psd1`, `tool/flutter_engine/apply.ps1`, and the
+patch path read from
 `FlutterEnginePatchPath`. A manual workflow dispatch also forces that proof.
 When selected, CI verifies the exact framework and engine source revisions,
 applies this patch, builds `host_release`, and compiles Lineup against that
