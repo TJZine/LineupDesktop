@@ -352,6 +352,14 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Lineup Desktop could not start'), findsOneWidget);
+    final failureSemantics = tester.widget<Semantics>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is Semantics &&
+            widget.properties.label == 'Lineup Desktop could not start',
+      ),
+    );
+    expect(failureSemantics.properties.liveRegion, isTrue);
     expect(find.textContaining('Restart the app'), findsOneWidget);
     expect(
       find.textContaining('libmpv could not create a client.'),

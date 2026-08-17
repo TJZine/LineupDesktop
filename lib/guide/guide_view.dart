@@ -715,21 +715,26 @@ class _GuideRow extends StatelessWidget {
     final selectedChannel = channel.id == controller.selectedChannelId;
     final tunedChannel = controller.lineup.currentChannelId == channel.id;
     final data = controller.row(channel.id);
-    return Semantics(
-      container: true,
-      label:
-          'Channel ${channel.number}, ${channel.name}${tunedChannel ? ', now watching' : ''}',
-      selected: selectedChannel,
-      focused: focusedChannel,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 3),
-        child: Row(
-          children: [
-            InkWell(
-              onTap: () {
-                final current = controller.currentProgram(channel.id);
-                if (current != null) controller.focusProgram(current);
-              },
+    void focusCurrentProgram() {
+      final current = controller.currentProgram(channel.id);
+      if (current != null) controller.focusProgram(current);
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        children: [
+          Semantics(
+            container: true,
+            button: true,
+            label:
+                'Channel ${channel.number}, ${channel.name}${tunedChannel ? ', now watching' : ''}',
+            selected: selectedChannel,
+            focused: focusedChannel,
+            onTap: focusCurrentProgram,
+            child: InkWell(
+              excludeFromSemantics: true,
+              onTap: focusCurrentProgram,
               child: AnimatedContainer(
                 duration: controller.lineup.settings.reduceMotion
                     ? Duration.zero
@@ -773,27 +778,23 @@ class _GuideRow extends StatelessWidget {
                     if (tunedChannel)
                       const Padding(
                         padding: EdgeInsets.only(left: 4),
-                        child: Icon(
-                          Icons.play_circle_fill,
-                          size: 17,
-                          semanticLabel: 'Now watching',
-                        ),
+                        child: Icon(Icons.play_circle_fill, size: 17),
                       ),
                   ],
                 ),
               ),
             ),
-            const SizedBox(width: 4),
-            Expanded(
-              child: _Programs(
-                channel: channel,
-                data: data,
-                controller: controller,
-                onTune: onTune,
-              ),
+          ),
+          const SizedBox(width: 4),
+          Expanded(
+            child: _Programs(
+              channel: channel,
+              data: data,
+              controller: controller,
+              onTune: onTune,
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

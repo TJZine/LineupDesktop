@@ -180,27 +180,33 @@ class _StartupFailureBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    const failureLabel = 'Lineup Desktop could not start';
     return Scaffold(
       body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 520),
-          child: Padding(
-            padding: const EdgeInsets.all(32),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.error_outline, size: 48),
-                const SizedBox(height: 20),
-                Text(
-                  'Lineup Desktop could not start',
-                  style: Theme.of(context).textTheme.headlineSmall,
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  requiredEngineFailure ? _requiredEngineFailureMessage : 'Restart the app, and check diagnostics if the problem continues.',
-                  textAlign: TextAlign.center,
-                ),
-              ],
+        child: Semantics(
+          container: true,
+          liveRegion: true,
+          label: failureLabel,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520),
+            child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.error_outline, size: 48),
+                  const SizedBox(height: 20),
+                  Text(
+                    failureLabel,
+                    style: Theme.of(context).textTheme.headlineSmall,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    requiredEngineFailure ? _requiredEngineFailureMessage : 'Restart the app, and check diagnostics if the problem continues.',
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
             ),
           ),
         ),

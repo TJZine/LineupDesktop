@@ -587,19 +587,22 @@ class _MiniGuide extends StatelessWidget {
             container: true,
             explicitChildNodes: true,
             label: 'Mini Guide',
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                for (final channel in channels)
-                  _MiniGuideRow(controller: controller, channel: channel),
-                const SizedBox(height: 8),
-                const Text(
-                  'UP/DOWN Browse • CH± Page • OK Watch • RIGHT Full Guide • BACK Close',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 12),
-                ),
-              ],
+            child: SingleChildScrollView(
+              key: const Key('mini-guide-scroll'),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (final channel in channels)
+                    _MiniGuideRow(controller: controller, channel: channel),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'UP/DOWN Browse • CH± Page • OK Watch • RIGHT Full Guide • BACK Close',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 12),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -686,7 +689,6 @@ class _MiniGuideRow extends StatelessWidget {
                                 Icons.play_circle_fill,
                                 size: 18,
                                 color: foreground,
-                                semanticLabel: 'Now watching',
                               ),
                           ],
                         ),

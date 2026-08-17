@@ -182,6 +182,36 @@ void main() {
     fixture.dispose();
   });
 
+  testWidgets('mini Guide scrolls in short windows', (tester) async {
+    final fixture = _Fixture(PlayerState.playing, channelCount: 5);
+    await tester.binding.setSurfaceSize(const Size(800, 240));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    fixture.player.showMiniGuide();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+    await tester.pump();
+
+    final scrollable = find.descendant(
+      of: find.byKey(const Key('mini-guide-shelf')),
+      matching: find.byType(Scrollable),
+    );
+    expect(scrollable, findsOneWidget);
+    final position = tester.state<ScrollableState>(scrollable).position;
+    expect(position.maxScrollExtent, greaterThan(0));
+    position.jumpTo(position.maxScrollExtent);
+    await tester.pump();
+
+    final hint = find.textContaining('UP/DOWN Browse');
+    expect(tester.getRect(hint).bottom, lessThanOrEqualTo(240));
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
   testWidgets('playback options scroll through long native track lists', (
     tester,
   ) async {
@@ -284,6 +314,7 @@ void main() {
       tester.widget<Text>(find.text('Channel')).style?.color,
       LineupTheme.of(tester.element(find.text('Channel'))).focusedText,
     );
+    expect(find.bySemanticsLabel(RegExp(r'^Now watching$')), findsNothing);
 
     await tester.pumpWidget(const SizedBox.shrink());
     fixture.dispose();
@@ -295,8 +326,9 @@ class _Fixture {
     PlayerState state, {
     bool failLoad = false,
     List<PlayerTrack> tracks = const [],
+    int channelCount = 1,
   }) {
-    lineup = _Lineup();
+    lineup = _Lineup(channelCount);
     guide = GuideController(
       lineup: lineup,
       loadSchedule: (channel) async => buildSchedule(
@@ -322,7 +354,7 @@ class _Fixture {
 }
 
 class _Lineup extends LineupController {
-  _Lineup()
+  _Lineup(int channelCount)
     : super(
         store: _Store(),
         credentials: _Credentials(),
@@ -330,23 +362,25 @@ class _Lineup extends LineupController {
           clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
         ),
       ) {
-    channels = [
-      Channel(
-        id: 'channel',
-        number: 7,
-        name: 'Channel',
-        source: const ManualSource([
+    channels = List.generate(
+      channelCount,
+      (index) => Channel(
+        id: index == 0 ? 'channel' : 'channel-$index',
+        number: 7 + index,
+        name: index == 0 ? 'Channel' : 'Channel $index',
+        source: ManualSource([
           ChannelItem(
-            id: 'program',
-            title: 'Program',
-            duration: Duration(hours: 24),
+            id: index == 0 ? 'program' : 'program-$index',
+            title: index == 0 ? 'Program' : 'Program $index',
+            duration: const Duration(hours: 24),
           ),
         ]),
         playbackMode: PlaybackMode.sequential,
         anchor: DateTime.now().subtract(const Duration(hours: 1)),
-        shuffleSeed: 1,
+        shuffleSeed: index + 1,
       ),
-    ];
+      growable: false,
+    );
     currentChannelId = 'channel';
     stage = SetupStage.ready;
   }

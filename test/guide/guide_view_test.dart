@@ -190,7 +190,7 @@ void main() {
           ChannelItem(
             id: 'upcoming-program',
             title: 'Upcoming Program',
-            duration: Duration(minutes: 30),
+            duration: Duration(hours: 4),
           ),
         ]),
         playbackMode: PlaybackMode.sequential,
@@ -198,6 +198,7 @@ void main() {
         shuffleSeed: 1,
       ),
     ];
+    lineup.currentChannelId = 'semantic-channel';
     var fail = true;
     final guide = GuideController(
       lineup: lineup,
@@ -225,9 +226,29 @@ void main() {
     await tester.tap(find.text('Schedule unavailable — select to retry'));
     await tester.pumpAndSettle();
 
+    final channelRail = find.bySemanticsLabel(
+      RegExp(r'^Channel 1, Semantic Channel, now watching'),
+    );
+    expect(channelRail, findsOneWidget);
+    final channelSemantics = tester
+        .getSemantics(channelRail)
+        .getSemanticsData();
+    expect(channelSemantics.flagsCollection.isButton, isTrue);
+    expect(channelSemantics.hasAction(SemanticsAction.tap), isTrue);
+    expect(find.bySemanticsLabel(RegExp(r'^Now watching$')), findsNothing);
+
+    final current = guide.currentProgram('semantic-channel')!;
+    await tester.tap(find.bySemanticsLabel(RegExp('upcoming')));
+    await tester.pump();
+    expect(guide.focusedProgramId, isNot(current.id));
+    await tester.tap(channelRail);
+    await tester.pump();
+    expect(guide.focusedProgramId, current.id);
+
     for (final status in ['currently airing', 'ended', 'upcoming']) {
-      final program = find.bySemanticsLabel(RegExp(status)).first;
-      expect(program, findsOneWidget);
+      final programs = find.bySemanticsLabel(RegExp(status));
+      expect(programs, findsOneWidget);
+      final program = programs.first;
       final semantics = tester.getSemantics(program).getSemanticsData();
       expect(semantics.flagsCollection.isButton, isTrue);
       expect(semantics.hasAction(SemanticsAction.tap), isTrue);
