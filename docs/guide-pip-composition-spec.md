@@ -271,7 +271,7 @@ flutter analyze
 flutter test
 ```
 
-Run narrower focused suites during development before the full verification.
+Run narrower-focused suites during development before the full verification.
 
 ## Physical Windows acceptance
 
