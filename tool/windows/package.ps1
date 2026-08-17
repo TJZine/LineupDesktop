@@ -7,6 +7,16 @@ param(
 $ErrorActionPreference = 'Stop'
 $repository = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $metadata = Import-PowerShellDataFile -LiteralPath (Join-Path $repository 'tool/windows/build-metadata.psd1')
+function Throw-PackageFailure {
+  param(
+    [Parameter(Mandatory)] [string] $Id,
+    [Parameter(Mandatory)] [string] $Message
+  )
+  $exception = [InvalidOperationException]::new($Message)
+  $exception.Data['LineupPackageFailure'] = $Id
+  throw $exception
+}
+
 $versionMatch = Select-String -LiteralPath (Join-Path $repository 'pubspec.yaml') -Pattern '^version:\s*(\S+)\s*$'
 if (-not $versionMatch) { throw 'pubspec.yaml does not contain a version.' }
 $pubspecVersion = $versionMatch.Matches[0].Groups[1].Value
@@ -48,7 +58,7 @@ $sourceDirty = & {
   $worktreeExit -eq 1 -or $indexExit -eq 1 -or $untracked.Count -ne 0
 }
 if ($sourceDirty) {
-  throw 'Refusing to create a release package from a dirty source tree. Commit or stash all tracked and untracked changes first.'
+  Throw-PackageFailure 'dirty-source' 'Refusing to create a release package from a dirty source tree. Commit or stash all tracked and untracked changes first.'
 }
 
 $runtime = Join-Path $BuildDirectory 'libmpv-2.dll'
@@ -114,10 +124,11 @@ $licenseMetadata = @{
 }
 foreach ($entry in $licenseMetadata.GetEnumerator()) {
   $license = Join-Path $env:LINEUP_MPV_ROOT "licenses/$($entry.Key)"
-  if ((Get-ProvenanceValue $entry.Value.Provenance) -ne $entry.Value.Sha256 -or
+  $expectedHash = $entry.Value.Sha256.ToUpperInvariant()
+  if ((Get-ProvenanceValue $entry.Value.Provenance).ToUpperInvariant() -ne $expectedHash -or
     -not (Test-Path -LiteralPath $license) -or
-    (Get-FileHash -Algorithm SHA256 -LiteralPath $license).Hash -ne $entry.Value.Sha256) {
-    throw "Prepared production runtime license does not match $($entry.Key)."
+    (Get-FileHash -Algorithm SHA256 -LiteralPath $license).Hash.ToUpperInvariant() -ne $expectedHash) {
+    Throw-PackageFailure 'runtime-license-mismatch' "Prepared production runtime license does not match $($entry.Key)."
   }
 }
 

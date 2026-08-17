@@ -215,7 +215,7 @@ jobs:
               & .\tool\windows\package.ps1 -Destination $dirtyDestination
               throw 'Packaging unexpectedly accepted the source-state probe.'
             } catch {
-              if ($_.Exception.Message -notlike '*dirty source tree*') { throw }
+              if ($_.Exception.Data['LineupPackageFailure'] -ne 'dirty-source') { throw }
             }
             if (Test-Path -LiteralPath $dirtyDestination) {
               throw 'Dirty-source packaging wrote package output before failing.'
@@ -231,7 +231,7 @@ jobs:
               & .\tool\windows\package.ps1 -Destination 'build/package/provenance-tamper-check'
               throw 'Packaging accepted a modified runtime license.'
             } catch {
-              if ($_.Exception.Message -notlike '*runtime license does not match*') { throw }
+              if ($_.Exception.Data['LineupPackageFailure'] -ne 'runtime-license-mismatch') { throw }
             }
           } finally {
             [IO.File]::WriteAllBytes($license, $licenseBytes)
