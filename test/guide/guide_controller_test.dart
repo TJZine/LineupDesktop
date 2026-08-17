@@ -16,16 +16,15 @@ import 'package:lineup_desktop/settings/lineup_settings.dart';
 void main() {
   test('window rounding preserves a UTC clock', () {
     final lineup = _TestLineup(_channels(1));
+    addTearDown(lineup.dispose);
     final guide = GuideController(
       lineup: lineup,
       clock: () => DateTime.utc(2026, 1, 15, 3, 17),
     );
+    addTearDown(guide.dispose);
 
     expect(guide.windowStart, DateTime.utc(2026, 1, 15, 2, 30));
     expect(guide.windowStart.isUtc, isTrue);
-
-    guide.dispose();
-    lineup.dispose();
   });
 
   test(

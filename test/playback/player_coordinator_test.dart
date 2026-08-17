@@ -46,8 +46,6 @@ void main() {
       await coordinator.stop();
       await coordinator.stop();
       expect(lineup.releases, 1);
-
-      coordinator.dispose();
     },
   );
 
@@ -78,7 +76,6 @@ void main() {
     expect(lineup.releases, 1);
     expect(coordinator.overlay, PlayerOverlay.none);
     expect(coordinator.sleepDuration, isNull);
-    coordinator.dispose();
   });
 
   test('scope cleanup does not notify after disposal', () async {
@@ -215,8 +212,11 @@ void main() {
     await tester.pump();
 
     expect(coordinator.sleepDuration, const Duration(minutes: 60));
-    coordinator.dispose();
+    await tester.pump(const Duration(minutes: 60));
     await tester.pump();
+
+    expect(player.stops, 2);
+    expect(coordinator.sleepDuration, isNull);
   });
 
   testWidgets('sleep completion does not notify after disposal', (
@@ -310,7 +310,6 @@ void main() {
 
       expect(nativePlayer.stops, 1);
       expect(lineup.releases, 1);
-      coordinator.dispose();
     },
   );
 
@@ -340,8 +339,6 @@ void main() {
       expect(await coordinator.logout(), isTrue);
       expect(nativePlayer.stops, 1);
       expect(lineup.releases, 1);
-
-      coordinator.dispose();
     },
   );
 
@@ -374,8 +371,6 @@ void main() {
       expect(coordinator.overlay, PlayerOverlay.channelNumber);
       await coordinator.commitChannelNumber();
       expect(lineup.currentChannelId, 'channel-b');
-
-      coordinator.dispose();
     },
   );
 
@@ -407,8 +402,6 @@ void main() {
       expect(coordinator.miniGuideChannelId, 'channel-500');
       expect(loads, greaterThanOrEqualTo(5));
       expect(guide.cachedRowCount, lessThanOrEqualTo(14));
-
-      coordinator.dispose();
     },
   );
 
@@ -434,7 +427,6 @@ void main() {
         coordinator.miniGuideChannels.map((channel) => channel.id),
         lineup.channels.map((channel) => channel.id),
       );
-      coordinator.dispose();
     }
   });
 
@@ -485,8 +477,6 @@ void main() {
     expect(coordinator.overlay, PlayerOverlay.osd);
     await tester.pump(const Duration(seconds: 3));
     expect(coordinator.overlay, PlayerOverlay.none);
-
-    coordinator.dispose();
   });
 
   testWidgets('OSD timeout reads the persisted setting consumer', (
@@ -512,8 +502,6 @@ void main() {
     expect(coordinator.overlay, PlayerOverlay.osd);
     await tester.pump(const Duration(milliseconds: 2));
     expect(coordinator.overlay, PlayerOverlay.none);
-
-    coordinator.dispose();
   });
 
   testWidgets('an OSD settings change reschedules the visible controls', (
@@ -540,8 +528,6 @@ void main() {
     expect(coordinator.overlay, PlayerOverlay.osd);
     await tester.pump(const Duration(milliseconds: 2));
     expect(coordinator.overlay, PlayerOverlay.none);
-
-    coordinator.dispose();
   });
 
   test(
@@ -574,8 +560,6 @@ void main() {
       await Future<void>.delayed(Duration.zero);
       expect(coordinator.status.state, PlayerState.buffering);
       expect(coordinator.overlay, PlayerOverlay.osd);
-
-      coordinator.dispose();
     },
   );
 
@@ -608,8 +592,6 @@ void main() {
     expect(lineup.releases, 1);
     await coordinator.stop();
     expect(lineup.releases, 2);
-
-    coordinator.dispose();
   });
 
   test(
@@ -645,8 +627,6 @@ void main() {
         player.loadGenerations.last!,
         greaterThan(player.loadGenerations.first! + 1),
       );
-
-      coordinator.dispose();
     },
   );
 
@@ -676,8 +656,6 @@ void main() {
     expect(lineup.currentChannelId, 'channel-0');
     expect(player.stops, 1);
     expect(lineup.releases, 1);
-
-    coordinator.dispose();
   });
 
   test(
@@ -718,8 +696,6 @@ void main() {
       expect(coordinator.status.state, PlayerState.stopped);
       expect(coordinator.hasPlaybackIntent, isFalse);
       expect(coordinator.overlay, PlayerOverlay.error);
-
-      coordinator.dispose();
     },
   );
 
@@ -755,8 +731,6 @@ void main() {
     expect(coordinator.status.state, PlayerState.stopped);
     expect(coordinator.hasPlaybackIntent, isFalse);
     expect(lineup.releases, 1);
-
-    coordinator.dispose();
   });
 
   test(
@@ -788,8 +762,6 @@ void main() {
       player.failStop = true;
       await expectLater(coordinator.stop(), throwsStateError);
       expect(lineup.releases, 2);
-
-      coordinator.dispose();
     },
   );
 
@@ -829,8 +801,6 @@ void main() {
     expect(lineup.diagnostics.entries.single.message, 'Native playback failed');
     expect(lineup.diagnostics.entries.single.context['reason'], 'Failed');
     expect(lineup.diagnostics.entries.single.context['audioCodec'], 'truehd');
-
-    coordinator.dispose();
   });
 
   test('load side effects roll back when load later fails', () async {
@@ -857,8 +827,6 @@ void main() {
     expect(lineup.releases, 1);
     expect(lineup.currentChannelId, 'channel-0');
     expect(coordinator.overlay, PlayerOverlay.error);
-
-    coordinator.dispose();
   });
 
   test('initial media is loaded once and exposes failures', () async {
@@ -888,8 +856,6 @@ void main() {
     );
     expect(coordinator.error, isNot(contains('load failed after dispatch')));
     expect(coordinator.overlay, PlayerOverlay.error);
-
-    coordinator.dispose();
   });
 
   test('a tune supersedes a pending initial media load', () async {
@@ -919,8 +885,6 @@ void main() {
 
     expect(lineup.currentChannelId, 'channel-b');
     expect(coordinator.error, isNull);
-
-    coordinator.dispose();
   });
 
   test('terminal error during seek cannot settle tune as successful', () async {
@@ -951,8 +915,6 @@ void main() {
     expect(lineup.currentChannelId, 'channel-0');
     expect(lineup.releases, 1);
     expect(coordinator.overlay, PlayerOverlay.error);
-
-    coordinator.dispose();
   });
 
   test(
@@ -985,8 +947,6 @@ void main() {
       expect(lineup.currentChannelId, 'channel-0');
       expect(lineup.releases, 1);
       expect(coordinator.overlay, PlayerOverlay.error);
-
-      coordinator.dispose();
     },
   );
 
@@ -1022,8 +982,6 @@ void main() {
     expect(coordinator.miniGuideChannelId, isNot(removed));
     expect(coordinator.miniGuideChannelIndex, 500);
     expect(loads, greaterThan(before));
-
-    coordinator.dispose();
   });
 }
 
@@ -1234,7 +1192,7 @@ class _BlockingStopPlayer extends _Player {
   @override
   Future<void> stop() async {
     await super.stop();
-    stopStarted.complete();
+    if (!stopStarted.isCompleted) stopStarted.complete();
     await releaseStop.future;
   }
 }
