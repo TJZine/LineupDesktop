@@ -190,8 +190,40 @@ void main() {
 
       await expectation;
       expect(player.status.message, 'Media server returned HTTP 503');
+      expect(player.status.failureCode, 'http_error');
+      expect(player.status.httpStatus, 503);
     },
   );
+
+  test('preserves the bounded libmpv fallback description', () async {
+    final calls = <MethodCall>[];
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      calls.add(call);
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+    final player = WindowsNativePlayer();
+    addTearDown(player.dispose);
+    await player.initialize();
+    final load = player.load(Uri.parse('file:///broken.mp4'));
+    await Future<void>.delayed(Duration.zero);
+    final loadId = calls.last.arguments!['loadId']! as int;
+    final expectation = expectLater(load, throwsA(isA<PlayerUnavailable>()));
+
+    await _sendNativeEvent(messenger, {
+      'type': 'state',
+      'loadId': loadId,
+      'state': 'error',
+      'message': 'loading failed',
+      'failureCode': 'mpv_error',
+    });
+
+    await expectation;
+    expect(player.status.message, 'loading failed');
+    expect(player.status.failureCode, 'mpv_error');
+    expect(player.status.httpStatus, isNull);
+  });
 
   test(
     'ignores stale or unscoped events and clears facts for replacement',

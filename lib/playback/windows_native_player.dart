@@ -111,6 +111,8 @@ class WindowsNativePlayer implements NativePlayer {
               ? error.message
               : 'Media load failed',
           recoverable: true,
+          failureCode: _status.failureCode,
+          httpStatus: _status.httpStatus,
         );
         _activeGeneration = null;
       }
@@ -227,7 +229,17 @@ class WindowsNativePlayer implements NativePlayer {
     final message = event['failureCode'] is String
         ? _nativeFailureMessage(event)
         : event['message'] as String? ?? state.name;
-    _setStatus(state, message, recoverable: state == PlayerState.error);
+    _setStatus(
+      state,
+      message,
+      recoverable: state == PlayerState.error,
+      failureCode: event['failureCode'] is String
+          ? event['failureCode'] as String
+          : null,
+      httpStatus: event['httpStatus'] is int
+          ? event['httpStatus'] as int
+          : null,
+    );
     if (state == PlayerState.playing) {
       final pending = _pendingLoad;
       if (pending != null && !pending.isCompleted) pending.complete();
@@ -248,6 +260,8 @@ class WindowsNativePlayer implements NativePlayer {
         'video_output_error' => 'Video output could not start',
         'source_open_error' => 'Media source could not be opened',
         'container_error' => 'Media container could not be read',
+        'mpv_error' when event['message'] is String =>
+          event['message'] as String,
         _ => 'Media playback failed',
       };
 
@@ -429,11 +443,15 @@ class WindowsNativePlayer implements NativePlayer {
     PlayerState state,
     String message, {
     bool recoverable = false,
+    String? failureCode,
+    int? httpStatus,
   }) {
     _status = PlayerStatus(
       state: state,
       message: message,
       recoverable: recoverable,
+      failureCode: failureCode,
+      httpStatus: httpStatus,
     );
     _emit();
   }

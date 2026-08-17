@@ -49,11 +49,15 @@ class PlayerStatus {
     required this.state,
     required this.message,
     this.recoverable = false,
+    this.failureCode,
+    this.httpStatus,
   });
 
   final PlayerState state;
   final String message;
   final bool recoverable;
+  final String? failureCode;
+  final int? httpStatus;
 }
 
 class PlayerEvent {

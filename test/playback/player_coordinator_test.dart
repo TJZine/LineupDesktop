@@ -187,6 +187,102 @@ void main() {
     expect(coordinator.overlay, PlayerOverlay.none);
   });
 
+  testWidgets('stale sleep completion preserves a replacement timer', (
+    tester,
+  ) async {
+    final lineup = _TestLineup();
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    final player = _BlockingStopPlayer();
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
+
+    coordinator.cycleSleepTimer();
+    await tester.pump(const Duration(minutes: 30));
+    await player.stopStarted.future;
+
+    coordinator.cycleSleepTimer();
+    expect(coordinator.sleepDuration, const Duration(minutes: 60));
+    player.releaseStop.complete();
+    await tester.pump();
+
+    expect(coordinator.sleepDuration, const Duration(minutes: 60));
+    coordinator.dispose();
+    await tester.pump();
+  });
+
+  testWidgets('sleep completion does not notify after disposal', (
+    tester,
+  ) async {
+    final lineup = _TestLineup();
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    final player = _BlockingStopPlayer();
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
+
+    coordinator.cycleSleepTimer();
+    await tester.pump(const Duration(minutes: 30));
+    await player.stopStarted.future;
+
+    coordinator.dispose();
+    player.releaseStop.complete();
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('sleep stop failure is reported and clears the timer', (
+    tester,
+  ) async {
+    final lineup = _TestLineup()..diagnostics.enabled = true;
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    final player = _EventPlayer()..failStop = true;
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(player.close);
+    addTearDown(coordinator.dispose);
+
+    coordinator.cycleSleepTimer();
+    await tester.pump(const Duration(minutes: 30));
+    await tester.pump();
+
+    expect(coordinator.sleepDuration, isNull);
+    expect(coordinator.overlay, PlayerOverlay.error);
+    expect(
+      coordinator.error,
+      'Playback could not be stopped when the sleep timer expired.',
+    );
+    expect(
+      lineup.diagnostics.entries.single.message,
+      'Playback request failed',
+    );
+  });
+
   test(
     'removing the active channel stops playback and releases its lease',
     () async {
@@ -721,11 +817,15 @@ void main() {
       recoverable: true,
       generation: player.loadGenerations.single,
       audioCodec: 'truehd',
+      failureCode: 'http_error',
+      httpStatus: 401,
     );
     await Future<void>.delayed(Duration.zero);
 
     expect(coordinator.canRetry, isTrue);
     expect(coordinator.overlay, PlayerOverlay.error);
+    expect(coordinator.status.failureCode, 'http_error');
+    expect(coordinator.status.httpStatus, 401);
     expect(lineup.diagnostics.entries.single.message, 'Native playback failed');
     expect(lineup.diagnostics.entries.single.context['reason'], 'Failed');
     expect(lineup.diagnostics.entries.single.context['audioCodec'], 'truehd');
@@ -1127,6 +1227,18 @@ class _BlockingFullscreenPlayer extends _Player {
   }
 }
 
+class _BlockingStopPlayer extends _Player {
+  final stopStarted = Completer<void>();
+  final releaseStop = Completer<void>();
+
+  @override
+  Future<void> stop() async {
+    await super.stop();
+    stopStarted.complete();
+    await releaseStop.future;
+  }
+}
+
 class _LoadFailurePlayer extends _Player {
   @override
   Future<void> load(Uri media, {String? plexToken, int? generation}) async {
@@ -1146,6 +1258,8 @@ class _EventPlayer extends _Player {
     bool recoverable = false,
     int? generation,
     String? audioCodec,
+    String? failureCode,
+    int? httpStatus,
   }) {
     _events.add(
       PlayerEvent(
@@ -1153,6 +1267,8 @@ class _EventPlayer extends _Player {
           state: PlayerState.error,
           message: 'Failed',
           recoverable: recoverable,
+          failureCode: failureCode,
+          httpStatus: httpStatus,
         ),
         position: Duration.zero,
         duration: Duration.zero,

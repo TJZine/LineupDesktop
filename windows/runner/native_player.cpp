@@ -241,8 +241,8 @@ flutter::EncodableMap StateEvent(const char* state, const char* message,
 
 flutter::EncodableMap FailureStateEvent(
     const std::string& code, std::optional<int64_t> http_status,
-    std::optional<int64_t> load_id) {
-  auto event = StateEvent("error", "Media playback failed", load_id);
+    std::optional<int64_t> load_id, const char* message) {
+  auto event = StateEvent("error", message, load_id);
   event[flutter::EncodableValue("failureCode")] =
       flutter::EncodableValue(code);
   if (http_status) {
@@ -1136,7 +1136,9 @@ void WindowsNativePlayer::HandleMpvEvent(const mpv_event& event,
             FailureStateEvent(has_detail ? last_failure_code_ : "mpv_error",
                               has_detail ? last_failure_http_status_
                                          : std::nullopt,
-                              load_id));
+                              load_id,
+                              has_detail ? "Media playback failed"
+                                         : mpv_error_string(end->error)));
       } else {
         QueueEvent(generation,
                    StateEvent("stopped", "Playback stopped", load_id));

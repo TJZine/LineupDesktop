@@ -54,6 +54,7 @@ class PlayerCoordinator extends ChangeNotifier {
   Timer? _numberTimer;
   Timer? _cursorTimer;
   int _overlayEpoch = 0;
+  int _sleepEpoch = 0;
   PlayerOverlay _overlay = PlayerOverlay.none;
   String _channelNumber = '';
   String? _miniGuideChannelId;
@@ -150,6 +151,8 @@ class PlayerCoordinator extends ChangeNotifier {
             state: PlayerState.error,
             message: 'Playback error',
             recoverable: event.status.recoverable,
+            failureCode: event.status.failureCode,
+            httpStatus: event.status.httpStatus,
           )
         : event.status;
     _position = event.position;
@@ -493,6 +496,7 @@ class PlayerCoordinator extends ChangeNotifier {
   }
 
   void cycleSleepTimer() {
+    final epoch = ++_sleepEpoch;
     _sleepTimer?.cancel();
     _sleepDuration = switch (_sleepDuration?.inMinutes) {
       null => const Duration(minutes: 30),
@@ -503,7 +507,20 @@ class PlayerCoordinator extends ChangeNotifier {
     final duration = _sleepDuration;
     if (duration != null) {
       _sleepTimer = Timer(duration, () async {
-        await stop();
+        try {
+          await stop();
+        } catch (error) {
+          if (_disposed || epoch != _sleepEpoch) return;
+          _sleepTimer = null;
+          _sleepDuration = null;
+          _recordPlaybackFailure(error);
+          _error =
+              'Playback could not be stopped when the sleep timer expired.';
+          _setOverlay(PlayerOverlay.error, timed: false);
+          return;
+        }
+        if (_disposed || epoch != _sleepEpoch) return;
+        _sleepTimer = null;
         _sleepDuration = null;
         notifyListeners();
       });
@@ -640,6 +657,7 @@ class PlayerCoordinator extends ChangeNotifier {
 
   void _resetScopeState() {
     _cancelOverlayTimer();
+    ++_sleepEpoch;
     _sleepTimer?.cancel();
     _sleepTimer = null;
     _sleepDuration = null;
@@ -707,6 +725,7 @@ class PlayerCoordinator extends ChangeNotifier {
     if (_disposed) return;
     _disposed = true;
     ++_tuneGeneration;
+    ++_sleepEpoch;
     _activeLoadGeneration = null;
     _tuning = false;
     lineup.removeListener(_lineupChanged);
