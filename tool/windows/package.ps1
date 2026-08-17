@@ -126,10 +126,13 @@ foreach ($file in @(
     'lineup_desktop.exe',
     'flutter_windows.dll',
     'flutter_secure_storage_windows_plugin.dll',
-    'libmpv-2.dll',
-    'native_assets.json'
+    'libmpv-2.dll'
   )) {
   Copy-Item -LiteralPath (Join-Path $BuildDirectory $file) -Destination $Destination
+}
+$nativeAssets = Join-Path $BuildDirectory 'native_assets.json'
+if (Test-Path -LiteralPath $nativeAssets -PathType Leaf) {
+  Copy-Item -LiteralPath $nativeAssets -Destination $Destination
 }
 Copy-Item -LiteralPath (Join-Path $BuildDirectory 'data') -Destination $Destination -Recurse
 
