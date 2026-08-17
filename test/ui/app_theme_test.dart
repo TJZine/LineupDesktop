@@ -61,6 +61,7 @@ void main() {
         reason: '${name.label} focus outline',
       );
       expect(roles.focusBorder, isNot(roles.deepBackground));
+      expect(roles.focusedSurface, isNot(roles.selectedSurface));
       expect(roles.progressTrack, isNot(roles.progressFill));
     }
   });

@@ -15,6 +15,7 @@ import 'package:lineup_desktop/playback/player_view.dart';
 import 'package:lineup_desktop/plex/plex_client.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 import 'package:lineup_desktop/ui/app_theme.dart';
+import 'package:lineup_desktop/ui/app_ui.dart';
 
 void main() {
   testWidgets('unsupported macOS backend keeps the Flutter player accessible', (
@@ -109,6 +110,8 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
     for (final size in const [
       Size(800, 600),
+      Size(LineupLayout.compact - 1, 700),
+      Size(LineupLayout.compact, 700),
       Size(1280, 720),
       Size(1600, 900),
       Size(1920, 1080),

@@ -435,6 +435,39 @@ void main() {
       expect(FocusManager.instance.primaryFocus, same(intendedFocus));
     },
   );
+
+  testWidgets('Settings does not reclaim focus after a layout remount', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(700, 700));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final controller = FixtureController()..stage = SetupStage.ready;
+    final outsideFocus = FocusNode(debugLabel: 'Outside Settings');
+    addTearDown(controller.dispose);
+    addTearDown(outsideFocus.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Column(
+          children: [
+            TextButton(
+              focusNode: outsideFocus,
+              onPressed: () {},
+              child: const Text('Outside'),
+            ),
+            Expanded(child: SettingsView(controller: controller)),
+          ],
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    outsideFocus.requestFocus();
+    await tester.pump();
+
+    await tester.binding.setSurfaceSize(const Size(1200, 700));
+    await tester.pumpAndSettle();
+
+    expect(FocusManager.instance.primaryFocus, same(outsideFocus));
+  });
 }
 
 Future<void> _confirmDelete(WidgetTester tester) async {

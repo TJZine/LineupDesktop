@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../channels/channel.dart';
 import '../ui/app_theme.dart';
+import '../ui/app_ui.dart';
 import 'native_player.dart';
 import 'native_video_surface.dart';
 import 'player_coordinator.dart';
@@ -345,6 +346,9 @@ class _Osd extends StatelessWidget {
     );
     final unsupported = controller.status.state == PlayerState.unsupported;
     final quality = _quality(controller.telemetry);
+    final expanded = !LineupLayout.isCompactWidth(
+      MediaQuery.sizeOf(context).width,
+    );
     return Align(
       alignment: Alignment.bottomCenter,
       child: SafeArea(
@@ -447,7 +451,7 @@ class _Osd extends StatelessWidget {
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                     const Spacer(),
-                    if (next != null && MediaQuery.sizeOf(context).width >= 900)
+                    if (next != null && expanded)
                       Flexible(
                         child: Text(
                           'Up next • ${next.scheduled.item.title}',
@@ -507,7 +511,7 @@ class _Osd extends StatelessWidget {
                       onPressed: controller.cycleSleepTimer,
                       icon: const Icon(Icons.bedtime_outlined),
                     ),
-                    if (MediaQuery.sizeOf(context).width >= 900)
+                    if (expanded)
                       Text(
                         controller.sleepDuration == null
                             ? 'Sleep off'

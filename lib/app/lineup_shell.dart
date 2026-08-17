@@ -519,7 +519,6 @@ class _ChannelsViewState extends State<ChannelsView> {
   );
 
   Future<void> _delete(Channel channel) async {
-    final opener = _deleteFocus[channel.id]!;
     final confirmed = await confirmDestructiveAction(
       context,
       title: 'Delete ${channel.name}?',
@@ -529,7 +528,7 @@ class _ChannelsViewState extends State<ChannelsView> {
     );
     if (!mounted) return;
     if (!confirmed) {
-      opener.requestFocus();
+      _deleteFocus[channel.id]?.requestFocus();
       return;
     }
     try {
@@ -540,7 +539,7 @@ class _ChannelsViewState extends State<ChannelsView> {
           () => _error =
               'The channel could not be deleted. No lineup changes were saved.',
         );
-        opener.requestFocus();
+        _deleteFocus[channel.id]?.requestFocus();
       }
       return;
     }
@@ -878,8 +877,17 @@ class SettingsView extends StatefulWidget {
 
 class _SettingsViewState extends State<SettingsView> {
   _SettingsCategory _category = _SettingsCategory.appearance;
+  bool _categoryFocusPlaced = false;
   bool _saving = false;
   String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _categoryFocusPlaced = true;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -937,7 +945,7 @@ class _SettingsViewState extends State<SettingsView> {
               focusNode: category == _SettingsCategory.appearance
                   ? widget.focusNode
                   : null,
-              autofocus: category == _category,
+              autofocus: category == _category && !_categoryFocusPlaced,
               style: OutlinedButton.styleFrom(
                 alignment: Alignment.centerLeft,
                 backgroundColor: category == _category

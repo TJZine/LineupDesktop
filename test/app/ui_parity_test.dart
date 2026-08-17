@@ -219,6 +219,32 @@ void main() {
     expect(fixture.controller.channels, isEmpty);
   });
 
+  testWidgets('channel deletion cancellation tolerates a removed opener', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 720));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final fixture = UiFixture()
+      ..controller.stage = SetupStage.ready
+      ..controller.channels = [_channel()];
+    await tester.pumpWidget(fixture.build());
+    await tester.pump();
+    await tester.pump();
+    await openDestination(tester, 'Channels');
+
+    await tester.tap(find.byTooltip('Delete Newsroom'));
+    await tester.pumpAndSettle();
+    fixture.controller
+      ..channels = const []
+      ..notifyListeners();
+    await tester.pump();
+    await tester.pump();
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('Windows-style 200 percent DPI uses the 1080p logical regime', (
     tester,
   ) async {
@@ -335,6 +361,45 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Review expected changes'), findsOneWidget);
     expect(find.text('Confirm & Replace'), findsOneWidget);
+  });
+
+  testWidgets('Channel Setup does not reclaim focus after a layout remount', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(700, 700));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final controller = _SetupFixtureController()
+      ..stage = SetupStage.channelSetup
+      ..libraries = const [
+        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
+      ];
+    final outsideFocus = FocusNode(debugLabel: 'Outside Channel Setup');
+    addTearDown(controller.dispose);
+    addTearDown(outsideFocus.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Column(
+          children: [
+            TextButton(
+              focusNode: outsideFocus,
+              onPressed: () {},
+              child: const Text('Outside'),
+            ),
+            Expanded(child: UpstreamChannelSetupView(controller: controller)),
+          ],
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Configure channels'));
+    await tester.pumpAndSettle();
+    outsideFocus.requestFocus();
+    await tester.pump();
+
+    await tester.binding.setSurfaceSize(const Size(1200, 700));
+    await tester.pumpAndSettle();
+
+    expect(FocusManager.instance.primaryFocus, same(outsideFocus));
   });
 }
 

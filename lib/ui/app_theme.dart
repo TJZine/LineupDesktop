@@ -407,7 +407,7 @@ abstract final class LineupTheme {
     Color? focusBorder,
     Color onFocus = const Color(0xFF0A0D12),
   }) {
-    final focusColor = focus ?? primary.withValues(alpha: 0.20);
+    final focusColor = focus ?? primary.withValues(alpha: 0.32);
     return LineupThemeRoles(
       deepBackground: deep,
       primarySurface: surface,

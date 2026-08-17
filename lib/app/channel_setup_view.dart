@@ -48,6 +48,7 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
   bool _replaceConfirmed = false;
   bool _building = false;
   bool _libraryFocusPlaced = false;
+  bool _strategyFocusPlaced = false;
   String? _error;
   List<Channel>? _planned;
 
@@ -297,6 +298,11 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
           _error = widget.controller.error ?? 'Library loading failed.';
         }
       });
+      if (loaded) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _strategyFocusPlaced = true;
+        });
+      }
     } catch (error) {
       if (mounted) {
         setState(
@@ -364,11 +370,11 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
     final children = [
       for (final category in _SetupCategory.values)
         Padding(
-          padding: const EdgeInsets.only(bottom: 8),
+          padding: EdgeInsets.only(right: compact ? 8 : 0, bottom: 8),
           child: _RailButton(
             label: _categoryLabel(category),
             selected: category == _category,
-            autofocus: category == _category,
+            autofocus: category == _category && !_strategyFocusPlaced,
             onPressed: () => setState(() => _category = category),
           ),
         ),
