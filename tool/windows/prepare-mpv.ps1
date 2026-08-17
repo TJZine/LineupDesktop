@@ -4,6 +4,21 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+
+function Invoke-DownloadWithRetry {
+  param([string] $Uri, [string] $OutFile)
+
+  for ($attempt = 1; $attempt -le 3; $attempt++) {
+    try {
+      Invoke-WebRequest -Uri $Uri -OutFile $OutFile -ErrorAction Stop
+      return
+    } catch {
+      if ($attempt -eq 3) { throw }
+      Start-Sleep -Seconds (1 -shl ($attempt - 1))
+    }
+  }
+}
+
 $repository = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $metadata = Import-PowerShellDataFile -LiteralPath (Join-Path $repository 'tool/windows/build-metadata.psd1')
 $asset = 'mpv-dev-lgpl-x86_64-20260813-git-7b8915bc1d.7z'
@@ -24,7 +39,7 @@ $temporaryDirectory = if ($env:RUNNER_TEMP) {
 }
 $archive = Join-Path $temporaryDirectory $asset
 
-Invoke-WebRequest -Uri $url -OutFile $archive
+Invoke-DownloadWithRetry -Uri $url -OutFile $archive
 if ((Get-FileHash -Algorithm SHA256 -LiteralPath $archive).Hash -ne $sha256) {
   throw "SHA-256 mismatch for $asset."
 }
@@ -73,7 +88,7 @@ $licenses = @(
 $licenseHashes = @{}
 foreach ($license in $licenses) {
   $path = Join-Path $licenseDirectory $license.Name
-  Invoke-WebRequest -Uri $license.Uri -OutFile $path
+  Invoke-DownloadWithRetry -Uri $license.Uri -OutFile $path
   if ((Get-FileHash -Algorithm SHA256 -LiteralPath $path).Hash -ne $license.Sha256) {
     throw "SHA-256 mismatch for $($license.Name)."
   }
