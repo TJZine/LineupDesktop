@@ -109,6 +109,7 @@ class LineupController extends ChangeNotifier {
   ScheduleWorker? _scheduleWorker;
   final ScheduleWorkerFactory _scheduleWorkerFactory;
   Future<void> _credentialOperations = Future.value();
+  Future<bool>? _logoutFuture;
   int _settingsGeneration = 0;
   int _contentGeneration = 0;
   bool _disposed = false;
@@ -849,11 +850,21 @@ class LineupController extends ChangeNotifier {
     }
   }
 
-  Future<bool> logout() async {
+  Future<bool> logout() {
+    final active = _logoutFuture;
+    if (active != null) return active;
+    final next = Future<bool>.microtask(_performLogout)
+        .whenComplete(_finishLogout);
+    _logoutFuture = next;
+    return next;
+  }
+
+  Future<bool> _performLogout() async {
     ++_epoch;
     _pinTimer?.cancel();
     _busyOperation = null;
-    busy = false;
+    busy = true;
+    notifyListeners();
     try {
       await _clearCredentials();
     } catch (exception) {
@@ -862,7 +873,6 @@ class LineupController extends ChangeNotifier {
       diagnostics.add('application', 'Credential cleanup failed', {
         'error': exception.toString(),
       });
-      notifyListeners();
       return false;
     }
     if (_disposed) return false;
@@ -891,8 +901,14 @@ class LineupController extends ChangeNotifier {
     _contentGeneration++;
     stage = SetupStage.welcome;
     error = null;
-    notifyListeners();
     return true;
+  }
+
+  void _finishLogout() {
+    _logoutFuture = null;
+    if (_disposed) return;
+    busy = false;
+    notifyListeners();
   }
 
   Future<void> _save() async {

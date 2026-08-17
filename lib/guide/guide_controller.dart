@@ -279,12 +279,18 @@ class GuideController extends ChangeNotifier {
       _activeArtworkLoads++;
       lineup
           .artworkFor(request.item)
+          .then<Uint8List?>((value) => value, onError: (_) => null)
           .then((value) {
-            final current =
-                request.generation == _generation &&
-                identical(_artwork[request.key], request.completer.future);
-            request.completer.complete(current ? value : null);
-          }, onError: (_) => request.completer.complete(null))
+            final cached = identical(
+              _artwork[request.key],
+              request.completer.future,
+            );
+            final current = request.generation == _generation && cached;
+            if (!current && cached) _artwork.remove(request.key);
+            if (!request.completer.isCompleted) {
+              request.completer.complete(current ? value : null);
+            }
+          })
           .whenComplete(() {
             _activeArtworkLoads--;
             if (!_disposed) _pumpArtwork();
@@ -575,11 +581,7 @@ class GuideController extends ChangeNotifier {
     _contentGeneration = lineup.contentGeneration;
     final lineupChanged =
         contentChanged ||
-        (!identical(old, next) &&
-            !listEquals(
-              old.map(_channelFingerprint).toList(),
-              next.map(_channelFingerprint).toList(),
-            ));
+        (!identical(old, next) && !_listEqualsBy(old, next, _channelEquals));
     final settingsChanged =
         _settings.guideHours != lineup.settings.guideHours ||
         _settings.pastMinutes != lineup.settings.pastMinutes ||
@@ -680,16 +682,54 @@ class _ArtworkRequest {
   final int generation;
 }
 
-Object _channelFingerprint(Channel channel) => (
-  id: channel.id,
-  number: channel.number,
-  name: channel.name,
-  anchor: channel.anchor,
-  shuffleSeed: channel.shuffleSeed,
-  blockSize: channel.blockSize,
-  playbackMode: channel.playbackMode,
-  source: channel.source,
-);
+bool _channelEquals(Channel left, Channel right) =>
+    left.id == right.id &&
+    left.number == right.number &&
+    left.name == right.name &&
+    left.anchor == right.anchor &&
+    left.shuffleSeed == right.shuffleSeed &&
+    left.blockSize == right.blockSize &&
+    left.playbackMode == right.playbackMode &&
+    _sourceEquals(left.source, right.source);
+
+bool _sourceEquals(ContentSource left, ContentSource right) {
+  if (identical(left, right)) return true;
+  return switch (left) {
+    LibrarySource() when right is LibrarySource =>
+      left.libraryId == right.libraryId &&
+          left.libraryType == right.libraryType &&
+          left.includeWatched == right.includeWatched &&
+          mapEquals(left.filters, right.filters),
+    ManualSource() when right is ManualSource => _listEqualsBy(
+      left.items,
+      right.items,
+      _itemEquals,
+    ),
+    PlaylistSource() when right is PlaylistSource =>
+      left.playlistId == right.playlistId,
+    MixedSource() when right is MixedSource =>
+      left.interleave == right.interleave &&
+          _listEqualsBy(left.sources, right.sources, _sourceEquals),
+    _ => false,
+  };
+}
+
+bool _itemEquals(ChannelItem left, ChannelItem right) =>
+    left.id == right.id &&
+    left.title == right.title &&
+    left.duration == right.duration &&
+    left.showTitle == right.showTitle &&
+    left.showThumb == right.showThumb &&
+    left.artwork == right.artwork;
+
+bool _listEqualsBy<T>(List<T> left, List<T> right, bool Function(T, T) equals) {
+  if (identical(left, right)) return true;
+  if (left.length != right.length) return false;
+  for (var index = 0; index < left.length; index++) {
+    if (!equals(left[index], right[index])) return false;
+  }
+  return true;
+}
 
 DateTime _floorHalfHour(DateTime value) {
   final minute = value.minute < 30 ? 0 : 30;

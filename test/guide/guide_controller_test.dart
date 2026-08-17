@@ -106,53 +106,63 @@ void main() {
     },
   );
 
-  test(
-    'lineup comparison reuses source identity without serializing it',
-    () async {
-      final channel = _channels(1).single;
-      final lineup = _TestLineup([channel]);
-      var loads = 0;
-      final guide = GuideController(
-        lineup: lineup,
-        loadSchedule: (channel) async {
-          loads++;
-          return _schedule(channel);
-        },
-      )..requestViewport(0, 1);
-      await _settle();
+  test('lineup comparison preserves value-equal rebuilt sources', () async {
+    final channel = _channels(1).single;
+    final lineup = _TestLineup([channel]);
+    var loads = 0;
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async {
+        loads++;
+        return _schedule(channel);
+      },
+    )..requestViewport(0, 1);
+    await _settle();
 
-      Channel copy(ContentSource source) => Channel(
-        id: channel.id,
-        number: channel.number,
-        name: channel.name,
-        source: source,
-        playbackMode: channel.playbackMode,
-        anchor: channel.anchor,
-        shuffleSeed: channel.shuffleSeed,
-        blockSize: channel.blockSize,
-      );
+    Channel copy(ContentSource source) => Channel(
+      id: channel.id,
+      number: channel.number,
+      name: channel.name,
+      source: source,
+      playbackMode: channel.playbackMode,
+      anchor: channel.anchor,
+      shuffleSeed: channel.shuffleSeed,
+      blockSize: channel.blockSize,
+    );
 
-      lineup.setChannels([copy(channel.source)]);
-      guide.requestViewport(0, 1);
-      await _settle();
-      expect(loads, 1);
+    lineup.setChannels([copy(channel.source)]);
+    guide.requestViewport(0, 1);
+    await _settle();
+    expect(loads, 1);
 
-      lineup.setChannels([
-        copy(
-          const LibrarySource(
-            libraryId: 'library-0',
-            libraryType: PlexLibraryType.movie,
+    final items = (channel.source as ManualSource).items;
+    lineup.setChannels([copy(ManualSource(List.of(items)))]);
+    guide.requestViewport(0, 1);
+    await _settle();
+    expect(loads, 1);
+
+    lineup.setChannels([
+      copy(
+        ManualSource([
+          ChannelItem(
+            id: items.first.id,
+            title: 'Changed title',
+            duration: items.first.duration,
+            showTitle: items.first.showTitle,
+            showThumb: items.first.showThumb,
+            artwork: items.first.artwork,
           ),
-        ),
-      ]);
-      guide.requestViewport(0, 1);
-      await _settle();
-      expect(loads, 2);
+          ...items.skip(1),
+        ]),
+      ),
+    ]);
+    guide.requestViewport(0, 1);
+    await _settle();
+    expect(loads, 2);
 
-      guide.dispose();
-      lineup.dispose();
-    },
-  );
+    guide.dispose();
+    lineup.dispose();
+  });
 
   test('stale schedule result cannot repopulate a replaced lineup', () async {
     final old = _channels(1).single;
@@ -345,6 +355,41 @@ void main() {
     lineup.dispose();
   });
 
+  test('stale artwork is evicted so the same key can retry', () async {
+    final lineup = _ArtworkLineup(_channels(1));
+    addTearDown(lineup.dispose);
+    final guide = GuideController(lineup: lineup);
+    addTearDown(guide.dispose);
+    final start = DateTime(2026, 8, 13, 12);
+    final program = GuideProgram(
+      channelId: lineup.channels.single.id,
+      scheduled: ScheduledProgram(
+        item: ChannelItem(
+          id: 'art',
+          title: 'Artwork',
+          duration: const Duration(hours: 1),
+          artwork: Uri.parse('/art'),
+        ),
+        start: start,
+        end: start.add(const Duration(hours: 1)),
+        elapsed: Duration.zero,
+        index: 0,
+        loop: 0,
+      ),
+    );
+
+    final stale = guide.artworkFor(program);
+    guide.playToNow();
+    lineup.completeArtwork();
+    expect(await stale, isNull);
+
+    final retry = guide.artworkFor(program);
+    await _settle();
+    expect(lineup.artworkLoads, 2);
+    lineup.completeArtwork();
+    expect(await retry, isNotNull);
+  });
+
   test('production schedules use the persistent catalog worker', () async {
     final channel = Channel(
       id: 'library-channel',
@@ -420,6 +465,7 @@ void main() {
 
   test('disposing Guide prevents queued schedule work from starting', () async {
     final lineup = _TestLineup(_channels(10));
+    addTearDown(lineup.dispose);
     final loads = <Completer<ScheduleIndex>>[];
     final guide = GuideController(
       lineup: lineup,
@@ -429,6 +475,7 @@ void main() {
         return completer.future;
       },
     );
+    addTearDown(guide.dispose);
     guide.requestViewport(0, 5);
     expect(loads, hasLength(guide.maximumConcurrentLoads));
 

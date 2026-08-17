@@ -286,6 +286,33 @@ void main() {
     expect(controller.stage, SetupStage.welcome);
   });
 
+  test('overlapping logout calls share one busy credential cleanup', () async {
+    final credentials = _BlockingClearCredentials(accountToken: 'token');
+    final controller =
+        LineupController(
+            store: _MemoryStore(),
+            credentials: credentials,
+            plex: _FakePlex(),
+          )
+          ..stage = SetupStage.ready
+          ..account = const PlexAccount(id: 'owner', name: 'Owner', email: '');
+    addTearDown(controller.dispose);
+
+    final first = controller.logout();
+    await credentials.clearStarted.future;
+    expect(controller.busy, isTrue);
+
+    final second = controller.logout();
+    expect(identical(first, second), isTrue);
+    expect(credentials.clearCalls, 1);
+
+    credentials.finishClear.complete();
+    expect(await first, isTrue);
+    expect(await second, isTrue);
+    expect(controller.busy, isFalse);
+    expect(controller.stage, SetupStage.welcome);
+  });
+
   test(
     'failed PIN cancellation stays retryable without hiding a late token',
     () async {
@@ -744,6 +771,22 @@ class _BlockingCredentials extends _MemoryCredentials {
     if (!writeStarted.isCompleted) writeStarted.complete();
     await finishWrite.future;
     await super.writeAccountToken(token);
+  }
+}
+
+class _BlockingClearCredentials extends _MemoryCredentials {
+  _BlockingClearCredentials({super.accountToken});
+
+  final clearStarted = Completer<void>();
+  final finishClear = Completer<void>();
+  var clearCalls = 0;
+
+  @override
+  Future<void> clear() async {
+    clearCalls++;
+    if (!clearStarted.isCompleted) clearStarted.complete();
+    await finishClear.future;
+    await super.clear();
   }
 }
 

@@ -87,6 +87,7 @@ class HarnessController extends LineupController {
 class HarnessPlayer implements NativePlayer {
   final _events = StreamController<PlayerEvent>.broadcast();
   bool _disposed = false;
+  int _loadEpoch = 0;
   int? _generation;
   PlayerStatus _status = const PlayerStatus(
     state: PlayerState.playing,
@@ -125,6 +126,7 @@ class HarnessPlayer implements NativePlayer {
   @override
   Future<void> load(Uri media, {String? plexToken, int? generation}) async {
     if (_disposed) return;
+    final operation = ++_loadEpoch;
     _generation = generation;
     _status = const PlayerStatus(
       state: PlayerState.loading,
@@ -132,7 +134,7 @@ class HarnessPlayer implements NativePlayer {
     );
     _emit();
     await Future<void>.delayed(const Duration(milliseconds: 250));
-    if (_disposed) return;
+    if (_disposed || operation != _loadEpoch) return;
     _status = const PlayerStatus(
       state: PlayerState.playing,
       message: 'Playing synthetic program',
