@@ -281,15 +281,16 @@ flutter build windows `
   --local-engine-host=host_release `
   --local-engine-src-path=$EngineSource
 
-$PackageDestination = Join-Path $Repo `
-  "build\package\LineupDesktop-$($Head.Substring(0, 12))-windows-x64"
-if ((Test-Path -LiteralPath $PackageDestination) -or
-    (Test-Path -LiteralPath "$PackageDestination.zip")) {
+$PackageDestination = "build\package\LineupDesktop-$($Head.Substring(0, 12))-windows-x64"
+$PackageDirectory = Join-Path $Repo $PackageDestination
+$PackageArchive = "$PackageDirectory.zip"
+if ((Test-Path -LiteralPath $PackageDirectory) -or
+    (Test-Path -LiteralPath $PackageArchive)) {
   throw 'Choose a new package destination or review and remove prior output.'
 }
 
 & .\tool\windows\package.ps1 -Destination $PackageDestination
-Get-FileHash -Algorithm SHA256 -LiteralPath "$PackageDestination.zip" |
+Get-FileHash -Algorithm SHA256 -LiteralPath $PackageArchive |
   Format-List | Out-String |
   Set-Content -LiteralPath (Join-Path $EvidenceRoot 'package-sha256.txt')
 ```
