@@ -10,6 +10,7 @@ import 'package:lineup_desktop/persistence/app_store.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 import 'package:lineup_desktop/ui/app_ui.dart';
+import 'package:lineup_desktop/ui/app_theme.dart';
 
 import '../support/ui_fixture.dart';
 
@@ -65,6 +66,59 @@ void main() {
         hasTapAction: false,
         hasFocusAction: true,
       ),
+    );
+  });
+
+  testWidgets('Swiss panels keep shared custom surfaces square', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: LineupTheme.forName(LineupThemeName.swiss),
+        home: const Column(
+          children: [
+            LineupSelectionCard(
+              selected: false,
+              onPressed: null,
+              child: Text('Movies'),
+            ),
+            LineupNotice(message: 'Unavailable'),
+          ],
+        ),
+      ),
+    );
+
+    final selectionCard = tester.widget<Card>(
+      find.descendant(
+        of: find.byType(LineupSelectionCard),
+        matching: find.byType(Card),
+      ),
+    );
+    expect(
+      (selectionCard.shape! as RoundedRectangleBorder).borderRadius,
+      BorderRadius.zero,
+    );
+    final focusRing = tester.widget<AnimatedContainer>(
+      find.descendant(
+        of: find.byType(LineupSelectionCard),
+        matching: find.byType(AnimatedContainer),
+      ),
+    );
+    expect(
+      (focusRing.decoration! as BoxDecoration).borderRadius,
+      BorderRadius.zero,
+    );
+    final notice = tester.widget<Container>(
+      find
+          .descendant(
+            of: find.byType(LineupNotice),
+            matching: find.byType(Container),
+          )
+          .first,
+    );
+    expect(
+      (notice.decoration! as BoxDecoration).borderRadius,
+      BorderRadius.zero,
     );
   });
 

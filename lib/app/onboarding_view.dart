@@ -56,16 +56,25 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
   }
 
   void _controllerChanged() {
+    if (!mounted) return;
     final controller = widget.controller;
+    final nextSecureCancellationRequired =
+        controller.secureCancellationRequired;
+    final nextBusy = controller.busy;
     final retryNeedsFocus =
-        !_secureCancellationRequired && controller.secureCancellationRequired;
+        !_secureCancellationRequired && nextSecureCancellationRequired;
     final cancelNeedsFocus =
         !_busy &&
-        controller.busy &&
+        nextBusy &&
         controller.stage == SetupStage.profiles &&
         controller.profileSelectionCanCancel;
-    _secureCancellationRequired = controller.secureCancellationRequired;
-    _busy = controller.busy;
+    if (_secureCancellationRequired != nextSecureCancellationRequired ||
+        _busy != nextBusy) {
+      setState(() {
+        _secureCancellationRequired = nextSecureCancellationRequired;
+        _busy = nextBusy;
+      });
+    }
     final target = retryNeedsFocus
         ? _linkActionFocus
         : cancelNeedsFocus

@@ -1289,28 +1289,29 @@ class _DiagnosticsSummaryState extends State<_DiagnosticsSummary> {
   bool _focused = false;
 
   @override
-  Widget build(BuildContext context) => Focus(
-    focusNode: widget.focusNode,
-    onFocusChange: (focused) => setState(() => _focused = focused),
-    child: Card(
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(LineupTheme.radius),
-        side: BorderSide(
-          color: _focused
-              ? LineupTheme.of(context).focusBorder
-              : LineupTheme.of(context).subtleBorder,
-          width: _focused ? LineupTheme.of(context).focusBorderWidth : 1,
+  Widget build(BuildContext context) {
+    final roles = LineupTheme.of(context);
+    return Focus(
+      focusNode: widget.focusNode,
+      onFocusChange: (focused) => setState(() => _focused = focused),
+      child: Card(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(roles.panelRadius),
+          side: BorderSide(
+            color: _focused ? roles.focusBorder : roles.subtleBorder,
+            width: _focused ? roles.focusBorderWidth : 1,
+          ),
+        ),
+        child: ListTile(
+          leading: const Icon(Icons.shield_outlined),
+          title: const Text('Credential-safe diagnostics'),
+          subtitle: Text(
+            'Playback: ${widget.status.message}\nPlex: ${widget.serverName ?? 'not connected'}\nEntries: ${widget.entryCount}',
+          ),
         ),
       ),
-      child: ListTile(
-        leading: const Icon(Icons.shield_outlined),
-        title: const Text('Credential-safe diagnostics'),
-        subtitle: Text(
-          'Playback: ${widget.status.message}\nPlex: ${widget.serverName ?? 'not connected'}\nEntries: ${widget.entryCount}',
-        ),
-      ),
-    ),
-  );
+    );
+  }
 }
 
 class _Dropdown<T> extends StatelessWidget {

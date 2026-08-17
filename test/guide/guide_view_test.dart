@@ -48,10 +48,12 @@ void main() {
 
   testWidgets('non-positive timeline slots render safely', (tester) async {
     final lineup = _Lineup(1)..settings = const LineupSettings(guideHours: 0);
+    addTearDown(lineup.dispose);
     final guide = GuideController(
       lineup: lineup,
       loadSchedule: (channel) async => _schedule(channel),
     );
+    addTearDown(guide.dispose);
     await tester.pumpWidget(
       MaterialApp(
         home: GuideView(
@@ -77,6 +79,7 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
     for (final count in [200, 500, 1000]) {
       final lineup = _Lineup(count);
+      addTearDown(lineup.dispose);
       var loads = 0;
       final guide = GuideController(
         lineup: lineup,
@@ -85,6 +88,7 @@ void main() {
           return _schedule(channel);
         },
       );
+      addTearDown(guide.dispose);
       final elapsed = Stopwatch()..start();
       await tester.pumpWidget(
         MaterialApp(
@@ -113,6 +117,7 @@ void main() {
     tester,
   ) async {
     final lineup = _Lineup(1000);
+    addTearDown(lineup.dispose);
     var loads = 0;
     final guide = GuideController(
       lineup: lineup,
@@ -121,6 +126,7 @@ void main() {
         return _schedule(channel);
       },
     );
+    addTearDown(guide.dispose);
     final rssBefore = ProcessInfo.currentRss;
     final firstViewport = Stopwatch()..start();
     await tester.binding.setSurfaceSize(const Size(1280, 800));
@@ -172,6 +178,7 @@ void main() {
   ) async {
     final now = DateTime.utc(2026, 1, 1, 12, 45);
     final lineup = _Lineup(1);
+    addTearDown(lineup.dispose);
     lineup.channels = [
       Channel(
         id: 'semantic-channel',
@@ -209,6 +216,7 @@ void main() {
         return _schedule(channel);
       },
     );
+    addTearDown(guide.dispose);
     await tester.pumpWidget(
       MaterialApp(
         home: GuideView(
@@ -265,10 +273,12 @@ void main() {
     tester,
   ) async {
     final lineup = _Lineup(20);
+    addTearDown(lineup.dispose);
     final guide = GuideController(
       lineup: lineup,
       loadSchedule: (channel) async => _schedule(channel),
     );
+    addTearDown(guide.dispose);
     var tunes = 0;
 
     await tester.binding.setSurfaceSize(const Size(800, 600));
@@ -326,6 +336,14 @@ void main() {
       expect(tester.takeException(), isNull, reason: '$size');
     }
 
+    final pictureSemantics = find.bySemanticsLabel(
+      'Now playing picture in picture. Open full player.',
+    );
+    expect(pictureSemantics, findsOneWidget);
+    final semantics = tester.getSemantics(pictureSemantics).getSemanticsData();
+    expect(semantics.flagsCollection.isButton, isTrue);
+    expect(semantics.hasAction(SemanticsAction.tap), isTrue);
+
     expect(guide.focusedProgram, isNotNull);
     expect(guide.selectedProgram, isNull);
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
@@ -374,10 +392,12 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     addTearDown(tester.view.resetPhysicalSize);
     final lineup = _Lineup(20);
+    addTearDown(lineup.dispose);
     final guide = GuideController(
       lineup: lineup,
       loadSchedule: (channel) async => _schedule(channel),
     );
+    addTearDown(guide.dispose);
 
     await tester.pumpWidget(
       MaterialApp(
@@ -418,10 +438,12 @@ void main() {
     tester,
   ) async {
     final lineup = _Lineup(2)..currentChannelId = 'channel-0';
+    addTearDown(lineup.dispose);
     final guide = GuideController(
       lineup: lineup,
       loadSchedule: (channel) async => _schedule(channel),
     )..requestViewport(0, 2);
+    addTearDown(guide.dispose);
     await tester.pumpWidget(
       MaterialApp(
         home: GuideView(
@@ -451,10 +473,12 @@ void main() {
     tester,
   ) async {
     final lineup = _Lineup(2)..currentChannelId = 'channel-0';
+    addTearDown(lineup.dispose);
     final guide = GuideController(
       lineup: lineup,
       loadSchedule: (channel) async => _schedule(channel),
     );
+    addTearDown(guide.dispose);
     await tester.pumpWidget(
       MaterialApp(
         home: GuideView(
@@ -481,10 +505,12 @@ void main() {
     tester,
   ) async {
     final lineup = _Lineup(100);
+    addTearDown(lineup.dispose);
     final guide = GuideController(
       lineup: lineup,
       loadSchedule: (channel) async => _schedule(channel),
     );
+    addTearDown(guide.dispose);
     Widget buildGuide() => MaterialApp(
       home: GuideView(controller: guide, onClose: () {}, onTune: (_) async {}),
     );
@@ -531,10 +557,12 @@ void main() {
   ) async {
     final lineup = _Lineup(100)
       ..settings = const LineupSettings(reduceMotion: true);
+    addTearDown(lineup.dispose);
     final guide = GuideController(
       lineup: lineup,
       loadSchedule: (channel) async => _schedule(channel),
     );
+    addTearDown(guide.dispose);
     Widget buildGuide() => MaterialApp(
       home: GuideView(controller: guide, onClose: () {}, onTune: (_) async {}),
     );

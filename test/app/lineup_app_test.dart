@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/lineup_app.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
+import 'package:lineup_desktop/app/onboarding_view.dart';
 import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/channels/scheduler.dart';
 import 'package:lineup_desktop/persistence/app_store.dart';
@@ -276,10 +277,21 @@ void main() {
     await tester.pump();
     await tester.sendKeyEvent(LogicalKeyboardKey.tab);
     await tester.pump();
-    final focusedButton = FocusManager.instance.primaryFocus?.context
-        ?.findAncestorWidgetOfExactType<TextButton>();
-    expect(focusedButton, isNotNull);
-    expect((focusedButton!.child as Text).data, 'Cancel');
+    final cancel = find.widgetWithText(TextButton, 'Cancel');
+    expect(cancel, findsOneWidget);
+    expect(
+      tester.getSemantics(cancel),
+      matchesSemantics(
+        label: 'Cancel',
+        isButton: true,
+        hasEnabledState: true,
+        isEnabled: true,
+        isFocusable: true,
+        isFocused: true,
+        hasTapAction: true,
+        hasFocusAction: true,
+      ),
+    );
 
     controller.requireSecureCancellation();
     await tester.pump();
@@ -316,6 +328,32 @@ void main() {
     );
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
     expect(controller.profileSelectionCanceled, isTrue);
+  });
+
+  testWidgets('onboarding rebuilds without a listening parent', (tester) async {
+    final controller = _FakeController()
+      ..stage = SetupStage.linking
+      ..activePin = PlexPin(
+        id: 1,
+        code: 'ABCD',
+        expiresAt: DateTime.now().add(const Duration(minutes: 2)),
+      );
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: UpstreamOnboardingView(
+          controller: controller,
+          onLogout: () async {},
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(find.text('Retry secure cancellation'), findsNothing);
+
+    controller.requireSecureCancellation();
+    await tester.pump();
+
+    expect(find.text('Retry secure cancellation'), findsOneWidget);
   });
 
   testWidgets('protected profile PIN submits after four remote digits', (

@@ -6,9 +6,12 @@ import 'package:flutter/services.dart';
 import '../channels/channel.dart';
 import '../settings/lineup_settings.dart';
 import '../ui/app_theme.dart';
+import '../ui/app_ui.dart';
 import 'guide_controller.dart';
 
 class GuideLayoutPolicy {
+  static const _comfortableGuideHeight = 900.0;
+
   const GuideLayoutPolicy._({
     required this.compact,
     required this.padding,
@@ -27,14 +30,20 @@ class GuideLayoutPolicy {
     bool overlayMode = false,
     GuideDensity density = GuideDensity.comfortable,
   }) {
-    final compact = size.width < 1100 || size.height < 900;
-    final padding = size.width < 1100 || size.height < 720 ? 12.0 : 20.0;
+    final compact =
+        size.width < LineupLayout.expandedNavigation ||
+        size.height < _comfortableGuideHeight;
+    final padding =
+        size.width < LineupLayout.expandedNavigation || size.height < 720
+        ? 12.0
+        : 20.0;
     final minimumRows = size.height < 720
         ? 4
         : size.height < 1080
         ? 5
         : 7;
-    final rowHeight = size.height < 900 || density == GuideDensity.compact
+    final rowHeight =
+        size.height < _comfortableGuideHeight || density == GuideDensity.compact
         ? 58.0
         : 78.0;
     final rowBudget =
@@ -44,10 +53,10 @@ class GuideLayoutPolicy {
     final availableShowcaseHeight = rowBudget.clamp(0.0, double.infinity);
     final targetPictureHeight = size.height < 720
         ? _lerp(236.25, 281.25, (size.height - 600) / 120)
-        : size.height < 900
+        : size.height < _comfortableGuideHeight
         ? _lerp(281.25, 360, (size.height - 720) / 180)
         : size.height < 1080
-        ? _lerp(360, 378, (size.height - 900) / 180)
+        ? _lerp(360, 378, (size.height - _comfortableGuideHeight) / 180)
         : 378.0;
     final richShowcase = hasPicture || overlayMode;
     var showcaseHeight = richShowcase
@@ -68,7 +77,7 @@ class GuideLayoutPolicy {
       pictureWidth: pictureWidth,
       rowHeight: rowHeight,
       minimumRows: minimumRows,
-      showSecondaryMetadata: size.height >= 900,
+      showSecondaryMetadata: size.height >= _comfortableGuideHeight,
       artworkWidth: (showcaseHeight * 0.62).clamp(132.0, 224.0),
     );
   }
@@ -604,7 +613,9 @@ class _GuideShowcase extends StatelessWidget {
               child: Semantics(
                 button: onOpenPlayer != null,
                 label: 'Now playing picture in picture. Open full player.',
+                onTap: onOpenPlayer,
                 child: InkWell(
+                  excludeFromSemantics: true,
                   onTap: onOpenPlayer,
                   borderRadius: BorderRadius.circular(12),
                   child: ClipRRect(

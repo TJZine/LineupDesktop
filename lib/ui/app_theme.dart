@@ -189,10 +189,6 @@ class LineupThemeRoles extends ThemeExtension<LineupThemeRoles> {
 abstract final class LineupTheme {
   static const fast = Duration(milliseconds: 100);
 
-  static const radiusSmall = 8.0;
-  static const radius = 12.0;
-  static const radiusLarge = 16.0;
-
   static LineupThemeRoles of(BuildContext context) =>
       Theme.of(context).extension<LineupThemeRoles>() ??
       _palette(LineupThemeName.emberSteel);
