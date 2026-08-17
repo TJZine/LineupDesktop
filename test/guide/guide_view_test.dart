@@ -170,6 +170,7 @@ void main() {
   testWidgets('loading, error, retry, and program semantics stay visible', (
     tester,
   ) async {
+    final now = DateTime.utc(2026, 1, 1, 12, 45);
     final lineup = _Lineup(1);
     lineup.channels = [
       Channel(
@@ -194,7 +195,7 @@ void main() {
           ),
         ]),
         playbackMode: PlaybackMode.sequential,
-        anchor: DateTime.now().subtract(const Duration(minutes: 45)),
+        anchor: now.subtract(const Duration(minutes: 45)),
         shuffleSeed: 1,
       ),
     ];
@@ -202,6 +203,7 @@ void main() {
     var fail = true;
     final guide = GuideController(
       lineup: lineup,
+      clock: () => now,
       loadSchedule: (channel) async {
         if (fail) throw StateError('offline');
         return _schedule(channel);
