@@ -39,13 +39,13 @@ class StreamCapabilities {
   const StreamCapabilities.unrestricted({
     this.remux = true,
     this.transcode = true,
-    this.subtitleDeliveries = const {
-      SubtitleDelivery.embedded,
-      SubtitleDelivery.sidecar,
-      SubtitleDelivery.external,
-      SubtitleDelivery.unknown,
-    },
-  }) : _unrestricted = true,
+  }) : subtitleDeliveries = const {
+         SubtitleDelivery.embedded,
+         SubtitleDelivery.sidecar,
+         SubtitleDelivery.external,
+         SubtitleDelivery.unknown,
+       },
+       _unrestricted = true,
        containers = null,
        videoCodecs = null,
        audioCodecs = null,

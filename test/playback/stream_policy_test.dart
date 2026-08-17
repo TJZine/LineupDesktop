@@ -94,6 +94,27 @@ void main() {
     expect(decision.kind, StreamDecisionKind.directPlay);
   });
 
+  test('unrestricted backends accept every subtitle delivery', () {
+    for (final delivery in SubtitleDelivery.values) {
+      final decision = decideStream(
+        StreamFacts(
+          container: 'future-container',
+          videoCodec: 'future-video',
+          audioCodec: 'future-audio',
+          dynamicRange: DynamicRange.unknown,
+          subtitleDelivery: delivery,
+        ),
+        const StreamCapabilities.unrestricted(),
+      );
+
+      expect(
+        decision.kind,
+        StreamDecisionKind.directPlay,
+        reason: delivery.name,
+      );
+    }
+  });
+
   test('unrestricted backends try streams with incomplete metadata', () {
     final decision = decideStream(
       const StreamFacts(
