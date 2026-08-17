@@ -72,8 +72,10 @@ class PlayerEvent {
   final PlayerTelemetry telemetry;
   final List<PlayerTrack> tracks;
 
-  /// Optional public-seam generation used by deterministic test players.
-  /// Production native owners may reject stale events before emitting them.
+  /// Identifies the media load associated with this event.
+  ///
+  /// Production native players project the active generation onto emitted
+  /// events so `PlayerCoordinator` can ignore events from superseded loads.
   final int? generation;
 }
 
