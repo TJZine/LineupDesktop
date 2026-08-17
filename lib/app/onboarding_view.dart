@@ -68,13 +68,10 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
         nextBusy &&
         controller.stage == SetupStage.profiles &&
         controller.profileSelectionCanCancel;
-    if (_secureCancellationRequired != nextSecureCancellationRequired ||
-        _busy != nextBusy) {
-      setState(() {
-        _secureCancellationRequired = nextSecureCancellationRequired;
-        _busy = nextBusy;
-      });
-    }
+    setState(() {
+      _secureCancellationRequired = nextSecureCancellationRequired;
+      _busy = nextBusy;
+    });
     final target = retryNeedsFocus
         ? _linkActionFocus
         : cancelNeedsFocus

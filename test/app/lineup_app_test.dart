@@ -356,6 +356,66 @@ void main() {
     expect(find.text('Retry secure cancellation'), findsOneWidget);
   });
 
+  testWidgets('onboarding reflects state-only controller notifications', (
+    tester,
+  ) async {
+    const profile = PlexHomeUser(
+      id: 'child',
+      name: 'Child',
+      protected: false,
+    );
+    const server = PlexServer(
+      id: 'server',
+      name: 'Living Room',
+      connections: [],
+      owned: true,
+    );
+    final controller = _FakeController()
+      ..stage = SetupStage.profiles
+      ..profiles = const [profile];
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: UpstreamOnboardingView(
+          controller: controller,
+          onLogout: () async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Child'), findsOneWidget);
+
+    controller
+      ..servers = [server]
+      ..stage = SetupStage.servers;
+    controller.notifyListeners();
+    await tester.pumpAndSettle();
+    expect(find.text('Living Room'), findsOneWidget);
+
+    controller.error = 'Server discovery needs attention.';
+    controller.notifyListeners();
+    await tester.pump();
+    expect(find.text('Server discovery needs attention.'), findsOneWidget);
+
+    controller
+      ..stage = SetupStage.linking
+      ..activePin = PlexPin(
+        id: 1,
+        code: 'ABCD',
+        expiresAt: DateTime.now().add(const Duration(minutes: 2)),
+      );
+    controller.notifyListeners();
+    await tester.pumpAndSettle();
+    controller.activePin = PlexPin(
+      id: 2,
+      code: 'WXYZ',
+      expiresAt: DateTime.now().add(const Duration(minutes: 2)),
+    );
+    controller.notifyListeners();
+    await tester.pump();
+    expect(find.bySemanticsLabel('Plex link code W X Y Z'), findsOneWidget);
+  });
+
   testWidgets('protected profile PIN submits after four remote digits', (
     tester,
   ) async {
@@ -422,6 +482,10 @@ void main() {
         'The required Lineup DirectComposition Flutter engine is not active.',
       ),
       findsOneWidget,
+    );
+    expect(
+      find.text('native wording is not part of the application contract'),
+      findsNothing,
     );
   });
 }
