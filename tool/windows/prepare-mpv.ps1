@@ -68,27 +68,32 @@ if ((Get-FileHash -Algorithm SHA256 -LiteralPath $header).Hash -ne
 
 $licenseDirectory = Join-Path $root 'licenses'
 [IO.Directory]::CreateDirectory($licenseDirectory) | Out-Null
+$licenseSourceDirectory = Join-Path $repository 'third_party/libmpv/licenses'
 $licenses = @(
   @{
     Name = 'mpv-LICENSE.LGPL'
-    Uri = 'https://raw.githubusercontent.com/mpv-player/mpv/7b8915bc1d04c7e1b61184e00c7fbfaab1911e75/LICENSE.LGPL'
     Sha256 = '72B672113D642CBB8EF5DCC76938DB801983C56E50B1400AB930F1A64D6DC8D9'
   },
   @{
     Name = 'FFmpeg-COPYING.LGPLv3'
-    Uri = 'https://raw.githubusercontent.com/FFmpeg/FFmpeg/8b4fad11acfc958dfde29fb0799d3ca1818bbbf7/COPYING.LGPLv3'
     Sha256 = 'DA7EABB7BAFDF7D3AE5E9F223AA5BDC1EECE45AC569DC21B3B037520B4464768'
   },
   @{
     Name = 'libplacebo-LICENSE'
-    Uri = 'https://raw.githubusercontent.com/haasn/libplacebo/22ee762e8e0890fc54068beb670310f0edce7263/LICENSE'
     Sha256 = 'B3AA400ACA6D2BA1F0BD03BD98D03D1FE7489A3BBB26969D72016360AF8A5C9D'
   }
 )
 $licenseHashes = @{}
 foreach ($license in $licenses) {
+  $source = Join-Path $licenseSourceDirectory $license.Name
   $path = Join-Path $licenseDirectory $license.Name
-  Invoke-DownloadWithRetry -Uri $license.Uri -OutFile $path
+  if (-not (Test-Path -LiteralPath $source -PathType Leaf)) {
+    throw "Pinned license source is missing: $($license.Name)."
+  }
+  if ((Get-FileHash -Algorithm SHA256 -LiteralPath $source).Hash -ne $license.Sha256) {
+    throw "SHA-256 mismatch for pinned license source: $($license.Name)."
+  }
+  Copy-Item -LiteralPath $source -Destination $path
   if ((Get-FileHash -Algorithm SHA256 -LiteralPath $path).Hash -ne $license.Sha256) {
     throw "SHA-256 mismatch for $($license.Name)."
   }
