@@ -359,11 +359,7 @@ void main() {
   testWidgets('onboarding reflects state-only controller notifications', (
     tester,
   ) async {
-    const profile = PlexHomeUser(
-      id: 'child',
-      name: 'Child',
-      protected: false,
-    );
+    const profile = PlexHomeUser(id: 'child', name: 'Child', protected: false);
     const server = PlexServer(
       id: 'server',
       name: 'Living Room',
