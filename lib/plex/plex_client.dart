@@ -428,7 +428,7 @@ class PlexClient {
     }
     final session = _randomId();
     final uri = decision.kind == StreamDecisionKind.directPlay
-        ? server.resolve(item.partPath!)
+        ? _directPlayUri(server, item.partPath!)
         : server
               .resolve('/video/:/transcode/universal/start.m3u8')
               .replace(
@@ -468,10 +468,7 @@ class PlexClient {
     int maximumBytes = 4 * 1024 * 1024,
   }) async {
     final uri = server.resolveUri(path);
-    if (uri.scheme != server.scheme ||
-        uri.host != server.host ||
-        uri.port != server.port ||
-        uri.userInfo.isNotEmpty) {
+    if (!_isSameServerUri(server, uri)) {
       throw const PlexException(
         'artwork-unavailable',
         'Program artwork is unavailable.',
@@ -556,6 +553,21 @@ class PlexClient {
 
   void close() => _http.close();
 }
+
+Uri _directPlayUri(Uri server, String partPath) {
+  final uri = server.resolve(partPath);
+  if (_isSameServerUri(server, uri)) return uri;
+  throw const PlexException(
+    'unsupported',
+    'This item has no playable media part.',
+  );
+}
+
+bool _isSameServerUri(Uri server, Uri uri) =>
+    uri.scheme == server.scheme &&
+    uri.host == server.host &&
+    uri.port == server.port &&
+    uri.userInfo.isEmpty;
 
 String? _identityId(String body) {
   final json = _tryJson(body);

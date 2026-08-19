@@ -426,6 +426,37 @@ void main() {
     );
   });
 
+  test('direct play retains the selected Plex server origin', () {
+    final descriptor = _directPlaybackDescriptor('/library/parts/1/file.mkv');
+
+    expect(descriptor.decision.kind, StreamDecisionKind.directPlay);
+    expect(
+      descriptor.uri,
+      Uri.parse('https://plex.example:32400/library/parts/1/file.mkv'),
+    );
+  });
+
+  for (final mismatch in {
+    'host': 'https://attacker.example/file.mkv',
+    'network path': '//attacker.example/file.mkv',
+    'scheme': 'http://plex.example:32400/file.mkv',
+    'port': 'https://plex.example:32401/file.mkv',
+    'userinfo': 'https://user@plex.example:32400/file.mkv',
+  }.entries) {
+    test('direct play rejects ${mismatch.key} mismatch', () {
+      expect(
+        () => _directPlaybackDescriptor(mismatch.value),
+        throwsA(
+          isA<PlexException>().having(
+            (exception) => exception.code,
+            'code',
+            'unsupported',
+          ),
+        ),
+      );
+    });
+  }
+
   test('direct stream uses the Plex universal HLS contract', () {
     final client = PlexClient(
       clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
@@ -746,3 +777,22 @@ void main() {
     },
   );
 }
+
+PlexPlaybackDescriptor _directPlaybackDescriptor(String partPath) => PlexClient(
+  clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+).playbackDescriptor(
+  server: Uri.parse('https://plex.example:32400'),
+  item: PlexMediaItem(
+    id: '1',
+    key: '/library/metadata/1',
+    title: 'Movie',
+    type: 'movie',
+    duration: const Duration(minutes: 1),
+    partPath: partPath,
+    container: 'mkv',
+    videoCodec: 'h264',
+    audioCodec: 'aac',
+    dynamicRange: DynamicRange.sdr,
+  ),
+  capabilities: const StreamCapabilities.unrestricted(),
+);
