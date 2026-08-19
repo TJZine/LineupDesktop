@@ -613,6 +613,53 @@ void main() {
     guide.dispose();
     lineup.dispose();
   });
+
+  testWidgets('focus fully reveals a trailing partial row', (tester) async {
+    final lineup = _Lineup(100)
+      ..settings = const LineupSettings(reduceMotion: true);
+    addTearDown(lineup.dispose);
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    addTearDown(guide.dispose);
+    await tester.binding.setSurfaceSize(const Size(1280, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: GuideView(
+          controller: guide,
+          onClose: () {},
+          onTune: (_) async {},
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final list = tester.widget<ListView>(
+      find.byKey(const Key('guide-schedule-list')),
+    );
+    final scrollable = tester.state<ScrollableState>(
+      find.descendant(
+        of: find.byKey(const Key('guide-schedule-list')),
+        matching: find.byType(Scrollable),
+      ),
+    );
+    final rowHeight = list.itemExtent!;
+    scrollable.position.jumpTo(rowHeight * 3 + 5);
+    await tester.pump();
+
+    guide.moveVertical(8);
+    await tester.pump();
+    await tester.pump();
+
+    expect(guide.focusedChannelIndex, 8);
+    expect(scrollable.position.pixels, greaterThanOrEqualTo(rowHeight * 8));
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    guide.dispose();
+    lineup.dispose();
+  });
 }
 
 ScheduleIndex _schedule(Channel channel) => buildSchedule(

@@ -101,6 +101,10 @@ save preserves the previous lineup.
 | Diagnostics | Review bounded, credential-safe support events from the current session |
 | Player | Watch the tuned channel and use playback, track, channel, sleep, and fullscreen controls |
 
+**Windows playback acceptance:** Player, Classic PiP, and Overlay describe the
+intended private-test behavior. Native video composition and live Plex playback
+have not yet passed the current branch's physical Windows acceptance.
+
 Guide and Player use an immersive layout. Open the **Lineup** menu from either
 surface to reach the other destinations. Management screens use the persistent
 navigation rail.

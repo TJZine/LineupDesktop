@@ -44,6 +44,9 @@ abstract final class GuideGeometry {
     if (totalRows <= 0 || rowHeight <= 0 || viewportHeight <= 0) {
       return (first: 0, count: 0);
     }
+    // This is the focus-safe viewport capacity, not every intersecting row.
+    // A trailing partial row is deliberately excluded so focusing it reveals
+    // the entire row instead of leaving it clipped at the viewport boundary.
     final first = (scrollOffset / rowHeight).floor().clamp(0, totalRows - 1);
     final count = (viewportHeight / rowHeight).ceil().clamp(
       1,

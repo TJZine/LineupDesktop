@@ -190,6 +190,15 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
             onPressed: widget.controller.cancelChannelSetup,
             child: const Text('Cancel'),
           ),
+        if (widget.controller.libraries.isEmpty &&
+            !widget.controller.channelSetupCanCancel)
+          OutlinedButton.icon(
+            onPressed: widget.controller.busy
+                ? null
+                : widget.controller.showServers,
+            icon: const Icon(Icons.dns_outlined),
+            label: const Text('Choose another server'),
+          ),
         OutlinedButton(
           onPressed: () => setState(
             () => _selectedLibraries.addAll(

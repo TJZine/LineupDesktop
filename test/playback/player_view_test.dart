@@ -22,15 +22,25 @@ void main() {
     tester,
   ) async {
     final fixture = _Fixture(PlayerState.unsupported);
+    final focus = FocusNode();
+    addTearDown(focus.dispose);
     await tester.pumpWidget(
       MaterialApp(
-        home: PlayerView(controller: fixture.player, openGuide: () {}),
+        home: PlayerView(
+          controller: fixture.player,
+          focusNode: focus,
+          openGuide: () {},
+        ),
       ),
     );
+    await tester.pump();
+    focus.requestFocus();
+    await tester.pump();
 
     expect(find.byType(NativeVideoSurface), findsNothing);
     expect(find.text('Playback unavailable'), findsOneWidget);
     expect(find.text('Playback is unavailable on macOS.'), findsOneWidget);
+    expect(focus.hasFocus, isTrue);
 
     await tester.sendKeyEvent(LogicalKeyboardKey.space);
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
@@ -65,6 +75,36 @@ void main() {
 
     await tester.pumpWidget(const SizedBox.shrink());
     fixture.dispose();
+  });
+
+  testWidgets('preparing takes precedence over buffering while tuning', (
+    tester,
+  ) async {
+    final fixture = _Fixture(PlayerState.buffering, blockLoad: true);
+    var disposed = false;
+    void disposeFixture() {
+      if (disposed) return;
+      disposed = true;
+      fixture.native.completeLoad();
+      fixture.dispose();
+    }
+
+    addTearDown(disposeFixture);
+    await Future<void>.delayed(Duration.zero);
+    final tuning = fixture.player.tune('channel');
+    await fixture.native.loadStarted.future;
+
+    await tester.pumpWidget(
+      MaterialApp(home: PlayerSurface(controller: fixture.player)),
+    );
+
+    expect(find.text('Preparing playback'), findsOneWidget);
+    expect(find.text('Buffering playback'), findsNothing);
+
+    fixture.native.completeLoad();
+    await tuning;
+    await tester.pumpWidget(const SizedBox.shrink());
+    disposeFixture();
   });
 
   testWidgets('keyboard routes OSD, mini Guide, and full Guide consistently', (
@@ -162,25 +202,23 @@ void main() {
       ),
     );
 
-    final switcher = tester.widget<AnimatedSwitcher>(
-      find.byType(AnimatedSwitcher),
-    );
-    const animation = AlwaysStoppedAnimation<double>(1);
-    final miniGuide = switcher.transitionBuilder(
-      const KeyedSubtree(
-        key: ValueKey(PlayerOverlay.miniGuide),
-        child: SizedBox(),
-      ),
-      animation,
-    );
-    final osd = switcher.transitionBuilder(
-      const KeyedSubtree(key: ValueKey(PlayerOverlay.osd), child: SizedBox()),
-      animation,
-    );
+    fixture.player.showMiniGuide();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 175));
+    expect(find.byType(FadeTransition), findsWidgets);
+    expect(find.byType(SlideTransition), findsNothing);
 
-    expect(miniGuide, isA<FadeTransition>());
-    expect(osd, isA<SlideTransition>());
-    expect((osd as SlideTransition).child, isA<FadeTransition>());
+    fixture.player.closeOverlay();
+    await tester.pumpAndSettle();
+    fixture.player.showOsd();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 175));
+    final slide = find.byType(SlideTransition);
+    expect(slide, findsOneWidget);
+    expect(
+      find.descendant(of: slide, matching: find.byType(FadeTransition)),
+      findsOneWidget,
+    );
     await tester.pumpWidget(const SizedBox.shrink());
     fixture.dispose();
   });
@@ -328,6 +366,7 @@ class _Fixture {
   _Fixture(
     PlayerState state, {
     bool failLoad = false,
+    bool blockLoad = false,
     List<PlayerTrack> tracks = const [],
     int channelCount = 1,
   }) {
@@ -340,7 +379,12 @@ class _Fixture {
         seed: channel.shuffleSeed,
       ),
     )..requestViewport(0, 1);
-    native = _Native(state, failLoad: failLoad, tracks: tracks);
+    native = _Native(
+      state,
+      failLoad: failLoad,
+      blockLoad: blockLoad,
+      tracks: tracks,
+    );
     player = PlayerCoordinator(player: native, lineup: lineup, guide: guide);
   }
 
@@ -387,10 +431,19 @@ class _Lineup extends LineupController {
     currentChannelId = 'channel';
     stage = SetupStage.ready;
   }
+
+  @override
+  LineupPlaybackRequest playbackFor(String itemId) =>
+      LineupPlaybackRequest(Uri.parse('lineup-test://$itemId'), () async {});
 }
 
 class _Native implements NativePlayer {
-  _Native(PlayerState state, {this.failLoad = false, this.tracks = const []})
+  _Native(
+    PlayerState state, {
+    this.failLoad = false,
+    this.blockLoad = false,
+    this.tracks = const [],
+  })
     : status = PlayerStatus(
         state: state,
         message: state == PlayerState.unsupported
@@ -399,6 +452,9 @@ class _Native implements NativePlayer {
       );
 
   final bool failLoad;
+  final bool blockLoad;
+  final loadStarted = Completer<void>();
+  final _loadCompletion = Completer<void>();
   int transportCommands = 0;
 
   @override
@@ -418,6 +474,14 @@ class _Native implements NativePlayer {
   @override
   Future<void> load(Uri media, {String? plexToken, int? generation}) async {
     if (failLoad) throw StateError('synthetic load failure');
+    if (blockLoad) {
+      loadStarted.complete();
+      await _loadCompletion.future;
+    }
+  }
+
+  void completeLoad() {
+    if (!_loadCompletion.isCompleted) _loadCompletion.complete();
   }
 
   @override

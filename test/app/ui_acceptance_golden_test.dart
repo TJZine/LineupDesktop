@@ -164,6 +164,11 @@ Future<void> _loadPinnedTestFont() async {
   }
   final fontDirectory =
       '${flutterRoot.path}/bin/cache/artifacts/material_fonts';
+  if (!Directory(fontDirectory).existsSync()) {
+    throw StateError(
+      'Pinned Flutter material-fonts directory is missing: $fontDirectory',
+    );
+  }
   final requiredFonts = [
     'Roboto-Regular.ttf',
     'Roboto-Medium.ttf',

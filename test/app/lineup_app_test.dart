@@ -17,6 +17,31 @@ import 'package:lineup_desktop/plex/plex_models.dart';
 import '../support/ui_fixture.dart';
 
 void main() {
+  testWidgets('empty first-run Channel Setup can return to server selection', (
+    tester,
+  ) async {
+    final controller = _FakeController()..stage = SetupStage.channelSetup;
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      LineupBootstrap(player: _FakePlayer(), controller: controller),
+    );
+    await tester.pumpAndSettle();
+
+    final chooseServer = find.widgetWithText(
+      OutlinedButton,
+      'Choose another server',
+    );
+    expect(chooseServer, findsOneWidget);
+    expect(
+      tester.getSemantics(chooseServer),
+      matchesSemantics(isButton: true, hasEnabledState: true, isEnabled: true),
+    );
+
+    await tester.tap(chooseServer);
+    expect(controller.stage, SetupStage.servers);
+  });
+
   testWidgets('startup announcement is a labeled live region', (tester) async {
     final controller = _LoadingController();
 
@@ -454,9 +479,16 @@ void main() {
       ),
     );
     expect(failureSemantics.properties.liveRegion, isTrue);
+    expect(
+      find.ancestor(
+        of: find.text('Lineup Desktop could not start'),
+        matching: find.byType(ExcludeSemantics),
+      ),
+      findsOneWidget,
+    );
     expect(find.textContaining('Restart the app'), findsOneWidget);
     expect(
-      find.textContaining('libmpv could not create a client.'),
+      find.textContaining(_nativeInitializeFailureMessage),
       findsNothing,
     );
     expect(find.text('Guide'), findsNothing);
@@ -480,7 +512,7 @@ void main() {
       findsOneWidget,
     );
     expect(
-      find.text('native wording is not part of the application contract'),
+      find.text(_requiredEngineNativeFailureMessage),
       findsNothing,
     );
   });
@@ -644,12 +676,16 @@ class _FakePlayer implements NativePlayer {
   }
 }
 
+const _nativeInitializeFailureMessage = 'libmpv could not create a client.';
+const _requiredEngineNativeFailureMessage =
+    'native wording is not part of the application contract';
+
 class _FailingPlayer extends _FakePlayer {
   @override
   Future<void> initialize() async {
     throw PlatformException(
       code: 'initialize_failed',
-      message: 'libmpv could not create a client.',
+      message: _nativeInitializeFailureMessage,
     );
   }
 }
@@ -659,7 +695,7 @@ class _RequiredEngineFailingPlayer extends _FakePlayer {
   Future<void> initialize() async {
     throw PlatformException(
       code: 'required_engine_unavailable',
-      message: 'native wording is not part of the application contract',
+      message: _requiredEngineNativeFailureMessage,
     );
   }
 }

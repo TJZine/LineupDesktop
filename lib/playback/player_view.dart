@@ -265,6 +265,7 @@ class PlayerSurface extends StatelessWidget {
   Widget build(BuildContext context) {
     final state = controller.status.state;
     final unsupported = state == PlayerState.unsupported;
+    final preparing = state == PlayerState.loading || controller.tuning;
     final roles = LineupTheme.of(context);
     return Stack(
       fit: StackFit.expand,
@@ -274,9 +275,9 @@ class PlayerSurface extends StatelessWidget {
         else
           NativeVideoSurface(player: controller.player),
         if (unsupported) _Unsupported(message: controller.status.message),
-        if (state == PlayerState.loading || controller.tuning)
+        if (preparing)
           const _Loading(label: 'Preparing playback'),
-        if (state == PlayerState.buffering)
+        if (!preparing && state == PlayerState.buffering)
           const _Loading(label: 'Buffering playback'),
         if (showErrors && controller.error != null)
           _SurfaceError(controller: controller),

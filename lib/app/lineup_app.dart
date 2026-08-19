@@ -196,9 +196,11 @@ class _StartupFailureBody extends StatelessWidget {
                 children: [
                   const Icon(Icons.error_outline, size: 48),
                   const SizedBox(height: 20),
-                  Text(
-                    failureLabel,
-                    style: Theme.of(context).textTheme.headlineSmall,
+                  ExcludeSemantics(
+                    child: Text(
+                      failureLabel,
+                      style: Theme.of(context).textTheme.headlineSmall,
+                    ),
                   ),
                   const SizedBox(height: 12),
                   Text(
