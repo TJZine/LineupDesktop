@@ -79,6 +79,10 @@ $licenses = @(
     Sha256 = 'DA7EABB7BAFDF7D3AE5E9F223AA5BDC1EECE45AC569DC21B3B037520B4464768'
   },
   @{
+    Name = 'FFmpeg-COPYING.GPLv3'
+    Sha256 = '8CEB4B9EE5ADEDDE47B31E975C1D90C73AD27B6B165A1DCD80C7C545EB65B903'
+  },
+  @{
     Name = 'libplacebo-LICENSE'
     Sha256 = 'B3AA400ACA6D2BA1F0BD03BD98D03D1FE7489A3BBB26969D72016360AF8A5C9D'
   }
@@ -145,6 +149,7 @@ $provenance = Join-Path $root 'lineup-mpv-provenance.cmake'
   "set(LINEUP_MPV_IMPORT_LIBRARY_SHA256 `"$((Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $root 'libmpv.lib')).Hash)`")",
   "set(LINEUP_MPV_MPV_LICENSE_SHA256 `"$($licenseHashes['mpv-LICENSE.LGPL'])`")",
   "set(LINEUP_MPV_FFMPEG_LICENSE_SHA256 `"$($licenseHashes['FFmpeg-COPYING.LGPLv3'])`")",
+  "set(LINEUP_MPV_FFMPEG_GPL_LICENSE_SHA256 `"$($licenseHashes['FFmpeg-COPYING.GPLv3'])`")",
   "set(LINEUP_MPV_LIBPLACEBO_LICENSE_SHA256 `"$($licenseHashes['libplacebo-LICENSE'])`")"
 ) | Set-Content -LiteralPath $provenance -Encoding ascii
 Write-Host "Prepared verified LGPL libmpv production files at $root"

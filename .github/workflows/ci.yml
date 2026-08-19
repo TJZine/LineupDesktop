@@ -224,18 +224,25 @@ jobs:
           } finally {
             Remove-Item -LiteralPath $dirtyProbe
           }
-          $license = Join-Path $mpvRoot 'licenses\mpv-LICENSE.LGPL'
-          $licenseBytes = [IO.File]::ReadAllBytes($license)
-          try {
-            Add-Content -LiteralPath $license -Value 'tampered'
+          foreach ($licenseName in @(
+            'mpv-LICENSE.LGPL',
+            'FFmpeg-COPYING.LGPLv3',
+            'FFmpeg-COPYING.GPLv3',
+            'libplacebo-LICENSE'
+          )) {
+            $license = Join-Path $mpvRoot "licenses\$licenseName"
+            $licenseBytes = [IO.File]::ReadAllBytes($license)
             try {
-              & .\tool\windows\package.ps1 -Destination 'build/package/provenance-tamper-check'
-              throw 'Packaging accepted a modified runtime license.'
-            } catch {
-              if ($_.Exception.Data['LineupPackageFailure'] -ne 'runtime-license-mismatch') { throw }
+              Add-Content -LiteralPath $license -Value 'tampered'
+              try {
+                & .\tool\windows\package.ps1 -Destination 'build/package/provenance-tamper-check'
+                throw "Packaging accepted a modified runtime license: $licenseName."
+              } catch {
+                if ($_.Exception.Data['LineupPackageFailure'] -ne 'runtime-license-mismatch') { throw }
+              }
+            } finally {
+              [IO.File]::WriteAllBytes($license, $licenseBytes)
             }
-          } finally {
-            [IO.File]::WriteAllBytes($license, $licenseBytes)
           }
           & .\tool\windows\package.ps1
       - name: Upload portable Windows package
