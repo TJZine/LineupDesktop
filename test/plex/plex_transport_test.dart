@@ -778,21 +778,21 @@ void main() {
   );
 }
 
-PlexPlaybackDescriptor _directPlaybackDescriptor(String partPath) => PlexClient(
-  clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
-).playbackDescriptor(
-  server: Uri.parse('https://plex.example:32400'),
-  item: PlexMediaItem(
-    id: '1',
-    key: '/library/metadata/1',
-    title: 'Movie',
-    type: 'movie',
-    duration: const Duration(minutes: 1),
-    partPath: partPath,
-    container: 'mkv',
-    videoCodec: 'h264',
-    audioCodec: 'aac',
-    dynamicRange: DynamicRange.sdr,
-  ),
-  capabilities: const StreamCapabilities.unrestricted(),
-);
+PlexPlaybackDescriptor _directPlaybackDescriptor(String partPath) =>
+    PlexClient(clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst')
+        .playbackDescriptor(
+          server: Uri.parse('https://plex.example:32400'),
+          item: PlexMediaItem(
+            id: '1',
+            key: '/library/metadata/1',
+            title: 'Movie',
+            type: 'movie',
+            duration: const Duration(minutes: 1),
+            partPath: partPath,
+            container: 'mkv',
+            videoCodec: 'h264',
+            audioCodec: 'aac',
+            dynamicRange: DynamicRange.sdr,
+          ),
+          capabilities: const StreamCapabilities.unrestricted(),
+        );

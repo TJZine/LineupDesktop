@@ -625,40 +625,37 @@ void main() {
     await selection;
   });
 
-  test(
-    'discovery clears an unavailable runtime server without crossing profile scope',
-    () async {
-      final selected = _server('server-a');
-      final plex = _FakePlex()
-        ..homeUsersResult = const [
-          PlexHomeUser(id: 'owner', name: 'Owner', protected: false),
-        ]
-        ..serversResult = [selected]
-        ..connectionResult = selected.connections.single;
-      final controller = LineupController(
-        store: _MemoryStore(
-          const PersistedState(
-            settings: LineupSettings(audioSetupComplete: true),
-            profileId: 'owner',
-            selectedServerByProfile: {'owner': 'server-a'},
-          ),
+  test('discovery clears an unavailable runtime server without crossing profile scope', () async {
+    final selected = _server('server-a');
+    final plex = _FakePlex()
+      ..homeUsersResult = const [
+        PlexHomeUser(id: 'owner', name: 'Owner', protected: false),
+      ]
+      ..serversResult = [selected]
+      ..connectionResult = selected.connections.single;
+    final controller = LineupController(
+      store: _MemoryStore(
+        const PersistedState(
+          settings: LineupSettings(audioSetupComplete: true),
+          profileId: 'owner',
+          selectedServerByProfile: {'owner': 'server-a'},
         ),
-        credentials: _MemoryCredentials(accountToken: 'owner-token'),
-        plex: plex,
-      );
-      addTearDown(controller.dispose);
-      await controller.initialize();
-      controller.stage = SetupStage.ready;
+      ),
+      credentials: _MemoryCredentials(accountToken: 'owner-token'),
+      plex: plex,
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+    controller.stage = SetupStage.ready;
 
-      plex.serversResult = const [];
-      await controller.refreshServers();
+    plex.serversResult = const [];
+    await controller.refreshServers();
 
-      expect(controller.stage, SetupStage.servers);
-      expect(controller.server, isNull);
-      expect(controller.connection, isNull);
-      expect(controller.channels, isEmpty);
-    },
-  );
+    expect(controller.stage, SetupStage.servers);
+    expect(controller.server, isNull);
+    expect(controller.connection, isNull);
+    expect(controller.channels, isEmpty);
+  });
 
   test('a stale settings failure cannot roll back a newer value', () async {
     final store = _ConcurrentStore();

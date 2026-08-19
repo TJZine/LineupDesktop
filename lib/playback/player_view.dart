@@ -275,8 +275,7 @@ class PlayerSurface extends StatelessWidget {
         else
           NativeVideoSurface(player: controller.player),
         if (unsupported) _Unsupported(message: controller.status.message),
-        if (preparing)
-          const _Loading(label: 'Preparing playback'),
+        if (preparing) const _Loading(label: 'Preparing playback'),
         if (!preparing && state == PlayerState.buffering)
           const _Loading(label: 'Buffering playback'),
         if (showErrors && controller.error != null)

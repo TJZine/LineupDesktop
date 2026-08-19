@@ -487,10 +487,7 @@ void main() {
       findsOneWidget,
     );
     expect(find.textContaining('Restart the app'), findsOneWidget);
-    expect(
-      find.textContaining(_nativeInitializeFailureMessage),
-      findsNothing,
-    );
+    expect(find.textContaining(_nativeInitializeFailureMessage), findsNothing);
     expect(find.text('Guide'), findsNothing);
   });
 
@@ -511,10 +508,7 @@ void main() {
       ),
       findsOneWidget,
     );
-    expect(
-      find.text(_requiredEngineNativeFailureMessage),
-      findsNothing,
-    );
+    expect(find.text(_requiredEngineNativeFailureMessage), findsNothing);
   });
 }
 

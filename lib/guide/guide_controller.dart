@@ -48,7 +48,7 @@ abstract final class GuideGeometry {
     // A trailing partial row is deliberately excluded so focusing it reveals
     // the entire row instead of leaving it clipped at the viewport boundary.
     final first = (scrollOffset / rowHeight).floor().clamp(0, totalRows - 1);
-    final count = (viewportHeight / rowHeight).ceil().clamp(
+    final count = (viewportHeight / rowHeight).floor().clamp(
       1,
       totalRows - first,
     );

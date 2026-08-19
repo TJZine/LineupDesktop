@@ -90,8 +90,8 @@ void main() {
     }
 
     addTearDown(disposeFixture);
-    await Future<void>.delayed(Duration.zero);
     final tuning = fixture.player.tune('channel');
+    await tester.pump();
     await fixture.native.loadStarted.future;
 
     await tester.pumpWidget(
@@ -205,18 +205,25 @@ void main() {
     fixture.player.showMiniGuide();
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 175));
-    expect(find.byType(FadeTransition), findsWidgets);
-    expect(find.byType(SlideTransition), findsNothing);
+    final transitions = find.byType(AnimatedSwitcher);
+    expect(
+      find.descendant(of: transitions, matching: find.byType(FadeTransition)),
+      findsWidgets,
+    );
+    final slides = find.descendant(
+      of: transitions,
+      matching: find.byType(SlideTransition),
+    );
+    expect(slides, findsNothing);
 
     fixture.player.closeOverlay();
     await tester.pumpAndSettle();
     fixture.player.showOsd();
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 175));
-    final slide = find.byType(SlideTransition);
-    expect(slide, findsOneWidget);
+    expect(slides, findsOneWidget);
     expect(
-      find.descendant(of: slide, matching: find.byType(FadeTransition)),
+      find.descendant(of: slides, matching: find.byType(FadeTransition)),
       findsOneWidget,
     );
     await tester.pumpWidget(const SizedBox.shrink());
@@ -443,13 +450,12 @@ class _Native implements NativePlayer {
     this.failLoad = false,
     this.blockLoad = false,
     this.tracks = const [],
-  })
-    : status = PlayerStatus(
-        state: state,
-        message: state == PlayerState.unsupported
-            ? 'Playback is unavailable on macOS.'
-            : 'Playing',
-      );
+  }) : status = PlayerStatus(
+         state: state,
+         message: state == PlayerState.unsupported
+             ? 'Playback is unavailable on macOS.'
+             : 'Playing',
+       );
 
   final bool failLoad;
   final bool blockLoad;

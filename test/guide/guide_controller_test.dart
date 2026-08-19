@@ -613,7 +613,7 @@ void main() {
 
     final rows = GuideGeometry.visibleRows(
       scrollOffset: 245,
-      viewportHeight: 400,
+      viewportHeight: 401,
       rowHeight: 80,
       totalRows: 1000,
     );
