@@ -649,12 +649,18 @@ void main() {
     scrollable.position.jumpTo(rowHeight * 3 + 5);
     await tester.pump();
 
-    guide.moveVertical(8);
+    final trailingPartialRow =
+        (scrollable.position.pixels / rowHeight).floor() +
+        (scrollable.position.viewportDimension / rowHeight).floor();
+    guide.moveVertical(trailingPartialRow);
     await tester.pump();
     await tester.pump();
 
-    expect(guide.focusedChannelIndex, 8);
-    expect(scrollable.position.pixels, greaterThanOrEqualTo(rowHeight * 8));
+    expect(guide.focusedChannelIndex, trailingPartialRow);
+    expect(
+      scrollable.position.pixels,
+      greaterThanOrEqualTo(rowHeight * trailingPartialRow),
+    );
 
     await tester.pumpWidget(const SizedBox.shrink());
     guide.dispose();

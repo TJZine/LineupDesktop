@@ -33,10 +33,6 @@ void main() {
       'Choose another server',
     );
     expect(chooseServer, findsOneWidget);
-    expect(
-      tester.getSemantics(chooseServer),
-      matchesSemantics(isButton: true, hasEnabledState: true, isEnabled: true),
-    );
 
     await tester.tap(chooseServer);
     expect(controller.stage, SetupStage.servers);

@@ -98,8 +98,8 @@ void main() {
       MaterialApp(home: PlayerSurface(controller: fixture.player)),
     );
 
-    expect(find.text('Preparing playback'), findsOneWidget);
-    expect(find.text('Buffering playback'), findsNothing);
+    expect(find.bySemanticsLabel('Preparing playback'), findsOneWidget);
+    expect(find.bySemanticsLabel('Buffering playback'), findsNothing);
 
     fixture.native.completeLoad();
     await tuning;
