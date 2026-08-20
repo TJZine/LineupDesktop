@@ -58,8 +58,9 @@ Safety rules:
 
 ## 1. Define local paths
 
-Start in PowerShell with the exact Flutter and pinned `depot_tools` environment
-from [Development](DEVELOPMENT.md). Edit only these values:
+Start in PowerShell 7.4 or newer (`pwsh`) with the exact Flutter and pinned
+`depot_tools` environment from [Development](DEVELOPMENT.md). Edit only these
+values:
 
 ```powershell
 $Repo = 'C:\src\LineupDesktop'
@@ -69,8 +70,8 @@ $SdrSample = 'C:\test-media\sdr-sample.mp4'
 ```
 
 The machine needs Visual Studio Build Tools 2022 with Desktop C++, ATL, Windows
-SDK `10.0.22621.0`, Debugging Tools for Windows, 7-Zip, Git, PowerShell, Python,
-`depot_tools`, and the exact Flutter checkout documented in
+SDK `10.0.22621.0`, Debugging Tools for Windows, 7-Zip, Git, PowerShell 7.4 or
+newer, Python, `depot_tools`, and the exact Flutter checkout documented in
 [Development](DEVELOPMENT.md).
 
 ## 2. Establish a clean, exact baseline

@@ -83,10 +83,10 @@ flutter build windows # run on Windows
 
 ## Windows native player
 
-The Windows player requires Visual Studio Build Tools 2022 with Desktop C++,
-ATL, Windows SDK `10.0.22621.0`, Debugging Tools for Windows, and 7-Zip with
-`7z.exe` on PATH. The pinned Flutter SDK is also the source checkout for the
-owned engine patch:
+The Windows player requires PowerShell 7.4 or newer (`pwsh`), Visual Studio
+Build Tools 2022 with Desktop C++, ATL, Windows SDK `10.0.22621.0`, Debugging
+Tools for Windows, and 7-Zip with `7z.exe` on PATH. The pinned Flutter SDK is
+also the source checkout for the owned engine patch:
 
 ```powershell
 $metadata = Import-PowerShellDataFile C:\path\to\LineupDesktop\tool\windows\build-metadata.psd1

@@ -1,3 +1,5 @@
+#Requires -Version 7.4
+
 [CmdletBinding()]
 param(
   [Parameter(Mandatory)] [string] $Destination
@@ -10,7 +12,12 @@ function Invoke-DownloadWithRetry {
 
   for ($attempt = 1; $attempt -le 3; $attempt++) {
     try {
-      Invoke-WebRequest -Uri $Uri -OutFile $OutFile -ErrorAction Stop
+      Invoke-WebRequest `
+        -Uri $Uri `
+        -OutFile $OutFile `
+        -ConnectionTimeoutSeconds 30 `
+        -OperationTimeoutSeconds 30 `
+        -ErrorAction Stop
       return
     } catch {
       if ($attempt -eq 3) { throw }
