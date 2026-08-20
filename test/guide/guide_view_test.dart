@@ -657,10 +657,12 @@ void main() {
     await tester.pump();
 
     expect(guide.focusedChannelIndex, trailingPartialRow);
-    expect(
-      scrollable.position.pixels,
-      greaterThanOrEqualTo(rowHeight * trailingPartialRow),
-    );
+    final viewportTop = scrollable.position.pixels;
+    final viewportBottom = viewportTop + scrollable.position.viewportDimension;
+    final rowTop = rowHeight * trailingPartialRow;
+    final rowBottom = rowTop + rowHeight;
+    expect(rowTop, greaterThanOrEqualTo(viewportTop));
+    expect(rowBottom, lessThanOrEqualTo(viewportBottom));
 
     await tester.pumpWidget(const SizedBox.shrink());
     guide.dispose();

@@ -481,7 +481,7 @@ class _Native implements NativePlayer {
   Future<void> load(Uri media, {String? plexToken, int? generation}) async {
     if (failLoad) throw StateError('synthetic load failure');
     if (blockLoad) {
-      loadStarted.complete();
+      if (!loadStarted.isCompleted) loadStarted.complete();
       await _loadCompletion.future;
     }
   }

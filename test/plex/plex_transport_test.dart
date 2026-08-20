@@ -611,7 +611,7 @@ void main() {
         ),
         plexError('artwork-unavailable'),
       );
-      await Future<void>.delayed(Duration.zero);
+      await canceled.future.timeout(const Duration(seconds: 1));
 
       expect(request.followRedirects, isFalse);
       expect(canceled.isCompleted, isTrue);
@@ -634,7 +634,7 @@ void main() {
         ),
         plexError('artwork-too-large'),
       );
-      await Future<void>.delayed(Duration.zero);
+      await canceled.future.timeout(const Duration(seconds: 1));
 
       expect(canceled.isCompleted, isTrue);
     });

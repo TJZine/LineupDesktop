@@ -24,10 +24,7 @@ void main() {
       emberSteel.colorScheme.primary,
     );
 
-    await tester.tap(find.byKey(const Key('guide-app-menu')));
-    await tester.pump(const Duration(milliseconds: 250));
-    await tester.tap(find.text('Settings').last);
-    await tester.pumpAndSettle();
+    await openDestination(tester, 'Settings');
     await tester.tap(find.byType(DropdownButton<LineupThemeName>));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Slate & Pine').last);
@@ -75,10 +72,7 @@ void main() {
     expect(find.byKey(const Key('classic-guide')), findsOneWidget);
     expect(find.byType(NavigationRail), findsNothing);
 
-    await tester.tap(find.byKey(const Key('guide-app-menu')));
-    await tester.pump(const Duration(milliseconds: 250));
-    await tester.tap(find.text('Player').last);
-    await tester.pumpAndSettle();
+    await openDestination(tester, 'Player');
     expect(find.byType(NavigationRail), findsNothing);
     expect(find.byKey(const Key('player-app-menu')), findsNothing);
 

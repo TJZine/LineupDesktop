@@ -79,7 +79,7 @@ class HarnessController extends LineupController {
         ),
     ]),
     playbackMode: PlaybackMode.sequential,
-    anchor: DateTime(2026, 8, 13),
+    anchor: DateTime.utc(2026, 8, 13),
     shuffleSeed: index,
   );
 }
