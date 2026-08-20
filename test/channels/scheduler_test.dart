@@ -34,6 +34,61 @@ void main() {
     expect(before.elapsed, const Duration(minutes: 19));
   });
 
+  test('program lookup preserves sub-millisecond durations', () {
+    final schedule = buildSchedule(
+      const [
+        ChannelItem(
+          id: 'tiny-a',
+          title: 'Tiny A',
+          duration: Duration(microseconds: 1),
+        ),
+        ChannelItem(
+          id: 'tiny-b',
+          title: 'Tiny B',
+          duration: Duration(microseconds: 2),
+        ),
+      ],
+      mode: PlaybackMode.sequential,
+      seed: 1,
+    );
+
+    final program = programAt(
+      anchor.add(const Duration(microseconds: 2)),
+      anchor,
+      schedule,
+    );
+
+    expect(program.item.id, 'tiny-b');
+    expect(program.elapsed, const Duration(microseconds: 1));
+  });
+
+  test('program lookup keeps large loop boundaries exact', () {
+    final schedule = buildSchedule(
+      const [
+        ChannelItem(
+          id: 'large-a',
+          title: 'Large A',
+          duration: Duration(microseconds: 1),
+        ),
+        ChannelItem(
+          id: 'large-b',
+          title: 'Large B',
+          duration: Duration(microseconds: 1),
+        ),
+      ],
+      mode: PlaybackMode.sequential,
+      seed: 1,
+    );
+    final time = anchor.add(const Duration(microseconds: 9007199254740995));
+
+    final program = programAt(time, anchor, schedule);
+
+    expect(program.item.id, 'large-b');
+    expect(program.loop, 4503599627370497);
+    expect(program.start, time);
+    expect(program.elapsed, Duration.zero);
+  });
+
   test('seeded shuffle is stable and preserves every item', () {
     final first = seededShuffle(items, 90210);
     final second = seededShuffle(items, 90210);

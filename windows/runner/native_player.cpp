@@ -1,6 +1,7 @@
 #include "native_player.h"
 
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <cmath>
 #include <cstring>
@@ -8,6 +9,7 @@
 #include <iostream>
 #include <limits>
 #include <optional>
+#include <string_view>
 #include <utility>
 
 #include <flutter/standard_method_codec.h>
@@ -20,6 +22,7 @@ constexpr wchar_t kCompositionMarker[] =
 constexpr size_t kMaxQueuedEvents = 256;
 constexpr size_t kMaxQueuedCommands = 64;
 constexpr size_t kMaxQueuedCommandBytes = 128 * 1024;
+constexpr size_t kMaxPlexTokenBytes = 8 * 1024;
 constexpr size_t kMaxCorrelatedPlaylistEntries = 1024;
 constexpr size_t kMaxMetadataBytes = 64 * 1024;
 constexpr size_t kMaxMetadataStringBytes = 4096;
@@ -72,6 +75,75 @@ std::optional<int64_t> AsInt(const flutter::EncodableValue* value) {
   }
   return std::nullopt;
 }
+
+bool IsHttpUri(std::string_view uri) {
+  const size_t separator = uri.find(':');
+  if (separator == std::string_view::npos || separator == 0) {
+    return false;
+  }
+  std::string scheme(uri.substr(0, separator));
+  std::transform(scheme.begin(), scheme.end(), scheme.begin(), [](char byte) {
+    return static_cast<char>(std::tolower(static_cast<unsigned char>(byte)));
+  });
+  return scheme == "http" || scheme == "https";
+}
+
+bool IsValidPlexToken(std::string_view value) {
+  if (value.empty() || value.size() > kMaxPlexTokenBytes) {
+    return false;
+  }
+  for (const unsigned char byte : value) {
+    if (byte < 0x21 || byte > 0x7e) {
+      return false;
+    }
+  }
+  return true;
+}
+
+constexpr bool EscapeMpvStringListByte(char value) {
+  return value == '\\' || value == ',';
+}
+
+static_assert(!EscapeMpvStringListByte('a'));
+static_assert(EscapeMpvStringListByte(','));
+static_assert(EscapeMpvStringListByte('\\'));
+
+constexpr bool IsHttpStatusSeparator(char value) {
+  return value == ' ' || value == '\t' || value == '\r' || value == '\n' ||
+         value == ':' || value == '=' || value == '-';
+}
+
+constexpr bool IsAsciiDigit(char value) {
+  return value >= '0' && value <= '9';
+}
+
+constexpr std::optional<int64_t> ParseHttpErrorStatus(std::string_view text) {
+  constexpr std::string_view marker = "http error";
+  const size_t start = text.find(marker);
+  if (start == std::string_view::npos) {
+    return std::nullopt;
+  }
+  size_t cursor = start + marker.size();
+  while (cursor < text.size() && IsHttpStatusSeparator(text[cursor])) {
+    ++cursor;
+  }
+  const size_t digit_start = cursor;
+  while (cursor < text.size() && IsAsciiDigit(text[cursor])) {
+    ++cursor;
+  }
+  if (cursor - digit_start != 3 ||
+      (text[digit_start] != '4' && text[digit_start] != '5')) {
+    return std::nullopt;
+  }
+  return (text[digit_start] - '0') * 100 +
+         (text[digit_start + 1] - '0') * 10 +
+         (text[digit_start + 2] - '0');
+}
+
+static_assert(ParseHttpErrorStatus("http error: 404") == 404);
+static_assert(ParseHttpErrorStatus("http error = 503") == 503);
+static_assert(!ParseHttpErrorStatus("http error: 4040"));
+static_assert(!ParseHttpErrorStatus("http error while opening; retry 503"));
 
 const mpv_node* FindNode(const mpv_node& map, const char* key) {
   if (map.format != MPV_FORMAT_NODE_MAP || !map.u.list) {
@@ -167,6 +239,85 @@ flutter::EncodableMap StateEvent(const char* state, const char* message,
   return event;
 }
 
+flutter::EncodableMap FailureStateEvent(
+    const std::string& code, std::optional<int64_t> http_status,
+    std::optional<int64_t> load_id, const char* message) {
+  auto event = StateEvent("error", message, load_id);
+  event[flutter::EncodableValue("failureCode")] =
+      flutter::EncodableValue(code);
+  if (http_status) {
+    event[flutter::EncodableValue("httpStatus")] =
+        flutter::EncodableValue(*http_status);
+  }
+  return event;
+}
+
+std::string LowerAscii(const char* input) {
+  std::string value = BoundedUtf8(input, kMaxMetadataStringBytes);
+  std::transform(value.begin(), value.end(), value.begin(), [](char byte) {
+    return static_cast<char>(
+        std::tolower(static_cast<unsigned char>(byte)));
+  });
+  return value;
+}
+
+struct ClassifiedFailure {
+  std::string code;
+  std::optional<int64_t> http_status;
+};
+
+constexpr bool ShouldReplaceFailure(bool same_load, bool candidate_has_http) {
+  return !same_load || candidate_has_http;
+}
+
+static_assert(!ShouldReplaceFailure(true, false));
+static_assert(ShouldReplaceFailure(true, true));
+static_assert(ShouldReplaceFailure(false, false));
+
+std::optional<ClassifiedFailure> ClassifyMpvFailure(
+    const mpv_event_log_message& message) {
+  const std::string prefix = LowerAscii(message.prefix);
+  const std::string text = LowerAscii(message.text);
+  const auto contains = [&](const char* value) {
+    return text.find(value) != std::string::npos;
+  };
+  if (const size_t start = text.find("http error");
+      start != std::string::npos) {
+    if (const auto status = ParseHttpErrorStatus(text)) {
+      return ClassifiedFailure{"http_error", status};
+    }
+    return ClassifiedFailure{"http_error", std::nullopt};
+  }
+  if (contains("connection refused") || contains("connection timed out") ||
+      contains("network is unreachable") || contains("failed to resolve") ||
+      contains("tls") || contains("certificate")) {
+    return ClassifiedFailure{"network_error", std::nullopt};
+  }
+  if (contains("audio") &&
+      (contains("decode") || contains("decoder") || contains("codec"))) {
+    return ClassifiedFailure{"audio_decode_error", std::nullopt};
+  }
+  if (contains("video") &&
+      (contains("decode") || contains("decoder") || contains("codec"))) {
+    return ClassifiedFailure{"video_decode_error", std::nullopt};
+  }
+  if (prefix.rfind("ao/", 0) == 0 || contains("audio output")) {
+    return ClassifiedFailure{"audio_output_error", std::nullopt};
+  }
+  if (prefix.rfind("vo/", 0) == 0 || contains("video output")) {
+    return ClassifiedFailure{"video_output_error", std::nullopt};
+  }
+  if (contains("failed to open") || contains("cannot open") ||
+      contains("could not open")) {
+    return ClassifiedFailure{"source_open_error", std::nullopt};
+  }
+  if (prefix.find("demux") != std::string::npos ||
+      contains("demuxer") || contains("invalid data found")) {
+    return ClassifiedFailure{"container_error", std::nullopt};
+  }
+  return std::nullopt;
+}
+
 bool RestoreWindowState(HWND window, LONG_PTR style,
                         const WINDOWPLACEMENT& placement) {
   ::SetLastError(ERROR_SUCCESS);
@@ -180,6 +331,49 @@ bool RestoreWindowState(HWND window, LONG_PTR style,
 }
 
 }  // namespace
+
+WindowsNativePlayer::PlexHeader::PlexHeader(std::string_view token) {
+  constexpr std::string_view prefix = "X-Plex-Token: ";
+  const size_t escapes = std::count_if(token.begin(), token.end(),
+                                       EscapeMpvStringListByte);
+  size_ = prefix.size() + token.size() + escapes;
+  data_ = std::make_unique<char[]>(size_ + 1);
+  char* output = data_.get();
+  std::memcpy(output, prefix.data(), prefix.size());
+  output += prefix.size();
+  for (const char byte : token) {
+    if (EscapeMpvStringListByte(byte)) {
+      *output++ = '\\';
+    }
+    *output++ = byte;
+  }
+  *output = '\0';
+}
+
+WindowsNativePlayer::PlexHeader::~PlexHeader() {
+  Clear();
+}
+
+WindowsNativePlayer::PlexHeader::PlexHeader(PlexHeader&& other) noexcept
+    : data_(std::move(other.data_)), size_(std::exchange(other.size_, 0)) {}
+
+WindowsNativePlayer::PlexHeader& WindowsNativePlayer::PlexHeader::operator=(
+    PlexHeader&& other) noexcept {
+  if (this != &other) {
+    Clear();
+    data_ = std::move(other.data_);
+    size_ = std::exchange(other.size_, 0);
+  }
+  return *this;
+}
+
+void WindowsNativePlayer::PlexHeader::Clear() noexcept {
+  if (data_) {
+    ::SecureZeroMemory(data_.get(), size_);
+    data_.reset();
+    size_ = 0;
+  }
+}
 
 WindowsNativePlayer::WindowsNativePlayer(
     HWND top_level_window, HWND flutter_view,
@@ -220,8 +414,9 @@ void WindowsNativePlayer::HandleMethodCall(
   const std::string& method = call.method_name();
   if (method == "initialize") {
     std::string error;
-    if (!Initialize(error)) {
-      result->Error("initialize_failed", error);
+    std::string error_code;
+    if (!Initialize(error, error_code)) {
+      result->Error(error_code, error);
       return;
     }
     flutter::EncodableMap details{
@@ -263,7 +458,27 @@ void WindowsNativePlayer::HandleMethodCall(
       result->Error("invalid_argument", "A non-negative integer loadId is required.");
       return;
     }
-    if (!QueueCommand({CommandType::load, *load_id, *uri})) {
+    const auto* token_value =
+        arguments ? Find(*arguments, "plexToken") : nullptr;
+    const bool token_supplied =
+        token_value && !std::holds_alternative<std::monostate>(*token_value);
+    const auto* plex_token =
+        token_supplied ? std::get_if<std::string>(token_value) : nullptr;
+    if (token_supplied &&
+        (!plex_token || !IsValidPlexToken(*plex_token))) {
+      result->Error("invalid_argument", "The Plex token is invalid.");
+      return;
+    }
+    if (plex_token && !IsHttpUri(*uri)) {
+      result->Error("invalid_argument",
+                    "Plex authentication requires an HTTP or HTTPS media URI.");
+      return;
+    }
+    QueuedCommand command{CommandType::load, *load_id, *uri};
+    if (plex_token) {
+      command.plex_header = PlexHeader(*plex_token);
+    }
+    if (!QueueCommand(std::move(command))) {
       result->Error("command_queue_full", "The native command queue is full.");
       return;
     }
@@ -347,7 +562,9 @@ void WindowsNativePlayer::HandleMethodCall(
   result->Success();
 }
 
-bool WindowsNativePlayer::Initialize(std::string& error) {
+bool WindowsNativePlayer::Initialize(std::string& error,
+                                     std::string& error_code) {
+  error_code = "initialize_failed";
   if (accepting_commands_) {
     return true;
   }
@@ -360,6 +577,7 @@ bool WindowsNativePlayer::Initialize(std::string& error) {
   if (::GetEnvironmentVariableW(L"LINEUP_FLUTTER_DCOMP_ACTIVE", marker,
                                 static_cast<DWORD>(std::size(marker))) == 0 ||
       std::wstring(marker) != kCompositionMarker) {
+    error_code = "required_engine_unavailable";
     error = "The required Lineup DirectComposition Flutter engine is not active.";
     return false;
   }
@@ -417,6 +635,7 @@ bool WindowsNativePlayer::Initialize(std::string& error) {
   }
   std::cerr << "[lineup-player] libmpv initialized client-api="
             << mpv_client_api_version() << std::endl;
+  mpv_request_log_messages(mpv_, "error");
 
   struct Observation {
     uint64_t id;
@@ -494,6 +713,9 @@ void WindowsNativePlayer::FinishDispose() {
   event_load_id_.reset();
   pending_load_ids_.clear();
   playlist_load_ids_.clear();
+  last_failure_load_id_.reset();
+  last_failure_code_.clear();
+  last_failure_http_status_.reset();
 }
 
 bool WindowsNativePlayer::SetVideoRect(
@@ -632,16 +854,23 @@ void WindowsNativePlayer::StartEventThread() {
 
 bool WindowsNativePlayer::QueueCommand(QueuedCommand command) {
   std::lock_guard lock(command_mutex_);
-  if (!accepting_commands_ || commands_.size() >= kMaxQueuedCommands ||
-      command.text.size() > kMaxQueuedCommandBytes - queued_command_bytes_) {
+  if (command.text.size() > kMaxQueuedCommandBytes ||
+      command.plex_header.size() >
+          kMaxQueuedCommandBytes - command.text.size()) {
     return false;
   }
-  queued_command_bytes_ += command.text.size();
+  const size_t command_bytes = command.text.size() + command.plex_header.size();
+  if (!accepting_commands_ || commands_.size() >= kMaxQueuedCommands ||
+      queued_command_bytes_ > kMaxQueuedCommandBytes ||
+      command_bytes > kMaxQueuedCommandBytes - queued_command_bytes_) {
+    return false;
+  }
+  queued_command_bytes_ += command_bytes;
   commands_.push_back(std::move(command));
   return true;
 }
 
-void WindowsNativePlayer::RunCommand(const QueuedCommand& command,
+void WindowsNativePlayer::RunCommand(QueuedCommand& command,
                                      uint64_t generation) {
   int status = 0;
   switch (command.type) {
@@ -649,9 +878,36 @@ void WindowsNativePlayer::RunCommand(const QueuedCommand& command,
       int paused = 0;
       status = mpv_set_property(mpv_, "pause", MPV_FORMAT_FLAG, &paused);
       if (status >= 0) {
-        const char* value[] = {"loadfile", command.text.c_str(), "replace",
-                               nullptr};
-        status = mpv_command(mpv_, value);
+        if (command.plex_header.empty()) {
+          const char* value[] = {"loadfile", command.text.c_str(), "replace",
+                                 nullptr};
+          status = mpv_command(mpv_, value);
+        } else {
+          char* command_name = const_cast<char*>("loadfile");
+          char* uri = const_cast<char*>(command.text.c_str());
+          char* flags = const_cast<char*>("replace");
+          mpv_node values[5]{};
+          values[0].format = MPV_FORMAT_STRING;
+          values[0].u.string = command_name;
+          values[1].format = MPV_FORMAT_STRING;
+          values[1].u.string = uri;
+          values[2].format = MPV_FORMAT_STRING;
+          values[2].u.string = flags;
+          values[3].format = MPV_FORMAT_INT64;
+          values[3].u.int64 = -1;
+          values[4].format = MPV_FORMAT_NODE_MAP;
+          mpv_node option_value{};
+          option_value.format = MPV_FORMAT_STRING;
+          option_value.u.string = command.plex_header.data();
+          char* option_key = const_cast<char*>("http-header-fields");
+          mpv_node_list option_list{1, &option_value, &option_key};
+          values[4].u.list = &option_list;
+          mpv_node_list command_list{5, values, nullptr};
+          mpv_node command_node{};
+          command_node.format = MPV_FORMAT_NODE_ARRAY;
+          command_node.u.list = &command_list;
+          status = mpv_command_node(mpv_, &command_node, nullptr);
+        }
         if (status >= 0) {
           active_load_id_ = command.load_id;
           int64_t playlist_entry_id = 0;
@@ -758,8 +1014,9 @@ void WindowsNativePlayer::EventLoop(uint64_t generation) {
       std::swap(commands, commands_);
       queued_command_bytes_ = 0;
     }
-    for (const auto& command : commands) {
+    for (auto& command : commands) {
       RunCommand(command, generation);
+      command.plex_header.Clear();
     }
     const mpv_event* event = mpv_wait_event(mpv_, 0.05);
     if (stopping_) {
@@ -803,6 +1060,11 @@ void WindowsNativePlayer::HandleMpvEvent(const mpv_event& event,
         } else {
           event_load_id_.reset();
         }
+      }
+      if (last_failure_load_id_ == event_load_id_) {
+        last_failure_load_id_.reset();
+        last_failure_code_.clear();
+        last_failure_http_status_.reset();
       }
       QueueEvent(generation,
                  StateEvent("loading", "Loading media", event_load_id_));
@@ -867,15 +1129,53 @@ void WindowsNativePlayer::HandleMpvEvent(const mpv_event& event,
             pending_load_ids_.end());
       }
       if (end && end->error < 0) {
-        QueueEvent(generation,
-                   StateEvent("error", mpv_error_string(end->error),
-                              load_id));
+        const bool has_detail = load_id && last_failure_load_id_ == load_id &&
+                                !last_failure_code_.empty();
+        QueueEvent(
+            generation,
+            FailureStateEvent(has_detail ? last_failure_code_ : "mpv_error",
+                              has_detail ? last_failure_http_status_
+                                         : std::nullopt,
+                              load_id,
+                              has_detail ? "Media playback failed"
+                                         : mpv_error_string(end->error)));
       } else {
         QueueEvent(generation,
                    StateEvent("stopped", "Playback stopped", load_id));
       }
+      if (last_failure_load_id_ == load_id) {
+        last_failure_load_id_.reset();
+        last_failure_code_.clear();
+        last_failure_http_status_.reset();
+      }
+      if (active_load_id_ == load_id) {
+        active_load_id_.reset();
+      }
+      if (event_load_id_ == load_id) {
+        event_load_id_.reset();
+      }
       break;
     }
+    case MPV_EVENT_LOG_MESSAGE:
+      if (const auto* message =
+              static_cast<mpv_event_log_message*>(event.data)) {
+        if (message->log_level != MPV_LOG_LEVEL_ERROR &&
+            message->log_level != MPV_LOG_LEVEL_FATAL) {
+          break;
+        }
+        if (event_load_id_ && event_load_id_ == active_load_id_) {
+          if (const auto detail = ClassifyMpvFailure(*message)) {
+            const bool same_load = last_failure_load_id_ == event_load_id_;
+            if (ShouldReplaceFailure(same_load,
+                                     detail->http_status.has_value())) {
+              last_failure_load_id_ = event_load_id_;
+              last_failure_code_ = detail->code;
+              last_failure_http_status_ = detail->http_status;
+            }
+          }
+        }
+      }
+      break;
     case MPV_EVENT_QUEUE_OVERFLOW:
       QueueEvent(generation,
                  StateEvent("error", "The libmpv event queue overflowed",

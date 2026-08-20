@@ -39,14 +39,8 @@ target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
 
 if(NOT DEFINED ENV{LINEUP_MPV_ROOT})
   message(FATAL_ERROR
-    "LINEUP_MPV_ROOT must point to a local libmpv development build. "
+    "LINEUP_MPV_ROOT must point to the prepared libmpv production build. "
     "See docs/DEVELOPMENT.md.")
-endif()
-if(NOT "$ENV{LINEUP_ALLOW_GPL_MPV_DEV_ARTIFACT}" STREQUAL "1")
-  message(FATAL_ERROR
-    "This libmpv development artifact is GPL-default and is not an approved "
-    "redistributable dependency. Set LINEUP_ALLOW_GPL_MPV_DEV_ARTIFACT=1 only "
-    "for the documented local/CI development build.")
 endif()
 file(TO_CMAKE_PATH "$ENV{LINEUP_MPV_ROOT}" LINEUP_MPV_ROOT)
 unset(LINEUP_MPV_INCLUDE_DIR CACHE)
@@ -67,12 +61,16 @@ endforeach()
 set(LINEUP_MPV_PROVENANCE "${LINEUP_MPV_ROOT}/lineup-mpv-provenance.cmake")
 if(NOT EXISTS "${LINEUP_MPV_PROVENANCE}")
   message(FATAL_ERROR
-    "LINEUP_MPV_ROOT must be prepared by tool/windows/prepare-mpv-dev.ps1.")
+    "LINEUP_MPV_ROOT must be prepared by tool/windows/prepare-mpv.ps1.")
 endif()
 include("${LINEUP_MPV_PROVENANCE}")
+if(NOT LINEUP_MPV_DISTRIBUTION STREQUAL "production" OR
+    NOT LINEUP_MPV_LICENSE STREQUAL "LGPL-2.1-or-later")
+  message(FATAL_ERROR "LINEUP_MPV_ROOT is not the selected production runtime.")
+endif()
 if(NOT LINEUP_MPV_ASSET_SHA256 STREQUAL
-    "4425B3E9768452FCBA31EE2EC61456514FAF9C5CF11D919B1A889D1C415C1A12")
-  message(FATAL_ERROR "LINEUP_MPV_ROOT is not the pinned mpv development asset.")
+    "13723530C3A719577A27EA19E0127175CE6A047071F8D988ADC1B0DD400B3D18")
+  message(FATAL_ERROR "LINEUP_MPV_ROOT is not the pinned mpv production asset.")
 endif()
 function(verify_lineup_mpv_file PATH EXPECTED_HASH)
   file(SHA256 "${PATH}" ACTUAL_HASH)
@@ -88,7 +86,7 @@ endfunction()
 verify_lineup_mpv_file("${LINEUP_MPV_INCLUDE_DIR}/mpv/client.h"
   "1ACF99EE77C8C2A6F1D1993BD81BBC8A91D27FB5924E80171670E6139A4BD353")
 verify_lineup_mpv_file("${LINEUP_MPV_DLL}"
-  "C079C7A52A1A62AB591DE3BCDB0AC46D64A496B9CFBD9CE4F69249453CDF9174")
+  "353D527E569F69D822A9D679B28D2E975C6B22A82AB9924D533110E1C21C8508")
 verify_lineup_mpv_file("${LINEUP_MPV_LIBRARY}"
   "${LINEUP_MPV_IMPORT_LIBRARY_SHA256}")
 target_include_directories(${BINARY_NAME} PRIVATE "${LINEUP_MPV_INCLUDE_DIR}")

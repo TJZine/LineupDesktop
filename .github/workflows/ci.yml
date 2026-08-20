@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -16,8 +17,11 @@ jobs:
   verify:
     name: Verify Dart
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
           flutter-version: 3.47.0
@@ -29,40 +33,155 @@ jobs:
       - run: flutter test
 
   build-macos:
-    name: Build macOS
+    name: Verify golden UI and build macOS
     runs-on: macos-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
           flutter-version: 3.47.0
           channel: stable
           cache: true
+      - id: golden
+        run: flutter test test/app/ui_acceptance_golden_test.dart
+      - name: Upload golden failure images
+        if: ${{ failure() && steps.golden.outcome == 'failure' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: golden-ui-failures
+          path: test/app/failures/
+          if-no-files-found: error
+          retention-days: 7
       - run: flutter build macos
 
   build-windows:
-    name: Build Windows development player
+    name: Verify and build Windows player
     runs-on: windows-2022
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
           flutter-version: 3.47.0
           channel: stable
           cache: true
-      - name: Validate the exact Flutter and engine sources for the owned patch
+      - name: Verify portable UI on Windows
+        run: >-
+          flutter test
+          test/app/ui_parity_test.dart
+          test/guide/guide_view_test.dart
+          test/playback/player_view_test.dart
+      - name: Build with the pinned LGPL libmpv runtime
         shell: pwsh
         run: |
+          $mpvRoot = Join-Path $env:RUNNER_TEMP 'lineup-mpv'
+          & .\tool\windows\prepare-mpv.ps1 -Destination $mpvRoot
+          $env:LINEUP_MPV_ROOT = $mpvRoot
+          flutter build windows
+
+  engine-inputs:
+    name: Detect Windows engine inputs
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      required: ${{ steps.detect.outputs.required }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: metadata
+        name: Read engine patch path
+        shell: pwsh
+        run: |
+          $metadata = Import-PowerShellDataFile -LiteralPath ./tool/windows/build-metadata.psd1
+          $path = $metadata.FlutterEnginePatchPath
+          if ($path -notmatch '^[A-Za-z0-9._/-]+$' -or
+              [IO.Path]::IsPathRooted($path) -or
+              ($path -split '/') -contains '..') {
+            throw 'FlutterEnginePatchPath must be a safe repository-relative path.'
+          }
+          "patch-path=$path" >> $env:GITHUB_OUTPUT
+      - id: detect
+        name: Detect engine changes
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          CURRENT_SHA: ${{ github.sha }}
+          ENGINE_PATCH_PATH: ${{ steps.metadata.outputs.patch-path }}
+        run: |
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            echo "required=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            base="$PR_BASE_SHA"
+            head="$PR_HEAD_SHA"
+          else
+            base="$PUSH_BEFORE"
+            head="$CURRENT_SHA"
+          fi
+
+          if [[ -z "$base" || "$base" =~ ^0+$ ]] ||
+             ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            echo "required=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          changed_files="$(git diff --name-only "$base" "$head")"
+          if grep -Eq '^(\.gitattributes|\.metadata|tool/windows/build-metadata\.psd1|tool/flutter_engine/apply\.ps1)$' <<<"$changed_files" ||
+             grep -Fxq "$ENGINE_PATCH_PATH" <<<"$changed_files"; then
+            echo "required=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "required=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  build-windows-engine:
+    name: Build patched Flutter engine
+    needs: engine-inputs
+    if: needs.engine-inputs.outputs.required == 'true'
+    runs-on: windows-2022
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: 3.47.0
+          channel: stable
+          cache: true
+      - name: Validate exact Flutter and engine sources and build the patched engine
+        shell: pwsh
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          $metadata = Import-PowerShellDataFile -LiteralPath (Join-Path $env:GITHUB_WORKSPACE 'tool/windows/build-metadata.psd1')
           $flutterSource = Join-Path $env:RUNNER_TEMP 'lineup-flutter-source'
           $depotTools = Join-Path $env:RUNNER_TEMP 'depot_tools'
           git clone --filter=blob:none https://github.com/flutter/flutter.git $flutterSource
-          git -C $flutterSource checkout 4cf24164269a5ebf0c16a028a00727d0e77bbb05
-          if ((git -C $flutterSource rev-parse HEAD:engine/scripts/standard.gclient).Trim() -ne 'a05a39e336335389321b8a6d855b13bd3fc7892c') {
+          git -C $flutterSource checkout $metadata.FlutterFrameworkRevision
+          if ((git -C $flutterSource rev-parse HEAD:engine/scripts/standard.gclient).Trim() -ne $metadata.FlutterStandardGclientBlob) {
             throw 'Pinned Flutter standard.gclient blob does not match.'
           }
           Copy-Item -LiteralPath (Join-Path $flutterSource 'engine\scripts\standard.gclient') -Destination (Join-Path $flutterSource '.gclient')
-          git clone --depth 1 https://chromium.googlesource.com/chromium/tools/depot_tools.git $depotTools
+          git clone --depth 1 --no-checkout https://chromium.googlesource.com/chromium/tools/depot_tools.git $depotTools
+          git -C $depotTools fetch --depth 1 origin $metadata.DepotToolsRevision
+          git -C $depotTools checkout --detach $metadata.DepotToolsRevision
+          if ((git -C $depotTools rev-parse HEAD).Trim() -ne $metadata.DepotToolsRevision) {
+            throw 'depot_tools did not resolve to the pinned revision.'
+          }
           $env:PATH = "$depotTools;$env:PATH"
+          & (Join-Path $depotTools 'bootstrap\win_tools.bat')
+          $env:DEPOT_TOOLS_UPDATE = '0'
           $env:DEPOT_TOOLS_WIN_TOOLCHAIN = '0'
           $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
           $env:GYP_MSVS_OVERRIDE_PATH = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
@@ -71,17 +190,64 @@ jobs:
           gclient sync --no-history
           & "$env:GITHUB_WORKSPACE\tool\flutter_engine\apply.ps1" -FlutterRoot $flutterSource
           Set-Location (Join-Path $flutterSource 'engine\src')
-          python .\flutter\tools\gn --runtime-mode=release
+          python .\flutter\tools\gn `
+            --runtime-mode=release `
+            --no-enable-unittests `
+            --no-build-embedder-examples
           ninja -C out\host_release
-      - name: Build with the pinned libmpv development asset
+      - name: Compile Lineup against the patched engine
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
           $mpvRoot = Join-Path $env:RUNNER_TEMP 'lineup-mpv'
-          & .\tool\windows\prepare-mpv-dev.ps1 -Destination $mpvRoot
+          & .\tool\windows\prepare-mpv.ps1 -Destination $mpvRoot
           $env:LINEUP_MPV_ROOT = $mpvRoot
-          $env:LINEUP_ALLOW_GPL_MPV_DEV_ARTIFACT = '1'
           $engineSource = Join-Path $env:RUNNER_TEMP 'lineup-flutter-source\engine\src'
           flutter build windows `
             --local-engine=host_release `
             --local-engine-host=host_release `
             --local-engine-src-path=$engineSource
+          $dirtyProbe = Join-Path $env:GITHUB_WORKSPACE 'PACKAGE-DIRTY-PROBE'
+          $dirtyDestination = 'build/package/dirty-source-check'
+          Set-Content -LiteralPath $dirtyProbe -Value 'dirty'
+          try {
+            try {
+              & .\tool\windows\package.ps1 -Destination $dirtyDestination
+              throw 'Packaging unexpectedly accepted the source-state probe.'
+            } catch {
+              if ($_.Exception.Data['LineupPackageFailure'] -ne 'dirty-source') { throw }
+            }
+            if (Test-Path -LiteralPath $dirtyDestination) {
+              throw 'Dirty-source packaging wrote package output before failing.'
+            }
+          } finally {
+            Remove-Item -LiteralPath $dirtyProbe
+          }
+          foreach ($licenseName in @(
+            'mpv-LICENSE.LGPL',
+            'FFmpeg-COPYING.LGPLv3',
+            'FFmpeg-COPYING.GPLv3',
+            'libplacebo-LICENSE'
+          )) {
+            $license = Join-Path $mpvRoot "licenses\$licenseName"
+            $licenseBytes = [IO.File]::ReadAllBytes($license)
+            try {
+              Add-Content -LiteralPath $license -Value 'tampered'
+              try {
+                & .\tool\windows\package.ps1 -Destination 'build/package/provenance-tamper-check'
+                throw "Packaging accepted a modified runtime license: $licenseName."
+              } catch {
+                if ($_.Exception.Data['LineupPackageFailure'] -ne 'runtime-license-mismatch') { throw }
+              }
+            } finally {
+              [IO.File]::WriteAllBytes($license, $licenseBytes)
+            }
+          }
+          & .\tool\windows\package.ps1
+      - name: Upload portable Windows package
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: LineupDesktop-windows-x64
+          path: build/package/LineupDesktop-*-windows-x64.zip
+          if-no-files-found: error

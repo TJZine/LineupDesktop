@@ -25,6 +25,7 @@ class WindowsNativePlayer implements NativePlayer {
   Future<void> _lifecycle = Future.value();
   int _nextLoadId = 0;
   int? _activeLoadId;
+  int? _activeGeneration;
   bool _initialized = false;
 
   @override
@@ -69,7 +70,7 @@ class WindowsNativePlayer implements NativePlayer {
   });
 
   @override
-  Future<void> load(Uri media) async {
+  Future<void> load(Uri media, {String? plexToken, int? generation}) async {
     await _lifecycle;
     _requireInitialized();
     final loadId = ++_nextLoadId;
@@ -79,6 +80,7 @@ class WindowsNativePlayer implements NativePlayer {
     );
     _pendingLoad = pending;
     _activeLoadId = loadId;
+    _activeGeneration = generation;
     _resetMediaState();
     _setStatus(PlayerState.loading, 'Loading media');
     try {
@@ -91,6 +93,7 @@ class WindowsNativePlayer implements NativePlayer {
           );
       await _channel.invokeMethod<void>('load', {
         'uri': media.toString(),
+        'plexToken': plexToken,
         'loadId': loadId,
       });
       final failure = await completion;
@@ -104,8 +107,14 @@ class WindowsNativePlayer implements NativePlayer {
           PlayerState.error,
           error is TimeoutException
               ? 'Media load timed out'
+              : error is PlayerUnavailable
+              ? error.message
               : 'Media load failed',
+          recoverable: true,
+          failureCode: _status.failureCode,
+          httpStatus: _status.httpStatus,
         );
+        _activeGeneration = null;
       }
       rethrow;
     } finally {
@@ -157,6 +166,7 @@ class WindowsNativePlayer implements NativePlayer {
     );
     _pendingLoad = null;
     _activeLoadId = null;
+    _activeGeneration = null;
     if (!_initialized) return;
     _initialized = false;
     try {
@@ -216,8 +226,20 @@ class WindowsNativePlayer implements NativePlayer {
       'error' => PlayerState.error,
       _ => PlayerState.idle,
     };
-    final message = event['message'] as String? ?? state.name;
-    _setStatus(state, message);
+    final message = event['failureCode'] is String
+        ? _nativeFailureMessage(event)
+        : event['message'] as String? ?? state.name;
+    _setStatus(
+      state,
+      message,
+      recoverable: state == PlayerState.error,
+      failureCode: event['failureCode'] is String
+          ? event['failureCode'] as String
+          : null,
+      httpStatus: event['httpStatus'] is int
+          ? event['httpStatus'] as int
+          : null,
+    );
     if (state == PlayerState.playing) {
       final pending = _pendingLoad;
       if (pending != null && !pending.isCompleted) pending.complete();
@@ -225,6 +247,23 @@ class WindowsNativePlayer implements NativePlayer {
       _completePendingLoadError(PlayerUnavailable(message));
     }
   }
+
+  String _nativeFailureMessage(Map<Object?, Object?> event) =>
+      switch (event['failureCode']) {
+        'http_error' when event['httpStatus'] is int =>
+          'Media server returned HTTP ${event['httpStatus']}',
+        'http_error' => 'Media server rejected the request',
+        'network_error' => 'Media server connection failed',
+        'audio_decode_error' => 'Audio decoding failed',
+        'video_decode_error' => 'Video decoding failed',
+        'audio_output_error' => 'Audio output could not start',
+        'video_output_error' => 'Video output could not start',
+        'source_open_error' => 'Media source could not be opened',
+        'container_error' => 'Media container could not be read',
+        'mpv_error' when event['message'] is String =>
+          event['message'] as String,
+        _ => 'Media playback failed',
+      };
 
   void _handleProperty(String? name, Object? value) {
     switch (name) {
@@ -400,8 +439,20 @@ class WindowsNativePlayer implements NativePlayer {
     _tracks = const [];
   }
 
-  void _setStatus(PlayerState state, String message) {
-    _status = PlayerStatus(state: state, message: message);
+  void _setStatus(
+    PlayerState state,
+    String message, {
+    bool recoverable = false,
+    String? failureCode,
+    int? httpStatus,
+  }) {
+    _status = PlayerStatus(
+      state: state,
+      message: message,
+      recoverable: recoverable,
+      failureCode: failureCode,
+      httpStatus: httpStatus,
+    );
     _emit();
   }
 
@@ -414,6 +465,7 @@ class WindowsNativePlayer implements NativePlayer {
         duration: _duration,
         telemetry: _telemetry,
         tracks: List.unmodifiable(_tracks),
+        generation: _activeGeneration,
       ),
     );
   }

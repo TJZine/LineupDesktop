@@ -25,10 +25,15 @@ void main() {
       addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
       final player = WindowsNativePlayer();
+      addTearDown(player.dispose);
       await player.initialize();
-      final load = player.load(Uri.file(r'C:\media\sample.mp4'));
+      final load = player.load(
+        Uri.parse('https://plex.example/media/sample.mp4'),
+        plexToken: 'test-token',
+      );
       await Future<void>.delayed(Duration.zero);
       final loadId = calls.last.arguments!['loadId']! as int;
+      expect(calls.last.arguments!['plexToken'], 'test-token');
 
       await _sendNativeEvent(messenger, {
         'type': 'property',
@@ -94,9 +99,131 @@ void main() {
       await player.dispose();
       await player.initialize();
       expect(calls.where((call) => call.method == 'initialize'), hasLength(2));
-      await player.dispose();
     },
   );
+
+  test(
+    'native load errors preserve retry and coordinator generation',
+    () async {
+      final calls = <MethodCall>[];
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        calls.add(call);
+        return null;
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+      final player = WindowsNativePlayer();
+      addTearDown(player.dispose);
+      final events = <PlayerEvent>[];
+      final subscription = player.events.listen(events.add);
+      addTearDown(subscription.cancel);
+      await player.initialize();
+      final load = player.load(
+        Uri.parse('file:///retryable.mp4'),
+        generation: 42,
+      );
+      await Future<void>.delayed(Duration.zero);
+      final loadId = calls.last.arguments!['loadId']! as int;
+      final loadExpectation = expectLater(
+        load,
+        throwsA(isA<PlayerUnavailable>()),
+      );
+      await _sendNativeEvent(messenger, {
+        'type': 'state',
+        'loadId': loadId,
+        'state': 'error',
+        'message': 'Temporary media failure',
+      });
+
+      await loadExpectation;
+      expect(player.status.recoverable, isTrue);
+      expect(
+        events.where((event) => event.status.state == PlayerState.error),
+        isNotEmpty,
+      );
+      expect(
+        events
+            .where((event) => event.status.state == PlayerState.error)
+            .every(
+              (event) => event.status.recoverable && event.generation == 42,
+            ),
+        isTrue,
+      );
+    },
+  );
+
+  test(
+    'maps structured native failures without exposing native prose',
+    () async {
+      final calls = <MethodCall>[];
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        calls.add(call);
+        return null;
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+      final player = WindowsNativePlayer();
+      addTearDown(player.dispose);
+      await player.initialize();
+      final load = player.load(Uri.parse('https://plex.example/media'));
+      await Future<void>.delayed(Duration.zero);
+      final loadId = calls.last.arguments!['loadId']! as int;
+      final expectation = expectLater(
+        load,
+        throwsA(
+          isA<PlayerUnavailable>().having(
+            (error) => error.message,
+            'message',
+            'Media server returned HTTP 503',
+          ),
+        ),
+      );
+
+      await _sendNativeEvent(messenger, {
+        'type': 'state',
+        'loadId': loadId,
+        'state': 'error',
+        'message': 'raw native detail that must not reach Dart UI',
+        'failureCode': 'http_error',
+        'httpStatus': 503,
+      });
+
+      await expectation;
+      expect(player.status.message, 'Media server returned HTTP 503');
+      expect(player.status.failureCode, 'http_error');
+      expect(player.status.httpStatus, 503);
+    },
+  );
+
+  test('preserves the bounded libmpv fallback description', () async {
+    final calls = <MethodCall>[];
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      calls.add(call);
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+    final player = WindowsNativePlayer();
+    addTearDown(player.dispose);
+    await player.initialize();
+    final load = player.load(Uri.parse('file:///broken.mp4'));
+    await Future<void>.delayed(Duration.zero);
+    final loadId = calls.last.arguments!['loadId']! as int;
+    final expectation = expectLater(load, throwsA(isA<PlayerUnavailable>()));
+
+    await _sendNativeEvent(messenger, {
+      'type': 'state',
+      'loadId': loadId,
+      'state': 'error',
+      'message': 'loading failed',
+      'failureCode': 'mpv_error',
+    });
+
+    await expectation;
+    expect(player.status.message, 'loading failed');
+    expect(player.status.failureCode, 'mpv_error');
+    expect(player.status.httpStatus, isNull);
+  });
 
   test(
     'ignores stale or unscoped events and clears facts for replacement',
@@ -109,6 +236,7 @@ void main() {
       addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
       final player = WindowsNativePlayer();
+      addTearDown(player.dispose);
       await player.initialize();
       final first = player.load(Uri.parse('file:///one.mp4'));
       await Future<void>.delayed(Duration.zero);
@@ -139,7 +267,6 @@ void main() {
         'state': 'playing',
       });
       await second;
-      await player.dispose();
     },
   );
 
@@ -154,6 +281,7 @@ void main() {
       addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
       final player = WindowsNativePlayer();
+      addTearDown(player.dispose);
       await player.initialize();
       final video = player.load(Uri.parse('file:///video.mp4'));
       await Future<void>.delayed(Duration.zero);
@@ -202,7 +330,6 @@ void main() {
         'loadId': audioId,
         'state': 'error',
       });
-      await player.dispose();
     },
   );
 
@@ -218,6 +345,7 @@ void main() {
       addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
       final player = WindowsNativePlayer();
+      addTearDown(player.dispose);
       final initialize = player.initialize();
       final dispose = player.dispose();
       await Future<void>.delayed(Duration.zero);
@@ -240,6 +368,7 @@ void main() {
       addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
       final player = WindowsNativePlayer();
+      addTearDown(player.dispose);
       await player.initialize();
       final load = player.load(Uri.parse('file:///pending.mp4'));
       final loadFailure = expectLater(load, throwsA(isA<PlayerUnavailable>()));
@@ -269,6 +398,7 @@ void main() {
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
     final player = WindowsNativePlayer();
+    addTearDown(player.dispose);
     await player.initialize();
     await expectLater(
       player.load(Uri.parse('file:///broken.mp4')),
@@ -280,7 +410,6 @@ void main() {
       'state': 'playing',
     });
     expect(player.status.state, PlayerState.error);
-    await player.dispose();
   });
 
   test('load timeout retires its load id', () async {
@@ -292,6 +421,7 @@ void main() {
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
     final player = WindowsNativePlayer(loadTimeout: Duration.zero);
+    addTearDown(player.dispose);
     await player.initialize();
     await expectLater(
       player.load(Uri.parse('file:///timeout.mp4')),
@@ -305,7 +435,6 @@ void main() {
     });
     expect(player.telemetry.videoCodec, isNull);
     expect(player.status.state, PlayerState.error);
-    await player.dispose();
   });
 
   test(
@@ -326,6 +455,7 @@ void main() {
       final uncaught = <Object>[];
       await runZonedGuarded(() async {
         final player = WindowsNativePlayer();
+        addTearDown(player.dispose);
         await player.initialize();
         final first = player.load(Uri.parse('file:///first.mp4'));
         final firstFailure = expectLater(
@@ -345,7 +475,6 @@ void main() {
         await second;
         firstReply.complete();
         await firstFailure;
-        await player.dispose();
       }, (error, _) => uncaught.add(error));
 
       expect(uncaught, isEmpty);
@@ -361,6 +490,7 @@ void main() {
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
     final player = WindowsNativePlayer();
+    addTearDown(player.dispose);
     await player.initialize();
     final load = player.load(Uri.parse('file:///hdr.mp4'));
     await Future<void>.delayed(Duration.zero);
@@ -411,7 +541,6 @@ void main() {
       'state': 'playing',
     });
     await load;
-    await player.dispose();
   });
 
   test('pause events remain scoped across replacement autoplay', () async {
@@ -423,6 +552,7 @@ void main() {
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
     final player = WindowsNativePlayer();
+    addTearDown(player.dispose);
     await player.initialize();
     final first = player.load(Uri.parse('file:///first.mp4'));
     await Future<void>.delayed(Duration.zero);
@@ -471,7 +601,6 @@ void main() {
       'value': true,
     });
     expect(player.status.state, PlayerState.paused);
-    await player.dispose();
   });
 
   test('rejects a second platform-channel owner', () async {
@@ -479,12 +608,13 @@ void main() {
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
     final first = WindowsNativePlayer();
+    addTearDown(first.dispose);
     final second = WindowsNativePlayer();
+    addTearDown(second.dispose);
     await first.initialize();
     await expectLater(second.initialize(), throwsA(isA<PlayerUnavailable>()));
     await first.dispose();
     await second.initialize();
-    await second.dispose();
   });
 }
 

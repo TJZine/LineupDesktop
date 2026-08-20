@@ -1,79 +1,84 @@
 enum GuideDensity { comfortable, compact }
 
-enum VideoQuality { original, high, medium, low }
+enum GuideLayoutMode { pictureInPicture, overlay }
 
-enum ToneMapPolicy { automatic, always, never }
+enum LineupThemeName {
+  emberSteel('ember-steel', 'Ember & Steel'),
+  slatePine('slate-pine', 'Slate & Pine'),
+  swiss('swiss', 'Swiss Minimal'),
+  directv('directv', 'DirecTV Classic'),
+  glass('glass', 'Glassmorphism');
 
-enum SubtitleMode { off, forced, full }
+  const LineupThemeName(this.storageKey, this.label);
+
+  final String storageKey;
+  final String label;
+
+  static LineupThemeName fromStorage(Object? value) => values.firstWhere(
+    (theme) => theme.storageKey == value,
+    orElse: () => emberSteel,
+  );
+}
 
 class LineupSettings {
+  static const guideHoursOptions = [2, 4, 6, 8, 12];
+  static const pastMinutesOptions = [0, 15, 30, 60, 120, 180];
+  static const osdAutoHideSecondsOptions = [2, 4, 6, 8, 10, 15];
+
   const LineupSettings({
+    this.theme = LineupThemeName.emberSteel,
     this.guideHours = 4,
     this.pastMinutes = 30,
     this.guideDensity = GuideDensity.comfortable,
-    this.videoQuality = VideoQuality.original,
-    this.toneMapPolicy = ToneMapPolicy.automatic,
-    this.audioOutput = 'system',
-    this.audioPassthrough = false,
-    this.directPlayAudioFallback = false,
+    this.guideLayoutMode = GuideLayoutMode.pictureInPicture,
+    this.libraryTabsEnabled = true,
+    this.nowWatchingBanner = true,
+    this.osdAutoHideSeconds = 4,
     this.audioSetupComplete = false,
-    this.subtitleMode = SubtitleMode.full,
-    this.subtitleLanguage = '',
-    this.preferForcedSubtitles = false,
     this.reduceMotion = false,
     this.largeFocusIndicators = false,
     this.profilePickerOnStartup = false,
     this.diagnosticsEnabled = false,
   });
 
+  final LineupThemeName theme;
   final int guideHours;
   final int pastMinutes;
   final GuideDensity guideDensity;
-  final VideoQuality videoQuality;
-  final ToneMapPolicy toneMapPolicy;
-  final String audioOutput;
-  final bool audioPassthrough;
-  final bool directPlayAudioFallback;
+  final GuideLayoutMode guideLayoutMode;
+  final bool libraryTabsEnabled;
+  final bool nowWatchingBanner;
+  final int osdAutoHideSeconds;
   final bool audioSetupComplete;
-  final SubtitleMode subtitleMode;
-  final String subtitleLanguage;
-  final bool preferForcedSubtitles;
   final bool reduceMotion;
   final bool largeFocusIndicators;
   final bool profilePickerOnStartup;
   final bool diagnosticsEnabled;
 
   LineupSettings copyWith({
+    LineupThemeName? theme,
     int? guideHours,
     int? pastMinutes,
     GuideDensity? guideDensity,
-    VideoQuality? videoQuality,
-    ToneMapPolicy? toneMapPolicy,
-    String? audioOutput,
-    bool? audioPassthrough,
-    bool? directPlayAudioFallback,
+    GuideLayoutMode? guideLayoutMode,
+    bool? libraryTabsEnabled,
+    bool? nowWatchingBanner,
+    int? osdAutoHideSeconds,
     bool? audioSetupComplete,
-    SubtitleMode? subtitleMode,
-    String? subtitleLanguage,
-    bool? preferForcedSubtitles,
     bool? reduceMotion,
     bool? largeFocusIndicators,
     bool? profilePickerOnStartup,
     bool? diagnosticsEnabled,
   }) => LineupSettings(
+    theme: theme ?? this.theme,
     guideHours: guideHours ?? this.guideHours,
     pastMinutes: pastMinutes ?? this.pastMinutes,
     guideDensity: guideDensity ?? this.guideDensity,
-    videoQuality: videoQuality ?? this.videoQuality,
-    toneMapPolicy: toneMapPolicy ?? this.toneMapPolicy,
-    audioOutput: audioOutput ?? this.audioOutput,
-    audioPassthrough: audioPassthrough ?? this.audioPassthrough,
-    directPlayAudioFallback:
-        directPlayAudioFallback ?? this.directPlayAudioFallback,
+    guideLayoutMode: guideLayoutMode ?? this.guideLayoutMode,
+    libraryTabsEnabled: libraryTabsEnabled ?? this.libraryTabsEnabled,
+    nowWatchingBanner: nowWatchingBanner ?? this.nowWatchingBanner,
+    osdAutoHideSeconds: osdAutoHideSeconds ?? this.osdAutoHideSeconds,
     audioSetupComplete: audioSetupComplete ?? this.audioSetupComplete,
-    subtitleMode: subtitleMode ?? this.subtitleMode,
-    subtitleLanguage: subtitleLanguage ?? this.subtitleLanguage,
-    preferForcedSubtitles: preferForcedSubtitles ?? this.preferForcedSubtitles,
     reduceMotion: reduceMotion ?? this.reduceMotion,
     largeFocusIndicators: largeFocusIndicators ?? this.largeFocusIndicators,
     profilePickerOnStartup:
@@ -82,18 +87,15 @@ class LineupSettings {
   );
 
   Map<String, Object?> toJson() => {
+    'theme': theme.storageKey,
     'guideHours': guideHours,
     'pastMinutes': pastMinutes,
     'guideDensity': guideDensity.name,
-    'videoQuality': videoQuality.name,
-    'toneMapPolicy': toneMapPolicy.name,
-    'audioOutput': audioOutput,
-    'audioPassthrough': audioPassthrough,
-    'directPlayAudioFallback': directPlayAudioFallback,
+    'guideLayoutMode': guideLayoutMode.name,
+    'libraryTabsEnabled': libraryTabsEnabled,
+    'nowWatchingBanner': nowWatchingBanner,
+    'osdAutoHideSeconds': osdAutoHideSeconds,
     'audioSetupComplete': audioSetupComplete,
-    'subtitleMode': subtitleMode.name,
-    'subtitleLanguage': subtitleLanguage,
-    'preferForcedSubtitles': preferForcedSubtitles,
     'reduceMotion': reduceMotion,
     'largeFocusIndicators': largeFocusIndicators,
     'profilePickerOnStartup': profilePickerOnStartup,
@@ -106,41 +108,42 @@ class LineupSettings {
     T enumValue<T extends Enum>(List<T> values, String key, T fallback) =>
         values.where((value) => value.name == json[key]).firstOrNull ??
         fallback;
-    final guideHours = (json['guideHours'] as num?)?.toInt() ?? 4;
-    final pastMinutes = (json['pastMinutes'] as num?)?.toInt() ?? 30;
+    int number(String key, int fallback) {
+      final value = json[key];
+      return value is num && value.isFinite ? value.toInt() : fallback;
+    }
+
+    int option(String key, int fallback, List<int> options) {
+      final value = number(key, fallback);
+      return options.reduce((best, candidate) {
+        final bestDistance = (best - value).abs();
+        final candidateDistance = (candidate - value).abs();
+        return candidateDistance <= bestDistance ? candidate : best;
+      });
+    }
+
     return LineupSettings(
-      guideHours: guideHours.clamp(2, 12),
-      pastMinutes: pastMinutes.clamp(0, 180),
+      theme: LineupThemeName.fromStorage(json['theme']),
+      guideHours: option('guideHours', 4, guideHoursOptions),
+      pastMinutes: option('pastMinutes', 30, pastMinutesOptions),
       guideDensity: enumValue(
         GuideDensity.values,
         'guideDensity',
         GuideDensity.comfortable,
       ),
-      videoQuality: enumValue(
-        VideoQuality.values,
-        'videoQuality',
-        VideoQuality.original,
+      guideLayoutMode: enumValue(
+        GuideLayoutMode.values,
+        'guideLayoutMode',
+        GuideLayoutMode.pictureInPicture,
       ),
-      toneMapPolicy: enumValue(
-        ToneMapPolicy.values,
-        'toneMapPolicy',
-        ToneMapPolicy.automatic,
+      libraryTabsEnabled: json['libraryTabsEnabled'] != false,
+      nowWatchingBanner: json['nowWatchingBanner'] != false,
+      osdAutoHideSeconds: option(
+        'osdAutoHideSeconds',
+        4,
+        osdAutoHideSecondsOptions,
       ),
-      audioOutput: json['audioOutput'] is String
-          ? json['audioOutput']! as String
-          : 'system',
-      audioPassthrough: json['audioPassthrough'] == true,
-      directPlayAudioFallback: json['directPlayAudioFallback'] == true,
       audioSetupComplete: json['audioSetupComplete'] == true,
-      subtitleMode: enumValue(
-        SubtitleMode.values,
-        'subtitleMode',
-        SubtitleMode.full,
-      ),
-      subtitleLanguage: json['subtitleLanguage'] is String
-          ? json['subtitleLanguage']! as String
-          : '',
-      preferForcedSubtitles: json['preferForcedSubtitles'] == true,
       reduceMotion: json['reduceMotion'] == true,
       largeFocusIndicators: json['largeFocusIndicators'] == true,
       profilePickerOnStartup: json['profilePickerOnStartup'] == true,

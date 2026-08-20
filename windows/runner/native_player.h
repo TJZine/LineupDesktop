@@ -14,8 +14,10 @@
 #include <mutex>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <unordered_map>
+#include <utility>
 
 class WindowsNativePlayer {
  public:
@@ -40,21 +42,50 @@ class WindowsNativePlayer {
   };
 
   enum class CommandType { load, play, pause, seek, stop, track, volume };
+  class PlexHeader {
+   public:
+    PlexHeader() = default;
+    explicit PlexHeader(std::string_view token);
+    ~PlexHeader();
+
+    PlexHeader(const PlexHeader&) = delete;
+    PlexHeader& operator=(const PlexHeader&) = delete;
+    PlexHeader(PlexHeader&& other) noexcept;
+    PlexHeader& operator=(PlexHeader&& other) noexcept;
+
+    char* data() { return data_.get(); }
+    size_t size() const { return size_; }
+    bool empty() const { return data_ == nullptr; }
+    void Clear() noexcept;
+
+   private:
+    std::unique_ptr<char[]> data_;
+    size_t size_ = 0;
+  };
+
   struct QueuedCommand {
+    QueuedCommand(CommandType type, int64_t load_id = 0,
+                  std::string text = {}, double number = 0)
+        : type(type),
+          load_id(load_id),
+          text(std::move(text)),
+          number(number) {}
+
     CommandType type;
     int64_t load_id = 0;
     std::string text;
     double number = 0;
+    PlexHeader plex_header;
   };
 
   void HandleMethodCall(
       const flutter::MethodCall<flutter::EncodableValue>& call,
       std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
-  bool Initialize(std::string& error);
+  bool Initialize(std::string& error, std::string& error_code);
   void BeginAsyncDispose();
   void FinishDispose();
   bool QueueCommand(QueuedCommand command);
-  void RunCommand(const QueuedCommand& command, uint64_t generation);
+  void RunCommand(QueuedCommand& command, uint64_t generation);
   bool SetVideoRect(const flutter::EncodableMap& arguments);
   bool SetFullscreen(bool fullscreen, std::string& error);
   std::optional<QueuedCommand> ParseTrack(
@@ -88,6 +119,9 @@ class WindowsNativePlayer {
   std::optional<int64_t> event_load_id_;
   std::deque<int64_t> pending_load_ids_;
   std::unordered_map<int64_t, int64_t> playlist_load_ids_;
+  std::optional<int64_t> last_failure_load_id_;
+  std::string last_failure_code_;
+  std::optional<int64_t> last_failure_http_status_;
   std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>>
       dispose_result_;
   std::atomic<bool> dispose_ready_{false};

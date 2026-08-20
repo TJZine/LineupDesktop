@@ -210,52 +210,105 @@ class PlexClient {
     PlexServer server,
     String token,
   ) async {
-    final candidates = List<PlexConnection>.of(server.connections)
-      ..sort((a, b) => _connectionTier(a).compareTo(_connectionTier(b)));
+    final byTier = <int, List<PlexConnection>>{};
+    for (final connection in server.connections) {
+      byTier.putIfAbsent(_connectionTier(connection), () => []).add(connection);
+    }
+    final tiers = byTier.keys.toList()..sort();
+    final candidates = <PlexConnection>[];
+    for (
+      var index = 0;
+      index < tiers.length && candidates.length < 8;
+      index++
+    ) {
+      final laterFallbacks = tiers.length - index - 1;
+      final availableSlots = 8 - candidates.length - laterFallbacks;
+      candidates.addAll(byTier[tiers[index]]!.take(availableSlots));
+    }
+    PlexException? authorizationError;
     for (final tier in {
       for (final connection in candidates) _connectionTier(connection),
     }) {
-      final reachable = <(PlexConnection, Duration)>[];
-      for (final connection in candidates.where(
-        (candidate) => _connectionTier(candidate) == tier,
-      )) {
-        final watch = Stopwatch()..start();
-        try {
-          final response = await _send(
-            _http.get(
-              connection.uri.resolve('/identity'),
-              headers: _headers(token),
-            ),
-            timeout: const Duration(seconds: 4),
-          );
-          if (response.statusCode >= 200 && response.statusCode < 300) {
-            if (_identityId(response.body) == server.id) {
-              reachable.add((connection, watch.elapsed));
+      final results = await Future.wait(
+        candidates.where((candidate) => _connectionTier(candidate) == tier).map(
+          (connection) async {
+            try {
+              return (
+                probe: await _probeConnection(server, connection, token),
+                authorizationError: null as PlexException?,
+              );
+            } on PlexException catch (error) {
+              if (error.code != 'auth-required' &&
+                  error.code != 'access-denied') {
+                rethrow;
+              }
+              return (
+                probe: null as (PlexConnection, Duration)?,
+                authorizationError: error,
+              );
             }
-          } else if (response.statusCode == 401) {
-            throw const PlexException(
-              'auth-required',
-              'The Plex server requires authentication.',
-            );
-          } else if (response.statusCode == 403) {
-            throw const PlexException(
-              'access-denied',
-              'This Plex profile cannot access that server.',
-            );
-          }
-        } catch (error) {
-          if (error is PlexException) rethrow;
-        }
-      }
+          },
+        ),
+      );
+      authorizationError ??= results
+          .map((result) => result.authorizationError)
+          .nonNulls
+          .firstOrNull;
+      final reachable = results.map((result) => result.probe).nonNulls.toList();
       if (reachable.isNotEmpty) {
         reachable.sort((a, b) => a.$2.compareTo(b.$2));
-        return reachable.first.$1;
+        final selected = reachable.first;
+        return PlexConnection(
+          uri: selected.$1.uri,
+          local: selected.$1.local,
+          relay: selected.$1.relay,
+          latency: selected.$2,
+        );
       }
     }
+    if (authorizationError != null) throw authorizationError;
     throw const PlexException(
       'server-unreachable',
       'No reachable connection was found for this server.',
     );
+  }
+
+  Future<(PlexConnection, Duration)?> _probeConnection(
+    PlexServer server,
+    PlexConnection connection,
+    String token,
+  ) async {
+    final watch = Stopwatch()..start();
+    late final http.Response response;
+    try {
+      response = await _send(
+        _http.get(
+          connection.uri.resolve('/identity'),
+          headers: _headers(token),
+        ),
+        timeout: const Duration(seconds: 4),
+      );
+    } catch (_) {
+      return null;
+    }
+    if (response.statusCode == 401) {
+      throw const PlexException(
+        'auth-required',
+        'The Plex server requires authentication.',
+      );
+    }
+    if (response.statusCode == 403) {
+      throw const PlexException(
+        'access-denied',
+        'This Plex profile cannot access that server.',
+      );
+    }
+    if (response.statusCode >= 200 &&
+        response.statusCode < 300 &&
+        _identityId(response.body) == server.id) {
+      return (connection, watch.elapsed);
+    }
+    return null;
   }
 
   Future<List<PlexLibrary>> libraries(Uri server, String token) async {
@@ -352,7 +405,6 @@ class PlexClient {
 
   PlexPlaybackDescriptor playbackDescriptor({
     required Uri server,
-    required String token,
     required PlexMediaItem item,
     required StreamCapabilities capabilities,
   }) {
@@ -376,21 +428,34 @@ class PlexClient {
     }
     final session = _randomId();
     final uri = decision.kind == StreamDecisionKind.directPlay
-        ? server.resolve(item.partPath!)
+        ? _directPlayUri(server, item.partPath!)
         : server
-              .resolve('/video/:/transcode/universal/start')
+              .resolve('/video/:/transcode/universal/start.m3u8')
               .replace(
                 queryParameters: {
-                  'path': item.partPath!,
+                  'path': item.key,
+                  'mediaIndex': '0',
+                  'partIndex': '0',
                   'protocol': 'hls',
                   'session': session,
-                  if (decision.kind == StreamDecisionKind.directStream)
-                    'directStream': '1',
+                  'directPlay': '0',
+                  'directStream':
+                      decision.kind == StreamDecisionKind.directStream
+                      ? '1'
+                      : '0',
+                  'directStreamAudio':
+                      decision.kind == StreamDecisionKind.directStream
+                      ? '1'
+                      : '0',
+                  'fastSeek': '1',
+                  'X-Plex-Client-Identifier': clientIdentifier,
+                  'X-Plex-Product': 'Lineup Desktop',
+                  'X-Plex-Version': '0.1.0',
+                  'X-Plex-Platform': Platform.operatingSystem,
                 },
               );
     return PlexPlaybackDescriptor(
       uri: uri,
-      headers: {'X-Plex-Token': token},
       decision: decision,
       sessionId: session,
     );
@@ -402,16 +467,29 @@ class PlexClient {
     Uri path, {
     int maximumBytes = 4 * 1024 * 1024,
   }) async {
-    final request = http.Request(
-      'GET',
-      path.hasScheme ? path : server.resolveUri(path),
-    )..headers.addAll(_headers(token));
-    final response = await _http.send(request).timeout(requestTimeout);
-    if (response.statusCode != 200 ||
-        (response.contentLength ?? 0) > maximumBytes) {
+    final uri = server.resolveUri(path);
+    if (!_isSameServerUri(server, uri)) {
       throw const PlexException(
         'artwork-unavailable',
         'Program artwork is unavailable.',
+      );
+    }
+    final request = http.Request('GET', uri)
+      ..followRedirects = false
+      ..headers.addAll(_headers(token));
+    final response = await _http.send(request).timeout(requestTimeout);
+    if (response.statusCode != 200) {
+      _cancel(response.stream);
+      throw const PlexException(
+        'artwork-unavailable',
+        'Program artwork is unavailable.',
+      );
+    }
+    if ((response.contentLength ?? 0) > maximumBytes) {
+      _cancel(response.stream);
+      throw const PlexException(
+        'artwork-too-large',
+        'Program artwork is too large.',
       );
     }
     final bytes = BytesBuilder(copy: false);
@@ -425,6 +503,14 @@ class PlexClient {
       bytes.add(chunk);
     }
     return bytes.takeBytes();
+  }
+
+  void _cancel(Stream<List<int>> stream) {
+    final subscription = stream.listen(
+      null,
+      onError: (Object _, StackTrace _) {},
+    );
+    unawaited(subscription.cancel().onError((_, _) {}));
   }
 
   Future<void> releasePlaybackSession({
@@ -467,6 +553,21 @@ class PlexClient {
 
   void close() => _http.close();
 }
+
+Uri _directPlayUri(Uri server, String partPath) {
+  final uri = server.resolve(partPath);
+  if (_isSameServerUri(server, uri)) return uri;
+  throw const PlexException(
+    'unsupported',
+    'This item has no playable media part.',
+  );
+}
+
+bool _isSameServerUri(Uri server, Uri uri) =>
+    uri.scheme == server.scheme &&
+    uri.host == server.host &&
+    uri.port == server.port &&
+    uri.userInfo.isEmpty;
 
 String? _identityId(String body) {
   final json = _tryJson(body);

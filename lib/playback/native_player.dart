@@ -6,10 +6,24 @@ abstract interface class NativePlayer {
   Duration get duration;
   PlayerTelemetry get telemetry;
   List<PlayerTrack> get tracks;
+
+  /// A hot broadcast stream of player state snapshots.
+  ///
+  /// Implementations must allow multiple simultaneous listeners. Events
+  /// emitted without listeners are not buffered for later delivery.
   Stream<PlayerEvent> get events;
 
   Future<void> initialize();
-  Future<void> load(Uri media);
+
+  /// Loads [media] for the caller's optional [generation].
+  ///
+  /// [generation] identifies the current load and may be projected on emitted
+  /// events so callers can reject stale work.
+  ///
+  /// [plexToken] is sensitive authentication material. Implementations that
+  /// perform HTTP media loads must send it only as an `X-Plex-Token` request
+  /// header. They must never log it or append it to [media].
+  Future<void> load(Uri media, {String? plexToken, int? generation});
   Future<void> play();
   Future<void> pause();
   Future<void> seek(Duration position);
@@ -21,13 +35,34 @@ abstract interface class NativePlayer {
   Future<void> dispose();
 }
 
-enum PlayerState { idle, loading, playing, paused, stopped, error, unsupported }
+enum PlayerState {
+  idle,
+  loading,
+  ready,
+  playing,
+  paused,
+  buffering,
+  seeking,
+  ended,
+  stopped,
+  error,
+  unsupported,
+}
 
 class PlayerStatus {
-  const PlayerStatus({required this.state, required this.message});
+  const PlayerStatus({
+    required this.state,
+    required this.message,
+    this.recoverable = false,
+    this.failureCode,
+    this.httpStatus,
+  });
 
   final PlayerState state;
   final String message;
+  final bool recoverable;
+  final String? failureCode;
+  final int? httpStatus;
 }
 
 class PlayerEvent {
@@ -37,6 +72,7 @@ class PlayerEvent {
     required this.duration,
     required this.telemetry,
     required this.tracks,
+    this.generation,
   });
 
   final PlayerStatus status;
@@ -44,6 +80,12 @@ class PlayerEvent {
   final Duration duration;
   final PlayerTelemetry telemetry;
   final List<PlayerTrack> tracks;
+
+  /// Identifies the media load associated with this event.
+  ///
+  /// Production native players project the active generation onto emitted
+  /// events so `PlayerCoordinator` can ignore events from superseded loads.
+  final int? generation;
 }
 
 class PlayerVideoRect {

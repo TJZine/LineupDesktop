@@ -60,11 +60,23 @@ class PlexConnection {
     required this.uri,
     required this.local,
     required this.relay,
+    this.latency,
   });
 
   final Uri uri;
   final bool local;
   final bool relay;
+  final Duration? latency;
+}
+
+String plexConnectionDescription(PlexConnection connection) {
+  final type = connection.relay
+      ? 'Plex Relay'
+      : connection.local
+      ? 'Direct local'
+      : 'Direct remote';
+  final latency = connection.latency;
+  return '$type${latency == null ? '' : ' • ${latency.inMilliseconds} ms measured'}';
 }
 
 class PlexLibrary {
@@ -176,13 +188,11 @@ class PlexMediaItem {
 class PlexPlaybackDescriptor {
   const PlexPlaybackDescriptor({
     required this.uri,
-    required this.headers,
     required this.decision,
     required this.sessionId,
   });
 
   final Uri uri;
-  final Map<String, String> headers;
   final StreamDecision decision;
   final String sessionId;
 }

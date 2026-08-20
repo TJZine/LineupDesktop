@@ -59,15 +59,15 @@ ScheduledProgram programAt(
   DateTime anchor,
   ScheduleIndex schedule,
 ) {
-  final elapsed = time.toUtc().difference(anchor.toUtc()).inMilliseconds;
-  final loopMs = schedule.loopDuration.inMilliseconds;
-  final loop = (elapsed / loopMs).floor();
-  final position = ((elapsed % loopMs) + loopMs) % loopMs;
+  final elapsed = time.toUtc().difference(anchor.toUtc()).inMicroseconds;
+  final loopUs = schedule.loopDuration.inMicroseconds;
+  final position = ((elapsed % loopUs) + loopUs) % loopUs;
+  final loop = (elapsed - position) ~/ loopUs;
   var low = 0;
   var high = schedule.offsets.length - 1;
   while (low < high) {
     final middle = ((low + high + 1) / 2).floor();
-    if (schedule.offsets[middle].inMilliseconds <= position) {
+    if (schedule.offsets[middle].inMicroseconds <= position) {
       low = middle;
     } else {
       high = middle - 1;
@@ -75,7 +75,7 @@ ScheduledProgram programAt(
   }
   final start = anchor.toUtc().add(
     Duration(
-      milliseconds: loop * loopMs + schedule.offsets[low].inMilliseconds,
+      microseconds: loop * loopUs + schedule.offsets[low].inMicroseconds,
     ),
   );
   final item = schedule.items[low];
@@ -84,7 +84,7 @@ ScheduledProgram programAt(
     start: start,
     end: start.add(item.duration),
     elapsed: Duration(
-      milliseconds: position - schedule.offsets[low].inMilliseconds,
+      microseconds: position - schedule.offsets[low].inMicroseconds,
     ),
     index: low,
     loop: loop,

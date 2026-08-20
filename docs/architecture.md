@@ -82,27 +82,48 @@ navigation do not enter C++.
 ## Implemented now
 
 - Root Flutter project targeting only macOS and Windows.
-- Application bootstrap, theme tokens, keyboard-focus-aware Material controls,
-  semantic labels, navigation shell, and explicit startup failure surface.
+- Application bootstrap, a compact shared visual vocabulary, responsive page,
+  section, notice, empty-state and confirmation primitives, focus-aware
+  Material controls, semantic labels, navigation shell, and explicit startup
+  failure surface.
+- A persisted five-theme Flutter system using `ThemeData` plus one semantic
+  `ThemeExtension`. Ember & Steel is the default; onboarding, management,
+  Guide, player, overlays, dialogs, progress and focus consume shared roles
+  without theme-specific native code or feature-widget theme branches.
 - Production Guide, Channels, Settings, Diagnostics, and shared player routes
   consuming the persisted Channel Builder lineup without fixture-only paths.
+- One route-selection authority with a discoverable management shell for
+  Channels, Settings and Diagnostics, and an immersive shell for Guide and
+  Player. The immersive Lineup menu calls the same route owner; it is not a
+  second navigation system.
 - The Dart native-player seam and an explicit macOS unsupported development
   backend. It never reports successful playback.
 - A Windows C++ libmpv owner, native child presentation, command/property/event
   channel, track projection, decoder/output and quality/HDR observations,
   fullscreen/resize/minimize handling, and clean recreation controls.
 - A retained Flutter Guide with lazy fixed-extent rows, shared time geometry,
-  stable logical channel/program focus, bounded schedule and artwork caches,
-  stale-result rejection, library filters, accessible visible-cell semantics,
-  and full Guide presentation above continuing native video.
-- One Flutter player coordinator and overlay model for the OSD, now-playing
-  information, mini Guide, full Guide, channel entry, audio/subtitle tracks,
-  errors/retry, sleep timer, fullscreen intent, cursor timeout, and input/focus
-  restoration. Product state does not move into the native player.
+  distinct focus/selection/tuned/airing/hover treatment, bounded schedule and
+  artwork caches, stale-result rejection, library filters, accessible
+  visible-cell semantics, responsive PiP allocation, and selection/time/scroll
+  restoration across player transitions.
+- One Flutter player coordinator and overlay model for contract-valid playback
+  projection, the status-sensitive OSD, now-playing information, bounded
+  five-row mini Guide, full Guide, channel entry, available audio/subtitle
+  tracks, recoverable/terminal errors, sleep timer, fullscreen intent, cursor
+  timeout, cancellable epoch-safe auto-hide, and input/focus restoration.
+  Product state does not move into the native player.
 - A Dart product engine for Plex PIN authentication, Plex Home profiles,
   server discovery/probing, library and media parsing, privileged playback
   descriptors, deterministic channels/schedules, channel suggestions,
   playback policy, settings, redacted diagnostics, and durable state.
+- Profile and selected-server state remains scoped by Plex profile. The
+  application controller serializes secure credential writes with logout,
+  rejects stale profile/server operations, clears unavailable runtime server
+  state without crossing scopes, and retains per-server lineups when a saved
+  selection is explicitly cleared. One content generation invalidates Guide
+  caches and player work across committed profile, server, and library changes.
+  Connection priority is applied before an eight-endpoint probe bound; only the
+  selected direct/local/relay type and its actually measured latency are retained.
 - Upstream-shaped, remote-first onboarding for Plex QR/PIN linking, Home
   profile/PIN selection, secure server recovery, first-run audio intent, and
   Channel Setup. Channel Setup owns library selection, all eight source
@@ -115,19 +136,27 @@ navigation do not enter C++.
   enable and validate the data-protection Keychain. Tokens remain outside
   ordinary application state and durable JSON; selected-server persistence
   stores only profile-scoped server identity.
+- Persisted Guide preferences own library-filter visibility, the Now Watching
+  context banner, and player-control auto-hide duration. Their existing Guide
+  and player coordinators consume updates directly; there is no second
+  settings or overlay owner.
 - A pinned, repository-owned Flutter Windows DirectComposition patch with the
   adapted BSD notice and an exact runtime compatibility check.
-- Flutter format, analysis, tests, and macOS/Windows scaffold builds in CI.
+- Flutter format, analysis, tests, focused macOS golden verification and
+  application builds, focused Windows widget tests, pinned LGPL libmpv
+  application builds, conditional patched-engine builds, packaging rejection
+  checks, and portable Windows package uploads in CI.
 
-## Not implemented yet
+## Integration and acceptance status
 
-HDR display switching and tone-mapping policy, audio passthrough, broad
-codec/container acceptance, production approval of remote Plex playback,
-packaging/licensing of a redistributable libmpv build, and the final Windows
-media acceptance campaign remain integration work. The focused Windows checks
-and exact observations completed for this foundation are recorded in the
-development closeout rather than generalized beyond the media and machine
-actually exercised.
+Live remote Plex playback acceptance through the pinned LGPL libmpv runtime,
+HDR display switching, audio passthrough, broad codec/container and hardware
+acceptance, packaged-runtime validation, and the final Windows media acceptance
+matrix remain integration work. This evidence boundary limits support claims,
+not playback attempts: the Windows libmpv backend accepts original Plex streams
+without a codec, container, or HDR allowlist and without treating native audio
+passthrough as a decode gate. It lets libmpv decode, convert audio to PCM,
+render, or tone-map as needed.
 
 ## Dependency decision
 
@@ -143,11 +172,11 @@ legacy-Keychain option is an explicit bridge
 for unsigned development, not plaintext storage or the production signing
 endpoint. No plaintext credential fallback exists.
 
-The Windows runtime additionally
-links libmpv dynamically at the native boundary. The pinned development asset
-requires verified local provenance and an explicit GPL opt-in; it is not an
-approved redistributable dependency. `docs/DEVELOPMENT.md` records the
-production dependency requirement.
+The Windows runtime additionally links libmpv dynamically at the native
+boundary. The pinned production asset uses mpv's LGPL mode and an LGPLv3
+FFmpeg configuration, with exact acquisition and binary checksums enforced by
+the preparation script and CMake. `docs/windows-runtime.md` records the source,
+configuration, obligations, and package policy.
 `flutter_lints` and `flutter_test` are development dependencies under their
 SDK/BSD licenses. Re-evaluate packages when a concrete feature can show a
 material reliability or ownership advantage.

@@ -1,0 +1,18 @@
+# Local indexes and generated output
+.codanna/
+.dart_tool/
+build/
+coverage/
+macos/Flutter/ephemeral/
+windows/flutter/ephemeral/
+
+# External and generated sources
+initial-build/
+*.generated.*
+
+# Workspace noise
+.git/
+.worktrees/
+worktrees/
+*.log
+.DS_Store

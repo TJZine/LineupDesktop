@@ -1,0 +1,74 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+
+reviews:
+  profile: chill
+  request_changes_workflow: false
+  in_progress_fortune: false
+
+  auto_review:
+    enabled: true
+    drafts: false
+
+  pre_merge_checks:
+    docstrings:
+      mode: "off"
+
+  path_filters:
+    - "!macos/Flutter/GeneratedPluginRegistrant.swift"
+    - "!windows/flutter/generated_plugin_registrant.*"
+    - "!windows/flutter/generated_plugins.cmake"
+
+  path_instructions:
+    - path: "lib/**/*.dart"
+      instructions: |
+        Prioritize functional correctness, stale asynchronous work, bounded
+        resources, persistence rollback, credential redaction, accessibility,
+        and clear ownership. Flutter/Dart owns application and product policy.
+        Do not propose speculative abstractions, compatibility layers, new
+        dependencies, style-only refactors, or settings without real consumers.
+
+    - path: "test/**/*.dart"
+      instructions: |
+        Require regression coverage for meaningful behavior changes. Prefer
+        public seams and stable behavior over private implementation probes,
+        duplicated constants, excessive mocks, or screenshot churn.
+
+    - path: "windows/runner/**"
+      instructions: |
+        Treat C++ as the native media and Windows platform boundary only.
+        Review libmpv lifetime, thread safety, MethodChannel validation,
+        cancellation, cleanup, redaction, and presentation behavior. Do not
+        move Flutter UI or product policy into native code. Hardware and
+        DirectComposition claims require physical Windows evidence.
+
+    - path: "tool/flutter_engine/**"
+      instructions: |
+        Treat this as an exact-revision production boundary. Flag unpinned
+        inputs, source or patch drift, silent fallbacks, and claims without
+        patched-engine or physical Windows verification.
+
+    - path: "tool/windows/**"
+      instructions: |
+        Review checksums, provenance, license packaging, PowerShell path safety,
+        runtime completeness, and reproducibility. Avoid additional packaging
+        layers without a concrete distribution requirement.
+
+    - path: ".github/workflows/**"
+      instructions: |
+        Require minimal permissions, immutable action references, bounded jobs,
+        reproducible inputs, and risk-matched verification. Avoid duplicated CI,
+        brittle version coupling, or automation that merely repeats Flutter
+        analyzer and test output.
+
+    - path: "docs/**"
+      instructions: |
+        Check technical claims against current source and recorded evidence.
+        Distinguish deterministic tests from physical Windows validation. Flag
+        stale branch references, contradictory ownership, and undocumented
+        release assumptions without demanding documentation for trivial changes.
+
+knowledge_base:
+  code_guidelines:
+    filePatterns:
+      - files: "docs/DEVELOPMENT.md,docs/architecture.md"
+        applyTo: "**/*"

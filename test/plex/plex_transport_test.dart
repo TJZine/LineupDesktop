@@ -134,9 +134,271 @@ void main() {
         'secret',
       );
       expect(selected.uri.host, 'right.example');
+      expect(selected.latency, isNotNull);
       expect(probed, containsAll(['wrong.example', 'right.example']));
     },
   );
+
+  test('connection probing ignores a timed-out candidate', () async {
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      httpClient: MockClient((request) async {
+        if (request.url.host == 'slow.example') throw TimeoutException('slow');
+        return http.Response(
+          '<MediaContainer machineIdentifier="expected"/>',
+          200,
+        );
+      }),
+    );
+
+    final selected = await client.selectConnection(
+      PlexServer(
+        id: 'expected',
+        name: 'Server',
+        connections: [
+          PlexConnection(
+            uri: Uri.parse('https://slow.example:32400'),
+            local: true,
+            relay: false,
+          ),
+          PlexConnection(
+            uri: Uri.parse('https://ready.example:32400'),
+            local: true,
+            relay: false,
+          ),
+        ],
+      ),
+      'secret',
+    );
+
+    expect(selected.uri.host, 'ready.example');
+  });
+
+  for (final (status, code) in [
+    (401, 'auth-required'),
+    (403, 'access-denied'),
+  ]) {
+    test('connection probing preserves HTTP $status failures', () async {
+      final client = PlexClient(
+        clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+        httpClient: MockClient((_) async => http.Response('', status)),
+      );
+
+      await expectLater(
+        client.selectConnection(
+          PlexServer(
+            id: 'expected',
+            name: 'Server',
+            connections: [
+              PlexConnection(
+                uri: Uri.parse('https://server.example:32400'),
+                local: true,
+                relay: false,
+              ),
+            ],
+          ),
+          'secret',
+        ),
+        throwsA(
+          isA<PlexException>().having(
+            (exception) => exception.code,
+            'code',
+            code,
+          ),
+        ),
+      );
+    });
+  }
+
+  test(
+    'authorization failure does not hide a reachable same-tier endpoint',
+    () async {
+      final client = PlexClient(
+        clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+        httpClient: MockClient((request) async {
+          if (request.url.host == 'unauthorized.example') {
+            return http.Response('', 401);
+          }
+          return http.Response(
+            '<MediaContainer machineIdentifier="expected"/>',
+            200,
+          );
+        }),
+      );
+
+      final selected = await client.selectConnection(
+        PlexServer(
+          id: 'expected',
+          name: 'Server',
+          connections: [
+            PlexConnection(
+              uri: Uri.parse('https://unauthorized.example:32400'),
+              local: true,
+              relay: false,
+            ),
+            PlexConnection(
+              uri: Uri.parse('https://reachable.example:32400'),
+              local: true,
+              relay: false,
+            ),
+          ],
+        ),
+        'secret',
+      );
+
+      expect(selected.uri.host, 'reachable.example');
+    },
+  );
+
+  test(
+    'authorization failure does not prevent a reachable fallback tier',
+    () async {
+      final client = PlexClient(
+        clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+        httpClient: MockClient((request) async {
+          if (request.url.host == 'local.example') {
+            return http.Response('', 403);
+          }
+          return http.Response(
+            '<MediaContainer machineIdentifier="expected"/>',
+            200,
+          );
+        }),
+      );
+
+      final selected = await client.selectConnection(
+        PlexServer(
+          id: 'expected',
+          name: 'Server',
+          connections: [
+            PlexConnection(
+              uri: Uri.parse('https://local.example:32400'),
+              local: true,
+              relay: false,
+            ),
+            PlexConnection(
+              uri: Uri.parse('https://relay.example:32400'),
+              local: false,
+              relay: true,
+            ),
+          ],
+        ),
+        'secret',
+      );
+
+      expect(selected.uri.host, 'relay.example');
+    },
+  );
+
+  test(
+    'connection probing is bounded to eight advertised candidates',
+    () async {
+      var probes = 0;
+      final client = PlexClient(
+        clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+        httpClient: MockClient((_) async {
+          probes++;
+          return http.Response(
+            '<MediaContainer machineIdentifier="other"/>',
+            200,
+          );
+        }),
+      );
+      await expectLater(
+        client.selectConnection(
+          PlexServer(
+            id: 'expected',
+            name: 'Server',
+            connections: List.generate(
+              20,
+              (index) => PlexConnection(
+                uri: Uri.parse('https://server-$index.example:32400'),
+                local: true,
+                relay: false,
+              ),
+            ),
+          ),
+          'secret',
+        ),
+        throwsA(isA<PlexException>()),
+      );
+      expect(probes, 8);
+    },
+  );
+
+  test('connection priority is applied before the probe bound', () async {
+    final probed = <String>[];
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      httpClient: MockClient((request) async {
+        probed.add(request.url.host);
+        return http.Response(
+          '<MediaContainer machineIdentifier="expected"/>',
+          200,
+        );
+      }),
+    );
+    final selected = await client.selectConnection(
+      PlexServer(
+        id: 'expected',
+        name: 'Server',
+        connections: [
+          for (var index = 0; index < 8; index++)
+            PlexConnection(
+              uri: Uri.parse('https://relay-$index.example:32400'),
+              local: false,
+              relay: true,
+            ),
+          PlexConnection(
+            uri: Uri.parse('https://local.example:32400'),
+            local: true,
+            relay: false,
+          ),
+        ],
+      ),
+      'secret',
+    );
+
+    expect(selected.uri.host, 'local.example');
+    expect(probed, contains('local.example'));
+    expect(probed.length, lessThanOrEqualTo(8));
+  });
+
+  test('the probe bound reserves a reachable fallback tier', () async {
+    final probed = <String>[];
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      httpClient: MockClient((request) async {
+        probed.add(request.url.host);
+        final id = request.url.host == 'relay.example' ? 'expected' : 'other';
+        return http.Response('<MediaContainer machineIdentifier="$id"/>', 200);
+      }),
+    );
+    final selected = await client.selectConnection(
+      PlexServer(
+        id: 'expected',
+        name: 'Server',
+        connections: [
+          for (var index = 0; index < 8; index++)
+            PlexConnection(
+              uri: Uri.parse('https://local-$index.example:32400'),
+              local: true,
+              relay: false,
+            ),
+          PlexConnection(
+            uri: Uri.parse('https://relay.example:32400'),
+            local: false,
+            relay: true,
+          ),
+        ],
+      ),
+      'secret',
+    );
+
+    expect(selected.uri.host, 'relay.example');
+    expect(probed, contains('relay.example'));
+    expect(probed.length, 8);
+  });
 
   test('playback descriptors reject unsupported facts', () {
     final client = PlexClient(
@@ -145,7 +407,6 @@ void main() {
     expect(
       () => client.playbackDescriptor(
         server: Uri.parse('https://plex.example:32400'),
-        token: 'secret',
         item: const PlexMediaItem(
           id: '1',
           key: '/library/metadata/1',
@@ -165,13 +426,43 @@ void main() {
     );
   });
 
-  test('direct stream targets the playable part with Plex HLS flags', () {
+  test('direct play retains the selected Plex server origin', () {
+    final descriptor = _directPlaybackDescriptor('/library/parts/1/file.mkv');
+
+    expect(descriptor.decision.kind, StreamDecisionKind.directPlay);
+    expect(
+      descriptor.uri,
+      Uri.parse('https://plex.example:32400/library/parts/1/file.mkv'),
+    );
+  });
+
+  for (final mismatch in {
+    'host': 'https://attacker.example/file.mkv',
+    'network path': '//attacker.example/file.mkv',
+    'scheme': 'http://plex.example:32400/file.mkv',
+    'port': 'https://plex.example:32401/file.mkv',
+    'userinfo': 'https://user@plex.example:32400/file.mkv',
+  }.entries) {
+    test('direct play rejects ${mismatch.key} mismatch', () {
+      expect(
+        () => _directPlaybackDescriptor(mismatch.value),
+        throwsA(
+          isA<PlexException>().having(
+            (exception) => exception.code,
+            'code',
+            'unsupported',
+          ),
+        ),
+      );
+    });
+  }
+
+  test('direct stream uses the Plex universal HLS contract', () {
     final client = PlexClient(
       clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
     );
     final descriptor = client.playbackDescriptor(
       server: Uri.parse('https://plex.example:32400'),
-      token: 'secret',
       item: const PlexMediaItem(
         id: '1',
         key: '/library/metadata/1',
@@ -193,47 +484,176 @@ void main() {
     expect(descriptor.decision.kind, StreamDecisionKind.directStream);
     expect(
       descriptor.uri.queryParameters,
-      containsPair('path', '/library/parts/1/file.mkv'),
+      containsPair('path', '/library/metadata/1'),
     );
+    expect(descriptor.uri.path, '/video/:/transcode/universal/start.m3u8');
     expect(descriptor.uri.queryParameters, containsPair('protocol', 'hls'));
+    expect(descriptor.uri.queryParameters, containsPair('mediaIndex', '0'));
+    expect(descriptor.uri.queryParameters, containsPair('partIndex', '0'));
+    expect(descriptor.uri.queryParameters, containsPair('directPlay', '0'));
     expect(descriptor.uri.queryParameters, containsPair('directStream', '1'));
-    expect(descriptor.uri.queryParameters, isNot(contains('directPlay')));
+    expect(
+      descriptor.uri.queryParameters,
+      containsPair(
+        'X-Plex-Client-Identifier',
+        'lineup-desktop-test-abcdefghijklmnopqrst',
+      ),
+    );
+    expect(
+      descriptor.uri.queryParameters.keys.map((key) => key.toLowerCase()),
+      isNot(contains('x-plex-token')),
+    );
   });
 
-  test('artwork stays credential-scoped and enforces its byte bound', () async {
-    late http.Request request;
-    final client = PlexClient(
-      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
-      httpClient: MockClient((value) async {
-        request = value;
-        return http.Response.bytes([1, 2, 3, 4], 200);
-      }),
-    );
-    final bytes = await client.artwork(
-      Uri.parse('https://plex.example:32400'),
-      'secret',
-      Uri.parse('/library/art/1'),
-      maximumBytes: 4,
-    );
-    expect(bytes, [1, 2, 3, 4]);
-    expect(request.url.host, 'plex.example');
-    expect(request.headers['X-Plex-Token'], 'secret');
+  test('transcode disables direct play and direct stream', () {
+    final descriptor =
+        PlexClient(clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst')
+            .playbackDescriptor(
+              server: Uri.parse('https://plex.example:32400'),
+              item: const PlexMediaItem(
+                id: '1',
+                key: '/library/metadata/1',
+                title: 'Movie',
+                type: 'movie',
+                duration: Duration(minutes: 1),
+                partPath: '/library/parts/1/file.mkv',
+                container: 'mkv',
+                videoCodec: 'vc1',
+                audioCodec: 'dca',
+                dynamicRange: DynamicRange.sdr,
+              ),
+              capabilities: const StreamCapabilities(
+                containers: {'mkv'},
+                videoCodecs: {'h264'},
+                audioCodecs: {'dca'},
+              ),
+            );
 
-    await expectLater(
-      client.artwork(
+    expect(descriptor.decision.kind, StreamDecisionKind.transcode);
+    expect(descriptor.uri.queryParameters, containsPair('directPlay', '0'));
+    expect(descriptor.uri.queryParameters, containsPair('directStream', '0'));
+    expect(
+      descriptor.uri.queryParameters,
+      containsPair('directStreamAudio', '0'),
+    );
+  });
+
+  group('artwork transport', () {
+    Matcher plexError(String code) => throwsA(
+      isA<PlexException>().having((exception) => exception.code, 'code', code),
+    );
+
+    PlexClient client(
+      Future<http.StreamedResponse> Function(http.BaseRequest, http.ByteStream)
+      handler,
+    ) => PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      httpClient: MockClient.streaming(handler),
+    );
+
+    test('scopes credentials to the selected server', () async {
+      late http.BaseRequest request;
+      final plex = client((value, _) async {
+        request = value;
+        return http.StreamedResponse(Stream.value([1, 2, 3, 4]), 200);
+      });
+
+      final bytes = await plex.artwork(
         Uri.parse('https://plex.example:32400'),
         'secret',
         Uri.parse('/library/art/1'),
-        maximumBytes: 3,
-      ),
-      throwsA(
-        isA<PlexException>().having(
-          (exception) => exception.code,
-          'code',
-          'artwork-unavailable',
+        maximumBytes: 4,
+      );
+
+      expect(bytes, [1, 2, 3, 4]);
+      expect(request.url.host, 'plex.example');
+      expect(request.headers['X-Plex-Token'], 'secret');
+    });
+
+    for (final mismatch in {
+      'host': 'https://attacker.example/art',
+      'scheme': 'http://plex.example:32400/art',
+      'port': 'https://plex.example:32401/art',
+      'userinfo': 'https://user@plex.example:32400/art',
+    }.entries) {
+      test('rejects ${mismatch.key} mismatch before sending', () async {
+        final plex = client((_, _) async => throw StateError('sent request'));
+
+        await expectLater(
+          plex.artwork(
+            Uri.parse('https://plex.example:32400'),
+            'secret',
+            Uri.parse(mismatch.value),
+          ),
+          plexError('artwork-unavailable'),
+        );
+      });
+    }
+
+    test('rejects redirects and cancels the response stream', () async {
+      late http.BaseRequest request;
+      final canceled = Completer<void>();
+      final stream = StreamController<List<int>>(onCancel: canceled.complete);
+      final plex = client((value, _) async {
+        request = value;
+        return http.StreamedResponse(
+          stream.stream,
+          302,
+          headers: {'location': '/other'},
+        );
+      });
+
+      await expectLater(
+        plex.artwork(
+          Uri.parse('https://plex.example:32400'),
+          'secret',
+          Uri.parse('/redirect'),
         ),
-      ),
-    );
+        plexError('artwork-unavailable'),
+      );
+      await canceled.future.timeout(const Duration(seconds: 1));
+
+      expect(request.followRedirects, isFalse);
+      expect(canceled.isCompleted, isTrue);
+    });
+
+    test('rejects declared-length overflow and cancels the stream', () async {
+      final canceled = Completer<void>();
+      final stream = StreamController<List<int>>(onCancel: canceled.complete);
+      final plex = client(
+        (_, _) async =>
+            http.StreamedResponse(stream.stream, 200, contentLength: 4),
+      );
+
+      await expectLater(
+        plex.artwork(
+          Uri.parse('https://plex.example:32400'),
+          'secret',
+          Uri.parse('/library/art/1'),
+          maximumBytes: 3,
+        ),
+        plexError('artwork-too-large'),
+      );
+      await canceled.future.timeout(const Duration(seconds: 1));
+
+      expect(canceled.isCompleted, isTrue);
+    });
+
+    test('rejects streamed overflow', () async {
+      final plex = client(
+        (_, _) async => http.StreamedResponse(Stream.value([1, 2, 3, 4]), 200),
+      );
+
+      await expectLater(
+        plex.artwork(
+          Uri.parse('https://plex.example:32400'),
+          'secret',
+          Uri.parse('/library/art/1'),
+          maximumBytes: 3,
+        ),
+        plexError('artwork-too-large'),
+      );
+    });
   });
 
   test(
@@ -357,3 +777,22 @@ void main() {
     },
   );
 }
+
+PlexPlaybackDescriptor _directPlaybackDescriptor(String partPath) =>
+    PlexClient(clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst')
+        .playbackDescriptor(
+          server: Uri.parse('https://plex.example:32400'),
+          item: PlexMediaItem(
+            id: '1',
+            key: '/library/metadata/1',
+            title: 'Movie',
+            type: 'movie',
+            duration: const Duration(minutes: 1),
+            partPath: partPath,
+            container: 'mkv',
+            videoCodec: 'h264',
+            audioCodec: 'aac',
+            dynamicRange: DynamicRange.sdr,
+          ),
+          capabilities: const StreamCapabilities.unrestricted(),
+        );
