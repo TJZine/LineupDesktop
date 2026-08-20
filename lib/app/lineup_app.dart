@@ -204,7 +204,10 @@ class _StartupFailureBody extends StatelessWidget {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    requiredEngineFailure ? _requiredEngineFailureMessage : 'Restart the app, and check diagnostics if the problem continues.',
+                    requiredEngineFailure
+                        ? _requiredEngineFailureMessage
+                        : 'Restart the app, and check diagnostics if the '
+                              'problem continues.',
                     textAlign: TextAlign.center,
                   ),
                 ],
