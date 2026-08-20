@@ -73,7 +73,7 @@ Future<void> openDestination(WidgetTester tester, String destination) async {
 }
 
 class FixturePlayer implements NativePlayer {
-  final _events = StreamController<PlayerEvent>();
+  final _events = StreamController<PlayerEvent>.broadcast();
   int generation = 0;
   PlayerStatus _status = const PlayerStatus(
     state: PlayerState.idle,

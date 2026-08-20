@@ -390,7 +390,7 @@ class _ProductPlayer implements NativePlayer {
   _ProductPlayer(this.eventLog);
 
   final List<String> eventLog;
-  final _events = StreamController<PlayerEvent>();
+  final _events = StreamController<PlayerEvent>.broadcast();
   final selectedTracks = <(PlayerTrackType, int?)>[];
   Uri? loadedUri;
   String? loadedPlexToken;

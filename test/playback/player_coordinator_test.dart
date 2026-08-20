@@ -1206,7 +1206,7 @@ class _LoadFailurePlayer extends _Player {
 }
 
 class _EventPlayer extends _Player {
-  final _events = StreamController<PlayerEvent>();
+  final _events = StreamController<PlayerEvent>.broadcast();
   bool failStop = false;
 
   @override

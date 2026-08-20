@@ -6,6 +6,11 @@ abstract interface class NativePlayer {
   Duration get duration;
   PlayerTelemetry get telemetry;
   List<PlayerTrack> get tracks;
+
+  /// A hot broadcast stream of player state snapshots.
+  ///
+  /// Implementations must allow multiple simultaneous listeners. Events
+  /// emitted without listeners are not buffered for later delivery.
   Stream<PlayerEvent> get events;
 
   Future<void> initialize();
