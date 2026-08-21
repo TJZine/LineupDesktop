@@ -12,6 +12,7 @@ import 'package:lineup_desktop/guide/guide_view.dart';
 import 'package:lineup_desktop/persistence/app_store.dart';
 import 'package:lineup_desktop/plex/plex_client.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
+import 'package:lineup_desktop/ui/app_theme.dart';
 
 void main() {
   test(
@@ -383,6 +384,96 @@ void main() {
     lineup.dispose();
   });
 
+  testWidgets('Guide details project Plex metadata and artwork color', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1600, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final lineup = _Lineup(
+      1,
+      artworkBytes: File('test/app/goldens/settings-slate-pine-1280x720.png')
+          .readAsBytesSync(),
+    );
+    addTearDown(lineup.dispose);
+    lineup.channels = [
+      Channel(
+        id: 'channel',
+        number: 7,
+        name: 'Drama Seven',
+        source: ManualSource([
+          ChannelItem(
+            id: 'episode',
+            title: 'The Arrival',
+            duration: const Duration(hours: 24),
+            showTitle: 'Signal House',
+            artwork: Uri(path: '/poster'),
+            summary: 'A mysterious signal changes the course of the mission.',
+            contentRating: 'TV-14',
+            genres: const ['Drama', 'Science Fiction'],
+            year: 2026,
+            seasonNumber: 1,
+            episodeNumber: 2,
+            resolution: '4k',
+            videoCodec: 'hevc',
+            audioCodec: 'eac3',
+            audioChannels: 6,
+            dynamicRange: 'hdr10',
+          ),
+        ]),
+        playbackMode: PlaybackMode.sequential,
+        anchor: DateTime.now().subtract(const Duration(hours: 1)),
+        shuffleSeed: 7,
+      ),
+    ];
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    addTearDown(guide.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: GuideView(
+          controller: guide,
+          pictureInPicture: const ColoredBox(color: Colors.black),
+          onClose: () {},
+          onTune: (_) async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+
+    expect(find.text('SIGNAL HOUSE'), findsOneWidget);
+    expect(find.textContaining('S01E02 • 2026'), findsOneWidget);
+    expect(find.text('Drama • Science Fiction'), findsOneWidget);
+    for (final badge in ['TV-14', '4K', 'HDR10', 'HEVC', 'EAC3', '6 CH']) {
+      expect(find.text(badge), findsOneWidget);
+    }
+    expect(
+      find.text('A mysterious signal changes the course of the mission.'),
+      findsOneWidget,
+    );
+    expect(lineup.artworkLoads, 1);
+    final background = tester.widget<AnimatedContainer>(
+      find.byKey(const Key('guide-info-dynamic-background')),
+    );
+    final gradient = (background.decoration! as BoxDecoration).gradient!;
+    final roles = LineupTheme.of(
+      tester.element(find.byKey(const Key('guide-info-dynamic-background'))),
+    );
+    expect(
+      (gradient as LinearGradient).colors[1],
+      isNot(
+        Color.alphaBlend(
+          roles.progressFill.withValues(alpha: 0.36),
+          roles.primarySurface,
+        ),
+      ),
+    );
+  });
+
   testWidgets('physical 4K at DPR 2 uses the 1080p Guide row budget', (
     tester,
   ) async {
@@ -677,7 +768,7 @@ ScheduleIndex _schedule(Channel channel) => buildSchedule(
 );
 
 class _Lineup extends LineupController {
-  _Lineup(int count)
+  _Lineup(int count, {this.artworkBytes})
     : super(
         store: _Store(),
         credentials: _Credentials(),
@@ -704,6 +795,15 @@ class _Lineup extends LineupController {
       ),
     );
     stage = SetupStage.ready;
+  }
+
+  final Uint8List? artworkBytes;
+  int artworkLoads = 0;
+
+  @override
+  Future<Uint8List?> artworkFor(ChannelItem item) async {
+    artworkLoads++;
+    return artworkBytes;
   }
 }
 

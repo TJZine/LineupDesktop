@@ -120,7 +120,7 @@ Lineup distinguishes four identities that may be visible at the same time:
 - **Airing**: the program whose schedule includes the current time.
 
 Moving focus does not retune playback. Activating a currently airing program
-tunes its channel.
+tunes its channel and closes the Guide to the Player.
 
 The default **Classic with PiP** layout keeps the schedule primary and displays
 the active video in a responsive picture-in-picture area. The optional
@@ -160,19 +160,24 @@ report to Flutter.
 | --- | --- | --- |
 | Management screens | Move between controls | `Tab` / `Shift+Tab` |
 | Management screens | Activate focused control | `Enter` or `Space` |
+| Anywhere in the ready app | Open Guide / Player / Settings | `Ctrl+G` / `Ctrl+P` / `Ctrl+,` |
+| Anywhere in the ready app | Open destination 1-5 | `Ctrl+1` Guide, `Ctrl+2` Channels, `Ctrl+3` Settings, `Ctrl+4` Diagnostics, `Ctrl+5` Player |
 | Guide | Move between channels | `Up` / `Down` |
 | Guide | Move between scheduled programs | `Left` / `Right` |
 | Guide | Move by a visible page | `Page Up` / `Page Down` |
-| Guide | Jump to the current time | `P` or Media Play |
-| Guide | Select/tune a currently airing program | `Enter`, `Space`, or Select |
-| Guide | Close Guide | `Esc`, Back, or `G` |
+| Guide | Jump to the current time | `Home`, `P`, or Media Play |
+| Guide | Select/tune a currently airing program and open Player | `Enter`, numpad `Enter`, `Space`, or Select |
+| Guide | Close Guide to Player | `Esc`, Back, `G`, or `F2` |
 | Player | Open full Guide | `G` or `F2` |
 | Player | Show mini Guide | `Up` |
-| Player | Show OSD | `Down` |
-| Player | Seek backward/forward | `Left` = 10 seconds back; `Right` = 30 seconds forward |
-| Player | Play or pause | `Enter`, `Space`, Select, or Media Play/Pause |
+| Player | Show or hide OSD | `Down` or `Enter` shows; `I` toggles |
+| Player | Seek backward/forward | `Left` or `J` = 10 seconds back; `Right` or `L` = 30 seconds forward |
+| Player | Play or pause | `Space`, `K`, or Media Play/Pause |
 | Player | Previous/next channel | `Page Up` / `Page Down` |
 | Player | Enter a channel number | Number keys; confirm with `Enter` while the entry overlay is open |
+| Player | Audio / subtitle tracks | `A` / `C` |
+| Player | Sleep timer | `S` |
+| Player | Toggle fullscreen | `F` or `F11` |
 | Player | Close the active overlay; otherwise return to Guide | `Esc` or Back |
 | Mini Guide | Browse nearby channels | `Up` / `Down` |
 | Mini Guide | Move seven channels | `Page Up` / `Page Down` |
@@ -181,7 +186,8 @@ report to Flutter.
 | Mini Guide | Close | `Esc` or Back |
 
 Dedicated Media Play, Pause, Stop, Rewind, and Fast Forward keys are also
-handled when available.
+handled when available. Core playback keys continue to work while the OSD is
+visible, and the OSD follows the configured auto-hide duration.
 
 ## Channels
 

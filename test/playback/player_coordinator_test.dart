@@ -504,6 +504,35 @@ void main() {
     expect(coordinator.overlay, PlayerOverlay.none);
   });
 
+  testWidgets('OSD auto-hide is not stranded by a non-playing state', (
+    tester,
+  ) async {
+    final lineup = _TestLineup();
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    final player = _Player()
+      ..status = const PlayerStatus(
+        state: PlayerState.paused,
+        message: 'Paused',
+      );
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+      overlayTimeout: const Duration(seconds: 2),
+    );
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
+
+    coordinator.showOsd();
+    await tester.pump(const Duration(milliseconds: 2001));
+
+    expect(coordinator.overlay, PlayerOverlay.none);
+  });
+
   testWidgets('an OSD settings change reschedules the visible controls', (
     tester,
   ) async {

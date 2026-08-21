@@ -723,7 +723,18 @@ bool _itemEquals(ChannelItem left, ChannelItem right) =>
     left.duration == right.duration &&
     left.showTitle == right.showTitle &&
     left.showThumb == right.showThumb &&
-    left.artwork == right.artwork;
+    left.artwork == right.artwork &&
+    left.summary == right.summary &&
+    left.contentRating == right.contentRating &&
+    listEquals(left.genres, right.genres) &&
+    left.year == right.year &&
+    left.seasonNumber == right.seasonNumber &&
+    left.episodeNumber == right.episodeNumber &&
+    left.resolution == right.resolution &&
+    left.videoCodec == right.videoCodec &&
+    left.audioCodec == right.audioCodec &&
+    left.audioChannels == right.audioChannels &&
+    left.dynamicRange == right.dynamicRange;
 
 bool _listEqualsBy<T>(List<T> left, List<T> right, bool Function(T, T) equals) {
   if (identical(left, right)) return true;

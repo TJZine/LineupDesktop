@@ -155,6 +155,12 @@ class PlexMediaItem {
     this.actors = const [],
     this.studio,
     this.year,
+    this.summary,
+    this.contentRating,
+    this.seasonNumber,
+    this.episodeNumber,
+    this.videoResolution,
+    this.audioChannels,
     this.addedAt,
     this.viewed = false,
   });
@@ -181,6 +187,12 @@ class PlexMediaItem {
   final List<String> actors;
   final String? studio;
   final int? year;
+  final String? summary;
+  final String? contentRating;
+  final int? seasonNumber;
+  final int? episodeNumber;
+  final String? videoResolution;
+  final int? audioChannels;
   final DateTime? addedAt;
   final bool viewed;
 }

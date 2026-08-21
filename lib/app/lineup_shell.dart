@@ -47,7 +47,7 @@ class _LineupShellState extends State<LineupShell> {
   final _diagnosticsFocus = FocusNode(debugLabel: 'Diagnostics');
   final _playerFocus = FocusNode(debugLabel: 'Player');
   bool _appMenuOpen = false;
-  int? _guideReturnIndex;
+  bool _guideOpenedFromPlayer = false;
   late SetupStage _lastStage = widget.controller.stage;
   @override
   void initState() {
@@ -99,7 +99,7 @@ class _LineupShellState extends State<LineupShell> {
 
   void _select(int index) {
     if (index == 0) {
-      if (_selectedIndex != 0) _guideReturnIndex = _selectedIndex;
+      _guideOpenedFromPlayer = _selectedIndex == 4;
       _player.showFullGuide();
     } else if (_player.overlay == PlayerOverlay.fullGuide) {
       _player.closeOverlay();
@@ -127,15 +127,40 @@ class _LineupShellState extends State<LineupShell> {
   void _openAppMenu() => setState(() => _appMenuOpen = true);
 
   void _closeGuide(bool hasPlaybackSurface) {
-    final target = _guideReturnIndex ?? (hasPlaybackSurface ? 4 : null);
-    _guideReturnIndex = null;
-    target == null ? _openAppMenu() : _select(target);
+    final returnToPlayer = hasPlaybackSurface || _guideOpenedFromPlayer;
+    _guideOpenedFromPlayer = false;
+    returnToPlayer ? _select(4) : _openAppMenu();
+  }
+
+  Future<void> _tuneFromGuide(String channelId) async {
+    _select(4);
+    await _player.tune(channelId);
   }
 
   void _closeAppMenu() {
     setState(() => _appMenuOpen = false);
     WidgetsBinding.instance.addPostFrameCallback((_) => _restoreRouteFocus());
   }
+
+  KeyEventResult _globalKey(FocusNode _, KeyEvent event) {
+    if (event is! KeyDownEvent || !HardwareKeyboard.instance.isControlPressed) {
+      return KeyEventResult.ignored;
+    }
+    final index = switch (event.logicalKey) {
+      LogicalKeyboardKey.digit1 || LogicalKeyboardKey.keyG => 0,
+      LogicalKeyboardKey.digit2 => 1,
+      LogicalKeyboardKey.digit3 || LogicalKeyboardKey.comma => 2,
+      LogicalKeyboardKey.digit4 => 3,
+      LogicalKeyboardKey.digit5 || LogicalKeyboardKey.keyP => 4,
+      _ => null,
+    };
+    if (index == null) return KeyEventResult.ignored;
+    _select(index);
+    return KeyEventResult.handled;
+  }
+
+  Widget _withGlobalKeys(Widget child) =>
+      Focus(canRequestFocus: false, onKeyEvent: _globalKey, child: child);
 
   Future<void> _logout() async {
     if (await _player.logout() || !mounted) return;
@@ -260,7 +285,7 @@ class _LineupShellState extends State<LineupShell> {
           ? 'Preparing playback…'
           : _player.error ?? _player.status.message,
       onOpenPlayer: () => _select(4),
-      onTune: _player.tune,
+      onTune: _tuneFromGuide,
     );
     final views = <Widget>[
       overlayGuide
@@ -282,91 +307,95 @@ class _LineupShellState extends State<LineupShell> {
       playerView,
     ];
     if (_selectedIndex == 0 || _selectedIndex == 4) {
-      return Scaffold(
-        backgroundColor: Colors.transparent,
-        body: Stack(
-          fit: StackFit.expand,
-          children: [
-            ExcludeSemantics(
-              key: const Key('immersive-route-semantics'),
-              excluding: _appMenuOpen,
-              child: ExcludeFocus(
+      return _withGlobalKeys(
+        Scaffold(
+          backgroundColor: Colors.transparent,
+          body: Stack(
+            fit: StackFit.expand,
+            children: [
+              ExcludeSemantics(
+                key: const Key('immersive-route-semantics'),
                 excluding: _appMenuOpen,
-                child: SafeArea(child: views[_selectedIndex]),
+                child: ExcludeFocus(
+                  excluding: _appMenuOpen,
+                  child: SafeArea(child: views[_selectedIndex]),
+                ),
               ),
-            ),
-            if (_appMenuOpen) _immersiveAppMenu(),
-          ],
+              if (_appMenuOpen) _immersiveAppMenu(),
+            ],
+          ),
         ),
       );
     }
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: SafeArea(
-        child: Row(
-          children: [
-            ColoredBox(
-              color: Theme.of(context).scaffoldBackgroundColor,
-              child: NavigationRail(
-                selectedIndex: _selectedIndex,
-                onDestinationSelected: _select,
-                extended:
-                    MediaQuery.sizeOf(context).width >=
-                    LineupLayout.expandedNavigation,
-                leading: const Padding(
-                  padding: EdgeInsets.fromLTRB(12, 16, 12, 28),
-                  child: _Brand(),
-                ),
-                trailing: Expanded(
-                  child: Align(
-                    alignment: Alignment.bottomCenter,
-                    child: Padding(
-                      padding: const EdgeInsets.only(bottom: 16),
-                      child: IconButton(
-                        tooltip: 'Sign out of Plex',
-                        onPressed: controller.busy ? null : _logout,
-                        icon: const Icon(Icons.logout),
+    return _withGlobalKeys(
+      Scaffold(
+        backgroundColor: Colors.transparent,
+        body: SafeArea(
+          child: Row(
+            children: [
+              ColoredBox(
+                color: Theme.of(context).scaffoldBackgroundColor,
+                child: NavigationRail(
+                  selectedIndex: _selectedIndex,
+                  onDestinationSelected: _select,
+                  extended:
+                      MediaQuery.sizeOf(context).width >=
+                      LineupLayout.expandedNavigation,
+                  leading: const Padding(
+                    padding: EdgeInsets.fromLTRB(12, 16, 12, 28),
+                    child: _Brand(),
+                  ),
+                  trailing: Expanded(
+                    child: Align(
+                      alignment: Alignment.bottomCenter,
+                      child: Padding(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        child: IconButton(
+                          tooltip: 'Sign out of Plex',
+                          onPressed: controller.busy ? null : _logout,
+                          icon: const Icon(Icons.logout),
+                        ),
                       ),
                     ),
                   ),
+                  destinations: const [
+                    NavigationRailDestination(
+                      icon: Icon(Icons.live_tv_outlined),
+                      selectedIcon: Icon(Icons.live_tv),
+                      label: Text('Guide'),
+                    ),
+                    NavigationRailDestination(
+                      icon: Icon(Icons.view_list_outlined),
+                      selectedIcon: Icon(Icons.view_list),
+                      label: Text('Channels'),
+                    ),
+                    NavigationRailDestination(
+                      icon: Icon(Icons.settings_outlined),
+                      selectedIcon: Icon(Icons.settings),
+                      label: Text('Settings'),
+                    ),
+                    NavigationRailDestination(
+                      icon: Icon(Icons.monitor_heart_outlined),
+                      selectedIcon: Icon(Icons.monitor_heart),
+                      label: Text('Diagnostics'),
+                    ),
+                    NavigationRailDestination(
+                      icon: Icon(Icons.play_circle_outline),
+                      selectedIcon: Icon(Icons.play_circle),
+                      label: Text('Player'),
+                    ),
+                  ],
                 ),
-                destinations: const [
-                  NavigationRailDestination(
-                    icon: Icon(Icons.live_tv_outlined),
-                    selectedIcon: Icon(Icons.live_tv),
-                    label: Text('Guide'),
-                  ),
-                  NavigationRailDestination(
-                    icon: Icon(Icons.view_list_outlined),
-                    selectedIcon: Icon(Icons.view_list),
-                    label: Text('Channels'),
-                  ),
-                  NavigationRailDestination(
-                    icon: Icon(Icons.settings_outlined),
-                    selectedIcon: Icon(Icons.settings),
-                    label: Text('Settings'),
-                  ),
-                  NavigationRailDestination(
-                    icon: Icon(Icons.monitor_heart_outlined),
-                    selectedIcon: Icon(Icons.monitor_heart),
-                    label: Text('Diagnostics'),
-                  ),
-                  NavigationRailDestination(
-                    icon: Icon(Icons.play_circle_outline),
-                    selectedIcon: Icon(Icons.play_circle),
-                    label: Text('Player'),
-                  ),
-                ],
               ),
-            ),
-            const VerticalDivider(width: 1),
-            Expanded(
-              child: ColoredBox(
-                color: Theme.of(context).scaffoldBackgroundColor,
-                child: views[_selectedIndex],
+              const VerticalDivider(width: 1),
+              Expanded(
+                child: ColoredBox(
+                  color: Theme.of(context).scaffoldBackgroundColor,
+                  child: views[_selectedIndex],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
