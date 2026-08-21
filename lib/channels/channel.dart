@@ -106,6 +106,17 @@ class ChannelItem {
     this.showTitle,
     this.showThumb,
     this.artwork,
+    this.summary,
+    this.contentRating,
+    this.genres = const [],
+    this.year,
+    this.seasonNumber,
+    this.episodeNumber,
+    this.resolution,
+    this.videoCodec,
+    this.audioCodec,
+    this.audioChannels,
+    this.dynamicRange,
   });
 
   final String id;
@@ -114,6 +125,17 @@ class ChannelItem {
   final String? showTitle;
   final String? showThumb;
   final Uri? artwork;
+  final String? summary;
+  final String? contentRating;
+  final List<String> genres;
+  final int? year;
+  final int? seasonNumber;
+  final int? episodeNumber;
+  final String? resolution;
+  final String? videoCodec;
+  final String? audioCodec;
+  final int? audioChannels;
+  final String? dynamicRange;
 
   Map<String, Object?> toJson() => {
     'id': id,
@@ -122,6 +144,17 @@ class ChannelItem {
     if (showTitle != null) 'showTitle': showTitle,
     if (showThumb != null) 'showThumb': showThumb,
     if (artwork != null) 'artwork': artwork.toString(),
+    if (summary != null) 'summary': summary,
+    if (contentRating != null) 'contentRating': contentRating,
+    if (genres.isNotEmpty) 'genres': genres,
+    if (year != null) 'year': year,
+    if (seasonNumber != null) 'seasonNumber': seasonNumber,
+    if (episodeNumber != null) 'episodeNumber': episodeNumber,
+    if (resolution != null) 'resolution': resolution,
+    if (videoCodec != null) 'videoCodec': videoCodec,
+    if (audioCodec != null) 'audioCodec': audioCodec,
+    if (audioChannels != null) 'audioChannels': audioChannels,
+    if (dynamicRange != null) 'dynamicRange': dynamicRange,
   };
 
   factory ChannelItem.fromJson(Object? value) {
@@ -141,6 +174,17 @@ class ChannelItem {
       artwork: json['artwork'] is String
           ? Uri.tryParse(json['artwork'] as String)
           : null,
+      summary: json['summary'] as String?,
+      contentRating: json['contentRating'] as String?,
+      genres: List<String>.from(json['genres'] as List? ?? const []),
+      year: (json['year'] as num?)?.toInt(),
+      seasonNumber: (json['seasonNumber'] as num?)?.toInt(),
+      episodeNumber: (json['episodeNumber'] as num?)?.toInt(),
+      resolution: json['resolution'] as String?,
+      videoCodec: json['videoCodec'] as String?,
+      audioCodec: json['audioCodec'] as String?,
+      audioChannels: (json['audioChannels'] as num?)?.toInt(),
+      dynamicRange: json['dynamicRange'] as String?,
     );
   }
 }

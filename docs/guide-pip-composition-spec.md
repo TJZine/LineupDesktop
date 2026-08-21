@@ -139,6 +139,9 @@ logos, or quality claims solely to fill the new space.
 - The showcase places PiP beside a materially stronger information hierarchy.
 - Tuned/Now Playing identity stays visible while focused-program details change
   during Guide navigation.
+- Activating a currently airing program closes the Guide to the Player; closing
+  the Guide never restores a previously visited management destination while
+  playback exists.
 - At low heights, preserve the row contract by progressively compressing the
   showcase and its nonessential information.
 - Opening PiP returns to the existing full Player route and restores Player

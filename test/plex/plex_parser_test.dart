@@ -25,11 +25,17 @@ void main() {
       'type': 'episode',
       'duration': 3600000,
       'grandparentTitle': 'Show',
+      'summary': 'A first episode.',
+      'contentRating': 'TV-14',
+      'parentIndex': 1,
+      'index': 2,
       'Media': [
         {
           'container': 'MKV',
           'videoCodec': 'HEVC',
           'audioCodec': 'EAC3',
+          'videoResolution': '4k',
+          'audioChannels': 6,
           'DOVIPresent': true,
           'Part': [
             {
@@ -47,6 +53,12 @@ void main() {
     expect(item.videoCodec, 'hevc');
     expect(item.dynamicRange, DynamicRange.dolbyVision);
     expect(item.tracks.last.delivery, SubtitleDelivery.sidecar);
+    expect(item.summary, 'A first episode.');
+    expect(item.contentRating, 'TV-14');
+    expect(item.seasonNumber, 1);
+    expect(item.episodeNumber, 2);
+    expect(item.videoResolution, '4k');
+    expect(item.audioChannels, 6);
   });
 
   test('rejects missing media identity', () {

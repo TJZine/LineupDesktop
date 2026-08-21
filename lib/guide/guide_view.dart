@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -272,9 +273,11 @@ class _GuideViewState extends State<GuideView> {
     } else if (key == LogicalKeyboardKey.pageDown) {
       widget.controller.page(1, _visibleRows);
     } else if (key == LogicalKeyboardKey.mediaPlay ||
-        key == LogicalKeyboardKey.keyP) {
+        key == LogicalKeyboardKey.keyP ||
+        key == LogicalKeyboardKey.home) {
       widget.controller.playToNow();
     } else if (key == LogicalKeyboardKey.enter ||
+        key == LogicalKeyboardKey.numpadEnter ||
         key == LogicalKeyboardKey.space ||
         key == LogicalKeyboardKey.select) {
       final selected = widget.controller.selectFocusedProgram();
@@ -283,7 +286,8 @@ class _GuideViewState extends State<GuideView> {
       }
     } else if (key == LogicalKeyboardKey.escape ||
         key == LogicalKeyboardKey.goBack ||
-        key == LogicalKeyboardKey.keyG) {
+        key == LogicalKeyboardKey.keyG ||
+        key == LogicalKeyboardKey.f2) {
       widget.onClose();
     } else {
       return KeyEventResult.ignored;
@@ -1053,7 +1057,7 @@ class _ProgramCellState extends State<_ProgramCell> {
   );
 }
 
-class _Details extends StatelessWidget {
+class _Details extends StatefulWidget {
   const _Details({
     required this.controller,
     required this.compact,
@@ -1070,8 +1074,49 @@ class _Details extends StatelessWidget {
   final String? playbackMessage;
 
   @override
+  State<_Details> createState() => _DetailsState();
+}
+
+class _DetailsState extends State<_Details> {
+  String? _artworkProgramId;
+  Uint8List? _artwork;
+  Color? _dynamicColor;
+  int _artworkToken = 0;
+
+  @override
+  void dispose() {
+    _artworkToken++;
+    super.dispose();
+  }
+
+  void _ensureArtwork(GuideProgram? program) {
+    if (program?.id == _artworkProgramId) return;
+    _artworkProgramId = program?.id;
+    _artwork = null;
+    _dynamicColor = null;
+    final token = ++_artworkToken;
+    if (program == null) return;
+    unawaited(_loadArtwork(program, token));
+  }
+
+  Future<void> _loadArtwork(GuideProgram program, int token) async {
+    final artwork = await widget.controller.artworkFor(program);
+    if (!mounted || token != _artworkToken) return;
+    setState(() {
+      _artwork = artwork;
+      _dynamicColor = artwork == null ? null : _artworkHashColor(artwork);
+    });
+    if (artwork == null) return;
+    final color = await _artworkColor(artwork);
+    if (!mounted || token != _artworkToken || color == null) return;
+    setState(() => _dynamicColor = color);
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final controller = widget.controller;
     final program = controller.focusedProgram ?? controller.selectedProgram;
+    _ensureArtwork(program);
     final channel = controller.channels
         .where((channel) => channel.id == program?.channelId)
         .firstOrNull;
@@ -1081,135 +1126,345 @@ class _Details extends StatelessWidget {
     final tunedProgram = tunedChannel == null
         ? null
         : controller.currentProgram(tunedChannel.id);
+    final roles = LineupTheme.of(context);
+    final dynamicColor = _dynamicColor ?? roles.progressFill;
     return Card(
       margin: EdgeInsets.zero,
-      child: Padding(
-        padding: EdgeInsets.symmetric(
-          horizontal: compact ? 12 : 18,
-          vertical: compact ? 8 : 12,
+      clipBehavior: Clip.antiAlias,
+      child: AnimatedContainer(
+        key: const Key('guide-info-dynamic-background'),
+        duration: controller.lineup.settings.reduceMotion
+            ? Duration.zero
+            : const Duration(milliseconds: 400),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.centerLeft,
+            end: Alignment.centerRight,
+            colors: [
+              roles.primarySurface,
+              Color.alphaBlend(
+                dynamicColor.withValues(alpha: 0.36),
+                roles.primarySurface,
+              ),
+              roles.primarySurface,
+            ],
+            stops: const [0, 0.72, 1],
+          ),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+        child: Stack(
+          fit: StackFit.expand,
           children: [
-            if (tunedChannel != null &&
-                controller.lineup.settings.nowWatchingBanner) ...[
-              Text(
-                key: const Key('guide-now-playing-context'),
-                'NOW PLAYING  •  ${tunedChannel.number} ${tunedChannel.name}  •  ${tunedProgram?.scheduled.item.title ?? 'Schedule loading…'}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                  color: LineupTheme.of(context).liveAccent,
-                  fontWeight: FontWeight.w800,
+            if (_artwork != null)
+              Positioned.fill(
+                left: MediaQuery.sizeOf(context).width * 0.28,
+                child: Opacity(
+                  opacity: 0.12,
+                  child: Image.memory(
+                    _artwork!,
+                    fit: BoxFit.cover,
+                    alignment: Alignment.centerRight,
+                    gaplessPlayback: true,
+                    excludeFromSemantics: true,
+                    errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                  ),
                 ),
               ),
-              const SizedBox(height: 4),
-            ],
-            Expanded(
-              child: program == null
-                  ? Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        playbackMessage ?? 'Move to a program for details.',
+            Padding(
+              padding: EdgeInsets.symmetric(
+                horizontal: widget.compact ? 12 : 18,
+                vertical: widget.compact ? 8 : 12,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (tunedChannel != null &&
+                      controller.lineup.settings.nowWatchingBanner) ...[
+                    Text(
+                      key: const Key('guide-now-playing-context'),
+                      'NOW PLAYING  •  ${tunedChannel.number} ${tunedChannel.name}  •  ${tunedProgram?.scheduled.item.title ?? 'Schedule loading…'}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        color: roles.liveAccent,
+                        fontWeight: FontWeight.w800,
                       ),
-                    )
-                  : Row(
-                      children: [
-                        if (showArtwork)
-                          SizedBox(
-                            key: const Key('guide-focused-artwork'),
-                            width: artworkWidth,
-                            height: double.infinity,
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(8),
-                              child: FutureBuilder(
-                                future: controller.artworkFor(program),
-                                builder: (context, snapshot) =>
-                                    snapshot.data == null
-                                    ? ColoredBox(
-                                        color: LineupTheme.of(context)
-                                            .primarySurface,
-                                        child: const Icon(
-                                          Icons.movie_outlined,
-                                          size: 34,
-                                        ),
-                                      )
-                                    : Image.memory(
-                                        snapshot.data!,
-                                        fit: BoxFit.cover,
-                                        cacheWidth: 360,
-                                        semanticLabel:
-                                            'Artwork for ${program.scheduled.item.title}',
-                                        errorBuilder: (_, _, _) => const Icon(
-                                          Icons.broken_image_outlined,
-                                        ),
-                                      ),
-                              ),
-                            ),
-                          ),
-                        if (showArtwork) const SizedBox(width: 14),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              if (channel != null)
-                                Text(
-                                  '${channel.number} • ${channel.name}',
-                                  style: Theme.of(context).textTheme.labelLarge
-                                      ?.copyWith(
-                                        color: LineupTheme.of(context)
-                                            .progressFill,
-                                      ),
-                                ),
-                              Text(
-                                program.scheduled.item.title,
-                                maxLines: showSecondaryMetadata ? 2 : 1,
-                                overflow: TextOverflow.ellipsis,
-                                style:
-                                    (showSecondaryMetadata
-                                            ? Theme.of(context)
-                                                  .textTheme
-                                                  .headlineSmall
-                                            : Theme.of(context)
-                                                  .textTheme
-                                                  .titleLarge)
-                                        ?.copyWith(fontWeight: FontWeight.w700),
-                              ),
-                              Text(
-                                [
-                                  program.scheduled.item.showTitle,
-                                  '${_time(context, program.scheduled.start)}–${_time(context, program.scheduled.end)}',
-                                  program.isCurrentAt(controller.now)
-                                      ? 'Airing now'
-                                      : program.scheduled.end.isBefore(
-                                          controller.now,
-                                        )
-                                      ? 'Ended'
-                                      : 'Upcoming',
-                                ].nonNulls.join(' • '),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              if (playbackMessage != null &&
-                                  showSecondaryMetadata)
-                                Text(
-                                  playbackMessage!,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: Theme.of(context).textTheme.bodySmall,
-                                ),
-                            ],
-                          ),
-                        ),
-                      ],
                     ),
+                    const SizedBox(height: 4),
+                  ],
+                  Expanded(
+                    child: program == null
+                        ? Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              widget.playbackMessage ??
+                                  'Move to a program for details.',
+                            ),
+                          )
+                        : _ProgramDetails(
+                            program: program,
+                            channel: channel,
+                            artwork: _artwork,
+                            showArtwork: widget.showArtwork,
+                            showSecondaryMetadata: widget.showSecondaryMetadata,
+                            artworkWidth: widget.artworkWidth,
+                            playbackMessage: widget.playbackMessage,
+                            now: controller.now,
+                          ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
       ),
     );
   }
+}
+
+class _ProgramDetails extends StatelessWidget {
+  const _ProgramDetails({
+    required this.program,
+    required this.channel,
+    required this.artwork,
+    required this.showArtwork,
+    required this.showSecondaryMetadata,
+    required this.artworkWidth,
+    required this.playbackMessage,
+    required this.now,
+  });
+
+  final GuideProgram program;
+  final Channel? channel;
+  final Uint8List? artwork;
+  final bool showArtwork;
+  final bool showSecondaryMetadata;
+  final double artworkWidth;
+  final String? playbackMessage;
+  final DateTime now;
+
+  @override
+  Widget build(BuildContext context) {
+    final item = program.scheduled.item;
+    final episode = _episodeCode(item);
+    final badges = _mediaBadges(item);
+    return Row(
+      children: [
+        if (showArtwork)
+          SizedBox(
+            key: const Key('guide-focused-artwork'),
+            width: artworkWidth,
+            height: double.infinity,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: artwork == null
+                  ? ColoredBox(
+                      color: LineupTheme.of(context).primarySurface,
+                      child: const Icon(Icons.movie_outlined, size: 34),
+                    )
+                  : Image.memory(
+                      artwork!,
+                      fit: BoxFit.cover,
+                      cacheWidth: 360,
+                      gaplessPlayback: true,
+                      semanticLabel: 'Artwork for ${item.title}',
+                      errorBuilder: (_, _, _) =>
+                          const Icon(Icons.broken_image_outlined),
+                    ),
+            ),
+          ),
+        if (showArtwork) const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (channel != null)
+                Text(
+                  '${channel!.number} • ${channel!.name}',
+                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                    color: LineupTheme.of(context).progressFill,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              if (item.showTitle != null)
+                Text(
+                  item.showTitle!.toUpperCase(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.labelMedium,
+                ),
+              Text(
+                item.title,
+                maxLines: showSecondaryMetadata ? 2 : 1,
+                overflow: TextOverflow.ellipsis,
+                style:
+                    (showSecondaryMetadata
+                            ? Theme.of(context).textTheme.headlineSmall
+                            : Theme.of(context).textTheme.titleLarge)
+                        ?.copyWith(fontWeight: FontWeight.w800),
+              ),
+              Text(
+                [
+                  ?episode,
+                  if (item.year != null) '${item.year}',
+                  '${_time(context, program.scheduled.start)}–${_time(context, program.scheduled.end)}',
+                  program.isCurrentAt(now)
+                      ? 'Airing now'
+                      : program.scheduled.end.isBefore(now)
+                      ? 'Ended'
+                      : 'Upcoming',
+                ].join(' • '),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              if (showSecondaryMetadata && item.genres.isNotEmpty)
+                Text(
+                  item.genres.take(3).join(' • '),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              if (showSecondaryMetadata && badges.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 5),
+                  child: Wrap(
+                    key: const Key('guide-program-badges'),
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: [for (final badge in badges) _Badge(badge)],
+                  ),
+                ),
+              if (showSecondaryMetadata && item.summary != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 5),
+                  child: Text(
+                    item.summary!,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ),
+              if (playbackMessage != null && showSecondaryMetadata)
+                Text(
+                  playbackMessage!,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _Badge extends StatelessWidget {
+  const _Badge(this.label);
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+    decoration: BoxDecoration(
+      color: Colors.white.withValues(alpha: 0.12),
+      borderRadius: BorderRadius.circular(6),
+      border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+    ),
+    child: Text(
+      label,
+      style: Theme.of(context).textTheme.labelSmall
+          ?.copyWith(fontWeight: FontWeight.w700),
+    ),
+  );
+}
+
+String? _episodeCode(ChannelItem item) {
+  final season = item.seasonNumber;
+  final episode = item.episodeNumber;
+  if (season == null && episode == null) return null;
+  return 'S${(season ?? 0).toString().padLeft(2, '0')}E${(episode ?? 0).toString().padLeft(2, '0')}';
+}
+
+List<String> _mediaBadges(ChannelItem item) => [
+  item.contentRating,
+  item.resolution?.toUpperCase(),
+  switch (item.dynamicRange) {
+    'hdr10' => 'HDR10',
+    'hlg' => 'HLG',
+    'dolbyVision' => 'DOLBY VISION',
+    _ => null,
+  },
+  item.videoCodec?.toUpperCase(),
+  item.audioCodec?.toUpperCase(),
+  if (item.audioChannels != null) '${item.audioChannels} CH',
+].nonNulls.toList();
+
+Future<Color?> _artworkColor(Uint8List bytes) async {
+  ui.Codec? codec;
+  ui.Image? image;
+  try {
+    codec = await ui.instantiateImageCodec(
+      bytes,
+      targetWidth: 24,
+      targetHeight: 24,
+    );
+    final frame = await codec.getNextFrame();
+    image = frame.image;
+    final data = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+    if (data == null) return _artworkHashColor(bytes);
+    var red = 0.0;
+    var green = 0.0;
+    var blue = 0.0;
+    var total = 0.0;
+    for (var offset = 0; offset < data.lengthInBytes; offset += 4) {
+      final alpha = data.getUint8(offset + 3);
+      if (alpha < 128) continue;
+      final r = data.getUint8(offset);
+      final g = data.getUint8(offset + 1);
+      final b = data.getUint8(offset + 2);
+      final range =
+          [r, g, b].reduce((a, b) => a > b ? a : b) -
+          [r, g, b].reduce((a, b) => a < b ? a : b);
+      final weight = 1 + range / 128;
+      red += r * weight;
+      green += g * weight;
+      blue += b * weight;
+      total += weight;
+    }
+    if (total == 0) return _artworkHashColor(bytes);
+    final sampled = Color.fromARGB(
+      255,
+      (red / total).round(),
+      (green / total).round(),
+      (blue / total).round(),
+    );
+    final hsl = HSLColor.fromColor(sampled);
+    return hsl
+        .withSaturation(hsl.saturation.clamp(0.35, 0.78))
+        .withLightness(hsl.lightness.clamp(0.28, 0.52))
+        .toColor();
+  } catch (_) {
+    return _artworkHashColor(bytes);
+  } finally {
+    image?.dispose();
+    codec?.dispose();
+  }
+}
+
+Color _artworkHashColor(Uint8List bytes) {
+  if (bytes.isEmpty) return const Color(0xFF455A64);
+  var hash = 0x811c9dc5;
+  final stride = (bytes.length ~/ 256).clamp(1, bytes.length);
+  for (var index = 0; index < bytes.length; index += stride) {
+    hash = ((hash ^ bytes[index]) * 0x01000193) & 0xffffffff;
+  }
+  return HSLColor.fromAHSL(
+    1,
+    (hash & 0xffff) * 360 / 0xffff,
+    0.62,
+    0.42,
+  ).toColor();
 }
 
 class _EmptyGuide extends StatelessWidget {

@@ -167,7 +167,7 @@ void main() {
     expect(FocusManager.instance.primaryFocus?.debugLabel, 'Settings');
   });
 
-  testWidgets('Guide tune remains in PiP before opening the full player', (
+  testWidgets('Guide activation tunes and returns to the full player', (
     tester,
   ) async {
     final controller = _FakeController()
@@ -200,19 +200,57 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(player.loads, 1);
-    expect(find.byKey(const Key('guide-picture-in-picture')), findsOneWidget);
+    expect(find.byKey(const Key('guide-picture-in-picture')), findsNothing);
     expect(find.byType(NativeVideoSurface), findsOneWidget);
-    expect(find.text('Guide'), findsWidgets);
-
-    await tester.tap(find.byKey(const Key('guide-picture-in-picture')));
-    await tester.pump();
     expect(FocusManager.instance.primaryFocus?.debugLabel, 'Player');
-    expect(find.byType(NativeVideoSurface), findsOneWidget);
 
     await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
     await tester.pump();
     expect(find.byKey(const Key('guide-picture-in-picture')), findsOneWidget);
     expect(FocusManager.instance.primaryFocus?.debugLabel, 'Guide');
+  });
+
+  testWidgets('closing Guide returns to Player instead of management history', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 720));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final controller = _FakeController()
+      ..stage = SetupStage.ready
+      ..channels = [
+        Channel(
+          id: 'channel',
+          number: 7,
+          name: 'Synthetic Seven',
+          source: const ManualSource([
+            ChannelItem(
+              id: 'program',
+              title: 'Synthetic Program',
+              duration: Duration(hours: 24),
+            ),
+          ]),
+          playbackMode: PlaybackMode.sequential,
+          anchor: DateTime.now().subtract(const Duration(hours: 1)),
+          shuffleSeed: 7,
+        ),
+      ]
+      ..currentChannelId = 'channel';
+    final player = _PlayingPlayer();
+    await tester.pumpWidget(
+      LineupBootstrap(player: player, controller: controller),
+    );
+    await tester.pumpAndSettle();
+
+    await openDestination(tester, 'Settings');
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Close Guide'));
+    await tester.pumpAndSettle();
+
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Player');
+    expect(find.text('Theme'), findsNothing);
   });
 
   testWidgets('onboarding link action is keyboard reachable', (tester) async {
@@ -664,6 +702,12 @@ class _FakePlayer implements NativePlayer {
   Future<void> dispose() async {
     disposed = true;
   }
+}
+
+class _PlayingPlayer extends _FakePlayer {
+  @override
+  PlayerStatus get status =>
+      const PlayerStatus(state: PlayerState.playing, message: 'Playing');
 }
 
 const _nativeInitializeFailureMessage = 'libmpv could not create a client.';

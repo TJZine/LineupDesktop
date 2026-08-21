@@ -193,7 +193,7 @@ class PlayerCoordinator extends ChangeNotifier {
         case PlayerState.paused:
         case PlayerState.buffering:
         case PlayerState.seeking:
-          _setOverlay(PlayerOverlay.osd, timed: false);
+          _setOverlay(PlayerOverlay.osd);
           break;
         case PlayerState.playing:
           if (_overlay == PlayerOverlay.osd) _scheduleOverlayHide(_overlay);
@@ -430,7 +430,7 @@ class PlayerCoordinator extends ChangeNotifier {
   void showFullGuide() => _setOverlay(PlayerOverlay.fullGuide, timed: false);
 
   void showTracks(PlayerTrackType type) {
-    if (_overlay != PlayerOverlay.osd) return;
+    if (_overlay != PlayerOverlay.none && _overlay != PlayerOverlay.osd) return;
     _setOverlay(
       type == PlayerTrackType.audio
           ? PlayerOverlay.audioTracks
@@ -561,7 +561,7 @@ class PlayerCoordinator extends ChangeNotifier {
     _cancelOverlayTimer();
     _overlay = value;
     notifyListeners();
-    if (timed && _status.state == PlayerState.playing) {
+    if (timed) {
       _scheduleOverlayHide(value, timeout: timeout);
     }
   }
@@ -610,9 +610,7 @@ class PlayerCoordinator extends ChangeNotifier {
     }
     if (_osdAutoHideSeconds != lineup.settings.osdAutoHideSeconds) {
       _osdAutoHideSeconds = lineup.settings.osdAutoHideSeconds;
-      if (overlayTimeout == null &&
-          _overlay == PlayerOverlay.osd &&
-          _status.state == PlayerState.playing) {
+      if (overlayTimeout == null && _overlay == PlayerOverlay.osd) {
         _scheduleOverlayHide(_overlay);
       }
     }

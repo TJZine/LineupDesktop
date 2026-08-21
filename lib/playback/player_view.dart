@@ -63,6 +63,7 @@ class _PlayerViewState extends State<PlayerView> {
     final unsupported = controller.status.state == PlayerState.unsupported;
     final selects =
         key == LogicalKeyboardKey.enter ||
+        key == LogicalKeyboardKey.numpadEnter ||
         key == LogicalKeyboardKey.space ||
         key == LogicalKeyboardKey.select ||
         key == LogicalKeyboardKey.mediaPlayPause;
@@ -73,6 +74,11 @@ class _PlayerViewState extends State<PlayerView> {
             key == LogicalKeyboardKey.mediaStop ||
             key == LogicalKeyboardKey.mediaRewind ||
             key == LogicalKeyboardKey.mediaFastForward ||
+            key == LogicalKeyboardKey.keyF ||
+            key == LogicalKeyboardKey.f11 ||
+            key == LogicalKeyboardKey.keyJ ||
+            key == LogicalKeyboardKey.keyK ||
+            key == LogicalKeyboardKey.keyL ||
             ((key == LogicalKeyboardKey.pageUp ||
                     key == LogicalKeyboardKey.pageDown) &&
                 controller.overlay != PlayerOverlay.miniGuide) ||
@@ -94,7 +100,9 @@ class _PlayerViewState extends State<PlayerView> {
         controller.appendChannelDigit(digit);
         return KeyEventResult.handled;
       }
-      if (key == LogicalKeyboardKey.enter || key == LogicalKeyboardKey.select) {
+      if (key == LogicalKeyboardKey.enter ||
+          key == LogicalKeyboardKey.numpadEnter ||
+          key == LogicalKeyboardKey.select) {
         unawaited(controller.commitChannelNumber());
         return KeyEventResult.handled;
       }
@@ -118,27 +126,41 @@ class _PlayerViewState extends State<PlayerView> {
           ? controller.moveMiniGuide(7)
           : unawaited(controller.nextChannel());
     } else if (key == LogicalKeyboardKey.enter ||
-        key == LogicalKeyboardKey.space ||
-        key == LogicalKeyboardKey.select ||
-        key == LogicalKeyboardKey.mediaPlayPause) {
+        key == LogicalKeyboardKey.numpadEnter ||
+        key == LogicalKeyboardKey.select) {
       if (controller.overlay == PlayerOverlay.miniGuide) {
         unawaited(controller.tuneMiniGuideSelection());
       } else if (controller.overlay == PlayerOverlay.none) {
-        unawaited(controller.togglePlayback());
+        controller.showOsd();
       } else {
         return KeyEventResult.ignored;
       }
-    } else if (key == LogicalKeyboardKey.arrowLeft) {
-      if (controller.overlay != PlayerOverlay.none) {
+    } else if (key == LogicalKeyboardKey.space ||
+        key == LogicalKeyboardKey.keyK ||
+        key == LogicalKeyboardKey.mediaPlayPause) {
+      if (controller.overlay != PlayerOverlay.none &&
+          controller.overlay != PlayerOverlay.osd) {
+        return KeyEventResult.ignored;
+      }
+      unawaited(controller.togglePlayback());
+      controller.showOsd();
+    } else if (key == LogicalKeyboardKey.arrowLeft ||
+        key == LogicalKeyboardKey.keyJ) {
+      if (controller.overlay != PlayerOverlay.none &&
+          controller.overlay != PlayerOverlay.osd) {
         return KeyEventResult.ignored;
       }
       unawaited(controller.seekBy(const Duration(seconds: -10)));
-    } else if (key == LogicalKeyboardKey.arrowRight) {
+      controller.showOsd();
+    } else if (key == LogicalKeyboardKey.arrowRight ||
+        key == LogicalKeyboardKey.keyL) {
       if (controller.overlay == PlayerOverlay.miniGuide) {
         controller.showFullGuide();
         widget.openGuide();
-      } else if (controller.overlay == PlayerOverlay.none) {
+      } else if (controller.overlay == PlayerOverlay.none ||
+          controller.overlay == PlayerOverlay.osd) {
         unawaited(controller.seekBy(const Duration(seconds: 30)));
+        controller.showOsd();
       } else {
         return KeyEventResult.ignored;
       }
@@ -148,6 +170,19 @@ class _PlayerViewState extends State<PlayerView> {
     } else if (key == LogicalKeyboardKey.arrowDown &&
         controller.overlay == PlayerOverlay.none) {
       controller.showOsd();
+    } else if (key == LogicalKeyboardKey.keyI) {
+      controller.overlay == PlayerOverlay.osd
+          ? controller.closeOverlay()
+          : controller.showOsd();
+    } else if (key == LogicalKeyboardKey.keyF ||
+        key == LogicalKeyboardKey.f11) {
+      unawaited(controller.toggleFullscreen());
+    } else if (key == LogicalKeyboardKey.keyS) {
+      controller.cycleSleepTimer();
+    } else if (key == LogicalKeyboardKey.keyA) {
+      controller.showTracks(PlayerTrackType.audio);
+    } else if (key == LogicalKeyboardKey.keyC) {
+      controller.showTracks(PlayerTrackType.subtitle);
     } else if (key == LogicalKeyboardKey.mediaPlay) {
       unawaited(controller.player.play());
     } else if (key == LogicalKeyboardKey.mediaPause) {

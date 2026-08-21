@@ -638,6 +638,12 @@ PlexMediaItem parseMediaItem(Object? raw, {String? libraryId}) {
     actors: _tagNames(json['Role']),
     studio: _optionalText(json['studio']),
     year: (json['year'] as num?)?.toInt(),
+    summary: _optionalText(json['summary']),
+    contentRating: _optionalText(json['contentRating']),
+    seasonNumber: (json['parentIndex'] as num?)?.toInt(),
+    episodeNumber: (json['index'] as num?)?.toInt(),
+    videoResolution: _optionalText(media?['videoResolution']),
+    audioChannels: (media?['audioChannels'] as num?)?.toInt(),
     addedAt: json['addedAt'] is num
         ? DateTime.fromMillisecondsSinceEpoch(
             (json['addedAt'] as num).toInt() * 1000,

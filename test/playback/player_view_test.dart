@@ -142,6 +142,36 @@ void main() {
     fixture.dispose();
   });
 
+  testWidgets('core player keyboard controls work while the OSD is visible', (
+    tester,
+  ) async {
+    final fixture = _Fixture(PlayerState.playing);
+    fixture.player.showOsd();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+    await tester.pump();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.space);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyF);
+    await tester.pump();
+
+    expect(fixture.native.transportCommands, 2);
+    expect(fixture.native.fullscreenValues, [true]);
+    expect(fixture.player.overlay, PlayerOverlay.osd);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
+    expect(fixture.player.overlay, PlayerOverlay.none);
+    await tester.sendKeyEvent(LogicalKeyboardKey.numpadEnter);
+    expect(fixture.player.overlay, PlayerOverlay.osd);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
   testWidgets('player OSD and mini Guide reflow at desktop sizes', (
     tester,
   ) async {
@@ -462,6 +492,7 @@ class _Native implements NativePlayer {
   final loadStarted = Completer<void>();
   final _loadCompletion = Completer<void>();
   int transportCommands = 0;
+  final fullscreenValues = <bool>[];
 
   @override
   final PlayerStatus status;
@@ -508,7 +539,10 @@ class _Native implements NativePlayer {
   @override
   Future<void> setVideoRect(PlayerVideoRect rect) async {}
   @override
-  Future<void> setFullscreen(bool fullscreen) async {}
+  Future<void> setFullscreen(bool fullscreen) async {
+    fullscreenValues.add(fullscreen);
+  }
+
   @override
   Future<void> selectTrack(PlayerTrackType type, int? id) async {}
   @override
