@@ -1,35 +1,18 @@
-## Description
+## Summary
 
-Summarize the change, the reason for it, and the approved plan or issue it follows.
-
-## Type Of Change
-
-- [ ] Feature or product behavior
-- [ ] Architecture or contract change
-- [ ] Security, secret flow, or redaction change
-- [ ] Workflow, harness, or documentation change
-- [ ] Refactor with no intended behavior change
+Describe the user or architecture outcome and why this approach owns it cleanly.
 
 ## Verification
 
-List the commands and manual checks you ran.
+List the commands and manual checks actually observed.
 
-- [ ] `npm run verify`
-- [ ] `npm run verify:docs` for docs/workflow-only changes
-- [ ] Manual proof recorded when Electron, UI, playback, or packaging behavior is involved
+- [ ] `dart format --output=none --set-exit-if-changed .`
+- [ ] `flutter analyze`
+- [ ] `flutter test`
+- [ ] Relevant desktop build and manual proof
+- [ ] No credentials, tokenized URLs, private media data, or unredacted logs
 
-## Code Health
+## Platform evidence
 
-- [ ] Change is self-contained and reviewable, or the plan explains why it must be larger
-- [ ] New dependencies, build tools, config, diagnostics, or logging behavior are justified and verified
-- [ ] No speculative abstractions, unused public APIs, compatibility shims, or broad framework setup without an approved owner and revisit trigger
-- [ ] Tests protect public seams or stable behavior rather than brittle private implementation details
-
-## Desktop Boundary Checklist
-
-- [ ] Renderer remains unprivileged
-- [ ] Preload exposes only narrow typed APIs
-- [ ] Persistent Plex credentials remain outside renderer code
-- [ ] Token-bearing URLs, auth headers, native handles, and secret logs are not exposed to renderer-facing surfaces
-- [ ] Import ledger updated for copied or adapted upstream Lineup slices
-- [ ] Public release gates are not weakened
+Call out unverified platform behavior. Hardware decode, HDR, libmpv, native
+presentation, and DirectComposition claims require Windows evidence.

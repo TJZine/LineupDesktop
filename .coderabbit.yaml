@@ -1,74 +1,74 @@
 # yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
 
 reviews:
-  profile: "assertive"
-  review_details: true
-  collapse_walkthrough: true
+  profile: chill
+  request_changes_workflow: false
   in_progress_fortune: false
-  poem: false
+
   auto_review:
-    enabled: false
+    enabled: true
+    drafts: false
+
+  pre_merge_checks:
+    docstrings:
+      mode: "off"
+
   path_filters:
-    - "!**/.worktrees/**"
-    - "!**/worktrees/**"
-    - "!**/.agent/**"
-    - "!**/.codanna/**"
-    - "!**/.codex/cache/**"
-    - "!**/.fastembed_cache/**"
-    - "!**/.mcp_sequential_thinking/**"
-    - "!docs/runs/**"
-    - "!**/.DS_Store"
+    - "!macos/Flutter/GeneratedPluginRegistrant.swift"
+    - "!windows/flutter/generated_plugin_registrant.*"
+    - "!windows/flutter/generated_plugins.cmake"
+
   path_instructions:
-    - path: "AGENTS.md"
+    - path: "lib/**/*.dart"
       instructions: |
-        Review this as stable Desktop control-plane policy. Flag contradictions with docs/AGENTIC_DEV_WORKFLOW.md, docs/agentic/plan-authoring-standard.md, repo-local skill policy, and verification routing.
-    - path: "docs/AGENTIC_DEV_WORKFLOW.md"
+        Prioritize functional correctness, stale asynchronous work, bounded
+        resources, persistence rollback, credential redaction, accessibility,
+        and clear ownership. Flutter/Dart owns application and product policy.
+        Do not propose speculative abstractions, compatibility layers, new
+        dependencies, style-only refactors, or settings without real consumers.
+
+    - path: "test/**/*.dart"
       instructions: |
-        Review this as the operational runbook. Prioritize stale guidance, duplicate authority, missing verification routing, and process overhead that does not improve execution quality.
-    - path: "docs/agentic/**"
+        Require regression coverage for meaningful behavior changes. Prefer
+        public seams and stable behavior over private implementation probes,
+        duplicated constants, excessive mocks, or screenshot churn.
+
+    - path: "windows/runner/**"
       instructions: |
-        Review these as the Desktop agent-control plane. Flag contradictions, stale links, local-only leakage, mismatch with tools/verify-docs.mjs, and guidance that would encourage low-quality implementation.
-    - path: ".agents/skills/**/*.md"
+        Treat C++ as the native media and Windows platform boundary only.
+        Review libmpv lifetime, thread safety, MethodChannel validation,
+        cancellation, cleanup, redaction, and presentation behavior. Do not
+        move Flutter UI or product policy into native code. Hardware and
+        DirectComposition claims require physical Windows evidence.
+
+    - path: "tool/flutter_engine/**"
       instructions: |
-        Distinguish the two project-skill forms in docs/agentic/skill-strategy.md. Launcher wrappers named lineup-desktop-* should stay thin tracked-launcher routers, with at most their canonical allowlisted terminal invariant. Same-name workflow and boundary adaptations may retain concise trigger routing, owner-boundary rules, stop conditions, and task-local TypeScript/test/architecture checklists that are not fully owned elsewhere. Do not request link-only rewrites or removal of unique operational guidance merely because a tracked authority exists. Flag missing authoritative read order, contradictions, stale paths, and duplicated volatile/global policy such as role matrices, exact model/config values, numeric limits, verification routing, file-shape thresholds, or hotspot lists.
-    - path: ".codex/**"
+        Treat this as an exact-revision production boundary. Flag unpinned
+        inputs, source or patch drift, silent fallbacks, and claims without
+        patched-engine or physical Windows verification.
+
+    - path: "tool/windows/**"
       instructions: |
-        Review Codex role config for role clarity, read-only boundaries, and over-broad delegation. Flag obsolete role names or roles that encourage speculative implementation.
-    - path: "tools/verify-docs.mjs"
+        Review checksums, provenance, license packaging, PowerShell path safety,
+        runtime completeness, and reproducibility. Avoid additional packaging
+        layers without a concrete distribution requirement.
+
+    - path: ".github/workflows/**"
       instructions: |
-        Review this as a workflow contract verifier. Prefer structural guardrails over exact prose checks and flag any rule that either misses a real control-plane invariant or adds brittle ceremony.
-    - path: "tools/verify-redaction.mjs"
+        Require minimal permissions, immutable action references, bounded jobs,
+        reproducible inputs, and risk-matched verification. Avoid duplicated CI,
+        brittle version coupling, or automation that merely repeats Flutter
+        analyzer and test output.
+
+    - path: "docs/**"
       instructions: |
-        Review redaction checks against the Desktop security model. Flag gaps that could allow raw Plex tokens, auth headers, tokenized URLs, native handles, or secret-bearing logs into tracked files.
-    - path: "tools/architecture-rules/**"
-      instructions: |
-        Review architecture lint rules for the Electron security model. Flag missing renderer/preload/main/native-helper boundary checks and over-broad rules that would block reasonable implementation.
-    - path: "src/contracts/**"
-      instructions: |
-        Review contracts for renderer safety, explicit ownership, stable public shapes, and redaction behavior. Flag privileged fields crossing renderer-facing boundaries.
-    - path: "src/renderer/**"
-      instructions: |
-        Review renderer code as unprivileged UI. Flag Node/Electron imports, persistent secrets, token-bearing data, native handles, or policy that belongs in main/helper/domain owners.
-    - path: "src/preload/**"
-      instructions: |
-        Review preload as a narrow typed bridge. Flag broad RPC, raw ipcRenderer exposure, missing unsubscribe paths, missing validation, or secret-bearing payloads.
-    - path: "src/main/**"
-      instructions: |
-        Review Electron main for window lifecycle, IPC authorization, secure storage, redacted diagnostics, and thin composition. Flag UI policy, renderer implementation imports, or broad catch-all services.
-    - path: "src/native-helper/**"
-      instructions: |
-        Review native helper code for playback isolation, crash handling, command/event contracts, and log filtering. Flag renderer coupling or unsanitized media/secret logs.
-    - path: "src/**/*.test.ts"
-      instructions: |
-        Review tests for public contracts and realistic behavior. Flag brittle private probes, broad snapshots, missing security assertions, and tests that encode implementation trivia.
+        Check technical claims against current source and recorded evidence.
+        Distinguish deterministic tests from physical Windows validation. Flag
+        stale branch references, contradictory ownership, and undocumented
+        release assumptions without demanding documentation for trivial changes.
 
 knowledge_base:
   code_guidelines:
-    enabled: true
     filePatterns:
-      - "AGENTS.md"
-      - "docs/AGENTIC_DEV_WORKFLOW.md"
-      - "docs/architecture/CURRENT_STATE.md"
-      - "docs/architecture/security-and-secret-flow.md"
-      - "docs/architecture/playback-architecture.md"
-      - "docs/agentic/plan-authoring-standard.md"
+      - files: "docs/DEVELOPMENT.md,docs/architecture.md"
+        applyTo: "**/*"

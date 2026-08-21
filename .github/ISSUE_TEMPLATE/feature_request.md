@@ -20,4 +20,4 @@ List reasonable alternatives or constraints.
 
 ## Desktop Boundary Notes
 
-Call out any expected effect on Electron IPC, renderer privileges, Plex secret flow, native playback, persistence, packaging, or copied upstream Lineup code.
+Call out any expected effect on Plex secret flow, the Dart/native player boundary, native playback, persistence, accessibility, or packaging.

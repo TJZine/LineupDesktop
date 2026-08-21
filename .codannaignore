@@ -1,21 +1,18 @@
-# Codanna ignore patterns. Generated indexes stay local.
-
-node_modules/
-dist/
-out/
-coverage/
-.git/
+# Local indexes and generated output
 .codanna/
-.codex/cache/
-.agent/
-.fastembed_cache/
-.mcp_sequential_thinking/
-docs/runs/
+.dart_tool/
+build/
+coverage/
+macos/Flutter/ephemeral/
+windows/flutter/ephemeral/
 
+# External and generated sources
+initial-build/
+*.generated.*
+
+# Workspace noise
+.git/
+.worktrees/
+worktrees/
 *.log
-*.tmp
-*.temp
-*.bak
-*.swp
-*.swo
 .DS_Store

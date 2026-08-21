@@ -1,4 +1,0 @@
-interface:
-  display_name: "TypeScript Test Design"
-  short_description: "Design focused Desktop TypeScript tests at public seams"
-  default_prompt: "Apply Lineup Desktop TypeScript test-design boundaries to this change."

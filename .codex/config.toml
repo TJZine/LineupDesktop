@@ -1,39 +1,6 @@
-[agents]
-max_threads = 6
-max_depth = 1
-
-[agents.explorer]
-description = "Read-only codebase explorer for gathering evidence before changes are proposed."
-config_file = "agents/explorer.toml"
-
-[agents.explorer_fallback]
-description = "Fallback read-only explorer when the primary explorer is constrained or unavailable."
-config_file = "agents/explorer-fallback.toml"
-
-[agents.reviewer]
-description = "Read-only reviewer focused on correctness, regressions, security, and missing tests."
-config_file = "agents/reviewer.toml"
-
-[agents.docs_researcher]
-description = "Read-only documentation specialist for verifying framework and API behavior from official sources."
-config_file = "agents/docs-researcher.toml"
-
-[agents.planner]
-description = "Planning-focused writer for bounded discovery, tracked plan artifacts, and execution-ready handoffs."
-config_file = "agents/planner.toml"
-
-[agents.worker]
-description = "Sol escalation implementer for bounded units with settled decisions that still need material local design judgment, cross-boundary comprehension, complex diagnosis, or proof interpretation."
-config_file = "agents/worker.toml"
-
-[agents.worker_luna]
-description = "Cost-efficient autonomous implementer for bounded units with clear outcomes, established owner seams and contracts, and direct verification."
-config_file = "agents/worker-luna.toml"
-
-[agents.monitor]
-description = "Long-running command and polling role for status checks and verification waits."
-config_file = "agents/monitor.toml"
-
-[agents.monitor_fallback]
-description = "Fallback monitoring role for waits and polling when spark usage is constrained or unavailable."
-config_file = "agents/monitor-fallback.toml"
+[mcp_servers.codanna]
+url = "http://127.0.0.1:8082/mcp"
+http_headers = { Authorization = "Bearer mcp-access-token-dummy" }
+enabled = true
+required = false
+default_tools_approval_mode = "approve"

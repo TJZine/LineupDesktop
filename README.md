@@ -1,254 +1,135 @@
-# Lineup Desktop
+<p align="center">
+  <img src="assets/branding/lineup-wordmark.png" alt="Lineup Desktop" width="420">
+</p>
 
-A Windows-first Electron desktop client for [Plex](https://www.plex.tv/) that
-turns your media libraries into virtual TV channels with deterministic
-scheduling, an EPG guide, and native video playback — all running locally with
-no cloud backend.
+<p align="center">
+  <strong>A native desktop client for building and watching Plex-powered virtual TV channels.</strong>
+</p>
 
-> **Status:** Pre-release (`0.0.0`) · Private · Apache-2.0
-
----
-
-## What Is Lineup?
-
-Lineup lets you build custom channels from your Plex media library. Each channel
-gets its own schedule, and the app presents a familiar TV-like experience:
-flip through channels, check the guide, and watch content play continuously
-— just like live television, powered entirely by your own Plex server.
-
-**Lineup Desktop** is the native Windows port of that concept, built on Electron
-with a C#/.NET native helper for video playback via
-[libmpv](https://mpv.io/).
-
-### Key Features
-
-- 🔒 **Secure Plex auth** — encrypted credential storage via Electron
-  `safeStorage`; renderer never touches tokens
-- 📺 **Virtual channels** — deterministic scheduling with shuffle, block, and
-  loop strategies
-- 📖 **EPG guide** — full electronic program guide with current/next info,
-  mini-guide overlay, and channel badges
-- 🎬 **Native playback** — C# helper process with libmpv for direct play,
-  direct stream, and transcode decisions
-- 🎛️ **Media options** — subtitle, audio track, HDR/Dolby Vision, and quality
-  controls
-- 🖥️ **Desktop UX** — fullscreen, multi-monitor, keyboard/gamepad input, cursor
-  auto-hide, and app-command support
-- 🩺 **Diagnostics** — crash recovery, support-bundle export, and redacted
-  logging
-
----
-
-## Prerequisites
-
-| Requirement | Version |
-| --- | --- |
-| **Node.js** | `22.19.0` (see [`.nvmrc`](./.nvmrc)) |
-| **npm** | Bundled with Node |
-| **Git** | Any recent version |
-| **Windows** | 10+ (primary target for native playback proof) |
-| **macOS** | Supported for development and automated tests |
-
-> [!TIP]
-> Use [nvm](https://github.com/nvm-sh/nvm) (macOS/Linux) or
-> [nvm-windows](https://github.com/coreybutler/nvm-windows) to manage Node
-> versions. Run `nvm use` in the repo root to switch automatically.
-
----
-
-## Getting Started
-
-```sh
-# Clone the repository
-git clone https://github.com/TJZine/LineupDesktop.git
-cd LineupDesktop
-
-# Install the correct Node version
-nvm use
-
-# Install dependencies
-npm ci
-
-# Run the full verification suite
-npm run verify
-```
-
-### Launch the Electron App (Development)
-
-```sh
-# Build the Electron shell (main + preload + renderer)
-npm run build:electron
-
-# Run the Electron smoke test
-npm run smoke:electron
-```
-
-> [!NOTE]
-> There is no `npm run dev` hot-reload server yet. The current development
-> workflow is build → smoke → iterate.
-
----
-
-## Available Scripts
-
-| Script | Description |
-| --- | --- |
-| `npm run build:electron` | Compile TypeScript, bundle preload, and copy renderer assets |
-| `npm run smoke:electron` | Build + launch the Electron smoke test |
-| `npm run typecheck` | Run the TypeScript compiler in check-only mode |
-| `npm run lint` | Run ESLint across the project |
-| `npm run test` | Run contract tests and harness-doc tests |
-| `npm run test:contracts` | Run only the contract/unit test suite |
-| `npm run test:harness-docs` | Run only the harness-doc verification tests |
-| `npm run verify` | **Full verification** — typecheck, lint, architecture, tests, docs, and redaction |
-| `npm run verify:architecture` | Lint + maintainability checks |
-| `npm run verify:docs` | Verify doc structure and cross-references |
-| `npm run verify:redaction` | Scan for leaked secrets, tokens, or private data |
+<p align="center">
+  <a href="https://github.com/TJZine/LineupDesktop/actions/workflows/ci.yml?query=branch%3Areplatform%2Fflutter-native">
+    <img src="https://github.com/TJZine/LineupDesktop/actions/workflows/ci.yml/badge.svg?branch=replatform%2Fflutter-native" alt="CI status">
+  </a>
+  <a href="LICENSE">
+    <img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="Apache 2.0 license">
+  </a>
+  <img src="https://img.shields.io/badge/status-pre--release-orange.svg" alt="Pre-release status">
+</p>
 
 > [!IMPORTANT]
-> Always run `npm run verify` before committing. CI runs the same suite on
-> Linux and Windows.
+> Lineup Desktop is under active development. There is no supported public
+> installer or release yet. Windows native playback is implemented, but final
+> physical-device, media-compatibility, HDR, packaging, and release acceptance
+> are still in progress.
 
----
+Lineup Desktop turns a Plex library into a deterministic, television-style
+lineup. It combines channel creation, a responsive electronic program guide,
+and native desktop playback while keeping product behavior in Flutter/Dart and
+the Windows media boundary deliberately narrow.
 
-## Project Structure
+## Highlights
 
-```
-LineupDesktop/
-├── src/
-│   ├── contracts/       # Renderer-safe type contracts (player, Plex, IPC, persistence, diagnostics)
-│   ├── domain/          # Pure domain logic (scheduler, channel/content) — no Electron/Node deps
-│   ├── main/            # Electron main process (shell, Plex runtime, player, persistence, window)
-│   ├── preload/         # Narrow context bridge — single lineupDesktop exposure
-│   ├── renderer/        # Unprivileged renderer (UI, routes, overlays, focus, input)
-│   ├── native-helper/   # C#/.NET native player host (libmpv, NDJSON protocol)
-│   └── __tests__/       # Contract, domain, main, preload, renderer, and integration tests
-├── tools/               # Build scripts, verifiers, dev-only spike harnesses
-├── docs/
-│   ├── architecture/    # ADRs, current state, import ledger, guardrails
-│   ├── roadmap/         # Ordered port roadmap and MVP sequence
-│   ├── product/         # Product parity matrix
-│   ├── development/     # Internal validation, Windows proof plans
-│   ├── plans/           # Active and archived implementation plans
-│   ├── runs/            # Platform proof evidence (gitignored contents)
-│   └── agentic/         # Agentic workflow docs and session prompts
-├── .github/             # CI workflows, issue/PR templates, CODEOWNERS
-├── dist/                # Build output (gitignored)
-└── out/                 # Package output (gitignored)
-```
+- Plex PIN sign-in, Plex Home profiles, server discovery, and secure credential
+  storage
+- A guided Channel Builder with library, playlist, collection, genre, decade,
+  studio, actor, and director strategies
+- Custom channels built from an entire library or hand-picked media
+- Classic picture-in-picture and full-video Overlay Guide layouts
+- Native Windows playback with an OSD, mini Guide, channel entry, seeking,
+  track selection, sleep timer, and fullscreen controls
+- Five themes, compact and comfortable Guide densities, reduced motion, and
+  larger focus indicators
+- Bounded, credential-safe diagnostics intended for support and testing
 
----
+## Platform status
 
-## Architecture Overview
-
-Lineup Desktop follows a strict **privilege separation** model:
-
-```
-┌─────────────────────────────────────────────────────────┐
-│                    Renderer (unprivileged)               │
-│  Routes · Overlays · EPG · Settings · Focus · Input     │
-│  No tokens, no credentials, no raw URLs, no Node APIs   │
-└────────────────────────┬────────────────────────────────┘
-                         │ window.lineupDesktop (preload bridge)
-┌────────────────────────┴────────────────────────────────┐
-│                    Preload (narrow bridge)               │
-│  Single contextBridge exposure · payload guards          │
-│  Validated IPC channels only                             │
-└────────────────────────┬────────────────────────────────┘
-                         │ Electron IPC
-┌────────────────────────┴────────────────────────────────┐
-│                    Main (privileged)                     │
-│  Plex auth/discovery/library · Stream policy            │
-│  Persistence (safeStorage) · Player adapter · Window    │
-│  Diagnostics · Playback runtime/composition             │
-└────────────────────────┬────────────────────────────────┘
-                         │ NDJSON over stdin/stdout
-┌────────────────────────┴────────────────────────────────┐
-│              Native Helper (C#/.NET process)             │
-│  libmpv playback · Track control · Video parameters     │
-└─────────────────────────────────────────────────────────┘
-```
-
-**Key invariants:**
-
-- The renderer never accesses Plex tokens, auth headers, raw media URLs, native
-  handles, or filesystem paths.
-- Plex credentials are encrypted at rest via Electron `safeStorage` with no
-  plaintext fallback.
-- The domain layer (`src/domain/`) is pure — no Electron, Node, or browser
-  globals.
-- Playback decisions are capability-driven, not hardcoded to any platform's
-  codec assumptions.
-
-For full details, see
-[`docs/architecture/CURRENT_STATE.md`](./docs/architecture/CURRENT_STATE.md).
-
----
-
-## Technology Stack
-
-| Layer | Technology |
+| Platform | Current status |
 | --- | --- |
-| **Runtime** | [Electron](https://www.electronjs.org/) 42 |
-| **Language** | [TypeScript](https://www.typescriptlang.org/) 5.3 |
-| **Bundler** | [esbuild](https://esbuild.github.io/) (preload bundling) |
-| **Linter** | [ESLint](https://eslint.org/) 10 with architecture boundary rules |
-| **Native playback** | C#/.NET helper with [libmpv](https://mpv.io/) |
-| **Test runner** | Node.js built-in `--test` runner |
-| **CI** | GitHub Actions (Linux + Windows) |
+| Windows 10/11 x64 | Primary target. Flutter UI, libmpv playback, native video presentation, and portable packaging are implemented. Final real-hardware and release acceptance remains pending. |
+| macOS 12 or newer | Portable Flutter UI, onboarding, channel management, Guide, settings, and secure-storage development flows build successfully. Playback is intentionally reported as unsupported. |
+| Linux | Not currently targeted. |
 
----
+See [Architecture](docs/architecture.md) for the ownership model and
+[Windows Native Acceptance](docs/windows-native-validation.md) for the evidence
+still required before broader release claims.
 
-## Roadmap
+## First run
 
-The desktop port follows an ordered, incremental roadmap. Each slice has
-explicit dependencies, exit gates, and platform proof requirements.
+A private test build guides the user through:
 
-See [`docs/roadmap/desktop-port-roadmap.md`](./docs/roadmap/desktop-port-roadmap.md)
-for the full checklist.
+1. Link a Plex account with a QR code or four-character PIN.
+2. Choose a Plex Home profile, including protected-profile PIN entry.
+3. Select a reachable Plex Media Server.
+4. Confirm the system-selected audio-output behavior.
+5. Select libraries and build or review the initial channel lineup.
 
-**Completed milestones** include: secure Electron shell, player contracts,
-stream policy, persistence, Plex auth/discovery/library import, scheduler and
-channel domains, Plex-to-player integration, renderer UI and navigation,
-desktop input/fullscreen UX, UI-over-native-video composition, subtitle/audio/HDR
-hardening, diagnostics and crash recovery, internal Windows packaging, internal
-validation, upstream compatibility audit, product parity analysis, upstream UI
-body parity, live Plex onboarding/library wiring, channel setup, guide runtime,
-and production native playback code.
+The main application then provides **Guide**, **Channels**, **Settings**,
+**Diagnostics**, and **Player** destinations. The
+[User Guide](docs/user-guide.md) documents the complete flow, controls,
+settings, privacy behavior, and troubleshooting steps.
 
-**Next up:** RD-27 — full Windows product proof for production native playback
-and MVP visual/input/overlay behavior.
+## Getting a build
 
----
+No public release artifacts are published yet. Private testers should use only a
+build supplied by the maintainer and should verify its source commit and package
+hash before running it. Do not copy only the executable out of the portable
+package; the adjacent runtime files and `data` directory are required.
 
-## Contributing
+Developers can build the portable Flutter application on macOS or the complete
+native player on Windows. Start with [Development](docs/DEVELOPMENT.md).
 
-1. Read [`AGENTS.md`](./AGENTS.md) and
-   [`docs/AGENTIC_DEV_WORKFLOW.md`](./docs/AGENTIC_DEV_WORKFLOW.md) before
-   making changes.
-2. Use the Node version from [`.nvmrc`](./.nvmrc).
-3. Run `npm run verify` before pushing — it's the same gate CI enforces.
-4. Record any copied or adapted upstream Lineup source in the
-   [import ledger](./docs/architecture/import-ledger.md) before or with
-   the import.
-5. Never commit Plex tokens, auth headers, tokenized URLs, raw logs, or
-   unredacted crash dumps.
+```sh
+flutter pub get
+dart format --output=none --set-exit-if-changed .
+flutter analyze
+flutter test
+```
 
-See the [PR template](./.github/PULL_REQUEST_TEMPLATE.md) and
-[issue templates](./.github/ISSUE_TEMPLATE/) for contribution guidelines.
+Windows playback additionally requires the pinned LGPL libmpv runtime and the
+repository-owned Flutter DirectComposition engine patch. Do not substitute
+unpinned components; follow the exact Windows procedure in
+[Development](docs/DEVELOPMENT.md).
 
----
+## Documentation
 
-## Security
+| Document | Purpose |
+| --- | --- |
+| [Documentation index](docs/README.md) | Audience-oriented map of the project documentation |
+| [User Guide](docs/user-guide.md) | Setup, navigation, controls, settings, privacy, and troubleshooting |
+| [Contributing](CONTRIBUTING.md) | Contribution workflow, architecture constraints, and review expectations |
+| [Development](docs/DEVELOPMENT.md) | Toolchain, commands, native build setup, and engineering practices |
+| [Architecture](docs/architecture.md) | Component ownership, implemented state, and dependency decisions |
+| [Windows Native Acceptance](docs/windows-native-validation.md) | Physical-machine test campaign and Codex handoff |
+| [Windows Runtime Provenance](docs/windows-runtime.md) | libmpv/FFmpeg/libplacebo provenance and redistribution obligations |
+| [Portable UI Parity](docs/ui-parity.md) | Detailed source, test, and visual-parity evidence record |
+| [Guide PiP Specification](docs/guide-pip-composition-spec.md) | Approved Guide/PiP composition and physical-acceptance requirements |
+| [Security Policy](SECURITY.md) | Private vulnerability reporting and secret-handling rules |
 
-This app handles Plex credentials, local storage, media playback, and
-diagnostics. Security reports are welcome even in pre-release.
+## Security and privacy
 
-See [`SECURITY.md`](./SECURITY.md) for the full security policy, reporting
-instructions, and scope.
+Plex credentials are kept outside ordinary application state and durable JSON.
+Diagnostics are bounded and redact credentials, authorization headers,
+token-bearing URLs, and private paths at their owner. Even so, review every log
+or screenshot before sharing it.
 
----
+Report security issues privately using [SECURITY.md](SECURITY.md). Do not post
+Plex tokens, authentication headers, tokenized URLs, private media metadata, or
+unredacted diagnostics in issues or pull requests.
+
+## Project status
+
+The Flutter-native replatform is the active implementation. The historical
+Electron/TypeScript/C# code remains on `initial-build` as reference material,
+not as a compatibility target.
+
+The principal remaining release work is physical Windows acceptance of native
+video composition, replacement playback, hardware decode, HDR behavior,
+fullscreen and high-DPI transitions, input/focus behavior, and the final
+portable package on clean test systems.
 
 ## License
 
-[Apache License 2.0](./LICENSE) — Copyright 2026 TJZine.
+Lineup Desktop source is available under the
+[Apache License 2.0](LICENSE). Bundled native components retain their own
+licenses and redistribution requirements; see
+[Windows Runtime Provenance](docs/windows-runtime.md).
