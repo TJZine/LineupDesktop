@@ -43,9 +43,9 @@ audience and purpose.
 - [Portable UI Parity](ui-parity.md) is a detailed historical evidence record
   for the portable UI campaigns. Its classifications belong to the named
   campaign sections and must not be generalized into Windows support claims.
-- [Guide PiP Specification](guide-pip-composition-spec.md) records the approved
-  responsive composition, ownership boundaries, and physical Windows proof
-  required for Guide/PiP behavior.
+- [Guide PiP Specification](guide-pip-composition-spec.md) records the
+  implemented responsive composition, ownership boundaries, and physical
+  Windows proof still required for Guide/PiP behavior.
 - [Windows Runtime Provenance](windows-runtime.md) records exact native runtime
   sources, hashes, licenses, package policy, and unresolved redistribution
   gates.
