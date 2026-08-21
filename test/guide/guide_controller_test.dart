@@ -260,6 +260,68 @@ void main() {
     lineup.dispose();
   });
 
+  test(
+    'cached schedules reproject synchronously across a half-hour shift',
+    () async {
+      final lineup = _TestLineup(_channels(1));
+      var loads = 0;
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async {
+          loads++;
+          return _schedule(channel);
+        },
+        clock: () => DateTime(2026, 8, 13, 12),
+      );
+      guide.requestViewport(0, 1);
+      await _settle();
+      expect(guide.row('channel-0').state, GuideLoadState.ready);
+      guide.selectProgram(guide.row('channel-0').programs[2]);
+      final selected = guide.selectedProgramId;
+
+      var shifted = false;
+      for (var index = 0; index < 60; index++) {
+        final before = guide.windowStart;
+        guide.moveHorizontal(1);
+        if (guide.windowStart != before) {
+          shifted = true;
+          expect(guide.row('channel-0').state, GuideLoadState.ready);
+          break;
+        }
+      }
+
+      expect(shifted, isTrue);
+      expect(loads, 1);
+      expect(guide.selectedProgramId, selected);
+      guide.dispose();
+      lineup.dispose();
+    },
+  );
+
+  test('jumping to now keeps cached rows ready without reloading', () async {
+    var now = DateTime(2026, 8, 13, 12);
+    final lineup = _TestLineup(_channels(1));
+    var loads = 0;
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async {
+        loads++;
+        return _schedule(channel);
+      },
+      clock: () => now,
+    );
+    guide.requestViewport(0, 1);
+    await _settle();
+
+    now = now.add(const Duration(hours: 1));
+    guide.playToNow();
+
+    expect(guide.row('channel-0').state, GuideLoadState.ready);
+    expect(loads, 1);
+    guide.dispose();
+    lineup.dispose();
+  });
+
   test('tuning resolves now after the Guide browses another window', () async {
     final lineup = _TestLineup(_channels(1));
     final now = DateTime(2026, 8, 13, 12);
@@ -378,7 +440,7 @@ void main() {
     );
 
     final stale = guide.artworkFor(program);
-    guide.playToNow();
+    lineup.changeContentScope();
     lineup.completeArtwork();
     expect(await stale, isNull);
 
@@ -387,6 +449,48 @@ void main() {
     expect(lineup.artworkLoads, 2);
     lineup.completeArtwork();
     expect(await retry, isNotNull);
+  });
+
+  test('Guide artwork kinds use their distinct Plex paths', () async {
+    final lineup = _ArtworkLineup(_channels(1));
+    addTearDown(lineup.dispose);
+    final guide = GuideController(lineup: lineup);
+    addTearDown(guide.dispose);
+    final start = DateTime(2026, 8, 13, 12);
+    final program = GuideProgram(
+      channelId: 'channel-0',
+      scheduled: ScheduledProgram(
+        item: ChannelItem(
+          id: 'episode',
+          title: 'Episode',
+          duration: const Duration(hours: 1),
+          showThumb: '/show-poster',
+          artwork: Uri.parse('/episode-thumb'),
+          backdrop: Uri.parse('/backdrop'),
+          clearLogo: Uri.parse('/clear-logo'),
+        ),
+        start: start,
+        end: start.add(const Duration(hours: 1)),
+        elapsed: Duration.zero,
+        index: 0,
+        loop: 0,
+      ),
+    );
+
+    final loads = [
+      guide.artworkFor(program),
+      guide.artworkFor(program, GuideArtworkKind.backdrop),
+      guide.artworkFor(program, GuideArtworkKind.clearLogo),
+    ];
+    await _settle();
+
+    expect(lineup.artworkPaths, [
+      Uri.parse('/show-poster'),
+      Uri.parse('/backdrop'),
+      Uri.parse('/clear-logo'),
+    ]);
+    lineup.completeArtwork();
+    expect(await Future.wait(loads), everyElement(isNotNull));
   });
 
   test('production schedules use the persistent catalog worker', () async {
@@ -801,11 +905,13 @@ class _ArtworkLineup extends _TestLineup {
   _ArtworkLineup(super.value);
 
   final _artwork = <Completer<Uint8List?>>[];
+  final artworkPaths = <Uri>[];
   int artworkLoads = 0;
 
   @override
-  Future<Uint8List?> artworkFor(ChannelItem item) {
+  Future<Uint8List?> artworkForPath(Uri path) {
     artworkLoads++;
+    artworkPaths.add(path);
     final completer = Completer<Uint8List?>();
     _artwork.add(completer);
     return completer.future;

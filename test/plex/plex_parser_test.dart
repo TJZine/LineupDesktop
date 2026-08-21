@@ -61,6 +61,28 @@ void main() {
     expect(item.audioChannels, 6);
   });
 
+  test('parses episode artwork facts including show poster and clear logo', () {
+    final item = parseMediaItem({
+      'ratingKey': 'episode-1',
+      'key': '/library/metadata/episode-1',
+      'title': 'Episode',
+      'type': 'episode',
+      'duration': 1000,
+      'thumb': '/library/metadata/episode-1/thumb',
+      'grandparentThumb': '/library/metadata/show-1/thumb',
+      'art': '/library/metadata/show-1/art',
+      'Image': [
+        {'type': 'clearArt', 'url': '/library/metadata/show-1/clearart'},
+        {'type': 'clearLogo', 'url': '/library/metadata/show-1/clearlogo'},
+      ],
+    });
+
+    expect(item.thumbPath, '/library/metadata/episode-1/thumb');
+    expect(item.grandparentThumbPath, '/library/metadata/show-1/thumb');
+    expect(item.artPath, '/library/metadata/show-1/art');
+    expect(item.clearLogoPath, '/library/metadata/show-1/clearlogo');
+  });
+
   test('rejects missing media identity', () {
     expect(() => parseMediaItem({'title': 'No id'}), throwsA(isA<Exception>()));
   });

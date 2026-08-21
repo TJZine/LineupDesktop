@@ -20,7 +20,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      Theme.of(tester.element(find.text('Guide').first)).colorScheme.primary,
+      Theme.of(tester.element(find.byKey(const Key('classic-guide'))))
+          .colorScheme
+          .primary,
       emberSteel.colorScheme.primary,
     );
 

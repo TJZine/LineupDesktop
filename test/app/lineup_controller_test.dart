@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/testing.dart';
@@ -11,6 +12,32 @@ import 'package:lineup_desktop/plex/plex_models.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 
 void main() {
+  test(
+    'artworkForPath uses the active authenticated server transport',
+    () async {
+      final plex = _FakePlex();
+      final controller = LineupController(
+        store: _MemoryStore(),
+        credentials: _MemoryCredentials(accountToken: 'account-token'),
+        plex: plex,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+      controller.connection = PlexConnection(
+        uri: Uri.parse('https://plex.example:32400'),
+        local: true,
+        relay: false,
+      );
+
+      final bytes = await controller.artworkForPath(Uri.parse('/show/art'));
+
+      expect(bytes, Uint8List.fromList([1, 2, 3]));
+      expect(plex.artworkPath, Uri.parse('/show/art'));
+      expect(plex.artworkToken, 'account-token');
+    },
+  );
+
   test('playback requests remove Plex tokens without an empty query', () {
     final tokenOnly = LineupPlaybackRequest(
       Uri.parse(
@@ -890,6 +917,8 @@ class _FakePlex extends PlexClient {
   int pollCalls = 0;
   int cancelPinCalls = 0;
   int librariesCalls = 0;
+  Uri? artworkPath;
+  String? artworkToken;
 
   @override
   Future<PlexAccount> account(String token) =>
@@ -959,6 +988,18 @@ class _FakePlex extends PlexClient {
   @override
   Future<PlexPlaylistCatalog> playlists(Uri server, String token) async =>
       const PlexPlaylistCatalog(playlists: [], failedIds: {});
+
+  @override
+  Future<Uint8List> artwork(
+    Uri server,
+    String token,
+    Uri path, {
+    int maximumBytes = 4 * 1024 * 1024,
+  }) async {
+    artworkPath = path;
+    artworkToken = token;
+    return Uint8List.fromList([1, 2, 3]);
+  }
 
   @override
   void close() {}

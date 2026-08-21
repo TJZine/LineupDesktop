@@ -143,7 +143,17 @@ class _LineupShellState extends State<LineupShell> {
   }
 
   KeyEventResult _globalKey(FocusNode _, KeyEvent event) {
-    if (event is! KeyDownEvent || !HardwareKeyboard.instance.isControlPressed) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    final keyboard = HardwareKeyboard.instance;
+    if (event.logicalKey == LogicalKeyboardKey.f3 &&
+        !keyboard.isControlPressed &&
+        !keyboard.isMetaPressed &&
+        !keyboard.isAltPressed &&
+        !keyboard.isShiftPressed) {
+      _select(2);
+      return KeyEventResult.handled;
+    }
+    if (!keyboard.isControlPressed) {
       return KeyEventResult.ignored;
     }
     final index = switch (event.logicalKey) {
@@ -197,6 +207,7 @@ class _LineupShellState extends State<LineupShell> {
             onKeyEvent: (_, event) {
               if (event is KeyDownEvent &&
                   (event.logicalKey == LogicalKeyboardKey.escape ||
+                      event.logicalKey == LogicalKeyboardKey.backspace ||
                       event.logicalKey == LogicalKeyboardKey.goBack)) {
                 _closeAppMenu();
                 return KeyEventResult.handled;
@@ -1041,10 +1052,14 @@ class _SettingsViewState extends State<SettingsView> {
               ),
               _Dropdown<int>(
                 'Visible time range',
-                'Set how many schedule hours the Guide shows at once.',
+                'Use the upstream-scale view or a wider desktop schedule.',
                 value.guideHours,
                 LineupSettings.guideHoursOptions,
-                (item) => '$item hours',
+                (item) => switch (item) {
+                  2 => 'Detailed (2 hours)',
+                  3 => 'Wide (3 hours)',
+                  _ => 'Desktop extended ($item hours)',
+                },
                 _saving
                     ? null
                     : (item) => _update(
@@ -1065,7 +1080,7 @@ class _SettingsViewState extends State<SettingsView> {
               ),
               _Dropdown<GuideDensity>(
                 'Row density',
-                'Choose comfortable or compact channel rows.',
+                'Keep the upstream-scale rows or fit more on desktop.',
                 value.guideDensity,
                 GuideDensity.values,
                 (item) => _enumLabel(item.name),
@@ -1073,6 +1088,38 @@ class _SettingsViewState extends State<SettingsView> {
                     ? null
                     : (item) => _update(
                         widget.controller.settings.copyWith(guideDensity: item),
+                      ),
+              ),
+              _Dropdown<GuideInfoBackgroundMode>(
+                'Info box background',
+                'Choose dynamic color, the theme surface, or Plex artwork.',
+                value.guideInfoBackgroundMode,
+                GuideInfoBackgroundMode.values,
+                (item) => switch (item) {
+                  GuideInfoBackgroundMode.bleed => 'Artwork color bleed',
+                  GuideInfoBackgroundMode.themeDefault => 'Theme default',
+                  GuideInfoBackgroundMode.artwork => 'Artwork backdrop',
+                },
+                _saving
+                    ? null
+                    : (item) => _update(
+                        widget.controller.settings.copyWith(
+                          guideInfoBackgroundMode: item,
+                        ),
+                      ),
+              ),
+              SwitchListTile(
+                title: const Text('Prefer clear logos'),
+                subtitle: const Text(
+                  'Use Plex title logos in Guide details when available.',
+                ),
+                value: value.preferClearLogos,
+                onChanged: _saving
+                    ? null
+                    : (item) => _update(
+                        widget.controller.settings.copyWith(
+                          preferClearLogos: item,
+                        ),
                       ),
               ),
               SwitchListTile(
@@ -1090,9 +1137,9 @@ class _SettingsViewState extends State<SettingsView> {
                       ),
               ),
               SwitchListTile(
-                title: const Text('Now Watching banner'),
+                title: const Text('Now Playing context'),
                 subtitle: const Text(
-                  'Show the tuned channel and program above Guide details.',
+                  'Keep the tuned channel and program visible in the Guide.',
                 ),
                 value: value.nowWatchingBanner,
                 onChanged: _saving

@@ -625,7 +625,9 @@ PlexMediaItem parseMediaItem(Object? raw, {String? libraryId}) {
     parentTitle: _optionalText(json['parentTitle']),
     grandparentTitle: _optionalText(json['grandparentTitle']),
     thumbPath: _optionalText(json['thumb']),
+    grandparentThumbPath: _optionalText(json['grandparentThumb']),
     artPath: _optionalText(json['art']),
+    clearLogoPath: _clearLogoPath(json['Image']),
     partPath: _optionalText(part?['key']),
     container: _optionalText(media?['container'])?.toLowerCase(),
     videoCodec: _optionalText(media?['videoCodec'])?.toLowerCase(),
@@ -652,6 +654,16 @@ PlexMediaItem parseMediaItem(Object? raw, {String? libraryId}) {
         : null,
     viewed: ((json['viewCount'] as num?)?.toInt() ?? 0) > 0,
   );
+}
+
+String? _clearLogoPath(Object? raw) {
+  if (raw is! List) return null;
+  for (final entry in raw) {
+    if (entry is! Map || entry['type'] != 'clearLogo') continue;
+    final url = _optionalText(entry['url']);
+    if (url != null) return url;
+  }
+  return null;
 }
 
 List<String> _tagNames(Object? raw) {

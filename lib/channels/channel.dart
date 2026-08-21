@@ -106,6 +106,8 @@ class ChannelItem {
     this.showTitle,
     this.showThumb,
     this.artwork,
+    this.backdrop,
+    this.clearLogo,
     this.summary,
     this.contentRating,
     this.genres = const [],
@@ -124,7 +126,11 @@ class ChannelItem {
   final Duration duration;
   final String? showTitle;
   final String? showThumb;
+
+  /// The poster/thumb path retained under the legacy `artwork` JSON key.
   final Uri? artwork;
+  final Uri? backdrop;
+  final Uri? clearLogo;
   final String? summary;
   final String? contentRating;
   final List<String> genres;
@@ -144,6 +150,8 @@ class ChannelItem {
     if (showTitle != null) 'showTitle': showTitle,
     if (showThumb != null) 'showThumb': showThumb,
     if (artwork != null) 'artwork': artwork.toString(),
+    if (backdrop != null) 'backdrop': backdrop.toString(),
+    if (clearLogo != null) 'clearLogo': clearLogo.toString(),
     if (summary != null) 'summary': summary,
     if (contentRating != null) 'contentRating': contentRating,
     if (genres.isNotEmpty) 'genres': genres,
@@ -173,6 +181,12 @@ class ChannelItem {
       showThumb: json['showThumb'] as String?,
       artwork: json['artwork'] is String
           ? Uri.tryParse(json['artwork'] as String)
+          : null,
+      backdrop: json['backdrop'] is String
+          ? Uri.tryParse(json['backdrop'] as String)
+          : null,
+      clearLogo: json['clearLogo'] is String
+          ? Uri.tryParse(json['clearLogo'] as String)
           : null,
       summary: json['summary'] as String?,
       contentRating: json['contentRating'] as String?,

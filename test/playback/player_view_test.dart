@@ -138,6 +138,11 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     expect(guideOpened, isTrue);
 
+    guideOpened = false;
+    fixture.player.closeOverlay();
+    await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
+    expect(guideOpened, isTrue);
+
     await tester.pumpWidget(const SizedBox.shrink());
     fixture.dispose();
   });

@@ -58,6 +58,8 @@ abstract final class GuideGeometry {
 
 enum GuideLoadState { loading, ready, error }
 
+enum GuideArtworkKind { poster, backdrop, clearLogo }
+
 @immutable
 class GuideProgram {
   const GuideProgram({required this.channelId, required this.scheduled});
@@ -241,11 +243,22 @@ class GuideController extends ChangeNotifier {
 
   Set<String> get availableLibraryIds => _availableLibraryIds;
 
-  Future<Uint8List?> artworkFor(GuideProgram program) {
+  Future<Uint8List?> artworkFor(
+    GuideProgram program, [
+    GuideArtworkKind kind = GuideArtworkKind.poster,
+  ]) {
     if (_disposed) return Future.value();
-    final path = program.scheduled.item.artwork;
+    final item = program.scheduled.item;
+    final path = switch (kind) {
+      GuideArtworkKind.poster =>
+        item.showThumb == null || item.showThumb!.isEmpty
+            ? item.artwork
+            : Uri.tryParse(item.showThumb!) ?? item.artwork,
+      GuideArtworkKind.backdrop => item.backdrop,
+      GuideArtworkKind.clearLogo => item.clearLogo,
+    };
     if (path == null || path.toString().isEmpty) return Future.value();
-    final key = '${program.scheduled.item.id}|$path';
+    final key = '${item.id}|${kind.name}|$path';
     final existing = _artwork.remove(key);
     if (existing != null) {
       _artwork[key] = existing;
@@ -254,9 +267,7 @@ class GuideController extends ChangeNotifier {
     final completer = Completer<Uint8List?>();
     final loading = completer.future;
     _artwork[key] = loading;
-    _pendingArtwork.add(
-      _ArtworkRequest(key, program.scheduled.item, completer, _generation),
-    );
+    _pendingArtwork.add(_ArtworkRequest(key, path, completer, _generation));
     while (_artwork.length > maximumCachedArtworkEntries) {
       final evicted = _artwork.keys.first;
       _artwork.remove(evicted);
@@ -281,7 +292,7 @@ class GuideController extends ChangeNotifier {
       }
       _activeArtworkLoads++;
       lineup
-          .artworkFor(request.item)
+          .artworkForPath(request.path)
           .then<Uint8List?>((value) => value, onError: (_) => null)
           .then((value) {
             final cached = identical(
@@ -473,7 +484,15 @@ class GuideController extends ChangeNotifier {
 
   void _request(Channel channel) {
     if (_disposed) return;
-    if (_rows.containsKey(channel.id) || !_queuedIds.add(channel.id)) return;
+    if (_rows.containsKey(channel.id)) return;
+    final cachedSchedule = _schedules[channel.id];
+    if (cachedSchedule != null) {
+      _putRow(channel.id, _projectedRow(channel, cachedSchedule));
+      _updateFocusAndSelection(channel.id);
+      notifyListeners();
+      return;
+    }
+    if (!_queuedIds.add(channel.id)) return;
     _pending.add(channel);
     _pump();
   }
@@ -500,32 +519,8 @@ class GuideController extends ChangeNotifier {
                 return;
               }
               _putSchedule(channel.id, schedule);
-              final projected =
-                  scheduleWindow(
-                        _windowStart,
-                        windowEnd,
-                        channel.anchor,
-                        schedule,
-                      )
-                      .map((scheduled) {
-                        return GuideProgram(
-                          channelId: channel.id,
-                          scheduled: scheduled,
-                        );
-                      })
-                      .toList(growable: false);
-              _putRow(
-                channel.id,
-                GuideRowData(state: GuideLoadState.ready, programs: projected),
-              );
-              if (_focusedChannelId == channel.id) _selectAtFocusTime();
-              if (_selectedChannelId == channel.id &&
-                  !projected.any(
-                    (program) => program.id == _selectedProgramId,
-                  )) {
-                _selectedChannelId = null;
-                _selectedProgramId = null;
-              }
+              _putRow(channel.id, _projectedRow(channel, schedule));
+              _updateFocusAndSelection(channel.id);
               notifyListeners();
             },
             onError: (Object error) {
@@ -560,12 +555,69 @@ class GuideController extends ChangeNotifier {
     }
   }
 
+  GuideRowData _projectedRow(Channel channel, ScheduleIndex schedule) =>
+      GuideRowData(
+        state: GuideLoadState.ready,
+        programs:
+            scheduleWindow(_windowStart, windowEnd, channel.anchor, schedule)
+                .map(
+                  (scheduled) =>
+                      GuideProgram(channelId: channel.id, scheduled: scheduled),
+                )
+                .toList(growable: false),
+      );
+
+  void _updateFocusAndSelection(String channelId) {
+    if (_focusedChannelId == channelId) _selectAtFocusTime();
+    if (_selectedChannelId != channelId) return;
+    final selectedId = _selectedProgramId;
+    if (selectedId == null ||
+        !row(channelId).programs.any((program) => program.id == selectedId)) {
+      _selectedChannelId = null;
+      _selectedProgramId = null;
+    }
+  }
+
+  void _reprojectCachedRows() {
+    final loading = _rows.entries
+        .where(
+          (entry) =>
+              entry.value.state == GuideLoadState.loading &&
+              _channelById.containsKey(entry.key),
+        )
+        .toList(growable: false);
+    _rows.clear();
+    for (final entry in loading) {
+      _rows[entry.key] = entry.value;
+    }
+    for (final entry in _schedules.entries) {
+      final channel = _channelById[entry.key];
+      if (channel != null) {
+        _rows[entry.key] = _projectedRow(channel, entry.value);
+      }
+    }
+    while (_rows.length > maximumCachedRows) {
+      final evicted = _rows.keys.firstWhere(
+        (id) => _rows[id]!.state != GuideLoadState.loading,
+        orElse: () => _rows.keys.first,
+      );
+      _rows.remove(evicted);
+    }
+    for (final entry in _schedules.entries) {
+      if (_rows.containsKey(entry.key)) _updateFocusAndSelection(entry.key);
+    }
+  }
+
   void _reloadRows({bool clearSchedules = false}) {
-    _generation++;
+    if (clearSchedules) _generation++;
     _pending.clear();
     _queuedIds.clear();
-    _rows.clear();
-    if (clearSchedules) _schedules.clear();
+    if (clearSchedules) {
+      _rows.clear();
+      _schedules.clear();
+    } else {
+      _reprojectCachedRows();
+    }
     if (clearSchedules) _artwork.clear();
     if (clearSchedules) {
       for (final request in _pendingArtwork) {
@@ -677,10 +729,10 @@ class GuideController extends ChangeNotifier {
 }
 
 class _ArtworkRequest {
-  const _ArtworkRequest(this.key, this.item, this.completer, this.generation);
+  const _ArtworkRequest(this.key, this.path, this.completer, this.generation);
 
   final String key;
-  final ChannelItem item;
+  final Uri path;
   final Completer<Uint8List?> completer;
   final int generation;
 }
@@ -724,6 +776,8 @@ bool _itemEquals(ChannelItem left, ChannelItem right) =>
     left.showTitle == right.showTitle &&
     left.showThumb == right.showThumb &&
     left.artwork == right.artwork &&
+    left.backdrop == right.backdrop &&
+    left.clearLogo == right.clearLogo &&
     left.summary == right.summary &&
     left.contentRating == right.contentRating &&
     listEquals(left.genres, right.genres) &&

@@ -785,16 +785,17 @@ class LineupController extends ChangeNotifier {
   }
 
   Future<Uint8List?> artworkFor(ChannelItem item) async {
+    final artwork = item.artwork;
+    return artwork == null ? null : artworkForPath(artwork);
+  }
+
+  Future<Uint8List?> artworkForPath(Uri path) async {
     final endpoint = connection?.uri;
     final token = _profileToken ?? _accountToken;
-    final artwork = item.artwork;
-    if (endpoint == null ||
-        token == null ||
-        artwork == null ||
-        artwork.toString().isEmpty) {
+    if (endpoint == null || token == null || path.toString().isEmpty) {
       return null;
     }
-    return plex.artwork(endpoint, token, artwork);
+    return plex.artwork(endpoint, token, path);
   }
 
   Future<void> setCurrentChannel(String? id) async {
