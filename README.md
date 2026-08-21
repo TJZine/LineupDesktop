@@ -119,8 +119,9 @@ unredacted diagnostics in issues or pull requests.
 ## Project status
 
 The Flutter-native replatform is the active implementation. The historical
-Electron/TypeScript/C# code remains on `initial-build` as reference material,
-not as a compatibility target.
+Electron/TypeScript/C# source is preserved on `electron-ui` at the immutable
+`bfaee636748f2a0d442f3690b7ba5262d32ff17c` baseline. `initial-build` is a
+later Flutter-replatform milestone; neither branch is a compatibility target.
 
 The principal remaining release work is physical Windows acceptance of native
 video composition, replacement playback, hardware decode, HDR behavior,

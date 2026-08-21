@@ -3,8 +3,9 @@
 Lineup Desktop work normally moves through five activities in one session:
 
 1. **Inspect** the current flow, its owners, tests, and platform constraints.
-   Use `git show origin/initial-build:<path>` only when historical behavior is
-   relevant.
+   Use `git show origin/electron-ui:<path>` for the preserved Electron
+   implementation or `git show origin/initial-build:<path>` for the later
+   historical Flutter milestone only when that evidence is relevant.
 2. **Decide** the responsibility owner, dependency direction, failure behavior,
    and proportionate proof before editing.
 3. **Implement** the smallest cohesive change that meets current requirements.
