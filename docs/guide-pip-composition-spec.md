@@ -1,6 +1,6 @@
 # Guide PiP and Now Playing Composition Specification
 
-Status: Approved for implementation
+Status: Implemented in the current branch; physical Windows acceptance pending
 
 Issue: [TJZine/LineupDesktop#30](https://github.com/TJZine/LineupDesktop/issues/30)
 
