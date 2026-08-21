@@ -2,6 +2,11 @@
 
 Status: Implemented in the current branch; physical Windows acceptance pending
 
+Current parity follow-up: revised 2026-08-21. The original issue-30 evidence
+and native-composition boundary remain valid, while the product scope now also
+includes the upstream-informed grid scale, Plex information artwork, and
+desktop-preserved density/time overrides described below.
+
 Issue: [TJZine/LineupDesktop#30](https://github.com/TJZine/LineupDesktop/issues/30)
 
 Repository: `TJZine/LineupDesktop`
@@ -87,14 +92,14 @@ Minimum fully visible schedule rows:
 | 600-719 px | 4 | Compact rows and compact showcase |
 | 720-899 px | 5 | Compact rows and medium PiP |
 | 900-1079 px | 5 | Comfortable rows and full information hierarchy |
-| 1080 px and above | 7 | Comfortable rows and upstream-scale showcase |
+| 1080 px and above | 5 comfortable / 7 compact | Upstream-scale default with a desktop compact override |
 
 A clipped partial row does not satisfy the minimum.
 
 Target Classic PiP guidance, not duplicated constants:
 
-- Around 720p: approximately `500 x 281` logical pixels.
-- Around 600p: approximately `420 x 236` logical pixels.
+- Around 720p: approximately `484 x 272` logical pixels.
+- Around 600p: approximately `402 x 226` logical pixels.
 - At sufficiently large heights: grow toward an upstream-shaped
   `640-672 x 360-378` logical-pixel region.
 - Preserve 16:9 throughout.
@@ -103,10 +108,11 @@ These targets may move modestly when real text metrics, focus borders, SafeArea,
 or exact row geometry require it. The row contract and visual hierarchy outrank
 literal target numbers.
 
-Do not add a user-adjustable split, collapsible showcase, floating PiP, or new
-persisted setting. The existing Guide density setting remains authoritative,
-but the layout may select the compact presentation necessary to honor the
-low-height contract. Do not make text unreadably small to retain metadata.
+Do not add a user-adjustable split, collapsible showcase, or floating PiP. The
+Guide density setting remains authoritative. Comfortable rows and a two-hour
+window are the upstream-scale defaults; compact rows plus 3/4/6/8/12-hour
+desktop windows remain explicit overrides. Do not make text unreadably small
+to retain metadata.
 
 ## Progressive information disclosure
 
@@ -121,9 +127,9 @@ As height decreases, simplify information in this order:
 Do not uniformly scale the whole composition. Essential text and focus
 indicators must remain legible and accessible.
 
-Use only facts already available through current Dart models and controllers.
-Do not expand Plex models or fabricate descriptions, ratings, genres, badges,
-logos, or quality claims solely to fill the new space.
+Use only facts returned by Plex and projected through current Dart models and
+controllers. Poster, backdrop, and clear-logo paths must stay distinct. Never
+fabricate descriptions, ratings, genres, badges, logos, or quality claims.
 
 ## Classic Guide requirements
 
@@ -312,7 +318,8 @@ at the intended aperture before changing architecture.
 - [ ] Five fully visible schedule rows are retained at 720-899 logical pixels.
 - [ ] Four fully visible schedule rows are retained at 600-719 logical pixels.
 - [ ] Five comfortable rows are retained at 900-1079 logical pixels.
-- [ ] Seven comfortable rows are retained at 1080 logical pixels and above.
+- [ ] Five comfortable rows are retained at 1080 logical pixels and above;
+      the compact desktop override retains seven.
 - [ ] Focused, selected, tuned, and currently airing identities remain distinct.
 - [ ] The 1,000-channel Guide remains bounded and responsive.
 - [ ] Player/Guide transitions and replacement tuning preserve one playback
@@ -326,7 +333,7 @@ at the intended aperture before changing architecture.
 - HDR output or tone-mapping validation.
 - Audio passthrough or output-device work.
 - Physical gamepad acceptance beyond avoiding regressions.
-- New Plex metadata fields or background data fetches.
+- Metadata or artwork not supplied by the active Plex session.
 - A redesigned schedule engine, horizontal scrolling model, or Guide controller.
 - User-configurable PiP size or showcase collapse behavior.
 - Native rounded-window or clipping ownership.
@@ -363,12 +370,13 @@ physical evidence disproves the Flutter occlusion diagnosis.
 
 Use a row-budgeted responsive layout, not fixed upstream dimensions. Preserve
 at least five fully visible rows at 720-899 logical pixels and four at 600-719;
-use comfortable five-row and seven-row targets at 900 and 1080 respectively.
+use comfortable five-row targets at 900 and 1080, with seven rows at 1080 when
+the user selects compact density.
 Grow Classic PiP toward `640-672 x 360-378` only after the row budget is met.
-Around 720p, expect roughly `500 x 281`; around 600p, roughly `420 x 236`.
+Around 720p, expect roughly `484 x 272`; around 600p, roughly `402 x 226`.
 Apply progressive disclosure to metadata rather than shrinking essential text.
 
-Strengthen Classic and Overlay hierarchy using only existing Dart facts. Keep
+Strengthen Classic and Overlay hierarchy using Plex-backed Dart facts. Keep
 tuned/Now Playing context stable while focused-program details follow Guide
 focus. Overlay must retain real video beneath Flutter and gain a stronger
 poster/information composition without sacrificing its row budget.
