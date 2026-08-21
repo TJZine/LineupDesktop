@@ -9,8 +9,10 @@ substantial work. Use `docs/user-guide.md` for current user-facing behavior and
 - C++ owns only genuinely native media and platform behavior. libmpv is the
   media engine; Windows native presentation with DirectComposition is the
   target video architecture.
-- `initial-build` is historical reference, not a compatibility target. Inspect
-  it with `git show origin/initial-build:<path>` when needed.
+- The preserved Electron implementation is on `electron-ui`; use the immutable
+  `bfaee636748f2a0d442f3690b7ba5262d32ff17c` baseline when provenance matters.
+  `initial-build` is a historical Flutter-replatform milestone. Neither is a
+  compatibility target.
 - Inspect the real flow before editing. Fix root causes, keep one authoritative
   owner per responsibility, and delete obsolete alternatives.
 - Use Codanna for unknown native-code owners, callers, and impact when available;

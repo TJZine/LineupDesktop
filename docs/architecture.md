@@ -1,9 +1,10 @@
 # Architecture
 
 Lineup Desktop is a native Flutter/Dart application. The historical Electron
-implementation is preserved at `origin/initial-build`; the rewrite baseline is
-`bfaee636748f2a0d442f3690b7ba5262d32ff17c`. It is reference material, not a
-runtime, source-compatibility, or migration target.
+implementation is preserved on `electron-ui` at the immutable
+`bfaee636748f2a0d442f3690b7ba5262d32ff17c` baseline. `initial-build` is a
+later historical Flutter-replatform milestone. Both are reference material,
+not runtime, source-compatibility, or migration targets.
 
 ```text
 Flutter/Dart application

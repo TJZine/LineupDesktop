@@ -6,7 +6,7 @@ Flutter UI evaluation.
 Lineup Desktop builds scheduled virtual television channels from a Plex library
 and presents them through a desktop Guide and Player. This guide describes the
 current Flutter-native application. It does not apply to the historical
-Electron implementation on `initial-build`.
+Electron implementation preserved on `electron-ui`.
 
 ## Before you start
 
