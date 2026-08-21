@@ -51,7 +51,9 @@ class _PlayerViewState extends State<PlayerView> {
     }
     final key = event.logicalKey;
     final controller = widget.controller;
-    if (key == LogicalKeyboardKey.escape || key == LogicalKeyboardKey.goBack) {
+    if (key == LogicalKeyboardKey.escape ||
+        key == LogicalKeyboardKey.backspace ||
+        key == LogicalKeyboardKey.goBack) {
       if (controller.overlay == PlayerOverlay.none) {
         controller.showFullGuide();
         widget.openGuide();

@@ -103,6 +103,64 @@ void main() {
     expect(FocusManager.instance.primaryFocus?.debugLabel, 'Player');
   });
 
+  testWidgets('Guide Backspace opens the Lineup menu without playback', (
+    tester,
+  ) async {
+    final controller = _FakeController()..stage = SetupStage.ready;
+    await tester.pumpWidget(
+      LineupBootstrap(player: _FakePlayer(), controller: controller),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('immersive-app-menu')), findsOneWidget);
+  });
+
+  testWidgets('Ctrl destination shortcuts outrank Guide letter shortcuts', (
+    tester,
+  ) async {
+    final controller = _FakeController()..stage = SetupStage.ready;
+    await tester.pumpWidget(
+      LineupBootstrap(player: _FakePlayer(), controller: controller),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyP);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Player');
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Guide');
+  });
+
+  testWidgets('F3 opens Settings from Guide and Player routes', (tester) async {
+    final controller = _FakeController()..stage = SetupStage.ready;
+    await tester.pumpWidget(
+      LineupBootstrap(player: _FakePlayer(), controller: controller),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.f3);
+    await tester.pumpAndSettle();
+    expect(find.text('Theme'), findsOneWidget);
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Settings');
+
+    await openDestination(tester, 'Guide');
+    await openDestination(tester, 'Player');
+    await tester.sendKeyEvent(LogicalKeyboardKey.f3);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Theme'), findsOneWidget);
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Settings');
+  });
+
   testWidgets('Settings switches profile/server routes and restores focus', (
     tester,
   ) async {

@@ -67,8 +67,10 @@ ChannelItem channelItemFor(PlexMediaItem item) => ChannelItem(
   title: item.title,
   duration: item.duration,
   showTitle: item.grandparentTitle,
-  showThumb: item.thumbPath,
-  artwork: Uri.tryParse(item.thumbPath ?? item.artPath ?? ''),
+  showThumb: item.grandparentThumbPath,
+  artwork: _uriPath(item.thumbPath),
+  backdrop: _uriPath(item.artPath),
+  clearLogo: _uriPath(item.clearLogoPath),
   summary: item.summary,
   contentRating: item.contentRating,
   genres: item.genres,
@@ -81,6 +83,9 @@ ChannelItem channelItemFor(PlexMediaItem item) => ChannelItem(
   audioChannels: item.audioChannels,
   dynamicRange: item.dynamicRange.name,
 );
+
+Uri? _uriPath(String? path) =>
+    path == null || path.isEmpty ? null : Uri.tryParse(path);
 
 List<ChannelItem> _interleave(List<List<ChannelItem>> sources) {
   final output = <ChannelItem>[];

@@ -2,6 +2,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 
 void main() {
+  test('uses the upstream two-hour Guide default and desktop options', () {
+    const settings = LineupSettings();
+
+    expect(settings.guideHours, 2);
+    expect(LineupSettings.guideHoursOptions, [2, 3, 4, 6, 8, 12]);
+    expect(settings.guideDensity, GuideDensity.comfortable);
+  });
+
   test('restores defaults and snaps unsafe ranges', () {
     final settings = LineupSettings.fromJson({
       'guideHours': 99,
@@ -28,7 +36,7 @@ void main() {
       'osdAutoHideSeconds': 5,
     });
 
-    expect(settings.guideHours, 4);
+    expect(settings.guideHours, 3);
     expect(settings.pastMinutes, 60);
     expect(settings.osdAutoHideSeconds, 6);
   });
@@ -38,6 +46,8 @@ void main() {
       theme: LineupThemeName.slatePine,
       guideDensity: GuideDensity.compact,
       guideLayoutMode: GuideLayoutMode.overlay,
+      guideInfoBackgroundMode: GuideInfoBackgroundMode.artwork,
+      preferClearLogos: false,
       audioSetupComplete: true,
       reduceMotion: true,
       libraryTabsEnabled: false,
@@ -48,6 +58,8 @@ void main() {
     expect(restored.guideDensity, GuideDensity.compact);
     expect(restored.theme, LineupThemeName.slatePine);
     expect(restored.guideLayoutMode, GuideLayoutMode.overlay);
+    expect(restored.guideInfoBackgroundMode, GuideInfoBackgroundMode.artwork);
+    expect(restored.preferClearLogos, isFalse);
     expect(restored.audioSetupComplete, isTrue);
     expect(restored.reduceMotion, isTrue);
     expect(restored.libraryTabsEnabled, isFalse);
@@ -64,6 +76,15 @@ void main() {
     expect(restored.guideLayoutMode, GuideLayoutMode.pictureInPicture);
   });
 
+  test('invalid Guide info background values fall back safely', () {
+    final restored = LineupSettings.fromJson({
+      'guideInfoBackgroundMode': 'future-background',
+    });
+
+    expect(restored.guideInfoBackgroundMode, GuideInfoBackgroundMode.bleed);
+    expect(restored.preferClearLogos, isTrue);
+  });
+
   test('invalid numeric settings fall back without rejecting other state', () {
     final restored = LineupSettings.fromJson({
       'guideHours': 'many',
@@ -72,7 +93,7 @@ void main() {
       'nowWatchingBanner': false,
     });
 
-    expect(restored.guideHours, 4);
+    expect(restored.guideHours, 2);
     expect(restored.pastMinutes, 30);
     expect(restored.osdAutoHideSeconds, 4);
     expect(restored.nowWatchingBanner, isFalse);

@@ -142,7 +142,9 @@ class PlexMediaItem {
     this.parentTitle,
     this.grandparentTitle,
     this.thumbPath,
+    this.grandparentThumbPath,
     this.artPath,
+    this.clearLogoPath,
     this.partPath,
     this.container,
     this.videoCodec,
@@ -174,7 +176,9 @@ class PlexMediaItem {
   final String? parentTitle;
   final String? grandparentTitle;
   final String? thumbPath;
+  final String? grandparentThumbPath;
   final String? artPath;
+  final String? clearLogoPath;
   final String? partPath;
   final String? container;
   final String? videoCodec;

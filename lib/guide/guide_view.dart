@@ -8,6 +8,7 @@ import '../channels/channel.dart';
 import '../settings/lineup_settings.dart';
 import '../ui/app_theme.dart';
 import '../ui/app_ui.dart';
+import 'focused_ticker.dart';
 import 'guide_controller.dart';
 
 class GuideLayoutPolicy {
@@ -22,13 +23,13 @@ class GuideLayoutPolicy {
     required this.rowHeight,
     required this.minimumRows,
     required this.showSecondaryMetadata,
+    required this.showSummary,
     required this.artworkWidth,
   });
 
   factory GuideLayoutPolicy.forSize(
     Size size, {
     required bool hasPicture,
-    bool overlayMode = false,
     GuideDensity density = GuideDensity.comfortable,
   }) {
     final compact =
@@ -40,16 +41,19 @@ class GuideLayoutPolicy {
         : 20.0;
     final minimumRows = size.height < 720
         ? 4
-        : size.height < 1080
-        ? 5
-        : 7;
-    final rowHeight =
-        size.height < _comfortableGuideHeight || density == GuideDensity.compact
-        ? 58.0
-        : 78.0;
+        : density == GuideDensity.compact && size.height >= 900
+        ? 7
+        : 5;
+    final rowHeight = density == GuideDensity.compact
+        ? (size.height >= 1080 ? 78.0 : 58.0)
+        : size.height >= 1080
+        ? 108.0
+        : size.height >= _comfortableGuideHeight
+        ? 78.0
+        : 58.0;
     final rowBudget =
         size.height -
-        (padding * 2 + 48 + 10 + 8 + 38) -
+        (padding * 2 + 48 + 10 + 8 + 52) -
         minimumRows * rowHeight;
     final availableShowcaseHeight = rowBudget.clamp(0.0, double.infinity);
     final targetPictureHeight = size.height < 720
@@ -59,10 +63,10 @@ class GuideLayoutPolicy {
         : size.height < 1080
         ? _lerp(360, 378, (size.height - _comfortableGuideHeight) / 180)
         : 378.0;
-    final richShowcase = hasPicture || overlayMode;
-    var showcaseHeight = richShowcase
-        ? targetPictureHeight.clamp(0.0, availableShowcaseHeight)
-        : (compact ? 126.0 : 142.0).clamp(0.0, availableShowcaseHeight);
+    var showcaseHeight = targetPictureHeight.clamp(
+      0.0,
+      availableShowcaseHeight,
+    );
     var pictureWidth = showcaseHeight * 16 / 9;
     if (hasPicture) {
       final minimumDetailsWidth = compact ? 300.0 : 360.0;
@@ -78,7 +82,8 @@ class GuideLayoutPolicy {
       pictureWidth: pictureWidth,
       rowHeight: rowHeight,
       minimumRows: minimumRows,
-      showSecondaryMetadata: size.height >= _comfortableGuideHeight,
+      showSecondaryMetadata: showcaseHeight >= 300,
+      showSummary: showcaseHeight >= 340,
       artworkWidth: (showcaseHeight * 0.62).clamp(132.0, 224.0),
     );
   }
@@ -91,6 +96,7 @@ class GuideLayoutPolicy {
   final double rowHeight;
   final int minimumRows;
   final bool showSecondaryMetadata;
+  final bool showSummary;
   final double artworkWidth;
 }
 
@@ -260,6 +266,11 @@ class _GuideViewState extends State<GuideView> {
       return KeyEventResult.ignored;
     }
     final key = event.logicalKey;
+    final keyboard = HardwareKeyboard.instance;
+    final commandModified =
+        keyboard.isControlPressed ||
+        keyboard.isMetaPressed ||
+        keyboard.isAltPressed;
     if (key == LogicalKeyboardKey.arrowUp) {
       widget.controller.moveVertical(-1);
     } else if (key == LogicalKeyboardKey.arrowDown) {
@@ -273,7 +284,7 @@ class _GuideViewState extends State<GuideView> {
     } else if (key == LogicalKeyboardKey.pageDown) {
       widget.controller.page(1, _visibleRows);
     } else if (key == LogicalKeyboardKey.mediaPlay ||
-        key == LogicalKeyboardKey.keyP ||
+        (key == LogicalKeyboardKey.keyP && !commandModified) ||
         key == LogicalKeyboardKey.home) {
       widget.controller.playToNow();
     } else if (key == LogicalKeyboardKey.enter ||
@@ -285,8 +296,9 @@ class _GuideViewState extends State<GuideView> {
         unawaited(widget.onTune(selected!.channelId));
       }
     } else if (key == LogicalKeyboardKey.escape ||
+        key == LogicalKeyboardKey.backspace ||
         key == LogicalKeyboardKey.goBack ||
-        key == LogicalKeyboardKey.keyG ||
+        (key == LogicalKeyboardKey.keyG && !commandModified) ||
         key == LogicalKeyboardKey.f2) {
       widget.onClose();
     } else {
@@ -311,6 +323,7 @@ class _GuideViewState extends State<GuideView> {
       compact: policy.compact,
       overlayMode: widget.overlayMode,
       showSecondaryMetadata: policy.showSecondaryMetadata,
+      showSummary: policy.showSummary,
       artworkWidth: policy.artworkWidth,
       playbackMessage: widget.playbackMessage,
       onOpenPlayer: widget.onOpenPlayer,
@@ -346,6 +359,7 @@ class _GuideViewState extends State<GuideView> {
                   channel: channels[index],
                   controller: widget.controller,
                   railWidth: policy.channelRailWidth,
+                  showProvenance: policy.rowHeight >= 78,
                   onTune: widget.onTune,
                 ),
               );
@@ -372,7 +386,6 @@ class _GuideViewState extends State<GuideView> {
             final policy = GuideLayoutPolicy.forSize(
               outer.biggest,
               hasPicture: widget.pictureInPicture != null,
-              overlayMode: widget.overlayMode,
               density: widget.controller.density,
             );
             final schedule = channels.isEmpty
@@ -523,7 +536,12 @@ class _Toolbar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final libraryIds = controller.availableLibraryIds.toList()..sort();
+    final tunedChannel = controller.lineup.channels
+        .where((channel) => channel.id == controller.lineup.currentChannelId)
+        .firstOrNull;
+    final tunedProgram = tunedChannel == null
+        ? null
+        : controller.currentProgram(tunedChannel.id);
     return SizedBox(
       height: 48,
       child: Row(
@@ -531,32 +549,38 @@ class _Toolbar extends StatelessWidget {
           Image.asset('assets/branding/lineup-logo-mark.png', height: 26),
           const SizedBox(width: 9),
           Text('LINEUP', style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(width: 10),
-          Text('Guide', style: Theme.of(context).textTheme.labelLarge),
-          if (!compact) ...[
-            const SizedBox(width: 16),
-            Text('${controller.channels.length} channels'),
+          if (tunedChannel != null &&
+              controller.lineup.settings.nowWatchingBanner) ...[
+            const SizedBox(width: 18),
+            Text(
+              'NOW PLAYING',
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: LineupTheme.of(context).mutedText,
+                letterSpacing: 1.1,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                '${tunedChannel.number} • ${tunedChannel.name}${tunedProgram == null ? '' : ' — ${tunedProgram.scheduled.item.title}'}',
+                key: const Key('guide-now-playing-context'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+            ),
           ],
           const Spacer(),
-          if (controller.lineup.settings.libraryTabsEnabled &&
-              libraryIds.isNotEmpty)
-            DropdownButton<String?>(
-              value: controller.libraryFilterId,
-              hint: const Text('All libraries'),
-              items: [
-                const DropdownMenuItem(
-                  value: null,
-                  child: Text('All libraries'),
-                ),
-                for (final id in libraryIds)
-                  DropdownMenuItem(
-                    value: id,
-                    child: Text(_libraryName(controller, id)),
-                  ),
-              ],
-              onChanged: controller.setLibraryFilter,
+          if (!compact && MediaQuery.sizeOf(context).width >= 1500)
+            Padding(
+              padding: const EdgeInsets.only(right: 16),
+              child: Text(
+                'OK Select  ·  ←/→ Navigate  ·  BACK Close',
+                style: Theme.of(context).textTheme.labelSmall
+                    ?.copyWith(color: LineupTheme.of(context).mutedText),
+              ),
             ),
-          const SizedBox(width: 8),
           if (onOpenMenu != null)
             IconButton(
               key: const Key('guide-app-menu'),
@@ -588,6 +612,7 @@ class _GuideShowcase extends StatelessWidget {
     required this.compact,
     required this.overlayMode,
     required this.showSecondaryMetadata,
+    required this.showSummary,
     required this.artworkWidth,
     required this.playbackMessage,
     required this.onOpenPlayer,
@@ -599,6 +624,7 @@ class _GuideShowcase extends StatelessWidget {
   final bool compact;
   final bool overlayMode;
   final bool showSecondaryMetadata;
+  final bool showSummary;
   final double artworkWidth;
   final String? playbackMessage;
   final VoidCallback? onOpenPlayer;
@@ -622,9 +648,22 @@ class _GuideShowcase extends StatelessWidget {
                   excludeFromSemantics: true,
                   onTap: onOpenPlayer,
                   borderRadius: BorderRadius.circular(12),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: picture,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: picture,
+                      ),
+                      if (!overlayMode)
+                        CustomPaint(
+                          key: const Key('guide-picture-corner-mask'),
+                          painter: _CornerMaskPainter(
+                            color: LineupTheme.of(context).deepBackground,
+                            radius: 12,
+                          ),
+                        ),
+                    ],
                   ),
                 ),
               ),
@@ -634,9 +673,14 @@ class _GuideShowcase extends StatelessWidget {
         if (overlayMode)
           const SizedBox(width: 12)
         else
-          ColoredBox(
-            color: LineupTheme.of(context).deepBackground,
-            child: const SizedBox(width: 12),
+          SizedBox(
+            width: 12,
+            child: OverflowBox(
+              alignment: Alignment.centerLeft,
+              minWidth: 13,
+              maxWidth: 13,
+              child: ColoredBox(color: LineupTheme.of(context).deepBackground),
+            ),
           ),
       ],
       Expanded(
@@ -649,6 +693,7 @@ class _GuideShowcase extends StatelessWidget {
             compact: compact,
             showArtwork: overlayMode,
             showSecondaryMetadata: showSecondaryMetadata,
+            showSummary: showSummary,
             artworkWidth: artworkWidth,
             playbackMessage: playbackMessage,
           ),
@@ -656,6 +701,28 @@ class _GuideShowcase extends StatelessWidget {
       ),
     ],
   );
+}
+
+class _CornerMaskPainter extends CustomPainter {
+  const _CornerMaskPainter({required this.color, required this.radius});
+
+  final Color color;
+  final double radius;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final mask = Path()
+      ..fillType = PathFillType.evenOdd
+      ..addRect(Offset.zero & size)
+      ..addRRect(
+        RRect.fromRectAndRadius(Offset.zero & size, Radius.circular(radius)),
+      );
+    canvas.drawPath(mask, Paint()..color = color);
+  }
+
+  @override
+  bool shouldRepaint(_CornerMaskPainter oldDelegate) =>
+      oldDelegate.color != color || oldDelegate.radius != radius;
 }
 
 class _TimeHeader extends StatelessWidget {
@@ -666,47 +733,138 @@ class _TimeHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final slots = controller.guideHours * 2;
-    if (slots <= 0) return const SizedBox(height: 38);
+    if (slots <= 0) return const SizedBox(height: 52);
+    final libraryIds = controller.availableLibraryIds.toList()..sort();
     return SizedBox(
-      height: 38,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final timelineWidth = constraints.maxWidth - railWidth;
-          if (timelineWidth <= 0) return const SizedBox.shrink();
-          final slotWidth = timelineWidth / slots;
-          final stride = (68 / slotWidth).ceil().clamp(1, slots);
-          return Row(
-            children: [
-              SizedBox(
-                width: railWidth,
-                child: const Padding(
-                  padding: EdgeInsets.only(left: 10),
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text('CHANNEL'),
+      height: 52,
+      child: Row(
+        children: [
+          SizedBox(
+            width: railWidth,
+            child:
+                controller.lineup.settings.libraryTabsEnabled &&
+                    libraryIds.isNotEmpty
+                ? Padding(
+                    padding: const EdgeInsets.fromLTRB(6, 5, 8, 5),
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: LineupTheme.of(context).primarySurface,
+                        border: Border.all(
+                          color: LineupTheme.of(context).subtleBorder,
+                        ),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String?>(
+                          isExpanded: true,
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                          value: controller.libraryFilterId,
+                          hint: const Text('All libraries'),
+                          items: [
+                            const DropdownMenuItem(
+                              value: null,
+                              child: Text('All libraries'),
+                            ),
+                            for (final id in libraryIds)
+                              DropdownMenuItem(
+                                value: id,
+                                child: Text(_libraryName(controller, id)),
+                              ),
+                          ],
+                          onChanged: controller.setLibraryFilter,
+                        ),
+                      ),
+                    ),
+                  )
+                : const Padding(
+                    padding: EdgeInsets.only(left: 10),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text('CHANNEL'),
+                    ),
                   ),
-                ),
-              ),
-              for (var index = 0; index < slots; index++)
-                Expanded(
-                  child: index % stride == 0
-                      ? Text(
-                          _time(
-                            context,
-                            controller.windowStart.add(
-                              Duration(minutes: 30 * index),
+          ),
+          Expanded(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final slotWidth = constraints.maxWidth / slots;
+                final stride = (68 / slotWidth).ceil().clamp(1, slots);
+                final now = controller.now;
+                final nowFraction =
+                    now.difference(controller.windowStart).inMicroseconds /
+                    controller.windowEnd
+                        .difference(controller.windowStart)
+                        .inMicroseconds;
+                return Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    Row(
+                      children: [
+                        for (var index = 0; index < slots; index++)
+                          Expanded(
+                            child: Container(
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                border: Border(
+                                  left: BorderSide(
+                                    color: LineupTheme.of(context).subtleBorder,
+                                  ),
+                                ),
+                              ),
+                              child: index % stride == 0
+                                  ? Text(
+                                      _time(
+                                        context,
+                                        controller.windowStart.add(
+                                          Duration(minutes: 30 * index),
+                                        ),
+                                      ),
+                                      textAlign: TextAlign.center,
+                                      overflow: TextOverflow.clip,
+                                      maxLines: 1,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .labelLarge,
+                                    )
+                                  : null,
                             ),
                           ),
-                          textAlign: TextAlign.center,
-                          overflow: TextOverflow.clip,
-                          maxLines: 1,
-                          style: Theme.of(context).textTheme.labelMedium,
-                        )
-                      : const SizedBox.shrink(),
-                ),
-            ],
-          );
-        },
+                      ],
+                    ),
+                    if (nowFraction >= 0 && nowFraction < 1)
+                      Positioned(
+                        left: (constraints.maxWidth * nowFraction).clamp(
+                          0,
+                          constraints.maxWidth - 2,
+                        ),
+                        top: 4,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: LineupTheme.of(context).deepBackground,
+                            borderRadius: BorderRadius.circular(5),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 5,
+                              vertical: 2,
+                            ),
+                            child: Text(
+                              'NOW',
+                              style: Theme.of(context).textTheme.labelSmall
+                                  ?.copyWith(
+                                    color: LineupTheme.of(context).liveAccent,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -717,11 +875,13 @@ class _GuideRow extends StatelessWidget {
     required this.channel,
     required this.controller,
     required this.railWidth,
+    required this.showProvenance,
     required this.onTune,
   });
   final Channel channel;
   final GuideController controller;
   final double railWidth;
+  final bool showProvenance;
   final Future<void> Function(String channelId) onTune;
 
   @override
@@ -784,10 +944,27 @@ class _GuideRow extends StatelessWidget {
                       ),
                     ),
                     Expanded(
-                      child: Text(
-                        channel.name,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            channel.name,
+                            maxLines: showProvenance ? 1 : 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          if (showProvenance)
+                            Text(
+                              _channelProvenance(controller, channel),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.labelSmall
+                                  ?.copyWith(
+                                    color: LineupTheme.of(context).mutedText,
+                                  ),
+                            ),
+                        ],
                       ),
                     ),
                     if (tunedChannel)
@@ -858,6 +1035,21 @@ class _Programs extends StatelessWidget {
           child: Stack(
             fit: StackFit.expand,
             children: [
+              for (var index = 0; index < controller.guideHours * 2; index++)
+                Positioned(
+                  left:
+                      constraints.maxWidth *
+                      index /
+                      (controller.guideHours * 2),
+                  top: 0,
+                  bottom: 0,
+                  child: SizedBox(
+                    width: 1,
+                    child: ColoredBox(
+                      color: LineupTheme.of(context).subtleBorder,
+                    ),
+                  ),
+                ),
               for (final program in data.programs)
                 _programCell(program, constraints.maxWidth, now),
               if (!now.isBefore(controller.windowStart) &&
@@ -880,6 +1072,44 @@ class _Programs extends StatelessWidget {
                     ),
                   ),
                 ),
+              Positioned(
+                left: 0,
+                top: 0,
+                bottom: 0,
+                width: 14,
+                child: IgnorePointer(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          LineupTheme.of(context).deepBackground
+                              .withValues(alpha: 0.7),
+                          Colors.transparent,
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              Positioned(
+                right: 0,
+                top: 0,
+                bottom: 0,
+                width: 14,
+                child: IgnorePointer(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          Colors.transparent,
+                          LineupTheme.of(context).deepBackground
+                              .withValues(alpha: 0.7),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             ],
           ),
         );
@@ -974,7 +1204,7 @@ class _ProgramCellState extends State<_ProgramCell> {
         button: true,
         selected: widget.selected,
         focused: widget.focused,
-        onTap: widget.onTap,
+        onTap: widget.onDoubleTap ?? widget.onTap,
         label:
             '${widget.program.scheduled.item.title}, ${_time(context, widget.program.scheduled.start)} to ${_time(context, widget.program.scheduled.end)}${widget.current
                 ? ', currently airing'
@@ -994,8 +1224,8 @@ class _ProgramCellState extends State<_ProgramCell> {
                   : const Duration(milliseconds: 90),
               padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
               decoration: BoxDecoration(
-                color: widget.current
-                    ? LineupTheme.of(context).tunedSurface
+                color: widget.focused
+                    ? LineupTheme.of(context).selectedSurface
                     : widget.past
                     ? LineupTheme.of(context).primarySurface
                           .withValues(alpha: 0.56)
@@ -1023,35 +1253,159 @@ class _ProgramCellState extends State<_ProgramCell> {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  if (widget.current)
-                    FractionallySizedBox(
-                      alignment: Alignment.centerLeft,
-                      widthFactor: widget.progress.clamp(0, 1),
-                      child: ColoredBox(
-                        color: LineupTheme.of(context).selectedSurface,
-                      ),
-                    ),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      widget.program.scheduled.item.title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: widget.past
-                            ? LineupTheme.of(context).mutedText
-                            : null,
-                        fontWeight: widget.focused
-                            ? FontWeight.w800
-                            : FontWeight.w500,
-                      ),
-                    ),
+                  _ProgramCellContent(
+                    program: widget.program,
+                    focused: widget.focused,
+                    current: widget.current,
+                    past: widget.past,
+                    reduceMotion: widget.reduceMotion,
                   ),
+                  if (widget.current)
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      height: 4,
+                      child: ColoredBox(
+                        color: LineupTheme.of(context).deepBackground,
+                        child: FractionallySizedBox(
+                          alignment: Alignment.centerLeft,
+                          widthFactor: widget.progress.clamp(0, 1),
+                          child: ColoredBox(
+                            color: LineupTheme.of(context).progressFill,
+                          ),
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),
           ),
         ),
+      ),
+    ),
+  );
+}
+
+class _ProgramCellContent extends StatelessWidget {
+  const _ProgramCellContent({
+    required this.program,
+    required this.focused,
+    required this.current,
+    required this.past,
+    required this.reduceMotion,
+  });
+
+  final GuideProgram program;
+  final bool focused;
+  final bool current;
+  final bool past;
+  final bool reduceMotion;
+
+  @override
+  Widget build(BuildContext context) {
+    final item = program.scheduled.item;
+    final episodeCode = _episodeCode(item);
+    final isEpisode = item.showTitle != null || episodeCode != null;
+    final primaryTitle = isEpisode ? item.showTitle ?? item.title : item.title;
+    final episodeTitle = isEpisode && item.title != primaryTitle
+        ? item.title
+        : null;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final wide = constraints.maxWidth >= 220;
+        final medium = constraints.maxWidth >= 140;
+        final tiny = constraints.maxWidth < 88;
+        final richRow = constraints.maxHeight >= 56;
+        final showEpisode = episodeCode != null && (wide || focused);
+        final showSubtitle =
+            episodeTitle != null && richRow && (medium || focused);
+        final showTime = richRow && (wide || (focused && !isEpisode));
+        final titleStyle = Theme.of(context).textTheme.bodyMedium?.copyWith(
+          color: past ? LineupTheme.of(context).mutedText : null,
+          fontWeight: focused ? FontWeight.w800 : FontWeight.w600,
+        );
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            if (showEpisode || current)
+              Row(
+                children: [
+                  if (showEpisode) _CellEpisodeTag(episodeCode),
+                  const Spacer(),
+                  if (current)
+                    Container(
+                      width: 7,
+                      height: 7,
+                      decoration: BoxDecoration(
+                        color: LineupTheme.of(context).liveAccent,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                ],
+              ),
+            if (tiny && !focused)
+              Text(
+                primaryTitle,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: titleStyle,
+              )
+            else
+              FocusedTicker(
+                text: primaryTitle,
+                focused: focused,
+                reduceMotion: reduceMotion,
+                style: titleStyle,
+              ),
+            if (showSubtitle)
+              FocusedTicker(
+                text: episodeTitle,
+                focused: focused,
+                reduceMotion: reduceMotion,
+                style: Theme.of(context).textTheme.bodySmall
+                    ?.copyWith(color: LineupTheme.of(context).mutedText),
+              ),
+            if (showTime)
+              Align(
+                alignment: Alignment.centerRight,
+                child: Text(
+                  '${_time(context, program.scheduled.start)}–${_time(context, program.scheduled.end)}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: LineupTheme.of(context).mutedText,
+                    fontFeatures: const [ui.FontFeature.tabularFigures()],
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _CellEpisodeTag extends StatelessWidget {
+  const _CellEpisodeTag(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+    decoration: BoxDecoration(
+      color: LineupTheme.of(context).deepBackground.withValues(alpha: 0.5),
+      border: Border.all(color: LineupTheme.of(context).defaultBorder),
+      borderRadius: BorderRadius.circular(4),
+    ),
+    child: Text(
+      label,
+      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+        fontSize: 10,
+        fontWeight: FontWeight.w800,
+        letterSpacing: 0.4,
       ),
     ),
   );
@@ -1063,6 +1417,7 @@ class _Details extends StatefulWidget {
     required this.compact,
     required this.showArtwork,
     required this.showSecondaryMetadata,
+    required this.showSummary,
     required this.artworkWidth,
     required this.playbackMessage,
   });
@@ -1070,6 +1425,7 @@ class _Details extends StatefulWidget {
   final bool compact;
   final bool showArtwork;
   final bool showSecondaryMetadata;
+  final bool showSummary;
   final double artworkWidth;
   final String? playbackMessage;
 
@@ -1079,7 +1435,9 @@ class _Details extends StatefulWidget {
 
 class _DetailsState extends State<_Details> {
   String? _artworkProgramId;
-  Uint8List? _artwork;
+  Uint8List? _poster;
+  Uint8List? _backdrop;
+  Uint8List? _clearLogo;
   Color? _dynamicColor;
   int _artworkToken = 0;
 
@@ -1090,9 +1448,16 @@ class _DetailsState extends State<_Details> {
   }
 
   void _ensureArtwork(GuideProgram? program) {
-    if (program?.id == _artworkProgramId) return;
-    _artworkProgramId = program?.id;
-    _artwork = null;
+    final settings = widget.controller.lineup.settings;
+    final item = program?.scheduled.item;
+    final artworkKey = program == null
+        ? null
+        : '${program.id}|${widget.controller.lineup.contentGeneration}|${item?.showThumb}|${item?.artwork}|${item?.backdrop}|${item?.clearLogo}|${settings.guideInfoBackgroundMode.name}|${settings.preferClearLogos}';
+    if (artworkKey == _artworkProgramId) return;
+    _artworkProgramId = artworkKey;
+    _poster = null;
+    _backdrop = null;
+    _clearLogo = null;
     _dynamicColor = null;
     final token = ++_artworkToken;
     if (program == null) return;
@@ -1100,14 +1465,28 @@ class _DetailsState extends State<_Details> {
   }
 
   Future<void> _loadArtwork(GuideProgram program, int token) async {
-    final artwork = await widget.controller.artworkFor(program);
+    final settings = widget.controller.lineup.settings;
+    final artwork = await Future.wait([
+      widget.controller.artworkFor(program),
+      if (settings.guideInfoBackgroundMode == GuideInfoBackgroundMode.artwork)
+        widget.controller.artworkFor(program, GuideArtworkKind.backdrop)
+      else
+        Future<Uint8List?>.value(),
+      if (settings.preferClearLogos)
+        widget.controller.artworkFor(program, GuideArtworkKind.clearLogo)
+      else
+        Future<Uint8List?>.value(),
+    ]);
     if (!mounted || token != _artworkToken) return;
+    final poster = artwork[0];
     setState(() {
-      _artwork = artwork;
-      _dynamicColor = artwork == null ? null : _artworkHashColor(artwork);
+      _poster = poster;
+      _backdrop = artwork[1];
+      _clearLogo = artwork[2];
+      _dynamicColor = poster == null ? null : _artworkHashColor(poster);
     });
-    if (artwork == null) return;
-    final color = await _artworkColor(artwork);
+    if (poster == null) return;
+    final color = await _artworkColor(poster);
     if (!mounted || token != _artworkToken || color == null) return;
     setState(() => _dynamicColor = color);
   }
@@ -1120,14 +1499,31 @@ class _DetailsState extends State<_Details> {
     final channel = controller.channels
         .where((channel) => channel.id == program?.channelId)
         .firstOrNull;
-    final tunedChannel = controller.channels
-        .where((channel) => channel.id == controller.lineup.currentChannelId)
-        .firstOrNull;
-    final tunedProgram = tunedChannel == null
-        ? null
-        : controller.currentProgram(tunedChannel.id);
     final roles = LineupTheme.of(context);
     final dynamicColor = _dynamicColor ?? roles.progressFill;
+    final settings = controller.lineup.settings;
+    final backgroundMode = settings.guideInfoBackgroundMode;
+    final backgroundGradient = switch (backgroundMode) {
+      GuideInfoBackgroundMode.bleed => RadialGradient(
+        center: const Alignment(0.72, -0.15),
+        radius: 1.25,
+        colors: [
+          Color.alphaBlend(
+            dynamicColor.withValues(alpha: 0.48),
+            roles.primarySurface,
+          ),
+          roles.primarySurface,
+          roles.deepBackground,
+        ],
+        stops: const [0, 0.58, 1],
+      ),
+      GuideInfoBackgroundMode.themeDefault => LinearGradient(
+        colors: [roles.primarySurface, roles.deepBackground],
+      ),
+      GuideInfoBackgroundMode.artwork => LinearGradient(
+        colors: [roles.primarySurface, roles.deepBackground],
+      ),
+    };
     return Card(
       margin: EdgeInsets.zero,
       clipBehavior: Clip.antiAlias,
@@ -1136,39 +1532,38 @@ class _DetailsState extends State<_Details> {
         duration: controller.lineup.settings.reduceMotion
             ? Duration.zero
             : const Duration(milliseconds: 400),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.centerLeft,
-            end: Alignment.centerRight,
-            colors: [
-              roles.primarySurface,
-              Color.alphaBlend(
-                dynamicColor.withValues(alpha: 0.36),
-                roles.primarySurface,
-              ),
-              roles.primarySurface,
-            ],
-            stops: const [0, 0.72, 1],
-          ),
-        ),
+        decoration: BoxDecoration(gradient: backgroundGradient),
         child: Stack(
           fit: StackFit.expand,
           children: [
-            if (_artwork != null)
+            if (backgroundMode == GuideInfoBackgroundMode.artwork &&
+                _backdrop != null) ...[
               Positioned.fill(
-                left: MediaQuery.sizeOf(context).width * 0.28,
-                child: Opacity(
-                  opacity: 0.12,
-                  child: Image.memory(
-                    _artwork!,
-                    fit: BoxFit.cover,
-                    alignment: Alignment.centerRight,
-                    gaplessPlayback: true,
-                    excludeFromSemantics: true,
-                    errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                child: Image.memory(
+                  _backdrop!,
+                  key: const Key('guide-info-backdrop'),
+                  fit: BoxFit.cover,
+                  alignment: Alignment.centerRight,
+                  gaplessPlayback: true,
+                  excludeFromSemantics: true,
+                  errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                ),
+              ),
+              Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        roles.deepBackground.withValues(alpha: 0.94),
+                        roles.deepBackground.withValues(alpha: 0.56),
+                        roles.deepBackground.withValues(alpha: 0.72),
+                      ],
+                      stops: const [0, 0.6, 1],
+                    ),
                   ),
                 ),
               ),
+            ],
             Padding(
               padding: EdgeInsets.symmetric(
                 horizontal: widget.compact ? 12 : 18,
@@ -1177,20 +1572,6 @@ class _DetailsState extends State<_Details> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  if (tunedChannel != null &&
-                      controller.lineup.settings.nowWatchingBanner) ...[
-                    Text(
-                      key: const Key('guide-now-playing-context'),
-                      'NOW PLAYING  •  ${tunedChannel.number} ${tunedChannel.name}  •  ${tunedProgram?.scheduled.item.title ?? 'Schedule loading…'}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                        color: roles.liveAccent,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                  ],
                   Expanded(
                     child: program == null
                         ? Align(
@@ -1203,9 +1584,13 @@ class _DetailsState extends State<_Details> {
                         : _ProgramDetails(
                             program: program,
                             channel: channel,
-                            artwork: _artwork,
+                            poster: _poster,
+                            clearLogo: settings.preferClearLogos
+                                ? _clearLogo
+                                : null,
                             showArtwork: widget.showArtwork,
                             showSecondaryMetadata: widget.showSecondaryMetadata,
+                            showSummary: widget.showSummary,
                             artworkWidth: widget.artworkWidth,
                             playbackMessage: widget.playbackMessage,
                             now: controller.now,
@@ -1225,9 +1610,11 @@ class _ProgramDetails extends StatelessWidget {
   const _ProgramDetails({
     required this.program,
     required this.channel,
-    required this.artwork,
+    required this.poster,
+    required this.clearLogo,
     required this.showArtwork,
     required this.showSecondaryMetadata,
+    required this.showSummary,
     required this.artworkWidth,
     required this.playbackMessage,
     required this.now,
@@ -1235,9 +1622,11 @@ class _ProgramDetails extends StatelessWidget {
 
   final GuideProgram program;
   final Channel? channel;
-  final Uint8List? artwork;
+  final Uint8List? poster;
+  final Uint8List? clearLogo;
   final bool showArtwork;
   final bool showSecondaryMetadata;
+  final bool showSummary;
   final double artworkWidth;
   final String? playbackMessage;
   final DateTime now;
@@ -1247,6 +1636,17 @@ class _ProgramDetails extends StatelessWidget {
     final item = program.scheduled.item;
     final episode = _episodeCode(item);
     final badges = _mediaBadges(item);
+    final hasClearLogo = clearLogo != null;
+    final logoFallback = Text(
+      item.showTitle?.toUpperCase() ?? item.title,
+      key: const Key('guide-clear-logo-fallback'),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: item.showTitle != null
+          ? Theme.of(context).textTheme.labelMedium
+          : Theme.of(context).textTheme.titleLarge
+                ?.copyWith(fontWeight: FontWeight.w800),
+    );
     return Row(
       children: [
         if (showArtwork)
@@ -1256,13 +1656,13 @@ class _ProgramDetails extends StatelessWidget {
             height: double.infinity,
             child: ClipRRect(
               borderRadius: BorderRadius.circular(8),
-              child: artwork == null
+              child: poster == null
                   ? ColoredBox(
                       color: LineupTheme.of(context).primarySurface,
                       child: const Icon(Icons.movie_outlined, size: 34),
                     )
                   : Image.memory(
-                      artwork!,
+                      poster!,
                       fit: BoxFit.cover,
                       cacheWidth: 360,
                       gaplessPlayback: true,
@@ -1286,43 +1686,75 @@ class _ProgramDetails extends StatelessWidget {
                     fontWeight: FontWeight.w700,
                   ),
                 ),
-              if (item.showTitle != null)
+              if (hasClearLogo)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxWidth: showSecondaryMetadata ? 360 : 240,
+                      maxHeight: showSecondaryMetadata ? 52 : 36,
+                    ),
+                    child: Image.memory(
+                      clearLogo!,
+                      key: const Key('guide-clear-logo'),
+                      fit: BoxFit.contain,
+                      alignment: Alignment.centerLeft,
+                      gaplessPlayback: true,
+                      semanticLabel: '${item.showTitle ?? item.title} logo',
+                      errorBuilder: (_, _, _) => logoFallback,
+                    ),
+                  ),
+                ),
+              if (item.showTitle != null && !hasClearLogo)
                 Text(
                   item.showTitle!.toUpperCase(),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.labelMedium,
                 ),
-              Text(
-                item.title,
-                maxLines: showSecondaryMetadata ? 2 : 1,
-                overflow: TextOverflow.ellipsis,
-                style:
-                    (showSecondaryMetadata
-                            ? Theme.of(context).textTheme.headlineSmall
-                            : Theme.of(context).textTheme.titleLarge)
-                        ?.copyWith(fontWeight: FontWeight.w800),
-              ),
-              Text(
-                [
-                  ?episode,
-                  if (item.year != null) '${item.year}',
-                  '${_time(context, program.scheduled.start)}–${_time(context, program.scheduled.end)}',
-                  program.isCurrentAt(now)
-                      ? 'Airing now'
-                      : program.scheduled.end.isBefore(now)
-                      ? 'Ended'
-                      : 'Upcoming',
-                ].join(' • '),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+              if (item.showTitle != null || !hasClearLogo)
+                Text(
+                  item.title,
+                  maxLines: showSecondaryMetadata ? 2 : 1,
+                  overflow: TextOverflow.ellipsis,
+                  style:
+                      (showSecondaryMetadata
+                              ? Theme.of(context).textTheme.headlineSmall
+                              : Theme.of(context).textTheme.titleLarge)
+                          ?.copyWith(fontWeight: FontWeight.w800),
+                ),
+              Padding(
+                padding: const EdgeInsets.only(top: 5),
+                child: Wrap(
+                  key: const Key('guide-program-meta'),
+                  spacing: 6,
+                  runSpacing: 4,
+                  children: [
+                    _InfoPill(
+                      '${_time(context, program.scheduled.start)}–${_time(context, program.scheduled.end)}',
+                    ),
+                    _InfoPill(_duration(item.duration)),
+                    if (episode != null) _InfoPill(episode),
+                    if (item.year != null) _InfoPill('${item.year}'),
+                    _InfoPill(
+                      program.isCurrentAt(now)
+                          ? 'Airing now'
+                          : program.scheduled.end.isBefore(now)
+                          ? 'Ended'
+                          : 'Upcoming',
+                    ),
+                  ],
+                ),
               ),
               if (showSecondaryMetadata && item.genres.isNotEmpty)
-                Text(
-                  item.genres.take(3).join(' • '),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodySmall,
+                Padding(
+                  padding: const EdgeInsets.only(top: 5),
+                  child: Text(
+                    item.genres.take(3).join(' • '),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
                 ),
               if (showSecondaryMetadata && badges.isNotEmpty)
                 Padding(
@@ -1334,7 +1766,7 @@ class _ProgramDetails extends StatelessWidget {
                     children: [for (final badge in badges) _Badge(badge)],
                   ),
                 ),
-              if (showSecondaryMetadata && item.summary != null)
+              if (showSummary && item.summary != null)
                 Padding(
                   padding: const EdgeInsets.only(top: 5),
                   child: Text(
@@ -1379,6 +1811,29 @@ class _Badge extends StatelessWidget {
   );
 }
 
+class _InfoPill extends StatelessWidget {
+  const _InfoPill(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+    decoration: BoxDecoration(
+      color: LineupTheme.of(context).deepBackground.withValues(alpha: 0.42),
+      borderRadius: BorderRadius.circular(999),
+      border: Border.all(color: LineupTheme.of(context).defaultBorder),
+    ),
+    child: Text(
+      label,
+      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+        fontWeight: FontWeight.w700,
+        fontFeatures: const [ui.FontFeature.tabularFigures()],
+      ),
+    ),
+  );
+}
+
 String? _episodeCode(ChannelItem item) {
   final season = item.seasonNumber;
   final episode = item.episodeNumber;
@@ -1395,10 +1850,26 @@ List<String> _mediaBadges(ChannelItem item) => [
     'dolbyVision' => 'DOLBY VISION',
     _ => null,
   },
-  item.videoCodec?.toUpperCase(),
   item.audioCodec?.toUpperCase(),
-  if (item.audioChannels != null) '${item.audioChannels} CH',
+  if (item.audioChannels != null) _audioChannels(item.audioChannels!),
 ].nonNulls.toList();
+
+String _audioChannels(int channels) => switch (channels) {
+  1 => 'MONO',
+  2 => 'STEREO',
+  6 => '5.1',
+  8 => '7.1',
+  _ => '$channels CH',
+};
+
+String _duration(Duration duration) {
+  final totalMinutes = duration.inMinutes;
+  final hours = totalMinutes ~/ 60;
+  final minutes = totalMinutes.remainder(60);
+  if (hours == 0) return '${minutes}m';
+  if (minutes == 0) return '${hours}h';
+  return '${hours}h ${minutes}m';
+}
 
 Future<Color?> _artworkColor(Uint8List bytes) async {
   ui.Codec? codec;
@@ -1495,3 +1966,14 @@ String _libraryName(GuideController controller, String id) =>
         .map((library) => library.title)
         .firstOrNull ??
     id;
+
+String _channelProvenance(
+  GuideController controller,
+  Channel channel,
+) => switch (channel.source) {
+  LibrarySource(:final libraryId, :final libraryType) =>
+    '${_libraryName(controller, libraryId)} • ${libraryType == PlexLibraryType.movie ? 'Movies' : 'Shows'}',
+  PlaylistSource() => 'Playlist',
+  ManualSource() => 'Manual lineup',
+  MixedSource() => 'Mixed sources',
+};
