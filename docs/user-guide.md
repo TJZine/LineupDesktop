@@ -131,6 +131,18 @@ Use the library selector in the Guide toolbar when **Library filters** are
 enabled. **Jump to now** returns the time window and focus to the current
 schedule.
 
+The default Guide uses a detailed two-hour window and comfortable rows so its
+visual scale stays close to the webOS Guide. A three-hour **Wide** option and
+the preserved 4, 6, 8, and 12-hour desktop ranges are available when more of
+the schedule matters than cell detail. Compact rows remain available as a
+desktop override.
+
+Focused program cells reveal long titles with a slow ticker; unfocused cells
+remain stable and ellipsized. Reduce Motion disables the ticker. The program
+information area can use artwork-derived color bleed, the current theme, or a
+Plex backdrop, and can prefer Plex clear title logos when available. Missing
+logos and artwork fall back to text and themed surfaces.
+
 ## Player
 
 Move the pointer or click/tap the Player to show the on-screen controls. The OSD
@@ -162,12 +174,13 @@ report to Flutter.
 | Management screens | Activate focused control | `Enter` or `Space` |
 | Anywhere in the ready app | Open Guide / Player / Settings | `Ctrl+G` / `Ctrl+P` / `Ctrl+,` |
 | Anywhere in the ready app | Open destination 1-5 | `Ctrl+1` Guide, `Ctrl+2` Channels, `Ctrl+3` Settings, `Ctrl+4` Diagnostics, `Ctrl+5` Player |
+| Anywhere in the ready app | Open Settings directly | `F3` |
 | Guide | Move between channels | `Up` / `Down` |
 | Guide | Move between scheduled programs | `Left` / `Right` |
 | Guide | Move by a visible page | `Page Up` / `Page Down` |
 | Guide | Jump to the current time | `Home`, `P`, or Media Play |
 | Guide | Select/tune a currently airing program and open Player | `Enter`, numpad `Enter`, `Space`, or Select |
-| Guide | Close Guide to Player | `Esc`, Back, `G`, or `F2` |
+| Guide | Close Guide to Player when playback exists; otherwise open the Lineup menu | `Esc`, `Backspace`, Back, `G`, or `F2` |
 | Player | Open full Guide | `G` or `F2` |
 | Player | Show mini Guide | `Up` |
 | Player | Show or hide OSD | `Down` or `Enter` shows; `I` toggles |
@@ -178,12 +191,12 @@ report to Flutter.
 | Player | Audio / subtitle tracks | `A` / `C` |
 | Player | Sleep timer | `S` |
 | Player | Toggle fullscreen | `F` or `F11` |
-| Player | Close the active overlay; otherwise return to Guide | `Esc` or Back |
+| Player | Close the active overlay; otherwise return to Guide | `Esc`, `Backspace`, or Back |
 | Mini Guide | Browse nearby channels | `Up` / `Down` |
 | Mini Guide | Move seven channels | `Page Up` / `Page Down` |
 | Mini Guide | Tune focused channel | `Enter`, `Space`, or Select |
 | Mini Guide | Open full Guide | `Right` |
-| Mini Guide | Close | `Esc` or Back |
+| Mini Guide | Close | `Esc`, `Backspace`, or Back |
 
 Dedicated Media Play, Pause, Stop, Rewind, and Fast Forward keys are also
 handled when available. Core playback keys continue to work while the OSD is
@@ -216,7 +229,7 @@ Deletion requires confirmation and cannot be undone.
 | Category | Current controls |
 | --- | --- |
 | Appearance | Ember & Steel, Slate & Pine, Swiss Minimal, DirecTV Classic, and Glassmorphism themes |
-| Guide | Classic with PiP or Overlay presentation; 2/4/6/8/12 visible hours; 0-180 minute past window; comfortable or compact rows; library filters; Now Watching banner; 2-15 second OSD auto-hide |
+| Guide | Classic with PiP or Overlay presentation; detailed 2-hour, wide 3-hour, or desktop-extended 4/6/8/12-hour windows; 0-180 minute past window; comfortable or compact rows; color-bleed/theme/artwork information backgrounds; clear-logo preference; library filters; Now Playing context; 2-15 second OSD auto-hide |
 | Accessibility | Reduce motion and larger keyboard/controller focus indicators |
 | Account | Switch Plex Home profile, switch or clear Plex server selection, and optionally show the profile picker at startup |
 | Support | Enable or disable bounded redacted diagnostic recording |
