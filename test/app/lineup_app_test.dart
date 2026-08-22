@@ -158,8 +158,12 @@ void main() {
     expect(find.text('Theme'), findsOneWidget);
     expect(FocusManager.instance.primaryFocus?.debugLabel, 'Settings');
 
-    await openDestination(tester, 'Guide');
-    await openDestination(tester, 'Player');
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.digit5);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Player');
+
     await tester.sendKeyEvent(LogicalKeyboardKey.f3);
     await tester.pumpAndSettle();
 
