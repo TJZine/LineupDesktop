@@ -137,7 +137,7 @@ navigation do not enter C++.
   enable and validate the data-protection Keychain. Tokens remain outside
   ordinary application state and durable JSON; selected-server persistence
   stores only profile-scoped server identity.
-- Persisted Guide preferences own library-filter visibility, the Now Watching
+- Persisted Guide preferences own library-filter visibility, the Now Playing
   context banner, and player-control auto-hide duration. Their existing Guide
   and player coordinators consume updates directly; there is no second
   settings or overlay owner.
