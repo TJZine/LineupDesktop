@@ -12,10 +12,13 @@ void main() {
       ),
     );
 
-    final text = tester.widget<Text>(find.text('Short program'));
+    final textFinder = find.text('Short program');
+    final text = tester.widget<Text>(textFinder);
+    final initialPosition = tester.getTopLeft(textFinder);
     expect(text.overflow, TextOverflow.ellipsis);
     expect(tester.takeException(), isNull);
     await tester.pump(const Duration(seconds: 3));
+    expect(tester.getTopLeft(textFinder), initialPosition);
     expect(tester.takeException(), isNull);
   });
 
@@ -34,6 +37,7 @@ void main() {
     );
     final initialX = tester.getTopLeft(textFinder).dx;
 
+    // Cross the 900 ms start delay without advancing the scroll first.
     await tester.pump(const Duration(milliseconds: 800));
     expect(tester.getTopLeft(textFinder).dx, initialX);
     await tester.pump(const Duration(milliseconds: 100));

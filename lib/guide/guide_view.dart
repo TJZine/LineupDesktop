@@ -787,7 +787,11 @@ class _TimeHeader extends StatelessWidget {
           Expanded(
             child: LayoutBuilder(
               builder: (context, constraints) {
-                final slotWidth = constraints.maxWidth / slots;
+                final width = constraints.maxWidth;
+                if (!width.isFinite || width < 2) {
+                  return const SizedBox.shrink();
+                }
+                final slotWidth = width / slots;
                 final stride = (68 / slotWidth).ceil().clamp(1, slots);
                 final now = controller.now;
                 final nowFraction =
@@ -833,10 +837,7 @@ class _TimeHeader extends StatelessWidget {
                     ),
                     if (nowFraction >= 0 && nowFraction < 1)
                       Positioned(
-                        left: (constraints.maxWidth * nowFraction).clamp(
-                          0,
-                          constraints.maxWidth - 2,
-                        ),
+                        left: (width * nowFraction).clamp(0, width - 2),
                         top: 4,
                         child: DecoratedBox(
                           decoration: BoxDecoration(
@@ -1767,13 +1768,15 @@ class _ProgramDetails extends StatelessWidget {
                   ),
                 ),
               if (showSummary && item.summary != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 5),
-                  child: Text(
-                    item.summary!,
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodyMedium,
+                Flexible(
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 5),
+                    child: Text(
+                      item.summary!,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
                   ),
                 ),
               if (playbackMessage != null && showSecondaryMetadata)
@@ -1837,8 +1840,8 @@ class _InfoPill extends StatelessWidget {
 String? _episodeCode(ChannelItem item) {
   final season = item.seasonNumber;
   final episode = item.episodeNumber;
-  if (season == null && episode == null) return null;
-  return 'S${(season ?? 0).toString().padLeft(2, '0')}E${(episode ?? 0).toString().padLeft(2, '0')}';
+  if (season == null || episode == null) return null;
+  return 'S${season.toString().padLeft(2, '0')}E${episode.toString().padLeft(2, '0')}';
 }
 
 List<String> _mediaBadges(ChannelItem item) => [

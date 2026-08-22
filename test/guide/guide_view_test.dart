@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -13,6 +14,11 @@ import 'package:lineup_desktop/persistence/app_store.dart';
 import 'package:lineup_desktop/plex/plex_client.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 import 'package:lineup_desktop/ui/app_theme.dart';
+
+final _tinyPng = base64Decode(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwC'
+  'AAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+);
 
 void main() {
   test(
@@ -411,11 +417,7 @@ void main() {
   ) async {
     await tester.binding.setSurfaceSize(const Size(1600, 900));
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    final lineup = _Lineup(
-      1,
-      artworkBytes: File('test/app/goldens/settings-slate-pine-1280x720.png')
-          .readAsBytesSync(),
-    );
+    final lineup = _Lineup(1, artworkBytes: _tinyPng);
     addTearDown(lineup.dispose);
     lineup.channels = [
       Channel(
@@ -455,6 +457,11 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context)
+              .copyWith(textScaler: const TextScaler.linear(1.25)),
+          child: child!,
+        ),
         home: GuideView(
           controller: guide,
           pictureInPicture: const ColoredBox(color: Colors.black),
@@ -479,6 +486,7 @@ void main() {
       findsOneWidget,
     );
     expect(lineup.artworkLoads, 1);
+    expect(tester.takeException(), isNull);
     final background = tester.widget<AnimatedContainer>(
       find.byKey(const Key('guide-info-dynamic-background')),
     );
@@ -497,14 +505,64 @@ void main() {
     );
   });
 
+  testWidgets('Guide omits incomplete episode coordinates', (tester) async {
+    final lineup = _Lineup(1);
+    addTearDown(lineup.dispose);
+    lineup.channels = [
+      for (final (index, item) in [
+        const ChannelItem(
+          id: 'season-only',
+          title: 'Season only',
+          showTitle: 'Incomplete Show',
+          duration: Duration(hours: 24),
+          seasonNumber: 1,
+        ),
+        const ChannelItem(
+          id: 'episode-only',
+          title: 'Episode only',
+          showTitle: 'Incomplete Show',
+          duration: Duration(hours: 24),
+          episodeNumber: 2,
+        ),
+      ].indexed)
+        Channel(
+          id: 'channel-$index',
+          number: index + 1,
+          name: 'Channel $index',
+          source: ManualSource([item]),
+          playbackMode: PlaybackMode.sequential,
+          anchor: DateTime.now().subtract(const Duration(hours: 1)),
+          shuffleSeed: index + 1,
+        ),
+    ];
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    addTearDown(guide.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: GuideView(
+          controller: guide,
+          onClose: () {},
+          onTune: (_) async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('S01E00'), findsNothing);
+    guide.moveVertical(1);
+    await tester.pumpAndSettle();
+    expect(find.text('S00E02'), findsNothing);
+  });
+
   testWidgets('Guide artwork mode renders backdrop and preferred clear logo', (
     tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(1600, 900));
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    final bytes = File('test/app/goldens/settings-slate-pine-1280x720.png')
-        .readAsBytesSync();
-    final lineup = _Lineup(1, artworkBytes: bytes)
+    final lineup = _Lineup(1, artworkBytes: _tinyPng)
       ..settings = const LineupSettings(
         guideInfoBackgroundMode: GuideInfoBackgroundMode.artwork,
       );

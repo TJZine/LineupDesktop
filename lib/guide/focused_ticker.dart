@@ -126,8 +126,13 @@ class _FocusedTickerState extends State<FocusedTicker>
       textDirection: textDirection,
       textScaler: textScaler,
       maxLines: 1,
-    )..layout();
-    return painter.size;
+    );
+    try {
+      painter.layout();
+      return painter.size;
+    } finally {
+      painter.dispose();
+    }
   }
 
   double _offset(double distance) => distance * _animationController.value;
