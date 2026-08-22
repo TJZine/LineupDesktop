@@ -61,6 +61,50 @@ void main() {
     expect(item.audioChannels, 6);
   });
 
+  test(
+    'accepts quoted numeric metadata and ignores invalid optional values',
+    () {
+      final item = parseMediaItem({
+        'ratingKey': 'quoted',
+        'key': '/library/metadata/quoted',
+        'title': 'Quoted metadata',
+        'type': 'episode',
+        'duration': '3600000',
+        'year': '2026',
+        'parentIndex': '1',
+        'index': '2',
+        'addedAt': '1720000000',
+        'viewCount': '1',
+        'Media': [
+          {'audioChannels': '6'},
+        ],
+      });
+
+      expect(item.duration, const Duration(hours: 1));
+      expect(item.year, 2026);
+      expect(item.seasonNumber, 1);
+      expect(item.episodeNumber, 2);
+      expect(item.audioChannels, 6);
+      expect(item.addedAt, isNotNull);
+      expect(item.viewed, isTrue);
+
+      final invalid = parseMediaItem({
+        'ratingKey': 'invalid',
+        'key': '/library/metadata/invalid',
+        'title': 'Invalid metadata',
+        'type': 'movie',
+        'duration': 'not-a-number',
+        'year': true,
+        'addedAt': 1e300,
+        'viewCount': double.infinity,
+      });
+      expect(invalid.duration, Duration.zero);
+      expect(invalid.year, isNull);
+      expect(invalid.addedAt, isNull);
+      expect(invalid.viewed, isFalse);
+    },
+  );
+
   test('parses episode artwork facts including show poster and clear logo', () {
     final item = parseMediaItem({
       'ratingKey': 'episode-1',

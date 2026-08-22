@@ -674,7 +674,8 @@ void main() {
                       'key': '/library/metadata/e1',
                       'title': 'Pilot',
                       'type': 'episode',
-                      'duration': 1000,
+                      'duration': '1000',
+                      'year': '2026',
                     },
                   ],
                 },
@@ -727,6 +728,8 @@ void main() {
         'secret',
       );
       expect(episodes.single.type, 'episode');
+      expect(episodes.single.duration, const Duration(seconds: 1));
+      expect(episodes.single.year, 2026);
       expect(requests.first.queryParameters['type'], '4');
       expect(playlists.playlists.single.title, 'Favorites');
       expect(playlists.playlists.single.items.single.id, 'm1');
