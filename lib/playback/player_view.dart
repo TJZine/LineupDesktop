@@ -50,6 +50,7 @@ class _PlayerViewState extends State<PlayerView> {
       return KeyEventResult.ignored;
     }
     final key = event.logicalKey;
+    final initialPress = event is KeyDownEvent;
     final controller = widget.controller;
     if (key == LogicalKeyboardKey.escape ||
         key == LogicalKeyboardKey.backspace ||
@@ -172,14 +173,14 @@ class _PlayerViewState extends State<PlayerView> {
     } else if (key == LogicalKeyboardKey.arrowDown &&
         controller.overlay == PlayerOverlay.none) {
       controller.showOsd();
-    } else if (key == LogicalKeyboardKey.keyI) {
+    } else if (initialPress && key == LogicalKeyboardKey.keyI) {
       controller.overlay == PlayerOverlay.osd
           ? controller.closeOverlay()
           : controller.showOsd();
-    } else if (key == LogicalKeyboardKey.keyF ||
-        key == LogicalKeyboardKey.f11) {
+    } else if (initialPress &&
+        (key == LogicalKeyboardKey.keyF || key == LogicalKeyboardKey.f11)) {
       unawaited(controller.toggleFullscreen());
-    } else if (key == LogicalKeyboardKey.keyS) {
+    } else if (initialPress && key == LogicalKeyboardKey.keyS) {
       controller.cycleSleepTimer();
     } else if (key == LogicalKeyboardKey.keyA) {
       controller.showTracks(PlayerTrackType.audio);

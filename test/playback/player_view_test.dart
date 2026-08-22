@@ -45,8 +45,134 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.space);
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
     await tester.sendKeyEvent(LogicalKeyboardKey.mediaPlay);
+    for (final key in [
+      LogicalKeyboardKey.keyF,
+      LogicalKeyboardKey.f11,
+      LogicalKeyboardKey.keyJ,
+      LogicalKeyboardKey.keyK,
+      LogicalKeyboardKey.keyL,
+      LogicalKeyboardKey.mediaPlayPause,
+    ]) {
+      await tester.sendKeyEvent(key);
+    }
     expect(fixture.native.transportCommands, 0);
+    expect(fixture.native.fullscreenValues, isEmpty);
 
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
+  testWidgets('edge-triggered player shortcuts ignore repeat events', (
+    tester,
+  ) async {
+    final fixture = _Fixture(PlayerState.playing);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.keyI);
+    await tester.sendKeyRepeatEvent(LogicalKeyboardKey.keyI);
+    expect(fixture.player.overlay, PlayerOverlay.osd);
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.f11);
+    await tester.sendKeyRepeatEvent(LogicalKeyboardKey.f11);
+    await tester.pump();
+    expect(fixture.native.fullscreenValues, [true]);
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.keyS);
+    await tester.sendKeyRepeatEvent(LogicalKeyboardKey.keyS);
+    expect(fixture.player.sleepDuration, const Duration(minutes: 30));
+
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.keyI);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.f11);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.keyS);
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
+  testWidgets('documented player shortcut aliases reach their public actions', (
+    tester,
+  ) async {
+    final fixture = _Fixture(
+      PlayerState.playing,
+      tracks: const [
+        PlayerTrack(id: 1, type: PlayerTrackType.audio, selected: true),
+        PlayerTrack(id: 2, type: PlayerTrackType.subtitle, selected: false),
+      ],
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+
+    for (final key in [
+      LogicalKeyboardKey.keyJ,
+      LogicalKeyboardKey.keyK,
+      LogicalKeyboardKey.keyL,
+      LogicalKeyboardKey.mediaPlayPause,
+    ]) {
+      await tester.sendKeyEvent(key);
+    }
+    expect(fixture.native.transportCommands, 4);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.f11);
+    expect(fixture.native.fullscreenValues, [true]);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyS);
+    expect(fixture.player.sleepDuration, const Duration(minutes: 30));
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
+    expect(fixture.player.overlay, PlayerOverlay.audioTracks);
+    fixture.player.closeOverlay();
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyC);
+    expect(fixture.player.overlay, PlayerOverlay.subtitleTracks);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
+  testWidgets('numpad Enter commits channel entry', (tester) async {
+    final fixture = _Fixture(PlayerState.playing, channelCount: 2);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.digit8);
+    await tester.sendKeyEvent(LogicalKeyboardKey.numpadEnter);
+    await tester.pump();
+
+    expect(fixture.lineup.currentChannelId, 'channel-1');
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
+  testWidgets('non-OSD overlays guard transport shortcuts', (tester) async {
+    final fixture = _Fixture(PlayerState.playing);
+    var guideOpened = false;
+    fixture.player.showMiniGuide();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PlayerView(
+          controller: fixture.player,
+          openGuide: () => guideOpened = true,
+        ),
+      ),
+    );
+
+    for (final key in [
+      LogicalKeyboardKey.keyJ,
+      LogicalKeyboardKey.keyK,
+      LogicalKeyboardKey.mediaPlayPause,
+    ]) {
+      await tester.sendKeyEvent(key);
+    }
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyL);
+
+    expect(fixture.native.transportCommands, 0);
+    expect(guideOpened, isTrue);
     await tester.pumpWidget(const SizedBox.shrink());
     fixture.dispose();
   });
@@ -338,9 +464,7 @@ void main() {
     fixture.dispose();
   });
 
-  testWidgets('empty track menus assign one intentional autofocus target', (
-    tester,
-  ) async {
+  testWidgets('A and C do not open unavailable track rails', (tester) async {
     final fixture = _Fixture(PlayerState.playing);
     await tester.pumpWidget(
       MaterialApp(
@@ -348,30 +472,13 @@ void main() {
       ),
     );
 
-    fixture.player.showOsd();
-    fixture.player.showTracks(PlayerTrackType.subtitle);
-    await tester.pump();
-    expect(
-      tester.widget<ListTile>(find.widgetWithText(ListTile, 'Off')).autofocus,
-      isTrue,
-    );
-    expect(
-      tester
-          .widget<TextButton>(find.widgetWithText(TextButton, 'Back'))
-          .autofocus,
-      isFalse,
-    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
+    expect(fixture.player.overlay, PlayerOverlay.none);
 
-    fixture.player.closeOverlay();
-    fixture.player.showTracks(PlayerTrackType.audio);
-    await tester.pump();
-    expect(find.text('Off'), findsNothing);
-    expect(
-      tester
-          .widget<TextButton>(find.widgetWithText(TextButton, 'Back'))
-          .autofocus,
-      isTrue,
-    );
+    fixture.player.showOsd();
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyC);
+    expect(fixture.player.overlay, PlayerOverlay.osd);
+    expect(find.byKey(const Key('playback-options-rail')), findsNothing);
 
     await tester.pumpWidget(const SizedBox.shrink());
     fixture.dispose();

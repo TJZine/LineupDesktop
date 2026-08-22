@@ -431,6 +431,7 @@ class PlayerCoordinator extends ChangeNotifier {
 
   void showTracks(PlayerTrackType type) {
     if (_overlay != PlayerOverlay.none && _overlay != PlayerOverlay.osd) return;
+    if (!_tracks.any((track) => track.type == type)) return;
     _setOverlay(
       type == PlayerTrackType.audio
           ? PlayerOverlay.audioTracks
