@@ -33,6 +33,7 @@ void main() {
       final bytes = await controller.artworkForPath(Uri.parse('/show/art'));
 
       expect(bytes, Uint8List.fromList([1, 2, 3]));
+      expect(plex.artworkServer, controller.connection!.uri);
       expect(plex.artworkPath, Uri.parse('/show/art'));
       expect(plex.artworkToken, 'account-token');
     },
@@ -917,6 +918,7 @@ class _FakePlex extends PlexClient {
   int pollCalls = 0;
   int cancelPinCalls = 0;
   int librariesCalls = 0;
+  Uri? artworkServer;
   Uri? artworkPath;
   String? artworkToken;
 
@@ -996,6 +998,7 @@ class _FakePlex extends PlexClient {
     Uri path, {
     int maximumBytes = 4 * 1024 * 1024,
   }) async {
+    artworkServer = server;
     artworkPath = path;
     artworkToken = token;
     return Uint8List.fromList([1, 2, 3]);
