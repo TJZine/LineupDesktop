@@ -28,12 +28,19 @@ class Diagnostics {
     if (!enabled) return;
     final safe = <String, Object>{};
     for (final entry in context.entries) {
-      if (_forbiddenKey.hasMatch(entry.key)) continue;
       final value = entry.value;
-      if (value is String || value is num || value is bool) {
-        final redacted = redact(value.toString());
-        safe[entry.key.substring(0, entry.key.length.clamp(0, 64))] = redacted
-            .substring(0, redacted.length.clamp(0, 500));
+      if (_stringKeys.contains(entry.key) && value is String) {
+        safe[entry.key] = _safeToken.hasMatch(value) ? value : 'unexpected';
+      } else if (entry.key == 'httpStatus' &&
+          value is int &&
+          value >= 100 &&
+          value <= 599) {
+        safe[entry.key] = value;
+      } else if (entry.key == 'count' &&
+          value is int &&
+          value >= 0 &&
+          value <= 1000000) {
+        safe[entry.key] = value;
       }
     }
     _entries.add(
@@ -68,8 +75,16 @@ class Diagnostics {
         '[PATH]',
       );
 
-  static final _forbiddenKey = RegExp(
-    r'(token|auth|header|credential|secret|pin|password|url|uri|path|stack|handle)',
-    caseSensitive: false,
-  );
+  static const _stringKeys = {
+    'code',
+    'failureCode',
+    'mode',
+    'container',
+    'videoCodec',
+    'audioCodec',
+    'dynamicRange',
+    'videoOutput',
+    'hardwareDecoder',
+  };
+  static final _safeToken = RegExp(r'^[A-Za-z0-9._+-]{1,64}$');
 }

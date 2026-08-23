@@ -220,7 +220,7 @@ class LineupController extends ChangeNotifier {
     } catch (exception) {
       cleanupFailure = exception;
       diagnostics.add('application', 'Credential cleanup failed', {
-        'error': exception.toString(),
+        'code': exception is PlexException ? exception.code : 'unexpected',
       });
     }
     if (pin != null) {
@@ -228,7 +228,7 @@ class LineupController extends ChangeNotifier {
         await plex.cancelPin(pin);
       } catch (exception) {
         diagnostics.add('plex-auth', 'PIN cancellation failed', {
-          'error': exception.toString(),
+          'code': exception is PlexException ? exception.code : 'unexpected',
         });
       }
     }
@@ -294,7 +294,7 @@ class LineupController extends ChangeNotifier {
       notifyListeners();
     } catch (exception) {
       diagnostics.add('plex-auth', 'PIN poll failed', {
-        'error': exception.toString(),
+        'code': exception is PlexException ? exception.code : 'unexpected',
       });
     }
   }
@@ -602,7 +602,7 @@ class LineupController extends ChangeNotifier {
     } on PlexException catch (exception) {
       if (_isPmsAuthorizationError(exception)) rethrow;
       diagnostics.add('plex-library', 'Playlist discovery unavailable', {
-        'error': exception.toString(),
+        'code': exception.code,
       });
       catalog = const PlexPlaylistCatalog(playlists: [], failedIds: {});
     }
@@ -639,7 +639,7 @@ class LineupController extends ChangeNotifier {
       error =
           'Could not save audio settings. Check device storage and try again.';
       diagnostics.add('application', 'Audio setup persistence failed', {
-        'error': exception.toString(),
+        'code': exception is PlexException ? exception.code : 'unexpected',
       });
       notifyListeners();
     }
@@ -868,7 +868,6 @@ class LineupController extends ChangeNotifier {
       'videoCodec': item.videoCodec,
       'audioCodec': item.audioCodec,
       'dynamicRange': item.dynamicRange.name,
-      'reason': descriptor.decision.reasons.join(','),
     });
     return LineupPlaybackRequest(
       descriptor.uri,
@@ -1001,7 +1000,7 @@ class LineupController extends ChangeNotifier {
       if (_disposed) return false;
       error = 'Lineup could not securely sign out. Check system credential storage and try again.';
       diagnostics.add('application', 'Credential cleanup failed', {
-        'error': exception.toString(),
+        'code': exception is PlexException ? exception.code : 'unexpected',
       });
       return false;
     }
@@ -1248,7 +1247,7 @@ class LineupController extends ChangeNotifier {
           : 'Lineup could not complete that request.';
       stage = fallbackStage;
       diagnostics.add('application', 'Operation failed', {
-        'error': exception.toString(),
+        'code': exception is PlexException ? exception.code : 'unexpected',
       });
       return false;
     } finally {

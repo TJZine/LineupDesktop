@@ -122,6 +122,17 @@ void main() {
         },
     ];
     expect(diagnosticSnapshot.toString(), isNot(contains('sentinel')));
+    expect(
+      controller.diagnostics.entries.single.message,
+      'Plex playback selected',
+    );
+    expect(controller.diagnostics.entries.single.context, {
+      'mode': 'directPlay',
+      'container': 'mp4',
+      'videoCodec': 'h264',
+      'audioCodec': 'aac',
+      'dynamicRange': 'sdr',
+    });
   });
 
   test('concurrent PMS authorization failures coalesce one refresh', () async {
@@ -572,25 +583,98 @@ void main() {
           ),
         ]
         ..libraryItemsHandler = (_, _, _, _) async =>
-            throw const PlexException('offline', 'Library unavailable'),
+            throw const PlexException('offline', 'opaque-secret-sentinel'),
     );
     addTearDown(controller.dispose);
     await controller.initialize();
-    controller.stage = SetupStage.channelSetup;
+    controller
+      ..stage = SetupStage.channelSetup
+      ..diagnostics.enabled = true;
 
     final loaded = await controller.setLibraries({'movies'});
 
     expect(loaded, isFalse);
     expect(controller.stage, SetupStage.channelSetup);
-    expect(controller.error, 'Library unavailable');
+    expect(controller.error, 'opaque-secret-sentinel');
+    expect(controller.diagnostics.entries.single.message, 'Operation failed');
+    expect(controller.diagnostics.entries.single.context, {'code': 'offline'});
+    expect(
+      '${controller.diagnostics.entries.single.message}'
+      '${controller.diagnostics.entries.single.context}',
+      isNot(contains('opaque-secret-sentinel')),
+    );
   });
 
+  test(
+    'playlist diagnostics retain Plex code and bounded failure count',
+    () async {
+      final selected = _server('server');
+      var calls = 0;
+      final plex = _FakePlex()
+        ..serversResult = [selected]
+        ..connectionResult = selected.connections.single
+        ..librariesResult = const [
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+        ]
+        ..playlistsHandler = (_, _) async {
+          calls++;
+          if (calls == 1) {
+            throw const PlexException(
+              'playlist-failed',
+              'opaque-secret-sentinel',
+            );
+          }
+          return const PlexPlaylistCatalog(
+            playlists: [],
+            failedIds: {'missing-1', 'missing-2'},
+          );
+        };
+      final controller = LineupController(
+        store: _MemoryStore(
+          const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+        ),
+        credentials: _MemoryCredentials(accountToken: 'token'),
+        plex: plex,
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+      controller
+        ..stage = SetupStage.channelSetup
+        ..diagnostics.enabled = true;
+
+      expect(await controller.setLibraries({'movies'}), isTrue);
+      var entry = controller.diagnostics.entries.single;
+      expect(entry.message, 'Playlist discovery unavailable');
+      expect(entry.context, {'code': 'playlist-failed'});
+      expect(
+        '${entry.message}${entry.context}',
+        isNot(contains('opaque-secret-sentinel')),
+      );
+
+      controller.diagnostics.enabled = false;
+      controller.diagnostics.enabled = true;
+      expect(await controller.setLibraries({'movies'}), isTrue);
+      entry = controller.diagnostics.entries.single;
+      expect(entry.message, 'Some playlists could not be loaded');
+      expect(entry.context, {'count': 2});
+    },
+  );
+
   test('audio persistence failure stays retryable and visible', () async {
-    final controller = LineupController(
-      store: _MemoryStore()..failNextSave = true,
-      credentials: _MemoryCredentials(),
-      plex: _FakePlex(),
-    )..stage = SetupStage.audio;
+    final controller =
+        LineupController(
+            store: _MemoryStore()
+              ..failNextSave = true
+              ..failureMessage = 'opaque-secret-sentinel',
+            credentials: _MemoryCredentials(),
+            plex: _FakePlex(),
+          )
+          ..stage = SetupStage.audio
+          ..diagnostics.enabled = true;
     addTearDown(controller.dispose);
 
     await controller.completeAudioSetup();
@@ -598,6 +682,13 @@ void main() {
     expect(controller.stage, SetupStage.audio);
     expect(controller.settings.audioSetupComplete, isFalse);
     expect(controller.error, contains('Could not save audio settings'));
+    final entry = controller.diagnostics.entries.single;
+    expect(entry.message, 'Audio setup persistence failed');
+    expect(entry.context, {'code': 'unexpected'});
+    expect(
+      '${entry.message}${entry.context}',
+      isNot(contains('opaque-secret-sentinel')),
+    );
   });
 
   test(
@@ -674,6 +765,39 @@ void main() {
 
     await controller.logout();
     poll.complete(null);
+  });
+
+  test('PIN polling diagnostics retain only the Plex failure code', () async {
+    final plex = _FakePlex()
+      ..pinResult = PlexPin(
+        id: 6,
+        code: 'EFGH',
+        expiresAt: DateTime.now().add(const Duration(minutes: 1)),
+      )
+      ..pollHandler = (_) async =>
+          throw const PlexException('poll-failed', 'opaque-secret-sentinel');
+    final controller = LineupController(
+      store: _MemoryStore(),
+      credentials: _MemoryCredentials(),
+      plex: plex,
+      pinPollInterval: const Duration(milliseconds: 1),
+    )..diagnostics.enabled = true;
+    addTearDown(controller.dispose);
+
+    await controller.startLinking();
+    while (controller.diagnostics.entries.isEmpty) {
+      await Future<void>.delayed(const Duration(milliseconds: 1));
+    }
+    await controller.cancelLinking();
+
+    for (final entry in controller.diagnostics.entries) {
+      expect(entry.message, 'PIN poll failed');
+      expect(entry.context, {'code': 'poll-failed'});
+      expect(
+        '${entry.message}${entry.context}',
+        isNot(contains('opaque-secret-sentinel')),
+      );
+    }
   });
 
   test(
@@ -778,13 +902,20 @@ void main() {
           code: 'WXYZ',
           expiresAt: DateTime.now().add(const Duration(minutes: 1)),
         )
-        ..pollHandler = (_) async => 'late-token';
+        ..pollHandler = (_) async {
+          return 'late-token';
+        }
+        ..cancelPinFailure = const PlexException(
+          'cancel-failed',
+          'opaque-secret-sentinel',
+        );
       final controller = LineupController(
         store: _MemoryStore(),
         credentials: credentials,
         plex: plex,
         pinPollInterval: const Duration(milliseconds: 1),
       );
+      controller.diagnostics.enabled = true;
       addTearDown(controller.dispose);
 
       await controller.startLinking();
@@ -798,6 +929,20 @@ void main() {
       expect(controller.error, isNot(contains('late-token')));
       expect(credentials.accountToken, 'late-token');
       expect(plex.cancelPinCalls, 1);
+      expect(controller.diagnostics.entries.map((entry) => entry.message), [
+        'Credential cleanup failed',
+        'PIN cancellation failed',
+      ]);
+      expect(controller.diagnostics.entries.map((entry) => entry.context), [
+        {'code': 'unexpected'},
+        {'code': 'cancel-failed'},
+      ]);
+      expect(
+        controller.diagnostics.entries
+            .map((entry) => '${entry.message}${entry.context}')
+            .join(),
+        isNot(contains('opaque-secret-sentinel')),
+      );
 
       expect(await controller.cancelLinking(), isTrue);
       expect(controller.stage, SetupStage.welcome);
@@ -816,11 +961,8 @@ void main() {
               plex: _FakePlex(),
             )
             ..stage = SetupStage.ready
-            ..account = const PlexAccount(
-              id: 'owner',
-              name: 'Owner',
-              email: '',
-            );
+            ..account = const PlexAccount(id: 'owner', name: 'Owner', email: '')
+            ..diagnostics.enabled = true;
       addTearDown(controller.dispose);
 
       expect(await controller.logout(), isFalse);
@@ -828,7 +970,19 @@ void main() {
       expect(controller.stage, SetupStage.ready);
       expect(controller.account?.id, 'owner');
       expect(controller.error, contains('securely sign out'));
-      expect(controller.error, isNot(contains('keychain-token-secret')));
+      expect(controller.error, isNot(contains('opaque-secret-sentinel')));
+      expect(
+        controller.diagnostics.entries.single.message,
+        'Credential cleanup failed',
+      );
+      expect(controller.diagnostics.entries.single.context, {
+        'code': 'unexpected',
+      });
+      expect(
+        '${controller.diagnostics.entries.single.message}'
+        '${controller.diagnostics.entries.single.context}',
+        isNot(contains('opaque-secret-sentinel')),
+      );
     },
   );
 
@@ -1172,6 +1326,7 @@ class _MemoryStore implements AppStore {
 
   PersistedState state;
   bool failNextSave = false;
+  String failureMessage = 'save failed';
 
   @override
   Future<String> clientIdentifier() async =>
@@ -1184,7 +1339,7 @@ class _MemoryStore implements AppStore {
   Future<void> save(PersistedState value) async {
     if (failNextSave) {
       failNextSave = false;
-      throw StateError('save failed');
+      throw StateError(failureMessage);
     }
     state = value;
   }
@@ -1254,7 +1409,7 @@ mixin _FailOnceClear on _MemoryCredentials {
   @override
   Future<void> clear() async {
     clearCalls++;
-    if (clearCalls == 1) throw StateError('keychain-token-secret');
+    if (clearCalls == 1) throw StateError('opaque-secret-sentinel');
     await super.clear();
   }
 }
@@ -1267,7 +1422,7 @@ class _FailingClearCredentials extends _MemoryCredentials {
 
   @override
   Future<void> clear() async {
-    throw StateError('keychain-token-secret');
+    throw StateError('opaque-secret-sentinel');
   }
 }
 
@@ -1340,6 +1495,7 @@ class _FakePlex extends PlexClient {
   Future<List<PlexMediaItem>> Function(Uri, String, String, PlexLibraryType)?
   libraryItemsHandler;
   Future<List<PlexLibrary>> Function(Uri, String)? librariesHandler;
+  Future<PlexPlaylistCatalog> Function(Uri, String)? playlistsHandler;
   Future<List<PlexServerAccess>> Function(String)? discoverServersHandler;
   Future<Uint8List> Function(Uri, String, Uri)? artworkHandler;
   final discoveredTokens = <String>[];
@@ -1358,6 +1514,7 @@ class _FakePlex extends PlexClient {
   List<PlexLibrary> librariesResult = const [];
   int pollCalls = 0;
   int cancelPinCalls = 0;
+  Object? cancelPinFailure;
   int librariesCalls = 0;
   Uri? artworkServer;
   Uri? artworkPath;
@@ -1427,6 +1584,9 @@ class _FakePlex extends PlexClient {
   @override
   Future<void> cancelPin(PlexPin pin) async {
     cancelPinCalls++;
+    final failure = cancelPinFailure;
+    cancelPinFailure = null;
+    if (failure != null) throw failure;
   }
 
   @override
@@ -1449,7 +1609,8 @@ class _FakePlex extends PlexClient {
   @override
   Future<PlexPlaylistCatalog> playlists(Uri server, String token) async {
     playlistTokens.add(token);
-    return const PlexPlaylistCatalog(playlists: [], failedIds: {});
+    return playlistsHandler?.call(server, token) ??
+        const PlexPlaylistCatalog(playlists: [], failedIds: {});
   }
 
   @override

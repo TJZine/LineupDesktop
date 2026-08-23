@@ -190,7 +190,8 @@ class PlayerCoordinator extends ChangeNotifier {
           .firstOrNull
           ?.codec;
       lineup.diagnostics.add('playback', 'Native playback failed', {
-        'reason': event.status.message,
+        'failureCode': event.status.failureCode,
+        'httpStatus': event.status.httpStatus,
         'videoCodec': event.telemetry.videoCodec,
         'audioCodec': audioCodec,
         'videoOutput': event.telemetry.videoOutput,
@@ -786,7 +787,7 @@ class PlayerCoordinator extends ChangeNotifier {
 
   void _recordPlaybackFailure(Object error) {
     lineup.diagnostics.add('playback', 'Playback request failed', {
-      'error': error.toString(),
+      'code': error is PlexException ? error.code : 'unexpected',
     });
   }
 

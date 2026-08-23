@@ -281,6 +281,12 @@ void main() {
       lineup.diagnostics.entries.single.message,
       'Playback request failed',
     );
+    expect(lineup.diagnostics.entries.single.context, {'code': 'unexpected'});
+    expect(
+      '${lineup.diagnostics.entries.single.message}'
+      '${lineup.diagnostics.entries.single.context}',
+      isNot(contains('opaque-secret-sentinel')),
+    );
   });
 
   test(
@@ -797,9 +803,13 @@ void main() {
     player.emitError(
       recoverable: true,
       generation: player.loadGenerations.single,
+      message: 'opaque-secret-sentinel',
       audioCodec: 'truehd',
       failureCode: 'http_error',
       httpStatus: 401,
+      videoCodec: 'hevc',
+      videoOutput: 'gpu-next',
+      hardwareDecoder: 'd3d11va',
     );
     await Future<void>.delayed(Duration.zero);
 
@@ -808,8 +818,19 @@ void main() {
     expect(coordinator.status.failureCode, 'http_error');
     expect(coordinator.status.httpStatus, 401);
     expect(lineup.diagnostics.entries.single.message, 'Native playback failed');
-    expect(lineup.diagnostics.entries.single.context['reason'], 'Failed');
-    expect(lineup.diagnostics.entries.single.context['audioCodec'], 'truehd');
+    expect(lineup.diagnostics.entries.single.context, {
+      'failureCode': 'http_error',
+      'httpStatus': 401,
+      'videoCodec': 'hevc',
+      'audioCodec': 'truehd',
+      'videoOutput': 'gpu-next',
+      'hardwareDecoder': 'd3d11va',
+    });
+    expect(
+      '${lineup.diagnostics.entries.single.message}'
+      '${lineup.diagnostics.entries.single.context}',
+      isNot(contains('opaque-secret-sentinel')),
+    );
   });
 
   test(
@@ -1396,22 +1417,30 @@ class _EventPlayer extends _Player {
   void emitError({
     bool recoverable = false,
     int? generation,
+    String message = 'Failed',
     String? audioCodec,
     String? failureCode,
     int? httpStatus,
+    String? videoCodec,
+    String? videoOutput,
+    String? hardwareDecoder,
   }) {
     _events.add(
       PlayerEvent(
         status: PlayerStatus(
           state: PlayerState.error,
-          message: 'Failed',
+          message: message,
           recoverable: recoverable,
           failureCode: failureCode,
           httpStatus: httpStatus,
         ),
         position: Duration.zero,
         duration: Duration.zero,
-        telemetry: const PlayerTelemetry(),
+        telemetry: PlayerTelemetry(
+          videoCodec: videoCodec,
+          videoOutput: videoOutput,
+          hardwareDecoder: hardwareDecoder,
+        ),
         tracks: audioCodec == null
             ? const []
             : [
@@ -1443,7 +1472,7 @@ class _EventPlayer extends _Player {
   @override
   Future<void> stop() async {
     await super.stop();
-    if (failStop) throw StateError('stop failed');
+    if (failStop) throw StateError('opaque-secret-sentinel');
   }
 
   Future<void> close() => _events.close();
