@@ -471,11 +471,15 @@ class PlexClient {
     required PlexMediaItem item,
     required StreamCapabilities capabilities,
   }) {
-    if (item.partPath == null) {
+    final mediaParts = item.parts;
+    if (mediaParts.isEmpty) {
       throw const PlexException(
         'unsupported',
         'This item has no playable media part.',
       );
+    }
+    for (final part in mediaParts) {
+      _directPlayUri(server, part.path);
     }
     final decision = decideStream(
       StreamFacts(
@@ -489,16 +493,38 @@ class PlexClient {
     if (decision.kind == StreamDecisionKind.unsupported) {
       throw PlexException('unsupported', decision.reasons.join(' '));
     }
+    return PlexPlaybackDescriptor(
+      decision: decision,
+      parts: List.unmodifiable([
+        for (var index = 0; index < mediaParts.length; index++)
+          _playbackPartDescriptor(
+            server: server,
+            item: item,
+            part: mediaParts[index],
+            partIndex: index,
+            decision: decision,
+          ),
+      ]),
+    );
+  }
+
+  PlexPlaybackPartDescriptor _playbackPartDescriptor({
+    required Uri server,
+    required PlexMediaItem item,
+    required PlexMediaPart part,
+    required int partIndex,
+    required StreamDecision decision,
+  }) {
     final session = _randomId();
     final uri = decision.kind == StreamDecisionKind.directPlay
-        ? _directPlayUri(server, item.partPath!)
+        ? _directPlayUri(server, part.path)
         : server
               .resolve('/video/:/transcode/universal/start.m3u8')
               .replace(
                 queryParameters: {
                   'path': item.key,
                   'mediaIndex': '0',
-                  'partIndex': '0',
+                  'partIndex': '$partIndex',
                   'protocol': 'hls',
                   'session': session,
                   'directPlay': '0',
@@ -517,10 +543,10 @@ class PlexClient {
                   'X-Plex-Platform': Platform.operatingSystem,
                 },
               );
-    return PlexPlaybackDescriptor(
+    return PlexPlaybackPartDescriptor(
       uri: uri,
-      decision: decision,
       sessionId: session,
+      duration: part.duration,
     );
   }
 
@@ -664,11 +690,52 @@ PlexMediaItem parseMediaItem(Object? raw, {String? libraryId}) {
   final media = (json['Media'] as List? ?? const [])
       .whereType<Map>()
       .firstOrNull;
-  final part = (media?['Part'] as List? ?? const [])
-      .whereType<Map>()
-      .firstOrNull;
+  final parts = [
+    for (final rawPart in media?['Part'] as List? ?? const [])
+      if (rawPart is Map) _parseMediaPart(rawPart),
+  ];
+  final part = parts.firstOrNull;
+  final streams = part?.tracks ?? const <PlexTrack>[];
+  return PlexMediaItem(
+    id: _id(json['ratingKey'], 'media id'),
+    key: _text(json['key'], 'media key'),
+    title: _text(json['title'], 'media title'),
+    type: _text(json['type'], 'media type'),
+    duration: Duration(milliseconds: _optionalInteger(json['duration']) ?? 0),
+    libraryId: libraryId,
+    parentTitle: _optionalText(json['parentTitle']),
+    grandparentTitle: _optionalText(json['grandparentTitle']),
+    thumbPath: _optionalText(json['thumb']),
+    grandparentThumbPath: _optionalText(json['grandparentThumb']),
+    artPath: _optionalText(json['art']),
+    clearLogoPath: _clearLogoPath(json['Image']),
+    parts: List.unmodifiable(parts),
+    container: _optionalText(media?['container'])?.toLowerCase(),
+    videoCodec: _optionalText(media?['videoCodec'])?.toLowerCase(),
+    audioCodec: _optionalText(media?['audioCodec'])?.toLowerCase(),
+    dynamicRange: _dynamicRange(media, streams),
+    genres: _tagNames(json['Genre']),
+    collections: _tagNames(json['Collection']),
+    directors: _tagNames(json['Director']),
+    actors: _tagNames(json['Role']),
+    studio: _optionalText(json['studio']),
+    year: _optionalInteger(json['year']),
+    summary: _optionalText(json['summary']),
+    contentRating: _optionalText(json['contentRating']),
+    seasonNumber: _optionalInteger(json['parentIndex']),
+    episodeNumber: _optionalInteger(json['index']),
+    videoResolution: _optionalText(media?['videoResolution']),
+    audioChannels: _optionalInteger(media?['audioChannels']),
+    addedAt: _optionalUnixTime(json['addedAt']),
+    viewed: (_optionalInteger(json['viewCount']) ?? 0) > 0,
+  );
+}
+
+PlexMediaPart _parseMediaPart(Map raw) {
+  final path = _text(raw['key'], 'media part path');
+  final milliseconds = _optionalInteger(raw['duration']);
   final streams = <PlexTrack>[];
-  for (final rawStream in part?['Stream'] as List? ?? const []) {
+  for (final rawStream in raw['Stream'] as List? ?? const []) {
     final stream = _record(rawStream, 'stream');
     final type = _integer(stream['streamType'], 'stream type');
     final codec = _text(stream['codec'], 'stream codec').toLowerCase();
@@ -687,39 +754,12 @@ PlexMediaItem parseMediaItem(Object? raw, {String? libraryId}) {
       ),
     );
   }
-  return PlexMediaItem(
-    id: _id(json['ratingKey'], 'media id'),
-    key: _text(json['key'], 'media key'),
-    title: _text(json['title'], 'media title'),
-    type: _text(json['type'], 'media type'),
-    duration: Duration(milliseconds: _optionalInteger(json['duration']) ?? 0),
-    libraryId: libraryId,
-    parentTitle: _optionalText(json['parentTitle']),
-    grandparentTitle: _optionalText(json['grandparentTitle']),
-    thumbPath: _optionalText(json['thumb']),
-    grandparentThumbPath: _optionalText(json['grandparentThumb']),
-    artPath: _optionalText(json['art']),
-    clearLogoPath: _clearLogoPath(json['Image']),
-    partPath: _optionalText(part?['key']),
-    container: _optionalText(media?['container'])?.toLowerCase(),
-    videoCodec: _optionalText(media?['videoCodec'])?.toLowerCase(),
-    audioCodec: _optionalText(media?['audioCodec'])?.toLowerCase(),
-    dynamicRange: _dynamicRange(media, streams),
-    tracks: streams,
-    genres: _tagNames(json['Genre']),
-    collections: _tagNames(json['Collection']),
-    directors: _tagNames(json['Director']),
-    actors: _tagNames(json['Role']),
-    studio: _optionalText(json['studio']),
-    year: _optionalInteger(json['year']),
-    summary: _optionalText(json['summary']),
-    contentRating: _optionalText(json['contentRating']),
-    seasonNumber: _optionalInteger(json['parentIndex']),
-    episodeNumber: _optionalInteger(json['index']),
-    videoResolution: _optionalText(media?['videoResolution']),
-    audioChannels: _optionalInteger(media?['audioChannels']),
-    addedAt: _optionalUnixTime(json['addedAt']),
-    viewed: (_optionalInteger(json['viewCount']) ?? 0) > 0,
+  return PlexMediaPart(
+    path: path,
+    duration: milliseconds != null && milliseconds > 0
+        ? Duration(milliseconds: milliseconds)
+        : null,
+    tracks: List.unmodifiable(streams),
   );
 }
 

@@ -51,7 +51,13 @@ void main() {
       type: 'movie',
       duration: const Duration(minutes: 1),
       libraryId: 'movies',
-      partPath: '/library/parts/movie/file.mp4',
+      parts: [
+        PlexMediaPart(
+          path: '/library/parts/movie/one.mp4',
+          duration: Duration(seconds: 30),
+        ),
+        PlexMediaPart(path: '/library/parts/movie/two.mp4'),
+      ],
       container: 'mp4',
       videoCodec: 'h264',
       audioCodec: 'aac',
@@ -86,7 +92,30 @@ void main() {
     controller.diagnostics.enabled = true;
     await controller.setLibraries({'movies'});
     await controller.artworkForPath(Uri.parse('/art'));
+    plex.playbackDescriptorResult = PlexPlaybackDescriptor(
+      decision: const StreamDecision(StreamDecisionKind.directPlay, []),
+      parts: [
+        PlexPlaybackPartDescriptor(
+          uri: Uri.parse('https://plex.example/one.mp4'),
+          sessionId: 'session-one',
+          duration: const Duration(seconds: 30),
+        ),
+        PlexPlaybackPartDescriptor(
+          uri: Uri.parse('https://plex.example/duplicate.mp4'),
+          sessionId: 'session-one',
+        ),
+        PlexPlaybackPartDescriptor(
+          uri: Uri.parse('https://plex.example/two.mp4'),
+          sessionId: 'session-two',
+        ),
+        PlexPlaybackPartDescriptor(
+          uri: Uri.parse('https://plex.example/malformed.mp4'),
+          sessionId: '',
+        ),
+      ],
+    );
     final playback = controller.playbackFor('movie');
+    await playback.release();
     await playback.release();
 
     expect(plex.accountTokens, ['cloud-token-sentinel']);
@@ -98,7 +127,9 @@ void main() {
     expect(plex.playlistTokens, everyElement('pms-token-sentinel'));
     expect(plex.artworkToken, 'pms-token-sentinel');
     expect(playback.plexToken, 'pms-token-sentinel');
-    expect(plex.releaseTokens, ['pms-token-sentinel']);
+    expect(playback.parts, hasLength(4));
+    expect(plex.releaseTokens, ['pms-token-sentinel', 'pms-token-sentinel']);
+    expect(plex.releaseSessionIds.toSet(), hasLength(2));
     expect(
       [
         ...plex.selectedTokens,
@@ -489,26 +520,28 @@ void main() {
   });
 
   test('playback requests remove Plex tokens without an empty query', () {
-    final tokenOnly = LineupPlaybackRequest(
-      Uri.parse(
-        'https://user@plex.example:32400/video%2Fpart?X-Plex-Token=secret#section%2Fone',
+    final tokenOnly = LineupPlaybackRequest.parts([
+      LineupPlaybackPart(
+        uri: Uri.parse(
+          'https://user@plex.example:32400/video%2Fpart?X-Plex-Token=secret#section%2Fone',
+        ),
       ),
-      () async {},
-    );
-    final mixed = LineupPlaybackRequest(
-      Uri.parse(
-        'https://plex.example/video?quality=original&X-Plex-Token=secret&quality=mobile#part',
+    ], () async {});
+    final mixed = LineupPlaybackRequest.parts([
+      LineupPlaybackPart(
+        uri: Uri.parse(
+          'https://plex.example/video?quality=original&X-Plex-Token=secret&quality=mobile#part',
+        ),
       ),
-      () async {},
-    );
+    ], () async {});
 
     expect(
-      tokenOnly.uri,
+      tokenOnly.parts.single.uri,
       Uri.parse('https://user@plex.example:32400/video%2Fpart#section%2Fone'),
     );
-    expect(tokenOnly.uri.hasQuery, isFalse);
-    expect(mixed.uri.fragment, 'part');
-    expect(mixed.uri.queryParametersAll, {
+    expect(tokenOnly.parts.single.uri.hasQuery, isFalse);
+    expect(mixed.parts.single.uri.fragment, 'part');
+    expect(mixed.parts.single.uri.queryParametersAll, {
       'quality': ['original', 'mobile'],
     });
   });
@@ -2452,6 +2485,7 @@ class _FakePlex extends PlexClient {
   Future<PlexPlaylistCatalog> Function(Uri, String)? playlistsHandler;
   Future<List<PlexServerAccess>> Function(String)? discoverServersHandler;
   Future<Uint8List> Function(Uri, String, Uri)? artworkHandler;
+  PlexPlaybackDescriptor? playbackDescriptorResult;
   final discoveredTokens = <String>[];
   final accountTokens = <String>[];
   final homeUsersTokens = <String>[];
@@ -2460,6 +2494,7 @@ class _FakePlex extends PlexClient {
   final itemTokens = <String>[];
   final playlistTokens = <String>[];
   final releaseTokens = <String>[];
+  final releaseSessionIds = <String>[];
   List<PlexServer> serversResult = const [];
   String resourceToken = 'pms-token';
   PlexConnection? connectionResult;
@@ -2596,12 +2631,26 @@ class _FakePlex extends PlexClient {
   }
 
   @override
+  PlexPlaybackDescriptor playbackDescriptor({
+    required Uri server,
+    required PlexMediaItem item,
+    required StreamCapabilities capabilities,
+  }) =>
+      playbackDescriptorResult ??
+      super.playbackDescriptor(
+        server: server,
+        item: item,
+        capabilities: capabilities,
+      );
+
+  @override
   Future<void> releasePlaybackSession({
     required Uri server,
     required String token,
     required String sessionId,
   }) async {
     releaseTokens.add(token);
+    releaseSessionIds.add(sessionId);
   }
 
   @override

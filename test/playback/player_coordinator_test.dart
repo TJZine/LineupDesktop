@@ -567,6 +567,10 @@ void main() {
       await coordinator.loadInitialMedia(Uri.parse('lineup-test://generation'));
       final generation = player.loadGenerations.single!;
 
+      player.emitStatus(PlayerState.paused);
+      await Future<void>.delayed(Duration.zero);
+      expect(coordinator.status.state, PlayerState.playing);
+
       player.emitStatus(PlayerState.paused, generation: generation + 1);
       await Future<void>.delayed(Duration.zero);
       expect(coordinator.status.state, PlayerState.playing);
@@ -640,7 +644,7 @@ void main() {
       expect(player.loadGenerations.every((value) => value != null), isTrue);
       expect(
         player.loadGenerations.last!,
-        greaterThan(player.loadGenerations.first! + 1),
+        greaterThan(player.loadGenerations.first!),
       );
     },
   );
@@ -769,7 +773,7 @@ void main() {
       addTearDown(coordinator.dispose);
 
       await coordinator.tune('channel-b');
-      player.emitError();
+      player.emitError(generation: player.loadGenerations.single);
       await Future<void>.delayed(Duration.zero);
       expect(lineup.releases, 1);
 
@@ -836,7 +840,10 @@ void main() {
   test(
     'synchronous native authorization failure loads one replacement',
     () async {
-      final lineup = _TestLineup(recoverAuthorization: true);
+      final lineup = _TestLineup(
+        recoverAuthorization: true,
+        replacementRecoverable: true,
+      );
       final guide = GuideController(
         lineup: lineup,
         loadSchedule: (channel) async => _schedule(channel),
@@ -869,7 +876,10 @@ void main() {
   test(
     'a second native authorization failure is terminal without a loop',
     () async {
-      final lineup = _TestLineup(recoverAuthorization: true);
+      final lineup = _TestLineup(
+        recoverAuthorization: true,
+        replacementRecoverable: true,
+      );
       final guide = GuideController(
         lineup: lineup,
         loadSchedule: (channel) async => _schedule(channel),
@@ -896,6 +906,173 @@ void main() {
       expect(coordinator.status.httpStatus, 401);
     },
   );
+
+  test('replacement retry ceiling survives newer tune dispatch', () async {
+    final lineup = _TestLineup(
+      recoverAuthorization: true,
+      replacementRecoverable: true,
+    );
+    final nextGuideStarted = Completer<void>();
+    final releaseNextGuide = Completer<void>();
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async {
+        if (channel.id == 'channel-0') {
+          nextGuideStarted.complete();
+          await releaseNextGuide.future;
+        }
+        return _schedule(channel);
+      },
+    );
+    final player = _EventPlayer();
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(player.close);
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
+
+    await coordinator.tune('channel-b');
+    player.emitError(
+      recoverable: true,
+      generation: player.loadGenerations.single,
+      failureCode: 'http_error',
+      httpStatus: 401,
+    );
+    await pumpEventQueue(times: 5);
+
+    final winningTune = coordinator.tune('channel-0');
+    await nextGuideStarted.future;
+    player.emitError(
+      recoverable: true,
+      generation: player.loadGenerations.last,
+      failureCode: 'http_error',
+      httpStatus: 401,
+    );
+    await Future<void>.delayed(Duration.zero);
+    expect(lineup.recoveryCalls, 1);
+    expect(player.loads, hasLength(2));
+
+    releaseNextGuide.complete();
+    await winningTune;
+    expect(lineup.currentChannelId, 'channel-0');
+    expect(coordinator.error, isNull);
+    expect(lineup.releasedTokens, ['test-token-1', 'test-token-2']);
+    await coordinator.stop();
+    expect(lineup.releasedTokens, [
+      'test-token-1',
+      'test-token-2',
+      'test-token-1',
+    ]);
+  });
+
+  test('pending recovery ceiling survives tune dispatch', () async {
+    final lineup = _TestLineup(
+      recoverAuthorization: true,
+      replacementRecoverable: true,
+      blockAuthorizationRecovery: true,
+    );
+    final nextGuideStarted = Completer<void>();
+    final releaseNextGuide = Completer<void>();
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async {
+        if (channel.id == 'channel-0') {
+          nextGuideStarted.complete();
+          await releaseNextGuide.future;
+        }
+        return _schedule(channel);
+      },
+    );
+    final player = _EventPlayer();
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(player.close);
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
+
+    await coordinator.tune('channel-b');
+    final rejectedGeneration = player.loadGenerations.single;
+    player.emitError(
+      recoverable: true,
+      generation: rejectedGeneration,
+      failureCode: 'http_error',
+      httpStatus: 401,
+    );
+    await lineup.recoveryStarted.future;
+
+    final winningTune = coordinator.tune('channel-0');
+    await nextGuideStarted.future;
+    player.emitError(
+      recoverable: true,
+      generation: rejectedGeneration,
+      failureCode: 'http_error',
+      httpStatus: 401,
+    );
+    await Future<void>.delayed(Duration.zero);
+    expect(lineup.recoveryCalls, 1);
+
+    releaseNextGuide.complete();
+    await winningTune;
+    lineup.finishRecovery.complete();
+    await pumpEventQueue(times: 5);
+
+    expect(lineup.currentChannelId, 'channel-0');
+    expect(coordinator.error, isNull);
+    expect(lineup.recoveryCalls, 1);
+    expect(lineup.releasedTokens, ['test-token-1', 'test-token-2']);
+    await coordinator.stop();
+    expect(lineup.releasedTokens, [
+      'test-token-1',
+      'test-token-2',
+      'test-token-1',
+    ]);
+  });
+
+  test('failed pre-load tune preserves retained playback recovery', () async {
+    final lineup = _TestLineup(
+      failSecondPlaybackRequest: true,
+      recoverAuthorization: true,
+    );
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    )..requestViewport(0, 2);
+    await Future<void>.delayed(Duration.zero);
+    final player = _EventPlayer();
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(player.close);
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
+
+    await coordinator.tune('channel-0');
+    await coordinator.tune('channel-b');
+    player.emitError(
+      recoverable: true,
+      generation: player.loadGenerations.single,
+      failureCode: 'http_error',
+      httpStatus: 401,
+    );
+    await pumpEventQueue(times: 5);
+
+    expect(player.loads, hasLength(2));
+    expect(lineup.recoveryCalls, 1);
+    expect(lineup.releasedTokens, ['test-token-1']);
+    await coordinator.stop();
+    expect(lineup.releasedTokens, ['test-token-1', 'test-token-2']);
+  });
 
   test(
     'non-authorization native failure never invokes token recovery',
@@ -974,6 +1151,54 @@ void main() {
     },
   );
 
+  test('superseded active recovery cannot fail the winning tune', () async {
+    final lineup = _TestLineup(
+      recoverAuthorization: true,
+      blockAuthorizationRecovery: true,
+    );
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    )..requestViewport(0, 2);
+    await Future<void>.delayed(Duration.zero);
+    final player = _BlockingSecondLoadPlayer();
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(player.close);
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
+
+    await coordinator.tune('channel-b');
+    player.emitError(
+      recoverable: true,
+      generation: player.loadGenerations.single,
+      failureCode: 'http_error',
+      httpStatus: 401,
+    );
+    await lineup.recoveryStarted.future;
+    final winningTune = coordinator.tune('channel-0');
+    await player.secondLoadStarted.future;
+    lineup.finishRecovery.complete();
+    await pumpEventQueue(times: 5);
+    player.releaseSecondLoad.complete();
+    await winningTune;
+
+    expect(lineup.currentChannelId, 'channel-0');
+    expect(coordinator.error, isNull);
+    expect(coordinator.overlay, isNot(PlayerOverlay.error));
+    expect(lineup.releasedTokens, ['test-token-1', 'test-token-2']);
+    await coordinator.stop();
+    expect(lineup.releasedTokens, [
+      'test-token-1',
+      'test-token-2',
+      'test-token-1',
+    ]);
+  });
+
   test('load side effects roll back when load later fails', () async {
     final lineup = _TestLineup();
     final guide = GuideController(
@@ -1029,6 +1254,39 @@ void main() {
     expect(coordinator.overlay, PlayerOverlay.error);
   });
 
+  for (final terminal in [PlayerState.ended, PlayerState.stopped]) {
+    test(
+      'standalone initial media $terminal clears its native scope',
+      () async {
+        final lineup = _TestLineup();
+        final guide = GuideController(
+          lineup: lineup,
+          loadSchedule: (channel) async => _schedule(channel),
+        );
+        final player = _EventPlayer();
+        final coordinator = PlayerCoordinator(
+          player: player,
+          lineup: lineup,
+          guide: guide,
+        );
+        addTearDown(player.close);
+        addTearDown(lineup.dispose);
+        addTearDown(guide.dispose);
+        addTearDown(coordinator.dispose);
+
+        await coordinator.loadInitialMedia(Uri.parse('lineup-test://initial'));
+        final generation = player.loadGenerations.single;
+        player.emitStatus(terminal, generation: generation);
+        await Future<void>.delayed(Duration.zero);
+        player.emitStatus(PlayerState.playing, generation: generation);
+        await Future<void>.delayed(Duration.zero);
+
+        expect(coordinator.status.state, terminal);
+        expect(coordinator.overlay, PlayerOverlay.none);
+      },
+    );
+  }
+
   test('a tune supersedes a pending initial media load', () async {
     final lineup = _TestLineup();
     final guide = GuideController(
@@ -1078,7 +1336,7 @@ void main() {
 
     final tune = coordinator.tune('channel-b');
     await player.seekStarted.future;
-    player.emitError();
+    player.emitError(generation: player.loadGenerations.single);
     await Future<void>.delayed(Duration.zero);
     player.releaseSeek.complete();
     await tune;
@@ -1110,7 +1368,7 @@ void main() {
 
       final tune = coordinator.tune('channel-b');
       await lineup.persistenceStarted.future;
-      player.emitError();
+      player.emitError(generation: player.loadGenerations.single);
       await Future<void>.delayed(Duration.zero);
       lineup.releasePersistence.complete();
       await tune;
@@ -1120,6 +1378,1029 @@ void main() {
       expect(coordinator.overlay, PlayerOverlay.error);
     },
   );
+
+  test('known schedule elapsed starts directly in the matching part', () async {
+    final lineup = _TestLineup(
+      playbackParts: _parts(first: const Duration(minutes: 30)),
+    );
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    )..requestViewport(0, 2);
+    await Future<void>.delayed(Duration.zero);
+    final player = _EventPlayer();
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(player.close);
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
+
+    await coordinator.tune('channel-b');
+
+    expect(player.loads.single.path, '/part-2.mkv');
+    expect(
+      player.seeks.single,
+      allOf(
+        greaterThanOrEqualTo(const Duration(minutes: 29)),
+        lessThanOrEqualTo(const Duration(minutes: 31)),
+      ),
+    );
+  });
+
+  test('initial known part target survives authorization recovery', () async {
+    final lineup = _TestLineup(
+      recoverAuthorization: true,
+      playbackParts: _parts(first: const Duration(minutes: 30)),
+    );
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    )..requestViewport(0, 2);
+    await Future<void>.delayed(Duration.zero);
+    final player = _AsyncInitialAuthorizationPlayer();
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(player.close);
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
+
+    await coordinator.tune('channel-b');
+
+    expect(player.loads.map((uri) => uri.path), ['/part-2.mkv', '/part-2.mkv']);
+    expect(player.loadPlexTokens, ['test-token-1', 'test-token-2']);
+    expect(
+      player.seeks.where(
+        (value) =>
+            value >= const Duration(minutes: 29) &&
+            value <= const Duration(minutes: 31),
+      ),
+      hasLength(1),
+    );
+    expect(lineup.releasedTokens, ['test-token-1']);
+    await coordinator.stop();
+    expect(lineup.releasedTokens, ['test-token-1', 'test-token-2']);
+  });
+
+  test('known cross-part seek loads a fresh native generation', () async {
+    final lineup = _TestLineup(
+      playbackParts: _parts(
+        first: const Duration(hours: 2),
+        second: const Duration(hours: 1),
+      ),
+    );
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    )..requestViewport(0, 2);
+    await Future<void>.delayed(Duration.zero);
+    final player = _EventPlayer();
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(player.close);
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
+    await coordinator.tune('channel-b');
+
+    await coordinator.seekTo(const Duration(hours: 2, minutes: 5));
+
+    expect(player.loads.map((uri) => uri.path), ['/part-1.mkv', '/part-2.mkv']);
+    expect(player.seeks.last, const Duration(minutes: 5));
+    expect(
+      player.loadGenerations.last!,
+      greaterThan(player.loadGenerations.first!),
+    );
+  });
+
+  test('known cross-part target survives authorization recovery', () async {
+    final lineup = _TestLineup(
+      recoverAuthorization: true,
+      playbackParts: _parts(
+        first: const Duration(hours: 2),
+        second: const Duration(hours: 1),
+      ),
+    );
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    )..requestViewport(0, 2);
+    await Future<void>.delayed(Duration.zero);
+    final player = _PartAuthorizationFailurePlayer();
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(player.close);
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
+    await coordinator.tune('channel-b');
+
+    await coordinator.seekTo(const Duration(hours: 2, minutes: 5));
+
+    expect(player.loads.map((uri) => uri.path), [
+      '/part-1.mkv',
+      '/part-2.mkv',
+      '/part-2.mkv',
+    ]);
+    expect(player.loadPlexTokens, [
+      'test-token-1',
+      'test-token-1',
+      'test-token-2',
+    ]);
+    expect(
+      player.seeks.where((value) => value == const Duration(minutes: 5)),
+      hasLength(1),
+    );
+    expect(lineup.releasedTokens, ['test-token-1']);
+    await coordinator.stop();
+    expect(lineup.releasedTokens, ['test-token-1', 'test-token-2']);
+  });
+
+  test('cross-part authorization retry load failure is terminal', () async {
+    final lineup = _TestLineup(
+      recoverAuthorization: true,
+      playbackParts: _parts(
+        first: const Duration(hours: 2),
+        second: const Duration(hours: 1),
+      ),
+    );
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    )..requestViewport(0, 2);
+    await Future<void>.delayed(Duration.zero);
+    final player = _FailingPartAuthorizationRetryPlayer();
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(player.close);
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
+    await coordinator.tune('channel-b');
+
+    await coordinator.seekTo(const Duration(hours: 2, minutes: 5));
+
+    expect(player.loads.map((uri) => uri.path), [
+      '/part-1.mkv',
+      '/part-2.mkv',
+      '/part-2.mkv',
+    ]);
+    expect(lineup.recoveryCalls, 1);
+    expect(lineup.releasedTokens, ['test-token-1', 'test-token-2']);
+    expect(player.stops, 1);
+    expect(coordinator.overlay, PlayerOverlay.error);
+    expect(coordinator.error, isNotNull);
+  });
+
+  test(
+    'same-tune cross seek supersedes a failing authorization retry load',
+    () async {
+      final lineup = _TestLineup(
+        recoverAuthorization: true,
+        playbackParts: _parts(
+          first: const Duration(hours: 2),
+          second: const Duration(hours: 1),
+        ),
+      );
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => _schedule(channel),
+      )..requestViewport(0, 2);
+      await Future<void>.delayed(Duration.zero);
+      final player = _BlockingFailingPartAuthorizationRetryPlayer();
+      final coordinator = PlayerCoordinator(
+        player: player,
+        lineup: lineup,
+        guide: guide,
+      );
+      addTearDown(player.close);
+      addTearDown(lineup.dispose);
+      addTearDown(guide.dispose);
+      addTearDown(coordinator.dispose);
+      await coordinator.tune('channel-b');
+
+      final staleSeek = coordinator.seekTo(
+        const Duration(hours: 2, minutes: 5),
+      );
+      await player.retryLoadStarted.future;
+      await coordinator.seekTo(const Duration(minutes: 30));
+      player.releaseRetryLoad.complete();
+      await staleSeek;
+
+      expect(player.loads.map((uri) => uri.path), [
+        '/part-1.mkv',
+        '/part-2.mkv',
+        '/part-2.mkv',
+        '/part-1.mkv',
+      ]);
+      expect(player.seeks.last, const Duration(minutes: 30));
+      expect(lineup.recoveryCalls, 1);
+      expect(lineup.releasedTokens, ['test-token-1', 'test-token-2']);
+      expect(coordinator.error, isNull);
+      expect(coordinator.overlay, isNot(PlayerOverlay.error));
+    },
+  );
+
+  test('blocked successful cross seek is inert after tune dispatch', () async {
+    final lineup = _TestLineup(
+      playbackParts: _parts(
+        first: const Duration(hours: 2),
+        second: const Duration(hours: 1),
+      ),
+    );
+    final nextGuideStarted = Completer<void>();
+    final releaseNextGuide = Completer<void>();
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async {
+        if (channel.id == 'channel-0') {
+          nextGuideStarted.complete();
+          await releaseNextGuide.future;
+        }
+        return _schedule(channel);
+      },
+    );
+    final player = _BlockingSecondLoadPlayer();
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(player.close);
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
+    await coordinator.tune('channel-b');
+
+    final stale = coordinator.seekTo(const Duration(hours: 2, minutes: 5));
+    await player.secondLoadStarted.future;
+    final winningTune = coordinator.tune('channel-0');
+    await nextGuideStarted.future;
+    coordinator.closeOverlay();
+    player.releaseSecondLoad.complete();
+    await stale;
+
+    expect(player.seeks, isNot(contains(const Duration(minutes: 5))));
+    expect(coordinator.overlay, PlayerOverlay.none);
+
+    releaseNextGuide.complete();
+    await winningTune;
+    expect(lineup.currentChannelId, 'channel-0');
+    expect(coordinator.error, isNull);
+  });
+
+  test('blocked recovery seek is inert after a newer tune', () async {
+    final lineup = _TestLineup(recoverAuthorization: true);
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    )..requestViewport(0, 2);
+    await Future<void>.delayed(Duration.zero);
+    final player = _BlockingSecondSeekPlayer();
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(player.close);
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
+    await coordinator.tune('channel-b');
+    player.position = const Duration(minutes: 12);
+    player.emitError(
+      recoverable: true,
+      generation: player.loadGenerations.single,
+      failureCode: 'http_error',
+      httpStatus: 401,
+    );
+    await player.secondSeekStarted.future;
+
+    await coordinator.tune('channel-0');
+    player.releaseSecondSeek.complete();
+    await pumpEventQueue(times: 5);
+
+    expect(lineup.currentChannelId, 'channel-0');
+    expect(coordinator.error, isNull);
+    expect(lineup.releasedTokens, ['test-token-1', 'test-token-2']);
+    await coordinator.stop();
+    expect(lineup.releasedTokens, [
+      'test-token-1',
+      'test-token-2',
+      'test-token-1',
+    ]);
+  });
+
+  for (final operation in ['cross seek', 'part advance']) {
+    test('$operation recovery cannot fail a newer tune', () async {
+      final lineup = _TestLineup(
+        recoverAuthorization: true,
+        blockAuthorizationRecovery: true,
+        playbackParts: _parts(
+          first: const Duration(hours: 2),
+          second: const Duration(hours: 1),
+        ),
+      );
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => _schedule(channel),
+      )..requestViewport(0, 2);
+      await Future<void>.delayed(Duration.zero);
+      final player = _PartAuthorizationFailurePlayer();
+      final coordinator = PlayerCoordinator(
+        player: player,
+        lineup: lineup,
+        guide: guide,
+      );
+      addTearDown(player.close);
+      addTearDown(lineup.dispose);
+      addTearDown(guide.dispose);
+      addTearDown(coordinator.dispose);
+      await coordinator.tune('channel-b');
+
+      Future<void>? pending;
+      if (operation == 'cross seek') {
+        pending = coordinator.seekTo(const Duration(hours: 2, minutes: 5));
+      } else {
+        player.emitStatus(
+          PlayerState.ended,
+          generation: player.loadGenerations.single,
+        );
+      }
+      await lineup.recoveryStarted.future;
+      await coordinator.tune('channel-0');
+      lineup.finishRecovery.complete();
+      await pending;
+      await pumpEventQueue(times: 5);
+
+      expect(lineup.currentChannelId, 'channel-0');
+      expect(coordinator.error, isNull);
+      expect(coordinator.overlay, isNot(PlayerOverlay.error));
+      expect(lineup.releasedTokens, ['test-token-1', 'test-token-2']);
+      await coordinator.stop();
+      expect(lineup.releasedTokens, [
+        'test-token-1',
+        'test-token-2',
+        'test-token-1',
+      ]);
+    });
+  }
+
+  for (final operation in ['cross seek', 'part advance']) {
+    test('stale $operation failure cannot mutate a newer load', () async {
+      final lineup = _TestLineup(
+        playbackParts: _parts(
+          first: const Duration(hours: 2),
+          second: const Duration(hours: 1),
+        ),
+      );
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => _schedule(channel),
+      )..requestViewport(0, 2);
+      await Future<void>.delayed(Duration.zero);
+      final player = _BlockingFailingSecondLoadPlayer();
+      final coordinator = PlayerCoordinator(
+        player: player,
+        lineup: lineup,
+        guide: guide,
+      );
+      addTearDown(player.close);
+      addTearDown(lineup.dispose);
+      addTearDown(guide.dispose);
+      addTearDown(coordinator.dispose);
+      await coordinator.tune('channel-b');
+
+      Future<void>? stale;
+      if (operation == 'cross seek') {
+        stale = coordinator.seekTo(const Duration(hours: 2, minutes: 5));
+      } else {
+        player.emitStatus(
+          PlayerState.ended,
+          generation: player.loadGenerations.single,
+        );
+      }
+      await player.secondLoadStarted.future;
+      await coordinator.seekTo(const Duration(hours: 1));
+      player.releaseSecondLoad.complete();
+      await stale;
+      await Future<void>.delayed(Duration.zero);
+
+      expect(player.loads.map((uri) => uri.path), [
+        '/part-1.mkv',
+        '/part-2.mkv',
+        '/part-1.mkv',
+      ]);
+      expect(coordinator.error, isNull);
+      expect(coordinator.overlay, isNot(PlayerOverlay.error));
+      expect(lineup.releases, 0);
+      await coordinator.stop();
+      expect(lineup.releases, 1);
+    });
+  }
+
+  test('unknown boundaries stay on and report the current part', () async {
+    final lineup = _TestLineup(playbackParts: _parts());
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    )..requestViewport(0, 2);
+    await Future<void>.delayed(Duration.zero);
+    final player = _EventPlayer();
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(player.close);
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
+    await coordinator.tune('channel-b');
+    player
+      ..position = const Duration(seconds: 7)
+      ..duration = const Duration(seconds: 20)
+      ..emitStatus(
+        PlayerState.playing,
+        generation: player.loadGenerations.single,
+      );
+    await Future<void>.delayed(Duration.zero);
+
+    expect(player.loads.single.path, '/part-1.mkv');
+    expect(coordinator.position, const Duration(seconds: 7));
+    expect(coordinator.duration, const Duration(seconds: 20));
+  });
+
+  test('completed native duration establishes aggregate projection', () async {
+    final lineup = _TestLineup(
+      playbackParts: _parts(second: const Duration(hours: 1)),
+    );
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    )..requestViewport(0, 2);
+    await Future<void>.delayed(Duration.zero);
+    final player = _EventPlayer();
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(player.close);
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
+    await coordinator.tune('channel-b');
+    player.duration = const Duration(hours: 2);
+    player.emitStatus(
+      PlayerState.ended,
+      generation: player.loadGenerations.single,
+    );
+    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(Duration.zero);
+    player
+      ..position = const Duration(minutes: 5)
+      ..duration = const Duration(hours: 1)
+      ..tracks = const [
+        PlayerTrack(
+          id: 22,
+          type: PlayerTrackType.audio,
+          selected: true,
+          codec: 'aac',
+        ),
+      ]
+      ..emitStatus(
+        PlayerState.playing,
+        generation: player.loadGenerations.last,
+      );
+    await Future<void>.delayed(Duration.zero);
+
+    expect(coordinator.position, const Duration(hours: 2, minutes: 5));
+    expect(coordinator.duration, const Duration(hours: 3));
+    expect(coordinator.tracks.single.id, 22);
+    await coordinator.seekBy(const Duration(minutes: 5));
+    expect(player.seeks.last, const Duration(minutes: 10));
+  });
+
+  for (final completion in [PlayerState.ended, PlayerState.stopped]) {
+    test(
+      '$completion advances once and final completion releases once',
+      () async {
+        final lineup = _TestLineup(
+          playbackParts: _parts(
+            first: const Duration(hours: 2),
+            second: const Duration(hours: 1),
+          ),
+        );
+        final guide = GuideController(
+          lineup: lineup,
+          loadSchedule: (channel) async => _schedule(channel),
+        )..requestViewport(0, 2);
+        await Future<void>.delayed(Duration.zero);
+        final player = _EventPlayer();
+        final coordinator = PlayerCoordinator(
+          player: player,
+          lineup: lineup,
+          guide: guide,
+        );
+        addTearDown(player.close);
+        addTearDown(lineup.dispose);
+        addTearDown(guide.dispose);
+        addTearDown(coordinator.dispose);
+        await coordinator.tune('channel-b');
+        final firstGeneration = player.loadGenerations.single;
+
+        player
+          ..emitStatus(completion, generation: firstGeneration)
+          ..emitStatus(completion, generation: firstGeneration);
+        await Future<void>.delayed(Duration.zero);
+        await Future<void>.delayed(Duration.zero);
+
+        expect(player.loads.map((uri) => uri.path), [
+          '/part-1.mkv',
+          '/part-2.mkv',
+        ]);
+        expect(lineup.releases, 0);
+        if (completion == PlayerState.stopped) {
+          player.emitStatus(
+            PlayerState.playing,
+            generation: player.loadGenerations.last,
+          );
+        }
+        player.emitStatus(completion, generation: player.loadGenerations.last);
+        await Future<void>.delayed(Duration.zero);
+        await Future<void>.delayed(Duration.zero);
+        expect(lineup.releases, 1);
+        await coordinator.stop();
+        expect(lineup.releases, 1);
+      },
+    );
+  }
+
+  test('explicit stop and stale completion never advance parts', () async {
+    final lineup = _TestLineup(
+      playbackParts: _parts(
+        first: const Duration(hours: 2),
+        second: const Duration(hours: 1),
+      ),
+    );
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    )..requestViewport(0, 2);
+    await Future<void>.delayed(Duration.zero);
+    final player = _EventPlayer();
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(player.close);
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
+    await coordinator.tune('channel-b');
+    final generation = player.loadGenerations.single;
+    player.emitStatus(PlayerState.ended, generation: generation! + 1);
+    await Future<void>.delayed(Duration.zero);
+    await coordinator.stop();
+    player.emitStatus(PlayerState.stopped, generation: generation);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(player.loads, hasLength(1));
+    expect(lineup.releases, 1);
+  });
+
+  test(
+    'current stopped during cross-part replacement does not advance',
+    () async {
+      final lineup = _TestLineup(
+        playbackParts: _parts(
+          first: const Duration(hours: 2),
+          second: const Duration(hours: 1),
+        ),
+      );
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => _schedule(channel),
+      )..requestViewport(0, 2);
+      await Future<void>.delayed(Duration.zero);
+      final player = _BlockingSecondLoadPlayer();
+      final coordinator = PlayerCoordinator(
+        player: player,
+        lineup: lineup,
+        guide: guide,
+      );
+      addTearDown(player.close);
+      addTearDown(lineup.dispose);
+      addTearDown(guide.dispose);
+      addTearDown(coordinator.dispose);
+      await coordinator.tune('channel-b');
+
+      final seek = coordinator.seekTo(const Duration(hours: 2, minutes: 5));
+      await player.secondLoadStarted.future;
+      player.emitStatus(
+        PlayerState.stopped,
+        generation: player.loadGenerations.last,
+      );
+      await Future<void>.delayed(Duration.zero);
+      player.releaseSecondLoad.complete();
+      await seek;
+
+      expect(player.loads, hasLength(2));
+      expect(player.seeks.last, const Duration(minutes: 5));
+      expect(lineup.releases, 0);
+    },
+  );
+
+  test('queued stopped after part load settlement is cleanup', () async {
+    final lineup = _TestLineup(
+      playbackParts: _parts(
+        first: const Duration(hours: 2),
+        second: const Duration(hours: 1),
+      ),
+    );
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    )..requestViewport(0, 2);
+    await Future<void>.delayed(Duration.zero);
+    final player = _EventPlayer();
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(player.close);
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
+
+    await coordinator.tune('channel-b');
+    player.emitStatus(
+      PlayerState.ended,
+      generation: player.loadGenerations.single,
+    );
+    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(Duration.zero);
+    final secondGeneration = player.loadGenerations.last;
+
+    player.emitStatus(PlayerState.stopped, generation: secondGeneration);
+    await Future<void>.delayed(Duration.zero);
+    expect(player.loads, hasLength(2));
+    expect(lineup.releases, 0);
+
+    player.emitStatus(PlayerState.ended, generation: secondGeneration);
+    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(Duration.zero);
+    expect(lineup.releases, 1);
+  });
+
+  test('credential retry on part two reloads only that logical part', () async {
+    final lineup = _TestLineup(
+      recoverAuthorization: true,
+      playbackParts: _parts(
+        first: const Duration(minutes: 30),
+        second: const Duration(hours: 2),
+      ),
+    );
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    )..requestViewport(0, 2);
+    await Future<void>.delayed(Duration.zero);
+    final player = _EventPlayer();
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(player.close);
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
+    await coordinator.tune('channel-b');
+    player.position = const Duration(minutes: 12);
+    player.emitStatus(
+      PlayerState.playing,
+      generation: player.loadGenerations.single,
+    );
+    await Future<void>.delayed(Duration.zero);
+    player.emitError(
+      recoverable: true,
+      generation: player.loadGenerations.single,
+      failureCode: 'http_error',
+      httpStatus: 401,
+    );
+    await pumpEventQueue(times: 5);
+
+    expect(player.loads.map((uri) => uri.path), ['/part-2.mkv', '/part-2.mkv']);
+    expect(player.loadPlexTokens, ['test-token-1', 'test-token-2']);
+    expect(player.seeks.last, const Duration(minutes: 12));
+    expect(lineup.releases, 1);
+    await coordinator.stop();
+    expect(lineup.releases, 2);
+  });
+
+  test(
+    'synchronous part transition authorization failure replaces active lease',
+    () async {
+      final lineup = _TestLineup(
+        recoverAuthorization: true,
+        playbackParts: _parts(
+          first: const Duration(hours: 2),
+          second: const Duration(hours: 1),
+        ),
+      );
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => _schedule(channel),
+      )..requestViewport(0, 2);
+      await Future<void>.delayed(Duration.zero);
+      final player = _SuccessfulPartAuthorizationPlayer();
+      final coordinator = PlayerCoordinator(
+        player: player,
+        lineup: lineup,
+        guide: guide,
+      );
+      addTearDown(player.close);
+      addTearDown(lineup.dispose);
+      addTearDown(guide.dispose);
+      addTearDown(coordinator.dispose);
+
+      await coordinator.tune('channel-b');
+      player.emitStatus(
+        PlayerState.ended,
+        generation: player.loadGenerations.single,
+      );
+      for (var index = 0; index < 10 && player.loads.length < 3; index++) {
+        await Future<void>.delayed(Duration.zero);
+      }
+
+      expect(player.loads.map((uri) => uri.path), [
+        '/part-1.mkv',
+        '/part-2.mkv',
+        '/part-2.mkv',
+      ]);
+      expect(player.loadPlexTokens, [
+        'test-token-1',
+        'test-token-1',
+        'test-token-2',
+      ]);
+      expect(player.seeks.last, const Duration(minutes: 7));
+      expect(lineup.recoveryCalls, 1);
+      expect(lineup.releasedTokens, ['test-token-1']);
+      expect(coordinator.error, isNull);
+
+      player.emitStatus(
+        PlayerState.ended,
+        generation: player.loadGenerations.last,
+      );
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+      expect(lineup.releasedTokens, ['test-token-1', 'test-token-2']);
+      await coordinator.stop();
+      expect(lineup.releasedTokens, ['test-token-1', 'test-token-2']);
+    },
+  );
+
+  test('async no-throw part authorization recovery is awaited', () async {
+    final lineup = _TestLineup(
+      recoverAuthorization: true,
+      playbackParts: _parts(
+        first: const Duration(hours: 2),
+        second: const Duration(hours: 1),
+      ),
+    );
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    )..requestViewport(0, 2);
+    await Future<void>.delayed(Duration.zero);
+    final player = _SuccessfulPartAuthorizationPlayer(sync: false);
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(player.close);
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
+
+    await coordinator.tune('channel-b');
+    player.emitStatus(
+      PlayerState.ended,
+      generation: player.loadGenerations.single,
+    );
+    for (var index = 0; index < 10 && player.loads.length < 3; index++) {
+      await Future<void>.delayed(Duration.zero);
+    }
+
+    expect(player.loadPlexTokens, [
+      'test-token-1',
+      'test-token-1',
+      'test-token-2',
+    ]);
+    expect(player.seeks.last, const Duration(minutes: 7));
+    expect(lineup.releasedTokens, ['test-token-1']);
+    await coordinator.stop();
+    expect(lineup.releasedTokens, ['test-token-1', 'test-token-2']);
+  });
+
+  test('part transition failure stops and releases the aggregate', () async {
+    final lineup = _TestLineup(
+      playbackParts: _parts(
+        first: const Duration(hours: 2),
+        second: const Duration(hours: 1),
+      ),
+    );
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    )..requestViewport(0, 2);
+    await Future<void>.delayed(Duration.zero);
+    final player = _SecondLoadFailurePlayer();
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(player.close);
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
+    await coordinator.tune('channel-b');
+    player.emitStatus(
+      PlayerState.ended,
+      generation: player.loadGenerations.single,
+    );
+    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(player.loads, hasLength(2));
+    expect(player.stops, 1);
+    expect(lineup.releases, 1);
+    expect(coordinator.overlay, PlayerOverlay.error);
+  });
+
+  test('superseded transition cleanup cannot publish a stale error', () async {
+    final lineup = _TestLineup(
+      playbackParts: _parts(
+        first: const Duration(hours: 2),
+        second: const Duration(hours: 1),
+      ),
+    );
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    )..requestViewport(0, 2);
+    await Future<void>.delayed(Duration.zero);
+    final player = _BlockingTransitionFailurePlayer();
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(player.close);
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
+    await coordinator.tune('channel-b');
+    player.emitStatus(
+      PlayerState.ended,
+      generation: player.loadGenerations.single,
+    );
+    await player.stopStarted.future;
+
+    await coordinator.tune('channel-0');
+    player.releaseStop.complete();
+    await pumpEventQueue(times: 5);
+
+    expect(lineup.currentChannelId, 'channel-0');
+    expect(coordinator.error, isNull);
+    expect(coordinator.canRetry, isFalse);
+    expect(coordinator.overlay, isNot(PlayerOverlay.error));
+    expect(lineup.releases, 1);
+    await coordinator.stop();
+    expect(lineup.releases, 2);
+  });
+
+  test(
+    'failed channel replacement releases old and attempted aggregates',
+    () async {
+      final lineup = _TestLineup(
+        playbackParts: _parts(
+          first: const Duration(hours: 2),
+          second: const Duration(hours: 1),
+        ),
+      );
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => _schedule(channel),
+      )..requestViewport(0, 2);
+      await Future<void>.delayed(Duration.zero);
+      final player = _SecondLoadFailurePlayer();
+      final coordinator = PlayerCoordinator(
+        player: player,
+        lineup: lineup,
+        guide: guide,
+      );
+      addTearDown(player.close);
+      addTearDown(lineup.dispose);
+      addTearDown(guide.dispose);
+      addTearDown(coordinator.dispose);
+
+      await coordinator.tune('channel-0');
+      await coordinator.tune('channel-b');
+
+      expect(player.loads, hasLength(2));
+      expect(player.stops, 1);
+      expect(lineup.releases, 2);
+      expect(lineup.currentChannelId, 'channel-0');
+      expect(coordinator.overlay, PlayerOverlay.error);
+      await coordinator.stop();
+      expect(lineup.releases, 2);
+    },
+  );
+
+  test('failed tune cleanup stopped cannot advance attempted media', () async {
+    final lineup = _TestLineup(
+      playbackParts: _parts(
+        first: const Duration(hours: 2),
+        second: const Duration(hours: 1),
+      ),
+    );
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    )..requestViewport(0, 2);
+    await Future<void>.delayed(Duration.zero);
+    final player = _QueuedStopSecondLoadFailurePlayer();
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(player.close);
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
+
+    await coordinator.tune('channel-0');
+    await coordinator.tune('channel-b');
+    await Future<void>.delayed(Duration.zero);
+
+    expect(player.loads, hasLength(2));
+    expect(lineup.releases, 2);
+    expect(coordinator.overlay, PlayerOverlay.error);
+  });
+
+  test('disposing multipart playback releases its aggregate once', () async {
+    final lineup = _TestLineup(
+      playbackParts: _parts(
+        first: const Duration(hours: 2),
+        second: const Duration(hours: 1),
+      ),
+    );
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    )..requestViewport(0, 2);
+    await Future<void>.delayed(Duration.zero);
+    final player = _EventPlayer();
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(player.close);
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    await coordinator.tune('channel-b');
+
+    coordinator.dispose();
+    await Future<void>.delayed(Duration.zero);
+    coordinator.dispose();
+
+    expect(lineup.releases, 1);
+  });
 
   test('mini Guide reconciles deletion and reloads its visible rows', () async {
     final lineup = _TestLineup(count: 1000);
@@ -1162,12 +2443,25 @@ ScheduleIndex _schedule(Channel channel) => buildSchedule(
   seed: channel.shuffleSeed,
 );
 
+List<LineupPlaybackPart> _parts({Duration? first, Duration? second}) => [
+  LineupPlaybackPart(
+    uri: Uri.parse('https://media.test/part-1.mkv'),
+    duration: first,
+  ),
+  LineupPlaybackPart(
+    uri: Uri.parse('https://media.test/part-2.mkv'),
+    duration: second,
+  ),
+];
+
 class _TestLineup extends LineupController {
   _TestLineup({
     int count = 2,
     this.failSecondPlaybackRequest = false,
     this.recoverAuthorization = false,
+    this.replacementRecoverable = false,
     this.blockAuthorizationRecovery = false,
+    this.playbackParts,
   }) : super(
          store: _MemoryStore(),
          credentials: _Credentials(),
@@ -1200,7 +2494,9 @@ class _TestLineup extends LineupController {
   int releases = 0;
   final bool failSecondPlaybackRequest;
   final bool recoverAuthorization;
+  final bool replacementRecoverable;
   final bool blockAuthorizationRecovery;
+  final List<LineupPlaybackPart>? playbackParts;
   int playbackRequests = 0;
   int recoveryCalls = 0;
   final releasedTokens = <String>[];
@@ -1239,25 +2535,34 @@ class _TestLineup extends LineupController {
   }
 
   LineupPlaybackRequest _request(String token, {bool recoverable = false}) {
-    return LineupPlaybackRequest(
-      Uri.parse(
-        'https://media.test/program?x-PLEX-token=must-not-leak&quality=original',
-      ),
-      () async {
-        releases++;
-        releasedTokens.add(token);
-      },
+    final parts =
+        playbackParts ??
+        [
+          LineupPlaybackPart(
+            uri: Uri.parse(
+              'https://media.test/program?x-PLEX-token=must-not-leak&quality=original',
+            ),
+          ),
+        ];
+    Future<void> release() async {
+      releases++;
+      releasedTokens.add(token);
+    }
+
+    Future<LineupPlaybackRequest> recover() async {
+      recoveryCalls++;
+      if (blockAuthorizationRecovery) {
+        recoveryStarted.complete();
+        await finishRecovery.future;
+      }
+      return _request('test-token-2', recoverable: replacementRecoverable);
+    }
+
+    return LineupPlaybackRequest.parts(
+      parts,
+      release,
       plexToken: token,
-      authorizationRecovery: recoverable
-          ? () async {
-              recoveryCalls++;
-              if (blockAuthorizationRecovery) {
-                recoveryStarted.complete();
-                await finishRecovery.future;
-              }
-              return _request('test-token-2');
-            }
-          : null,
+      authorizationRecovery: recoverable ? recover : null,
     );
   }
 
@@ -1478,6 +2783,41 @@ class _EventPlayer extends _Player {
   Future<void> close() => _events.close();
 }
 
+class _SecondLoadFailurePlayer extends _EventPlayer {
+  @override
+  Future<void> load(Uri media, {String? plexToken, int? generation}) async {
+    await super.load(media, plexToken: plexToken, generation: generation);
+    if (loads.length == 2) throw StateError('part transition failed');
+  }
+}
+
+class _BlockingSecondLoadPlayer extends _EventPlayer {
+  final secondLoadStarted = Completer<void>();
+  final releaseSecondLoad = Completer<void>();
+
+  @override
+  Future<void> load(Uri media, {String? plexToken, int? generation}) async {
+    await super.load(media, plexToken: plexToken, generation: generation);
+    if (loads.length != 2) return;
+    secondLoadStarted.complete();
+    await releaseSecondLoad.future;
+  }
+}
+
+class _BlockingFailingSecondLoadPlayer extends _EventPlayer {
+  final secondLoadStarted = Completer<void>();
+  final releaseSecondLoad = Completer<void>();
+
+  @override
+  Future<void> load(Uri media, {String? plexToken, int? generation}) async {
+    await super.load(media, plexToken: plexToken, generation: generation);
+    if (loads.length != 2) return;
+    secondLoadStarted.complete();
+    await releaseSecondLoad.future;
+    throw StateError('stale load failed');
+  }
+}
+
 class _SynchronousAuthorizationPlayer extends _EventPlayer {
   _SynchronousAuthorizationPlayer({
     this.failures = 1,
@@ -1503,6 +2843,113 @@ class _SynchronousAuthorizationPlayer extends _EventPlayer {
   }
 }
 
+class _AsyncInitialAuthorizationPlayer extends _EventPlayer {
+  _AsyncInitialAuthorizationPlayer() : super(sync: false);
+
+  @override
+  Future<void> load(Uri media, {String? plexToken, int? generation}) async {
+    await super.load(media, plexToken: plexToken, generation: generation);
+    if (loads.length != 1) return;
+    emitError(
+      recoverable: true,
+      generation: generation,
+      failureCode: 'http_error',
+      httpStatus: 401,
+    );
+    await Future<void>.delayed(Duration.zero);
+  }
+}
+
+class _SuccessfulPartAuthorizationPlayer extends _EventPlayer {
+  _SuccessfulPartAuthorizationPlayer({super.sync = true});
+
+  @override
+  Future<void> load(Uri media, {String? plexToken, int? generation}) async {
+    await super.load(media, plexToken: plexToken, generation: generation);
+    if (loads.length != 2) return;
+    position = const Duration(minutes: 7);
+    _events.add(
+      PlayerEvent(
+        status: const PlayerStatus(
+          state: PlayerState.error,
+          message: 'Unauthorized',
+          recoverable: true,
+          failureCode: 'http_error',
+          httpStatus: 401,
+        ),
+        position: position,
+        duration: duration,
+        telemetry: telemetry,
+        tracks: tracks,
+        generation: generation,
+      ),
+    );
+  }
+}
+
+class _PartAuthorizationFailurePlayer extends _EventPlayer {
+  _PartAuthorizationFailurePlayer() : super(sync: true);
+
+  @override
+  Future<void> load(Uri media, {String? plexToken, int? generation}) async {
+    await super.load(media, plexToken: plexToken, generation: generation);
+    if (loads.length != 2) return;
+    emitError(
+      recoverable: true,
+      generation: generation,
+      failureCode: 'http_error',
+      httpStatus: 401,
+    );
+    throw StateError('native load rejected');
+  }
+}
+
+class _FailingPartAuthorizationRetryPlayer
+    extends _PartAuthorizationFailurePlayer {
+  @override
+  Future<void> load(Uri media, {String? plexToken, int? generation}) async {
+    await super.load(media, plexToken: plexToken, generation: generation);
+    if (loads.length == 3) throw StateError('authorization retry failed');
+  }
+}
+
+class _BlockingFailingPartAuthorizationRetryPlayer
+    extends _PartAuthorizationFailurePlayer {
+  final retryLoadStarted = Completer<void>();
+  final releaseRetryLoad = Completer<void>();
+
+  @override
+  Future<void> load(Uri media, {String? plexToken, int? generation}) async {
+    await super.load(media, plexToken: plexToken, generation: generation);
+    if (loads.length != 3) return;
+    retryLoadStarted.complete();
+    await releaseRetryLoad.future;
+    throw StateError('stale authorization retry failed');
+  }
+}
+
+class _BlockingTransitionFailurePlayer extends _SecondLoadFailurePlayer {
+  final stopStarted = Completer<void>();
+  final releaseStop = Completer<void>();
+
+  @override
+  Future<void> stop() async {
+    await super.stop();
+    if (!stopStarted.isCompleted) stopStarted.complete();
+    await releaseStop.future;
+  }
+}
+
+class _QueuedStopSecondLoadFailurePlayer extends _SecondLoadFailurePlayer {
+  @override
+  Future<void> stop() async {
+    await super.stop();
+    scheduleMicrotask(
+      () => emitStatus(PlayerState.stopped, generation: loadGenerations.last),
+    );
+  }
+}
+
 class _BlockingEventPlayer extends _EventPlayer with _BlocksFirstLoad {}
 
 class _BlockingControlPlayer extends _EventPlayer {
@@ -1523,6 +2970,19 @@ class _BlockingControlPlayer extends _EventPlayer {
     selectedTracks.add((type, id));
     if (!selectStarted.isCompleted) selectStarted.complete();
     await releaseSelect.future;
+  }
+}
+
+class _BlockingSecondSeekPlayer extends _EventPlayer {
+  final secondSeekStarted = Completer<void>();
+  final releaseSecondSeek = Completer<void>();
+
+  @override
+  Future<void> seek(Duration value) async {
+    seeks.add(value);
+    if (seeks.length != 2) return;
+    secondSeekStarted.complete();
+    await releaseSecondSeek.future;
   }
 }
 

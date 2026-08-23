@@ -35,14 +35,15 @@ enum LibraryScanStatus {
 }
 
 class LineupPlaybackRequest {
-  LineupPlaybackRequest(
-    Uri uri,
+  LineupPlaybackRequest.parts(
+    List<LineupPlaybackPart> parts,
     this._release, {
     this.plexToken,
     this.authorizationRecovery,
-  }) : uri = _withoutPlexToken(uri);
+  }) : assert(parts.isNotEmpty),
+       parts = List.unmodifiable(parts);
 
-  final Uri uri;
+  final List<LineupPlaybackPart> parts;
   final String? plexToken;
   final Future<void> Function() _release;
   final Future<LineupPlaybackRequest> Function()? authorizationRecovery;
@@ -72,6 +73,15 @@ class LineupPlaybackRequest {
     _released = true;
     await _release();
   }
+}
+
+class LineupPlaybackPart {
+  LineupPlaybackPart({required Uri uri, this.duration})
+    : assert(duration == null || duration > Duration.zero),
+      uri = LineupPlaybackRequest._withoutPlexToken(uri);
+
+  final Uri uri;
+  final Duration? duration;
 }
 
 class LineupController extends ChangeNotifier {
@@ -999,13 +1009,30 @@ class LineupController extends ChangeNotifier {
       'audioCodec': item.audioCodec,
       'dynamicRange': item.dynamicRange.name,
     });
-    return LineupPlaybackRequest(
-      descriptor.uri,
-      () => plex.releasePlaybackSession(
-        server: endpoint,
-        token: token,
-        sessionId: descriptor.sessionId,
-      ),
+    return LineupPlaybackRequest.parts(
+      [
+        for (final part in descriptor.parts)
+          LineupPlaybackPart(uri: part.uri, duration: part.duration),
+      ],
+      () async {
+        Object? failure;
+        final sessionIds = <String>{};
+        for (final part in descriptor.parts) {
+          if (part.sessionId.isEmpty || !sessionIds.add(part.sessionId)) {
+            continue;
+          }
+          try {
+            await plex.releasePlaybackSession(
+              server: endpoint,
+              token: token,
+              sessionId: part.sessionId,
+            );
+          } catch (error) {
+            failure ??= error;
+          }
+        }
+        if (failure != null) throw failure;
+      },
       plexToken: token,
       authorizationRecovery: () async {
         await _refreshPmsAccess(operation, serverId);

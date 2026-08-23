@@ -361,7 +361,7 @@ class _ProductPlex extends PlexClient {
         type: 'movie',
         duration: const Duration(minutes: 30),
         libraryId: libraryId,
-        partPath: '/library/parts/$index/file.mp4',
+        parts: [PlexMediaPart(path: '/library/parts/$index/file.mp4')],
         container: 'mp4',
         videoCodec: 'h264',
         audioCodec: 'aac',

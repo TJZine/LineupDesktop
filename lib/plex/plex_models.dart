@@ -143,6 +143,15 @@ class PlexTrack {
   final SubtitleDelivery? delivery;
 }
 
+class PlexMediaPart {
+  PlexMediaPart({required this.path, this.duration, this.tracks = const []})
+    : assert(duration == null || duration.inMicroseconds > 0);
+
+  final String path;
+  final Duration? duration;
+  final List<PlexTrack> tracks;
+}
+
 class PlexMediaItem {
   const PlexMediaItem({
     required this.id,
@@ -157,12 +166,11 @@ class PlexMediaItem {
     this.grandparentThumbPath,
     this.artPath,
     this.clearLogoPath,
-    this.partPath,
+    this.parts = const [],
     this.container,
     this.videoCodec,
     this.audioCodec,
     this.dynamicRange = DynamicRange.unknown,
-    this.tracks = const [],
     this.genres = const [],
     this.collections = const [],
     this.directors = const [],
@@ -191,12 +199,11 @@ class PlexMediaItem {
   final String? grandparentThumbPath;
   final String? artPath;
   final String? clearLogoPath;
-  final String? partPath;
+  final List<PlexMediaPart> parts;
   final String? container;
   final String? videoCodec;
   final String? audioCodec;
   final DynamicRange dynamicRange;
-  final List<PlexTrack> tracks;
   final List<String> genres;
   final List<String> collections;
   final List<String> directors;
@@ -213,16 +220,24 @@ class PlexMediaItem {
   final bool viewed;
 }
 
-class PlexPlaybackDescriptor {
-  const PlexPlaybackDescriptor({
+class PlexPlaybackPartDescriptor {
+  const PlexPlaybackPartDescriptor({
     required this.uri,
-    required this.decision,
     required this.sessionId,
+    this.duration,
   });
 
   final Uri uri;
-  final StreamDecision decision;
   final String sessionId;
+  final Duration? duration;
+}
+
+class PlexPlaybackDescriptor {
+  const PlexPlaybackDescriptor({required this.decision, required this.parts})
+    : assert(parts.length > 0);
+
+  final StreamDecision decision;
+  final List<PlexPlaybackPartDescriptor> parts;
 }
 
 class PlexException implements Exception {

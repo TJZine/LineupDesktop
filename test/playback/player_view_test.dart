@@ -583,7 +583,9 @@ class _Lineup extends LineupController {
 
   @override
   LineupPlaybackRequest playbackFor(String itemId) =>
-      LineupPlaybackRequest(Uri.parse('lineup-test://$itemId'), () async {});
+      LineupPlaybackRequest.parts([
+        LineupPlaybackPart(uri: Uri.parse('lineup-test://$itemId')),
+      ], () async {});
 }
 
 class _Native implements NativePlayer {

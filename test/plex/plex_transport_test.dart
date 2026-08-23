@@ -439,13 +439,13 @@ void main() {
     expect(
       () => client.playbackDescriptor(
         server: Uri.parse('https://plex.example:32400'),
-        item: const PlexMediaItem(
+        item: PlexMediaItem(
           id: '1',
           key: '/library/metadata/1',
           title: 'Movie',
           type: 'movie',
           duration: Duration(minutes: 1),
-          partPath: '/library/parts/1/file.mkv',
+          parts: [PlexMediaPart(path: '/library/parts/1/file.mkv')],
           dynamicRange: DynamicRange.unknown,
         ),
         capabilities: const StreamCapabilities(
@@ -458,13 +458,117 @@ void main() {
     );
   });
 
+  test('an empty ordered part list is unsupported media', () {
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+    );
+    expect(
+      () => client.playbackDescriptor(
+        server: Uri.parse('https://plex.example:32400'),
+        item: PlexMediaItem(
+          id: 'empty',
+          key: '/library/metadata/empty',
+          title: 'Empty',
+          type: 'movie',
+          duration: Duration.zero,
+        ),
+        capabilities: const StreamCapabilities.unrestricted(),
+      ),
+      throwsA(
+        isA<PlexException>().having(
+          (exception) => exception.code,
+          'code',
+          'unsupported',
+        ),
+      ),
+    );
+  });
+
   test('direct play retains the selected Plex server origin', () {
     final descriptor = _directPlaybackDescriptor('/library/parts/1/file.mkv');
 
     expect(descriptor.decision.kind, StreamDecisionKind.directPlay);
     expect(
-      descriptor.uri,
+      descriptor.parts.single.uri,
       Uri.parse('https://plex.example:32400/library/parts/1/file.mkv'),
+    );
+  });
+
+  test(
+    'multipart descriptors preserve order, origin, and session ownership',
+    () {
+      final client = PlexClient(
+        clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      );
+      final descriptor = client.playbackDescriptor(
+        server: Uri.parse('https://plex.example:32400'),
+        item: PlexMediaItem(
+          id: '1',
+          key: '/library/metadata/1',
+          title: 'Movie',
+          type: 'movie',
+          duration: Duration(minutes: 2),
+          parts: [
+            PlexMediaPart(
+              path: '/library/parts/one.mkv',
+              duration: Duration(minutes: 1),
+            ),
+            PlexMediaPart(path: '/library/parts/two.mkv'),
+          ],
+          container: 'mkv',
+          videoCodec: 'h264',
+          audioCodec: 'aac',
+          dynamicRange: DynamicRange.sdr,
+        ),
+        capabilities: const StreamCapabilities.unrestricted(),
+      );
+
+      expect(descriptor.parts.map((part) => part.uri), [
+        Uri.parse('https://plex.example:32400/library/parts/one.mkv'),
+        Uri.parse('https://plex.example:32400/library/parts/two.mkv'),
+      ]);
+      expect(descriptor.parts.first.duration, const Duration(minutes: 1));
+      expect(descriptor.parts.last.duration, isNull);
+      expect(
+        descriptor.parts.map((part) => part.sessionId).toSet(),
+        hasLength(2),
+      );
+      expect(
+        descriptor.parts.expand((part) => part.uri.queryParameters.keys),
+        isNot(contains('X-Plex-Token')),
+      );
+    },
+  );
+
+  test('multipart descriptors reject a cross-origin part', () {
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+    );
+    expect(
+      () => client.playbackDescriptor(
+        server: Uri.parse('https://plex.example:32400'),
+        item: PlexMediaItem(
+          id: '1',
+          key: '/library/metadata/1',
+          title: 'Movie',
+          type: 'movie',
+          duration: Duration(minutes: 2),
+          parts: [
+            PlexMediaPart(path: '/library/parts/one.mkv'),
+            PlexMediaPart(path: 'https://attacker.example/two.mkv'),
+          ],
+          container: 'mkv',
+          videoCodec: 'h264',
+          audioCodec: 'aac',
+          dynamicRange: DynamicRange.sdr,
+        ),
+        capabilities: const StreamCapabilities(
+          containers: {'mp4'},
+          videoCodecs: {'h264'},
+          audioCodecs: {'aac'},
+        ),
+      ),
+      throwsA(isA<PlexException>()),
     );
   });
 
@@ -495,13 +599,13 @@ void main() {
     );
     final descriptor = client.playbackDescriptor(
       server: Uri.parse('https://plex.example:32400'),
-      item: const PlexMediaItem(
+      item: PlexMediaItem(
         id: '1',
         key: '/library/metadata/1',
         title: 'Movie',
         type: 'movie',
         duration: Duration(minutes: 1),
-        partPath: '/library/parts/1/file.mkv',
+        parts: [PlexMediaPart(path: '/library/parts/1/file.mkv')],
         container: 'mkv',
         videoCodec: 'h264',
         audioCodec: 'aac',
@@ -515,24 +619,25 @@ void main() {
     );
     expect(descriptor.decision.kind, StreamDecisionKind.directStream);
     expect(
-      descriptor.uri.queryParameters,
+      descriptor.parts.single.uri.queryParameters,
       containsPair('path', '/library/metadata/1'),
     );
-    expect(descriptor.uri.path, '/video/:/transcode/universal/start.m3u8');
-    expect(descriptor.uri.queryParameters, containsPair('protocol', 'hls'));
-    expect(descriptor.uri.queryParameters, containsPair('mediaIndex', '0'));
-    expect(descriptor.uri.queryParameters, containsPair('partIndex', '0'));
-    expect(descriptor.uri.queryParameters, containsPair('directPlay', '0'));
-    expect(descriptor.uri.queryParameters, containsPair('directStream', '1'));
+    final uri = descriptor.parts.single.uri;
+    expect(uri.path, '/video/:/transcode/universal/start.m3u8');
+    expect(uri.queryParameters, containsPair('protocol', 'hls'));
+    expect(uri.queryParameters, containsPair('mediaIndex', '0'));
+    expect(uri.queryParameters, containsPair('partIndex', '0'));
+    expect(uri.queryParameters, containsPair('directPlay', '0'));
+    expect(uri.queryParameters, containsPair('directStream', '1'));
     expect(
-      descriptor.uri.queryParameters,
+      uri.queryParameters,
       containsPair(
         'X-Plex-Client-Identifier',
         'lineup-desktop-test-abcdefghijklmnopqrst',
       ),
     );
     expect(
-      descriptor.uri.queryParameters.keys.map((key) => key.toLowerCase()),
+      uri.queryParameters.keys.map((key) => key.toLowerCase()),
       isNot(contains('x-plex-token')),
     );
   });
@@ -542,13 +647,13 @@ void main() {
         PlexClient(clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst')
             .playbackDescriptor(
               server: Uri.parse('https://plex.example:32400'),
-              item: const PlexMediaItem(
+              item: PlexMediaItem(
                 id: '1',
                 key: '/library/metadata/1',
                 title: 'Movie',
                 type: 'movie',
                 duration: Duration(minutes: 1),
-                partPath: '/library/parts/1/file.mkv',
+                parts: [PlexMediaPart(path: '/library/parts/1/file.mkv')],
                 container: 'mkv',
                 videoCodec: 'vc1',
                 audioCodec: 'dca',
@@ -562,12 +667,10 @@ void main() {
             );
 
     expect(descriptor.decision.kind, StreamDecisionKind.transcode);
-    expect(descriptor.uri.queryParameters, containsPair('directPlay', '0'));
-    expect(descriptor.uri.queryParameters, containsPair('directStream', '0'));
-    expect(
-      descriptor.uri.queryParameters,
-      containsPair('directStreamAudio', '0'),
-    );
+    final uri = descriptor.parts.single.uri;
+    expect(uri.queryParameters, containsPair('directPlay', '0'));
+    expect(uri.queryParameters, containsPair('directStream', '0'));
+    expect(uri.queryParameters, containsPair('directStreamAudio', '0'));
   });
 
   group('artwork transport', () {
@@ -1027,7 +1130,7 @@ PlexPlaybackDescriptor _directPlaybackDescriptor(String partPath) =>
             title: 'Movie',
             type: 'movie',
             duration: const Duration(minutes: 1),
-            partPath: partPath,
+            parts: [PlexMediaPart(path: partPath)],
             container: 'mkv',
             videoCodec: 'h264',
             audioCodec: 'aac',

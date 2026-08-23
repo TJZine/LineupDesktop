@@ -52,13 +52,66 @@ void main() {
     expect(item.container, 'mkv');
     expect(item.videoCodec, 'hevc');
     expect(item.dynamicRange, DynamicRange.dolbyVision);
-    expect(item.tracks.last.delivery, SubtitleDelivery.sidecar);
+    expect(item.parts.first.tracks.last.delivery, SubtitleDelivery.sidecar);
     expect(item.summary, 'A first episode.');
     expect(item.contentRating, 'TV-14');
     expect(item.seasonNumber, 1);
     expect(item.episodeNumber, 2);
     expect(item.videoResolution, '4k');
     expect(item.audioChannels, 6);
+  });
+
+  test('preserves every ordered part with positive nullable durations', () {
+    final item = parseMediaItem({
+      'ratingKey': 'multi',
+      'key': '/library/metadata/multi',
+      'title': 'Multi-part movie',
+      'type': 'movie',
+      'duration': 3000,
+      'Media': [
+        {
+          'container': 'mkv',
+          'videoCodec': 'h264',
+          'audioCodec': 'aac',
+          'Part': [
+            {
+              'key': '/library/parts/one.mkv',
+              'duration': 1000,
+              'Stream': [
+                {'id': 1, 'streamType': 2, 'codec': 'aac', 'selected': 1},
+              ],
+            },
+            {
+              'key': '/library/parts/two.mkv',
+              'duration': 0,
+              'Stream': [
+                {'id': 2, 'streamType': 3, 'codec': 'srt'},
+              ],
+            },
+            {'key': '/library/parts/three.mkv', 'duration': -1},
+          ],
+        },
+        {
+          'container': 'mp4',
+          'Part': [
+            {'key': '/ignored-alternate.mp4'},
+          ],
+        },
+      ],
+    });
+
+    expect(item.parts.map((part) => part.path), [
+      '/library/parts/one.mkv',
+      '/library/parts/two.mkv',
+      '/library/parts/three.mkv',
+    ]);
+    expect(item.parts.map((part) => part.duration), [
+      const Duration(seconds: 1),
+      null,
+      null,
+    ]);
+    expect(item.parts[0].tracks.single.id, '1');
+    expect(item.parts[1].tracks.single.id, '2');
   });
 
   test(
