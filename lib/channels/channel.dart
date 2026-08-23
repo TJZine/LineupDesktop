@@ -105,7 +105,7 @@ class ChannelItem {
     required this.duration,
     this.showTitle,
     this.showThumb,
-    this.artwork,
+    this.poster,
     this.backdrop,
     this.clearLogo,
     this.summary,
@@ -127,8 +127,7 @@ class ChannelItem {
   final String? showTitle;
   final String? showThumb;
 
-  /// The poster/thumb path retained under the legacy `artwork` JSON key.
-  final Uri? artwork;
+  final Uri? poster;
   final Uri? backdrop;
   final Uri? clearLogo;
   final String? summary;
@@ -149,7 +148,7 @@ class ChannelItem {
     'durationMs': duration.inMilliseconds,
     if (showTitle != null) 'showTitle': showTitle,
     if (showThumb != null) 'showThumb': showThumb,
-    if (artwork != null) 'artwork': artwork.toString(),
+    if (poster != null) 'poster': poster.toString(),
     if (backdrop != null) 'backdrop': backdrop.toString(),
     if (clearLogo != null) 'clearLogo': clearLogo.toString(),
     if (summary != null) 'summary': summary,
@@ -167,6 +166,9 @@ class ChannelItem {
 
   factory ChannelItem.fromJson(Object? value) {
     final json = Map<String, Object?>.from(value as Map);
+    if (json.containsKey('artwork')) {
+      throw const FormatException('Legacy artwork is not canonical');
+    }
     final duration = Duration(
       milliseconds: (json['durationMs'] as num).toInt(),
     );
@@ -179,15 +181,9 @@ class ChannelItem {
       duration: duration,
       showTitle: json['showTitle'] as String?,
       showThumb: json['showThumb'] as String?,
-      artwork: json['artwork'] is String
-          ? Uri.tryParse(json['artwork'] as String)
-          : null,
-      backdrop: json['backdrop'] is String
-          ? Uri.tryParse(json['backdrop'] as String)
-          : null,
-      clearLogo: json['clearLogo'] is String
-          ? Uri.tryParse(json['clearLogo'] as String)
-          : null,
+      poster: _optionalUri(json, 'poster'),
+      backdrop: _optionalUri(json, 'backdrop'),
+      clearLogo: _optionalUri(json, 'clearLogo'),
       summary: json['summary'] as String?,
       contentRating: json['contentRating'] as String?,
       genres: List<String>.from(json['genres'] as List? ?? const []),
@@ -284,6 +280,13 @@ String _string(Object? value) {
     throw const FormatException('Required text is missing');
   }
   return value.trim();
+}
+
+Uri? _optionalUri(Map<String, Object?> json, String key) {
+  final value = json[key];
+  if (value == null) return null;
+  if (value is! String) throw FormatException('Invalid $key');
+  return Uri.tryParse(value) ?? (throw FormatException('Invalid $key'));
 }
 
 void _validateSource(ContentSource source, int depth) {

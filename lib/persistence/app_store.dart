@@ -45,13 +45,30 @@ class PersistedState {
 
   factory PersistedState.fromJson(Object? value) {
     if (value is! Map) throw const FormatException('State must be an object.');
-    final json = Map<String, Object?>.from(value);
     try {
+      final json = _stringKeyedMap(value, 'state');
+      const fields = {
+        'settings',
+        'profileId',
+        'selectedServerByProfile',
+        'selectedLibraryIdsByProfileServer',
+        'channelsByProfileServer',
+        'currentChannelByProfileServer',
+      };
+      if (json.keys.toSet().difference(fields).isNotEmpty ||
+          !json.keys.toSet().containsAll(fields)) {
+        throw const FormatException('State fields are not canonical.');
+      }
+      final settings = json['settings'];
+      final profileId = json['profileId'];
+      if (settings is! Map || (profileId != null && profileId is! String)) {
+        throw const FormatException('Invalid settings or profile.');
+      }
       return PersistedState(
-        settings: LineupSettings.fromJson(json['settings']),
-        profileId: json['profileId'] as String?,
-        selectedServerByProfile: Map<String, String>.from(
-          json['selectedServerByProfile'] as Map? ?? const {},
+        settings: LineupSettings.fromJson(settings),
+        profileId: profileId as String?,
+        selectedServerByProfile: _flatStringMap(
+          json['selectedServerByProfile'],
         ),
         selectedLibraryIdsByProfileServer: _librarySelections(
           json['selectedLibraryIdsByProfileServer'],
@@ -69,20 +86,33 @@ class PersistedState {
   }
 }
 
+Map<String, Object?> _stringKeyedMap(Object? value, String name) {
+  if (value is! Map || value.keys.any((key) => key is! String)) {
+    throw FormatException('Invalid $name.');
+  }
+  return {for (final entry in value.entries) entry.key as String: entry.value};
+}
+
+Map<String, String> _flatStringMap(Object? value) {
+  final map = _stringKeyedMap(value, 'server selections');
+  if (map.values.any((value) => value is! String)) {
+    throw const FormatException('Invalid server selections.');
+  }
+  return {for (final entry in map.entries) entry.key: entry.value as String};
+}
+
 Map<String, Map<String, List<Channel>>> _channelSelections(Object? value) {
-  if (value == null) return const {};
-  if (value is! Map) throw const FormatException('Invalid channel selections.');
-  final selections = {
-    for (final profile in value.entries)
-      if (profile.key is String && profile.value is Map)
-        profile.key as String: {
-          for (final server in (profile.value as Map).entries)
-            if (server.key is String && server.value is List)
-              server.key as String: (server.value as List)
-                  .map(Channel.fromJson)
-                  .toList(),
-        },
-  };
+  final outer = _stringKeyedMap(value, 'channel selections');
+  final selections = <String, Map<String, List<Channel>>>{};
+  for (final profile in outer.entries) {
+    final inner = _stringKeyedMap(profile.value, 'profile channel selections');
+    selections[profile.key] = {
+      for (final server in inner.entries)
+        server.key: server.value is List
+            ? (server.value as List).map(Channel.fromJson).toList()
+            : throw const FormatException('Invalid channel list.'),
+    };
+  }
   for (final profile in selections.values) {
     for (final channels in profile.values) {
       for (final channel in channels) {
@@ -94,29 +124,28 @@ Map<String, Map<String, List<Channel>>> _channelSelections(Object? value) {
 }
 
 Map<String, Map<String, String>> _stringSelections(Object? value) {
-  if (value == null) return const {};
-  if (value is! Map) throw const FormatException('Invalid current channels.');
+  final outer = _stringKeyedMap(value, 'current channels');
   return {
-    for (final profile in value.entries)
-      if (profile.key is String && profile.value is Map)
-        profile.key as String: Map<String, String>.from(profile.value as Map),
+    for (final profile in outer.entries)
+      profile.key: _flatStringMap(profile.value),
   };
 }
 
 Map<String, Map<String, List<String>>> _librarySelections(Object? value) {
-  if (value == null) return const {};
-  if (value is! Map) throw const FormatException('Invalid library selections.');
-  return {
-    for (final profileEntry in value.entries)
-      if (profileEntry.key is String && profileEntry.value is Map)
-        profileEntry.key as String: {
-          for (final serverEntry in (profileEntry.value as Map).entries)
-            if (serverEntry.key is String && serverEntry.value is List)
-              serverEntry.key as String: (serverEntry.value as List)
-                  .whereType<String>()
-                  .toList(),
-        },
-  };
+  final outer = _stringKeyedMap(value, 'library selections');
+  final selections = <String, Map<String, List<String>>>{};
+  for (final profile in outer.entries) {
+    final inner = _stringKeyedMap(profile.value, 'profile library selections');
+    selections[profile.key] = {
+      for (final server in inner.entries)
+        server.key:
+            server.value is List &&
+                (server.value as List).every((item) => item is String)
+            ? List<String>.from(server.value as List)
+            : throw const FormatException('Invalid library list.'),
+    };
+  }
+  return selections;
 }
 
 abstract interface class AppStore {

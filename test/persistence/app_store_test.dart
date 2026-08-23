@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -16,7 +17,7 @@ void main() {
       id: 'stable-id',
       number: 42,
       name: 'Edited generated channel',
-      source: const MixedSource(
+      source: MixedSource(
         interleave: true,
         sources: [
           LibrarySource(
@@ -26,6 +27,14 @@ void main() {
             filters: {'genre': 'Comedy'},
           ),
           PlaylistSource('playlist-1'),
+          ManualSource([
+            ChannelItem(
+              id: 'poster-item',
+              title: 'Poster item',
+              duration: Duration(minutes: 1),
+              poster: Uri(path: '/poster'),
+            ),
+          ]),
         ],
       ),
       playbackMode: PlaybackMode.block,
@@ -64,6 +73,16 @@ void main() {
     final restoredChannel =
         restored.state.channelsByProfileServer['profile']?['server']?.single;
     expect(restoredChannel?.toJson(), channel.toJson());
+    final item =
+        ((restoredChannel!.source as MixedSource).sources.last as ManualSource)
+            .items
+            .single;
+    expect(item.poster, Uri(path: '/poster'));
+    expect(item.toJson(), containsPair('poster', '/poster'));
+    expect(item.toJson(), isNot(contains('artwork')));
+    final savedJson = await File('${directory.path}/state.json').readAsString();
+    expect(savedJson, contains('"poster":"/poster"'));
+    expect(savedJson, isNot(contains('"artwork"')));
     expect(
       restored.state.currentChannelByProfileServer['profile']?['server'],
       'stable-id',
@@ -77,9 +96,157 @@ void main() {
     );
   });
 
+  group('canonical persisted schema', () {
+    test(
+      'requires every structural field and permits only a nullable profile',
+      () {
+        for (final field in [
+          'settings',
+          'selectedServerByProfile',
+          'selectedLibraryIdsByProfileServer',
+          'channelsByProfileServer',
+          'currentChannelByProfileServer',
+        ]) {
+          final missing = _canonicalJson()..remove(field);
+          final nullValue = _canonicalJson()..[field] = null;
+          expect(() => PersistedState.fromJson(missing), throwsFormatException);
+          expect(
+            () => PersistedState.fromJson(nullValue),
+            throwsFormatException,
+          );
+        }
+        expect(
+          PersistedState.fromJson(_canonicalJson()..['profileId'] = null)
+              .profileId,
+          isNull,
+        );
+        expect(
+          () => PersistedState.fromJson(_canonicalJson()..remove('profileId')),
+          throwsFormatException,
+        );
+        expect(
+          () => PersistedState.fromJson(_canonicalJson()..['profileId'] = 7),
+          throwsFormatException,
+        );
+        expect(
+          () => PersistedState.fromJson(_canonicalJson()..['legacy'] = true),
+          throwsFormatException,
+        );
+      },
+    );
+
+    test('rejects non-string outer and inner keys', () {
+      expect(
+        () => PersistedState.fromJson(
+          _canonicalJson()..['selectedServerByProfile'] = {1: 'server'},
+        ),
+        throwsFormatException,
+      );
+      expect(
+        () => PersistedState.fromJson(
+          _canonicalJson()
+            ..['channelsByProfileServer'] = {
+              'profile': {1: <Object?>[]},
+            },
+        ),
+        throwsFormatException,
+      );
+    });
+
+    test('rejects wrong nested leaf shapes and mixed library lists', () {
+      for (final invalid in [
+        _canonicalJson()..['selectedServerByProfile'] = {'profile': 1},
+        _canonicalJson()
+          ..['selectedLibraryIdsByProfileServer'] = {
+            'profile': {'server': 'library'},
+          },
+        _canonicalJson()
+          ..['channelsByProfileServer'] = {
+            'profile': {'server': <String, Object?>{}},
+          },
+        _canonicalJson()
+          ..['currentChannelByProfileServer'] = {
+            'profile': {'server': <Object?>[]},
+          },
+        _canonicalJson()
+          ..['selectedLibraryIdsByProfileServer'] = {
+            'profile': {
+              'server': ['library', 2],
+            },
+          },
+      ]) {
+        expect(() => PersistedState.fromJson(invalid), throwsFormatException);
+      }
+    });
+
+    test('rejects malformed channels and invalid selected/current values', () {
+      for (final invalid in [
+        _canonicalJson()
+          ..['channelsByProfileServer'] = {
+            'profile': {
+              'server': [null],
+            },
+          },
+        _canonicalJson()
+          ..['channelsByProfileServer'] = {
+            'profile': {
+              'server': [_channelJson(artworkValue: 7)],
+            },
+          },
+        _canonicalJson()..['selectedServerByProfile'] = {'profile': false},
+        _canonicalJson()
+          ..['currentChannelByProfileServer'] = {
+            'profile': {'server': 42},
+          },
+      ]) {
+        expect(() => PersistedState.fromJson(invalid), throwsFormatException);
+      }
+    });
+
+    test('preserves settings value normalization', () {
+      final state = PersistedState.fromJson(
+        _canonicalJson()
+          ..['settings'] = {
+            'guideHours': 5,
+            'pastMinutes': 29,
+            'osdAutoHideSeconds': 7,
+          },
+      );
+      expect(state.settings.guideHours, 6);
+      expect(state.settings.pastMinutes, 30);
+      expect(state.settings.osdAutoHideSeconds, 8);
+    });
+  });
+
   for (final corruptState in <String, String>{
     'malformed JSON': '{broken',
     'schema-invalid JSON': '{"selectedServerByProfile":[]}',
+    'malformed nested JSON': _encodedState(
+      _canonicalJson()
+        ..['selectedLibraryIdsByProfileServer'] = {
+          'profile': {
+            'server': ['library', 2],
+          },
+        },
+    ),
+    'legacy artwork JSON': _encodedState(
+      _canonicalJson()
+        ..['channelsByProfileServer'] = {
+          'profile': {
+            'server': [_channelJson(artworkKey: 'artwork')],
+          },
+        },
+    ),
+    'malformed current artwork JSON': _encodedState(
+      _canonicalJson()
+        ..['channelsByProfileServer'] = {
+          'profile': {
+            'server': [
+              _channelJson(artworkKey: 'clearLogo', artworkValue: 'http://['),
+            ],
+          },
+        },
+    ),
   }.entries) {
     test('${corruptState.key} quarantines once and reports recovery', () async {
       final directory = await Directory.systemTemp.createTemp(
@@ -182,3 +349,33 @@ void main() {
     },
   );
 }
+
+Map<String, Object?> _canonicalJson() => {
+  ...const PersistedState().toJson(),
+  'profileId': 'profile',
+};
+
+Map<String, Object?> _channelJson({
+  String artworkKey = 'poster',
+  Object? artworkValue = '/poster',
+}) => {
+  'id': 'channel',
+  'number': 1,
+  'name': 'Channel',
+  'source': {
+    'type': 'manual',
+    'items': [
+      {
+        'id': 'item',
+        'title': 'Item',
+        'durationMs': 60000,
+        artworkKey: artworkValue,
+      },
+    ],
+  },
+  'playbackMode': 'sequential',
+  'anchor': '2026-08-23T00:00:00.000Z',
+  'shuffleSeed': 1,
+};
+
+String _encodedState(Map<String, Object?> state) => jsonEncode(state);

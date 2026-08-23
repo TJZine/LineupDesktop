@@ -252,8 +252,8 @@ class GuideController extends ChangeNotifier {
     final path = switch (kind) {
       GuideArtworkKind.poster =>
         item.showThumb == null || item.showThumb!.isEmpty
-            ? item.artwork
-            : Uri.tryParse(item.showThumb!) ?? item.artwork,
+            ? item.poster
+            : Uri.tryParse(item.showThumb!) ?? item.poster,
       GuideArtworkKind.backdrop => item.backdrop,
       GuideArtworkKind.clearLogo => item.clearLogo,
     };
@@ -775,7 +775,7 @@ bool _itemEquals(ChannelItem left, ChannelItem right) =>
     left.duration == right.duration &&
     left.showTitle == right.showTitle &&
     left.showThumb == right.showThumb &&
-    left.artwork == right.artwork &&
+    left.poster == right.poster &&
     left.backdrop == right.backdrop &&
     left.clearLogo == right.clearLogo &&
     left.summary == right.summary &&

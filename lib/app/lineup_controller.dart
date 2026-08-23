@@ -1018,8 +1018,8 @@ class LineupController extends ChangeNotifier {
   }
 
   Future<Uint8List?> artworkFor(ChannelItem item) async {
-    final artwork = item.artwork;
-    return artwork == null ? null : artworkForPath(artwork);
+    final poster = item.poster;
+    return poster == null ? null : artworkForPath(poster);
   }
 
   Future<Uint8List?> artworkForPath(Uri path) async {

@@ -85,35 +85,35 @@ void main() {
       ),
     );
 
-    expect(item.artwork, Uri.parse('/episode/thumb'));
+    expect(item.poster, Uri.parse('/episode/thumb'));
     expect(item.showThumb, '/show/thumb');
     expect(item.backdrop, Uri.parse('/show/art'));
     expect(item.clearLogo, Uri.parse('/show/clearlogo'));
   });
 
-  test(
-    'channel item artwork additions round-trip while old artwork remains valid',
-    () {
-      const oldJson = {
+  test('channel item poster, backdrop, and logo round-trip canonically', () {
+    final item = ChannelItem(
+      id: 'new',
+      title: 'New item',
+      duration: Duration(minutes: 1),
+      poster: Uri(path: '/poster'),
+      backdrop: Uri(path: '/backdrop'),
+      clearLogo: Uri(path: '/logo'),
+    );
+    expect(ChannelItem.fromJson(item.toJson()).toJson(), item.toJson());
+    expect(item.toJson(), containsPair('poster', '/poster'));
+    expect(item.toJson(), isNot(contains('artwork')));
+  });
+
+  test('legacy artwork is rejected without a poster fallback', () {
+    expect(
+      () => ChannelItem.fromJson(const {
         'id': 'old',
         'title': 'Old item',
         'durationMs': 60000,
         'artwork': '/old/poster',
-      };
-      final oldItem = ChannelItem.fromJson(oldJson);
-      expect(oldItem.artwork, Uri.parse('/old/poster'));
-      expect(oldItem.backdrop, isNull);
-      expect(oldItem.clearLogo, isNull);
-
-      final item = ChannelItem(
-        id: 'new',
-        title: 'New item',
-        duration: Duration(minutes: 1),
-        artwork: Uri(path: '/poster'),
-        backdrop: Uri(path: '/backdrop'),
-        clearLogo: Uri(path: '/logo'),
-      );
-      expect(ChannelItem.fromJson(item.toJson()).toJson(), item.toJson());
-    },
-  );
+      }),
+      throwsFormatException,
+    );
+  });
 }
