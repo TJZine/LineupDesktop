@@ -605,6 +605,427 @@ void main() {
     );
   });
 
+  test('library scans bound concurrency and publish inventory-ordered exact progress', () async {
+    final selected = _server('server');
+    var active = 0;
+    var peak = 0;
+    var requests = 0;
+    final perLibrary = <String, int>{};
+    final plex = _FakePlex()
+      ..serversResult = [selected]
+      ..connectionResult = selected.connections.single
+      ..librariesResult = [
+        for (var index = 0; index < 6; index++)
+          PlexLibrary(
+            id: 'library-$index',
+            title: 'Library $index',
+            type: PlexLibraryType.movie,
+          ),
+      ]
+      ..libraryItemsScanHandler =
+          (_, _, libraryId, _, isCurrent, onProgress) async {
+            requests++;
+            active++;
+            perLibrary[libraryId] = (perLibrary[libraryId] ?? 0) + 1;
+            peak = active > peak ? active : peak;
+            final index = int.parse(libraryId.split('-').last);
+            await Future<void>.delayed(Duration(milliseconds: 6 - index));
+            active--;
+            if (isCurrent?.call() == false) {
+              throw const PlexException('cancelled', 'cancelled');
+            }
+            onProgress?.call(
+              const PlexLibraryPageProgress(
+                completedPages: 1,
+                completedItems: 1,
+                totalItems: 1,
+              ),
+            );
+            return [
+              PlexMediaItem(
+                id: libraryId,
+                key: '/library/metadata/$libraryId',
+                title: libraryId,
+                type: 'movie',
+                duration: const Duration(minutes: 1),
+                libraryId: libraryId,
+              ),
+            ];
+          };
+    final controller = LineupController(
+      store: _MemoryStore(
+        const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+      ),
+      credentials: _MemoryCredentials(accountToken: 'token'),
+      plex: plex,
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+    final observedItems = <int>[];
+    controller.addListener(() {
+      if (controller.libraryScanStatus == LibraryScanStatus.scanning) {
+        observedItems.add(controller.libraryScanCompletedItems);
+      }
+    });
+
+    final loaded = await controller.setLibraries({
+      'library-5',
+      'library-4',
+      'library-3',
+      'library-2',
+      'library-1',
+      'library-0',
+    });
+
+    expect(loaded, isTrue);
+    expect(peak, 4);
+    expect(perLibrary.values, everyElement(1));
+    expect(requests, 6);
+    expect(
+      controller.availableMedia.map((item) => item.libraryId),
+      orderedEquals([for (var index = 0; index < 6; index++) 'library-$index']),
+    );
+    expect(observedItems, orderedEquals(observedItems.toList()..sort()));
+    expect(controller.libraryScanCompletedPages, 6);
+    expect(controller.libraryScanCompletedItems, 6);
+    expect(controller.libraryScanTotalItems, 6);
+    expect(controller.libraryScanStatus, LibraryScanStatus.complete);
+  });
+
+  test(
+    'authorization retry cannot regress aggregate library progress',
+    () async {
+      final selected = _server('server');
+      var calls = 0;
+      final plex = _FakePlex()
+        ..serversResult = [selected]
+        ..connectionResult = selected.connections.single
+        ..librariesResult = const [
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+        ]
+        ..libraryItemsScanHandler = (_, _, libraryId, _, _, onProgress) async {
+          calls++;
+          if (calls == 1) {
+            onProgress?.call(
+              const PlexLibraryPageProgress(
+                completedPages: 2,
+                completedItems: 2,
+                totalItems: 3,
+              ),
+            );
+            throw const PlexException('auth-required', 'refresh');
+          }
+          onProgress?.call(
+            const PlexLibraryPageProgress(
+              completedPages: 1,
+              completedItems: 1,
+              totalItems: 3,
+            ),
+          );
+          onProgress?.call(
+            const PlexLibraryPageProgress(
+              completedPages: 3,
+              completedItems: 3,
+              totalItems: 3,
+            ),
+          );
+          return [
+            for (var index = 0; index < 3; index++)
+              PlexMediaItem(
+                id: '$index',
+                key: '/library/metadata/$index',
+                title: 'Item $index',
+                type: 'movie',
+                duration: const Duration(minutes: 1),
+                libraryId: libraryId,
+              ),
+          ];
+        };
+      final controller = LineupController(
+        store: _MemoryStore(
+          const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+        ),
+        credentials: _MemoryCredentials(accountToken: 'token'),
+        plex: plex,
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+      final observed = <int>[];
+      controller.addListener(() {
+        if (controller.libraryScanStatus == LibraryScanStatus.scanning) {
+          observed.add(controller.libraryScanCompletedItems);
+        }
+      });
+
+      expect(await controller.setLibraries({'movies'}), isTrue);
+
+      expect(calls, 2);
+      expect(observed, orderedEquals(observed.toList()..sort()));
+      expect(observed, containsAllInOrder([2, 2, 3]));
+      expect(controller.libraryScanCompletedPages, 3);
+      expect(controller.libraryScanCompletedItems, 3);
+      expect(controller.libraryScanTotalItems, 3);
+    },
+  );
+
+  test('cancelled library scan preserves committed content and superseding scan wins', () async {
+    final selected = _server('server');
+    final firstStarted = Completer<void>();
+    final releaseFirst = Completer<void>();
+    final plex = _FakePlex()
+      ..serversResult = [selected]
+      ..connectionResult = selected.connections.single
+      ..librariesResult = const [
+        PlexLibrary(id: 'first', title: 'First', type: PlexLibraryType.movie),
+        PlexLibrary(id: 'second', title: 'Second', type: PlexLibraryType.movie),
+      ]
+      ..libraryItemsScanHandler =
+          (_, _, libraryId, _, isCurrent, onProgress) async {
+            if (libraryId == 'first') {
+              firstStarted.complete();
+              await releaseFirst.future;
+              if (isCurrent?.call() == false) {
+                throw const PlexException('cancelled', 'cancelled');
+              }
+            }
+            onProgress?.call(
+              const PlexLibraryPageProgress(
+                completedPages: 1,
+                completedItems: 1,
+                totalItems: 1,
+              ),
+            );
+            return [
+              PlexMediaItem(
+                id: libraryId,
+                key: '/library/metadata/$libraryId',
+                title: libraryId,
+                type: 'movie',
+                duration: const Duration(minutes: 1),
+                libraryId: libraryId,
+              ),
+            ];
+          };
+    final controller = LineupController(
+      store: _MemoryStore(
+        const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+      ),
+      credentials: _MemoryCredentials(accountToken: 'token'),
+      plex: plex,
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+    controller
+      ..selectedLibraryIds = const {'committed'}
+      ..availableMedia = const [
+        PlexMediaItem(
+          id: 'committed',
+          key: '/library/metadata/committed',
+          title: 'Committed',
+          type: 'movie',
+          duration: Duration(minutes: 1),
+        ),
+      ];
+
+    final first = controller.setLibraries({'first'});
+    await firstStarted.future;
+    controller.cancelLibraryScan();
+    expect(controller.libraryScanStatus, LibraryScanStatus.cancelled);
+    expect(controller.selectedLibraryIds, {'committed'});
+    expect(controller.availableMedia.single.id, 'committed');
+
+    final second = controller.setLibraries({'second'});
+    releaseFirst.complete();
+    expect(await first, isFalse);
+    expect(await second, isTrue);
+    expect(controller.selectedLibraryIds, {'second'});
+    expect(controller.availableMedia.single.id, 'second');
+    expect(controller.libraryScanStatus, LibraryScanStatus.complete);
+  });
+
+  test(
+    'route cancellation invalidates an active scan before returning ready',
+    () async {
+      final selected = _server('server');
+      final started = Completer<void>();
+      final release = Completer<void>();
+      final store = _CountingMemoryStore(
+        const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+      );
+      final plex = _FakePlex()
+        ..serversResult = [selected]
+        ..connectionResult = selected.connections.single
+        ..librariesResult = const [
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+        ]
+        ..libraryItemsScanHandler = (_, _, _, _, isCurrent, _) async {
+          started.complete();
+          await release.future;
+          if (isCurrent?.call() == false) {
+            throw const PlexException('cancelled', 'cancelled');
+          }
+          return const [];
+        };
+      final controller = LineupController(
+        store: store,
+        credentials: _MemoryCredentials(accountToken: 'token'),
+        plex: plex,
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+      controller
+        ..stage = SetupStage.channelSetup
+        ..channelSetupCanCancel = true
+        ..selectedLibraryIds = const {'committed'}
+        ..availableMedia = const [
+          PlexMediaItem(
+            id: 'committed',
+            key: '/library/metadata/committed',
+            title: 'Committed',
+            type: 'movie',
+            duration: Duration(minutes: 1),
+          ),
+        ];
+      final savesBeforeScan = store.saveCalls;
+
+      final scan = controller.setLibraries({'movies'});
+      await started.future;
+      controller.cancelChannelSetup();
+      release.complete();
+
+      expect(await scan, isFalse);
+      expect(controller.stage, SetupStage.ready);
+      expect(controller.selectedLibraryIds, {'committed'});
+      expect(controller.availableMedia.single.id, 'committed');
+      expect(store.saveCalls, savesBeforeScan);
+    },
+  );
+
+  test('cancelling a scan schedules no queued fifth library', () async {
+    final selected = _server('server');
+    final fourStarted = Completer<void>();
+    final release = Completer<void>();
+    final started = <String>[];
+    final plex = _FakePlex()
+      ..serversResult = [selected]
+      ..connectionResult = selected.connections.single
+      ..librariesResult = [
+        for (var index = 0; index < 5; index++)
+          PlexLibrary(
+            id: 'library-$index',
+            title: 'Library $index',
+            type: PlexLibraryType.movie,
+          ),
+      ]
+      ..libraryItemsScanHandler = (_, _, libraryId, _, isCurrent, _) async {
+        started.add(libraryId);
+        if (started.length == 4) fourStarted.complete();
+        await release.future;
+        if (isCurrent?.call() == false) {
+          throw const PlexException('cancelled', 'cancelled');
+        }
+        return const [];
+      };
+    final controller = LineupController(
+      store: _MemoryStore(
+        const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+      ),
+      credentials: _MemoryCredentials(accountToken: 'token'),
+      plex: plex,
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+
+    final scan = controller.setLibraries({
+      for (var index = 0; index < 5; index++) 'library-$index',
+    });
+    await fourStarted.future;
+    controller.cancelLibraryScan();
+    release.complete();
+
+    expect(await scan, isFalse);
+    expect(started, [for (var index = 0; index < 4; index++) 'library-$index']);
+    expect(controller.libraryScanStatus, LibraryScanStatus.cancelled);
+  });
+
+  test(
+    'library scan distinguishes empty unsupported and transient failures',
+    () async {
+      final selected = _server('server');
+      var result = 0;
+      final plex = _FakePlex()
+        ..serversResult = [selected]
+        ..connectionResult = selected.connections.single
+        ..librariesResult = const [
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+        ]
+        ..libraryItemsHandler = (_, _, libraryId, _) async => switch (result) {
+          0 => const [],
+          1 => [
+            PlexMediaItem(
+              id: 'zero',
+              key: '/library/metadata/zero',
+              title: 'Zero',
+              type: 'movie',
+              duration: Duration.zero,
+              libraryId: libraryId,
+            ),
+          ],
+          2 => throw const PlexException(
+            'network-timeout',
+            'Plex did not respond in time. Try again.',
+          ),
+          3 => throw const PlexException(
+            'server-unreachable',
+            'Plex request failed (503).',
+          ),
+          _ => throw const PlexException(
+            'library-scale-exceeded',
+            'This library is too large to scan safely.',
+          ),
+        };
+      final controller = LineupController(
+        store: _MemoryStore(
+          const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+        ),
+        credentials: _MemoryCredentials(accountToken: 'token'),
+        plex: plex,
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+
+      expect(await controller.setLibraries({'movies'}), isTrue);
+      expect(controller.libraryScanStatus, LibraryScanStatus.empty);
+      result = 1;
+      expect(await controller.setLibraries({'movies'}), isTrue);
+      expect(controller.libraryScanStatus, LibraryScanStatus.unsupported);
+      result = 2;
+      expect(await controller.setLibraries({'movies'}), isFalse);
+      expect(controller.libraryScanStatus, LibraryScanStatus.transientFailure);
+      expect(controller.error, contains('did not respond'));
+      result = 3;
+      expect(await controller.setLibraries({'movies'}), isFalse);
+      expect(controller.libraryScanStatus, LibraryScanStatus.transientFailure);
+      expect(controller.error, contains('503'));
+      result = 4;
+      expect(await controller.setLibraries({'movies'}), isFalse);
+      expect(controller.libraryScanStatus, LibraryScanStatus.transientFailure);
+      expect(controller.error, contains('too large'));
+    },
+  );
+
   test(
     'playlist diagnostics retain Plex code and bounded failure count',
     () async {
@@ -1918,6 +2339,18 @@ class _BlockingSaveStore extends _MemoryStore {
   }
 }
 
+class _CountingMemoryStore extends _MemoryStore {
+  _CountingMemoryStore([super.state]);
+
+  int saveCalls = 0;
+
+  @override
+  Future<void> save(PersistedState value) async {
+    saveCalls++;
+    await super.save(value);
+  }
+}
+
 class _ControlledSaveStore extends _MemoryStore {
   _ControlledSaveStore([super.state]);
 
@@ -2006,6 +2439,15 @@ class _FakePlex extends PlexClient {
   Future<String?> Function(PlexPin)? pollHandler;
   Future<List<PlexMediaItem>> Function(Uri, String, String, PlexLibraryType)?
   libraryItemsHandler;
+  Future<List<PlexMediaItem>> Function(
+    Uri,
+    String,
+    String,
+    PlexLibraryType,
+    bool Function()?,
+    void Function(PlexLibraryPageProgress)?,
+  )?
+  libraryItemsScanHandler;
   Future<List<PlexLibrary>> Function(Uri, String)? librariesHandler;
   Future<PlexPlaylistCatalog> Function(Uri, String)? playlistsHandler;
   Future<List<PlexServerAccess>> Function(String)? discoverServersHandler;
@@ -2106,9 +2548,22 @@ class _FakePlex extends PlexClient {
     Uri server,
     String token,
     String libraryId,
-    PlexLibraryType libraryType,
-  ) async {
+    PlexLibraryType libraryType, {
+    bool Function()? isCurrent,
+    void Function(PlexLibraryPageProgress progress)? onProgress,
+  }) async {
     itemTokens.add(token);
+    final scanHandler = libraryItemsScanHandler;
+    if (scanHandler != null) {
+      return scanHandler(
+        server,
+        token,
+        libraryId,
+        libraryType,
+        isCurrent,
+        onProgress,
+      );
+    }
     return await libraryItemsHandler?.call(
           server,
           token,

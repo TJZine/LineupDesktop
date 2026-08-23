@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -363,6 +365,115 @@ void main() {
     expect(find.text('Confirm & Replace'), findsOneWidget);
   });
 
+  testWidgets('Channel Setup exposes distinct scan states and actions', (
+    tester,
+  ) async {
+    Future<_SetupFixtureController> pumpStatus(
+      LibraryScanStatus status, {
+      String? error,
+    }) async {
+      final controller = _SetupFixtureController()
+        ..stage = SetupStage.channelSetup
+        ..libraries = const [
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+        ]
+        ..libraryScanStatus = status
+        ..libraryScanCompletedItems = 50
+        ..libraryScanTotalItems = 100
+        ..error = error;
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(
+        MaterialApp(home: UpstreamChannelSetupView(controller: controller)),
+      );
+      await tester.pump();
+      return controller;
+    }
+
+    final scanning = await pumpStatus(LibraryScanStatus.scanning);
+    expect(
+      find.bySemanticsLabel('Scanning selected libraries'),
+      findsOneWidget,
+    );
+    expect(find.widgetWithText(OutlinedButton, 'Cancel scan'), findsOneWidget);
+    expect(
+      tester
+          .widget<LinearProgressIndicator>(find.byType(LinearProgressIndicator))
+          .value,
+      0.5,
+    );
+    await tester.tap(find.text('Cancel scan'));
+    await tester.pump();
+    expect(scanning.libraryScanStatus, LibraryScanStatus.cancelled);
+
+    for (final state in [
+      (LibraryScanStatus.empty, 'Selected libraries are empty'),
+      (LibraryScanStatus.unsupported, 'No playable media found'),
+      (LibraryScanStatus.cancelled, 'Library scan cancelled'),
+    ]) {
+      await pumpStatus(state.$1);
+      expect(find.bySemanticsLabel(state.$2), findsOneWidget);
+      expect(find.widgetWithText(TextButton, 'Retry scan'), findsOneWidget);
+    }
+
+    await pumpStatus(
+      LibraryScanStatus.transientFailure,
+      error: 'Plex did not respond in time. Try again.',
+    );
+    expect(find.bySemanticsLabel('Library scan failed'), findsOneWidget);
+    expect(find.textContaining('did not respond'), findsOneWidget);
+    expect(find.widgetWithText(TextButton, 'Retry scan'), findsOneWidget);
+
+    await pumpStatus(LibraryScanStatus.complete);
+    expect(find.bySemanticsLabel('Library scan complete'), findsOneWidget);
+    expect(find.text('Retry scan'), findsNothing);
+  });
+
+  testWidgets('dedicated scan cancellation is not presented as a failure', (
+    tester,
+  ) async {
+    final controller = _BlockingScanController()
+      ..stage = SetupStage.channelSetup
+      ..libraries = const [
+        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
+      ]
+      ..selectedLibraryIds = const {'movies'}
+      ..availableMedia = const [
+        PlexMediaItem(
+          id: 'committed',
+          key: '/library/metadata/committed',
+          title: 'Committed',
+          type: 'movie',
+          duration: Duration(minutes: 1),
+        ),
+      ];
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ListenableBuilder(
+          listenable: controller,
+          builder: (_, _) => UpstreamChannelSetupView(controller: controller),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.text('Configure channels'));
+    await controller.started.future;
+    await tester.pump();
+    await tester.tap(find.text('Cancel scan'));
+    await tester.pumpAndSettle();
+
+    expect(find.bySemanticsLabel('Library scan cancelled'), findsOneWidget);
+    expect(find.byType(LineupNotice), findsNothing);
+    expect(find.text('Library loading failed.'), findsNothing);
+    expect(controller.selectedLibraryIds, {'movies'});
+    expect(controller.availableMedia.single.id, 'committed');
+  });
+
   testWidgets('Channel Setup does not reclaim focus after a layout remount', (
     tester,
   ) async {
@@ -429,7 +540,32 @@ class _SetupFixtureController extends FixtureController {
           addedAt: DateTime.utc(2026, 1, index + 1),
         ),
     ];
+    libraryScanStatus = LibraryScanStatus.complete;
+    libraryScanCompletedItems = availableMedia.length;
     return true;
+  }
+}
+
+class _BlockingScanController extends FixtureController {
+  final started = Completer<void>();
+  final _cancelled = Completer<void>();
+
+  @override
+  Future<bool> setLibraries(Set<String> ids) async {
+    libraryScanStatus = LibraryScanStatus.scanning;
+    busy = true;
+    notifyListeners();
+    started.complete();
+    await _cancelled.future;
+    busy = false;
+    notifyListeners();
+    return false;
+  }
+
+  @override
+  void cancelLibraryScan() {
+    super.cancelLibraryScan();
+    if (!_cancelled.isCompleted) _cancelled.complete();
   }
 }
 

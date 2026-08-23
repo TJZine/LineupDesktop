@@ -185,6 +185,12 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
     subtitle: 'Lineup will scan the selected movie and show libraries for channel ideas.',
     footer: _SetupFooter(
       secondary: [
+        if (widget.controller.libraryScanStatus == LibraryScanStatus.scanning)
+          OutlinedButton.icon(
+            onPressed: widget.controller.cancelLibraryScan,
+            icon: const Icon(Icons.stop_circle_outlined),
+            label: const Text('Cancel scan'),
+          ),
         if (widget.controller.channelSetupCanCancel)
           OutlinedButton(
             onPressed: widget.controller.cancelChannelSetup,
@@ -226,74 +232,166 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
             title: 'No movie or show libraries found',
             message: 'Choose another Plex server with accessible movie or show libraries.',
           )
-        : GridView.builder(
-            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-              maxCrossAxisExtent: 340,
-              mainAxisExtent: 120,
-              crossAxisSpacing: 14,
-              mainAxisSpacing: 14,
-            ),
-            itemCount: widget.controller.libraries.length,
-            itemBuilder: (_, index) {
-              final library = widget.controller.libraries[index];
-              final selected = _selectedLibraries.contains(library.id);
-              return LineupSelectionCard(
-                selected: selected,
-                autofocus: index == 0 && !_libraryFocusPlaced,
-                onPressed: () => setState(
-                  () => selected
-                      ? _selectedLibraries.remove(library.id)
-                      : _selectedLibraries.add(library.id),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(18),
-                  child: Row(
-                    children: [
-                      Icon(
-                        library.type == PlexLibraryType.show
-                            ? Icons.tv
-                            : Icons.movie_outlined,
-                        size: 38,
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              library.title,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            Text(
-                              library.type == PlexLibraryType.show
-                                  ? 'TV Shows'
-                                  : 'Movies',
-                              style: TextStyle(
-                                color: LineupTheme.of(context).mutedText,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Icon(
-                        selected ? Icons.check_circle : Icons.circle_outlined,
-                        color: selected
-                            ? LineupTheme.of(context).progressFill
-                            : LineupTheme.of(context).mutedText,
-                      ),
-                    ],
+        : CustomScrollView(
+            slivers: [
+              if (widget.controller.libraryScanStatus != LibraryScanStatus.idle)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 14),
+                    child: _scanStatus(),
                   ),
                 ),
-              );
-            },
+              SliverGrid(
+                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                  maxCrossAxisExtent: 340,
+                  mainAxisExtent: 120,
+                  crossAxisSpacing: 14,
+                  mainAxisSpacing: 14,
+                ),
+                delegate: SliverChildBuilderDelegate((_, index) {
+                  final library = widget.controller.libraries[index];
+                  final selected = _selectedLibraries.contains(library.id);
+                  return LineupSelectionCard(
+                    selected: selected,
+                    autofocus: index == 0 && !_libraryFocusPlaced,
+                    onPressed: () => setState(
+                      () => selected
+                          ? _selectedLibraries.remove(library.id)
+                          : _selectedLibraries.add(library.id),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(18),
+                      child: Row(
+                        children: [
+                          Icon(
+                            library.type == PlexLibraryType.show
+                                ? Icons.tv
+                                : Icons.movie_outlined,
+                            size: 38,
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  library.title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                Text(
+                                  library.type == PlexLibraryType.show
+                                      ? 'TV Shows'
+                                      : 'Movies',
+                                  style: TextStyle(
+                                    color: LineupTheme.of(context).mutedText,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Icon(
+                            selected
+                                ? Icons.check_circle
+                                : Icons.circle_outlined,
+                            color: selected
+                                ? LineupTheme.of(context).progressFill
+                                : LineupTheme.of(context).mutedText,
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }, childCount: widget.controller.libraries.length),
+              ),
+            ],
           ),
   );
+
+  Widget _scanStatus() {
+    final controller = widget.controller;
+    final status = controller.libraryScanStatus;
+    final (label, message) = switch (status) {
+      LibraryScanStatus.scanning => (
+        'Scanning selected libraries',
+        '${controller.libraryScanCompletedItems} items scanned',
+      ),
+      LibraryScanStatus.complete => (
+        'Library scan complete',
+        '${controller.libraryScanCompletedItems} items scanned',
+      ),
+      LibraryScanStatus.empty => (
+        'Selected libraries are empty',
+        'Plex returned no media metadata for the selected libraries.',
+      ),
+      LibraryScanStatus.unsupported => (
+        'No playable media found',
+        'Plex returned media, but none has a supported positive duration.',
+      ),
+      LibraryScanStatus.transientFailure => (
+        'Library scan failed',
+        controller.error ?? 'Plex could not complete the library scan.',
+      ),
+      LibraryScanStatus.cancelled => (
+        'Library scan cancelled',
+        'Your previous library selection and media remain unchanged.',
+      ),
+      LibraryScanStatus.idle => ('', ''),
+    };
+    final total = controller.libraryScanTotalItems;
+    return Semantics(
+      container: true,
+      liveRegion: true,
+      label: label,
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              ExcludeSemantics(
+                child: Text(
+                  label,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(message),
+              if (status == LibraryScanStatus.scanning) ...[
+                const SizedBox(height: 10),
+                LinearProgressIndicator(
+                  value: total != null && total > 0
+                      ? (controller.libraryScanCompletedItems / total).clamp(
+                          0.0,
+                          1.0,
+                        )
+                      : null,
+                ),
+              ],
+              if ({
+                LibraryScanStatus.empty,
+                LibraryScanStatus.unsupported,
+                LibraryScanStatus.transientFailure,
+                LibraryScanStatus.cancelled,
+              }.contains(status))
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton(
+                    onPressed: controller.busy ? null : _continueFromLibraries,
+                    child: const Text('Retry scan'),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   Future<void> _continueFromLibraries() async {
     setState(() => _error = null);
@@ -301,13 +399,17 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
       final loaded = await widget.controller.setLibraries(_selectedLibraries);
       if (!mounted) return;
       setState(() {
-        if (loaded) {
+        if (loaded &&
+            widget.controller.libraryScanStatus == LibraryScanStatus.complete) {
           _step = 2;
-        } else {
+        } else if (!loaded &&
+            widget.controller.libraryScanStatus !=
+                LibraryScanStatus.cancelled) {
           _error = widget.controller.error ?? 'Library loading failed.';
         }
       });
-      if (loaded) {
+      if (loaded &&
+          widget.controller.libraryScanStatus == LibraryScanStatus.complete) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) _strategyFocusPlaced = true;
         });

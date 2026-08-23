@@ -109,6 +109,18 @@ class PlexPlaylistCatalog {
   final Set<String> failedIds;
 }
 
+class PlexLibraryPageProgress {
+  const PlexLibraryPageProgress({
+    required this.completedPages,
+    required this.completedItems,
+    required this.totalItems,
+  });
+
+  final int completedPages;
+  final int completedItems;
+  final int? totalItems;
+}
+
 class PlexTrack {
   const PlexTrack({
     required this.id,

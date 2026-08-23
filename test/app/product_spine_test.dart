@@ -347,8 +347,10 @@ class _ProductPlex extends PlexClient {
     Uri server,
     String token,
     String libraryId,
-    PlexLibraryType libraryType,
-  ) async {
+    PlexLibraryType libraryType, {
+    bool Function()? isCurrent,
+    void Function(PlexLibraryPageProgress progress)? onProgress,
+  }) async {
     events.add('library:$libraryId');
     return List.generate(
       12,

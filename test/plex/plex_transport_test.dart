@@ -790,6 +790,192 @@ void main() {
   );
 
   test(
+    'library pagination reports exact progress without page snapshots',
+    () async {
+      var requests = 0;
+      final progress = <PlexLibraryPageProgress>[];
+      final client = PlexClient(
+        clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+        httpClient: MockClient((request) async {
+          requests++;
+          final start = int.parse(
+            request.url.queryParameters['X-Plex-Container-Start']!,
+          );
+          const total = 2505;
+          final count = (total - start).clamp(0, 100);
+          return http.Response(
+            jsonEncode({
+              'MediaContainer': {
+                'totalSize': total,
+                'Metadata': [
+                  for (var index = 0; index < count; index++)
+                    {
+                      'ratingKey': '${start + index}',
+                      'key': '/library/metadata/${start + index}',
+                      'title': 'Item ${start + index}',
+                      'type': 'movie',
+                      'duration': 1000,
+                    },
+                ],
+              },
+            }),
+            200,
+          );
+        }),
+      );
+
+      final items = await client.libraryItems(
+        Uri.parse('https://plex.example:32400'),
+        'secret',
+        '7',
+        PlexLibraryType.movie,
+        onProgress: progress.add,
+      );
+
+      expect(items, hasLength(2505));
+      expect(requests, 26);
+      expect(
+        progress.map((value) => value.completedItems),
+        orderedEquals([
+          for (var count = 100; count <= 2500; count += 100) count,
+          2505,
+        ]),
+      );
+      expect(progress.last.completedPages, 26);
+      expect(progress.last.totalItems, 2505);
+    },
+  );
+
+  test('library pagination checks cancellation before the next page', () async {
+    var current = true;
+    var requests = 0;
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      httpClient: MockClient((_) async {
+        requests++;
+        current = false;
+        return http.Response(
+          jsonEncode({
+            'MediaContainer': {
+              'totalSize': 200,
+              'Metadata': [
+                for (var index = 0; index < 100; index++)
+                  {
+                    'ratingKey': '$index',
+                    'key': '/library/metadata/$index',
+                    'title': 'Item $index',
+                    'type': 'movie',
+                    'duration': 1000,
+                  },
+              ],
+            },
+          }),
+          200,
+        );
+      }),
+    );
+
+    await expectLater(
+      client.libraryItems(
+        Uri.parse('https://plex.example:32400'),
+        'secret',
+        '7',
+        PlexLibraryType.movie,
+        isCurrent: () => current,
+      ),
+      throwsA(
+        isA<PlexException>().having((error) => error.code, 'code', 'cancelled'),
+      ),
+    );
+    expect(requests, 1);
+  });
+
+  test(
+    'one thousand full pages return when the reported total is reached',
+    () async {
+      var requests = 0;
+      final page = jsonEncode({
+        'MediaContainer': {
+          'totalSize': 100000,
+          'Metadata': [
+            for (var index = 0; index < 100; index++)
+              {
+                'ratingKey': '$index',
+                'key': '/library/metadata/$index',
+                'title': 'Item $index',
+                'type': 'movie',
+                'duration': 1000,
+              },
+          ],
+        },
+      });
+      final client = PlexClient(
+        clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+        httpClient: MockClient((_) async {
+          requests++;
+          return http.Response(page, 200);
+        }),
+      );
+
+      final items = await client.libraryItems(
+        Uri.parse('https://plex.example:32400'),
+        'secret',
+        '7',
+        PlexLibraryType.movie,
+      );
+
+      expect(items, hasLength(100000));
+      expect(requests, 1000);
+    },
+  );
+
+  test(
+    'one thousand full library pages fail visibly instead of truncating',
+    () async {
+      var requests = 0;
+      final page = jsonEncode({
+        'MediaContainer': {
+          'totalSize': 100001,
+          'Metadata': [
+            for (var index = 0; index < 100; index++)
+              {
+                'ratingKey': '$index',
+                'key': '/library/metadata/$index',
+                'title': 'Item $index',
+                'type': 'movie',
+                'duration': 1000,
+              },
+          ],
+        },
+      });
+      final client = PlexClient(
+        clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+        httpClient: MockClient((_) async {
+          requests++;
+          return http.Response(page, 200);
+        }),
+      );
+
+      await expectLater(
+        client.libraryItems(
+          Uri.parse('https://plex.example:32400'),
+          'secret',
+          '7',
+          PlexLibraryType.movie,
+        ),
+        throwsA(
+          isA<PlexException>().having(
+            (error) => error.code,
+            'code',
+            'library-scale-exceeded',
+          ),
+        ),
+      );
+      expect(requests, 1000);
+    },
+  );
+
+  test(
     'Plex Home falls back from empty v2 users and missing v2 switch',
     () async {
       final paths = <String>[];

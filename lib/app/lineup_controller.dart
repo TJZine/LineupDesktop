@@ -24,6 +24,16 @@ enum SetupStage {
   ready,
 }
 
+enum LibraryScanStatus {
+  idle,
+  scanning,
+  complete,
+  empty,
+  unsupported,
+  transientFailure,
+  cancelled,
+}
+
 class LineupPlaybackRequest {
   LineupPlaybackRequest(
     Uri uri,
@@ -102,6 +112,10 @@ class LineupController extends ChangeNotifier {
   bool profileSelectionCanCancel = false;
   bool serverSelectionCanCancel = false;
   bool secureCancellationRequired = false;
+  LibraryScanStatus libraryScanStatus = LibraryScanStatus.idle;
+  int libraryScanCompletedPages = 0;
+  int libraryScanCompletedItems = 0;
+  int? libraryScanTotalItems;
   String? error;
   int _epoch = 0;
   String? _accountToken;
@@ -383,6 +397,7 @@ class LineupController extends ChangeNotifier {
             rethrow;
           }
           if (_disposed) return;
+          _resetLibraryScan();
           _contentGeneration++;
           notifyListeners();
         });
@@ -523,6 +538,7 @@ class LineupController extends ChangeNotifier {
             rethrow;
           }
           if (_disposed) return;
+          _resetLibraryScan();
           _contentGeneration++;
           notifyListeners();
         });
@@ -531,9 +547,12 @@ class LineupController extends ChangeNotifier {
           final loaded = await _loadLibraries(operation, selectedLibraryIds);
           if (operation != _epoch) return;
           _requireAvailablePlaylists(loaded.failedPlaylistIds);
+          libraryScanStatus = loaded.status;
           availableMedia = loaded.media;
           availablePlaylists = loaded.playlists;
-          stage = SetupStage.ready;
+          stage = libraryScanStatus == LibraryScanStatus.complete
+              ? SetupStage.ready
+              : SetupStage.channelSetup;
         } else if (!settings.audioSetupComplete) {
           stage = SetupStage.audio;
         }
@@ -547,7 +566,7 @@ class LineupController extends ChangeNotifier {
 
   Future<bool> setLibraries(Set<String> ids) async {
     final operation = ++_epoch;
-    return _run(
+    final loaded = await _run(
       () async {
         final allowed = libraries.map((library) => library.id).toSet();
         if (ids.isEmpty || !allowed.containsAll(ids)) {
@@ -559,6 +578,7 @@ class LineupController extends ChangeNotifier {
         final loaded = await _loadLibraries(operation, ids);
         if (operation != _epoch) return;
         await _queueStateOperation(operation, () async {
+          libraryScanStatus = loaded.status;
           _requireAvailablePlaylists(loaded.failedPlaylistIds);
           final oldSelectedLibraries = selectedLibraryIds;
           final oldMedia = availableMedia;
@@ -582,6 +602,11 @@ class LineupController extends ChangeNotifier {
       operation: operation,
       fallbackStage: SetupStage.channelSetup,
     );
+    if (_isCurrent(operation) && !loaded) {
+      libraryScanStatus = LibraryScanStatus.transientFailure;
+      notifyListeners();
+    }
+    return loaded;
   }
 
   Future<
@@ -589,6 +614,7 @@ class LineupController extends ChangeNotifier {
       Set<String> failedPlaylistIds,
       List<PlexMediaItem> media,
       List<PlexPlaylist> playlists,
+      LibraryScanStatus status,
     })
   >
   _loadLibraries(int operation, Set<String> ids) async {
@@ -596,29 +622,69 @@ class LineupController extends ChangeNotifier {
     if (selectedServer == null || connection == null) {
       throw const PlexException('server-unreachable', 'Select a server first.');
     }
-    final items = <PlexMediaItem>[];
-    for (final id in ids) {
-      final library = libraries.firstWhere((library) => library.id == id);
-      items.addAll(
-        await _withPmsAuthorization(
+    libraryScanStatus = LibraryScanStatus.scanning;
+    libraryScanCompletedPages = 0;
+    libraryScanCompletedItems = 0;
+    libraryScanTotalItems = null;
+    notifyListeners();
+    final selected = libraries
+        .where((library) => ids.contains(library.id))
+        .toList(growable: false);
+    final results = List<List<PlexMediaItem>?>.filled(selected.length, null);
+    final pages = List<int>.filled(selected.length, 0);
+    final itemCounts = List<int>.filled(selected.length, 0);
+    final totals = List<int?>.filled(selected.length, null);
+    var nextLibrary = 0;
+    Future<void> loadNext() async {
+      while (_isCurrent(operation)) {
+        final index = nextLibrary++;
+        if (index >= selected.length) return;
+        final library = selected[index];
+        results[index] = await _withPmsAuthorization(
           operation,
           selectedServer.id,
           (token, refreshedConnection) => plex.libraryItems(
             (refreshedConnection ?? connection!).uri,
             token,
-            id,
+            library.id,
             library.type,
+            isCurrent: () => _isCurrent(operation),
+            onProgress: (progress) {
+              if (!_isCurrent(operation)) return;
+              if (progress.completedPages > pages[index]) {
+                pages[index] = progress.completedPages;
+              }
+              if (progress.completedItems > itemCounts[index]) {
+                itemCounts[index] = progress.completedItems;
+              }
+              totals[index] = progress.totalItems ?? totals[index];
+              libraryScanCompletedPages = pages.fold(0, (a, b) => a + b);
+              libraryScanCompletedItems = itemCounts.fold(0, (a, b) => a + b);
+              libraryScanTotalItems = totals.every((total) => total != null)
+                  ? totals.whereType<int>().fold<int>(0, (a, b) => a + b)
+                  : null;
+              notifyListeners();
+            },
           ),
-        ),
-      );
-      if (operation != _epoch) {
-        return (
-          failedPlaylistIds: const <String>{},
-          media: const <PlexMediaItem>[],
-          playlists: const <PlexPlaylist>[],
         );
       }
     }
+
+    await Future.wait(
+      List.generate(selected.length.clamp(0, 4), (_) => loadNext()),
+    );
+    if (!_isCurrent(operation)) {
+      return (
+        failedPlaylistIds: const <String>{},
+        media: const <PlexMediaItem>[],
+        playlists: const <PlexPlaylist>[],
+        status: LibraryScanStatus.cancelled,
+      );
+    }
+    final items = results
+        .whereType<List<PlexMediaItem>>()
+        .expand((items) => items)
+        .toList();
     PlexPlaylistCatalog catalog;
     try {
       catalog = await _withPmsAuthorization(
@@ -639,6 +705,7 @@ class LineupController extends ChangeNotifier {
         failedPlaylistIds: const <String>{},
         media: const <PlexMediaItem>[],
         playlists: const <PlexPlaylist>[],
+        status: LibraryScanStatus.cancelled,
       );
     }
     if (catalog.failedIds.isNotEmpty) {
@@ -646,13 +713,30 @@ class LineupController extends ChangeNotifier {
         'count': catalog.failedIds.length,
       });
     }
+    final playable = items
+        .where((item) => item.duration > Duration.zero)
+        .toList();
+    final status = items.isEmpty
+        ? LibraryScanStatus.empty
+        : playable.isEmpty
+        ? LibraryScanStatus.unsupported
+        : LibraryScanStatus.complete;
     return (
       failedPlaylistIds: Set<String>.unmodifiable(catalog.failedIds),
-      media: List<PlexMediaItem>.unmodifiable(
-        items.where((item) => item.duration > Duration.zero),
-      ),
+      media: List<PlexMediaItem>.unmodifiable(playable),
       playlists: List<PlexPlaylist>.unmodifiable(catalog.playlists),
+      status: status,
     );
+  }
+
+  void cancelLibraryScan() {
+    if (libraryScanStatus != LibraryScanStatus.scanning) return;
+    ++_epoch;
+    _busyOperation = null;
+    busy = false;
+    error = null;
+    libraryScanStatus = LibraryScanStatus.cancelled;
+    notifyListeners();
   }
 
   void _requireAvailablePlaylists(Set<String> failedIds) {
@@ -693,6 +777,7 @@ class LineupController extends ChangeNotifier {
 
   void cancelChannelSetup() {
     if (channelSetupCanCancel) {
+      cancelLibraryScan();
       channelSetupCanCancel = false;
       error = null;
       stage = SetupStage.ready;
@@ -1207,6 +1292,7 @@ class LineupController extends ChangeNotifier {
     selectedLibraryIds = const {};
     availableMedia = const [];
     availablePlaylists = const [];
+    _resetLibraryScan();
     channels = const [];
     currentChannelId = null;
     _scheduleWorker?.dispose();
@@ -1214,6 +1300,13 @@ class LineupController extends ChangeNotifier {
     _scheduleWorkerMedia = null;
     _scheduleWorkerPlaylists = null;
     _contentGeneration++;
+  }
+
+  void _resetLibraryScan() {
+    libraryScanStatus = LibraryScanStatus.idle;
+    libraryScanCompletedPages = 0;
+    libraryScanCompletedItems = 0;
+    libraryScanTotalItems = null;
   }
 
   Future<T> _withPmsAuthorization<T>(
