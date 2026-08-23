@@ -8,7 +8,6 @@ import 'package:http/http.dart' as http;
 import 'package:xml/xml.dart';
 
 import '../channels/channel.dart';
-import '../playback/stream_policy.dart';
 import 'plex_models.dart';
 
 class PlexServerAccess {
@@ -469,7 +468,6 @@ class PlexClient {
   PlexPlaybackDescriptor playbackDescriptor({
     required Uri server,
     required PlexMediaItem item,
-    required StreamCapabilities capabilities,
   }) {
     final mediaParts = item.parts;
     if (mediaParts.isEmpty) {
@@ -478,75 +476,15 @@ class PlexClient {
         'This item has no playable media part.',
       );
     }
-    for (final part in mediaParts) {
-      _directPlayUri(server, part.path);
-    }
-    final decision = decideStream(
-      StreamFacts(
-        container: item.container,
-        videoCodec: item.videoCodec,
-        audioCodec: item.audioCodec,
-        dynamicRange: item.dynamicRange,
-      ),
-      capabilities,
-    );
-    if (decision.kind == StreamDecisionKind.unsupported) {
-      throw PlexException('unsupported', decision.reasons.join(' '));
-    }
     return PlexPlaybackDescriptor(
-      decision: decision,
       parts: List.unmodifiable([
-        for (var index = 0; index < mediaParts.length; index++)
-          _playbackPartDescriptor(
-            server: server,
-            item: item,
-            part: mediaParts[index],
-            partIndex: index,
-            decision: decision,
+        for (final part in mediaParts)
+          PlexPlaybackPartDescriptor(
+            uri: _directPlayUri(server, part.path),
+            sessionId: _randomId(),
+            duration: part.duration,
           ),
       ]),
-    );
-  }
-
-  PlexPlaybackPartDescriptor _playbackPartDescriptor({
-    required Uri server,
-    required PlexMediaItem item,
-    required PlexMediaPart part,
-    required int partIndex,
-    required StreamDecision decision,
-  }) {
-    final session = _randomId();
-    final uri = decision.kind == StreamDecisionKind.directPlay
-        ? _directPlayUri(server, part.path)
-        : server
-              .resolve('/video/:/transcode/universal/start.m3u8')
-              .replace(
-                queryParameters: {
-                  'path': item.key,
-                  'mediaIndex': '0',
-                  'partIndex': '$partIndex',
-                  'protocol': 'hls',
-                  'session': session,
-                  'directPlay': '0',
-                  'directStream':
-                      decision.kind == StreamDecisionKind.directStream
-                      ? '1'
-                      : '0',
-                  'directStreamAudio':
-                      decision.kind == StreamDecisionKind.directStream
-                      ? '1'
-                      : '0',
-                  'fastSeek': '1',
-                  'X-Plex-Client-Identifier': clientIdentifier,
-                  'X-Plex-Product': 'Lineup Desktop',
-                  'X-Plex-Version': '0.1.0',
-                  'X-Plex-Platform': Platform.operatingSystem,
-                },
-              );
-    return PlexPlaybackPartDescriptor(
-      uri: uri,
-      sessionId: session,
-      duration: part.duration,
     );
   }
 
@@ -694,8 +632,9 @@ PlexMediaItem parseMediaItem(Object? raw, {String? libraryId}) {
     for (final rawPart in media?['Part'] as List? ?? const [])
       if (rawPart is Map) _parseMediaPart(rawPart),
   ];
-  final part = parts.firstOrNull;
-  final streams = part?.tracks ?? const <PlexTrack>[];
+  final firstPart = (media?['Part'] as List? ?? const [])
+      .whereType<Map>()
+      .firstOrNull;
   return PlexMediaItem(
     id: _id(json['ratingKey'], 'media id'),
     key: _text(json['key'], 'media key'),
@@ -713,7 +652,7 @@ PlexMediaItem parseMediaItem(Object? raw, {String? libraryId}) {
     container: _optionalText(media?['container'])?.toLowerCase(),
     videoCodec: _optionalText(media?['videoCodec'])?.toLowerCase(),
     audioCodec: _optionalText(media?['audioCodec'])?.toLowerCase(),
-    dynamicRange: _dynamicRange(media, streams),
+    dynamicRange: _dynamicRange(media, _streamCodecs(firstPart)),
     genres: _tagNames(json['Genre']),
     collections: _tagNames(json['Collection']),
     directors: _tagNames(json['Director']),
@@ -734,33 +673,18 @@ PlexMediaItem parseMediaItem(Object? raw, {String? libraryId}) {
 PlexMediaPart _parseMediaPart(Map raw) {
   final path = _text(raw['key'], 'media part path');
   final milliseconds = _optionalInteger(raw['duration']);
-  final streams = <PlexTrack>[];
-  for (final rawStream in raw['Stream'] as List? ?? const []) {
-    final stream = _record(rawStream, 'stream');
-    final type = _integer(stream['streamType'], 'stream type');
-    final codec = _text(stream['codec'], 'stream codec').toLowerCase();
-    streams.add(
-      PlexTrack(
-        id: _id(stream['id'], 'stream id'),
-        type: type,
-        codec: codec,
-        language: _optionalText(stream['languageCode'] ?? stream['language']),
-        selected: _boolean(stream['selected']),
-        isDefault: _boolean(stream['default']),
-        forced: _boolean(stream['forced']),
-        delivery: type == 3
-            ? _subtitleDelivery(codec, _optionalText(stream['key']))
-            : null,
-      ),
-    );
-  }
   return PlexMediaPart(
     path: path,
     duration: milliseconds != null && milliseconds > 0
         ? Duration(milliseconds: milliseconds)
         : null,
-    tracks: List.unmodifiable(streams),
   );
+}
+
+Iterable<String> _streamCodecs(Map? part) sync* {
+  for (final rawStream in part?['Stream'] as List? ?? const []) {
+    if (rawStream case {'codec': final String codec}) yield codec;
+  }
 }
 
 String? _clearLogoPath(Object? raw) {
@@ -989,22 +913,12 @@ String? _findTokenInXml(String body) {
   return null;
 }
 
-SubtitleDelivery _subtitleDelivery(String codec, String? key) {
-  if ({'pgs', 'vobsub', 'dvd_subtitle'}.contains(codec)) {
-    return SubtitleDelivery.embedded;
-  }
-  if ({'ass', 'ssa', 'srt', 'webvtt'}.contains(codec)) {
-    return key == null ? SubtitleDelivery.embedded : SubtitleDelivery.sidecar;
-  }
-  return key == null ? SubtitleDelivery.unknown : SubtitleDelivery.external;
-}
-
-DynamicRange _dynamicRange(Map? media, List<PlexTrack> tracks) {
+DynamicRange _dynamicRange(Map? media, Iterable<String> streamCodecs) {
   if (_boolean(media?['DOVIPresent']) || media?['DOVIProfile'] != null) {
     return DynamicRange.dolbyVision;
   }
   final facts =
-      '${media?['videoDynamicRange']} ${media?['DOVIProfile']} ${media?['DOVIPresent']} ${tracks.map((track) => track.codec).join(' ')}'
+      '${media?['videoDynamicRange']} ${media?['DOVIProfile']} ${media?['DOVIPresent']} ${streamCodecs.join(' ')}'
           .toLowerCase();
   if (facts.contains('dovi') || facts.contains('dolby vision')) {
     return DynamicRange.dolbyVision;

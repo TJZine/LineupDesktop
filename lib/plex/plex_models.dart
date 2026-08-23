@@ -1,5 +1,6 @@
 import '../channels/channel.dart';
-import '../playback/stream_policy.dart';
+
+enum DynamicRange { sdr, hdr10, hlg, dolbyVision, unknown }
 
 class PlexAccount {
   const PlexAccount({
@@ -121,35 +122,12 @@ class PlexLibraryPageProgress {
   final int? totalItems;
 }
 
-class PlexTrack {
-  const PlexTrack({
-    required this.id,
-    required this.type,
-    required this.codec,
-    this.language,
-    this.selected = false,
-    this.isDefault = false,
-    this.forced = false,
-    this.delivery,
-  });
-
-  final String id;
-  final int type;
-  final String codec;
-  final String? language;
-  final bool selected;
-  final bool isDefault;
-  final bool forced;
-  final SubtitleDelivery? delivery;
-}
-
 class PlexMediaPart {
-  PlexMediaPart({required this.path, this.duration, this.tracks = const []})
+  PlexMediaPart({required this.path, this.duration})
     : assert(duration == null || duration.inMicroseconds > 0);
 
   final String path;
   final Duration? duration;
-  final List<PlexTrack> tracks;
 }
 
 class PlexMediaItem {
@@ -233,10 +211,9 @@ class PlexPlaybackPartDescriptor {
 }
 
 class PlexPlaybackDescriptor {
-  const PlexPlaybackDescriptor({required this.decision, required this.parts})
+  const PlexPlaybackDescriptor({required this.parts})
     : assert(parts.length > 0);
 
-  final StreamDecision decision;
   final List<PlexPlaybackPartDescriptor> parts;
 }
 

@@ -7,7 +7,6 @@ import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/channels/channel_builder.dart';
 import 'package:lineup_desktop/persistence/app_store.dart';
-import 'package:lineup_desktop/playback/stream_policy.dart';
 import 'package:lineup_desktop/plex/plex_client.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
@@ -93,7 +92,6 @@ void main() {
     await controller.setLibraries({'movies'});
     await controller.artworkForPath(Uri.parse('/art'));
     plex.playbackDescriptorResult = PlexPlaybackDescriptor(
-      decision: const StreamDecision(StreamDecisionKind.directPlay, []),
       parts: [
         PlexPlaybackPartDescriptor(
           uri: Uri.parse('https://plex.example/one.mp4'),
@@ -2634,14 +2632,9 @@ class _FakePlex extends PlexClient {
   PlexPlaybackDescriptor playbackDescriptor({
     required Uri server,
     required PlexMediaItem item,
-    required StreamCapabilities capabilities,
   }) =>
       playbackDescriptorResult ??
-      super.playbackDescriptor(
-        server: server,
-        item: item,
-        capabilities: capabilities,
-      );
+      super.playbackDescriptor(server: server, item: item);
 
   @override
   Future<void> releasePlaybackSession({

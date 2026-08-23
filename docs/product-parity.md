@@ -196,10 +196,10 @@ without placing credentials in public facts, durable state, URLs, or diagnostics
 | Capability | Upstream behavior/reference | Current Desktop behavior | Classification | Priority | Confidence | Evidence | Owner / next action |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Single playback owner | HTML5 player/recovery owners | One `PlayerCoordinator`, one native player, generations and serialized tune operations | PARITY | — | HIGH | `lib/playback/player_coordinator.dart`; coordinator tests | Playback |
-| Format-open original-stream playback | Browser/webOS scores codecs, containers, audio, subtitles, and HDR before playback | Production sends the original PMS part to pinned libmpv with no application codec/container/HDR allowlist; libmpv/FFmpeg owns demux, video/audio decode, PCM conversion, rendering, hardware-decode attempts, and tone mapping | DESKTOP-ENHANCED | — | HIGH | `lib/app/lineup_controller.dart`; `lib/playback/stream_policy.dart`; `windows/runner/native_player.cpp`; `docs/architecture.md` | Preserve native-first ownership; never promise literally every file without bounded evidence |
+| Format-open original-stream playback | Browser/webOS scores codecs, containers, audio, subtitles, and HDR before playback | Production sends the original PMS part to pinned libmpv with no application codec/container/HDR allowlist; libmpv/FFmpeg owns demux, video/audio decode, PCM conversion, rendering, hardware-decode attempts, and tone mapping | DESKTOP-ENHANCED | — | HIGH | `lib/app/lineup_controller.dart`; `windows/runner/native_player.cpp`; `docs/architecture.md` | Preserve native-first ownership; never promise literally every file without bounded evidence |
 | Multi-part media playback | Plays every sequential part of a Plex media item | The selected first media version retains every ordered part and continues them under one Flutter-owned tune, native-load generation, and aggregate release lifetime | PARITY | — | HIGH | Plex parser/transport and Player coordinator tests cover known/unknown timing, seek, natural completion, stale events, replacement, and release | Playback |
 | Multiple media-version selection | Scores/selects among alternate Plex `Media` versions | Parser retains only the first `Media`; libmpv openness lowers codec urgency, but users cannot choose edition/quality/version | MISSING | P2 | HIGH | `lib/plex/plex_client.dart`; no multi-version model/UI fixture | Define default/chooser behavior before implementing a version inventory |
-| Server remux/transcode fallback | HLS when browser/container/codec/resolution/subtitle/HDR policy requires it | Production intentionally uses unrestricted native Direct Play; dormant policy can model remux/transcode but has no runtime capability or remote-quality consumer | BLOCKED BY DECISION | P2 | HIGH | `lib/playback/stream_policy.dart`; `lib/app/lineup_controller.dart`; `docs/architecture.md` | Decide only for bandwidth-limited remote quality or demonstrated libmpv failures; do not recreate browser fallback by default |
+| Server remux/transcode fallback | HLS when browser/container/codec/resolution/subtitle/HDR policy requires it | Production intentionally uses unrestricted native Direct Play and has no remux/transcode implementation or remote-quality consumer | INTENTIONALLY OMITTED | — | HIGH | `lib/app/lineup_controller.dart`; `docs/architecture.md` | Add only for an accepted bandwidth policy or demonstrated libmpv failure; do not recreate browser fallback by default |
 | Remote quality selection | User transcode tiers applied to Plex resolver | No production transcode/quality consumer | MISSING | P2 | HIGH | Upstream `transcodeQuality.ts`; no Desktop consumer | Add only with real transcode path |
 | Native HDR decode/output/tone mapping | Browser policy chooses Direct/HDR10/HLS fallback | libmpv accepts original HDR-family streams and owns decode/render/tone mapping; owner reports surface playback working, but representative HDR-output evidence is not recorded | NEEDS EVIDENCE | P2 | MEDIUM | Owner report 2026-08-23; native telemetry/options; `docs/architecture.md`; Windows acceptance plan | Later representative HDR/DV display matrix; add server fallback only for an observed failure class |
 | Load/retry surface and resource cleanup | Typed retry/reload and diagnostics | Recoverable error overlay, same-path retry, stale-load rejection, and lease release | PARITY | — | HIGH | `lib/playback/player_coordinator.dart`; tests | Compatibility fallback is classified separately above |
@@ -449,12 +449,12 @@ The matrix contains **147 capabilities**:
 - 14 **INTENTIONAL DESKTOP ADAPTATION**;
 - 16 **PARTIAL**;
 - 13 **MISSING**;
-- 8 **INTENTIONALLY OMITTED**;
+- 9 **INTENTIONALLY OMITTED**;
 - 6 **NOT APPLICABLE**;
 - 8 **NEEDS EVIDENCE**; and
-- 8 **BLOCKED BY DECISION**.
+- 7 **BLOCKED BY DECISION**.
 
-The actionable/decision rows contain 0 P0, 0 P1, 34 P2, and 11 P3
+The actionable/decision rows contain 0 P0, 0 P1, 33 P2, and 11 P3
 dispositions. Counts are literal matrix rows, not a quality-weighted percentage.
 
 - **Core daily-use parity:** the audited P0/P1 application gaps are implemented
@@ -484,7 +484,7 @@ against current Dart/C++ ownership:
 | Whole-state save transactions | Closed deterministically | One controller queue covers cross-domain snapshot/save/commit/rollback races. |
 | Corrupt/transient state recovery | Closed deterministically | Malformed or schema-invalid JSON is quarantined; transient and quarantine failures stop startup, while recovery is visible. |
 | Media-version/part selection | Split; multi-part closed | Ordered parts of the selected first version continue deterministically; alternate-version choice remains P2. |
-| Direct Stream/transcode fallback | Move to P2 decision | Native libmpv Direct Play is intentionally format-open. Add server fallback only for bandwidth policy or demonstrated failures. |
+| Direct Stream/transcode fallback | Intentionally omitted | Native libmpv Direct Play is intentionally format-open. Add server fallback only for an accepted bandwidth policy or demonstrated failures. |
 | HDR compatibility/fallback | Move to P2 evidence | Native decode/tone mapping is the primary design; prove representative output instead of importing browser fallback policy. |
 | OSD accessibility-focus timeout | Closed deterministically | OSD and mini Guide timers suspend for keyboard descendant focus and reject stale callbacks. |
 | Reduce Motion in Player overlays | Closed deterministically | Effective Reduce Motion makes Player transition durations zero. |

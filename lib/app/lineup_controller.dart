@@ -9,7 +9,6 @@ import '../channels/scheduler.dart';
 import '../channels/schedule_worker.dart';
 import '../diagnostics/diagnostics.dart';
 import '../persistence/app_store.dart';
-import '../playback/stream_policy.dart';
 import '../plex/plex_client.dart';
 import '../plex/plex_models.dart';
 import '../settings/lineup_settings.dart';
@@ -997,13 +996,9 @@ class LineupController extends ChangeNotifier {
     String serverId,
     int operation,
   ) {
-    final descriptor = plex.playbackDescriptor(
-      server: endpoint,
-      item: item,
-      capabilities: const StreamCapabilities.unrestricted(),
-    );
+    final descriptor = plex.playbackDescriptor(server: endpoint, item: item);
     diagnostics.add('playback', 'Plex playback selected', {
-      'mode': descriptor.decision.kind.name,
+      'mode': 'directPlay',
       'container': item.container,
       'videoCodec': item.videoCodec,
       'audioCodec': item.audioCodec,

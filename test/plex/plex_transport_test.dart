@@ -5,7 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:lineup_desktop/channels/channel.dart';
-import 'package:lineup_desktop/playback/stream_policy.dart';
 import 'package:lineup_desktop/plex/plex_client.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
 
@@ -432,32 +431,6 @@ void main() {
     expect(probed.length, 8);
   });
 
-  test('playback descriptors reject unsupported facts', () {
-    final client = PlexClient(
-      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
-    );
-    expect(
-      () => client.playbackDescriptor(
-        server: Uri.parse('https://plex.example:32400'),
-        item: PlexMediaItem(
-          id: '1',
-          key: '/library/metadata/1',
-          title: 'Movie',
-          type: 'movie',
-          duration: Duration(minutes: 1),
-          parts: [PlexMediaPart(path: '/library/parts/1/file.mkv')],
-          dynamicRange: DynamicRange.unknown,
-        ),
-        capabilities: const StreamCapabilities(
-          containers: {'mkv'},
-          videoCodecs: {'h264'},
-          audioCodecs: {'aac'},
-        ),
-      ),
-      throwsA(isA<PlexException>()),
-    );
-  });
-
   test('an empty ordered part list is unsupported media', () {
     final client = PlexClient(
       clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
@@ -472,7 +445,6 @@ void main() {
           type: 'movie',
           duration: Duration.zero,
         ),
-        capabilities: const StreamCapabilities.unrestricted(),
       ),
       throwsA(
         isA<PlexException>().having(
@@ -487,7 +459,6 @@ void main() {
   test('direct play retains the selected Plex server origin', () {
     final descriptor = _directPlaybackDescriptor('/library/parts/1/file.mkv');
 
-    expect(descriptor.decision.kind, StreamDecisionKind.directPlay);
     expect(
       descriptor.parts.single.uri,
       Uri.parse('https://plex.example:32400/library/parts/1/file.mkv'),
@@ -520,7 +491,6 @@ void main() {
           audioCodec: 'aac',
           dynamicRange: DynamicRange.sdr,
         ),
-        capabilities: const StreamCapabilities.unrestricted(),
       );
 
       expect(descriptor.parts.map((part) => part.uri), [
@@ -562,11 +532,6 @@ void main() {
           audioCodec: 'aac',
           dynamicRange: DynamicRange.sdr,
         ),
-        capabilities: const StreamCapabilities(
-          containers: {'mp4'},
-          videoCodecs: {'h264'},
-          audioCodecs: {'aac'},
-        ),
       ),
       throwsA(isA<PlexException>()),
     );
@@ -592,86 +557,6 @@ void main() {
       );
     });
   }
-
-  test('direct stream uses the Plex universal HLS contract', () {
-    final client = PlexClient(
-      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
-    );
-    final descriptor = client.playbackDescriptor(
-      server: Uri.parse('https://plex.example:32400'),
-      item: PlexMediaItem(
-        id: '1',
-        key: '/library/metadata/1',
-        title: 'Movie',
-        type: 'movie',
-        duration: Duration(minutes: 1),
-        parts: [PlexMediaPart(path: '/library/parts/1/file.mkv')],
-        container: 'mkv',
-        videoCodec: 'h264',
-        audioCodec: 'aac',
-        dynamicRange: DynamicRange.sdr,
-      ),
-      capabilities: const StreamCapabilities(
-        containers: {'mp4'},
-        videoCodecs: {'h264'},
-        audioCodecs: {'aac'},
-      ),
-    );
-    expect(descriptor.decision.kind, StreamDecisionKind.directStream);
-    expect(
-      descriptor.parts.single.uri.queryParameters,
-      containsPair('path', '/library/metadata/1'),
-    );
-    final uri = descriptor.parts.single.uri;
-    expect(uri.path, '/video/:/transcode/universal/start.m3u8');
-    expect(uri.queryParameters, containsPair('protocol', 'hls'));
-    expect(uri.queryParameters, containsPair('mediaIndex', '0'));
-    expect(uri.queryParameters, containsPair('partIndex', '0'));
-    expect(uri.queryParameters, containsPair('directPlay', '0'));
-    expect(uri.queryParameters, containsPair('directStream', '1'));
-    expect(
-      uri.queryParameters,
-      containsPair(
-        'X-Plex-Client-Identifier',
-        'lineup-desktop-test-abcdefghijklmnopqrst',
-      ),
-    );
-    expect(
-      uri.queryParameters.keys.map((key) => key.toLowerCase()),
-      isNot(contains('x-plex-token')),
-    );
-  });
-
-  test('transcode disables direct play and direct stream', () {
-    final descriptor =
-        PlexClient(clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst')
-            .playbackDescriptor(
-              server: Uri.parse('https://plex.example:32400'),
-              item: PlexMediaItem(
-                id: '1',
-                key: '/library/metadata/1',
-                title: 'Movie',
-                type: 'movie',
-                duration: Duration(minutes: 1),
-                parts: [PlexMediaPart(path: '/library/parts/1/file.mkv')],
-                container: 'mkv',
-                videoCodec: 'vc1',
-                audioCodec: 'dca',
-                dynamicRange: DynamicRange.sdr,
-              ),
-              capabilities: const StreamCapabilities(
-                containers: {'mkv'},
-                videoCodecs: {'h264'},
-                audioCodecs: {'dca'},
-              ),
-            );
-
-    expect(descriptor.decision.kind, StreamDecisionKind.transcode);
-    final uri = descriptor.parts.single.uri;
-    expect(uri.queryParameters, containsPair('directPlay', '0'));
-    expect(uri.queryParameters, containsPair('directStream', '0'));
-    expect(uri.queryParameters, containsPair('directStreamAudio', '0'));
-  });
 
   group('artwork transport', () {
     Matcher plexError(String code) => throwsA(
@@ -1136,5 +1021,4 @@ PlexPlaybackDescriptor _directPlaybackDescriptor(String partPath) =>
             audioCodec: 'aac',
             dynamicRange: DynamicRange.sdr,
           ),
-          capabilities: const StreamCapabilities.unrestricted(),
         );

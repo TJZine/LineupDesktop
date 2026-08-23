@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:lineup_desktop/playback/stream_policy.dart';
 import 'package:lineup_desktop/plex/plex_client.dart';
+import 'package:lineup_desktop/plex/plex_models.dart';
 
 void main() {
   test('parses collection metadata for builder sources', () {
@@ -17,7 +17,7 @@ void main() {
     expect(item.collections, ['Friday Night']);
   });
 
-  test('parses media, part, streams, and Dolby Vision facts', () {
+  test('parses media, part, and Dolby Vision facts', () {
     final item = parseMediaItem({
       'ratingKey': '42',
       'key': '/library/metadata/42',
@@ -36,13 +36,11 @@ void main() {
           'audioCodec': 'EAC3',
           'videoResolution': '4k',
           'audioChannels': 6,
-          'DOVIPresent': true,
           'Part': [
             {
               'key': '/library/parts/1/file.mkv',
               'Stream': [
-                {'id': 1, 'streamType': 2, 'codec': 'eac3', 'selected': 1},
-                {'id': 2, 'streamType': 3, 'codec': 'srt', 'key': '/subs/2'},
+                {'codec': 'dovi'},
               ],
             },
           ],
@@ -52,7 +50,6 @@ void main() {
     expect(item.container, 'mkv');
     expect(item.videoCodec, 'hevc');
     expect(item.dynamicRange, DynamicRange.dolbyVision);
-    expect(item.parts.first.tracks.last.delivery, SubtitleDelivery.sidecar);
     expect(item.summary, 'A first episode.');
     expect(item.contentRating, 'TV-14');
     expect(item.seasonNumber, 1);
@@ -74,20 +71,8 @@ void main() {
           'videoCodec': 'h264',
           'audioCodec': 'aac',
           'Part': [
-            {
-              'key': '/library/parts/one.mkv',
-              'duration': 1000,
-              'Stream': [
-                {'id': 1, 'streamType': 2, 'codec': 'aac', 'selected': 1},
-              ],
-            },
-            {
-              'key': '/library/parts/two.mkv',
-              'duration': 0,
-              'Stream': [
-                {'id': 2, 'streamType': 3, 'codec': 'srt'},
-              ],
-            },
+            {'key': '/library/parts/one.mkv', 'duration': 1000},
+            {'key': '/library/parts/two.mkv', 'duration': 0},
             {'key': '/library/parts/three.mkv', 'duration': -1},
           ],
         },
@@ -110,8 +95,6 @@ void main() {
       null,
       null,
     ]);
-    expect(item.parts[0].tracks.single.id, '1');
-    expect(item.parts[1].tracks.single.id, '2');
   });
 
   test(
