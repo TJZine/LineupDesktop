@@ -1315,7 +1315,6 @@ class PlayerCoordinator extends ChangeNotifier {
   Future<void>? _beginNativeStop({bool force = false}) {
     final pending = _nativeStopOperation;
     if (pending != null) {
-      _retirePlaybackIntent();
       return pending;
     }
     if (!force && _activeLoadGeneration == null) return null;
