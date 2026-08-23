@@ -356,14 +356,14 @@ class PlexClient {
     String token,
     String libraryId,
     PlexLibraryType libraryType, {
-    bool Function()? isCurrent,
-    void Function(PlexLibraryPageProgress progress)? onProgress,
+    required bool Function() isCurrent,
+    required void Function(PlexLibraryPageProgress progress) onProgress,
   }) async {
     final output = <PlexMediaItem>[];
     var start = 0;
     const pageSize = 100;
     for (var page = 0; page < 1000; page++) {
-      if (isCurrent?.call() == false) {
+      if (!isCurrent()) {
         throw const PlexException('cancelled', 'Library scan cancelled.');
       }
       final uri = server
@@ -380,20 +380,18 @@ class PlexClient {
       output.addAll(
         metadata.map((item) => parseMediaItem(item, libraryId: libraryId)),
       );
-      if (isCurrent?.call() == false) {
+      if (!isCurrent()) {
         throw const PlexException('cancelled', 'Library scan cancelled.');
       }
       final container = json['MediaContainer'];
       final totalItems = container is Map
           ? _optionalInteger(container['totalSize'])
           : null;
-      onProgress?.call(
-        PlexLibraryPageProgress(
-          completedPages: page + 1,
-          completedItems: output.length,
-          totalItems: totalItems,
-        ),
-      );
+      onProgress((
+        completedPages: page + 1,
+        completedItems: output.length,
+        totalItems: totalItems,
+      ));
       if (metadata.length < pageSize ||
           (totalItems != null &&
               totalItems >= 0 &&

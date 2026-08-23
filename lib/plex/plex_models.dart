@@ -110,17 +110,11 @@ class PlexPlaylistCatalog {
   final Set<String> failedIds;
 }
 
-class PlexLibraryPageProgress {
-  const PlexLibraryPageProgress({
-    required this.completedPages,
-    required this.completedItems,
-    required this.totalItems,
-  });
-
-  final int completedPages;
-  final int completedItems;
-  final int? totalItems;
-}
+typedef PlexLibraryPageProgress = ({
+  int completedPages,
+  int completedItems,
+  int? totalItems,
+});
 
 class PlexMediaPart {
   PlexMediaPart({required this.path, this.duration})

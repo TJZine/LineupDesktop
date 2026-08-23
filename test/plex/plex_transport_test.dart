@@ -760,6 +760,8 @@ void main() {
         'secret',
         '7',
         PlexLibraryType.show,
+        isCurrent: () => true,
+        onProgress: (_) {},
       );
       final playlists = await client.playlists(
         Uri.parse('https://plex.example:32400'),
@@ -817,6 +819,7 @@ void main() {
         'secret',
         '7',
         PlexLibraryType.movie,
+        isCurrent: () => true,
         onProgress: progress.add,
       );
 
@@ -870,6 +873,7 @@ void main() {
         '7',
         PlexLibraryType.movie,
         isCurrent: () => current,
+        onProgress: (_) {},
       ),
       throwsA(
         isA<PlexException>().having((error) => error.code, 'code', 'cancelled'),
@@ -910,6 +914,8 @@ void main() {
         'secret',
         '7',
         PlexLibraryType.movie,
+        isCurrent: () => true,
+        onProgress: (_) {},
       );
 
       expect(items, hasLength(100000));
@@ -950,6 +956,8 @@ void main() {
           'secret',
           '7',
           PlexLibraryType.movie,
+          isCurrent: () => true,
+          onProgress: (_) {},
         ),
         throwsA(
           isA<PlexException>().having(

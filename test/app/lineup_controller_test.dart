@@ -662,16 +662,14 @@ void main() {
             final index = int.parse(libraryId.split('-').last);
             await Future<void>.delayed(Duration(milliseconds: 6 - index));
             active--;
-            if (isCurrent?.call() == false) {
+            if (!isCurrent()) {
               throw const PlexException('cancelled', 'cancelled');
             }
-            onProgress?.call(
-              const PlexLibraryPageProgress(
-                completedPages: 1,
-                completedItems: 1,
-                totalItems: 1,
-              ),
-            );
+            onProgress(const (
+              completedPages: 1,
+              completedItems: 1,
+              totalItems: 1,
+            ));
             return [
               PlexMediaItem(
                 id: libraryId,
@@ -741,29 +739,23 @@ void main() {
         ..libraryItemsScanHandler = (_, _, libraryId, _, _, onProgress) async {
           calls++;
           if (calls == 1) {
-            onProgress?.call(
-              const PlexLibraryPageProgress(
-                completedPages: 2,
-                completedItems: 2,
-                totalItems: 3,
-              ),
-            );
+            onProgress(const (
+              completedPages: 2,
+              completedItems: 2,
+              totalItems: 3,
+            ));
             throw const PlexException('auth-required', 'refresh');
           }
-          onProgress?.call(
-            const PlexLibraryPageProgress(
-              completedPages: 1,
-              completedItems: 1,
-              totalItems: 3,
-            ),
-          );
-          onProgress?.call(
-            const PlexLibraryPageProgress(
-              completedPages: 3,
-              completedItems: 3,
-              totalItems: 3,
-            ),
-          );
+          onProgress(const (
+            completedPages: 1,
+            completedItems: 1,
+            totalItems: 3,
+          ));
+          onProgress(const (
+            completedPages: 3,
+            completedItems: 3,
+            totalItems: 3,
+          ));
           return [
             for (var index = 0; index < 3; index++)
               PlexMediaItem(
@@ -819,17 +811,15 @@ void main() {
             if (libraryId == 'first') {
               firstStarted.complete();
               await releaseFirst.future;
-              if (isCurrent?.call() == false) {
+              if (!isCurrent()) {
                 throw const PlexException('cancelled', 'cancelled');
               }
             }
-            onProgress?.call(
-              const PlexLibraryPageProgress(
-                completedPages: 1,
-                completedItems: 1,
-                totalItems: 1,
-              ),
-            );
+            onProgress(const (
+              completedPages: 1,
+              completedItems: 1,
+              totalItems: 1,
+            ));
             return [
               PlexMediaItem(
                 id: libraryId,
@@ -900,7 +890,7 @@ void main() {
         ..libraryItemsScanHandler = (_, _, _, _, isCurrent, _) async {
           started.complete();
           await release.future;
-          if (isCurrent?.call() == false) {
+          if (!isCurrent()) {
             throw const PlexException('cancelled', 'cancelled');
           }
           return const [];
@@ -960,7 +950,7 @@ void main() {
         started.add(libraryId);
         if (started.length == 4) fourStarted.complete();
         await release.future;
-        if (isCurrent?.call() == false) {
+        if (!isCurrent()) {
           throw const PlexException('cancelled', 'cancelled');
         }
         return const [];
@@ -2475,8 +2465,8 @@ class _FakePlex extends PlexClient {
     String,
     String,
     PlexLibraryType,
-    bool Function()?,
-    void Function(PlexLibraryPageProgress)?,
+    bool Function(),
+    void Function(PlexLibraryPageProgress),
   )?
   libraryItemsScanHandler;
   Future<List<PlexLibrary>> Function(Uri, String)? librariesHandler;
@@ -2582,8 +2572,8 @@ class _FakePlex extends PlexClient {
     String token,
     String libraryId,
     PlexLibraryType libraryType, {
-    bool Function()? isCurrent,
-    void Function(PlexLibraryPageProgress progress)? onProgress,
+    required bool Function() isCurrent,
+    required void Function(PlexLibraryPageProgress progress) onProgress,
   }) async {
     itemTokens.add(token);
     final scanHandler = libraryItemsScanHandler;
