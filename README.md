@@ -7,8 +7,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/TJZine/LineupDesktop/actions/workflows/ci.yml?query=branch%3Areplatform%2Fflutter-native">
-    <img src="https://github.com/TJZine/LineupDesktop/actions/workflows/ci.yml/badge.svg?branch=replatform%2Fflutter-native" alt="CI status">
+  <a href="https://github.com/TJZine/LineupDesktop/actions/workflows/ci.yml?query=branch%3Aflutter-mvp">
+    <img src="https://github.com/TJZine/LineupDesktop/actions/workflows/ci.yml/badge.svg?branch=flutter-mvp" alt="CI status">
   </a>
   <a href="LICENSE">
     <img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="Apache 2.0 license">
@@ -119,8 +119,9 @@ unredacted diagnostics in issues or pull requests.
 ## Project status
 
 The Flutter-native replatform is the active implementation. The historical
-Electron/TypeScript/C# code remains on `initial-build` as reference material,
-not as a compatibility target.
+Electron/TypeScript/C# source is preserved on `electron-ui` at the immutable
+`bfaee636748f2a0d442f3690b7ba5262d32ff17c` baseline. `initial-build` is a
+later Flutter-replatform milestone; neither branch is a compatibility target.
 
 The principal remaining release work is physical Windows acceptance of native
 video composition, replacement playback, hardware decode, HDR behavior,

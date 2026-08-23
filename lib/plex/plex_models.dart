@@ -142,7 +142,9 @@ class PlexMediaItem {
     this.parentTitle,
     this.grandparentTitle,
     this.thumbPath,
+    this.grandparentThumbPath,
     this.artPath,
+    this.clearLogoPath,
     this.partPath,
     this.container,
     this.videoCodec,
@@ -155,6 +157,12 @@ class PlexMediaItem {
     this.actors = const [],
     this.studio,
     this.year,
+    this.summary,
+    this.contentRating,
+    this.seasonNumber,
+    this.episodeNumber,
+    this.videoResolution,
+    this.audioChannels,
     this.addedAt,
     this.viewed = false,
   });
@@ -168,7 +176,9 @@ class PlexMediaItem {
   final String? parentTitle;
   final String? grandparentTitle;
   final String? thumbPath;
+  final String? grandparentThumbPath;
   final String? artPath;
+  final String? clearLogoPath;
   final String? partPath;
   final String? container;
   final String? videoCodec;
@@ -181,6 +191,12 @@ class PlexMediaItem {
   final List<String> actors;
   final String? studio;
   final int? year;
+  final String? summary;
+  final String? contentRating;
+  final int? seasonNumber;
+  final int? episodeNumber;
+  final String? videoResolution;
+  final int? audioChannels;
   final DateTime? addedAt;
   final bool viewed;
 }

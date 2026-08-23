@@ -1,5 +1,14 @@
 # Portable UI parity
 
+> [!IMPORTANT]
+> This is a historical, campaign-scoped visual evidence record. For current
+> product classifications, evidence gaps, priorities, and release conclusions,
+> use [Definitive Product Parity](product-parity.md). In particular, current
+> source does not retain the historical 256-program projection ceiling, OSD
+> auto-hide does not suspend for focused controls, and Player overlay motion is
+> not yet covered by Reduce Motion. Those corrections are adjudicated in the
+> current audit without rewriting the original campaign boundaries below.
+
 This document is the source record for Prompt 3B and Prompt 4B portable UI
 parity, the full Prompt 4C source-defined theme and shell refinement, Prompt 4D
 portable functionality and recovery hardening, and Prompt 4E unlocked portable
@@ -419,8 +428,8 @@ native video/presentation acceptance.
 | Channel reorder, copy, import/export, bulk administration | Behavior omitted because it has no current consumer | Channel number editing provides ordering, provenance is visible, and deletion is confirmed. Upstream import/export internals do not establish a current Desktop workflow, so no administration suite was invented. |
 | Guide theme, layout, density/time/past window | Behavior implemented and tested | Existing persisted settings continue to update the Guide owner and rollback on write failure. Labels now include descriptions. |
 | Library filters | Behavior implemented and tested | The persisted setting shows or hides the real Guide library filter. Disabling it clears an active filter so hidden state cannot keep channels excluded. |
-| Now Watching banner | Behavior implemented and tested | The persisted setting directly controls the existing tuned channel/program context above Guide details. |
-| Player controls auto-hide | Behavior implemented and tested | A validated 2–15 second setting feeds the existing epoch-safe coordinator timer. Paused/buffering/seeking and focused controls remain untimed. |
+| Now Playing context | Behavior implemented and tested | The persisted setting directly controls the tuned channel/program context in the Guide toolbar. |
+| Player controls auto-hide | Behavior implemented and tested | A validated 2–15 second setting feeds the existing epoch-safe coordinator timer. Paused, buffering, and seeking events reveal the OSD and restart that timer. |
 | Reduced motion, large focus indicators, profile picker, diagnostics | Behavior implemented and tested | These persisted settings retain their existing root theme, focus, startup, and redacted-diagnostics consumers. |
 | Subtitle mode/language/forced preference | Behavior omitted because it has no current consumer | Legacy persisted fields were removed. The public native track projection lacks reliable forced/default preference facts, so applying them would fabricate behavior. Manual available-track selection remains implemented. |
 | Video quality, HDR/tone mapping, audio output/passthrough controls | Deferred to Windows | Unvalidated fields are neither persisted nor exposed as ordinary settings. No hardware, output-device, HDR, or passthrough capability is claimed. |
@@ -465,7 +474,7 @@ acceptance remains deferred to Prompt 4E.
 
 Prompt 4E must still perform the unlocked foreground matrix already recorded
 above, including onboarding, profile/server recovery, settings descriptions,
-all five themes, Guide library/Now Watching states, PiP/overlay, tuning/loading,
+all five themes, Guide library/Now Playing states, PiP/overlay, tuning/loading,
 OSD timing, mini Guide, track selectors, errors, focus visibility, pointer and
 keyboard/controller behavior at 1280×720, 1600×900, and 1920×1080. Windows
 native acceptance remains Prompt 5.

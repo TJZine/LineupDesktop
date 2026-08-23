@@ -4,8 +4,8 @@ Lineup Desktop is a pre-release Flutter-native desktop application with a narrow
 Windows C++/libmpv boundary. Contributions should improve the current
 architecture rather than preserve the historical Electron implementation.
 
-While the replatform is active, target `replatform/flutter-native` unless an
-issue or maintainer explicitly names another base branch.
+Target `flutter-mvp` unless an issue or maintainer explicitly names another
+base branch.
 
 ## Before contributing
 
@@ -20,9 +20,11 @@ For Windows media, runner, engine, DirectComposition, or packaging changes, also
 read [Windows Native Acceptance](docs/windows-native-validation.md) and
 [Windows Runtime Provenance](docs/windows-runtime.md).
 
-The `initial-build` branch is historical evidence, not a compatibility target.
-Use it only to recover legitimate product requirements or understand past
-behavior.
+The preserved Electron implementation is on `electron-ui`; use the immutable
+`bfaee636748f2a0d442f3690b7ba5262d32ff17c` baseline when provenance matters.
+The `initial-build` branch is a later historical Flutter-replatform milestone.
+Neither is a compatibility target; inspect the source that matches the evidence
+being investigated.
 
 ## Architecture constraints
 

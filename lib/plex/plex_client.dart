@@ -620,12 +620,14 @@ PlexMediaItem parseMediaItem(Object? raw, {String? libraryId}) {
     key: _text(json['key'], 'media key'),
     title: _text(json['title'], 'media title'),
     type: _text(json['type'], 'media type'),
-    duration: Duration(milliseconds: (json['duration'] as num?)?.toInt() ?? 0),
+    duration: Duration(milliseconds: _optionalInteger(json['duration']) ?? 0),
     libraryId: libraryId,
     parentTitle: _optionalText(json['parentTitle']),
     grandparentTitle: _optionalText(json['grandparentTitle']),
     thumbPath: _optionalText(json['thumb']),
+    grandparentThumbPath: _optionalText(json['grandparentThumb']),
     artPath: _optionalText(json['art']),
+    clearLogoPath: _clearLogoPath(json['Image']),
     partPath: _optionalText(part?['key']),
     container: _optionalText(media?['container'])?.toLowerCase(),
     videoCodec: _optionalText(media?['videoCodec'])?.toLowerCase(),
@@ -637,15 +639,26 @@ PlexMediaItem parseMediaItem(Object? raw, {String? libraryId}) {
     directors: _tagNames(json['Director']),
     actors: _tagNames(json['Role']),
     studio: _optionalText(json['studio']),
-    year: (json['year'] as num?)?.toInt(),
-    addedAt: json['addedAt'] is num
-        ? DateTime.fromMillisecondsSinceEpoch(
-            (json['addedAt'] as num).toInt() * 1000,
-            isUtc: true,
-          )
-        : null,
-    viewed: ((json['viewCount'] as num?)?.toInt() ?? 0) > 0,
+    year: _optionalInteger(json['year']),
+    summary: _optionalText(json['summary']),
+    contentRating: _optionalText(json['contentRating']),
+    seasonNumber: _optionalInteger(json['parentIndex']),
+    episodeNumber: _optionalInteger(json['index']),
+    videoResolution: _optionalText(media?['videoResolution']),
+    audioChannels: _optionalInteger(media?['audioChannels']),
+    addedAt: _optionalUnixTime(json['addedAt']),
+    viewed: (_optionalInteger(json['viewCount']) ?? 0) > 0,
   );
+}
+
+String? _clearLogoPath(Object? raw) {
+  if (raw is! List) return null;
+  for (final entry in raw) {
+    if (entry is! Map || entry['type'] != 'clearLogo') continue;
+    final url = _optionalText(entry['url']);
+    if (url != null) return url;
+  }
+  return null;
 }
 
 List<String> _tagNames(Object? raw) {
@@ -792,6 +805,30 @@ int _integer(Object? value, String label) => value is num
     ? value.toInt()
     : int.tryParse(value?.toString() ?? '') ??
           (throw PlexException('parse-error', '$label was invalid.'));
+const _maxExactJsonInteger = 0x1fffffffffffff;
+int? _optionalInteger(Object? value) {
+  final number = switch (value) {
+    num number => number,
+    String text => num.tryParse(text.trim()),
+    _ => null,
+  };
+  return number != null &&
+          number.isFinite &&
+          number.abs() <= _maxExactJsonInteger
+      ? number.toInt()
+      : null;
+}
+
+DateTime? _optionalUnixTime(Object? value) {
+  final seconds = _optionalInteger(value);
+  if (seconds == null) return null;
+  try {
+    return DateTime.fromMillisecondsSinceEpoch(seconds * 1000, isUtc: true);
+  } on RangeError {
+    return null;
+  }
+}
+
 bool _boolean(Object? value) =>
     value == true ||
     value == 1 ||

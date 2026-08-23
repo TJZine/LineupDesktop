@@ -10,7 +10,8 @@ audience and purpose.
 | --- | --- | --- |
 | Private tester or future end user | [User Guide](user-guide.md) | [Windows Native Acceptance](windows-native-validation.md) when participating in hardware testing |
 | New contributor | [Contributing](../CONTRIBUTING.md) | [Development](DEVELOPMENT.md) and [Architecture](architecture.md) |
-| Application or UI work | [Architecture](architecture.md) | [Portable UI Parity](ui-parity.md) |
+| Product, parity, or release planning | [Product Parity](product-parity.md) | [Architecture](architecture.md) and [Portable UI Parity](ui-parity.md) |
+| Application or UI work | [Architecture](architecture.md) | [Product Parity](product-parity.md) and [Portable UI Parity](ui-parity.md) |
 | Windows media, runner, or packaging work | [Windows Native Acceptance](windows-native-validation.md) | [Development](DEVELOPMENT.md) and [Windows Runtime Provenance](windows-runtime.md) |
 | Guide/PiP implementation or investigation | [Guide PiP Specification](guide-pip-composition-spec.md) | [Architecture](architecture.md) and the current source |
 | Security report | [Security Policy](../SECURITY.md) | Use the private reporting route; never open a public issue containing secrets |
@@ -40,12 +41,15 @@ audience and purpose.
 
 ### Evidence and design records
 
+- [Product Parity](product-parity.md) is the authoritative current
+  bidirectional product-parity, UX/UI, evidence-gap, and release-readiness
+  audit. Use it for current classifications and backlog priority.
 - [Portable UI Parity](ui-parity.md) is a detailed historical evidence record
   for the portable UI campaigns. Its classifications belong to the named
   campaign sections and must not be generalized into Windows support claims.
-- [Guide PiP Specification](guide-pip-composition-spec.md) records the approved
-  responsive composition, ownership boundaries, and physical Windows proof
-  required for Guide/PiP behavior.
+- [Guide PiP Specification](guide-pip-composition-spec.md) records the
+  implemented responsive composition, ownership boundaries, and physical
+  Windows proof still required for Guide/PiP behavior.
 - [Windows Runtime Provenance](windows-runtime.md) records exact native runtime
   sources, hashes, licenses, package policy, and unresolved redistribution
   gates.

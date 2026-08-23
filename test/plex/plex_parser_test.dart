@@ -25,11 +25,17 @@ void main() {
       'type': 'episode',
       'duration': 3600000,
       'grandparentTitle': 'Show',
+      'summary': 'A first episode.',
+      'contentRating': 'TV-14',
+      'parentIndex': 1,
+      'index': 2,
       'Media': [
         {
           'container': 'MKV',
           'videoCodec': 'HEVC',
           'audioCodec': 'EAC3',
+          'videoResolution': '4k',
+          'audioChannels': 6,
           'DOVIPresent': true,
           'Part': [
             {
@@ -47,6 +53,78 @@ void main() {
     expect(item.videoCodec, 'hevc');
     expect(item.dynamicRange, DynamicRange.dolbyVision);
     expect(item.tracks.last.delivery, SubtitleDelivery.sidecar);
+    expect(item.summary, 'A first episode.');
+    expect(item.contentRating, 'TV-14');
+    expect(item.seasonNumber, 1);
+    expect(item.episodeNumber, 2);
+    expect(item.videoResolution, '4k');
+    expect(item.audioChannels, 6);
+  });
+
+  test(
+    'accepts quoted numeric metadata and ignores invalid optional values',
+    () {
+      final item = parseMediaItem({
+        'ratingKey': 'quoted',
+        'key': '/library/metadata/quoted',
+        'title': 'Quoted metadata',
+        'type': 'episode',
+        'duration': '3600000',
+        'year': '2026',
+        'parentIndex': '1',
+        'index': '2',
+        'addedAt': '1720000000',
+        'viewCount': '1',
+        'Media': [
+          {'audioChannels': '6'},
+        ],
+      });
+
+      expect(item.duration, const Duration(hours: 1));
+      expect(item.year, 2026);
+      expect(item.seasonNumber, 1);
+      expect(item.episodeNumber, 2);
+      expect(item.audioChannels, 6);
+      expect(item.addedAt, isNotNull);
+      expect(item.viewed, isTrue);
+
+      final invalid = parseMediaItem({
+        'ratingKey': 'invalid',
+        'key': '/library/metadata/invalid',
+        'title': 'Invalid metadata',
+        'type': 'movie',
+        'duration': 'not-a-number',
+        'year': true,
+        'addedAt': 1e300,
+        'viewCount': double.infinity,
+      });
+      expect(invalid.duration, Duration.zero);
+      expect(invalid.year, isNull);
+      expect(invalid.addedAt, isNull);
+      expect(invalid.viewed, isFalse);
+    },
+  );
+
+  test('parses episode artwork facts including show poster and clear logo', () {
+    final item = parseMediaItem({
+      'ratingKey': 'episode-1',
+      'key': '/library/metadata/episode-1',
+      'title': 'Episode',
+      'type': 'episode',
+      'duration': 1000,
+      'thumb': '/library/metadata/episode-1/thumb',
+      'grandparentThumb': '/library/metadata/show-1/thumb',
+      'art': '/library/metadata/show-1/art',
+      'Image': [
+        {'type': 'clearArt', 'url': '/library/metadata/show-1/clearart'},
+        {'type': 'clearLogo', 'url': '/library/metadata/show-1/clearlogo'},
+      ],
+    });
+
+    expect(item.thumbPath, '/library/metadata/episode-1/thumb');
+    expect(item.grandparentThumbPath, '/library/metadata/show-1/thumb');
+    expect(item.artPath, '/library/metadata/show-1/art');
+    expect(item.clearLogoPath, '/library/metadata/show-1/clearlogo');
   });
 
   test('rejects missing media identity', () {

@@ -335,7 +335,7 @@ void main() {
 
     await tester.tap(find.byType(DropdownButton<int>).first);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('6 hours').last);
+    await tester.tap(find.text('Desktop extended (6 hours)').last);
     await tester.pump();
 
     expect(

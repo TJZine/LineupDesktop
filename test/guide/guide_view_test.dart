@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -12,6 +13,12 @@ import 'package:lineup_desktop/guide/guide_view.dart';
 import 'package:lineup_desktop/persistence/app_store.dart';
 import 'package:lineup_desktop/plex/plex_client.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
+import 'package:lineup_desktop/ui/app_theme.dart';
+
+final _tinyPng = base64Decode(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwC'
+  'AAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+);
 
 void main() {
   test(
@@ -39,9 +46,9 @@ void main() {
         hasPicture: true,
         density: GuideDensity.compact,
       );
-      expect(comfortable.rowHeight, 78);
-      expect(compact.rowHeight, 58);
-      expect(comfortable.minimumRows, 7);
+      expect(comfortable.rowHeight, 108);
+      expect(compact.rowHeight, 78);
+      expect(comfortable.minimumRows, 5);
       expect(compact.minimumRows, 7);
     },
   );
@@ -208,6 +215,7 @@ void main() {
     ];
     lineup.currentChannelId = 'semantic-channel';
     var fail = true;
+    var tunes = 0;
     final guide = GuideController(
       lineup: lineup,
       clock: () => now,
@@ -222,7 +230,7 @@ void main() {
         home: GuideView(
           controller: guide,
           onClose: () {},
-          onTune: (_) async {},
+          onTune: (_) async => tunes++,
         ),
       ),
     );
@@ -251,6 +259,20 @@ void main() {
     await tester.tap(find.bySemanticsLabel(RegExp('upcoming')));
     await tester.pump();
     expect(guide.focusedProgramId, isNot(current.id));
+    for (final key in [
+      LogicalKeyboardKey.enter,
+      LogicalKeyboardKey.space,
+      LogicalKeyboardKey.select,
+    ]) {
+      await tester.sendKeyEvent(key);
+      await tester.pump();
+    }
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tap(find.bySemanticsLabel(RegExp('upcoming')));
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.tap(find.bySemanticsLabel(RegExp('upcoming')));
+    await tester.pump();
+    expect(tunes, 0);
     await tester.tap(channelRail);
     await tester.pump();
     expect(guide.focusedProgramId, current.id);
@@ -280,20 +302,21 @@ void main() {
     );
     addTearDown(guide.dispose);
     var tunes = 0;
+    var closes = 0;
 
     await tester.binding.setSurfaceSize(const Size(800, 600));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     for (final (size, expectedWidth, minimumRows) in const [
-      (Size(800, 600), 420.0, 4),
+      (Size(800, 600), 401.78, 4),
       (Size(1920, 719), 499.33, 4),
-      (Size(1280, 720), 500.0, 5),
+      (Size(1280, 720), 483.56, 5),
       (Size(800, 720), 464.0, 5),
       (Size(600, 720), 264.0, 5),
       (Size(1360, 840), 593.33, 5),
       (Size(1920, 899), 639.22, 5),
-      (Size(1600, 900), 640.0, 5),
+      (Size(1600, 900), 625.78, 5),
       (Size(1920, 1079), 671.82, 5),
-      (Size(1920, 1080), 672.0, 7),
+      (Size(1920, 1080), 672.0, 5),
       (Size(3840, 2160), 672.0, 7),
     ]) {
       await tester.binding.setSurfaceSize(size);
@@ -303,7 +326,7 @@ void main() {
             controller: guide,
             pictureInPicture: const ColoredBox(color: Colors.black),
             onOpenPlayer: () {},
-            onClose: () {},
+            onClose: () => closes++,
             onTune: (_) async => tunes++,
           ),
         ),
@@ -311,6 +334,10 @@ void main() {
       await tester.pumpAndSettle();
       final picture = find.byKey(const Key('guide-picture-in-picture'));
       expect(picture, findsOneWidget);
+      expect(
+        find.byKey(const Key('guide-picture-corner-mask')),
+        findsOneWidget,
+      );
       final pictureSize = tester.getSize(picture);
       expect(
         pictureSize.width / pictureSize.height,
@@ -357,7 +384,7 @@ void main() {
         home: GuideView(
           controller: guide,
           overlayMode: true,
-          onClose: () {},
+          onClose: () => closes++,
           onTune: (_) async {},
         ),
       ),
@@ -366,7 +393,7 @@ void main() {
     expect(find.byKey(const Key('guide-focused-artwork')), findsOneWidget);
     expect(
       tester.getSize(find.byKey(const Key('guide-focused-artwork'))).width,
-      greaterThanOrEqualTo(170),
+      greaterThanOrEqualTo(168),
     );
     final overlayList = tester.widget<ListView>(
       find.byKey(const Key('guide-schedule-list')),
@@ -377,10 +404,271 @@ void main() {
           .floor(),
       greaterThanOrEqualTo(5),
     );
+    await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
+    expect(closes, 1);
 
     await tester.pumpWidget(const SizedBox.shrink());
     guide.dispose();
     lineup.dispose();
+  });
+
+  testWidgets('Guide details project Plex metadata and artwork color', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1600, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final lineup = _Lineup(1, artworkBytes: _tinyPng);
+    addTearDown(lineup.dispose);
+    lineup.channels = [
+      Channel(
+        id: 'channel',
+        number: 7,
+        name: 'Drama Seven',
+        source: ManualSource([
+          ChannelItem(
+            id: 'episode',
+            title: 'The Arrival',
+            duration: const Duration(hours: 24),
+            showTitle: 'Signal House',
+            artwork: Uri(path: '/poster'),
+            summary: 'A mysterious signal changes the course of the mission.',
+            contentRating: 'TV-14',
+            genres: const ['Drama', 'Science Fiction'],
+            year: 2026,
+            seasonNumber: 1,
+            episodeNumber: 2,
+            resolution: '4k',
+            videoCodec: 'hevc',
+            audioCodec: 'eac3',
+            audioChannels: 6,
+            dynamicRange: 'hdr10',
+          ),
+        ]),
+        playbackMode: PlaybackMode.sequential,
+        anchor: DateTime.now().subtract(const Duration(hours: 1)),
+        shuffleSeed: 7,
+      ),
+    ];
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    addTearDown(guide.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context)
+              .copyWith(textScaler: const TextScaler.linear(1.25)),
+          child: child!,
+        ),
+        home: GuideView(
+          controller: guide,
+          pictureInPicture: const ColoredBox(color: Colors.black),
+          onClose: () {},
+          onTune: (_) async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+
+    expect(find.text('SIGNAL HOUSE'), findsOneWidget);
+    expect(find.text('S01E02'), findsWidgets);
+    expect(find.text('2026'), findsOneWidget);
+    expect(find.text('Drama • Science Fiction'), findsOneWidget);
+    for (final badge in ['TV-14', '4K', 'HDR10', 'EAC3', '5.1']) {
+      expect(find.text(badge), findsOneWidget);
+    }
+    expect(
+      find.text('A mysterious signal changes the course of the mission.'),
+      findsOneWidget,
+    );
+    expect(lineup.artworkLoads, 1);
+    expect(tester.takeException(), isNull);
+    final background = tester.widget<AnimatedContainer>(
+      find.byKey(const Key('guide-info-dynamic-background')),
+    );
+    final gradient = (background.decoration! as BoxDecoration).gradient!;
+    final roles = LineupTheme.of(
+      tester.element(find.byKey(const Key('guide-info-dynamic-background'))),
+    );
+    expect(
+      (gradient as RadialGradient).colors.first,
+      isNot(
+        Color.alphaBlend(
+          roles.progressFill.withValues(alpha: 0.48),
+          roles.primarySurface,
+        ),
+      ),
+    );
+  });
+
+  testWidgets('Guide omits incomplete episode coordinates', (tester) async {
+    final lineup = _Lineup(1);
+    addTearDown(lineup.dispose);
+    lineup.channels = [
+      for (final (index, item) in [
+        const ChannelItem(
+          id: 'season-only',
+          title: 'Season only',
+          showTitle: 'Incomplete Show',
+          duration: Duration(hours: 24),
+          seasonNumber: 1,
+        ),
+        const ChannelItem(
+          id: 'episode-only',
+          title: 'Episode only',
+          showTitle: 'Incomplete Show',
+          duration: Duration(hours: 24),
+          episodeNumber: 2,
+        ),
+      ].indexed)
+        Channel(
+          id: 'channel-$index',
+          number: index + 1,
+          name: 'Channel $index',
+          source: ManualSource([item]),
+          playbackMode: PlaybackMode.sequential,
+          anchor: DateTime.now().subtract(const Duration(hours: 1)),
+          shuffleSeed: index + 1,
+        ),
+    ];
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    addTearDown(guide.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: GuideView(
+          controller: guide,
+          onClose: () {},
+          onTune: (_) async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('S01E00'), findsNothing);
+    guide.moveVertical(1);
+    await tester.pumpAndSettle();
+    expect(find.text('S00E02'), findsNothing);
+  });
+
+  testWidgets('Guide artwork mode renders backdrop and preferred clear logo', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1600, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final lineup = _Lineup(1, artworkBytes: _tinyPng)
+      ..settings = const LineupSettings(
+        guideInfoBackgroundMode: GuideInfoBackgroundMode.artwork,
+      );
+    addTearDown(lineup.dispose);
+    lineup.channels = [
+      Channel(
+        id: 'channel',
+        number: 7,
+        name: 'Drama Seven',
+        source: ManualSource([
+          ChannelItem(
+            id: 'episode',
+            title: 'The Arrival',
+            showTitle: 'Signal House',
+            duration: const Duration(hours: 24),
+            showThumb: '/poster',
+            backdrop: Uri.parse('/backdrop'),
+            clearLogo: Uri.parse('/clear-logo'),
+          ),
+        ]),
+        playbackMode: PlaybackMode.sequential,
+        anchor: DateTime.now().subtract(const Duration(hours: 1)),
+        shuffleSeed: 7,
+      ),
+    ];
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    addTearDown(guide.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: GuideView(
+          controller: guide,
+          pictureInPicture: const ColoredBox(color: Colors.black),
+          onClose: () {},
+          onTune: (_) async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('guide-info-backdrop')), findsOneWidget);
+    expect(find.byKey(const Key('guide-clear-logo')), findsOneWidget);
+    expect(find.bySemanticsLabel('Signal House logo'), findsOneWidget);
+    expect(lineup.artworkLoads, 3);
+    final background = tester.widget<AnimatedContainer>(
+      find.byKey(const Key('guide-info-dynamic-background')),
+    );
+    expect(
+      (background.decoration! as BoxDecoration).gradient,
+      isA<LinearGradient>(),
+    );
+  });
+
+  testWidgets('invalid clear-logo bytes retain the textual title', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1600, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final lineup = _Lineup(
+      1,
+      artworkBytes: Uint8List.fromList(const [1, 2, 3]),
+    );
+    addTearDown(lineup.dispose);
+    lineup.channels = [
+      Channel(
+        id: 'channel',
+        number: 7,
+        name: 'Drama Seven',
+        source: ManualSource([
+          ChannelItem(
+            id: 'episode',
+            title: 'The Arrival',
+            showTitle: 'Signal House',
+            duration: const Duration(hours: 24),
+            artwork: Uri.parse('/poster'),
+            clearLogo: Uri.parse('/clear-logo'),
+          ),
+        ]),
+        playbackMode: PlaybackMode.sequential,
+        anchor: DateTime.now().subtract(const Duration(hours: 1)),
+        shuffleSeed: 7,
+      ),
+    ];
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    addTearDown(guide.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: GuideView(
+          controller: guide,
+          pictureInPicture: const ColoredBox(color: Colors.black),
+          onClose: () {},
+          onTune: (_) async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('guide-clear-logo-fallback')), findsOneWidget);
+    expect(find.text('SIGNAL HOUSE'), findsOneWidget);
   });
 
   testWidgets('physical 4K at DPR 2 uses the 1080p Guide row budget', (
@@ -426,7 +714,7 @@ void main() {
       (tester.getSize(find.byKey(const Key('guide-schedule-list'))).height /
               list.itemExtent!)
           .floor(),
-      greaterThanOrEqualTo(7),
+      greaterThanOrEqualTo(5),
     );
 
     await tester.pumpWidget(const SizedBox.shrink());
@@ -469,7 +757,7 @@ void main() {
     lineup.dispose();
   });
 
-  testWidgets('Now Playing banner setting updates its Guide consumer', (
+  testWidgets('Now Playing context setting updates its Guide consumer', (
     tester,
   ) async {
     final lineup = _Lineup(2)..currentChannelId = 'channel-0';
@@ -677,7 +965,7 @@ ScheduleIndex _schedule(Channel channel) => buildSchedule(
 );
 
 class _Lineup extends LineupController {
-  _Lineup(int count)
+  _Lineup(int count, {this.artworkBytes})
     : super(
         store: _Store(),
         credentials: _Credentials(),
@@ -704,6 +992,15 @@ class _Lineup extends LineupController {
       ),
     );
     stage = SetupStage.ready;
+  }
+
+  final Uint8List? artworkBytes;
+  int artworkLoads = 0;
+
+  @override
+  Future<Uint8List?> artworkForPath(Uri path) async {
+    artworkLoads++;
+    return artworkBytes;
   }
 }
 

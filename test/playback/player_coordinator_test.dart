@@ -353,7 +353,10 @@ void main() {
       guide.requestViewport(0, 2);
       await Future<void>.delayed(Duration.zero);
       final coordinator = PlayerCoordinator(
-        player: _Player(),
+        player: _Player()
+          ..tracks = const [
+            PlayerTrack(id: 1, type: PlayerTrackType.subtitle, selected: false),
+          ],
         lineup: lineup,
         guide: guide,
       );
@@ -504,7 +507,7 @@ void main() {
     expect(coordinator.overlay, PlayerOverlay.none);
   });
 
-  testWidgets('an OSD settings change reschedules the visible controls', (
+  testWidgets('paused events use an updated OSD auto-hide setting', (
     tester,
   ) async {
     final lineup = _TestLineup();
@@ -512,8 +515,10 @@ void main() {
       lineup: lineup,
       loadSchedule: (channel) async => _schedule(channel),
     );
+    final player = _EventPlayer();
+    addTearDown(player.close);
     final coordinator = PlayerCoordinator(
-      player: _Player(),
+      player: player,
       lineup: lineup,
       guide: guide,
     );
@@ -521,12 +526,16 @@ void main() {
     addTearDown(guide.dispose);
     addTearDown(coordinator.dispose);
 
-    coordinator.showOsd();
+    player.emitStatus(PlayerState.paused);
+    await tester.pump();
+    expect(coordinator.overlay, PlayerOverlay.osd);
+
     await tester.pump(const Duration(seconds: 1));
     lineup.setSettings(lineup.settings.copyWith(osdAutoHideSeconds: 2));
     await tester.pump(const Duration(milliseconds: 1999));
     expect(coordinator.overlay, PlayerOverlay.osd);
     await tester.pump(const Duration(milliseconds: 2));
+
     expect(coordinator.overlay, PlayerOverlay.none);
   });
 

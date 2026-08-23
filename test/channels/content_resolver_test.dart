@@ -72,4 +72,52 @@ void main() {
     ]);
     expect(resolved.map((item) => item.id), media.map((item) => item.id));
   });
+
+  test('maps distinct episode artwork and prefers the show poster', () {
+    final item = channelItemFor(
+      const PlexMediaItem(
+        id: 'episode',
+        key: '/episode',
+        title: 'Episode',
+        type: 'episode',
+        duration: Duration(minutes: 1),
+        grandparentTitle: 'Show',
+        thumbPath: '/episode/thumb',
+        grandparentThumbPath: '/show/thumb',
+        artPath: '/show/art',
+        clearLogoPath: '/show/clearlogo',
+      ),
+    );
+
+    expect(item.artwork, Uri.parse('/episode/thumb'));
+    expect(item.showThumb, '/show/thumb');
+    expect(item.backdrop, Uri.parse('/show/art'));
+    expect(item.clearLogo, Uri.parse('/show/clearlogo'));
+  });
+
+  test(
+    'channel item artwork additions round-trip while old artwork remains valid',
+    () {
+      const oldJson = {
+        'id': 'old',
+        'title': 'Old item',
+        'durationMs': 60000,
+        'artwork': '/old/poster',
+      };
+      final oldItem = ChannelItem.fromJson(oldJson);
+      expect(oldItem.artwork, Uri.parse('/old/poster'));
+      expect(oldItem.backdrop, isNull);
+      expect(oldItem.clearLogo, isNull);
+
+      final item = ChannelItem(
+        id: 'new',
+        title: 'New item',
+        duration: Duration(minutes: 1),
+        artwork: Uri(path: '/poster'),
+        backdrop: Uri(path: '/backdrop'),
+        clearLogo: Uri(path: '/logo'),
+      );
+      expect(ChannelItem.fromJson(item.toJson()).toJson(), item.toJson());
+    },
+  );
 }

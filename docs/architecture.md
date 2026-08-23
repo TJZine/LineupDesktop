@@ -1,9 +1,10 @@
 # Architecture
 
 Lineup Desktop is a native Flutter/Dart application. The historical Electron
-implementation is preserved at `origin/initial-build`; the rewrite baseline is
-`bfaee636748f2a0d442f3690b7ba5262d32ff17c`. It is reference material, not a
-runtime, source-compatibility, or migration target.
+implementation is preserved on `electron-ui` at the immutable
+`bfaee636748f2a0d442f3690b7ba5262d32ff17c` baseline. `initial-build` is a
+later historical Flutter-replatform milestone. Both are reference material,
+not runtime, source-compatibility, or migration targets.
 
 ```text
 Flutter/Dart application
@@ -136,7 +137,7 @@ navigation do not enter C++.
   enable and validate the data-protection Keychain. Tokens remain outside
   ordinary application state and durable JSON; selected-server persistence
   stores only profile-scoped server identity.
-- Persisted Guide preferences own library-filter visibility, the Now Watching
+- Persisted Guide preferences own library-filter visibility, the Now Playing
   context banner, and player-control auto-hide duration. Their existing Guide
   and player coordinators consume updates directly; there is no second
   settings or overlay owner.
@@ -149,14 +150,18 @@ navigation do not enter C++.
 
 ## Integration and acceptance status
 
-Live remote Plex playback acceptance through the pinned LGPL libmpv runtime,
-HDR display switching, audio passthrough, broad codec/container and hardware
-acceptance, packaged-runtime validation, and the final Windows media acceptance
-matrix remain integration work. This evidence boundary limits support claims,
-not playback attempts: the Windows libmpv backend accepts original Plex streams
-without a codec, container, or HDR allowlist and without treating native audio
-passthrough as a decode gate. It lets libmpv decode, convert audio to PCM,
-render, or tone-map as needed.
+The owner reports that native Player, Classic PiP/Overlay presentation, and
+fullscreen work at a surface level on Windows. Exact-commit remote Plex,
+representative HDR, broad codec/container/audio/subtitle, transition, and
+packaged-runtime acceptance remain deeper evidence work. This evidence boundary
+limits support claims, not playback attempts: the Windows libmpv backend accepts
+original Plex streams without a codec, container, or HDR allowlist and without
+treating native audio passthrough as a decode gate. It lets libmpv/FFmpeg demux,
+decode video and supported audio such as TrueHD and DTS-family tracks, convert
+audio to the system output (normally PCM), render subtitles, and tone-map as
+needed. Passthrough, server transcode, and explicit subtitle sidecar loading are
+separate optional/fallback capabilities justified only by a concrete product
+requirement or demonstrated native gap.
 
 ## Dependency decision
 

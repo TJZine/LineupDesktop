@@ -60,7 +60,8 @@ void main() {
   });
 
   testWidgets('Guide without playback', (tester) async {
-    final fixture = _readyFixture();
+    final fixture = _readyFixture()
+      ..controller.settings = const LineupSettings(reduceMotion: true);
     await _pump(tester, fixture.build());
     await _expectClassicOpacity(tester);
     await _match(
@@ -77,7 +78,7 @@ void main() {
         state: PlayerState.ready,
         message: 'Synthetic player surface',
       ),
-    );
+    )..controller.settings = const LineupSettings(reduceMotion: true);
     await _pump(tester, fixture.build());
     await _expectClassicOpacity(
       tester,
@@ -101,6 +102,7 @@ void main() {
           )
           ..controller.settings = const LineupSettings(
             guideLayoutMode: GuideLayoutMode.overlay,
+            reduceMotion: true,
           );
     await _pump(tester, fixture.build());
     await _match(
