@@ -56,7 +56,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Review expected changes'), findsOneWidget);
-    await _match(tester, 'channel-setup-review-1280x720.png');
+    await _match(
+      tester,
+      'channel-setup-review-1280x720.png',
+      precacheLogo: true,
+      additionalPumps: 2,
+    );
   });
 
   testWidgets('Guide without playback', (tester) async {
@@ -352,6 +357,7 @@ class _VisualController extends FixtureController {
           addedAt: DateTime.utc(2026, 1, index + 1),
         ),
     ];
+    libraryScanStatus = LibraryScanStatus.complete;
     return true;
   }
 }
