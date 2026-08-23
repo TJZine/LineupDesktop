@@ -114,8 +114,8 @@ navigation do not enter C++.
   timeout, cancellable epoch-safe auto-hide, and input/focus restoration.
   Ordered Plex parts remain one Flutter-owned playback lifetime: the
   coordinator gives every native load its own generation, advances natural
-  completion once, maps only known part boundaries, and releases every unique
-  playback session once. Native events remain the track-state authority.
+  completion once, and maps only known part boundaries. Native events remain
+  the track-state authority.
   Keyboard focus in the active timed OSD or mini Guide suspends dismissal;
   presentation generations reject stale focus callbacks. Player transitions
   use Flutter's effective Reduce Motion setting, and track rails initially
@@ -127,7 +127,7 @@ navigation do not enter C++.
 - Plex.tv account and Home-profile credentials are used only with Plex.tv.
   Resource discovery returns a separate PMS-issued credential for each server;
   the controller retains it only in private runtime scope and uses it for that
-  server's probes, libraries, artwork, playback, and session cleanup. A bounded
+  server's probes, libraries, artwork, and playback. A bounded
   authorization recovery refreshes the same server credential once without
   exposing it through public models, persisted state, URLs, or diagnostics.
 - Profile and selected-server state remains scoped by Plex profile. The

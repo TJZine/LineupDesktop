@@ -45,7 +45,6 @@ void main() {
     final selected = _server('server');
     final item = PlexMediaItem(
       id: 'movie',
-      key: '/library/metadata/movie',
       title: 'Movie',
       type: 'movie',
       duration: const Duration(minutes: 1),
@@ -91,30 +90,16 @@ void main() {
     controller.diagnostics.enabled = true;
     await controller.setLibraries({'movies'});
     await controller.artworkForPath(Uri.parse('/art'));
-    plex.playbackDescriptorResult = PlexPlaybackDescriptor(
-      parts: [
-        PlexPlaybackPartDescriptor(
-          uri: Uri.parse('https://plex.example/one.mp4'),
-          sessionId: 'session-one',
-          duration: const Duration(seconds: 30),
-        ),
-        PlexPlaybackPartDescriptor(
-          uri: Uri.parse('https://plex.example/duplicate.mp4'),
-          sessionId: 'session-one',
-        ),
-        PlexPlaybackPartDescriptor(
-          uri: Uri.parse('https://plex.example/two.mp4'),
-          sessionId: 'session-two',
-        ),
-        PlexPlaybackPartDescriptor(
-          uri: Uri.parse('https://plex.example/malformed.mp4'),
-          sessionId: '',
-        ),
-      ],
-    );
+    plex.playbackDescriptorResult = [
+      PlexPlaybackPartDescriptor(
+        uri: Uri.parse('https://plex.example/one.mp4'),
+        duration: const Duration(seconds: 30),
+      ),
+      PlexPlaybackPartDescriptor(
+        uri: Uri.parse('https://plex.example/two.mp4'),
+      ),
+    ];
     final playback = controller.playbackFor('movie');
-    await playback.release();
-    await playback.release();
 
     expect(plex.accountTokens, ['cloud-token-sentinel']);
     expect(plex.homeUsersTokens, ['cloud-token-sentinel']);
@@ -125,9 +110,10 @@ void main() {
     expect(plex.playlistTokens, everyElement('pms-token-sentinel'));
     expect(plex.artworkToken, 'pms-token-sentinel');
     expect(playback.plexToken, 'pms-token-sentinel');
-    expect(playback.parts, hasLength(4));
-    expect(plex.releaseTokens, ['pms-token-sentinel', 'pms-token-sentinel']);
-    expect(plex.releaseSessionIds.toSet(), hasLength(2));
+    expect(playback.parts.map((part) => part.uri), [
+      Uri.parse('https://plex.example/one.mp4'),
+      Uri.parse('https://plex.example/two.mp4'),
+    ]);
     expect(
       [
         ...plex.selectedTokens,
@@ -136,7 +122,6 @@ void main() {
         ...plex.playlistTokens,
         plex.artworkToken,
         playback.plexToken,
-        ...plex.releaseTokens,
       ].whereType<String>(),
       everyElement('pms-token-sentinel'),
     );
@@ -600,14 +585,14 @@ void main() {
           'https://user@plex.example:32400/video%2Fpart?X-Plex-Token=secret#section%2Fone',
         ),
       ),
-    ], () async {});
+    ]);
     final mixed = LineupPlaybackRequest.parts([
       LineupPlaybackPart(
         uri: Uri.parse(
           'https://plex.example/video?quality=original&X-Plex-Token=secret&quality=mobile#part',
         ),
       ),
-    ], () async {});
+    ]);
 
     expect(
       tokenOnly.parts.single.uri,
@@ -749,7 +734,6 @@ void main() {
             return [
               PlexMediaItem(
                 id: libraryId,
-                key: '/library/metadata/$libraryId',
                 title: libraryId,
                 type: 'movie',
                 duration: const Duration(minutes: 1),
@@ -836,7 +820,6 @@ void main() {
             for (var index = 0; index < 3; index++)
               PlexMediaItem(
                 id: '$index',
-                key: '/library/metadata/$index',
                 title: 'Item $index',
                 type: 'movie',
                 duration: const Duration(minutes: 1),
@@ -899,7 +882,6 @@ void main() {
             return [
               PlexMediaItem(
                 id: libraryId,
-                key: '/library/metadata/$libraryId',
                 title: libraryId,
                 type: 'movie',
                 duration: const Duration(minutes: 1),
@@ -921,7 +903,6 @@ void main() {
       ..availableMedia = const [
         PlexMediaItem(
           id: 'committed',
-          key: '/library/metadata/committed',
           title: 'Committed',
           type: 'movie',
           duration: Duration(minutes: 1),
@@ -985,7 +966,6 @@ void main() {
         ..availableMedia = const [
           PlexMediaItem(
             id: 'committed',
-            key: '/library/metadata/committed',
             title: 'Committed',
             type: 'movie',
             duration: Duration(minutes: 1),
@@ -1073,7 +1053,6 @@ void main() {
           1 => [
             PlexMediaItem(
               id: 'zero',
-              key: '/library/metadata/zero',
               title: 'Zero',
               type: 'movie',
               duration: Duration.zero,
@@ -2549,7 +2528,7 @@ class _FakePlex extends PlexClient {
   Future<PlexPlaylistCatalog> Function(Uri, String)? playlistsHandler;
   Future<List<PlexServerAccess>> Function(String)? discoverServersHandler;
   Future<Uint8List> Function(Uri, String, Uri)? artworkHandler;
-  PlexPlaybackDescriptor? playbackDescriptorResult;
+  List<PlexPlaybackPartDescriptor>? playbackDescriptorResult;
   final discoveredTokens = <String>[];
   final accountTokens = <String>[];
   final homeUsersTokens = <String>[];
@@ -2557,8 +2536,6 @@ class _FakePlex extends PlexClient {
   final libraryTokens = <String>[];
   final itemTokens = <String>[];
   final playlistTokens = <String>[];
-  final releaseTokens = <String>[];
-  final releaseSessionIds = <String>[];
   List<PlexServer> serversResult = const [];
   String resourceToken = 'pms-token';
   PlexConnection? connectionResult;
@@ -2695,22 +2672,12 @@ class _FakePlex extends PlexClient {
   }
 
   @override
-  PlexPlaybackDescriptor playbackDescriptor({
+  List<PlexPlaybackPartDescriptor> playbackDescriptor({
     required Uri server,
     required PlexMediaItem item,
   }) =>
       playbackDescriptorResult ??
       super.playbackDescriptor(server: server, item: item);
-
-  @override
-  Future<void> releasePlaybackSession({
-    required Uri server,
-    required String token,
-    required String sessionId,
-  }) async {
-    releaseTokens.add(token);
-    releaseSessionIds.add(sessionId);
-  }
 
   @override
   void close() {}

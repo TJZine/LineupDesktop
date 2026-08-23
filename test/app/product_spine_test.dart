@@ -197,7 +197,6 @@ void main() {
       expect(controller.stage, SetupStage.welcome);
       expect(credentials.accountToken, isNull);
       expect(credentials.profileTokens, isEmpty);
-      expect(events, contains('playback:release'));
       expect(
         events,
         containsAllInOrder([
@@ -355,7 +354,6 @@ class _ProductPlex extends PlexClient {
       12,
       (index) => PlexMediaItem(
         id: 'movie-$index',
-        key: '/library/metadata/$index',
         title: 'Movie $index',
         type: 'movie',
         duration: const Duration(minutes: 30),
@@ -373,15 +371,6 @@ class _ProductPlex extends PlexClient {
   @override
   Future<PlexPlaylistCatalog> playlists(Uri server, String token) async =>
       const PlexPlaylistCatalog(playlists: [], failedIds: {});
-
-  @override
-  Future<void> releasePlaybackSession({
-    required Uri server,
-    required String token,
-    required String sessionId,
-  }) async {
-    events.add('playback:release');
-  }
 
   @override
   void close() {}

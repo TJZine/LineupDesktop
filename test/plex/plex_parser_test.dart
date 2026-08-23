@@ -6,7 +6,6 @@ void main() {
   test('parses collection metadata for builder sources', () {
     final item = parseMediaItem({
       'ratingKey': '1',
-      'key': '/library/metadata/1',
       'title': 'Movie',
       'type': 'movie',
       'duration': 1000,

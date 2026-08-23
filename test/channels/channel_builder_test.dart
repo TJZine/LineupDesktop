@@ -14,7 +14,6 @@ void main() {
       6,
       (index) => PlexMediaItem(
         id: '$index',
-        key: '/$index',
         title: 'Movie $index',
         type: 'movie',
         duration: const Duration(minutes: 90),
@@ -51,7 +50,6 @@ void main() {
     final items = [
       const PlexMediaItem(
         id: '1',
-        key: '/1',
         title: 'One',
         type: 'movie',
         duration: Duration(minutes: 1),
@@ -77,7 +75,6 @@ void main() {
       5,
       (index) => PlexMediaItem(
         id: '$index',
-        key: '/library/metadata/$index',
         title: 'Movie $index',
         type: 'movie',
         duration: const Duration(minutes: 90),
@@ -115,7 +112,6 @@ void main() {
         for (var index = 0; index < 3; index++)
           PlexMediaItem(
             id: '${library.id}-$index',
-            key: '/${library.id}/$index',
             title: 'Movie',
             type: 'movie',
             duration: const Duration(minutes: 1),
@@ -175,7 +171,6 @@ void main() {
       for (var index = 0; index < 12; index++)
         PlexMediaItem(
           id: '$index',
-          key: '/$index',
           title: 'Movie',
           type: 'movie',
           duration: const Duration(minutes: 1),
@@ -206,7 +201,6 @@ void main() {
       5,
       (index) => PlexMediaItem(
         id: '$index',
-        key: '/$index',
         title: 'Movie',
         type: 'movie',
         duration: const Duration(minutes: 1),
@@ -240,7 +234,6 @@ void main() {
       for (var index = 0; index < 6; index++)
         PlexMediaItem(
           id: '$series-$index',
-          key: '/$index',
           title: 'Episode',
           type: 'episode',
           duration: const Duration(minutes: 1),

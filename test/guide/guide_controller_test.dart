@@ -520,7 +520,6 @@ void main() {
               2000,
               (index) => PlexMediaItem(
                 id: 'item-$index',
-                key: '/library/metadata/$index',
                 title: 'Item $index',
                 type: 'movie',
                 duration: const Duration(minutes: 30),

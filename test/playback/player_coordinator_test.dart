@@ -42,14 +42,11 @@ void main() {
       expect(player.seeks.single, greaterThanOrEqualTo(Duration.zero));
       expect(lineup.currentChannelId, 'channel-b');
       expect(coordinator.overlay, PlayerOverlay.osd);
-      expect(lineup.releases, 0);
       await coordinator.stop();
-      await coordinator.stop();
-      expect(lineup.releases, 1);
     },
   );
 
-  test('scope change stops playback and releases its lease once', () async {
+  test('scope change stops playback and clears its intent', () async {
     final lineup = _TestLineup();
     final guide = GuideController(
       lineup: lineup,
@@ -73,7 +70,7 @@ void main() {
     await Future<void>.delayed(Duration.zero);
 
     expect(nativePlayer.stops, 1);
-    expect(lineup.releases, 1);
+    expect(coordinator.hasPlaybackIntent, isFalse);
     expect(coordinator.overlay, PlayerOverlay.none);
     expect(coordinator.sleepDuration, isNull);
   });
@@ -103,7 +100,6 @@ void main() {
     nativePlayer.releaseFullscreen.complete();
     await Future<void>.delayed(Duration.zero);
 
-    expect(lineup.releases, 1);
     expect(lineup.diagnostics.entries, isEmpty);
   });
 
@@ -289,35 +285,32 @@ void main() {
     );
   });
 
-  test(
-    'removing the active channel stops playback and releases its lease',
-    () async {
-      final lineup = _TestLineup();
-      final guide = GuideController(
-        lineup: lineup,
-        loadSchedule: (channel) async => _schedule(channel),
-      )..requestViewport(0, 2);
-      await Future<void>.delayed(Duration.zero);
-      final nativePlayer = _Player();
-      final coordinator = PlayerCoordinator(
-        player: nativePlayer,
-        lineup: lineup,
-        guide: guide,
-      );
-      addTearDown(lineup.dispose);
-      addTearDown(guide.dispose);
-      addTearDown(coordinator.dispose);
+  test('removing the active channel stops playback', () async {
+    final lineup = _TestLineup();
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    )..requestViewport(0, 2);
+    await Future<void>.delayed(Duration.zero);
+    final nativePlayer = _Player();
+    final coordinator = PlayerCoordinator(
+      player: nativePlayer,
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
 
-      await coordinator.tune('channel-b');
-      lineup.replaceChannels(
-        lineup.channels.where((channel) => channel.id != 'channel-b').toList(),
-      );
-      await Future<void>.delayed(Duration.zero);
+    await coordinator.tune('channel-b');
+    lineup.replaceChannels(
+      lineup.channels.where((channel) => channel.id != 'channel-b').toList(),
+    );
+    await Future<void>.delayed(Duration.zero);
 
-      expect(nativePlayer.stops, 1);
-      expect(lineup.releases, 1);
-    },
-  );
+    expect(nativePlayer.stops, 1);
+    expect(coordinator.hasPlaybackIntent, isFalse);
+  });
 
   test(
     'coordinated logout preserves playback on failure and drains on retry',
@@ -341,10 +334,9 @@ void main() {
 
       expect(await coordinator.logout(), isFalse);
       expect(nativePlayer.stops, 0);
-      expect(lineup.releases, 0);
       expect(await coordinator.logout(), isTrue);
       expect(nativePlayer.stops, 1);
-      expect(lineup.releases, 1);
+      expect(coordinator.hasPlaybackIntent, isFalse);
     },
   );
 
@@ -687,7 +679,7 @@ void main() {
     },
   );
 
-  test('superseded tune cannot seek or release the winning request', () async {
+  test('superseded tune cannot seek or replace the winning request', () async {
     final lineup = _TestLineup();
     final guide = GuideController(
       lineup: lineup,
@@ -713,9 +705,8 @@ void main() {
     expect(lineup.currentChannelId, 'channel-b');
     expect(player.loads, hasLength(2));
     expect(player.seeks, hasLength(1));
-    expect(lineup.releases, 1);
     await coordinator.stop();
-    expect(lineup.releases, 2);
+    expect(player.stops, 2);
   });
 
   test(
@@ -754,7 +745,7 @@ void main() {
     },
   );
 
-  test('stop cancels a pending tune and releases its request', () async {
+  test('stop cancels a pending tune and clears its request', () async {
     final lineup = _TestLineup();
     final guide = GuideController(
       lineup: lineup,
@@ -779,49 +770,45 @@ void main() {
 
     expect(lineup.currentChannelId, 'channel-0');
     expect(player.stops, 1);
-    expect(lineup.releases, 1);
+    expect(coordinator.hasPlaybackIntent, isFalse);
   });
 
-  test(
-    'replacement failure stops superseded media before releasing its lease',
-    () async {
-      final lineup = _TestLineup(failSecondPlaybackRequest: true);
-      final guide = GuideController(
-        lineup: lineup,
-        loadSchedule: (channel) async => _schedule(channel),
-      )..requestViewport(0, 2);
-      await Future<void>.delayed(Duration.zero);
-      final player = _BlockingEventPlayer();
-      addTearDown(player.close);
-      final coordinator = PlayerCoordinator(
-        player: player,
-        lineup: lineup,
-        guide: guide,
-      );
-      addTearDown(lineup.dispose);
-      addTearDown(guide.dispose);
-      addTearDown(coordinator.dispose);
+  test('replacement failure stops superseded media before settling', () async {
+    final lineup = _TestLineup(failSecondPlaybackRequest: true);
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    )..requestViewport(0, 2);
+    await Future<void>.delayed(Duration.zero);
+    final player = _BlockingEventPlayer();
+    addTearDown(player.close);
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
 
-      final first = coordinator.tune('channel-0');
-      await player.firstLoadStarted.future;
-      final replacement = coordinator.tune('channel-b');
-      player.releaseFirstLoad.complete();
-      await Future.wait([first, replacement]);
-      player.emitStatus(
-        PlayerState.stopped,
-        generation: player.loadGenerations.single,
-      );
-      await Future<void>.delayed(Duration.zero);
+    final first = coordinator.tune('channel-0');
+    await player.firstLoadStarted.future;
+    final replacement = coordinator.tune('channel-b');
+    player.releaseFirstLoad.complete();
+    await Future.wait([first, replacement]);
+    player.emitStatus(
+      PlayerState.stopped,
+      generation: player.loadGenerations.single,
+    );
+    await Future<void>.delayed(Duration.zero);
 
-      expect(player.loads, hasLength(1));
-      expect(player.stops, 1);
-      expect(lineup.releases, 1);
-      expect(lineup.currentChannelId, 'channel-0');
-      expect(coordinator.status.state, PlayerState.stopped);
-      expect(coordinator.hasPlaybackIntent, isFalse);
-      expect(coordinator.overlay, PlayerOverlay.error);
-    },
-  );
+    expect(player.loads, hasLength(1));
+    expect(player.stops, 1);
+    expect(lineup.currentChannelId, 'channel-0');
+    expect(coordinator.status.state, PlayerState.stopped);
+    expect(coordinator.hasPlaybackIntent, isFalse);
+    expect(coordinator.overlay, PlayerOverlay.error);
+  });
 
   test('generated stopped event settles coordinator playback state', () async {
     final lineup = _TestLineup();
@@ -854,40 +841,36 @@ void main() {
     expect(player.stops, 1);
     expect(coordinator.status.state, PlayerState.stopped);
     expect(coordinator.hasPlaybackIntent, isFalse);
-    expect(lineup.releases, 1);
   });
 
-  test(
-    'terminal player errors and failed stops still release leases',
-    () async {
-      final lineup = _TestLineup();
-      final guide = GuideController(
-        lineup: lineup,
-        loadSchedule: (channel) async => _schedule(channel),
-      )..requestViewport(0, 2);
-      await Future<void>.delayed(Duration.zero);
-      final player = _EventPlayer();
-      addTearDown(player.close);
-      final coordinator = PlayerCoordinator(
-        player: player,
-        lineup: lineup,
-        guide: guide,
-      );
-      addTearDown(lineup.dispose);
-      addTearDown(guide.dispose);
-      addTearDown(coordinator.dispose);
+  test('terminal player errors settle and failed stops propagate', () async {
+    final lineup = _TestLineup();
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    )..requestViewport(0, 2);
+    await Future<void>.delayed(Duration.zero);
+    final player = _EventPlayer();
+    addTearDown(player.close);
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
 
-      await coordinator.tune('channel-b');
-      player.emitError(generation: player.loadGenerations.single);
-      await Future<void>.delayed(Duration.zero);
-      expect(lineup.releases, 1);
+    await coordinator.tune('channel-b');
+    player.emitError(generation: player.loadGenerations.single);
+    await Future<void>.delayed(Duration.zero);
+    expect(coordinator.overlay, PlayerOverlay.error);
 
-      await coordinator.tune('channel-0');
-      player.failStop = true;
-      await expectLater(coordinator.stop(), throwsStateError);
-      expect(lineup.releases, 2);
-    },
-  );
+    await coordinator.tune('channel-0');
+    player.failStop = true;
+    await expectLater(coordinator.stop(), throwsStateError);
+    expect(player.stops, 1);
+  });
 
   test('recoverable player errors retain the retry action', () async {
     final lineup = _TestLineup();
@@ -970,11 +953,10 @@ void main() {
       expect(player.loads, hasLength(2));
       expect(player.loadPlexTokens, ['test-token-1', 'test-token-2']);
       expect(lineup.recoveryCalls, 1);
-      expect(lineup.releases, 1);
       expect(coordinator.error, isNull);
 
       await coordinator.stop();
-      expect(lineup.releases, 2);
+      expect(player.stops, 1);
     },
   );
 
@@ -1005,7 +987,6 @@ void main() {
 
       expect(player.loads, hasLength(2));
       expect(lineup.recoveryCalls, 1);
-      expect(lineup.releasedTokens, ['test-token-1', 'test-token-2']);
       expect(coordinator.overlay, PlayerOverlay.error);
       expect(coordinator.status.failureCode, 'http_error');
       expect(coordinator.status.httpStatus, 401);
@@ -1065,13 +1046,7 @@ void main() {
     await winningTune;
     expect(lineup.currentChannelId, 'channel-0');
     expect(coordinator.error, isNull);
-    expect(lineup.releasedTokens, ['test-token-1', 'test-token-2']);
     await coordinator.stop();
-    expect(lineup.releasedTokens, [
-      'test-token-1',
-      'test-token-2',
-      'test-token-1',
-    ]);
   });
 
   test('pending recovery ceiling survives tune dispatch', () async {
@@ -1132,13 +1107,7 @@ void main() {
     expect(lineup.currentChannelId, 'channel-0');
     expect(coordinator.error, isNull);
     expect(lineup.recoveryCalls, 1);
-    expect(lineup.releasedTokens, ['test-token-1', 'test-token-2']);
     await coordinator.stop();
-    expect(lineup.releasedTokens, [
-      'test-token-1',
-      'test-token-2',
-      'test-token-1',
-    ]);
   });
 
   test('failed pre-load tune preserves retained playback recovery', () async {
@@ -1174,9 +1143,8 @@ void main() {
 
     expect(player.loads, hasLength(2));
     expect(lineup.recoveryCalls, 1);
-    expect(lineup.releasedTokens, ['test-token-1']);
     await coordinator.stop();
-    expect(lineup.releasedTokens, ['test-token-1', 'test-token-2']);
+    expect(player.stops, 1);
   });
 
   test(
@@ -1206,7 +1174,6 @@ void main() {
 
       expect(player.loads, hasLength(1));
       expect(lineup.recoveryCalls, 0);
-      expect(lineup.releasedTokens, ['test-token-1']);
       expect(coordinator.overlay, PlayerOverlay.error);
       expect(coordinator.status.failureCode, 'decoder_error');
     },
@@ -1243,16 +1210,10 @@ void main() {
 
       expect(player.loadPlexTokens, ['test-token-1', 'test-token-1']);
       expect(lineup.recoveryCalls, 1);
-      expect(lineup.releasedTokens, ['test-token-1', 'test-token-2']);
       expect(lineup.currentChannelId, 'channel-0');
       expect(coordinator.error, isNull);
 
       await coordinator.stop();
-      expect(lineup.releasedTokens, [
-        'test-token-1',
-        'test-token-2',
-        'test-token-1',
-      ]);
     },
   );
 
@@ -1295,13 +1256,7 @@ void main() {
     expect(lineup.currentChannelId, 'channel-0');
     expect(coordinator.error, isNull);
     expect(coordinator.overlay, isNot(PlayerOverlay.error));
-    expect(lineup.releasedTokens, ['test-token-1', 'test-token-2']);
     await coordinator.stop();
-    expect(lineup.releasedTokens, [
-      'test-token-1',
-      'test-token-2',
-      'test-token-1',
-    ]);
   });
 
   test('load side effects roll back when load later fails', () async {
@@ -1325,7 +1280,6 @@ void main() {
 
     expect(player.loads, hasLength(1));
     expect(player.stops, 1);
-    expect(lineup.releases, 1);
     expect(lineup.currentChannelId, 'channel-0');
     expect(coordinator.overlay, PlayerOverlay.error);
   });
@@ -1447,7 +1401,6 @@ void main() {
     await tune;
 
     expect(lineup.currentChannelId, 'channel-0');
-    expect(lineup.releases, 1);
     expect(coordinator.overlay, PlayerOverlay.error);
   });
 
@@ -1479,7 +1432,6 @@ void main() {
       await tune;
 
       expect(lineup.currentChannelId, 'channel-0');
-      expect(lineup.releases, 1);
       expect(coordinator.overlay, PlayerOverlay.error);
     },
   );
@@ -1549,9 +1501,8 @@ void main() {
       ),
       hasLength(1),
     );
-    expect(lineup.releasedTokens, ['test-token-1']);
     await coordinator.stop();
-    expect(lineup.releasedTokens, ['test-token-1', 'test-token-2']);
+    expect(player.stops, 1);
   });
 
   test('known cross-part seek loads a fresh native generation', () async {
@@ -1629,9 +1580,7 @@ void main() {
       player.seeks.where((value) => value == const Duration(minutes: 5)),
       hasLength(1),
     );
-    expect(lineup.releasedTokens, ['test-token-1']);
     await coordinator.stop();
-    expect(lineup.releasedTokens, ['test-token-1', 'test-token-2']);
   });
 
   test('cross-part authorization retry load failure is terminal', () async {
@@ -1667,7 +1616,6 @@ void main() {
       '/part-2.mkv',
     ]);
     expect(lineup.recoveryCalls, 1);
-    expect(lineup.releasedTokens, ['test-token-1', 'test-token-2']);
     expect(player.stops, 1);
     expect(coordinator.overlay, PlayerOverlay.error);
     expect(coordinator.error, isNotNull);
@@ -1716,7 +1664,6 @@ void main() {
       ]);
       expect(player.seeks.last, const Duration(minutes: 30));
       expect(lineup.recoveryCalls, 1);
-      expect(lineup.releasedTokens, ['test-token-1', 'test-token-2']);
       expect(coordinator.error, isNull);
       expect(coordinator.overlay, isNot(PlayerOverlay.error));
     },
@@ -1803,13 +1750,7 @@ void main() {
 
     expect(lineup.currentChannelId, 'channel-0');
     expect(coordinator.error, isNull);
-    expect(lineup.releasedTokens, ['test-token-1', 'test-token-2']);
     await coordinator.stop();
-    expect(lineup.releasedTokens, [
-      'test-token-1',
-      'test-token-2',
-      'test-token-1',
-    ]);
   });
 
   for (final operation in ['cross seek', 'part advance']) {
@@ -1857,13 +1798,7 @@ void main() {
       expect(lineup.currentChannelId, 'channel-0');
       expect(coordinator.error, isNull);
       expect(coordinator.overlay, isNot(PlayerOverlay.error));
-      expect(lineup.releasedTokens, ['test-token-1', 'test-token-2']);
       await coordinator.stop();
-      expect(lineup.releasedTokens, [
-        'test-token-1',
-        'test-token-2',
-        'test-token-1',
-      ]);
     });
   }
 
@@ -1914,9 +1849,7 @@ void main() {
       ]);
       expect(coordinator.error, isNull);
       expect(coordinator.overlay, isNot(PlayerOverlay.error));
-      expect(lineup.releases, 0);
       await coordinator.stop();
-      expect(lineup.releases, 1);
     });
   }
 
@@ -2003,56 +1936,52 @@ void main() {
   });
 
   for (final completion in [PlayerState.ended, PlayerState.stopped]) {
-    test(
-      '$completion advances once and final completion releases once',
-      () async {
-        final lineup = _TestLineup(
-          playbackParts: _parts(
-            first: const Duration(hours: 2),
-            second: const Duration(hours: 1),
-          ),
-        );
-        final guide = GuideController(
-          lineup: lineup,
-          loadSchedule: (channel) async => _schedule(channel),
-        )..requestViewport(0, 2);
-        await Future<void>.delayed(Duration.zero);
-        final player = _EventPlayer();
-        final coordinator = PlayerCoordinator(
-          player: player,
-          lineup: lineup,
-          guide: guide,
-        );
-        addTearDown(player.close);
-        addTearDown(lineup.dispose);
-        addTearDown(guide.dispose);
-        addTearDown(coordinator.dispose);
-        await coordinator.tune('channel-b');
-        final firstGeneration = player.loadGenerations.single;
+    test('$completion advances once and final completion settles', () async {
+      final lineup = _TestLineup(
+        playbackParts: _parts(
+          first: const Duration(hours: 2),
+          second: const Duration(hours: 1),
+        ),
+      );
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => _schedule(channel),
+      )..requestViewport(0, 2);
+      await Future<void>.delayed(Duration.zero);
+      final player = _EventPlayer();
+      final coordinator = PlayerCoordinator(
+        player: player,
+        lineup: lineup,
+        guide: guide,
+      );
+      addTearDown(player.close);
+      addTearDown(lineup.dispose);
+      addTearDown(guide.dispose);
+      addTearDown(coordinator.dispose);
+      await coordinator.tune('channel-b');
+      final firstGeneration = player.loadGenerations.single;
 
-        player
-          ..emitStatus(completion, generation: firstGeneration)
-          ..emitStatus(completion, generation: firstGeneration);
-        await pumpEventQueue(times: 2);
+      player
+        ..emitStatus(completion, generation: firstGeneration)
+        ..emitStatus(completion, generation: firstGeneration);
+      await pumpEventQueue(times: 2);
 
-        expect(player.loads.map((uri) => uri.path), [
-          '/part-1.mkv',
-          '/part-2.mkv',
-        ]);
-        expect(lineup.releases, 0);
-        if (completion == PlayerState.stopped) {
-          player.emitStatus(
-            PlayerState.playing,
-            generation: player.loadGenerations.last,
-          );
-        }
-        player.emitStatus(completion, generation: player.loadGenerations.last);
-        await pumpEventQueue(times: 2);
-        expect(lineup.releases, 1);
-        await coordinator.stop();
-        expect(lineup.releases, 1);
-      },
-    );
+      expect(player.loads.map((uri) => uri.path), [
+        '/part-1.mkv',
+        '/part-2.mkv',
+      ]);
+      if (completion == PlayerState.stopped) {
+        player.emitStatus(
+          PlayerState.playing,
+          generation: player.loadGenerations.last,
+        );
+      }
+      player.emitStatus(completion, generation: player.loadGenerations.last);
+      await pumpEventQueue(times: 2);
+      expect(coordinator.hasPlaybackIntent, isFalse);
+      await coordinator.stop();
+      expect(player.stops, 1);
+    });
   }
 
   test('explicit stop and stale completion never advance parts', () async {
@@ -2086,7 +2015,7 @@ void main() {
     await Future<void>.delayed(Duration.zero);
 
     expect(player.loads, hasLength(1));
-    expect(lineup.releases, 1);
+    expect(coordinator.hasPlaybackIntent, isFalse);
   });
 
   test(
@@ -2127,7 +2056,7 @@ void main() {
 
       expect(player.loads, hasLength(2));
       expect(player.seeks.last, const Duration(minutes: 5));
-      expect(lineup.releases, 0);
+      expect(coordinator.error, isNull);
     },
   );
 
@@ -2165,11 +2094,10 @@ void main() {
     player.emitStatus(PlayerState.stopped, generation: secondGeneration);
     await Future<void>.delayed(Duration.zero);
     expect(player.loads, hasLength(2));
-    expect(lineup.releases, 0);
 
     player.emitStatus(PlayerState.ended, generation: secondGeneration);
     await pumpEventQueue(times: 2);
-    expect(lineup.releases, 1);
+    expect(coordinator.hasPlaybackIntent, isFalse);
   });
 
   test('credential retry on part two reloads only that logical part', () async {
@@ -2213,13 +2141,11 @@ void main() {
     expect(player.loads.map((uri) => uri.path), ['/part-2.mkv', '/part-2.mkv']);
     expect(player.loadPlexTokens, ['test-token-1', 'test-token-2']);
     expect(player.seeks.last, const Duration(minutes: 12));
-    expect(lineup.releases, 1);
     await coordinator.stop();
-    expect(lineup.releases, 2);
   });
 
   test(
-    'synchronous part transition authorization failure replaces active lease',
+    'synchronous part transition authorization failure replaces active request',
     () async {
       final lineup = _TestLineup(
         recoverAuthorization: true,
@@ -2265,7 +2191,6 @@ void main() {
       ]);
       expect(player.seeks.last, const Duration(minutes: 7));
       expect(lineup.recoveryCalls, 1);
-      expect(lineup.releasedTokens, ['test-token-1']);
       expect(coordinator.error, isNull);
 
       player.emitStatus(
@@ -2273,9 +2198,8 @@ void main() {
         generation: player.loadGenerations.last,
       );
       await pumpEventQueue(times: 2);
-      expect(lineup.releasedTokens, ['test-token-1', 'test-token-2']);
+      expect(coordinator.hasPlaybackIntent, isFalse);
       await coordinator.stop();
-      expect(lineup.releasedTokens, ['test-token-1', 'test-token-2']);
     },
   );
 
@@ -2318,12 +2242,10 @@ void main() {
       'test-token-2',
     ]);
     expect(player.seeks.last, const Duration(minutes: 7));
-    expect(lineup.releasedTokens, ['test-token-1']);
     await coordinator.stop();
-    expect(lineup.releasedTokens, ['test-token-1', 'test-token-2']);
   });
 
-  test('part transition failure stops and releases the aggregate', () async {
+  test('part transition failure stops and settles playback', () async {
     final lineup = _TestLineup(
       playbackParts: _parts(
         first: const Duration(hours: 2),
@@ -2354,7 +2276,6 @@ void main() {
 
     expect(player.loads, hasLength(2));
     expect(player.stops, 1);
-    expect(lineup.releases, 1);
     expect(coordinator.overlay, PlayerOverlay.error);
   });
 
@@ -2395,48 +2316,43 @@ void main() {
     expect(coordinator.error, isNull);
     expect(coordinator.canRetry, isFalse);
     expect(coordinator.overlay, isNot(PlayerOverlay.error));
-    expect(lineup.releases, 1);
     await coordinator.stop();
-    expect(lineup.releases, 2);
+    expect(player.stops, 2);
   });
 
-  test(
-    'failed channel replacement releases old and attempted aggregates',
-    () async {
-      final lineup = _TestLineup(
-        playbackParts: _parts(
-          first: const Duration(hours: 2),
-          second: const Duration(hours: 1),
-        ),
-      );
-      final guide = GuideController(
-        lineup: lineup,
-        loadSchedule: (channel) async => _schedule(channel),
-      )..requestViewport(0, 2);
-      await Future<void>.delayed(Duration.zero);
-      final player = _SecondLoadFailurePlayer();
-      final coordinator = PlayerCoordinator(
-        player: player,
-        lineup: lineup,
-        guide: guide,
-      );
-      addTearDown(player.close);
-      addTearDown(lineup.dispose);
-      addTearDown(guide.dispose);
-      addTearDown(coordinator.dispose);
+  test('failed channel replacement retains the prior channel', () async {
+    final lineup = _TestLineup(
+      playbackParts: _parts(
+        first: const Duration(hours: 2),
+        second: const Duration(hours: 1),
+      ),
+    );
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    )..requestViewport(0, 2);
+    await Future<void>.delayed(Duration.zero);
+    final player = _SecondLoadFailurePlayer();
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(player.close);
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
 
-      await coordinator.tune('channel-0');
-      await coordinator.tune('channel-b');
+    await coordinator.tune('channel-0');
+    await coordinator.tune('channel-b');
 
-      expect(player.loads, hasLength(2));
-      expect(player.stops, 1);
-      expect(lineup.releases, 2);
-      expect(lineup.currentChannelId, 'channel-0');
-      expect(coordinator.overlay, PlayerOverlay.error);
-      await coordinator.stop();
-      expect(lineup.releases, 2);
-    },
-  );
+    expect(player.loads, hasLength(2));
+    expect(player.stops, 1);
+    expect(lineup.currentChannelId, 'channel-0');
+    expect(coordinator.overlay, PlayerOverlay.error);
+    await coordinator.stop();
+    expect(player.stops, 2);
+  });
 
   test('failed tune cleanup stopped cannot advance attempted media', () async {
     final lineup = _TestLineup(
@@ -2466,38 +2382,8 @@ void main() {
     await Future<void>.delayed(Duration.zero);
 
     expect(player.loads, hasLength(2));
-    expect(lineup.releases, 2);
+    expect(player.stops, 1);
     expect(coordinator.overlay, PlayerOverlay.error);
-  });
-
-  test('disposing multipart playback releases its aggregate once', () async {
-    final lineup = _TestLineup(
-      playbackParts: _parts(
-        first: const Duration(hours: 2),
-        second: const Duration(hours: 1),
-      ),
-    );
-    final guide = GuideController(
-      lineup: lineup,
-      loadSchedule: (channel) async => _schedule(channel),
-    )..requestViewport(0, 2);
-    await Future<void>.delayed(Duration.zero);
-    final player = _EventPlayer();
-    final coordinator = PlayerCoordinator(
-      player: player,
-      lineup: lineup,
-      guide: guide,
-    );
-    addTearDown(player.close);
-    addTearDown(lineup.dispose);
-    addTearDown(guide.dispose);
-    await coordinator.tune('channel-b');
-
-    coordinator.dispose();
-    await Future<void>.delayed(Duration.zero);
-    coordinator.dispose();
-
-    expect(lineup.releases, 1);
   });
 
   test('mini Guide reconciles deletion and reloads its visible rows', () async {
@@ -2589,7 +2475,6 @@ class _TestLineup extends LineupController {
     stage = SetupStage.ready;
   }
 
-  int releases = 0;
   final bool failSecondPlaybackRequest;
   final bool recoverAuthorization;
   final bool replacementRecoverable;
@@ -2597,7 +2482,6 @@ class _TestLineup extends LineupController {
   final List<LineupPlaybackPart>? playbackParts;
   int playbackRequests = 0;
   int recoveryCalls = 0;
-  final releasedTokens = <String>[];
   final recoveryStarted = Completer<void>();
   final finishRecovery = Completer<void>();
   int _testContentGeneration = 0;
@@ -2642,11 +2526,6 @@ class _TestLineup extends LineupController {
             ),
           ),
         ];
-    Future<void> release() async {
-      releases++;
-      releasedTokens.add(token);
-    }
-
     Future<LineupPlaybackRequest> recover() async {
       recoveryCalls++;
       if (blockAuthorizationRecovery) {
@@ -2658,7 +2537,6 @@ class _TestLineup extends LineupController {
 
     return LineupPlaybackRequest.parts(
       parts,
-      release,
       plexToken: token,
       authorizationRecovery: recoverable ? recover : null,
     );

@@ -45,7 +45,7 @@ class HarnessController extends LineupController {
   LineupPlaybackRequest playbackFor(String itemId) =>
       LineupPlaybackRequest.parts([
         LineupPlaybackPart(uri: Uri.parse('lineup-test://synthetic/$itemId')),
-      ], () async {});
+      ]);
 
   @override
   Future<void> setCurrentChannel(String? id) async {

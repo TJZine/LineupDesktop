@@ -35,8 +35,7 @@ enum LibraryScanStatus {
 
 class LineupPlaybackRequest {
   LineupPlaybackRequest.parts(
-    List<LineupPlaybackPart> parts,
-    this._release, {
+    List<LineupPlaybackPart> parts, {
     this.plexToken,
     this.authorizationRecovery,
   }) : assert(parts.isNotEmpty),
@@ -44,9 +43,7 @@ class LineupPlaybackRequest {
 
   final List<LineupPlaybackPart> parts;
   final String? plexToken;
-  final Future<void> Function() _release;
   final Future<LineupPlaybackRequest> Function()? authorizationRecovery;
-  bool _released = false;
 
   static Uri _withoutPlexToken(Uri uri) {
     final query = Map<String, List<String>>.fromEntries(
@@ -65,12 +62,6 @@ class LineupPlaybackRequest {
             fragment: uri.hasFragment ? uri.fragment : null,
           )
         : uri.replace(queryParameters: query);
-  }
-
-  Future<void> release() async {
-    if (_released) return;
-    _released = true;
-    await _release();
   }
 }
 
@@ -995,28 +986,9 @@ class LineupController extends ChangeNotifier {
     });
     return LineupPlaybackRequest.parts(
       [
-        for (final part in descriptor.parts)
+        for (final part in descriptor)
           LineupPlaybackPart(uri: part.uri, duration: part.duration),
       ],
-      () async {
-        Object? failure;
-        final sessionIds = <String>{};
-        for (final part in descriptor.parts) {
-          if (part.sessionId.isEmpty || !sessionIds.add(part.sessionId)) {
-            continue;
-          }
-          try {
-            await plex.releasePlaybackSession(
-              server: endpoint,
-              token: token,
-              sessionId: part.sessionId,
-            );
-          } catch (error) {
-            failure ??= error;
-          }
-        }
-        if (failure != null) throw failure;
-      },
       plexToken: token,
       authorizationRecovery: () async {
         await _refreshPmsAccess(operation, serverId);

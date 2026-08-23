@@ -440,7 +440,6 @@ void main() {
         server: Uri.parse('https://plex.example:32400'),
         item: PlexMediaItem(
           id: 'empty',
-          key: '/library/metadata/empty',
           title: 'Empty',
           type: 'movie',
           duration: Duration.zero,
@@ -460,55 +459,53 @@ void main() {
     final descriptor = _directPlaybackDescriptor('/library/parts/1/file.mkv');
 
     expect(
-      descriptor.parts.single.uri,
+      descriptor.single.uri,
       Uri.parse('https://plex.example:32400/library/parts/1/file.mkv'),
     );
   });
 
-  test(
-    'multipart descriptors preserve order, origin, and session ownership',
-    () {
-      final client = PlexClient(
-        clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
-      );
-      final descriptor = client.playbackDescriptor(
-        server: Uri.parse('https://plex.example:32400'),
-        item: PlexMediaItem(
-          id: '1',
-          key: '/library/metadata/1',
-          title: 'Movie',
-          type: 'movie',
-          duration: Duration(minutes: 2),
-          parts: [
-            PlexMediaPart(
-              path: '/library/parts/one.mkv',
-              duration: Duration(minutes: 1),
-            ),
-            PlexMediaPart(path: '/library/parts/two.mkv'),
-          ],
-          container: 'mkv',
-          videoCodec: 'h264',
-          audioCodec: 'aac',
-          dynamicRange: DynamicRange.sdr,
-        ),
-      );
+  test('multipart descriptors preserve order and origin', () {
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+    );
+    final descriptor = client.playbackDescriptor(
+      server: Uri.parse('https://plex.example:32400'),
+      item: PlexMediaItem(
+        id: '1',
+        title: 'Movie',
+        type: 'movie',
+        duration: Duration(minutes: 2),
+        parts: [
+          PlexMediaPart(
+            path: '/library/parts/one.mkv',
+            duration: Duration(minutes: 1),
+          ),
+          PlexMediaPart(path: '/library/parts/two.mkv'),
+        ],
+        container: 'mkv',
+        videoCodec: 'h264',
+        audioCodec: 'aac',
+        dynamicRange: DynamicRange.sdr,
+      ),
+    );
 
-      expect(descriptor.parts.map((part) => part.uri), [
-        Uri.parse('https://plex.example:32400/library/parts/one.mkv'),
-        Uri.parse('https://plex.example:32400/library/parts/two.mkv'),
-      ]);
-      expect(descriptor.parts.first.duration, const Duration(minutes: 1));
-      expect(descriptor.parts.last.duration, isNull);
-      expect(
-        descriptor.parts.map((part) => part.sessionId).toSet(),
-        hasLength(2),
-      );
-      expect(
-        descriptor.parts.expand((part) => part.uri.queryParameters.keys),
-        isNot(contains('X-Plex-Token')),
-      );
-    },
-  );
+    expect(descriptor.map((part) => part.uri), [
+      Uri.parse('https://plex.example:32400/library/parts/one.mkv'),
+      Uri.parse('https://plex.example:32400/library/parts/two.mkv'),
+    ]);
+    expect(descriptor.first.duration, const Duration(minutes: 1));
+    expect(descriptor.last.duration, isNull);
+    expect(
+      descriptor.expand((part) => part.uri.queryParameters.keys),
+      isNot(contains('X-Plex-Token')),
+    );
+    expect(
+      () => descriptor.add(
+        PlexPlaybackPartDescriptor(uri: Uri.parse('https://plex.example/new')),
+      ),
+      throwsUnsupportedError,
+    );
+  });
 
   test('multipart descriptors reject a cross-origin part', () {
     final client = PlexClient(
@@ -519,7 +516,6 @@ void main() {
         server: Uri.parse('https://plex.example:32400'),
         item: PlexMediaItem(
           id: '1',
-          key: '/library/metadata/1',
           title: 'Movie',
           type: 'movie',
           duration: Duration(minutes: 2),
@@ -1013,13 +1009,12 @@ void main() {
   );
 }
 
-PlexPlaybackDescriptor _directPlaybackDescriptor(String partPath) =>
+List<PlexPlaybackPartDescriptor> _directPlaybackDescriptor(String partPath) =>
     PlexClient(clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst')
         .playbackDescriptor(
           server: Uri.parse('https://plex.example:32400'),
           item: PlexMediaItem(
             id: '1',
-            key: '/library/metadata/1',
             title: 'Movie',
             type: 'movie',
             duration: const Duration(minutes: 1),

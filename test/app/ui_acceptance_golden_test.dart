@@ -348,7 +348,6 @@ class _VisualController extends FixtureController {
       for (var index = 0; index < 12; index++)
         PlexMediaItem(
           id: 'movie-$index',
-          key: '/library/metadata/$index',
           title: 'Synthetic Movie ${index + 1}',
           type: 'movie',
           duration: const Duration(minutes: 90),

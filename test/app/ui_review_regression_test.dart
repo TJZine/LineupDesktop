@@ -286,7 +286,6 @@ void main() {
       ..availableMedia = [
         PlexMediaItem(
           id: 'available',
-          key: '/library/metadata/available',
           title: 'Available program',
           type: 'movie',
           duration: const Duration(minutes: 30),

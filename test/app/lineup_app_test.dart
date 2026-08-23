@@ -803,7 +803,7 @@ class _FakeController extends LineupController {
   LineupPlaybackRequest playbackFor(String itemId) =>
       LineupPlaybackRequest.parts([
         LineupPlaybackPart(uri: Uri.parse('lineup-test://synthetic')),
-      ], () async {});
+      ]);
 
   @override
   Future<ScheduleIndex> loadScheduleFor(Channel channel) async => buildSchedule(

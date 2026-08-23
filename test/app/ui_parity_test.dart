@@ -447,7 +447,6 @@ void main() {
       ..availableMedia = const [
         PlexMediaItem(
           id: 'committed',
-          key: '/library/metadata/committed',
           title: 'Committed',
           type: 'movie',
           duration: Duration(minutes: 1),
@@ -534,7 +533,6 @@ class _SetupFixtureController extends FixtureController {
       for (var index = 0; index < 6; index++)
         PlexMediaItem(
           id: 'movie-$index',
-          key: '/library/metadata/$index',
           title: 'Movie $index',
           type: 'movie',
           duration: const Duration(minutes: 90),

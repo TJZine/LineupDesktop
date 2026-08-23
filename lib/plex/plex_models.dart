@@ -127,7 +127,6 @@ class PlexMediaPart {
 class PlexMediaItem {
   const PlexMediaItem({
     required this.id,
-    required this.key,
     required this.title,
     required this.type,
     required this.duration,
@@ -160,7 +159,6 @@ class PlexMediaItem {
   });
 
   final String id;
-  final String key;
   final String title;
   final String type;
   final Duration duration;
@@ -193,22 +191,10 @@ class PlexMediaItem {
 }
 
 class PlexPlaybackPartDescriptor {
-  const PlexPlaybackPartDescriptor({
-    required this.uri,
-    required this.sessionId,
-    this.duration,
-  });
+  const PlexPlaybackPartDescriptor({required this.uri, this.duration});
 
   final Uri uri;
-  final String sessionId;
   final Duration? duration;
-}
-
-class PlexPlaybackDescriptor {
-  const PlexPlaybackDescriptor({required this.parts})
-    : assert(parts.length > 0);
-
-  final List<PlexPlaybackPartDescriptor> parts;
 }
 
 class PlexException implements Exception {

@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
@@ -463,7 +462,7 @@ class PlexClient {
     );
   }
 
-  PlexPlaybackDescriptor playbackDescriptor({
+  List<PlexPlaybackPartDescriptor> playbackDescriptor({
     required Uri server,
     required PlexMediaItem item,
   }) {
@@ -474,16 +473,13 @@ class PlexClient {
         'This item has no playable media part.',
       );
     }
-    return PlexPlaybackDescriptor(
-      parts: List.unmodifiable([
-        for (final part in mediaParts)
-          PlexPlaybackPartDescriptor(
-            uri: _directPlayUri(server, part.path),
-            sessionId: _randomId(),
-            duration: part.duration,
-          ),
-      ]),
-    );
+    return List.unmodifiable([
+      for (final part in mediaParts)
+        PlexPlaybackPartDescriptor(
+          uri: _directPlayUri(server, part.path),
+          duration: part.duration,
+        ),
+    ]);
   }
 
   Future<Uint8List> artwork(
@@ -545,25 +541,6 @@ class PlexClient {
       onError: (Object _, StackTrace _) {},
     );
     unawaited(subscription.cancel().onError((_, _) {}));
-  }
-
-  Future<void> releasePlaybackSession({
-    required Uri server,
-    required String token,
-    required String sessionId,
-  }) async {
-    try {
-      await _send(
-        _http.get(
-          server
-              .resolve('/video/:/transcode/universal/stop')
-              .replace(queryParameters: {'session': sessionId}),
-          headers: _headers(token),
-        ),
-      );
-    } catch (_) {
-      // Lease cleanup is best effort and never replaces playback settlement.
-    }
   }
 
   Future<Map<String, Object?>> _serverJson(Uri uri, String token) async {
@@ -635,7 +612,6 @@ PlexMediaItem parseMediaItem(Object? raw, {String? libraryId}) {
       .firstOrNull;
   return PlexMediaItem(
     id: _id(json['ratingKey'], 'media id'),
-    key: _text(json['key'], 'media key'),
     title: _text(json['title'], 'media title'),
     type: _text(json['type'], 'media type'),
     duration: Duration(milliseconds: _optionalInteger(json['duration']) ?? 0),
@@ -928,9 +904,4 @@ DynamicRange _dynamicRange(Map? media, Iterable<String> streamCodecs) {
     return DynamicRange.hdr10;
   }
   return media == null ? DynamicRange.unknown : DynamicRange.sdr;
-}
-
-String _randomId() {
-  final random = Random.secure();
-  return List.generate(24, (_) => random.nextInt(16).toRadixString(16)).join();
 }

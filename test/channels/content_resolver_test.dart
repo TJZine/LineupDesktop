@@ -7,7 +7,6 @@ void main() {
   const media = [
     PlexMediaItem(
       id: 'a',
-      key: '/a',
       title: 'A',
       type: 'movie',
       duration: Duration(minutes: 1),
@@ -16,7 +15,6 @@ void main() {
     ),
     PlexMediaItem(
       id: 'b',
-      key: '/b',
       title: 'B',
       type: 'movie',
       duration: Duration(minutes: 1),
@@ -26,7 +24,6 @@ void main() {
     ),
     PlexMediaItem(
       id: 'c',
-      key: '/c',
       title: 'C',
       type: 'episode',
       duration: Duration(minutes: 1),
@@ -77,7 +74,6 @@ void main() {
     final item = channelItemFor(
       const PlexMediaItem(
         id: 'episode',
-        key: '/episode',
         title: 'Episode',
         type: 'episode',
         duration: Duration(minutes: 1),
