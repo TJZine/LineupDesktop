@@ -158,7 +158,7 @@ class FixtureStore implements AppStore {
   Future<String> clientIdentifier() async =>
       'lineup-desktop-test-abcdefghijklmnopqrst';
   @override
-  Future<PersistedState> load() async => state;
+  Future<AppStoreLoadResult> load() async => AppStoreLoadResult(state);
   @override
   Future<void> save(PersistedState value) async => state = value;
 }

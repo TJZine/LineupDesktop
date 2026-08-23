@@ -155,7 +155,7 @@ void main() {
       rebuild.stop();
       expect(controller.channels, hasLength(1000));
       expect(
-        (await store.load()).channelsByProfileServer['child']!['server']!,
+        (await store.load()).state.channelsByProfileServer['child']!['server']!,
         hasLength(1000),
       );
       // ignore: avoid_print

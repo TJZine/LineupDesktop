@@ -125,13 +125,18 @@ class LineupController extends ChangeNotifier {
   int _contentGeneration = 0;
   bool _disposed = false;
 
+  String? startupRecoveryNotice;
+
   int get contentGeneration => _contentGeneration;
 
   Future<void> initialize() async {
     final operation = ++_epoch;
-    final persisted = await store.load();
+    final loadResult = await store.load();
     if (!_isCurrent(operation)) return;
-    _persisted = persisted;
+    _persisted = loadResult.state;
+    startupRecoveryNotice = loadResult.recoveredCorruptState
+        ? 'Saved app data was corrupt and has been reset.'
+        : null;
     settings = _persisted.settings;
     diagnostics.enabled = settings.diagnosticsEnabled;
     channels = const [];
@@ -183,6 +188,12 @@ class LineupController extends ChangeNotifier {
       operation: operation,
       fallbackStage: SetupStage.welcome,
     );
+  }
+
+  void dismissStartupRecoveryNotice() {
+    if (startupRecoveryNotice == null) return;
+    startupRecoveryNotice = null;
+    notifyListeners();
   }
 
   Future<void> startLinking() async {

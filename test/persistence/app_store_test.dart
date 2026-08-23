@@ -45,17 +45,19 @@ void main() {
       ),
     );
     final restored = await store.load();
-    expect(restored.settings.reduceMotion, isTrue);
-    expect(restored.selectedServerByProfile, {'profile': 'server'});
-    expect(restored.selectedLibraryIdsByProfileServer['profile']?['server'], [
-      '1',
-    ]);
+    expect(restored.recoveredCorruptState, isFalse);
+    expect(restored.state.settings.reduceMotion, isTrue);
+    expect(restored.state.selectedServerByProfile, {'profile': 'server'});
     expect(
-      restored.channelsByProfileServer['profile']?['server']?.single.id,
+      restored.state.selectedLibraryIdsByProfileServer['profile']?['server'],
+      ['1'],
+    );
+    expect(
+      restored.state.channelsByProfileServer['profile']?['server']?.single.id,
       'stable-id',
     );
     expect(
-      restored.currentChannelByProfileServer['profile']?['server'],
+      restored.state.currentChannelByProfileServer['profile']?['server'],
       'stable-id',
     );
     expect(
@@ -67,17 +69,26 @@ void main() {
     );
   });
 
-  test(
-    'corrupt state fails closed and preserves a recovery artifact',
-    () async {
+  for (final corruptState in <String, String>{
+    'malformed JSON': '{broken',
+    'schema-invalid JSON': '{"selectedServerByProfile":[]}',
+  }.entries) {
+    test('${corruptState.key} quarantines once and reports recovery', () async {
       final directory = await Directory.systemTemp.createTemp(
         'lineup-store-test',
       );
       addTearDown(() => directory.delete(recursive: true));
-      await directory.create(recursive: true);
-      await File('${directory.path}/state.json').writeAsString('{broken');
-      final restored = await FileAppStore(directory).load();
-      expect(restored.channelsByProfileServer, isEmpty);
+      final stateFile = File('${directory.path}/state.json');
+      await stateFile.writeAsString(corruptState.value);
+      final store = FileAppStore(
+        directory,
+        clock: () => DateTime.utc(2026, 8, 23),
+      );
+
+      final restored = await store.load();
+
+      expect(restored.state.channelsByProfileServer, isEmpty);
+      expect(restored.recoveredCorruptState, isTrue);
       expect(
         await directory
             .list()
@@ -85,7 +96,81 @@ void main() {
             .length,
         1,
       );
-      expect(await File('${directory.path}/state.json').exists(), isFalse);
+      expect(await stateFile.exists(), isFalse);
+
+      final restart = await store.load();
+      expect(restart.recoveredCorruptState, isFalse);
+      expect(restart.state.toJson(), const PersistedState().toJson());
+      expect(
+        await directory
+            .list()
+            .where((entry) => entry.path.contains('state.json.corrupt-'))
+            .length,
+        1,
+      );
+    });
+  }
+
+  test('missing state is quiet', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'lineup-store-test',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+
+    final restored = await FileAppStore(directory).load();
+
+    expect(restored.recoveredCorruptState, isFalse);
+    expect(restored.state.toJson(), const PersistedState().toJson());
+    expect(await directory.list().isEmpty, isTrue);
+  });
+
+  test(
+    'a quarantine collision fails instead of hiding corrupt state',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'lineup-store-test',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      final stateFile = File('${directory.path}/state.json');
+      await stateFile.writeAsString('{broken');
+      final instant = DateTime.utc(2026, 8, 23);
+      final quarantinePath =
+          '${stateFile.path}.corrupt-${instant.millisecondsSinceEpoch}';
+      await Directory(quarantinePath).create();
+
+      await expectLater(
+        FileAppStore(directory, clock: () => instant).load(),
+        throwsA(isA<FileSystemException>()),
+      );
+
+      expect(await stateFile.readAsString(), '{broken');
+      expect(await Directory(quarantinePath).exists(), isTrue);
+    },
+  );
+
+  test(
+    'transient directory read failure preserves state without quarantine',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'lineup-store-test',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      final stateDirectory = Directory('${directory.path}/state.json');
+      await stateDirectory.create();
+
+      await expectLater(
+        FileAppStore(directory).load(),
+        throwsA(isA<FileSystemException>()),
+      );
+
+      expect(await stateDirectory.exists(), isTrue);
+      expect(
+        await directory
+            .list()
+            .where((entry) => entry.path.contains('state.json.corrupt-'))
+            .isEmpty,
+        isTrue,
+      );
     },
   );
 }

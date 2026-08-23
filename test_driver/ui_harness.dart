@@ -195,7 +195,8 @@ class _HarnessStore implements AppStore {
   @override
   Future<String> clientIdentifier() async => 'harness';
   @override
-  Future<PersistedState> load() async => const PersistedState();
+  Future<AppStoreLoadResult> load() async =>
+      const AppStoreLoadResult(PersistedState());
   @override
   Future<void> save(PersistedState state) async {}
 }

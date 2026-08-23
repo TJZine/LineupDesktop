@@ -1485,13 +1485,40 @@ void main() {
     final initialization = controller.initialize();
     controller.dispose();
     store.finishLoad.complete(
-      const PersistedState(profileId: 'should-not-restore'),
+      const AppStoreLoadResult(PersistedState(profileId: 'should-not-restore')),
     );
     await initialization;
 
     expect(controller.account, isNull);
     expect(controller.stage, SetupStage.welcome);
   });
+
+  test(
+    'startup corruption notice is bounded, path-free, and dismissible',
+    () async {
+      final controller = LineupController(
+        store: _MemoryStore(const PersistedState(), true),
+        credentials: _MemoryCredentials(),
+        plex: _FakePlex(),
+      );
+      addTearDown(controller.dispose);
+      var notifications = 0;
+      controller.addListener(() => notifications++);
+
+      await controller.initialize();
+
+      expect(controller.startupRecoveryNotice, isNotNull);
+      expect(controller.startupRecoveryNotice!.length, lessThan(100));
+      expect(controller.startupRecoveryNotice, isNot(contains('state.json')));
+      expect(controller.startupRecoveryNotice, isNot(contains('/')));
+      final beforeDismiss = notifications;
+
+      controller.dismissStartupRecoveryNotice();
+
+      expect(controller.startupRecoveryNotice, isNull);
+      expect(notifications, beforeDismiss + 1);
+    },
+  );
 
   test(
     'server management preserves scoped lineups when selection is cleared',
@@ -1766,9 +1793,13 @@ Channel _channel(String id) => Channel(
 );
 
 class _MemoryStore implements AppStore {
-  _MemoryStore([this.state = const PersistedState()]);
+  _MemoryStore([
+    this.state = const PersistedState(),
+    this.recoveredCorruptState = false,
+  ]);
 
   PersistedState state;
+  final bool recoveredCorruptState;
   bool failNextSave = false;
   String failureMessage = 'save failed';
 
@@ -1777,7 +1808,8 @@ class _MemoryStore implements AppStore {
       'lineup-desktop-test-abcdefghijklmnopqrst';
 
   @override
-  Future<PersistedState> load() async => state;
+  Future<AppStoreLoadResult> load() async =>
+      AppStoreLoadResult(state, recoveredCorruptState: recoveredCorruptState);
 
   @override
   Future<void> save(PersistedState value) async {
@@ -1923,10 +1955,10 @@ class _ControlledSaveStore extends _MemoryStore {
 }
 
 class _BlockingLoadStore extends _MemoryStore {
-  final finishLoad = Completer<PersistedState>();
+  final finishLoad = Completer<AppStoreLoadResult>();
 
   @override
-  Future<PersistedState> load() => finishLoad.future;
+  Future<AppStoreLoadResult> load() => finishLoad.future;
 }
 
 class _ConcurrentStore implements AppStore {
@@ -1940,7 +1972,7 @@ class _ConcurrentStore implements AppStore {
       'lineup-desktop-test-abcdefghijklmnopqrst';
 
   @override
-  Future<PersistedState> load() async => state;
+  Future<AppStoreLoadResult> load() async => AppStoreLoadResult(state);
 
   @override
   Future<void> save(PersistedState value) async {

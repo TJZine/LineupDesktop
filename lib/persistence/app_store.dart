@@ -120,15 +120,24 @@ Map<String, Map<String, List<String>>> _librarySelections(Object? value) {
 }
 
 abstract interface class AppStore {
-  Future<PersistedState> load();
+  Future<AppStoreLoadResult> load();
   Future<void> save(PersistedState state);
   Future<String> clientIdentifier();
 }
 
+class AppStoreLoadResult {
+  const AppStoreLoadResult(this.state, {this.recoveredCorruptState = false});
+
+  final PersistedState state;
+  final bool recoveredCorruptState;
+}
+
 class FileAppStore implements AppStore {
-  FileAppStore(this.directory);
+  FileAppStore(this.directory, {DateTime Function()? clock})
+    : _clock = clock ?? DateTime.now;
 
   final Directory directory;
+  final DateTime Function() _clock;
   Future<void> _writes = Future.value();
 
   static Future<FileAppStore> create() async => FileAppStore(
@@ -141,29 +150,29 @@ class FileAppStore implements AppStore {
   File get _identityFile => File('${directory.path}/plex-client-identity');
 
   @override
-  Future<PersistedState> load() async {
+  Future<AppStoreLoadResult> load() async {
+    late final String contents;
     try {
-      return PersistedState.fromJson(
-        jsonDecode(await _stateFile.readAsString()),
-      );
+      contents = await _stateFile.readAsString();
     } on PathNotFoundException {
-      return const PersistedState();
-    } catch (_) {
+      return const AppStoreLoadResult(PersistedState());
+    }
+    try {
+      return AppStoreLoadResult(PersistedState.fromJson(jsonDecode(contents)));
+    } on FormatException {
       await _quarantineState();
-      return const PersistedState();
+      return const AppStoreLoadResult(
+        PersistedState(),
+        recoveredCorruptState: true,
+      );
     }
   }
 
   Future<void> _quarantineState() async {
-    if (!await _stateFile.exists()) return;
     final quarantine = File(
-      '${_stateFile.path}.corrupt-${DateTime.now().toUtc().millisecondsSinceEpoch}',
+      '${_stateFile.path}.corrupt-${_clock().toUtc().millisecondsSinceEpoch}',
     );
-    try {
-      await _stateFile.rename(quarantine.path);
-    } catch (_) {
-      // Startup recovery must not fail only because preservation failed.
-    }
+    await _stateFile.rename(quarantine.path);
   }
 
   @override

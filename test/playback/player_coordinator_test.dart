@@ -1530,7 +1530,8 @@ class _MemoryStore implements AppStore {
   @override
   Future<String> clientIdentifier() async => 'test';
   @override
-  Future<PersistedState> load() async => const PersistedState();
+  Future<AppStoreLoadResult> load() async =>
+      const AppStoreLoadResult(PersistedState());
   @override
   Future<void> save(PersistedState state) async {}
 }
