@@ -8,13 +8,13 @@ void main() {
     diagnostics.add(
       'plex',
       'Bearer abc https://plex.test/file?X-Plex-Token=secret /Users/person/movie.mkv',
-      {'mode': 'direct-play', 'authorization': 'secret'},
+      {'container': 'mpeg-ts', 'authorization': 'secret'},
     );
     final entry = diagnostics.entries.single;
     expect(entry.message, isNot(contains('abc')));
     expect(entry.message, isNot(contains('secret')));
     expect(entry.message, isNot(contains('/Users/person')));
-    expect(entry.context, {'mode': 'direct-play'});
+    expect(entry.context, {'container': 'mpeg-ts'});
   });
 
   test('stores only bounded structured context', () {
@@ -24,7 +24,6 @@ void main() {
       'failureCode': 'http_error',
       'httpStatus': 401,
       'count': 12,
-      'mode': 'direct-play',
       'container': 'mpeg-ts',
       'videoCodec': 'h264',
       'audioCodec': 'eac3',
@@ -39,7 +38,6 @@ void main() {
       'failureCode': 'http_error',
       'httpStatus': 401,
       'count': 12,
-      'mode': 'direct-play',
       'container': 'mpeg-ts',
       'videoCodec': 'h264',
       'audioCodec': 'eac3',
@@ -56,7 +54,7 @@ void main() {
       diagnostics.add('playback', 'Playback facts', {
         'code': 'opaque secret sentinel',
         'failureCode': 'x' * 65,
-        'mode': true,
+        'container': true,
         'httpStatus': 99,
         'count': -1,
       });

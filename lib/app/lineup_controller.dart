@@ -978,7 +978,6 @@ class LineupController extends ChangeNotifier {
   ) {
     final descriptor = plex.playbackDescriptor(server: endpoint, item: item);
     diagnostics.add('playback', 'Plex playback selected', {
-      'mode': 'directPlay',
       'container': item.container,
       'videoCodec': item.videoCodec,
       'audioCodec': item.audioCodec,

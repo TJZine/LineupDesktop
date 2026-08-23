@@ -475,10 +475,7 @@ class PlexClient {
     }
     return List.unmodifiable([
       for (final part in mediaParts)
-        PlexPlaybackPartDescriptor(
-          uri: _directPlayUri(server, part.path),
-          duration: part.duration,
-        ),
+        (uri: _directPlayUri(server, part.path), duration: part.duration),
     ]);
   }
 

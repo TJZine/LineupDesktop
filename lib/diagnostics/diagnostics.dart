@@ -78,7 +78,6 @@ class Diagnostics {
   static const _stringKeys = {
     'code',
     'failureCode',
-    'mode',
     'container',
     'videoCodec',
     'audioCodec',

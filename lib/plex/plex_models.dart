@@ -190,12 +190,7 @@ class PlexMediaItem {
   final bool viewed;
 }
 
-class PlexPlaybackPartDescriptor {
-  const PlexPlaybackPartDescriptor({required this.uri, this.duration});
-
-  final Uri uri;
-  final Duration? duration;
-}
+typedef PlexPlaybackPartDescriptor = ({Uri uri, Duration? duration});
 
 class PlexException implements Exception {
   const PlexException(this.code, this.message);

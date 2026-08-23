@@ -91,13 +91,11 @@ void main() {
     await controller.setLibraries({'movies'});
     await controller.artworkForPath(Uri.parse('/art'));
     plex.playbackDescriptorResult = [
-      PlexPlaybackPartDescriptor(
+      (
         uri: Uri.parse('https://plex.example/one.mp4'),
         duration: const Duration(seconds: 30),
       ),
-      PlexPlaybackPartDescriptor(
-        uri: Uri.parse('https://plex.example/two.mp4'),
-      ),
+      (uri: Uri.parse('https://plex.example/two.mp4'), duration: null),
     ];
     final playback = controller.playbackFor('movie');
 
@@ -141,7 +139,6 @@ void main() {
       'Plex playback selected',
     );
     expect(controller.diagnostics.entries.single.context, {
-      'mode': 'directPlay',
       'container': 'mp4',
       'videoCodec': 'h264',
       'audioCodec': 'aac',

@@ -500,9 +500,10 @@ void main() {
       isNot(contains('X-Plex-Token')),
     );
     expect(
-      () => descriptor.add(
-        PlexPlaybackPartDescriptor(uri: Uri.parse('https://plex.example/new')),
-      ),
+      () => descriptor.add((
+        uri: Uri.parse('https://plex.example/new'),
+        duration: null,
+      )),
       throwsUnsupportedError,
     );
   });
