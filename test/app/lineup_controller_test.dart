@@ -219,6 +219,82 @@ void main() {
     ]);
   });
 
+  test('late old-token failure reuses refreshed PMS access', () async {
+    final initialServer = _server('server');
+    final refreshedConnection = PlexConnection(
+      uri: Uri.parse('https://refreshed.example:32400'),
+      local: true,
+      relay: false,
+    );
+    final refreshedServer = PlexServer(
+      id: initialServer.id,
+      name: initialServer.name,
+      owned: initialServer.owned,
+      connections: [refreshedConnection],
+    );
+    final firstFailure = Completer<Uint8List>();
+    final lateFailure = Completer<Uint8List>();
+    final artworkRequests = <(Uri, String, Uri)>[];
+    var discoveries = 0;
+    final plex = _FakePlex()
+      ..discoverServersHandler = (_) async {
+        discoveries++;
+        return [
+          PlexServerAccess(
+            server: discoveries == 1 ? initialServer : refreshedServer,
+            token: discoveries == 1 ? 'pms-token-1' : 'pms-token-2',
+          ),
+        ];
+      }
+      ..selectConnectionHandler = (server, _) async {
+        return server.connections.single;
+      }
+      ..artworkHandler = (server, token, path) {
+        artworkRequests.add((server, token, path));
+        if (token == 'pms-token-1') {
+          return path.path == '/first'
+              ? firstFailure.future
+              : lateFailure.future;
+        }
+        return Future.value(Uint8List.fromList([4]));
+      };
+    final controller = LineupController(
+      store: _MemoryStore(
+        const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+      ),
+      credentials: _MemoryCredentials(accountToken: 'cloud-token'),
+      plex: plex,
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+
+    final first = controller.artworkForPath(Uri.parse('/first'));
+    final second = controller.artworkForPath(Uri.parse('/second'));
+    await Future<void>.delayed(Duration.zero);
+    firstFailure.completeError(const PlexException('auth-invalid', 'Expired'));
+    expect(await first, Uint8List.fromList([4]));
+
+    lateFailure.completeError(const PlexException('auth-invalid', 'Expired'));
+    expect(await second, Uint8List.fromList([4]));
+
+    expect(discoveries, 2);
+    expect(plex.selectedTokens, ['pms-token-1', 'pms-token-2']);
+    expect(artworkRequests, [
+      (
+        initialServer.connections.single.uri,
+        'pms-token-1',
+        Uri.parse('/first'),
+      ),
+      (
+        initialServer.connections.single.uri,
+        'pms-token-1',
+        Uri.parse('/second'),
+      ),
+      (refreshedConnection.uri, 'pms-token-2', Uri.parse('/first')),
+      (refreshedConnection.uri, 'pms-token-2', Uri.parse('/second')),
+    ]);
+  });
+
   test(
     'server selection never substitutes the cloud token for missing access',
     () async {
