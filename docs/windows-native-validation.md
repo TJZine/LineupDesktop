@@ -1,7 +1,14 @@
 # Windows Native Acceptance Plan
 
-**Status:** Procedure defined; not yet executed as evidence for the current
-branch.
+**Status:** Procedure defined; full exact-commit campaign not yet executed.
+
+**Owner-observed surface smoke (reported 2026-08-23):** the Windows native
+Player, Classic PiP/Overlay presentation, and fullscreen work at a surface
+level on the owner's system. This is useful evidence that the architecture is
+viable and these paths are implemented; the tested commit, machine/display,
+package identity, media set, and transition results were not captured. The
+deeper campaign below remains the support/release record, not an urgent
+precondition for continuing product-completeness work.
 
 **Target branch:** `flutter-mvp`
 
@@ -261,13 +268,18 @@ direct-play/transcode behavior, and observed native telemetry.
 | HDR-1 | HEVC HDR10 on HDR display | Correct HDR/SDR state; no washed-out/crushed image; stable overlays/fullscreen | |
 | DV-1 | Dolby Vision Profile 8 or DV with HDR fallback | Record actual fallback/output; infer nothing from metadata alone | |
 | AUDIO-1 | Multiple audio tracks | Track selection corresponds to audible output | |
-| SUB-1 | Text subtitles | Select, render, disable, and compose correctly | |
-| SUB-2 | Image subtitles when available | Work or receive an explicit classification | |
+| AUDIO-2 | TrueHD and DTS/DTS-HD samples | Decode through libmpv to the system-selected output, normally PCM, without requiring passthrough; record actual channels/output telemetry | |
+| SUB-1 | SRT and ASS/SSA text subtitles, embedded and Plex-managed external when available | Select, render styled/plain text, disable, and compose correctly | |
+| SUB-2 | PGS and VobSub/image subtitles when available | Select, render, disable, and compose correctly, or receive an explicit classification | |
+| OPEN-1 | Representative MP4/MKV/MPEG-TS and H.264/HEVC/AV1/MPEG-2/VC-1 inputs available to the operator | Original stream reaches libmpv without an application allowlist; record any actual demux/decode limitation rather than assuming universal support | |
 | REMOTE-1 | Remote direct Plex stream | Start, seek, recover, and replace under realistic latency | |
 | RELAY-1 | Plex Relay when intentionally available | Connection is labeled truthfully; performance is not generalized | |
 
-One successful file does not establish a codec, container, HDR, or Dolby Vision
-support matrix. Preserve conservative wording tied to exact evidence.
+The target is Plex-HTPC-like breadth through pinned libmpv/FFmpeg, including
+native subtitle tracks and decode-to-PCM for lossless/surround audio. This does
+not require browser codec allowlists, subtitle burn-in modes, or audio
+passthrough. No finite matrix establishes “all formats”; preserve wording tied
+to the pinned runtime and exact representative evidence.
 
 ## 8. Portable package acceptance
 

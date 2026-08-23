@@ -14,6 +14,12 @@ on `flutter-mvp`
 **Host evidence:** macOS 26.6.1 arm64, Flutter 3.47.0 revision `4cf2416426`,
 Dart 3.13.0
 
+**Owner feedback re-adjudication:** 2026-08-23. Product-completeness priority
+now precedes public-release engineering. The owner reports successful surface
+use of the Windows native Player, Classic PiP/Overlay video, and fullscreen;
+the exact commit, machine, package, and deeper scenario matrix were not captured
+as durable evidence.
+
 This is the authoritative current product-parity record. The classifications
 in [Portable UI Parity](ui-parity.md) remain historical evidence for their
 named campaigns; they do not override this audit. Current source and observed
@@ -21,24 +27,29 @@ evidence outrank older documentation.
 
 ## Executive conclusion
 
-- **Replatform:** **PROVISIONAL**. The Flutter product spine, responsive Guide,
-  native boundary, and most daily-use workflows are implemented and strongly
-  tested, but a core Plex Media Server credential is discarded and Windows
-  playback/package behavior has not been physically accepted at this commit.
+- **Replatform:** **PROVISIONAL, WITH OWNER-OBSERVED WINDOWS SURFACE SMOKE**.
+  The Flutter product spine, responsive Guide, native boundary, and most
+  daily-use workflows are implemented and strongly tested. The owner has
+  personally observed native Player, PiP/Overlay, and fullscreen working at a
+  surface level. A core Plex Media Server credential is still discarded, and
+  deeper exact-commit Windows/package acceptance remains unrecorded.
 - **Core daily-use Lineup parity:** source-level workflow coverage is broad, but
-  actual daily-use parity is not established until PMS authorization and
-  physical Windows playback are proven. Generated-channel editing, large-library
-  planning, media-version choice, and some persistence/error paths are partial.
-- **Private beta:** **READY AFTER NAMED P0 ITEMS**. A tightly controlled evidence
-  cohort may begin after the per-server PMS token fix. A supported private beta
-  additionally requires an exact patched package and physical Windows
-  startup/auth/playback/overlay/fullscreen smoke at that commit.
+  actual daily-use parity is not established until PMS authorization is fixed
+  and ordinary product gaps close. Owner-observed Windows playback clears the
+  basic viability question; generated-channel editing, large-library planning,
+  multi-part/version handling, and some persistence/error paths remain partial.
+- **Private beta:** **READY AFTER THE PMS-CREDENTIAL P0 FOR A CONTROLLED
+  COHORT**. The owner-observed Windows smoke materially reduces surface risk,
+  but it is not a durable support claim. Exact-package and deeper hardware
+  acceptance are deliberately sequenced after product completeness unless a
+  package is distributed as supported software.
 - **First public Windows release:** **NOT READY**. Physical acceptance, package
   engine attestation, package CI coverage, native notice/legal review,
   project-controlled runtime mirroring, signing/trust, and a release channel
   remain open.
-- **Dominant next mode:** parity closure followed by Windows media/package
-  acceptance and release hardening.
+- **Dominant next mode:** useful parity and Desktop product closure first;
+  representative Windows media-depth validation second; package/public-release
+  hardening last.
 
 ## Method, scope, and evidence calibration
 
@@ -70,11 +81,22 @@ The classification vocabulary is fixed: **PARITY**, **DESKTOP-ENHANCED**,
 **NEEDS EVIDENCE**, and **BLOCKED BY DECISION** rows. Medium/Low confidence
 rows name the proof needed in the evidence-gap register.
 
-P0 is phase-scoped: it marks a blocker to the beta or public-release phase named
-by the row/register, not an assertion that every P0 blocks a controlled evidence
-cohort. P1 is required for the first public Windows release. Matrix counts are
-capability rows, not counts of independent root blockers; several native P0 rows
-collapse into one exact-package physical acceptance campaign.
+Priority now means implementation sequence for the owner's current objective:
+
+- **P0:** blocks ordinary product use or crosses a live credential/data-safety
+  boundary now.
+- **P1:** materially incomplete correctness, reliability, UX, or accessibility
+  in ordinary Desktop use.
+- **P2:** advanced workflow, compatibility-depth proof, or a product decision
+  that does not justify delaying core completion.
+- **P3:** optional polish or deliberately deferred packaging, legal, signing,
+  publication, and other public-release engineering.
+
+Release gates remain explicit in the evidence register and public-release
+conclusion even when their current implementation priority is P3. Priority is
+therefore not a claim that release work is unnecessary; it records when the
+owner wants it done. Matrix counts are capability rows, not counts of
+independent root blockers.
 
 ## Product matrix
 
@@ -99,7 +121,26 @@ collapse into one exact-package physical acceptance campaign.
 | Per-server PMS credential | `/resources` supplies a distinct private `accessToken` for each PMS and all PMS requests use it | Parser discards `accessToken`; probes, libraries, artwork, playback, and release use the Plex.tv/Home token | MISSING | P0 | HIGH | [Plex PMS auth](https://developer.plex.tv/pms/); upstream discovery/types and managed-profile test; `lib/plex/plex_models.dart`; `lib/plex/plex_client.dart` | Plex transport: retain privately, refresh once, route to every PMS consumer |
 | Local HTTP server reachability | Allows local HTTP only where platform policy permits it; otherwise prefers HTTPS/relay | A secure-only policy rejects every non-HTTPS resource connection, including HTTP-only LAN servers | BLOCKED BY DECISION | P2 | HIGH | Upstream mixed-content/discovery policy; `lib/plex/plex_client.dart` | Decide whether local-HTTP compatibility belongs in supported scope |
 | Connection facts and warnings | Auth/access/unreachable, relay/local HTTP, slow/very slow | Direct local/remote/relay and measured latency are shown; rich health/warning taxonomy is narrower | PARTIAL | P2 | HIGH | Upstream `ServerSelectListView.ts`; `lib/app/onboarding_view.dart` | Server UI |
-| Audio onboarding | Receiver/TV choice, DTS intent, direct-play fallback | Truthfully confirms OS-selected audio and hides controls with no native consumer | INTENTIONAL DESKTOP ADAPTATION | — | HIGH | Upstream `AudioSetupScreen.ts`; `lib/app/onboarding_view.dart`; `docs/user-guide.md` | Keep omitted until native facts and commands exist |
+| Audio onboarding | Receiver/TV choice, DTS intent, direct-play fallback | Truthfully confirms OS-selected output; libmpv decodes supported tracks to the system output without making passthrough a playback prerequisite | INTENTIONAL DESKTOP ADAPTATION | — | HIGH | Upstream `AudioSetupScreen.ts`; native options; `docs/architecture.md`; `docs/user-guide.md` | Preserve decode-to-PCM default; expose output/passthrough only for a proven user need |
+
+**What “per-server PMS credential is discarded” means:** linking and Plex Home
+selection produce a Plex.tv account/profile token. Desktop correctly uses that
+token to call Plex.tv `/api/v2/resources`, but each returned server resource also
+contains its own opaque `accessToken`. `PlexServer` has no field for it, and
+`discoverServers()` drops it while parsing. The controller then reuses the
+Plex.tv/Home token for the selected server's identity, libraries, artwork,
+playback header, and playback-session cleanup. Owned servers may accept that by
+coincidence; managed profiles and shared servers can reject it with `401` even
+though cloud sign-in succeeded.
+
+The fix is scoped, not an auth rewrite: retain the selected resource token in a
+private in-memory server-auth scope, keep it out of UI, durable JSON, URLs, and
+diagnostics, and route every request to that PMS through it. Continue using the
+account/Home token only for Plex.tv/Home endpoints. On a PMS authorization
+failure, refresh resources at most once under the current profile and retry only
+if profile/server/currentness still match. Prove the boundary with three
+different synthetic tokens through probes, libraries, artwork, playback, release,
+refresh, cancellation, logout, and profile/server switching.
 
 ### Channel Setup, authoring, persistence, and scheduling
 
@@ -150,18 +191,19 @@ collapse into one exact-package physical acceptance campaign.
 | Vertical virtualization/cache bounds | DOM window and bounded caches | Lazy fixed-extent rows, overscan, bounded row/artwork caches and concurrency | DESKTOP-ENHANCED | — | HIGH | `lib/guide/guide_controller.dart`; 1,000-channel tests | Guide |
 | Dense horizontal program bounds | Upstream uses fixed slots/virtualization policy | One visible row may synchronously project/build up to 1,000 program and semantic cells; 480 is tested | NEEDS EVIDENCE | P2 | MEDIUM | `lib/channels/scheduler.dart`; `lib/guide/guide_view.dart`; dense-row controller test | Profile 5–7 shortest-slot rows at 12h in release mode and measure frames/semantics |
 | Responsive Guide geometry | Fixed 1920×1080 TV reference | Tested logical 600/720/900/1080/4K regimes and DPR2 allocation | DESKTOP-ENHANCED | — | HIGH | `test/guide/guide_view_test.dart`; Guide goldens | Physical DPI/resize still Windows evidence |
-| Native PiP/overlay video | Real upstream video visible in supplied capture | Flutter apertures and rectangle forwarding implemented; no exact-commit physical Windows capture | NEEDS EVIDENCE | P0 | LOW | `lib/playback/native_video_surface.dart`; transparent goldens; `docs/windows-native-validation.md` | Physical Windows: real moving frame, resize, overlay, teardown |
+| Native PiP/overlay video | Real upstream video visible in supplied capture | Flutter apertures and rectangle forwarding are implemented; owner reports Player/PiP/Overlay working at surface level, without a durable exact-commit capture | NEEDS EVIDENCE | P2 | MEDIUM | Owner report 2026-08-23; `lib/playback/native_video_surface.dart`; transparent goldens; `docs/windows-native-validation.md` | Later acceptance: record moving frame, resize, overlay, and teardown at the target commit |
 
 ### Player, streaming, tracks, OSD, and input
 
 | Capability | Upstream behavior/reference | Current Desktop behavior | Classification | Priority | Confidence | Evidence | Owner / next action |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Single playback owner | HTML5 player/recovery owners | One `PlayerCoordinator`, one native player, generations and serialized tune operations | PARITY | — | HIGH | `lib/playback/player_coordinator.dart`; coordinator tests | Playback |
-| Original-stream playback | Direct-play-first playback when an appropriate media version is compatible | Production sends one original Plex part to libmpv, which owns native decode | INTENTIONAL DESKTOP ADAPTATION | — | HIGH | Upstream stream resolver; `lib/app/lineup_controller.dart`; native player | Physical Direct Play proof remains part of Windows acceptance |
-| Capability-aware media version/part selection | Scores available media versions/parts against runtime compatibility | Desktop chooses the first `Media` and first `Part` while production advertises unrestricted capability | PARTIAL | P1 | HIGH | `lib/plex/plex_client.dart`; `lib/app/lineup_controller.dart`; no multi-version production fixture | Select a compatible version/part and test alternates deterministically |
-| Direct Stream/transcode fallback | HLS when container/codec/resolution/subtitles/HDR policy requires it | Policy code can model direct-stream/transcode, but production unrestricted capabilities make those paths unreachable | MISSING | P1 | HIGH | `lib/playback/stream_policy.dart`; `lib/app/lineup_controller.dart`; stream-policy tests are not production wiring | Streaming: wire real compatibility/fallback owner and integration tests |
+| Format-open original-stream playback | Browser/webOS scores codecs, containers, audio, subtitles, and HDR before playback | Production sends the original PMS part to pinned libmpv with no application codec/container/HDR allowlist; libmpv/FFmpeg owns demux, video/audio decode, PCM conversion, rendering, hardware-decode attempts, and tone mapping | DESKTOP-ENHANCED | — | HIGH | `lib/app/lineup_controller.dart`; `lib/playback/stream_policy.dart`; `windows/runner/native_player.cpp`; `docs/architecture.md` | Preserve native-first ownership; never promise literally every file without bounded evidence |
+| Multi-part media playback | Plays every sequential part of a Plex media item | Parser retains only the first `Part`, so later parts are absent from the schedule/playback model | PARTIAL | P1 | HIGH | `lib/plex/plex_client.dart`; `lib/plex/plex_models.dart`; no multi-part production fixture | Model ordered parts and continue them under one current playback lifetime |
+| Multiple media-version selection | Scores/selects among alternate Plex `Media` versions | Parser retains only the first `Media`; libmpv openness lowers codec urgency, but users cannot choose edition/quality/version | MISSING | P2 | HIGH | `lib/plex/plex_client.dart`; no multi-version model/UI fixture | Preserve all versions and add selection only after defining default-version behavior |
+| Server remux/transcode fallback | HLS when browser/container/codec/resolution/subtitle/HDR policy requires it | Production intentionally uses unrestricted native Direct Play; dormant policy can model remux/transcode but has no runtime capability or remote-quality consumer | BLOCKED BY DECISION | P2 | HIGH | `lib/playback/stream_policy.dart`; `lib/app/lineup_controller.dart`; `docs/architecture.md` | Decide only for bandwidth-limited remote quality or demonstrated libmpv failures; do not recreate browser fallback by default |
 | Remote quality selection | User transcode tiers applied to Plex resolver | No production transcode/quality consumer | MISSING | P2 | HIGH | Upstream `transcodeQuality.ts`; no Desktop consumer | Add only with real transcode path |
-| HDR compatibility/fallback | Direct/HDR10/HLS fallback policy | libmpv delegates decode/tone mapping; native facts exist, but no fallback policy or physical HDR acceptance | NEEDS EVIDENCE | P1 | LOW | upstream resolver; native telemetry; Windows acceptance plan | Windows HDR display plus stream-policy decision |
+| Native HDR decode/output/tone mapping | Browser policy chooses Direct/HDR10/HLS fallback | libmpv accepts original HDR-family streams and owns decode/render/tone mapping; owner reports surface playback working, but representative HDR-output evidence is not recorded | NEEDS EVIDENCE | P2 | MEDIUM | Owner report 2026-08-23; native telemetry/options; `docs/architecture.md`; Windows acceptance plan | Later representative HDR/DV display matrix; add server fallback only for an observed failure class |
 | Load/retry surface and resource cleanup | Typed retry/reload and diagnostics | Recoverable error overlay, same-path retry, stale-load rejection, and lease release | PARITY | — | HIGH | `lib/playback/player_coordinator.dart`; tests | Compatibility fallback is classified separately above |
 | Tune/replacement lifetime | Stale-operation/currentness ownership | Tune generations, serialized operations, stop/release on scope change | PARITY | — | HIGH | coordinator/native source and tests | Physical replacement stress still required |
 | OSD hierarchy | Title/status, progress/buffer, up-next, tracks, sleep | Clean bottom gradient with channel/program/status/telemetry/progress/actions | INTENTIONAL DESKTOP ADAPTATION | — | HIGH | `lib/playback/player_view.dart`; OSD golden; screenshot `00-25-11` | Player UI |
@@ -172,12 +214,12 @@ collapse into one exact-package physical acceptance campaign.
 | Audio track selection | Immediate track switch and selected state | Truthful native audio rail and immediate selection | PARITY | — | HIGH | native track model; `lib/playback/player_view.dart`; tests | Playback |
 | Subtitle track selection/off | Grouped delivery modes and immediate selection | Native subtitle list plus Off; no false delivery mode | INTENTIONAL DESKTOP ADAPTATION | — | HIGH | `lib/playback/player_view.dart`; long-list tests; screenshot `00-25-21` | Playback |
 | Track selector initial focus | Selected entry is the highlighted primary row | Subtitle always starts at Off; audio starts at first row, not selected entry | PARTIAL | P2 | HIGH | `lib/playback/player_view.dart`; tests omit selected-focus assertion | Focus current selected track |
-| Subtitle mode/delivery/recovery | Off/Direct/Standard/Full, extract/burn-in and recovery | Native track selection and Off exist, but delivery compatibility, extraction/burn-in, and recovery policy do not | PARTIAL | P1 | HIGH | upstream playback options/resolver; Desktop native seam | Add only the delivery/fallback modes backed by production consumers |
+| Native subtitle format/delivery breadth | Off/Direct/Standard/Full, browser extraction/burn-in and recovery | libmpv-visible embedded tracks are selected natively and require no browser burn-in mode; Plex-managed external sidecars and representative text/image subtitle breadth are not yet explicitly proved | NEEDS EVIDENCE | P2 | MEDIUM | `lib/plex/plex_client.dart`; native `track-list`/`sid`; Player tests; owner broad-compatibility feedback | Validate SRT/ASS/PGS/VobSub and Plex external sidecars; implement explicit sidecar loading only if the evidence exposes a gap |
 | Preferred/forced subtitle autoselection | Stored language and forced policy affect selection | Plex parses some facts, but no complete native projection/autoselection consumer exists | MISSING | P2 | HIGH | upstream settings; `lib/plex/plex_models.dart`; native track model | Add epoch-safe selection after track facts are complete |
-| DTS/direct-play audio fallback | Settings drive resolver and alternate track | No passthrough/capability/fallback command; current UI is honest | INTENTIONALLY OMITTED | — | HIGH | upstream resolver; Desktop `NativePlayer`; user guide | Native capability owner required first |
+| Lossless/surround audio decode | Settings drive passthrough or alternate browser-compatible track | Native playback does not gate decode on passthrough; pinned libmpv/FFmpeg decodes supported DTS-family, TrueHD, and other tracks and sends the result through the system-selected output, normally as PCM | INTENTIONAL DESKTOP ADAPTATION | — | HIGH | native libmpv options; `docs/windows-runtime.md`; `docs/architecture.md` | Validate representative TrueHD/DTS/DTS-HD tracks; add passthrough only as a separate optional feature |
 | Sleep timer | Off/15/30/60/120 and one-minute warning | Off/30/60/90 cycle; stop failure surfaces safely | INTENTIONAL DESKTOP ADAPTATION | — | HIGH | `lib/playback/player_coordinator.dart`; tests | Optional duration/warning parity P3 |
 | Rich Now Playing details | Standard/cinematic details, synopsis, art, cast, badges | Guide carries rich details; Player has compact OSD only | MISSING | P2 | HIGH | upstream Now Playing coordinator; no Desktop surface; screenshot `00-26-12` | Product decision: dedicated player details or Guide-as-replacement |
-| Fullscreen | Player toggle and platform placement | F/F11/button, native window-placement snapshot/rollback/restore | NEEDS EVIDENCE | P0 | MEDIUM | Dart/C++ source and tests; no physical Windows report | Physical Windows DPI/move/minimize/fullscreen campaign |
+| Fullscreen | Player toggle and platform placement | F/F11/button and native window-placement snapshot/rollback/restore; owner reports surface behavior working | NEEDS EVIDENCE | P2 | MEDIUM | Owner report 2026-08-23; Dart/C++ source and tests; no durable exact-commit report | Later DPI/move/minimize/repetition campaign |
 | Channel entry/CH navigation | Digits and CH± remote behaviors | Digit buffer, PageUp/PageDown channels, explicit error, mini Guide paging | DESKTOP-ENHANCED | — | HIGH | player source/tests | Input |
 | Keyboard/media keys | TV remote/playback key map | Desktop keys, numpad, media transport, Guide/settings shortcuts | DESKTOP-ENHANCED | — | HIGH | `lib/app/lineup_shell.dart`; `lib/playback/player_view.dart`; tests | Input |
 | Cursor auto-hide and pointer wake | Timed pointer hiding over immersive playback | Desktop schedules cursor hiding while playing and restores it on pointer activity | PARITY | — | HIGH | `lib/playback/player_coordinator.dart`; `lib/playback/player_view.dart`; tests | Player input |
@@ -187,15 +229,15 @@ collapse into one exact-package physical acceptance campaign.
 
 | Capability | Upstream behavior/reference | Current Desktop behavior | Classification | Priority | Confidence | Evidence | Owner / next action |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| DTS Passthrough setting | Consumed by capability/audio policy | Hidden; no native passthrough consumer | INTENTIONALLY OMITTED | — | HIGH | upstream settings/resolver; Desktop `NativePlayer` | Windows media prerequisite |
-| Direct Play Audio Fallback setting | Consumed by resolver | Hidden; no alternate-track fallback owner | INTENTIONALLY OMITTED | — | HIGH | upstream resolver; Desktop playback wiring | Streaming prerequisite |
-| Subtitle Mode setting | Controls delivery/recovery/transcode | Hidden; no delivery policy consumer | INTENTIONALLY OMITTED | — | HIGH | upstream settings; Desktop track rail | Streaming prerequisite |
+| DTS Passthrough setting | Consumed by capability/audio policy | Hidden because native decode-to-system-output works without passthrough; passthrough is not a compatibility prerequisite | INTENTIONALLY OMITTED | — | HIGH | upstream settings/resolver; Desktop native options and architecture | Optional only after a concrete bitstream-output requirement and native device contract |
+| Direct Play Audio Fallback setting | Consumed by browser-compatible resolver | Hidden because libmpv native decode is the default compatibility path; no demonstrated input requires automatic alternate-track selection | INTENTIONALLY OMITTED | — | HIGH | upstream resolver; Desktop playback wiring/native architecture | Revisit only for a reproducible decode/output failure class |
+| Subtitle Mode setting | Controls browser/server extraction, burn-in, and transcode | Hidden because native libmpv track selection is the default Desktop model | INTENTIONALLY OMITTED | — | HIGH | upstream settings; Desktop track rail/native seam | Add a narrower fallback control only for a demonstrated sidecar/rendering failure |
 | Preferred Subtitle Language | Applied automatically | Manual track selection only | MISSING | P2 | HIGH | upstream settings; Desktop native track projection | Add with autoselection owner |
 | Prefer Forced Subtitles | Applied by descriptor/recovery | Forced fact does not reach a complete native consumer | MISSING | P2 | HIGH | upstream settings; Desktop models/native seam | Add with the autoselection capability, not as dead preference state |
 | Keep Playback Running in Settings | Optional on webOS | Desktop coordinator always persists across management routes | INTENTIONAL DESKTOP ADAPTATION | — | HIGH | `lib/app/lineup_shell.dart` | Fixed Desktop behavior |
-| HDR Fallback setting | Controls compatibility/transcode | Hidden pending supported HDR policy and evidence | INTENTIONALLY OMITTED | — | HIGH | upstream settings/resolver; Windows plan | Windows prerequisite |
+| HDR Fallback setting | Controls browser/server compatibility/transcode | Hidden because native libmpv decode/tone mapping is primary; no observed class currently justifies a user fallback switch | INTENTIONALLY OMITTED | — | HIGH | upstream settings/resolver; native architecture; Windows plan | Revisit only from representative HDR evidence |
 | Transcode Quality setting | Applies bitrate/resolution tier | No production transcode consumer | MISSING | P2 | HIGH | upstream config; Desktop playback wiring | Add with transcode path |
-| Transcode Compat Mode | Changes transcode parameters | No equivalent consumer | INTENTIONALLY OMITTED | — | HIGH | upstream settings/resolver | Streaming prerequisite |
+| Transcode Compat Mode | Changes browser/server transcode parameters | No equivalent consumer because native Direct Play is primary | INTENTIONALLY OMITTED | — | HIGH | upstream settings/resolver; native architecture | Add only with an accepted server-transcode capability and demonstrated need |
 | Library Tabs | Optional Guide filter | `Library filters` directly controls Guide and clears hidden filter | PARITY | — | HIGH | settings/shell/Guide tests | Settings |
 | Now Watching Banner | Optional tuned context | `Now Playing context` directly controls Guide banner | PARITY | — | HIGH | settings/shell/Guide tests | Settings |
 | OSD auto-hide duration | Upstream uses its own fixed/timed overlay policy | User selects 2/4/6/8/10/15 seconds; the active coordinator updates its timer | DESKTOP-ENHANCED | — | HIGH | `lib/settings/lineup_settings.dart`; `lib/playback/player_coordinator.dart`; coordinator tests | Settings/Player |
@@ -229,16 +271,16 @@ collapse into one exact-package physical acceptance campaign.
 | Local media-metadata privacy | Browser-local channel state contains library facts | Desktop writes channel titles, summaries, ratings, genres, artwork paths, and codec facts to plaintext `state.json`; tokens remain separate in secure storage | PARTIAL | P2 | HIGH | `lib/channels/channel.dart`; `lib/persistence/app_store.dart` | Document location/deletion/threat model and decide whether to minimize/protect metadata |
 | Secure credentials | Client-side tokens | Platform secure storage, separate account/profile keys, no token in JSON | DESKTOP-ENHANCED | — | HIGH | `lib/persistence/app_store.dart`; controller tests | Credentials |
 | macOS UI development | Not applicable to webOS | Exact toolchain analysis/tests/build pass; playback explicitly unsupported | INTENTIONAL DESKTOP ADAPTATION | — | HIGH | local 2026-08-23 commands; macOS backend tests | Supported only as UI development |
-| Windows native player implementation | Not applicable to webOS HTML5 | Narrow C++/libmpv owner, generation filtering, DComp marker, bounds/fullscreen | NEEDS EVIDENCE | P0 | MEDIUM | `windows/runner/native_player.cpp`; Dart tests; CI compile | Physical Windows acceptance |
-| Native rectangle contract | Browser owns video element | Flutter calculates global bounds/DPR and zeroes on dispose; fakes do not assert values | NEEDS EVIDENCE | P1 | MEDIUM | `lib/playback/native_video_surface.dart`; no recording fake | Add Dart geometry-contract test plus physical proof |
+| Windows native player implementation | Not applicable to webOS HTML5 | Narrow C++/libmpv owner, generation filtering, DComp marker, bounds/fullscreen; owner reports successful surface playback | NEEDS EVIDENCE | P2 | MEDIUM | Owner report 2026-08-23; `windows/runner/native_player.cpp`; Dart tests; CI compile | Preserve as implemented; run deeper exact-commit acceptance after core completeness |
+| Native rectangle contract | Browser owns video element | Flutter calculates global bounds/DPR and zeroes on dispose; owner-observed PiP/Overlay works, while fakes still do not assert exact values | NEEDS EVIDENCE | P2 | MEDIUM | Owner report 2026-08-23; `lib/playback/native_video_surface.dart`; no recording fake | Add cheap Dart geometry-contract regression; defer broad physical geometry matrix |
 | Exact-HEAD CI | Upstream webOS CI is comprehensive for its platform | Platform-adapted exact source checks passed Dart, macOS build/goldens, Windows UI and stock-engine compile | INTENTIONAL DESKTOP ADAPTATION | — | HIGH | GitHub run `32589006254`; local 278-test pass; patched job skipped | CI |
-| Patched-engine CI artifact | Not applicable upstream | Exact-HEAD expensive engine job skipped and run produced zero artifacts | NEEDS EVIDENCE | P0 | HIGH | `.github/workflows/ci.yml`; run/job/artifact metadata | Force manual exact-commit engine/package build |
-| Package engine provenance | Not applicable upstream | Package validates source/libmpv but unconditionally attests patched engine without verifying built `flutter_windows.dll` | PARTIAL | P1 | HIGH | `tool/windows/package.ps1`; native marker enforcement | Packaging: bind attestation to actual engine artifact |
-| Package CI ownership | Not applicable upstream | Package tests/upload run only under narrow engine-input detector; package-only changes can stay green without package proof | PARTIAL | P1 | HIGH | `.github/workflows/ci.yml` | Split cheap package verification from engine rebuild |
+| Patched-engine CI artifact | Not applicable upstream | Exact-HEAD expensive engine job skipped and run produced zero artifacts | NEEDS EVIDENCE | P3 | HIGH | `.github/workflows/ci.yml`; run/job/artifact metadata | Deferred release engineering: force a manual exact-commit engine/package build when packaging becomes the active phase |
+| Package engine provenance | Not applicable upstream | Package validates source/libmpv but unconditionally attests patched engine without verifying built `flutter_windows.dll` | PARTIAL | P3 | HIGH | `tool/windows/package.ps1`; native marker enforcement | Deferred packaging: bind attestation to the actual engine artifact |
+| Package CI ownership | Not applicable upstream | Package tests/upload run only under narrow engine-input detector; package-only changes can stay green without package proof | PARTIAL | P3 | HIGH | `.github/workflows/ci.yml` | Deferred packaging: split cheap package verification from engine rebuild |
 | Portable runtime provenance | No comparable webOS product capability | Windows distribution pins Flutter/engine/depot_tools/libmpv inputs and hashes and checks source/runtime facts | INTENTIONAL DESKTOP ADAPTATION | — | HIGH | development/runtime docs; build metadata; scripts | Desktop release engineering strength |
-| Native notice completeness | Not applicable upstream | Package verifies four media-runtime license inputs and includes app/engine provenance texts, but lacks a complete transitive dependency/source-notice manifest for monolithic libmpv | BLOCKED BY DECISION | P0 | HIGH | `docs/windows-runtime.md`; `tool/windows/package.ps1`; `third_party/libmpv` | Legal/release: complete manifest and independent review |
-| Runtime mirror | Not applicable upstream | Third-party binary source is hash-pinned, but project-controlled immutable mirror is required by current release policy | BLOCKED BY DECISION | P0 | HIGH | `docs/windows-runtime.md`; build metadata | Release owner |
-| Signing/public release channel | Not applicable upstream | No signing, supported channel, installer, updater, or release automation | BLOCKED BY DECISION | P0 | HIGH | README/user guide; repo census | Decide portable-only scope, signing and publication owner |
+| Native notice completeness | Not applicable upstream | Package verifies four media-runtime license inputs and includes app/engine provenance texts, but lacks a complete transitive dependency/source-notice manifest for monolithic libmpv | BLOCKED BY DECISION | P3 | HIGH | `docs/windows-runtime.md`; `tool/windows/package.ps1`; `third_party/libmpv` | Deferred legal/release phase: complete manifest and independent review |
+| Runtime mirror | Not applicable upstream | Third-party binary source is hash-pinned, but project-controlled immutable mirror is required by current release policy | BLOCKED BY DECISION | P3 | HIGH | `docs/windows-runtime.md`; build metadata | Deferred release owner |
+| Signing/public release channel | Not applicable upstream | No signing, supported channel, installer, updater, or release automation | BLOCKED BY DECISION | P3 | HIGH | README/user guide; repo census | Deferred release decision: portable-only scope, signing, and publication owner |
 | Installer/updater | webOS sideload/package model | Deliberately absent; a portable first release could omit both with recovery guidance | BLOCKED BY DECISION | P2 | HIGH | README/user guide; repo census | Product/release decision, not automatic blocker |
 | Network and application-lifecycle recovery | webOS observes connectivity, visibility, memory pressure, and relaunch | Desktop has request-level retries, bounded caches, stale-result rejection, and metric updates, but no general sleep/resume or reconnect campaign | PARTIAL | P2 | MEDIUM | Plex/Guide/player owners and tests; `lib/playback/native_video_surface.dart` | Exercise network loss, sleep/resume, minimize/restore, and server reappearance before broader support |
 
@@ -297,18 +339,21 @@ The compact bottom OSD and five-row top mini Guide are coherent Desktop
 adaptations, with direct goldens and strong input tests. The OSD can disappear
 while its controls retain keyboard/assistive focus, and player transitions
 ignore Reduce Motion. Playback-options rails truthfully expose native tracks,
-but initial focus does not follow the selection and subtitle delivery/recovery
-depth is absent. A cinematic rich-details Player surface is genuinely absent
-but P2.
+but initial focus does not follow the selection. Browser subtitle delivery modes
+are not a Desktop requirement; the remaining P2 question is whether
+representative native text/image formats and Plex-managed external sidecars all
+reach libmpv. A cinematic rich-details Player surface is genuinely absent but
+P2.
 
 ### Settings
 
 The category rail/detail layout, extended Guide choices, accessibility controls,
 account actions, and redacted-diagnostics preference are Desktop value. Every
 visible Desktop preference is persisted and has a current consumer. Missing
-upstream media settings are not superficial Settings gaps; they depend on
-absent compatibility, transcode, subtitle-delivery, or native capability
-owners.
+upstream media settings are not superficial Settings gaps: most encode
+browser/webOS compatibility policy that native libmpv does not need. Transcode
+quality, preferred/forced subtitle selection, and optional passthrough should
+appear only with concrete product requirements and working consumers.
 
 All preference changes apply immediately through one optimistic controller
 save. The Settings UI disables further edits during that save and reports a
@@ -397,259 +442,212 @@ Overlay Guide, OSD, mini Guide, and one alternate-theme Settings state.
 
 ## Mechanical summary
 
-The matrix contains **146 capabilities**:
+The matrix contains **147 capabilities**:
 
 - 37 **PARITY**;
-- 23 **DESKTOP-ENHANCED**;
+- 24 **DESKTOP-ENHANCED**;
 - 14 **INTENTIONAL DESKTOP ADAPTATION**;
-- 29 **PARTIAL**;
+- 28 **PARTIAL**;
 - 14 **MISSING**;
-- 9 **INTENTIONALLY OMITTED**;
+- 8 **INTENTIONALLY OMITTED**;
 - 6 **NOT APPLICABLE**;
-- 7 **NEEDS EVIDENCE**; and
-- 7 **BLOCKED BY DECISION**.
+- 8 **NEEDS EVIDENCE**; and
+- 8 **BLOCKED BY DECISION**.
 
-The actionable/decision rows contain 8 P0, 16 P1, 28 P2, and 5 P3
-dispositions. These are row counts; the eight remediation groups below
-consolidate related P0/P1 rows into owned work.
+The actionable/decision rows contain 1 P0, 10 P1, 36 P2, and 11 P3
+dispositions. Counts are literal matrix rows, not a quality-weighted percentage.
 
-Counts are literal matrix-row counts, not a quality-weighted percentage.
-Separate conclusions:
+- **Core daily-use parity:** broad but provisional because the PMS credential
+  defect can prevent normal managed/shared-server use. Owner-observed native
+  playback substantially improves confidence in the surface implementation.
+- **Total upstream coverage:** every material workflow and visible setting has
+  a disposition; browser/webOS workarounds are not assumed to be Desktop needs.
+- **Desktop media value:** original-stream, format-open libmpv playback and
+  decode-to-system-output replace browser allowlists, burn-in defaults, and
+  passthrough-as-compatibility logic.
+- **Private beta:** a controlled cohort can follow the PMS credential fix.
+- **Public release:** not ready; exact-package evidence, notices/legal, mirror,
+  signing, and release-channel decisions remain deliberately deferred.
 
-- **Core daily-use parity:** broad but provisional because PMS authorization
-  can fail before libraries/playback, and physical Windows media is unproven.
-- **Total upstream coverage:** every material workflow and every visible
-  setting has a disposition; webOS/developer-only behavior is separated.
-- **Desktop-only value:** responsive management, custom channels, extended
-  Guide ranges/density, focused state separation, accessibility preferences,
-  secure storage, and bounded support diagnostics are material additions.
-- **Private beta:** a controlled evidence cohort can follow the PMS credential
-  fix; a supported beta additionally needs the exact-package Windows smoke.
-- **Public release:** not ready; package, native, notice/legal, mirror, signing,
-  and release-channel gates remain.
+## Former P1 re-adjudication
+
+Every row that was P1 before the owner's Desktop/media feedback was re-read
+against current Dart/C++ ownership:
+
+| Former P1 finding | Current disposition | Reason |
+| --- | --- | --- |
+| Library scan/planning scale and cancellation | Keep P1 | Large libraries are an ordinary setup input; this is network/memory/UX correctness, not a platform difference. |
+| Editing generated channels | Keep P1 | Edit can silently change what a channel contains and destroy stable generated identity. |
+| Whole-state save transactions | Keep P1 | Cross-domain rollback can persist state the UI reported as failed. |
+| Corrupt/transient state recovery | Keep P1 | Transient I/O can be treated as corruption and silently reset visible state. |
+| Media-version/part selection | Split | Losing later sequential parts remains P1 correctness; optional alternate-version choice is P2. |
+| Direct Stream/transcode fallback | Move to P2 decision | Native libmpv Direct Play is intentionally format-open. Add server fallback only for bandwidth policy or demonstrated failures. |
+| HDR compatibility/fallback | Move to P2 evidence | Native decode/tone mapping is the primary design; prove representative output instead of importing browser fallback policy. |
+| OSD accessibility-focus timeout | Keep P1 | Focused controls can disappear during ordinary keyboard/assistive use. |
+| Reduce Motion in Player overlays | Keep P1 | A visible accessibility preference currently does not cover the Player. |
+| Subtitle mode/delivery/recovery | Move to P2 evidence | Browser extract/burn-in modes are not native parity; explicitly validate native text/image tracks and Plex sidecars. |
+| Reduce Motion setting coverage | Keep P1 | Same underlying incomplete advertised preference as the Player-overlay row. |
+| Accessibility semantics | Keep P1 | Aggregate product-quality finding; timed overlays and motion remain ordinary-use gaps. |
+| Credential-safe diagnostics | Keep P1 | Opaque exception text can cross a secret-display boundary independent of platform. |
+| Native rectangle contract | Move to P2 evidence | Owner-observed PiP/Overlay works; a cheap deterministic geometry test remains useful, while broad physical proof can wait. |
+| Package engine provenance | Move to P3 release work | Important before distribution, not before product feature completion. |
+| Package CI ownership | Move to P3 release work | Important before distribution, not before product feature completion. |
 
 ## Intentional adaptations and omissions
 
 ### Intentional Desktop adaptations
 
-- OS-selected audio replaces unproven receiver/device/passthrough controls.
+- The Windows player is native-first and format-open: it sends the original PMS
+  part to libmpv without an application codec/container/HDR allowlist.
+- Supported audio tracks are decoded through libmpv/FFmpeg to the
+  system-selected output, normally PCM. Bitstream passthrough is optional, not
+  a prerequisite for TrueHD or DTS-family playback.
+- Native subtitle selection replaces browser text-track extraction and burn-in
+  as the default path. Explicit sidecar loading is added only if evidence shows
+  Plex-managed external tracks are missing.
 - The player remains alive across management routes, so the upstream
   keep-playing toggle is unnecessary.
 - Guide geometry, row density, past windows, OSD, mini Guide, Settings, and
   navigation adapt TV intent to resizable pointer/keyboard windows.
-- Native track rails expose only facts the current player can consume.
 - macOS is a UI-development platform with an explicit unsupported player.
 
 ### Intentionally omitted upstream behavior
 
-- DTS/passthrough, direct-play audio fallback, HDR fallback, transcode
-  compatibility, and gamepad are hidden until a truthful native/stream consumer
-  and evidence exist. Subtitle selection is visible, but its missing delivery,
-  recovery, preferred-language, and forced-selection depth is classified as
-  partial/missing rather than intentionally omitted.
-- Aggressive preload and raw/subtitle debug logging are resource/developer
+- DTS passthrough and direct-play audio fallback settings are hidden because
+  decode-to-system-output is the working compatibility path.
+- HDR fallback, transcode compatibility, and subtitle delivery-mode settings
+  are hidden unless a representative failure or remote-quality requirement
+  establishes a real consumer.
+- Gamepad remains omitted without a supported Windows input contract.
+- Aggressive preload and raw/subtitle debug logging are internal/developer
   policy, not normal Desktop settings.
 
 ### WebOS/browser-only or developer-only behavior
 
 HTML5 video/Media Session, webOS relaunch/keepalive, visibility memory budgets,
-raw remote-key aliases, internal debug globals, EPG storage debug flags, and
-browser subtitle extraction are not Desktop requirements. Desktop independently
-implements playback cursor auto-hide as a normal pointer behavior.
-Upstream's hidden channel CRUD/import/export services and stale route tokens are
-not counted as reachable product capability.
+raw remote-key aliases, browser codec allowlists, internal debug globals, EPG
+storage debug flags, and browser subtitle extraction are not Desktop
+requirements. Desktop independently implements cursor auto-hide as ordinary
+pointer behavior. Upstream hidden channel CRUD/import/export services and stale
+route tokens are not counted as reachable product capability.
 
 ### Obsolete Electron behavior intentionally removed
 
 Chromium protocol delivery, renderer/main/preload/IPC ownership, browser
 Gamepad polling, window-process workarounds, and latent channel import/export
 code are not compatibility targets. Audio-device enumeration remains omitted
-because its historical physical validation was incomplete.
+because system output is the current product contract.
 
 ### Desktop enhancements not present upstream
 
-Custom channel management, extended 1,000-channel limits, additional variants,
-large focus indicators, explicit reduced motion, bounded user-visible support
-diagnostics, responsive management navigation, secure credential storage, and
-native Windows presentation are Desktop-specific value.
+Custom channel management, 1,000-channel limits, additional variants, large
+focus indicators, reduced motion, bounded user-visible diagnostics, responsive
+management, secure credential storage, native Windows presentation, and
+format-open libmpv playback are Desktop-specific value.
 
 ## Evidence-gap register
 
-| Unknown | Why evidence is insufficient | Smallest proof | Environment | Private beta | Public release |
+| Unknown | Why evidence is insufficient | Smallest proof | Environment | Product completeness | Public release |
 | --- | --- | --- | --- | --- | --- |
-| Real PMS authorization across owner, managed Home, and shared server | Current tests use one token and omit resource `accessToken` | Distinct cloud/Home/PMS token integration fixture plus a live disposable managed/shared profile smoke | Mac for deterministic test; Windows for live playback | Blocks | Blocks |
-| Large-library inventory/planning | Current tests do not measure paging, memory, cancellation, or empty/error recovery on representative large PMS libraries | Synthetic multi-page library with forced slow/error pages; record memory/time, progress, cancellation, and retry | Mac/CI; live disposable server follow-up | Blocks broad-library beta | Blocks |
-| Final atomic apply duration/failure | Source rolls memory back, but no focused delayed/failing persistence fixture proves UX and durable state | Force delayed then failed save during a 1,000-channel apply; verify progress, prior memory/disk state, and retry | Mac/CI | No if measured fast | Blocks atomicity claim |
-| State read-failure taxonomy | Malformed JSON is tested, but permission denial, truncation, short/transient read, and quarantine failure are not | Inject each failure and verify corruption versus retry/recovery without silent overwrite | Mac/CI; Windows app-data smoke | Blocks affected beta recovery | Blocks |
-| Direct Stream/transcode fallback | Policy unit tests are disconnected from production's unrestricted capability input | Production integration fixture that forces original incompatibility, verifies resolver choice/cleanup, and plays the result | Mac/CI for policy; physical Windows codec cases | No if beta media is constrained | Blocks general media claim |
-| Real Windows video/audio and DirectComposition stacking | C++ compiles and Flutter apertures are tested; no physical exact-commit report exists | Visible moving SDR video in Player/PiP/Overlay, audio, replacement tune, close/reopen | Physical Windows 10/11 x64 | Blocks supported beta | Blocks |
-| Native rectangle DPR/resize/dispose forwarding | Test fakes ignore `setVideoRect` | Recording fake asserts initial/resize/DPR/zero-on-dispose; physical resize validates frame alignment | Mac test plus physical Windows | No after basic smoke | Blocks broad support |
-| HDR/tone mapping/hardware decode | Source/telemetry do not prove display output | Pinned HDR media on an HDR display with expected telemetry and visual judgment | Physical Windows HDR system | No if excluded | Blocks HDR claim |
-| Patched engine and portable package at exact commit | Exact-head CI skipped expensive job and emitted no artifact | Forced clean engine build, package, manifest/hash inspection and launch outside repo | Clean Windows build/test machines | Blocks supported package | Blocks |
-| Clean-system Vulkan prerequisite/recovery | No disposable-system evidence | Launch with/without Vulkan loader only in disposable VM/snapshot; verify guidance | Disposable Windows VM | No if cohort is provisioned | Blocks broad package claim |
-| Package engine attestation | Script does not bind claim to actual built engine | Stock-engine negative test plus patched-engine identity/hash positive test | Windows | Blocks supported package | Blocks |
-| Dense 12-hour Guide semantics/performance | Vertical cardinality fixtures use long programs | Profile 5–7 visible rows of one-minute items; record nodes/frame timings and traversal | Mac profile; confirm Windows | No unless observed slow | Blocks 12h/1,000 claim |
-| Keyboard/AT timed-overlay usability | Widget tests do not keep focus inside OSD/mini Guide past timeout | Focus/semantics tests and one screen-reader/keyboard session | Mac test plus physical Windows AT | Blocks accessibility claim | Blocks support claim |
-| Mini Guide reading/focus timeout | Browse input resets the timer, but a paused keyboard/AT reading interval is not exercised | Keep focus/semantics interaction inside the shelf beyond eight seconds and verify it remains operable | Mac test plus Windows AT | No if documented | Blocks accessibility support claim |
-| Network loss and OS suspend/resume | Request-level recovery tests do not prove a live session reconnects cleanly across adapter/server loss or sleep | Redacted tune/Guide session through network loss/recovery, server disappearance/reappearance, sleep/resume, minimize/restore | Physical Windows plus controlled network | Advisable | Blocks broad reliability claim |
-| Physical gamepad | No current owner or device evidence | Product decision followed by supported-controller mapping/evidence | Physical Windows | No, omitted | No unless claimed |
-| Screenshot provenance | Pixels do not establish exact commit/logical DPI | Sanitized capture manifest naming commit, logical size, DPR and platform | Source capture environment | No | No |
-| Long-duration playback/replacement soak | Unit currentness tests are not a native soak | Repeated tune/stop/fullscreen/track cycles with redacted resource and leak observations | Physical Windows | Advisable | Blocks reliability claim |
-| Native notice/legal completeness | Top-level texts do not prove transitive obligations | Generated dependency/license manifest, vendored hashes, independent legal approval | Release/legal review | No for tightly controlled private test | Blocks |
-| Signing and publication trust | No selected signing/release channel | Documented signing identity, reproducible publication workflow, verification/revocation guidance | Windows/release infrastructure | No for direct cohort | Blocks |
+| Real PMS authorization across owner, managed Home, and shared server | Current model drops resource `accessToken` and tests use one token | Distinct cloud/Home/PMS-token fixture plus live disposable managed/shared smoke | Mac/CI; Windows follow-up | Blocks affected users | Blocks |
+| Large-library inventory/planning | Paging, memory, progress, cancellation, and empty/error recovery are not measured at representative scale | Synthetic slow/error pages with memory/time/progress/cancel/retry assertions | Mac/CI; live PMS follow-up | P1 | Blocks broad-library claim |
+| Multi-part and multi-version media | Parser retains only first `Media` and first `Part` | Sequential two-part fixture and alternate-version fixture with deterministic behavior | Mac/CI | Multi-part is P1 | Blocks only claimed scope |
+| State read-failure taxonomy | Only malformed JSON is covered | Inject permission, truncation, transient read, and quarantine failures | Mac/CI; Windows app-data smoke | P1 | Blocks recovery claim |
+| Native media breadth | Format-open source design and owner smoke do not establish every input; Plex external sidecars are not explicitly owned | Representative containers/video plus TrueHD, DTS/DTS-HD-to-PCM, SRT/ASS, PGS/VobSub, and Plex sidecar cases | Physical Windows | P2 after core work | Blocks only named compatibility claims |
+| Server remux/transcode | No active consumer because native playback is unrestricted | Product decision; if accepted, one forced bandwidth/failure fixture proving resolver, cleanup, and playback | Mac/CI plus Windows | No unless requirement accepted | Blocks only a transcode/remote-quality claim |
+| Native Player/PiP/Overlay/fullscreen depth | Owner reports surface success, but exact commit/machine/media/transition facts are not durably recorded | Record target commit and repeat resize, overlay, replacement, minimize, DPI, fullscreen, teardown | Physical Windows 10/11 | P2 after core work | Blocks a supported native claim |
+| HDR/tone mapping/hardware decode | Native path and owner smoke exist, but output telemetry/visual result is not captured | Representative HDR10 plus DV/HLG when claimed, on named displays | Physical Windows HDR system | P2 | Blocks only named HDR claims |
+| Native rectangle DPR/resize/dispose forwarding | Owner smoke supports viability; fakes ignore exact values | Recording fake plus one target-commit physical resize/DPI check | Mac test; Windows | P2 | Blocks broad geometry support claim |
+| Keyboard/AT timed-overlay usability | Tests do not keep focus inside timed overlays | Focus/semantics tests plus one keyboard/screen-reader session | Mac test; Windows AT | P1 | Blocks accessibility support claim |
+| Dense 12-hour Guide semantics/performance | Vertical cardinality fixtures use long programs | Profile short-slot visible rows and record nodes/frame timings | Mac profile; confirm Windows | P2 unless slow | Blocks 12h/1,000 performance claim |
+| Network loss and OS suspend/resume | Request recovery tests do not prove live-session recovery | Redacted tune/Guide session across network/server/sleep/minimize transitions | Physical Windows | P2 | Blocks broad reliability claim |
+| Patched package and engine attestation | Exact-head expensive CI job skipped; package claim is not bound to built engine | Forced clean engine/package build, identity negative/positive test, launch, manifest, hash | Clean Windows systems | Deferred P3 | Blocks distribution |
+| Native notice/legal completeness | Top-level texts do not prove transitive obligations | Dependency/license manifest, vendored hashes, independent legal approval | Release/legal review | Deferred P3 | Blocks distribution |
+| Signing and publication trust | No selected signing/release channel | Signing identity and reproducible publication/recovery workflow | Release infrastructure | Deferred P3 | Blocks supported public release |
 
-## P0/P1 remediation groups
+## Current implementation groups
 
 ### 1. Correct Plex credential ownership end to end
 
-- **Classifications / priority:** MISSING, P0.
-- **Evidence:** `PlexServer` drops resource `accessToken`; every PMS consumer
-  receives the Plex.tv/Home token.
-- **Owner:** Flutter Plex models/client/controller and transport integration tests.
-- **Consequence:** managed Home/shared servers can discover but fail probes,
-  libraries, artwork, or playback with misleading authorization errors.
-- **Acceptance:** keep the PMS token private/non-persisted, use it for every PMS
-  request, refresh once on bounded authorization failure, and test distinct
-  cloud/Home/PMS credentials through playback request construction.
-- **Why P0:** the discarded credential can prevent the first authenticated PMS
-  request for ordinary managed/shared-profile users.
-- **Machine:** Mac/CI deterministic; Windows live managed/shared profile smoke.
-- **Suggested implementation model:** Sol High.
-- **Independent review:** yes; credential ownership crosses a remote trust
-  boundary and every PMS consumer.
+- **Priority:** P0.
+- **Meaning:** Plex.tv/Home authentication can succeed while a managed/shared
+  PMS rejects libraries, artwork, or playback because Desktop sends the cloud
+  profile token instead of that server resource's separate `accessToken`.
+- **Implementation:** retain the opaque PMS token privately in the discovered
+  server scope, never in ordinary persisted/UI state; use it for probes and all
+  PMS requests; refresh resources once on a bounded PMS authorization failure.
+- **Acceptance:** distinct synthetic account, Home-profile, and PMS tokens flow
+  through discovery, library, artwork, playback header construction, release,
+  refresh, cancellation, and profile/server supersession without appearing in
+  logs or snapshots.
+- **Independent review:** specifically recommended; this crosses a remote
+  credential boundary.
 
 ### 2. Bound and cancel large-library setup planning
 
-- **Classifications / priority:** PARTIAL, P1.
-- **Evidence:** selected libraries are paged sequentially into memory before
-  setup, without per-page progress/cancellation or a structured empty/error state.
-- **Owner:** Flutter Plex pagination and Channel Setup planning UI/controller.
-- **Consequence:** an ordinary large library can leave first-run setup looking
-  stalled, consume excessive memory, or make failure indistinguishable from no content.
-- **Acceptance:** bound/concurrently schedule pagination, expose real progress,
-  cancel stale/abandoned scans, preserve successfully loaded libraries where safe,
-  distinguish empty/unsupported/transient failure, and test representative scale.
-- **Why P1:** large Plex libraries are normal public-release input, while a
-  controlled beta can constrain library size and observe the current path.
-- **Machine:** Mac/CI deterministic; live disposable PMS follow-up on Windows.
-- **Suggested implementation model:** Sol High.
-- **Independent review:** yes; network cancellation, memory bounds, and setup
-  state ownership cross several async boundaries.
+- **Priority:** P1.
+- **Implementation:** bound/concurrently schedule pagination, expose real
+  progress, cancel stale scans, and distinguish empty, unsupported, and
+  transient failure without inventing a new service layer.
+- **Acceptance:** representative multi-page slow/error fixtures prove memory,
+  progress, cancellation, retry, and stale-result behavior.
 
 ### 3. Make channel and state edits transaction-safe
 
-- **Classifications / priority:** PARTIAL, P1.
-- **Evidence:** generated Edit rewrites source/identity; concurrent saves can
-  persist rolled-back optimistic state; unreadable state becomes silent defaults.
-- **Owner:** Flutter Channels/controller/persistence.
-- **Consequence:** user-visible channel content or restart state can differ from
-  the action reported by the UI.
-- **Acceptance:** metadata-only generated edits preserve source and
-  `builderKey` or explicitly confirm conversion; controller mutations commit
-  atomically across domains; corruption and transient I/O have distinct,
-  tested recovery without silent overwrite.
-- **Why P1:** these are credible data-integrity/restart defects in ordinary
-  channel-management actions, but do not block a controlled read-heavy beta.
-- **Machine:** Mac/CI.
-- **Suggested implementation model:** Sol High.
-- **Independent review:** yes; async lifetime, persistence, and product semantics
-  span multiple owners.
+- **Priority:** P1.
+- **Implementation:** generated edits preserve source and `builderKey` unless
+  conversion is explicitly confirmed; controller mutations serialize
+  snapshot/commit/rollback; corruption and transient I/O have distinct visible
+  recovery.
+- **Acceptance:** focused cross-domain save races, generated-edit round trips,
+  permission/transient read failures, and rollback/restart assertions.
+- **Independent review:** specifically recommended for the async persistence
+  boundary.
 
-### 4. Close credential and diagnostic safety boundaries
+### 4. Close diagnostic and credential-cleanup boundaries
 
-- **Classifications / priority:** PARTIAL, P1 for diagnostic safety; related P2
-  credential-hygiene residue.
-- **Evidence:** failed/cancelled profile switch can retain an unused secure
-  token; arbitrary exception strings can bypass regex guarantees.
-- **Owner:** Credential store/controller/diagnostics.
-- **Consequence:** stale credential retention and possible secret text in a
-  visible support log.
-- **Acceptance:** scoped token restore/delete compensation across cancellation
-  and save failure; diagnostics record structured safe codes/classes, with an
-  opaque-secret sentinel test at every producer boundary.
-- **Why P1:** ordinary failure paths can retain a credential or display opaque
-  secret-bearing text, creating a support/security boundary before release.
-- **Machine:** Mac/CI; physical Windows secure-store smoke before support claim.
-- **Suggested implementation model:** Sol High.
-- **Independent review:** yes; security-sensitive compensation and redaction
-  need adversarial validation.
+- **Priority:** P1 diagnostics; P2 cancelled/failed profile-token residue.
+- **Implementation:** diagnostics record bounded structured error codes/classes,
+  never arbitrary exception strings; profile-switch failure compensates the
+  scoped secure token write.
+- **Acceptance:** opaque-secret sentinel tests at every producer boundary and
+  cancellation/save-failure compensation tests.
+- **Independent review:** specifically recommended for secret handling.
 
-### 5. Complete streaming compatibility ownership
+### 5. Close actual native-media product gaps
 
-- **Classifications / priority:** PARTIAL/MISSING/NEEDS EVIDENCE, P1.
-- **Evidence:** production always supplies unrestricted capabilities, selects the
-  first media version/part, and lacks subtitle-delivery fallback; direct
-  stream/transcode tests do not prove reachable runtime wiring; HDR is untested.
-- **Owner:** Flutter Plex stream policy plus native capability projection.
-- **Consequence:** original streams that libmpv cannot safely play and
-  constrained remote playback lack an owned fallback.
-- **Acceptance:** define actual supported capabilities; choose among multiple
-  versions/parts; exercise Direct Play, Direct Stream/transcode, subtitle
-  delivery/recovery, and cleanup with deterministic fixtures; scope first-release
-  media claims to physically accepted combinations.
-- **Why P1:** a controlled beta can constrain known-good media, while a public
-  player needs a truthful fallback for common incompatible/remote streams.
-- **Machine:** Mac/CI policy tests; physical Windows codec/HDR matrix.
-- **Suggested implementation model:** Sol High.
-- **Independent review:** yes; Plex policy, native capability, and media evidence
-  must agree.
+- **Priority:** P1 for sequential multi-part playback; P2 for alternate-version
+  choice, external subtitle proof, representative compatibility depth, and any
+  accepted server fallback.
+- **Implementation:** preserve native-first unrestricted Direct Play; model all
+  ordered parts; preserve all alternate media versions without adding chooser
+  UI until its default behavior is defined; explicitly load PMS subtitle URLs
+  only if physical/fixture evidence shows libmpv cannot see them.
+- **Acceptance:** multi-part continuation plus representative video/HDR,
+  TrueHD/DTS-to-PCM, text/image subtitle, track-switch, and cleanup cases.
+- **Do not implement by default:** browser codec allowlists, compulsory
+  transcode, burn-in modes, or passthrough-as-a-decode-gate.
 
 ### 6. Fix timed-overlay accessibility and motion
 
-- **Classifications / priority:** PARTIAL/NEEDS EVIDENCE, P1.
-- **Evidence:** OSD auto-hide ignores focused controls; Player always animates;
-  native rectangle and dense semantics proof is incomplete.
-- **Owner:** Flutter Player/Guide/accessibility tests.
-- **Consequence:** keyboard/assistive users can lose controls mid-operation and
-  Reduce Motion does not do what it says.
-- **Acceptance:** suspend timed dismissal while focus/AT interaction is inside,
-  honor reduced motion for every Player overlay, add selected-track focus and
-  rectangle/dense-semantics tests.
-- **Why P1:** timed loss of focused controls and an ineffective advertised
-  motion preference affect core Player accessibility in normal use.
-- **Machine:** Mac/CI; Windows keyboard/screen-reader confirmation.
-- **Suggested implementation model:** Sol Medium.
-- **Independent review:** yes; focus/timer behavior needs an accessibility-aware
-  regression review.
+- **Priority:** P1.
+- **Implementation:** suspend timed dismissal during focused/assistive
+  interaction, honor Reduce Motion throughout Player overlays, and focus the
+  selected track initially.
+- **Acceptance:** focus/semantics tests keep controls operable beyond timeouts;
+  zero/near-zero Player transitions under Reduce Motion.
 
-### 7. Bind packaging claims to verified artifacts
+### 7. Deferred release engineering
 
-- **Classifications / priority:** PARTIAL, P1.
-- **Evidence:** package can attest the patched engine without inspecting the
-  built engine; package checks run only inside the narrow engine rebuild gate.
-- **Owner:** Windows package script and CI.
-- **Consequence:** a green or apparently well-proven package can fail the DComp
-  marker at launch and carry false build provenance.
-- **Acceptance:** deterministic engine identity checked before BUILD-INFO,
-  stock-engine negative test, package-only CI ownership, successful exact-head
-  artifact with manifest and hash.
-- **Why P1:** public packages must not carry false runtime provenance or bypass
-  their own package verification when only packaging changes.
-- **Machine:** Windows CI.
-- **Suggested implementation model:** Sol High.
-- **Independent review:** yes; build provenance and CI gating are release trust
-  boundaries.
-
-### 8. Execute exact-commit Windows and public-release gates
-
-- **Classifications / priority:** NEEDS EVIDENCE/BLOCKED BY DECISION, P0.
-- **Evidence:** no physical acceptance, exact-head patched artifact, complete
-  notice manifest, project mirror, signing, or release channel.
-- **Owner:** Windows acceptance operator, release engineering, project owner,
-  and independent legal reviewer.
-- **Consequence:** support, compatibility, package trust, and redistribution
-  claims cannot be made safely.
-- **Acceptance:** complete the authoritative physical campaign at the target
-  commit; clean-system package launch; complete applicable notices and approval;
-  immutable project mirror; signing/publication/recovery policy.
-- **Why P0:** supported beta/public claims require a working exact package;
-  redistribution and trust decisions cannot be inferred from source compilation.
-- **Machine:** physical/clean/disposable Windows plus release infrastructure;
-  legal review.
-- **Suggested implementation model:** Sol High for engineering; named human
-  release/legal owners for decisions and approval.
-- **Independent review:** yes; physical evidence, dependency obligations, and
-  publication trust require independent sign-off.
+- **Priority:** P3 by owner sequencing, while still mandatory before the
+  corresponding distribution/support claim.
+- **Scope:** bind package attestation to the actual engine, give package-only
+  changes CI ownership, produce an exact-commit patched artifact, finish
+  notices/legal review and runtime mirroring, and decide signing/publication.
+- **Trigger:** begin after the application is feature-complete enough that the
+  intended package and support surface are stable.
+- **Independent review:** specifically recommended for provenance, dependency
+  obligations, and final exact-commit acceptance.
 
 ## Verification and CI/package evidence
 
@@ -679,28 +677,33 @@ Results against the unchanged audit-start source/test tree:
   pinned-libmpv stock-engine C++/CMake build succeeded;
 - exact-head patched-engine job: skipped;
 - exact-head artifacts: zero;
-- physical Windows evidence directory: absent and acceptance document stated
-  “not yet executed”.
+- durable physical Windows evidence directory: absent. The owner separately
+  reported 2026-08-23 surface success for native Player, PiP/Overlay, and
+  fullscreen, without an exact commit/machine/package manifest.
 
 The local build proves macOS UI feasibility, not playback. The live CI proves
-the exact source tree compiles on Windows, not that patched-engine native video,
-HDR, audio, fullscreen, or packaging works on physical hardware.
+the exact source tree compiles on Windows. The owner report is meaningful
+surface evidence that native video and fullscreen work, but does not by itself
+establish broad format/HDR/subtitle/audio, transition, or package support.
 
 ## Audit limitations
 
 - No Plex credential, real account, private server, or media was used.
-- No physical Windows, HDR display, gamepad, screen reader, clean package host,
-  disposable Vulkan VM, or long soak was available.
+- The audit operator had no physical Windows, HDR display, gamepad, screen
+  reader, clean package host, disposable Vulkan VM, or long soak. The owner
+  supplied separate surface-level Windows observations without a durable
+  exact-commit evidence bundle.
 - Upstream was inspected from the immutable ref; its dirty local worktree was
   not modified or trusted.
 - The screenshots are version/viewport uncertain and private-data-bearing, so
   only state/composition was used.
 - Legal obligations were not interpreted; the engineering notice mismatch is
   a release gate requiring independent review.
-- The review-context cache was stale and was not refreshed because the allowed
-  write scope was limited to audit documentation.
+- The review-context cache was refreshed after its stable architecture and
+  development inputs changed; current source remained authoritative.
 
 An independent adversarial review of this audit was completed and adjudicated.
 Independent review remains specifically recommended for implementation of the
-PMS token boundary, transaction/credential safety, package provenance, native
-notice inventory, and the final physical Windows acceptance record.
+PMS token boundary, transaction/credential safety, and later package
+provenance/native-notice/final physical-acceptance work. It is not automatically
+required for every ordinary product-completeness change.

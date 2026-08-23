@@ -73,8 +73,11 @@ When no server appears:
 ### 4. Confirm audio behavior
 
 The current Desktop audio step confirms that Lineup uses the
-system-selected output. Device selection and passthrough controls remain hidden
-until the native player can report and consume them accurately.
+system-selected output. On Windows, libmpv/FFmpeg decodes supported audio tracks,
+including TrueHD and DTS-family formats, to that output, normally as PCM;
+bitstream passthrough is not required for playback. Device selection and
+passthrough controls remain hidden because the application does not yet own a
+truthful native device/bitstream contract.
 
 ### 5. Build the initial lineup
 
@@ -98,12 +101,13 @@ save preserves the previous lineup.
 | Guide | Browse the schedule, inspect focused programs, filter by library, jump to now, tune current programs, and open the Player |
 | Channels | Re-run Channel Builder or create, edit, and delete custom channels |
 | Settings | Configure themes, Guide behavior, accessibility, Plex profile/server selection, and diagnostics |
-| Diagnostics | Review bounded, credential-safe support events from the current session |
+| Diagnostics | Review bounded, redacted support events from the current session |
 | Player | Watch the tuned channel and use playback, track, channel, sleep, and fullscreen controls |
 
-**Windows playback acceptance:** Player, Classic PiP, and Overlay describe the
-intended private-test behavior. Native video composition and live Plex playback
-have not yet passed the current branch's physical Windows acceptance.
+**Windows playback acceptance:** the owner reports that native Player, Classic
+PiP/Overlay, and fullscreen work at a surface level. The complete exact-commit
+physical matrix is still pending, so broad format/HDR/device/package wording
+remains provisional rather than unsupported-by-design.
 
 Guide and Player use an immersive layout. Open the **Lineup** menu from either
 surface to reach the other destinations. Management screens use the persistent
@@ -230,7 +234,7 @@ Deletion requires confirmation and cannot be undone.
 | --- | --- |
 | Appearance | Ember & Steel, Slate & Pine, Swiss Minimal, DirecTV Classic, and Glassmorphism themes |
 | Guide | Classic with PiP or Overlay presentation; detailed 2-hour, wide 3-hour, or desktop-extended 4/6/8/12-hour windows; 0-180 minute past window; comfortable or compact rows; color-bleed/theme/artwork information backgrounds; clear-logo preference; library filters; Now Playing context; 2-15 second OSD auto-hide |
-| Accessibility | Reduce motion and larger keyboard/controller focus indicators |
+| Accessibility | Reduce motion for management/Guide and larger keyboard/controller focus indicators; Player motion coverage is still incomplete |
 | Account | Switch Plex Home profile, switch or clear Plex server selection, and optionally show the profile picker at startup |
 | Support | Enable or disable bounded redacted diagnostic recording |
 
@@ -242,9 +246,10 @@ active and the screen shows an error.
 Diagnostics are disabled by default. Enable **Record redacted diagnostics** in
 **Settings > Support** before reproducing a problem that needs support context.
 
-The application excludes credentials, authorization headers, token-bearing
-URLs, and private paths from diagnostic entries. Redaction lowers risk but does
-not replace review. Before sharing anything:
+The application structurally excludes known credentials, authorization headers,
+token-bearing URLs, and private paths. Arbitrary exception text is not yet a
+provably safe producer boundary, so treat every entry as potentially sensitive.
+Redaction lowers risk but does not replace review. Before sharing anything:
 
 1. Inspect every line and screenshot.
 2. Remove private media titles or account details that are not needed.
@@ -278,7 +283,12 @@ vulnerabilities only through the private process in
   physical acceptance matrix on the current branch.
 - macOS playback is intentionally unsupported.
 - Audio-output selection and passthrough controls are not exposed.
-- Broad codec/container, HDR, multi-monitor, high-DPI, gamepad, signing, and
-  clean-system package coverage remain release-gate work.
+- Reduce Motion does not yet suppress every Player overlay transition, and
+  timed overlays do not yet suspend dismissal while controls retain focus.
+- The native player deliberately has no application codec/container/HDR
+  allowlist. Representative codec, HDR, TrueHD/DTS-to-PCM, text/image subtitle,
+  multi-monitor, and high-DPI coverage remains deeper validation work rather
+  than a reason to force browser-style transcode or burn-in.
+- Gamepad, signing, and clean-system package coverage remain later release work.
 - Pre-release behavior and persisted state may change before the first public
   version.

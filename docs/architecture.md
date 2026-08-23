@@ -150,14 +150,18 @@ navigation do not enter C++.
 
 ## Integration and acceptance status
 
-Live remote Plex playback acceptance through the pinned LGPL libmpv runtime,
-HDR display switching, audio passthrough, broad codec/container and hardware
-acceptance, packaged-runtime validation, and the final Windows media acceptance
-matrix remain integration work. This evidence boundary limits support claims,
-not playback attempts: the Windows libmpv backend accepts original Plex streams
-without a codec, container, or HDR allowlist and without treating native audio
-passthrough as a decode gate. It lets libmpv decode, convert audio to PCM,
-render, or tone-map as needed.
+The owner reports that native Player, Classic PiP/Overlay presentation, and
+fullscreen work at a surface level on Windows. Exact-commit remote Plex,
+representative HDR, broad codec/container/audio/subtitle, transition, and
+packaged-runtime acceptance remain deeper evidence work. This evidence boundary
+limits support claims, not playback attempts: the Windows libmpv backend accepts
+original Plex streams without a codec, container, or HDR allowlist and without
+treating native audio passthrough as a decode gate. It lets libmpv/FFmpeg demux,
+decode video and supported audio such as TrueHD and DTS-family tracks, convert
+audio to the system output (normally PCM), render subtitles, and tone-map as
+needed. Passthrough, server transcode, and explicit subtitle sidecar loading are
+separate optional/fallback capabilities justified only by a concrete product
+requirement or demonstrated native gap.
 
 ## Dependency decision
 
