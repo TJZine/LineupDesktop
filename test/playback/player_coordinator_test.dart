@@ -1132,6 +1132,88 @@ void main() {
     },
   );
 
+  test('synchronous authorization recovery failure is terminal', () async {
+    final lineup = _TestLineup(
+      recoverAuthorization: true,
+      throwAuthorizationRecoverySynchronously: true,
+    );
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    )..requestViewport(0, 2);
+    await Future<void>.delayed(Duration.zero);
+    final player = _EventPlayer();
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(player.close);
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
+
+    await coordinator.tune('channel-b');
+    player.emitError(
+      recoverable: true,
+      generation: player.loadGenerations.single,
+      failureCode: 'http_error',
+      httpStatus: 401,
+    );
+    await pumpEventQueue(times: 5);
+
+    expect(lineup.recoveryCalls, 1);
+    expect(player.loads, hasLength(1));
+    expect(player.stops, 1);
+    expect(coordinator.canRetry, isTrue);
+    expect(coordinator.overlay, PlayerOverlay.error);
+    expect(
+      coordinator.error,
+      'Playback could not start. Retry or choose another channel.',
+    );
+  });
+
+  test('failed authorization recovery future is terminal', () async {
+    final lineup = _TestLineup(
+      recoverAuthorization: true,
+      failAuthorizationRecovery: true,
+    );
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    )..requestViewport(0, 2);
+    await Future<void>.delayed(Duration.zero);
+    final player = _EventPlayer();
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(player.close);
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
+
+    await coordinator.tune('channel-b');
+    player.emitError(
+      recoverable: true,
+      generation: player.loadGenerations.single,
+      failureCode: 'http_error',
+      httpStatus: 401,
+    );
+    await pumpEventQueue(times: 5);
+
+    expect(lineup.recoveryCalls, 1);
+    expect(player.loads, hasLength(1));
+    expect(player.stops, 1);
+    expect(coordinator.canRetry, isTrue);
+    expect(coordinator.overlay, PlayerOverlay.error);
+    expect(
+      coordinator.error,
+      'Playback could not start. Retry or choose another channel.',
+    );
+  });
+
   test(
     'a second native authorization failure is terminal without a loop',
     () async {
@@ -2420,6 +2502,49 @@ void main() {
     await coordinator.stop();
   });
 
+  test('part transition authorization recovery failure is terminal', () async {
+    final lineup = _TestLineup(
+      recoverAuthorization: true,
+      failAuthorizationRecovery: true,
+      playbackParts: _parts(
+        first: const Duration(hours: 2),
+        second: const Duration(hours: 1),
+      ),
+    );
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    )..requestViewport(0, 2);
+    await Future<void>.delayed(Duration.zero);
+    final player = _SuccessfulPartAuthorizationPlayer();
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(player.close);
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
+
+    await coordinator.tune('channel-b');
+    player.emitStatus(
+      PlayerState.ended,
+      generation: player.loadGenerations.single,
+    );
+    await pumpEventQueue(times: 5);
+
+    expect(lineup.recoveryCalls, 1);
+    expect(player.loads, hasLength(2));
+    expect(player.stops, 1);
+    expect(coordinator.canRetry, isTrue);
+    expect(coordinator.overlay, PlayerOverlay.error);
+    expect(
+      coordinator.error,
+      'Playback could not start. Retry or choose another channel.',
+    );
+  });
+
   test('part transition failure stops and settles playback', () async {
     final lineup = _TestLineup(
       playbackParts: _parts(
@@ -2623,6 +2748,8 @@ class _TestLineup extends LineupController {
     this.recoverAuthorization = false,
     this.replacementRecoverable = false,
     this.blockAuthorizationRecovery = false,
+    this.throwAuthorizationRecoverySynchronously = false,
+    this.failAuthorizationRecovery = false,
     this.playbackParts,
   }) : super(
          store: _MemoryStore(),
@@ -2657,6 +2784,8 @@ class _TestLineup extends LineupController {
   final bool recoverAuthorization;
   final bool replacementRecoverable;
   final bool blockAuthorizationRecovery;
+  final bool throwAuthorizationRecoverySynchronously;
+  final bool failAuthorizationRecovery;
   final List<LineupPlaybackPart>? playbackParts;
   int playbackRequests = 0;
   int recoveryCalls = 0;
@@ -2704,13 +2833,23 @@ class _TestLineup extends LineupController {
             ),
           ),
         ];
-    Future<LineupPlaybackRequest> recover() async {
-      recoveryCalls++;
+    Future<LineupPlaybackRequest> completeRecovery() async {
       if (blockAuthorizationRecovery) {
         recoveryStarted.complete();
         await finishRecovery.future;
       }
       return _request('test-token-2', recoverable: replacementRecoverable);
+    }
+
+    Future<LineupPlaybackRequest> recover() {
+      recoveryCalls++;
+      if (throwAuthorizationRecoverySynchronously) {
+        throw StateError('authorization recovery failed synchronously');
+      }
+      if (failAuthorizationRecovery) {
+        return Future.error(StateError('authorization recovery failed'));
+      }
+      return completeRecovery();
     }
 
     return LineupPlaybackRequest.parts(

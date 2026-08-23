@@ -75,7 +75,6 @@ class PlayerCoordinator extends ChangeNotifier {
   int _activePartIndex = 0;
   final Map<int, Duration> _partDurations = {};
   int? _advancingGeneration;
-  bool _stopIntent = false;
   int? _nativeReplacementGeneration;
   Future<void> _tuneOperations = Future.value();
   Future<void>? _nativeStopOperation;
@@ -213,10 +212,8 @@ class PlayerCoordinator extends ChangeNotifier {
         if (!retryCeilingReached) {
           final rejected = playback;
           final wasActive = identical(rejected, _activePlayback);
-          final recovery = rejected.authorizationRecovery?.call();
-          if (recovery != null) {
-            _retryCeilingRequest = rejected;
-            _retryCeilingGeneration = rejectedGeneration;
+          final recover = rejected.authorizationRecovery;
+          if (recover != null) {
             _authorizationRecoveryRequest = rejected;
             _authorizationRecoveryGeneration = rejectedGeneration;
             _authorizationRecovery = _recoverAuthorization(
@@ -227,7 +224,7 @@ class PlayerCoordinator extends ChangeNotifier {
               _knownTargetGeneration == rejectedGeneration
                   ? _knownLocalTarget ?? Duration.zero
                   : _nativePosition,
-              recovery,
+              Future.sync(recover),
             );
             if (wasActive && _knownTargetGeneration != rejectedGeneration) {
               unawaited(
@@ -308,7 +305,6 @@ class PlayerCoordinator extends ChangeNotifier {
           }
           if (generation != null &&
               request != null &&
-              !_stopIntent &&
               _advancingGeneration != generation) {
             _advancingGeneration = generation;
             if (_partDurations[_activePartIndex] == null &&
@@ -505,7 +501,6 @@ class PlayerCoordinator extends ChangeNotifier {
     _knownTargetGeneration = knownLocalTarget == null ? null : generation;
     _knownLocalTarget = knownLocalTarget;
     _nativePosition = Duration.zero;
-    _stopIntent = false;
     return player.load(media, plexToken: plexToken, generation: generation);
   }
 
@@ -726,7 +721,6 @@ class PlayerCoordinator extends ChangeNotifier {
   ) async {
     final tuneGeneration = _tuneGeneration;
     if (_disposed ||
-        _stopIntent ||
         !identical(_activePlayback, request) ||
         _activeLoadGeneration != completedGeneration) {
       if (_advancingGeneration == completedGeneration) {
@@ -773,7 +767,6 @@ class PlayerCoordinator extends ChangeNotifier {
         return;
       }
       if (_disposed ||
-          _stopIntent ||
           tuneGeneration != _tuneGeneration ||
           !identical(_activePlayback, request) ||
           _activeLoadGeneration != replacementGeneration) {
@@ -859,24 +852,17 @@ class PlayerCoordinator extends ChangeNotifier {
 
   Future<void> stop() async {
     ++_tuneGeneration;
-    _stopIntent = true;
     _tuning = false;
     _canRetry = false;
     _invalidateAuthorizationRecovery();
     final nativeStop = _beginNativeStop(force: true)!;
     if (!_disposed) notifyListeners();
     final operation = _tuneOperations.then((_) async {
-      try {
-        await nativeStop;
-        _status = const PlayerStatus(
-          state: PlayerState.stopped,
-          message: 'Stopped',
-        );
-      } finally {
-        _activeLoadGeneration = null;
-        _advancingGeneration = null;
-        _nativeReplacementGeneration = null;
-      }
+      await nativeStop;
+      _status = const PlayerStatus(
+        state: PlayerState.stopped,
+        message: 'Stopped',
+      );
     });
     _tuneOperations = operation.catchError((_) {});
     await operation;
@@ -929,7 +915,6 @@ class PlayerCoordinator extends ChangeNotifier {
           generation = _activeLoadGeneration;
         }
         if (_disposed ||
-            _stopIntent ||
             tuneGeneration != _tuneGeneration ||
             !identical(_activePlayback, playback) ||
             _activeLoadGeneration != generation) {
@@ -937,7 +922,6 @@ class PlayerCoordinator extends ChangeNotifier {
         }
         if (recovery == null) await player.seek(target.$2);
         if (_disposed ||
-            _stopIntent ||
             tuneGeneration != _tuneGeneration ||
             !identical(_activePlayback, playback) ||
             _activeLoadGeneration != generation) {
@@ -1225,7 +1209,6 @@ class PlayerCoordinator extends ChangeNotifier {
           _scopeCleanupPending = true;
           final wasFullscreen = _fullscreen;
           ++_tuneGeneration;
-          _stopIntent = true;
           _tuning = false;
           _canRetry = false;
           _invalidateAuthorizationRecovery();
@@ -1282,18 +1265,12 @@ class PlayerCoordinator extends ChangeNotifier {
           })
         : Future<void>.value();
     final stop = _tuneOperations.then((_) async {
-      try {
-        await nativeStop;
-        if (!_disposed) {
-          _status = const PlayerStatus(
-            state: PlayerState.stopped,
-            message: 'Stopped',
-          );
-        }
-      } finally {
-        _activeLoadGeneration = null;
-        _advancingGeneration = null;
-        _nativeReplacementGeneration = null;
+      await nativeStop;
+      if (!_disposed) {
+        _status = const PlayerStatus(
+          state: PlayerState.stopped,
+          message: 'Stopped',
+        );
       }
     });
     _tuneOperations = stop.catchError((_) {});
@@ -1355,7 +1332,6 @@ class PlayerCoordinator extends ChangeNotifier {
   }
 
   void _retirePlaybackIntent() {
-    _stopIntent = true;
     _activeLoadGeneration = null;
     _advancingGeneration = null;
     _nativeReplacementGeneration = null;
