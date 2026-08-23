@@ -427,9 +427,9 @@ void main() {
       final intendedFocus = FocusManager.instance.primaryFocus;
       expect(intendedFocus, isNotNull);
 
-      await tester.drag(find.byType(GridView), const Offset(0, -2400));
+      await tester.drag(find.byType(CustomScrollView), const Offset(0, -2400));
       await tester.pumpAndSettle();
-      await tester.drag(find.byType(GridView), const Offset(0, 2400));
+      await tester.drag(find.byType(CustomScrollView), const Offset(0, 2400));
       await tester.pumpAndSettle();
 
       expect(FocusManager.instance.primaryFocus, same(intendedFocus));
