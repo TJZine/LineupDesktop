@@ -488,6 +488,111 @@ void main() {
     expect(coordinator.overlay, PlayerOverlay.none);
   });
 
+  testWidgets('focused timed overlays suspend and restart their full timeout', (
+    tester,
+  ) async {
+    final lineup = _TestLineup();
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    final coordinator = PlayerCoordinator(
+      player: _Player(),
+      lineup: lineup,
+      guide: guide,
+      overlayTimeout: const Duration(seconds: 4),
+    );
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
+
+    coordinator.showOsd();
+    final osdGeneration = coordinator.overlayPresentationGeneration;
+    coordinator.overlayFocusChanged(PlayerOverlay.osd, osdGeneration, true);
+    await tester.pump(const Duration(seconds: 5));
+    expect(coordinator.overlay, PlayerOverlay.osd);
+
+    coordinator.overlayFocusChanged(PlayerOverlay.osd, osdGeneration, false);
+    await tester.pump(const Duration(milliseconds: 3999));
+    expect(coordinator.overlay, PlayerOverlay.osd);
+    await tester.pump(const Duration(milliseconds: 2));
+    expect(coordinator.overlay, PlayerOverlay.none);
+
+    coordinator.showMiniGuide();
+    final guideGeneration = coordinator.overlayPresentationGeneration;
+    coordinator.overlayFocusChanged(
+      PlayerOverlay.miniGuide,
+      guideGeneration,
+      true,
+    );
+    await tester.pump(const Duration(seconds: 9));
+    expect(coordinator.overlay, PlayerOverlay.miniGuide);
+
+    coordinator.overlayFocusChanged(
+      PlayerOverlay.miniGuide,
+      guideGeneration,
+      false,
+    );
+    await tester.pump(const Duration(milliseconds: 7999));
+    expect(coordinator.overlay, PlayerOverlay.miniGuide);
+    await tester.pump(const Duration(milliseconds: 2));
+    expect(coordinator.overlay, PlayerOverlay.none);
+  });
+
+  testWidgets(
+    'stale overlay focus callbacks cannot affect a new presentation',
+    (tester) async {
+      final lineup = _TestLineup();
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => _schedule(channel),
+      );
+      final coordinator = PlayerCoordinator(
+        player: _Player(),
+        lineup: lineup,
+        guide: guide,
+        overlayTimeout: const Duration(seconds: 1),
+      );
+      addTearDown(lineup.dispose);
+      addTearDown(guide.dispose);
+      addTearDown(coordinator.dispose);
+
+      coordinator.showOsd();
+      final staleGeneration = coordinator.overlayPresentationGeneration;
+      coordinator.overlayFocusChanged(PlayerOverlay.osd, staleGeneration, true);
+      coordinator.showMiniGuide();
+      final guideGeneration = coordinator.overlayPresentationGeneration;
+      coordinator.overlayFocusChanged(
+        PlayerOverlay.miniGuide,
+        guideGeneration,
+        true,
+      );
+      coordinator.overlayFocusChanged(
+        PlayerOverlay.osd,
+        staleGeneration,
+        false,
+      );
+      await tester.pump(const Duration(seconds: 9));
+      expect(coordinator.overlay, PlayerOverlay.miniGuide);
+
+      coordinator.closeOverlay();
+      coordinator.showOsd();
+      final reopenedGeneration = coordinator.overlayPresentationGeneration;
+      coordinator.overlayFocusChanged(
+        PlayerOverlay.osd,
+        reopenedGeneration,
+        true,
+      );
+      coordinator.overlayFocusChanged(
+        PlayerOverlay.osd,
+        staleGeneration,
+        false,
+      );
+      await tester.pump(const Duration(seconds: 2));
+      expect(coordinator.overlay, PlayerOverlay.osd);
+    },
+  );
+
   testWidgets('OSD timeout reads the persisted setting consumer', (
     tester,
   ) async {

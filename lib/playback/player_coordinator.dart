@@ -55,6 +55,8 @@ class PlayerCoordinator extends ChangeNotifier {
   Timer? _numberTimer;
   Timer? _cursorTimer;
   int _overlayEpoch = 0;
+  int _overlayPresentationGeneration = 0;
+  bool _overlayFocusSuspended = false;
   int _sleepEpoch = 0;
   PlayerOverlay _overlay = PlayerOverlay.none;
   String _channelNumber = '';
@@ -102,6 +104,7 @@ class PlayerCoordinator extends ChangeNotifier {
   PlayerTelemetry get telemetry => _telemetry;
   List<PlayerTrack> get tracks => _tracks;
   PlayerOverlay get overlay => _overlay;
+  int get overlayPresentationGeneration => _overlayPresentationGeneration;
   String get channelNumber => _channelNumber;
   String? get miniGuideChannelId =>
       _miniGuideChannelId ??
@@ -277,7 +280,9 @@ class PlayerCoordinator extends ChangeNotifier {
       switch (event.status.state) {
         case PlayerState.loading:
           _cancelOverlayTimer();
-          if (_overlay == PlayerOverlay.osd) _overlay = PlayerOverlay.none;
+          if (_overlay == PlayerOverlay.osd) {
+            _presentOverlay(PlayerOverlay.none);
+          }
           break;
         case PlayerState.ready:
         case PlayerState.paused:
@@ -295,7 +300,9 @@ class PlayerCoordinator extends ChangeNotifier {
           if (request == null && playback == null) {
             _activeLoadGeneration = null;
             _cancelOverlayTimer();
-            if (_overlay != PlayerOverlay.error) _overlay = PlayerOverlay.none;
+            if (_overlay != PlayerOverlay.error) {
+              _presentOverlay(PlayerOverlay.none);
+            }
             break;
           }
           if (event.status.state == PlayerState.stopped &&
@@ -338,7 +345,7 @@ class PlayerCoordinator extends ChangeNotifier {
     _error = null;
     _retryChannelId = channelId;
     _cancelOverlayTimer();
-    _overlay = PlayerOverlay.osd;
+    _presentOverlay(PlayerOverlay.osd);
     notifyListeners();
     final operation = _tuneOperations.then(
       (_) => _performTune(channelId, generation),
@@ -744,7 +751,9 @@ class PlayerCoordinator extends ChangeNotifier {
       _activePlayback = null;
       _activeChannel = null;
       _cancelOverlayTimer();
-      if (_overlay != PlayerOverlay.error) _overlay = PlayerOverlay.none;
+      if (_overlay != PlayerOverlay.error) {
+        _presentOverlay(PlayerOverlay.none);
+      }
       await _release(request);
       if (!_disposed) notifyListeners();
       return;
@@ -1082,8 +1091,33 @@ class PlayerCoordinator extends ChangeNotifier {
       return;
     }
     _cancelOverlayTimer();
-    _overlay = PlayerOverlay.none;
+    _presentOverlay(PlayerOverlay.none);
     notifyListeners();
+  }
+
+  void overlayFocusChanged(
+    PlayerOverlay overlay,
+    int presentationGeneration,
+    bool focused,
+  ) {
+    if (_overlay != overlay ||
+        _overlayPresentationGeneration != presentationGeneration ||
+        (overlay != PlayerOverlay.osd && overlay != PlayerOverlay.miniGuide)) {
+      return;
+    }
+    if (focused) {
+      _overlayFocusSuspended = true;
+      _cancelOverlayTimer();
+      return;
+    }
+    if (!_overlayFocusSuspended) return;
+    _overlayFocusSuspended = false;
+    _scheduleOverlayHide(
+      overlay,
+      timeout: overlay == PlayerOverlay.miniGuide
+          ? const Duration(seconds: 8)
+          : null,
+    );
   }
 
   void appendChannelDigit(String digit) {
@@ -1172,7 +1206,7 @@ class PlayerCoordinator extends ChangeNotifier {
     Duration? timeout,
   }) {
     _cancelOverlayTimer();
-    _overlay = value;
+    if (_overlay != value) _presentOverlay(value);
     notifyListeners();
     if (timed) {
       _scheduleOverlayHide(value, timeout: timeout);
@@ -1181,6 +1215,8 @@ class PlayerCoordinator extends ChangeNotifier {
 
   void _scheduleOverlayHide(PlayerOverlay value, {Duration? timeout}) {
     _overlayTimer?.cancel();
+    _overlayTimer = null;
+    if (_overlayFocusSuspended && _overlay == value) return;
     final epoch = ++_overlayEpoch;
     _overlayTimer = Timer(
       timeout ??
@@ -1189,10 +1225,16 @@ class PlayerCoordinator extends ChangeNotifier {
       () {
         if (_disposed || epoch != _overlayEpoch || _overlay != value) return;
         _overlayTimer = null;
-        _overlay = PlayerOverlay.none;
+        _presentOverlay(PlayerOverlay.none);
         notifyListeners();
       },
     );
+  }
+
+  void _presentOverlay(PlayerOverlay value) {
+    _overlayPresentationGeneration++;
+    _overlayFocusSuspended = false;
+    _overlay = value;
   }
 
   void _cancelOverlayTimer() {
@@ -1278,7 +1320,7 @@ class PlayerCoordinator extends ChangeNotifier {
     _cursorTimer?.cancel();
     _cursorTimer = null;
     _cursorVisible = true;
-    _overlay = PlayerOverlay.none;
+    _presentOverlay(PlayerOverlay.none);
     _miniGuideChannelId = null;
     _retryChannelId = null;
     _activeChannel = null;

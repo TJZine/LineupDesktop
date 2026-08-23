@@ -14,10 +14,30 @@ import 'package:lineup_desktop/playback/native_player.dart';
 import 'package:lineup_desktop/playback/native_video_surface.dart';
 import 'package:lineup_desktop/plex/plex_client.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
+import 'package:lineup_desktop/settings/lineup_settings.dart';
 
 import '../support/ui_fixture.dart';
 
 void main() {
+  testWidgets('root Reduce Motion setting disables descendant animations', (
+    tester,
+  ) async {
+    final controller = _FakeController()
+      ..settings = const LineupSettings(reduceMotion: true)
+      ..stage = SetupStage.ready;
+    await tester.pumpWidget(
+      LineupBootstrap(player: _FakePlayer(), controller: controller),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      MediaQuery.disableAnimationsOf(
+        tester.element(find.text('Create a channel to build your Guide')),
+      ),
+      isTrue,
+    );
+  });
+
   testWidgets('empty first-run Channel Setup can return to server selection', (
     tester,
   ) async {
