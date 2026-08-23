@@ -258,9 +258,7 @@ class PlayerCoordinator extends ChangeNotifier {
         'hardwareDecoder': event.telemetry.hardwareDecoder,
       });
       _activeLoadGeneration = null;
-      _authorizationRecoveryRequest = null;
-      _authorizationRecoveryGeneration = null;
-      _authorizationRetryGeneration = null;
+      _invalidateAuthorizationRecovery();
       _nativeReplacementGeneration = null;
       _error =
           'Playback stopped unexpectedly. Retry or choose another channel.';
@@ -398,10 +396,7 @@ class PlayerCoordinator extends ChangeNotifier {
         generation,
         initialPosition: elapsed > const Duration(seconds: 2) ? elapsed : null,
       );
-      _authorizationRecovery = null;
-      _authorizationRecoveryRequest = null;
-      _authorizationRecoveryGeneration = null;
-      _authorizationRetryGeneration = null;
+      _invalidateAuthorizationRecovery();
       if (identical(_activePlayback, replaced)) {
         _activePlayback = null;
         _activeChannel = null;
@@ -458,10 +453,7 @@ class PlayerCoordinator extends ChangeNotifier {
     } catch (error) {
       final provisional = _provisionalPlayback;
       _provisionalPlayback = null;
-      _authorizationRecovery = null;
-      _authorizationRecoveryRequest = null;
-      _authorizationRecoveryGeneration = null;
-      _authorizationRetryGeneration = null;
+      _invalidateAuthorizationRecovery();
       if (identical(_activePlayback, request)) {
         _activePlayback = null;
         _activeChannel = null;
@@ -651,16 +643,14 @@ class PlayerCoordinator extends ChangeNotifier {
         generation != _authorizationRecoveryGeneration) {
       return;
     }
-    _authorizationRecovery = null;
-    _authorizationRecoveryRequest = null;
-    _authorizationRecoveryGeneration = null;
-    _authorizationRetryGeneration = null;
+    _invalidateAuthorizationRecovery();
   }
 
   void _invalidateAuthorizationRecovery() {
     _authorizationRecovery = null;
     _authorizationRecoveryRequest = null;
     _authorizationRecoveryGeneration = null;
+    _authorizationRetryGeneration = null;
   }
 
   Future<void> _settleActiveAuthorization(
@@ -846,10 +836,7 @@ class PlayerCoordinator extends ChangeNotifier {
     _stopIntent = true;
     _activeLoadGeneration = null;
     _advancingGeneration = null;
-    _authorizationRecovery = null;
-    _authorizationRecoveryRequest = null;
-    _authorizationRecoveryGeneration = null;
-    _authorizationRetryGeneration = null;
+    _invalidateAuthorizationRecovery();
     _nativeReplacementGeneration = null;
     final active = _activePlayback;
     final provisional = _provisionalPlayback;

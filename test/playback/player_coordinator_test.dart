@@ -1977,8 +1977,7 @@ void main() {
       PlayerState.ended,
       generation: player.loadGenerations.single,
     );
-    await Future<void>.delayed(Duration.zero);
-    await Future<void>.delayed(Duration.zero);
+    await pumpEventQueue(times: 2);
     player
       ..position = const Duration(minutes: 5)
       ..duration = const Duration(hours: 1)
@@ -2034,8 +2033,7 @@ void main() {
         player
           ..emitStatus(completion, generation: firstGeneration)
           ..emitStatus(completion, generation: firstGeneration);
-        await Future<void>.delayed(Duration.zero);
-        await Future<void>.delayed(Duration.zero);
+        await pumpEventQueue(times: 2);
 
         expect(player.loads.map((uri) => uri.path), [
           '/part-1.mkv',
@@ -2049,8 +2047,7 @@ void main() {
           );
         }
         player.emitStatus(completion, generation: player.loadGenerations.last);
-        await Future<void>.delayed(Duration.zero);
-        await Future<void>.delayed(Duration.zero);
+        await pumpEventQueue(times: 2);
         expect(lineup.releases, 1);
         await coordinator.stop();
         expect(lineup.releases, 1);
@@ -2162,8 +2159,7 @@ void main() {
       PlayerState.ended,
       generation: player.loadGenerations.single,
     );
-    await Future<void>.delayed(Duration.zero);
-    await Future<void>.delayed(Duration.zero);
+    await pumpEventQueue(times: 2);
     final secondGeneration = player.loadGenerations.last;
 
     player.emitStatus(PlayerState.stopped, generation: secondGeneration);
@@ -2172,8 +2168,7 @@ void main() {
     expect(lineup.releases, 0);
 
     player.emitStatus(PlayerState.ended, generation: secondGeneration);
-    await Future<void>.delayed(Duration.zero);
-    await Future<void>.delayed(Duration.zero);
+    await pumpEventQueue(times: 2);
     expect(lineup.releases, 1);
   });
 
@@ -2277,8 +2272,7 @@ void main() {
         PlayerState.ended,
         generation: player.loadGenerations.last,
       );
-      await Future<void>.delayed(Duration.zero);
-      await Future<void>.delayed(Duration.zero);
+      await pumpEventQueue(times: 2);
       expect(lineup.releasedTokens, ['test-token-1', 'test-token-2']);
       await coordinator.stop();
       expect(lineup.releasedTokens, ['test-token-1', 'test-token-2']);
@@ -2356,8 +2350,7 @@ void main() {
       PlayerState.ended,
       generation: player.loadGenerations.single,
     );
-    await Future<void>.delayed(Duration.zero);
-    await Future<void>.delayed(Duration.zero);
+    await pumpEventQueue(times: 2);
 
     expect(player.loads, hasLength(2));
     expect(player.stops, 1);
