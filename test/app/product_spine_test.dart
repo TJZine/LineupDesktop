@@ -194,6 +194,7 @@ void main() {
       addTearDown(restoredPlayer.dispose);
       await restoredPlayer.tune(controller.channels.first.id);
       expect(await restoredPlayer.logout(), isTrue);
+      expect(restoredNativePlayer.stopCalls, 1);
       expect(controller.stage, SetupStage.welcome);
       expect(credentials.accountToken, isNull);
       expect(credentials.profileTokens, isEmpty);
@@ -385,6 +386,7 @@ class _ProductPlayer implements NativePlayer {
   Uri? loadedUri;
   String? loadedPlexToken;
   int generation = 0;
+  int stopCalls = 0;
   PlayerStatus _status = const PlayerStatus(
     state: PlayerState.idle,
     message: 'Idle',
@@ -458,7 +460,7 @@ class _ProductPlayer implements NativePlayer {
   @override
   Future<void> setVolume(double volume) async {}
   @override
-  Future<void> stop() async {}
+  Future<void> stop() async => stopCalls++;
   @override
   Future<void> dispose() => _events.close();
 }
