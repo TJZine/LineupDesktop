@@ -7,8 +7,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/TJZine/LineupDesktop/actions/workflows/ci.yml?query=branch%3Areplatform%2Fflutter-native">
-    <img src="https://github.com/TJZine/LineupDesktop/actions/workflows/ci.yml/badge.svg?branch=replatform%2Fflutter-native" alt="CI status">
+  <a href="https://github.com/TJZine/LineupDesktop/actions/workflows/ci.yml?query=branch%3Aflutter-mvp">
+    <img src="https://github.com/TJZine/LineupDesktop/actions/workflows/ci.yml/badge.svg?branch=flutter-mvp" alt="CI status">
   </a>
   <a href="LICENSE">
     <img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="Apache 2.0 license">

@@ -1,5 +1,14 @@
 # Portable UI parity
 
+> [!IMPORTANT]
+> This is a historical, campaign-scoped visual evidence record. For current
+> product classifications, evidence gaps, priorities, and release conclusions,
+> use [Definitive Product Parity](product-parity.md). In particular, current
+> source does not retain the historical 256-program projection ceiling, OSD
+> auto-hide does not suspend for focused controls, and Player overlay motion is
+> not yet covered by Reduce Motion. Those corrections are adjudicated in the
+> current audit without rewriting the original campaign boundaries below.
+
 This document is the source record for Prompt 3B and Prompt 4B portable UI
 parity, the full Prompt 4C source-defined theme and shell refinement, Prompt 4D
 portable functionality and recovery hardening, and Prompt 4E unlocked portable

@@ -3,7 +3,7 @@
 **Status:** Procedure defined; not yet executed as evidence for the current
 branch.
 
-**Target branch:** `replatform/flutter-native`
+**Target branch:** `flutter-mvp`
 
 This is the authoritative physical-Windows campaign for native presentation,
 libmpv playback, focus/input integration, and portable packaging. It is a
@@ -91,8 +91,8 @@ if ($ActualFlutter -ne $ExpectedFlutter) {
 }
 
 git fetch origin
-git switch replatform/flutter-native
-git merge --ff-only origin/replatform/flutter-native
+git switch flutter-mvp
+git merge --ff-only origin/flutter-mvp
 
 if (git status --porcelain) {
   throw 'Worktree must be clean before native acceptance.'
@@ -403,7 +403,7 @@ media metadata.
 You are working in TJZine/LineupDesktop on a physical Windows native-test
 machine.
 
-Required branch: replatform/flutter-native
+Required branch: flutter-mvp
 
 Do not merge. Do not make product-code changes during acceptance unless a
 separate implementation task explicitly authorizes them.

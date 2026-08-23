@@ -4,8 +4,8 @@ Lineup Desktop is a pre-release Flutter-native desktop application with a narrow
 Windows C++/libmpv boundary. Contributions should improve the current
 architecture rather than preserve the historical Electron implementation.
 
-While the replatform is active, target `replatform/flutter-native` unless an
-issue or maintainer explicitly names another base branch.
+Target `flutter-mvp` unless an issue or maintainer explicitly names another
+base branch.
 
 ## Before contributing
 
