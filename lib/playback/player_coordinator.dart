@@ -88,7 +88,6 @@ class PlayerCoordinator extends ChangeNotifier {
   Future<LineupPlaybackRequest>? _authorizationRecovery;
   LineupPlaybackRequest? _authorizationRecoveryRequest;
   int? _authorizationRecoveryGeneration;
-  int? _authorizationRetryGeneration;
   LineupPlaybackRequest? _retryCeilingRequest;
   int? _retryCeilingGeneration;
   Channel? _activeChannel;
@@ -503,9 +502,6 @@ class PlayerCoordinator extends ChangeNotifier {
     _activeLoadGeneration = generation;
     _retryCeilingRequest = retryCeilingRequest;
     _retryCeilingGeneration = retryCeilingRequest == null ? null : generation;
-    _authorizationRetryGeneration = retryCeilingRequest == null
-        ? null
-        : generation;
     _knownTargetGeneration = knownLocalTarget == null ? null : generation;
     _knownLocalTarget = knownLocalTarget;
     _nativePosition = Duration.zero;
@@ -654,7 +650,6 @@ class PlayerCoordinator extends ChangeNotifier {
     _authorizationRecovery = null;
     _authorizationRecoveryRequest = null;
     _authorizationRecoveryGeneration = null;
-    _authorizationRetryGeneration = null;
   }
 
   Future<void> _settleActiveAuthorization(
@@ -683,7 +678,7 @@ class PlayerCoordinator extends ChangeNotifier {
         !identical(_activePlayback, rejected)) {
       return false;
     }
-    final retryGeneration = _authorizationRetryGeneration;
+    final retryGeneration = _retryCeilingGeneration;
     if (retryGeneration == null) {
       return _activeLoadGeneration == rejectedGeneration;
     }
