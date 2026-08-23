@@ -46,7 +46,7 @@ class PersistedState {
   factory PersistedState.fromJson(Object? value) {
     if (value is! Map) throw const FormatException('State must be an object.');
     try {
-      final json = _stringKeyedMap(value, 'state');
+      final json = _stringKeyedMap(value);
       const fields = {
         'settings',
         'profileId',
@@ -86,31 +86,17 @@ class PersistedState {
   }
 }
 
-Map<String, Object?> _stringKeyedMap(Object? value, String name) {
-  if (value is! Map) throw FormatException('Invalid $name.');
-  try {
-    return Map<String, Object?>.from(value);
-  } catch (error) {
-    throw FormatException('Invalid $name.', error);
-  }
-}
+Map<String, Object?> _stringKeyedMap(Object? value) =>
+    Map<String, Object?>.from(value as Map);
 
-Map<String, String> _flatStringMap(Object? value) {
-  if (value is! Map) {
-    throw const FormatException('Invalid server selections.');
-  }
-  try {
-    return Map<String, String>.from(value);
-  } catch (error) {
-    throw FormatException('Invalid server selections.', error);
-  }
-}
+Map<String, String> _flatStringMap(Object? value) =>
+    Map<String, String>.from(value as Map);
 
 Map<String, Map<String, List<Channel>>> _channelSelections(Object? value) {
-  final outer = _stringKeyedMap(value, 'channel selections');
+  final outer = _stringKeyedMap(value);
   final selections = <String, Map<String, List<Channel>>>{};
   for (final profile in outer.entries) {
-    final inner = _stringKeyedMap(profile.value, 'profile channel selections');
+    final inner = _stringKeyedMap(profile.value);
     selections[profile.key] = {
       for (final server in inner.entries)
         server.key: server.value is List
@@ -129,7 +115,7 @@ Map<String, Map<String, List<Channel>>> _channelSelections(Object? value) {
 }
 
 Map<String, Map<String, String>> _stringSelections(Object? value) {
-  final outer = _stringKeyedMap(value, 'current channels');
+  final outer = _stringKeyedMap(value);
   return {
     for (final profile in outer.entries)
       profile.key: _flatStringMap(profile.value),
@@ -137,10 +123,10 @@ Map<String, Map<String, String>> _stringSelections(Object? value) {
 }
 
 Map<String, Map<String, List<String>>> _librarySelections(Object? value) {
-  final outer = _stringKeyedMap(value, 'library selections');
+  final outer = _stringKeyedMap(value);
   final selections = <String, Map<String, List<String>>>{};
   for (final profile in outer.entries) {
-    final inner = _stringKeyedMap(profile.value, 'profile library selections');
+    final inner = _stringKeyedMap(profile.value);
     selections[profile.key] = {
       for (final server in inner.entries)
         server.key:
