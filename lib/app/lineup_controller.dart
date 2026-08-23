@@ -109,7 +109,7 @@ class LineupController extends ChangeNotifier {
   Map<String, PlexServerAccess> _serverAccess = const {};
   String? _pmsToken;
   String? _serverTargetId;
-  Future<void>? _pmsRefresh;
+  Future<PlexConnection>? _pmsRefresh;
   int? _pmsRefreshOperation;
   String? _pmsRefreshServerId;
   PersistedState _persisted = const PersistedState();
@@ -120,8 +120,8 @@ class LineupController extends ChangeNotifier {
   ScheduleWorker? _scheduleWorker;
   final ScheduleWorkerFactory _scheduleWorkerFactory;
   Future<void> _credentialOperations = Future.value();
+  Future<void> _stateOperations = Future.value();
   Future<bool>? _logoutFuture;
-  int _settingsGeneration = 0;
   int _contentGeneration = 0;
   bool _disposed = false;
 
@@ -322,57 +322,60 @@ class LineupController extends ChangeNotifier {
         )) {
           return;
         }
-        final oldProfile = profile;
-        final oldProfileToken = _profileToken;
-        final oldServerAccess = _serverAccess;
-        final oldPmsToken = _pmsToken;
-        final oldServer = server;
-        final oldConnection = connection;
-        final oldLibraries = libraries;
-        final oldSelectedLibraries = selectedLibraryIds;
-        final oldMedia = availableMedia;
-        final oldPlaylists = availablePlaylists;
-        final oldChannels = channels;
-        final oldCurrent = currentChannelId;
-        final oldCanCancel = profileSelectionCanCancel;
-        profileSelectionCanCancel = false;
-        notifyListeners();
-        profile = selected;
-        _profileToken = token;
-        _serverAccess = const {};
-        _pmsToken = null;
-        _pmsRefresh = null;
-        _pmsRefreshOperation = null;
-        _pmsRefreshServerId = null;
-        server = null;
-        connection = null;
-        libraries = const [];
-        selectedLibraryIds = const {};
-        availableMedia = const [];
-        availablePlaylists = const [];
-        channels = const [];
-        currentChannelId = null;
-        try {
-          await _save();
-        } catch (_) {
-          profile = oldProfile;
-          _profileToken = oldProfileToken;
-          _serverAccess = oldServerAccess;
-          _pmsToken = oldPmsToken;
-          server = oldServer;
-          connection = oldConnection;
-          libraries = oldLibraries;
-          selectedLibraryIds = oldSelectedLibraries;
-          availableMedia = oldMedia;
-          availablePlaylists = oldPlaylists;
-          channels = oldChannels;
-          currentChannelId = oldCurrent;
-          profileSelectionCanCancel = oldCanCancel;
-          rethrow;
-        }
+        await _queueStateOperation(operation, () async {
+          final oldProfile = profile;
+          final oldProfileToken = _profileToken;
+          final oldServerAccess = _serverAccess;
+          final oldPmsToken = _pmsToken;
+          final oldServer = server;
+          final oldConnection = connection;
+          final oldLibraries = libraries;
+          final oldSelectedLibraries = selectedLibraryIds;
+          final oldMedia = availableMedia;
+          final oldPlaylists = availablePlaylists;
+          final oldChannels = channels;
+          final oldCurrent = currentChannelId;
+          final oldCanCancel = profileSelectionCanCancel;
+          profileSelectionCanCancel = false;
+          notifyListeners();
+          profile = selected;
+          _profileToken = token;
+          _serverAccess = const {};
+          _pmsToken = null;
+          _pmsRefresh = null;
+          _pmsRefreshOperation = null;
+          _pmsRefreshServerId = null;
+          server = null;
+          connection = null;
+          libraries = const [];
+          selectedLibraryIds = const {};
+          availableMedia = const [];
+          availablePlaylists = const [];
+          channels = const [];
+          currentChannelId = null;
+          try {
+            await _save();
+          } catch (_) {
+            profile = oldProfile;
+            _profileToken = oldProfileToken;
+            _serverAccess = oldServerAccess;
+            _pmsToken = oldPmsToken;
+            server = oldServer;
+            connection = oldConnection;
+            libraries = oldLibraries;
+            selectedLibraryIds = oldSelectedLibraries;
+            availableMedia = oldMedia;
+            availablePlaylists = oldPlaylists;
+            channels = oldChannels;
+            currentChannelId = oldCurrent;
+            profileSelectionCanCancel = oldCanCancel;
+            rethrow;
+          }
+          if (_disposed) return;
+          _contentGeneration++;
+          notifyListeners();
+        });
         if (!_isCurrent(operation)) return;
-        _contentGeneration++;
-        notifyListeners();
         await _discover(operation);
         if (operation == _epoch) profileSelectionCanCancel = false;
       },
@@ -426,17 +429,7 @@ class LineupController extends ChangeNotifier {
     _pmsRefreshOperation = null;
     _pmsRefreshServerId = null;
     _serverTargetId = selected.id;
-    final oldServer = server;
-    final oldConnection = connection;
-    final oldPmsToken = _pmsToken;
-    final oldLibraries = libraries;
-    final oldSelectedLibraries = selectedLibraryIds;
-    final oldMedia = availableMedia;
-    final oldPlaylists = availablePlaylists;
-    final oldChannels = channels;
-    final oldCurrent = currentChannelId;
-    final oldCanCancel = serverSelectionCanCancel;
-    final succeeded = await _run(
+    await _run(
       () async {
         final selectedConnection = await _withPmsAuthorization(
           operation,
@@ -448,7 +441,6 @@ class LineupController extends ChangeNotifier {
           connectionIsResult: true,
         );
         if (!_isCurrent(operation)) return;
-        _pmsToken = _serverAccess[selected.id]!.token;
         var workingConnection = selectedConnection;
         final loadedLibraries = await _withPmsAuthorization(
           operation,
@@ -460,57 +452,76 @@ class LineupController extends ChangeNotifier {
           connectionOverride: selectedConnection,
         );
         if (!_isCurrent(operation)) return;
-        serverSelectionCanCancel = false;
-        notifyListeners();
-        server = _serverAccess[selected.id]?.server ?? selected;
-        connection = workingConnection;
-        libraries = loadedLibraries;
-        final profileId = profile?.id ?? account?.id;
-        final savedLibraries = profileId == null
-            ? const <String>[]
-            : _persisted.selectedLibraryIdsByProfileServer[profileId]?[selected
-                      .id] ??
-                  const <String>[];
-        final availableIds = loadedLibraries
-            .map((library) => library.id)
-            .toSet();
-        selectedLibraryIds = Set.unmodifiable(
-          savedLibraries.where(availableIds.contains),
-        );
-        availableMedia = const [];
-        availablePlaylists = const [];
-        channels = List.unmodifiable(
-          profileId == null
-              ? const <Channel>[]
-              : _persisted.channelsByProfileServer[profileId]?[selected.id] ??
-                    const <Channel>[],
-        );
-        currentChannelId = profileId == null
-            ? null
-            : _persisted.currentChannelByProfileServer[profileId]?[selected.id];
-        stage = SetupStage.channelSetup;
-        channelSetupCanCancel = false;
-        try {
-          await _save();
-        } catch (_) {
-          server = oldServer;
-          connection = oldConnection;
-          _pmsToken = oldPmsToken;
-          libraries = oldLibraries;
-          selectedLibraryIds = oldSelectedLibraries;
-          availableMedia = oldMedia;
-          availablePlaylists = oldPlaylists;
-          channels = oldChannels;
-          currentChannelId = oldCurrent;
-          serverSelectionCanCancel = oldCanCancel;
-          rethrow;
-        }
+        await _queueStateOperation(operation, () async {
+          final oldServer = server;
+          final oldConnection = connection;
+          final oldPmsToken = _pmsToken;
+          final oldLibraries = libraries;
+          final oldSelectedLibraries = selectedLibraryIds;
+          final oldMedia = availableMedia;
+          final oldPlaylists = availablePlaylists;
+          final oldChannels = channels;
+          final oldCurrent = currentChannelId;
+          final oldCanCancel = serverSelectionCanCancel;
+          serverSelectionCanCancel = false;
+          notifyListeners();
+          server = _serverAccess[selected.id]?.server ?? selected;
+          connection = workingConnection;
+          _pmsToken = _serverAccess[selected.id]!.token;
+          libraries = loadedLibraries;
+          final profileId = profile?.id ?? account?.id;
+          final savedLibraries = profileId == null
+              ? const <String>[]
+              : _persisted
+                        .selectedLibraryIdsByProfileServer[profileId]?[selected
+                        .id] ??
+                    const <String>[];
+          final availableIds = loadedLibraries
+              .map((library) => library.id)
+              .toSet();
+          selectedLibraryIds = Set.unmodifiable(
+            savedLibraries.where(availableIds.contains),
+          );
+          availableMedia = const [];
+          availablePlaylists = const [];
+          channels = List.unmodifiable(
+            profileId == null
+                ? const <Channel>[]
+                : _persisted.channelsByProfileServer[profileId]?[selected.id] ??
+                      const <Channel>[],
+          );
+          currentChannelId = profileId == null
+              ? null
+              : _persisted.currentChannelByProfileServer[profileId]?[selected
+                    .id];
+          stage = SetupStage.channelSetup;
+          channelSetupCanCancel = false;
+          try {
+            await _save();
+          } catch (_) {
+            server = oldServer;
+            connection = oldConnection;
+            _pmsToken = oldPmsToken;
+            libraries = oldLibraries;
+            selectedLibraryIds = oldSelectedLibraries;
+            availableMedia = oldMedia;
+            availablePlaylists = oldPlaylists;
+            channels = oldChannels;
+            currentChannelId = oldCurrent;
+            serverSelectionCanCancel = oldCanCancel;
+            rethrow;
+          }
+          if (_disposed) return;
+          _contentGeneration++;
+          notifyListeners();
+        });
         if (!_isCurrent(operation)) return;
-        _contentGeneration++;
-        notifyListeners();
         if (selectedLibraryIds.isNotEmpty && channels.isNotEmpty) {
-          await _loadLibraries(operation, selectedLibraryIds);
+          final loaded = await _loadLibraries(operation, selectedLibraryIds);
           if (operation != _epoch) return;
+          _requireAvailablePlaylists(loaded.failedPlaylistIds);
+          availableMedia = loaded.media;
+          availablePlaylists = loaded.playlists;
           stage = SetupStage.ready;
         } else if (!settings.audioSetupComplete) {
           stage = SetupStage.audio;
@@ -520,18 +531,6 @@ class LineupController extends ChangeNotifier {
       operation: operation,
       fallbackStage: SetupStage.servers,
     );
-    if (!succeeded && _isCurrent(operation)) {
-      server = oldServer;
-      connection = oldConnection;
-      _pmsToken = oldPmsToken;
-      libraries = oldLibraries;
-      selectedLibraryIds = oldSelectedLibraries;
-      availableMedia = oldMedia;
-      availablePlaylists = oldPlaylists;
-      channels = oldChannels;
-      currentChannelId = oldCurrent;
-      serverSelectionCanCancel = oldCanCancel;
-    }
     if (_serverTargetId == selected.id) _serverTargetId = null;
   }
 
@@ -546,30 +545,42 @@ class LineupController extends ChangeNotifier {
             'Select one or more libraries from the current server.',
           );
         }
-        final oldSelectedLibraries = selectedLibraryIds;
-        final oldMedia = availableMedia;
-        final oldPlaylists = availablePlaylists;
-        await _loadLibraries(operation, ids);
+        final loaded = await _loadLibraries(operation, ids);
         if (operation != _epoch) return;
-        selectedLibraryIds = Set.unmodifiable(ids);
-        try {
-          await _save();
-        } catch (_) {
-          selectedLibraryIds = oldSelectedLibraries;
-          availableMedia = oldMedia;
-          availablePlaylists = oldPlaylists;
-          rethrow;
-        }
-        if (!_isCurrent(operation)) return;
-        _contentGeneration++;
-        notifyListeners();
+        await _queueStateOperation(operation, () async {
+          _requireAvailablePlaylists(loaded.failedPlaylistIds);
+          final oldSelectedLibraries = selectedLibraryIds;
+          final oldMedia = availableMedia;
+          final oldPlaylists = availablePlaylists;
+          selectedLibraryIds = Set.unmodifiable(ids);
+          availableMedia = loaded.media;
+          availablePlaylists = loaded.playlists;
+          try {
+            await _save();
+          } catch (_) {
+            selectedLibraryIds = oldSelectedLibraries;
+            availableMedia = oldMedia;
+            availablePlaylists = oldPlaylists;
+            rethrow;
+          }
+          if (_disposed) return;
+          _contentGeneration++;
+          notifyListeners();
+        });
       },
       operation: operation,
       fallbackStage: SetupStage.channelSetup,
     );
   }
 
-  Future<void> _loadLibraries(int operation, Set<String> ids) async {
+  Future<
+    ({
+      Set<String> failedPlaylistIds,
+      List<PlexMediaItem> media,
+      List<PlexPlaylist> playlists,
+    })
+  >
+  _loadLibraries(int operation, Set<String> ids) async {
     final selectedServer = server;
     if (selectedServer == null || connection == null) {
       throw const PlexException('server-unreachable', 'Select a server first.');
@@ -589,7 +600,13 @@ class LineupController extends ChangeNotifier {
           ),
         ),
       );
-      if (operation != _epoch) return;
+      if (operation != _epoch) {
+        return (
+          failedPlaylistIds: const <String>{},
+          media: const <PlexMediaItem>[],
+          playlists: const <PlexPlaylist>[],
+        );
+      }
     }
     PlexPlaylistCatalog catalog;
     try {
@@ -606,16 +623,11 @@ class LineupController extends ChangeNotifier {
       });
       catalog = const PlexPlaylistCatalog(playlists: [], failedIds: {});
     }
-    if (operation != _epoch) return;
-    final required = channels
-        .map((channel) => channel.source)
-        .whereType<PlaylistSource>()
-        .map((source) => source.playlistId)
-        .toSet();
-    if (catalog.failedIds.any(required.contains)) {
-      throw const PlexException(
-        'playlist-unavailable',
-        'A playlist used by this lineup could not be loaded. Retry setup.',
+    if (operation != _epoch) {
+      return (
+        failedPlaylistIds: const <String>{},
+        media: const <PlexMediaItem>[],
+        playlists: const <PlexPlaylist>[],
       );
     }
     if (catalog.failedIds.isNotEmpty) {
@@ -623,10 +635,27 @@ class LineupController extends ChangeNotifier {
         'count': catalog.failedIds.length,
       });
     }
-    availableMedia = List.unmodifiable(
-      items.where((item) => item.duration > Duration.zero),
+    return (
+      failedPlaylistIds: Set<String>.unmodifiable(catalog.failedIds),
+      media: List<PlexMediaItem>.unmodifiable(
+        items.where((item) => item.duration > Duration.zero),
+      ),
+      playlists: List<PlexPlaylist>.unmodifiable(catalog.playlists),
     );
-    availablePlaylists = catalog.playlists;
+  }
+
+  void _requireAvailablePlaylists(Set<String> failedIds) {
+    final required = channels
+        .map((channel) => channel.source)
+        .whereType<PlaylistSource>()
+        .map((source) => source.playlistId)
+        .toSet();
+    if (failedIds.any(required.contains)) {
+      throw const PlexException(
+        'playlist-unavailable',
+        'A playlist used by this lineup could not be loaded. Retry setup.',
+      );
+    }
   }
 
   Future<void> completeAudioSetup() async {
@@ -709,11 +738,11 @@ class LineupController extends ChangeNotifier {
   }
 
   Future<void> clearSavedServer() async {
-    final profileId = profile?.id ?? account?.id;
-    if (profileId == null) return;
     final operation = ++_epoch;
     await _run(
-      () async {
+      () => _queueStateOperation(operation, () async {
+        final profileId = profile?.id ?? account?.id;
+        if (profileId == null) return;
         final selections = Map<String, String>.of(
           _persisted.selectedServerByProfile,
         )..remove(profileId);
@@ -728,12 +757,11 @@ class LineupController extends ChangeNotifier {
               _persisted.currentChannelByProfileServer,
         );
         await store.save(next);
-        if (operation != _epoch) return;
         _persisted = next;
         _clearServerRuntime();
         serverSelectionCanCancel = false;
         stage = SetupStage.servers;
-      },
+      }),
       operation: operation,
       fallbackStage: SetupStage.servers,
     );
@@ -743,70 +771,76 @@ class LineupController extends ChangeNotifier {
     List<Channel> planned, {
     required ChannelBuildMode mode,
   }) async {
-    final oldChannels = channels;
-    final oldCurrent = currentChannelId;
-    final oldCurrentIndex = oldChannels.indexWhere(
-      (channel) => channel.id == oldCurrent,
-    );
-    final next = switch (mode) {
-      ChannelBuildMode.replace => [...planned],
-      ChannelBuildMode.append => [...channels, ...planned],
-      ChannelBuildMode.merge => [
-        ...channels.where(
-          (existing) => !planned.any(
-            (candidate) =>
-                candidate.builderKey != null &&
-                candidate.builderKey == existing.builderKey,
+    final operation = _epoch;
+    await _queueStateOperation(operation, () async {
+      final oldChannels = channels;
+      final oldCurrent = currentChannelId;
+      final oldCurrentIndex = oldChannels.indexWhere(
+        (channel) => channel.id == oldCurrent,
+      );
+      final next = switch (mode) {
+        ChannelBuildMode.replace => [...planned],
+        ChannelBuildMode.append => [...channels, ...planned],
+        ChannelBuildMode.merge => [
+          ...channels.where(
+            (existing) => !planned.any(
+              (candidate) =>
+                  candidate.builderKey != null &&
+                  candidate.builderKey == existing.builderKey,
+            ),
           ),
-        ),
-        ...planned,
-      ],
-    }..sort((a, b) => a.number.compareTo(b.number));
-    for (final channel in next) {
-      channel.validate(next);
-    }
-    channels = List.unmodifiable(next);
-    currentChannelId = channels.any((channel) => channel.id == oldCurrent)
-        ? oldCurrent
-        : channels.isEmpty
-        ? null
-        : channels[oldCurrentIndex.clamp(0, channels.length - 1)].id;
-    try {
-      await _save();
-      if (_disposed) return;
-      stage = SetupStage.ready;
-      notifyListeners();
-    } catch (_) {
-      channels = oldChannels;
-      currentChannelId = oldCurrent;
-      rethrow;
-    }
+          ...planned,
+        ],
+      }..sort((a, b) => a.number.compareTo(b.number));
+      for (final channel in next) {
+        channel.validate(next);
+      }
+      channels = List.unmodifiable(next);
+      currentChannelId = channels.any((channel) => channel.id == oldCurrent)
+          ? oldCurrent
+          : channels.isEmpty
+          ? null
+          : channels[oldCurrentIndex.clamp(0, channels.length - 1)].id;
+      try {
+        await _save();
+        if (_disposed) return;
+        stage = SetupStage.ready;
+        notifyListeners();
+      } catch (_) {
+        channels = oldChannels;
+        currentChannelId = oldCurrent;
+        rethrow;
+      }
+    });
   }
 
   Future<void> saveChannel(Channel channel) async {
-    channel.validate(channels);
-    final next = [...channels];
-    final index = next.indexWhere((candidate) => candidate.id == channel.id);
-    if (index < 0) {
-      next.add(channel);
-    } else {
-      next[index] = channel;
-    }
-    final old = channels;
-    final oldCurrent = currentChannelId;
-    channels = List.unmodifiable(
-      next..sort((a, b) => a.number.compareTo(b.number)),
-    );
-    currentChannelId ??= channel.id;
-    try {
-      await _save();
-      if (_disposed) return;
-      notifyListeners();
-    } catch (_) {
-      channels = old;
-      currentChannelId = oldCurrent;
-      rethrow;
-    }
+    final operation = _epoch;
+    await _queueStateOperation(operation, () async {
+      channel.validate(channels);
+      final next = [...channels];
+      final index = next.indexWhere((candidate) => candidate.id == channel.id);
+      if (index < 0) {
+        next.add(channel);
+      } else {
+        next[index] = channel;
+      }
+      final old = channels;
+      final oldCurrent = currentChannelId;
+      channels = List.unmodifiable(
+        next..sort((a, b) => a.number.compareTo(b.number)),
+      );
+      currentChannelId ??= channel.id;
+      try {
+        await _save();
+        if (_disposed) return;
+        notifyListeners();
+      } catch (_) {
+        channels = old;
+        currentChannelId = oldCurrent;
+        rethrow;
+      }
+    });
   }
 
   ScheduleIndex scheduleFor(Channel channel) => buildSchedule(
@@ -923,56 +957,66 @@ class LineupController extends ChangeNotifier {
   }
 
   Future<void> setCurrentChannel(String? id) async {
-    if (id == currentChannelId ||
-        (id != null && !channels.any((channel) => channel.id == id))) {
-      return;
-    }
-    final old = currentChannelId;
-    currentChannelId = id;
-    try {
-      await _save();
-      if (_disposed) return;
-      notifyListeners();
-    } catch (_) {
-      currentChannelId = old;
-      rethrow;
-    }
+    final operation = _epoch;
+    await _queueStateOperation(operation, () async {
+      if (id == currentChannelId ||
+          (id != null && !channels.any((channel) => channel.id == id))) {
+        return;
+      }
+      final old = currentChannelId;
+      currentChannelId = id;
+      try {
+        await _save();
+        if (_disposed) return;
+        notifyListeners();
+      } catch (_) {
+        currentChannelId = old;
+        rethrow;
+      }
+    });
   }
 
   Future<void> deleteChannel(String id) async {
-    final old = channels;
-    final oldCurrent = currentChannelId;
-    final removedIndex = channels.indexWhere((channel) => channel.id == id);
-    channels = List.unmodifiable(channels.where((channel) => channel.id != id));
-    if (currentChannelId == id) {
-      currentChannelId = channels.isEmpty
-          ? null
-          : channels[removedIndex.clamp(0, channels.length - 1)].id;
-    }
-    try {
-      await _save();
-      if (_disposed) return;
-      notifyListeners();
-    } catch (_) {
-      channels = old;
-      currentChannelId = oldCurrent;
-      rethrow;
-    }
+    final operation = _epoch;
+    await _queueStateOperation(operation, () async {
+      final old = channels;
+      final oldCurrent = currentChannelId;
+      final removedIndex = channels.indexWhere((channel) => channel.id == id);
+      channels = List.unmodifiable(
+        channels.where((channel) => channel.id != id),
+      );
+      if (currentChannelId == id) {
+        currentChannelId = channels.isEmpty
+            ? null
+            : channels[removedIndex.clamp(0, channels.length - 1)].id;
+      }
+      try {
+        await _save();
+        if (_disposed) return;
+        notifyListeners();
+      } catch (_) {
+        channels = old;
+        currentChannelId = oldCurrent;
+        rethrow;
+      }
+    });
   }
 
   Future<void> updateSettings(LineupSettings value) async {
-    final generation = ++_settingsGeneration;
-    final old = settings;
-    settings = value;
-    try {
-      await _save();
-      if (generation != _settingsGeneration) return;
-      diagnostics.enabled = value.diagnosticsEnabled;
-      notifyListeners();
-    } catch (_) {
-      if (generation == _settingsGeneration) settings = old;
-      rethrow;
-    }
+    final operation = _epoch;
+    await _queueStateOperation(operation, () async {
+      final old = settings;
+      settings = value;
+      try {
+        await _save();
+        if (_disposed) return;
+        diagnostics.enabled = value.diagnosticsEnabled;
+        notifyListeners();
+      } catch (_) {
+        settings = old;
+        rethrow;
+      }
+    });
   }
 
   Future<bool> logout() {
@@ -986,6 +1030,11 @@ class LineupController extends ChangeNotifier {
 
   Future<bool> _performLogout() async {
     ++_epoch;
+    final stateBeforeLogout = _stateOperations;
+    final releaseStateOperations = Completer<void>();
+    _stateOperations = stateBeforeLogout.then(
+      (_) => releaseStateOperations.future,
+    );
     _pmsRefresh = null;
     _pmsRefreshOperation = null;
     _pmsRefreshServerId = null;
@@ -995,48 +1044,55 @@ class LineupController extends ChangeNotifier {
     busy = true;
     notifyListeners();
     try {
-      await _clearCredentials();
-    } catch (exception) {
+      try {
+        await _clearCredentials();
+      } catch (exception) {
+        if (_disposed) return false;
+        error = 'Lineup could not securely sign out. Check system credential storage and try again.';
+        diagnostics.add('application', 'Credential cleanup failed', {
+          'code': exception is PlexException ? exception.code : 'unexpected',
+        });
+        return false;
+      }
       if (_disposed) return false;
-      error = 'Lineup could not securely sign out. Check system credential storage and try again.';
-      diagnostics.add('application', 'Credential cleanup failed', {
-        'code': exception is PlexException ? exception.code : 'unexpected',
-      });
-      return false;
+      await stateBeforeLogout;
+      if (_disposed) return false;
+      ++_epoch;
+      account = null;
+      profile = null;
+      profiles = const [];
+      servers = const [];
+      server = null;
+      connection = null;
+      libraries = const [];
+      availableMedia = const [];
+      availablePlaylists = const [];
+      _scheduleWorker?.dispose();
+      _scheduleWorker = null;
+      _scheduleWorkerMedia = null;
+      _scheduleWorkerPlaylists = null;
+      selectedLibraryIds = const {};
+      channels = const [];
+      currentChannelId = null;
+      channelSetupCanCancel = false;
+      profileSelectionCanCancel = false;
+      serverSelectionCanCancel = false;
+      _accountToken = null;
+      _profileToken = null;
+      _serverAccess = const {};
+      _pmsToken = null;
+      _serverTargetId = null;
+      _pmsRefresh = null;
+      _pmsRefreshOperation = null;
+      _pmsRefreshServerId = null;
+      secureCancellationRequired = false;
+      _contentGeneration++;
+      stage = SetupStage.welcome;
+      error = null;
+      return true;
+    } finally {
+      releaseStateOperations.complete();
     }
-    if (_disposed) return false;
-    account = null;
-    profile = null;
-    profiles = const [];
-    servers = const [];
-    server = null;
-    connection = null;
-    libraries = const [];
-    availableMedia = const [];
-    availablePlaylists = const [];
-    _scheduleWorker?.dispose();
-    _scheduleWorker = null;
-    _scheduleWorkerMedia = null;
-    _scheduleWorkerPlaylists = null;
-    selectedLibraryIds = const {};
-    channels = const [];
-    currentChannelId = null;
-    channelSetupCanCancel = false;
-    profileSelectionCanCancel = false;
-    serverSelectionCanCancel = false;
-    _accountToken = null;
-    _profileToken = null;
-    _serverAccess = const {};
-    _pmsToken = null;
-    _serverTargetId = null;
-    _pmsRefresh = null;
-    _pmsRefreshOperation = null;
-    _pmsRefreshServerId = null;
-    secureCancellationRequired = false;
-    _contentGeneration++;
-    stage = SetupStage.welcome;
-    error = null;
-    return true;
   }
 
   void _finishLogout() {
@@ -1093,6 +1149,18 @@ class LineupController extends ChangeNotifier {
     );
     await store.save(next);
     if (!_disposed) _persisted = next;
+  }
+
+  Future<void> _queueStateOperation(
+    int operation,
+    Future<void> Function() body,
+  ) {
+    final queued = _stateOperations.then((_) async {
+      if (!_isCurrent(operation)) return;
+      await body();
+    });
+    _stateOperations = queued.then<void>((_) {}, onError: (_, _) {});
+    return queued;
   }
 
   Future<bool> _writeCredential(
@@ -1155,7 +1223,7 @@ class LineupController extends ChangeNotifier {
       return await request(access.token, connectionOverride);
     } on PlexException catch (exception) {
       if (!_isPmsAuthorizationError(exception)) rethrow;
-      await _refreshPmsAccess(operation, serverId);
+      final refreshedConnection = await _refreshPmsAccess(operation, serverId);
       if (!_isCurrentPmsTarget(operation, serverId)) {
         throw const PlexException(
           'authorization-unavailable',
@@ -1163,8 +1231,7 @@ class LineupController extends ChangeNotifier {
         );
       }
       final refreshed = _serverAccess[serverId];
-      final refreshedConnection = connection;
-      if (refreshed == null || refreshedConnection == null) {
+      if (refreshed == null) {
         throw const PlexException(
           'authorization-unavailable',
           'Plex server authorization is unavailable.',
@@ -1175,7 +1242,7 @@ class LineupController extends ChangeNotifier {
     }
   }
 
-  Future<void> _refreshPmsAccess(int operation, String serverId) {
+  Future<PlexConnection> _refreshPmsAccess(int operation, String serverId) {
     final active = _pmsRefresh;
     if (active != null &&
         _pmsRefreshOperation == operation &&
@@ -1195,7 +1262,10 @@ class LineupController extends ChangeNotifier {
     });
   }
 
-  Future<void> _performPmsRefresh(int operation, String serverId) async {
+  Future<PlexConnection> _performPmsRefresh(
+    int operation,
+    String serverId,
+  ) async {
     final profileToken = _profileToken ?? _accountToken;
     if (profileToken == null) {
       throw const PlexException('auth-required', 'Link Plex first.');
@@ -1223,8 +1293,11 @@ class LineupController extends ChangeNotifier {
     }
     _serverAccess = {for (final access in discovered) access.server.id: access};
     servers = List.unmodifiable(discovered.map((access) => access.server));
-    _pmsToken = refreshed.token;
-    connection = selectedConnection;
+    if (_serverTargetId != serverId) {
+      _pmsToken = refreshed.token;
+      connection = selectedConnection;
+    }
+    return selectedConnection;
   }
 
   Future<bool> _run(
@@ -1283,7 +1356,6 @@ class LineupController extends ChangeNotifier {
     if (_disposed) return;
     _disposed = true;
     ++_epoch;
-    ++_settingsGeneration;
     _pinTimer?.cancel();
     _busyOperation = null;
     busy = false;

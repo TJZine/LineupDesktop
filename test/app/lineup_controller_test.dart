@@ -838,6 +838,179 @@ void main() {
     },
   );
 
+  test(
+    'failed settings settles before a queued channel transaction derives',
+    () async {
+      final store = _ControlledSaveStore();
+      final selected = _server('server');
+      final controller = LineupController(
+        store: store,
+        credentials: _MemoryCredentials(),
+        plex: _FakePlex(),
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+      controller
+        ..account = const PlexAccount(id: 'owner', name: 'Owner', email: '')
+        ..server = selected
+        ..connection = selected.connections.single;
+      store.blockNext(fail: true);
+
+      final settings = controller.updateSettings(
+        const LineupSettings(diagnosticsEnabled: true),
+      );
+      await store.blockedSaveStarted.future;
+      final channel = controller.saveChannel(_channel('queued'));
+      await Future<void>.delayed(Duration.zero);
+
+      expect(controller.channels, isEmpty);
+      store.releaseBlockedSave();
+      await expectLater(settings, throwsStateError);
+      await channel;
+
+      expect(controller.settings.diagnosticsEnabled, isFalse);
+      expect(controller.channels.single.id, 'queued');
+      expect(store.state.settings.diagnosticsEnabled, isFalse);
+      expect(
+        store.state.channelsByProfileServer['owner']!['server']!.single.id,
+        'queued',
+      );
+    },
+  );
+
+  test('failed channel settles before queued settings derives', () async {
+    final store = _ControlledSaveStore();
+    final selected = _server('server');
+    final existing = _channel('existing');
+    final controller = LineupController(
+      store: store,
+      credentials: _MemoryCredentials(),
+      plex: _FakePlex(),
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+    controller
+      ..account = const PlexAccount(id: 'owner', name: 'Owner', email: '')
+      ..server = selected
+      ..connection = selected.connections.single
+      ..channels = [existing]
+      ..currentChannelId = existing.id;
+    store.blockNext(fail: true);
+
+    final channel = controller.deleteChannel(existing.id);
+    await store.blockedSaveStarted.future;
+    final settings = controller.updateSettings(
+      const LineupSettings(nowWatchingBanner: false),
+    );
+    store.releaseBlockedSave();
+
+    await expectLater(channel, throwsStateError);
+    await settings;
+    expect(controller.channels, [existing]);
+    expect(controller.currentChannelId, existing.id);
+    expect(controller.settings.nowWatchingBanner, isFalse);
+    expect(store.state.settings.nowWatchingBanner, isFalse);
+    expect(store.state.channelsByProfileServer['owner']!['server'], [existing]);
+  });
+
+  test(
+    'failed settings settles before a queued current-channel mutation',
+    () async {
+      final store = _ControlledSaveStore();
+      final selected = _server('server');
+      final first = _channel('first');
+      final second = Channel(
+        id: 'second',
+        number: 2,
+        name: 'Second channel',
+        source: first.source,
+        playbackMode: first.playbackMode,
+        anchor: first.anchor,
+        shuffleSeed: first.shuffleSeed,
+      );
+      final controller = LineupController(
+        store: store,
+        credentials: _MemoryCredentials(),
+        plex: _FakePlex(),
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+      controller
+        ..account = const PlexAccount(id: 'owner', name: 'Owner', email: '')
+        ..server = selected
+        ..channels = [first, second]
+        ..currentChannelId = first.id;
+      store.blockNext(fail: true);
+
+      final settings = controller.updateSettings(
+        const LineupSettings(diagnosticsEnabled: true),
+      );
+      await store.blockedSaveStarted.future;
+      final current = controller.setCurrentChannel(second.id);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(controller.currentChannelId, first.id);
+      store.releaseBlockedSave();
+      await expectLater(settings, throwsStateError);
+      await current;
+      expect(controller.settings.diagnosticsEnabled, isFalse);
+      expect(controller.currentChannelId, second.id);
+      expect(
+        store.state.currentChannelByProfileServer['owner']!['server'],
+        second.id,
+      );
+    },
+  );
+
+  test(
+    'failed settings settles before a queued library transaction applies',
+    () async {
+      final selected = _server('server');
+      final store = _ControlledSaveStore(
+        const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+      );
+      final plex = _FakePlex()
+        ..homeUsersResult = const [
+          PlexHomeUser(id: 'owner', name: 'Owner', protected: false),
+        ]
+        ..serversResult = [selected]
+        ..connectionResult = selected.connections.single
+        ..librariesResult = const [
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+        ];
+      final controller = LineupController(
+        store: store,
+        credentials: _MemoryCredentials(accountToken: 'account-token'),
+        plex: plex,
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+      store.blockNext(fail: true);
+
+      final settings = controller.updateSettings(
+        const LineupSettings(diagnosticsEnabled: true),
+      );
+      await store.blockedSaveStarted.future;
+      final libraries = controller.setLibraries({'movies'});
+      await Future<void>.delayed(Duration.zero);
+      store.releaseBlockedSave();
+
+      await expectLater(settings, throwsStateError);
+      expect(await libraries, isTrue);
+      expect(controller.settings.diagnosticsEnabled, isFalse);
+      expect(controller.selectedLibraryIds, {'movies'});
+      expect(store.state.settings.diagnosticsEnabled, isFalse);
+      expect(
+        store.state.selectedLibraryIdsByProfileServer['owner']!['server'],
+        ['movies'],
+      );
+    },
+  );
+
   test('logout clears a credential write that was already in flight', () async {
     final credentials = _BlockingCredentials();
     final plex = _FakePlex()
@@ -863,6 +1036,276 @@ void main() {
 
     expect(credentials.accountToken, isNull);
     expect(controller.stage, SetupStage.welcome);
+  });
+
+  test('profile scope apply waits for an older state transaction', () async {
+    const owner = PlexHomeUser(id: 'owner', name: 'Owner', protected: false);
+    const child = PlexHomeUser(id: 'child', name: 'Child', protected: false);
+    final store = _ControlledSaveStore();
+    final controller = LineupController(
+      store: store,
+      credentials: _MemoryCredentials(accountToken: 'account-token'),
+      plex: _FakePlex()..homeUsersResult = const [owner, child],
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+    controller
+      ..profile = owner
+      ..stage = SetupStage.ready;
+    store.blockNext();
+
+    final settings = controller.updateSettings(
+      const LineupSettings(nowWatchingBanner: false),
+    );
+    await store.blockedSaveStarted.future;
+    final selection = controller.selectProfile(child);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(controller.profile, owner);
+    store.releaseBlockedSave();
+    await settings;
+    await selection;
+
+    expect(controller.profile, child);
+    expect(store.savedStates[store.savedStates.length - 2].profileId, owner.id);
+    expect(store.savedStates.last.profileId, child.id);
+  });
+
+  test('server scope apply waits for an older state transaction', () async {
+    final oldServer = _server('old');
+    final nextServer = _server('next');
+    final store = _ControlledSaveStore(
+      const PersistedState(selectedServerByProfile: {'owner': 'old'}),
+    );
+    final plex = _FakePlex()
+      ..homeUsersResult = const [
+        PlexHomeUser(id: 'owner', name: 'Owner', protected: false),
+      ]
+      ..serversResult = [oldServer, nextServer]
+      ..librariesResult = const [];
+    final controller = LineupController(
+      store: store,
+      credentials: _MemoryCredentials(accountToken: 'account-token'),
+      plex: plex,
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+    controller.stage = SetupStage.ready;
+    store.blockNext();
+
+    final settings = controller.updateSettings(
+      const LineupSettings(nowWatchingBanner: false),
+    );
+    await store.blockedSaveStarted.future;
+    final selection = controller.selectServer(nextServer);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(controller.server?.id, oldServer.id);
+    store.releaseBlockedSave();
+    await settings;
+    await selection;
+
+    expect(controller.server?.id, nextServer.id);
+    expect(
+      store.savedStates[store.savedStates.length - 2].selectedServerByProfile,
+      {'owner': oldServer.id},
+    );
+    expect(store.savedStates.last.selectedServerByProfile, {
+      'owner': nextServer.id,
+    });
+  });
+
+  test(
+    'target authorization refresh waits for queued server scope apply',
+    () async {
+      final oldServer = _server('old');
+      final nextServer = _server('next');
+      final refreshedNext = PlexConnection(
+        uri: Uri.parse('https://next-refreshed.example:32400'),
+        local: true,
+        relay: false,
+        latency: const Duration(milliseconds: 8),
+      );
+      final targetLibrariesRequested = Completer<void>();
+      var discoveries = 0;
+      final store = _ControlledSaveStore(
+        const PersistedState(selectedServerByProfile: {'owner': 'old'}),
+      );
+      final plex = _FakePlex()
+        ..homeUsersResult = const [
+          PlexHomeUser(id: 'owner', name: 'Owner', protected: false),
+        ]
+        ..serversResult = [oldServer, nextServer]
+        ..discoverServersHandler = (_) async {
+          discoveries++;
+          return [
+            PlexServerAccess(
+              server: oldServer,
+              token: discoveries == 1 ? 'old-token-1' : 'old-token-2',
+            ),
+            PlexServerAccess(
+              server: nextServer,
+              token: discoveries == 1 ? 'next-token-1' : 'next-token-2',
+            ),
+          ];
+        }
+        ..selectConnectionHandler = (selected, token) async {
+          if (selected.id == nextServer.id && token == 'next-token-1') {
+            throw const PlexException('auth-invalid', 'Expired');
+          }
+          if (selected.id == nextServer.id) return refreshedNext;
+          return oldServer.connections.single;
+        }
+        ..librariesHandler = (_, token) async {
+          if (token == 'next-token-2' &&
+              !targetLibrariesRequested.isCompleted) {
+            targetLibrariesRequested.complete();
+          }
+          return const [];
+        };
+      final controller = LineupController(
+        store: store,
+        credentials: _MemoryCredentials(accountToken: 'account-token'),
+        plex: plex,
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+      controller.stage = SetupStage.ready;
+      store.blockNext();
+
+      final settings = controller.updateSettings(
+        const LineupSettings(nowWatchingBanner: false),
+      );
+      await store.blockedSaveStarted.future;
+      final selection = controller.selectServer(nextServer);
+      await targetLibrariesRequested.future;
+
+      expect(discoveries, 2);
+      expect(controller.server?.id, oldServer.id);
+      expect(controller.connection, oldServer.connections.single);
+      await controller.artworkForPath(Uri.parse('/old-art'));
+      expect(plex.artworkServer, oldServer.connections.single.uri);
+      expect(plex.artworkToken, 'old-token-2');
+
+      store.releaseBlockedSave();
+      await settings;
+      await selection;
+
+      expect(controller.server?.id, nextServer.id);
+      expect(controller.connection, refreshedNext);
+      await controller.artworkForPath(Uri.parse('/next-art'));
+      expect(plex.artworkServer, refreshedNext.uri);
+      expect(plex.artworkToken, 'next-token-2');
+    },
+  );
+
+  test(
+    'failed old transaction rolls back while profile network later fails',
+    () async {
+      const owner = PlexHomeUser(id: 'owner', name: 'Owner', protected: false);
+      const child = PlexHomeUser(id: 'child', name: 'Child', protected: false);
+      final switched = Completer<String>();
+      final store = _ControlledSaveStore();
+      final controller = LineupController(
+        store: store,
+        credentials: _MemoryCredentials(accountToken: 'account-token'),
+        plex: _FakePlex()
+          ..homeUsersResult = const [owner, child]
+          ..switchHomeUserHandler = (_, _, _) => switched.future,
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+      controller
+        ..profile = owner
+        ..stage = SetupStage.ready;
+      store.blockNext(fail: true);
+
+      final settings = controller.updateSettings(
+        const LineupSettings(diagnosticsEnabled: true),
+      );
+      await store.blockedSaveStarted.future;
+      final selection = controller.selectProfile(child);
+      switched.completeError(StateError('switch failed'));
+      await selection;
+      store.releaseBlockedSave();
+
+      await expectLater(settings, throwsStateError);
+      expect(controller.settings.diagnosticsEnabled, isFalse);
+      expect(controller.profile, owner);
+    },
+  );
+
+  test(
+    'logout waits for an applied state transaction before clearing',
+    () async {
+      final store = _ControlledSaveStore();
+      final controller = LineupController(
+        store: store,
+        credentials: _MemoryCredentials(accountToken: 'account-token'),
+        plex: _FakePlex(),
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+      controller
+        ..account = const PlexAccount(id: 'owner', name: 'Owner', email: '')
+        ..stage = SetupStage.ready;
+      store.blockNext();
+
+      final settings = controller.updateSettings(
+        const LineupSettings(nowWatchingBanner: false),
+      );
+      await store.blockedSaveStarted.future;
+      final logout = controller.logout();
+      await Future<void>.delayed(Duration.zero);
+
+      expect(controller.account?.id, 'owner');
+      store.releaseBlockedSave();
+      await settings;
+      expect(await logout, isTrue);
+      expect(store.state.settings.nowWatchingBanner, isFalse);
+      expect(controller.account, isNull);
+      expect(controller.stage, SetupStage.welcome);
+    },
+  );
+
+  test('queued stale mutation never calls store save', () async {
+    final store = _ControlledSaveStore();
+    final selected = _server('server');
+    final controller = LineupController(
+      store: store,
+      credentials: _MemoryCredentials(accountToken: 'account-token'),
+      plex: _FakePlex(),
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+    controller
+      ..account = const PlexAccount(id: 'owner', name: 'Owner', email: '')
+      ..server = selected
+      ..channels = const []
+      ..stage = SetupStage.ready;
+    var stalePublished = false;
+    controller.addListener(() {
+      stalePublished |= controller.channels.any(
+        (channel) => channel.id == 'stale',
+      );
+    });
+    store.blockNext();
+
+    final settings = controller.updateSettings(
+      const LineupSettings(nowWatchingBanner: false),
+    );
+    await store.blockedSaveStarted.future;
+    final stale = controller.saveChannel(_channel('stale'));
+    final logout = controller.logout();
+    store.releaseBlockedSave();
+
+    await settings;
+    await stale;
+    expect(await logout, isTrue);
+    expect(store.saveCalls, 1);
+    expect(store.state.channelsByProfileServer['owner']!['server'], isEmpty);
+    expect(controller.channels, isEmpty);
+    expect(stalePublished, isFalse);
   });
 
   test('overlapping logout calls share one busy credential cleanup', () async {
@@ -1269,7 +1712,7 @@ void main() {
     expect(controller.channels, isEmpty);
   });
 
-  test('a stale settings failure cannot roll back a newer value', () async {
+  test('a failed settings transaction settles before the next value', () async {
     final store = _ConcurrentStore();
     final controller = LineupController(
       store: store,
@@ -1283,11 +1726,12 @@ void main() {
       const LineupSettings(diagnosticsEnabled: true),
     );
     await store.firstSaveStarted.future;
-    await controller.updateSettings(
+    final newer = controller.updateSettings(
       const LineupSettings(nowWatchingBanner: false),
     );
     store.failFirstSave.complete();
     await expectLater(stale, throwsStateError);
+    await newer;
 
     expect(controller.settings.nowWatchingBanner, isFalse);
     expect(controller.settings.diagnosticsEnabled, isFalse);
@@ -1439,6 +1883,42 @@ class _BlockingSaveStore extends _MemoryStore {
     if (!saveStarted.isCompleted) saveStarted.complete();
     await finishSave.future;
     await super.save(value);
+  }
+}
+
+class _ControlledSaveStore extends _MemoryStore {
+  _ControlledSaveStore([super.state]);
+
+  Completer<void> blockedSaveStarted = Completer<void>();
+  Completer<void> _release = Completer<void>();
+  final List<PersistedState> savedStates = [];
+  var saveCalls = 0;
+  var _blocked = false;
+  var _fail = false;
+
+  void blockNext({bool fail = false}) {
+    assert(!_blocked);
+    blockedSaveStarted = Completer<void>();
+    _release = Completer<void>();
+    _blocked = true;
+    _fail = fail;
+  }
+
+  void releaseBlockedSave() => _release.complete();
+
+  @override
+  Future<void> save(PersistedState value) async {
+    saveCalls++;
+    if (_blocked) {
+      blockedSaveStarted.complete();
+      await _release.future;
+      final fail = _fail;
+      _blocked = false;
+      _fail = false;
+      if (fail) throw StateError('save failed');
+    }
+    await super.save(value);
+    savedStates.add(value);
   }
 }
 
