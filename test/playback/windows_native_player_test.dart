@@ -386,6 +386,84 @@ void main() {
     },
   );
 
+  test('stop retires a pending load before its native reply and ignores late events', () async {
+    final calls = <MethodCall>[];
+    final stopReply = Completer<void>();
+    messenger.setMockMethodCallHandler(channel, (call) {
+      calls.add(call);
+      return call.method == 'stop' ? stopReply.future : null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+    final player = WindowsNativePlayer();
+    addTearDown(player.dispose);
+    await player.initialize();
+    var loadSettled = false;
+    final load = player
+        .load(Uri.parse('file:///pending.mp4'), generation: 7)
+        .whenComplete(() => loadSettled = true);
+    final loadFailure = expectLater(load, throwsA(isA<PlayerUnavailable>()));
+    await Future<void>.delayed(Duration.zero);
+    final loadId = calls.last.arguments!['loadId']! as int;
+    await _sendNativeEvent(messenger, {
+      'type': 'property',
+      'loadId': loadId,
+      'name': 'video-codec',
+      'value': 'h264',
+    });
+    await _sendNativeEvent(messenger, {
+      'type': 'property',
+      'loadId': loadId,
+      'name': 'time-pos',
+      'value': 12,
+    });
+    await _sendNativeEvent(messenger, {
+      'type': 'property',
+      'loadId': loadId,
+      'name': 'duration',
+      'value': 30,
+    });
+    await _sendNativeEvent(messenger, {
+      'type': 'property',
+      'loadId': loadId,
+      'name': 'track-list',
+      'value': [
+        {'id': 1, 'type': 'video', 'selected': true},
+      ],
+    });
+
+    var stopSettled = false;
+    final stop = player.stop().whenComplete(() => stopSettled = true);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(loadSettled, isTrue);
+    expect(stopSettled, isFalse);
+    expect(player.status.state, PlayerState.loading);
+    expect(player.telemetry.videoCodec, 'h264');
+    await _sendNativeEvent(messenger, {
+      'type': 'property',
+      'loadId': loadId,
+      'name': 'video-codec',
+      'value': 'late',
+    });
+    await _sendNativeEvent(messenger, {
+      'type': 'state',
+      'loadId': loadId,
+      'state': 'playing',
+    });
+    expect(player.telemetry.videoCodec, 'h264');
+
+    stopReply.complete();
+    await stop;
+    await loadFailure;
+    expect(player.status.state, PlayerState.stopped);
+    expect(player.status.message, 'Stopped');
+    expect(player.position, Duration.zero);
+    expect(player.duration, Duration.zero);
+    expect(player.telemetry.videoCodec, isNull);
+    expect(player.tracks, isEmpty);
+  });
+
   test('load invocation failure retires its load id', () async {
     var loadId = 0;
     messenger.setMockMethodCallHandler(channel, (call) async {

@@ -157,7 +157,17 @@ class WindowsNativePlayer implements NativePlayer {
       _invoke('setVolume', {'volume': volume});
 
   @override
-  Future<void> stop() => _invoke('stop');
+  Future<void> stop() async {
+    _completePendingLoadError(
+      const PlayerUnavailable('The media load was stopped.'),
+    );
+    _pendingLoad = null;
+    _activeLoadId = null;
+    _activeGeneration = null;
+    await _invoke('stop');
+    _resetMediaState();
+    _setStatus(PlayerState.stopped, 'Stopped');
+  }
 
   @override
   Future<void> dispose() => _serializeLifecycle(() async {

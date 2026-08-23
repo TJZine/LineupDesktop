@@ -773,6 +773,178 @@ void main() {
     expect(coordinator.hasPlaybackIntent, isFalse);
   });
 
+  test('replacement tune preempts a never-settling load before dispatching its load', () async {
+    final lineup = _TestLineup();
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    )..requestViewport(0, 2);
+    await Future<void>.delayed(Duration.zero);
+    final player = _PreemptibleLoadPlayer(blockStop: true);
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(player.close);
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
+
+    final first = coordinator.tune('channel-0');
+    await player.loadStarted.future;
+    final replacement = coordinator.tune('channel-b');
+    await player.stopStarted.future;
+    await Future<void>.delayed(Duration.zero);
+
+    expect(player.loadSettled, isTrue);
+    expect(player.loads, hasLength(1));
+    expect(player.calls, ['load', 'stop']);
+
+    player.releaseStop.complete();
+    await Future.wait([first, replacement]);
+    expect(player.calls, ['load', 'stop', 'load']);
+    expect(lineup.currentChannelId, 'channel-b');
+  });
+
+  test('explicit Stop preempts a never-settling load immediately', () async {
+    final lineup = _TestLineup();
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    )..requestViewport(0, 2);
+    await Future<void>.delayed(Duration.zero);
+    final player = _PreemptibleLoadPlayer(blockStop: true);
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(player.close);
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
+
+    final tune = coordinator.tune('channel-b');
+    await player.loadStarted.future;
+    final stop = coordinator.stop();
+    await player.stopStarted.future;
+    await Future<void>.delayed(Duration.zero);
+
+    expect(player.loadSettled, isTrue);
+    expect(player.stops, 1);
+    player.releaseStop.complete();
+    await Future.wait([tune, stop]);
+    expect(coordinator.hasPlaybackIntent, isFalse);
+  });
+
+  test('content-scope invalidation preempts a never-settling load', () async {
+    final lineup = _TestLineup();
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    )..requestViewport(0, 2);
+    await Future<void>.delayed(Duration.zero);
+    final player = _PreemptibleLoadPlayer(blockStop: true);
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(player.close);
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
+
+    final tune = coordinator.tune('channel-b');
+    await player.loadStarted.future;
+    lineup.changeContentScope();
+    await player.stopStarted.future;
+    await Future<void>.delayed(Duration.zero);
+
+    expect(player.loadSettled, isTrue);
+    player.releaseStop.complete();
+    await tune;
+    await Future<void>.delayed(Duration.zero);
+    expect(player.stops, 1);
+    expect(coordinator.hasPlaybackIntent, isFalse);
+  });
+
+  test(
+    'successful logout preempts a pending load but failed logout preserves it',
+    () async {
+      final lineup = _LogoutLineup();
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => _schedule(channel),
+      )..requestViewport(0, 2);
+      await Future<void>.delayed(Duration.zero);
+      final player = _PreemptibleLoadPlayer(blockStop: true);
+      final coordinator = PlayerCoordinator(
+        player: player,
+        lineup: lineup,
+        guide: guide,
+      );
+      addTearDown(player.close);
+      addTearDown(lineup.dispose);
+      addTearDown(guide.dispose);
+      addTearDown(coordinator.dispose);
+
+      final tune = coordinator.tune('channel-b');
+      await player.loadStarted.future;
+      expect(await coordinator.logout(), isFalse);
+      expect(player.stops, 0);
+      expect(player.loadSettled, isFalse);
+
+      final logout = coordinator.logout();
+      await player.stopStarted.future;
+      await Future<void>.delayed(Duration.zero);
+      expect(player.loadSettled, isTrue);
+      player.releaseStop.complete();
+      expect(await logout, isTrue);
+      await tune;
+      expect(player.stops, 1);
+    },
+  );
+
+  test(
+    'rapid replacement Stop and scope invalidation coalesce preemption',
+    () async {
+      final lineup = _TestLineup();
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => _schedule(channel),
+      )..requestViewport(0, 2);
+      await Future<void>.delayed(Duration.zero);
+      final player = _PreemptibleLoadPlayer(blockStop: true);
+      final coordinator = PlayerCoordinator(
+        player: player,
+        lineup: lineup,
+        guide: guide,
+      );
+      addTearDown(player.close);
+      addTearDown(lineup.dispose);
+      addTearDown(guide.dispose);
+      addTearDown(coordinator.dispose);
+
+      final first = coordinator.tune('channel-0');
+      await player.loadStarted.future;
+      final replacement = coordinator.tune('channel-b');
+      final stop = coordinator.stop();
+      lineup.changeContentScope();
+      await player.stopStarted.future;
+      await Future<void>.delayed(Duration.zero);
+
+      expect(player.stops, 1);
+      expect(player.loads, hasLength(1));
+      player.releaseStop.complete();
+      await Future.wait([first, replacement, stop]);
+      await Future<void>.delayed(Duration.zero);
+      expect(player.stops, 1);
+      expect(player.loads, hasLength(1));
+    },
+  );
+
   test('replacement failure stops superseded media before settling', () async {
     final lineup = _TestLineup(failSecondPlaybackRequest: true);
     final guide = GuideController(
@@ -1110,42 +1282,45 @@ void main() {
     await coordinator.stop();
   });
 
-  test('failed pre-load tune preserves retained playback recovery', () async {
-    final lineup = _TestLineup(
-      failSecondPlaybackRequest: true,
-      recoverAuthorization: true,
-    );
-    final guide = GuideController(
-      lineup: lineup,
-      loadSchedule: (channel) async => _schedule(channel),
-    )..requestViewport(0, 2);
-    await Future<void>.delayed(Duration.zero);
-    final player = _EventPlayer();
-    final coordinator = PlayerCoordinator(
-      player: player,
-      lineup: lineup,
-      guide: guide,
-    );
-    addTearDown(player.close);
-    addTearDown(lineup.dispose);
-    addTearDown(guide.dispose);
-    addTearDown(coordinator.dispose);
+  test(
+    'failed pre-load replacement retires prior recovery ownership',
+    () async {
+      final lineup = _TestLineup(
+        failSecondPlaybackRequest: true,
+        recoverAuthorization: true,
+      );
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => _schedule(channel),
+      )..requestViewport(0, 2);
+      await Future<void>.delayed(Duration.zero);
+      final player = _EventPlayer();
+      final coordinator = PlayerCoordinator(
+        player: player,
+        lineup: lineup,
+        guide: guide,
+      );
+      addTearDown(player.close);
+      addTearDown(lineup.dispose);
+      addTearDown(guide.dispose);
+      addTearDown(coordinator.dispose);
 
-    await coordinator.tune('channel-0');
-    await coordinator.tune('channel-b');
-    player.emitError(
-      recoverable: true,
-      generation: player.loadGenerations.single,
-      failureCode: 'http_error',
-      httpStatus: 401,
-    );
-    await pumpEventQueue(times: 5);
+      await coordinator.tune('channel-0');
+      await coordinator.tune('channel-b');
+      player.emitError(
+        recoverable: true,
+        generation: player.loadGenerations.single,
+        failureCode: 'http_error',
+        httpStatus: 401,
+      );
+      await pumpEventQueue(times: 5);
 
-    expect(player.loads, hasLength(2));
-    expect(lineup.recoveryCalls, 1);
-    await coordinator.stop();
-    expect(player.stops, 1);
-  });
+      expect(player.loads, hasLength(1));
+      expect(lineup.recoveryCalls, 0);
+      await coordinator.stop();
+      expect(player.stops, 2);
+    },
+  );
 
   test(
     'non-authorization native failure never invokes token recovery',
@@ -2308,8 +2483,11 @@ void main() {
     );
     await player.stopStarted.future;
 
-    await coordinator.tune('channel-0');
+    final winningTune = coordinator.tune('channel-0');
+    await Future<void>.delayed(Duration.zero);
+    expect(player.loads, hasLength(2));
     player.releaseStop.complete();
+    await winningTune;
     await pumpEventQueue(times: 5);
 
     expect(lineup.currentChannelId, 'channel-0');
@@ -2347,11 +2525,11 @@ void main() {
     await coordinator.tune('channel-b');
 
     expect(player.loads, hasLength(2));
-    expect(player.stops, 1);
+    expect(player.stops, 2);
     expect(lineup.currentChannelId, 'channel-0');
     expect(coordinator.overlay, PlayerOverlay.error);
     await coordinator.stop();
-    expect(player.stops, 2);
+    expect(player.stops, 3);
   });
 
   test('failed tune cleanup stopped cannot advance attempted media', () async {
@@ -2382,7 +2560,7 @@ void main() {
     await Future<void>.delayed(Duration.zero);
 
     expect(player.loads, hasLength(2));
-    expect(player.stops, 1);
+    expect(player.stops, 2);
     expect(coordinator.overlay, PlayerOverlay.error);
   });
 
@@ -2674,6 +2852,44 @@ class _BlockingStopPlayer extends _Player {
     await super.stop();
     if (!stopStarted.isCompleted) stopStarted.complete();
     await releaseStop.future;
+  }
+}
+
+class _PreemptibleLoadPlayer extends _EventPlayer {
+  _PreemptibleLoadPlayer({required this.blockStop});
+
+  final bool blockStop;
+  final loadStarted = Completer<void>();
+  final stopStarted = Completer<void>();
+  final releaseStop = Completer<void>();
+  final calls = <String>[];
+  Completer<void>? _pendingLoad;
+  bool loadSettled = false;
+
+  @override
+  Future<void> load(Uri media, {String? plexToken, int? generation}) async {
+    await super.load(media, plexToken: plexToken, generation: generation);
+    calls.add('load');
+    if (loads.length != 1) return;
+    final pending = _pendingLoad = Completer<void>();
+    loadStarted.complete();
+    try {
+      await pending.future;
+    } finally {
+      loadSettled = true;
+    }
+  }
+
+  @override
+  Future<void> stop() async {
+    await super.stop();
+    calls.add('stop');
+    final pending = _pendingLoad;
+    if (pending != null && !pending.isCompleted) {
+      pending.completeError(const PlayerUnavailable('Load stopped.'));
+    }
+    if (!stopStarted.isCompleted) stopStarted.complete();
+    if (blockStop) await releaseStop.future;
   }
 }
 

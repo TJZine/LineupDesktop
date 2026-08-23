@@ -78,6 +78,7 @@ class PlayerCoordinator extends ChangeNotifier {
   bool _stopIntent = false;
   int? _nativeReplacementGeneration;
   Future<void> _tuneOperations = Future.value();
+  Future<void>? _nativeStopOperation;
   Future<void> _scopeCleanup = Future.value();
   bool _scopeCleanupPending = false;
   bool _disposed = false;
@@ -332,6 +333,7 @@ class PlayerCoordinator extends ChangeNotifier {
   Future<void> tune(String channelId) {
     final generation = ++_tuneGeneration;
     _invalidateAuthorizationRecovery();
+    final nativeStop = _beginNativeStop();
     _tuning = true;
     _canRetry = false;
     _error = null;
@@ -340,7 +342,7 @@ class PlayerCoordinator extends ChangeNotifier {
     _presentOverlay(PlayerOverlay.osd);
     notifyListeners();
     final operation = _tuneOperations.then(
-      (_) => _performTune(channelId, generation),
+      (_) => _performTune(channelId, generation, nativeStop),
     );
     _tuneOperations = operation.catchError((_) {});
     return operation;
@@ -362,7 +364,29 @@ class PlayerCoordinator extends ChangeNotifier {
     }
   }
 
-  Future<void> _performTune(String channelId, int generation) async {
+  Future<void> _performTune(
+    String channelId,
+    int generation,
+    Future<void>? nativeStop,
+  ) async {
+    if (generation != _tuneGeneration) return;
+    if (nativeStop != null) {
+      try {
+        await nativeStop;
+        _status = const PlayerStatus(
+          state: PlayerState.stopped,
+          message: 'Stopped',
+        );
+      } catch (error) {
+        if (generation != _tuneGeneration) return;
+        _tuning = false;
+        _canRetry = true;
+        _recordPlaybackFailure(error);
+        _error = _safePlaybackError(error);
+        _setOverlay(PlayerOverlay.error, timed: false);
+        return;
+      }
+    }
     if (generation != _tuneGeneration) return;
     GuideProgram? program;
     try {
@@ -470,6 +494,11 @@ class PlayerCoordinator extends ChangeNotifier {
     Duration? knownLocalTarget,
     LineupPlaybackRequest? retryCeilingRequest,
   }) {
+    if (_nativeStopOperation != null) {
+      return Future.error(
+        const PlayerUnavailable('Playback stop is still pending.'),
+      );
+    }
     final generation = ++_nativeLoadGeneration;
     _activeLoadGeneration = generation;
     _retryCeilingRequest = retryCeilingRequest;
@@ -803,15 +832,15 @@ class PlayerCoordinator extends ChangeNotifier {
   }
 
   Future<void> _failTransition(Object error, int tuneGeneration) async {
-    _stopIntent = true;
-    _activeLoadGeneration = null;
-    _advancingGeneration = null;
+    final nativeStop = _beginNativeStop();
     _invalidateAuthorizationRecovery();
-    _nativeReplacementGeneration = null;
-    _activePlayback = null;
-    _provisionalPlayback = null;
-    _activeChannel = null;
-    await _stopQuietly();
+    if (nativeStop != null) {
+      try {
+        await nativeStop;
+      } catch (_) {
+        // The transition failure remains the useful error.
+      }
+    }
     if (_disposed || tuneGeneration != _tuneGeneration) return;
     _recordPlaybackFailure(error);
     _error = _safePlaybackError(error);
@@ -838,13 +867,12 @@ class PlayerCoordinator extends ChangeNotifier {
     _stopIntent = true;
     _tuning = false;
     _canRetry = false;
+    _invalidateAuthorizationRecovery();
+    final nativeStop = _beginNativeStop(force: true)!;
     if (!_disposed) notifyListeners();
     final operation = _tuneOperations.then((_) async {
-      _activePlayback = null;
-      _provisionalPlayback = null;
-      _activeChannel = null;
       try {
-        await player.stop();
+        await nativeStop;
         _status = const PlayerStatus(
           state: PlayerState.stopped,
           message: 'Stopped',
@@ -1200,7 +1228,15 @@ class PlayerCoordinator extends ChangeNotifier {
       if (_activePlayback != null || _tuning || _activeLoadGeneration != null) {
         if (!_scopeCleanupPending) {
           _scopeCleanupPending = true;
-          _scopeCleanup = _stopForScopeChange()
+          final wasFullscreen = _fullscreen;
+          ++_tuneGeneration;
+          _stopIntent = true;
+          _tuning = false;
+          _canRetry = false;
+          _invalidateAuthorizationRecovery();
+          final nativeStop = _beginNativeStop(force: true)!;
+          _resetScopeState();
+          _scopeCleanup = _stopForScopeChange(wasFullscreen, nativeStop)
               .catchError((Object error) {
                 _recordPlaybackFailure(error);
               })
@@ -1241,18 +1277,33 @@ class PlayerCoordinator extends ChangeNotifier {
     }
   }
 
-  Future<void> _stopForScopeChange() async {
-    final wasFullscreen = _fullscreen;
-    _resetScopeState();
-    if (wasFullscreen) {
+  Future<void> _stopForScopeChange(
+    bool wasFullscreen,
+    Future<void> nativeStop,
+  ) async {
+    final fullscreen = wasFullscreen
+        ? player.setFullscreen(false).catchError((Object error) {
+            if (!_disposed) _recordPlaybackFailure(error);
+          })
+        : Future<void>.value();
+    final stop = _tuneOperations.then((_) async {
       try {
-        await player.setFullscreen(false);
-      } catch (error) {
-        if (!_disposed) _recordPlaybackFailure(error);
+        await nativeStop;
+        if (!_disposed) {
+          _status = const PlayerStatus(
+            state: PlayerState.stopped,
+            message: 'Stopped',
+          );
+        }
+      } finally {
+        _activeLoadGeneration = null;
+        _advancingGeneration = null;
+        _nativeReplacementGeneration = null;
       }
-    }
-    if (_disposed) return;
-    await stop();
+    });
+    _tuneOperations = stop.catchError((_) {});
+    await fullscreen;
+    await stop;
   }
 
   void _resetScopeState() {
@@ -1280,12 +1331,44 @@ class PlayerCoordinator extends ChangeNotifier {
   }
 
   Future<void> _stopQuietly() async {
-    _nativeReplacementGeneration = _activeLoadGeneration;
+    final stop = _beginNativeStop();
+    if (stop == null) return;
     try {
-      await player.stop();
+      await stop;
     } catch (_) {
       // The original tune failure remains the useful error.
     }
+  }
+
+  Future<void>? _beginNativeStop({bool force = false}) {
+    final pending = _nativeStopOperation;
+    if (pending != null) {
+      _retirePlaybackIntent();
+      return pending;
+    }
+    if (!force && _activeLoadGeneration == null) return null;
+    _retirePlaybackIntent();
+    late final Future<void> operation;
+    operation = Future<void>.sync(player.stop).whenComplete(() {
+      if (identical(_nativeStopOperation, operation)) {
+        _nativeStopOperation = null;
+      }
+    });
+    unawaited(operation.catchError((_) {}));
+    _nativeStopOperation = operation;
+    return operation;
+  }
+
+  void _retirePlaybackIntent() {
+    _stopIntent = true;
+    _activeLoadGeneration = null;
+    _advancingGeneration = null;
+    _nativeReplacementGeneration = null;
+    _activePlayback = null;
+    _provisionalPlayback = null;
+    _activeChannel = null;
+    _retryCeilingRequest = null;
+    _retryCeilingGeneration = null;
   }
 
   void _recordPlaybackFailure(Object error) {
