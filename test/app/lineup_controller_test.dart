@@ -7,6 +7,7 @@ import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/channels/channel_builder.dart';
 import 'package:lineup_desktop/persistence/app_store.dart';
+import 'package:lineup_desktop/playback/stream_policy.dart';
 import 'package:lineup_desktop/plex/plex_client.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
@@ -15,29 +16,466 @@ void main() {
   test(
     'artworkForPath uses the active authenticated server transport',
     () async {
-      final plex = _FakePlex();
+      final selected = _server('server');
+      final plex = _FakePlex()
+        ..serversResult = [selected]
+        ..connectionResult = selected.connections.single;
       final controller = LineupController(
-        store: _MemoryStore(),
+        store: _MemoryStore(
+          const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+        ),
         credentials: _MemoryCredentials(accountToken: 'account-token'),
         plex: plex,
       );
       addTearDown(controller.dispose);
 
       await controller.initialize();
-      controller.connection = PlexConnection(
-        uri: Uri.parse('https://plex.example:32400'),
-        local: true,
-        relay: false,
-      );
 
       final bytes = await controller.artworkForPath(Uri.parse('/show/art'));
 
       expect(bytes, Uint8List.fromList([1, 2, 3]));
       expect(plex.artworkServer, controller.connection!.uri);
       expect(plex.artworkPath, Uri.parse('/show/art'));
-      expect(plex.artworkToken, 'account-token');
+      expect(plex.artworkToken, 'pms-token');
     },
   );
+
+  test('selected-server requests use only the PMS resource token', () async {
+    const owner = PlexHomeUser(id: 'owner', name: 'Owner', protected: false);
+    const child = PlexHomeUser(id: 'child', name: 'Child', protected: false);
+    final selected = _server('server');
+    final item = PlexMediaItem(
+      id: 'movie',
+      key: '/library/metadata/movie',
+      title: 'Movie',
+      type: 'movie',
+      duration: const Duration(minutes: 1),
+      libraryId: 'movies',
+      partPath: '/library/parts/movie/file.mp4',
+      container: 'mp4',
+      videoCodec: 'h264',
+      audioCodec: 'aac',
+      dynamicRange: DynamicRange.sdr,
+    );
+    final plex = _FakePlex()
+      ..resourceToken = 'pms-token-sentinel'
+      ..homeUsersResult = const [owner, child]
+      ..switchHomeUserHandler = (accountToken, userId, _) async {
+        expect(accountToken, 'cloud-token-sentinel');
+        expect(userId, 'child');
+        return 'home-token-sentinel';
+      }
+      ..serversResult = [selected]
+      ..connectionResult = selected.connections.single
+      ..librariesResult = const [
+        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
+      ]
+      ..libraryItemsHandler = (_, _, _, _) async => [item];
+    final store = _MemoryStore(
+      const PersistedState(selectedServerByProfile: {'child': 'server'}),
+    );
+    final controller = LineupController(
+      store: store,
+      credentials: _MemoryCredentials(accountToken: 'cloud-token-sentinel'),
+      plex: plex,
+    );
+    addTearDown(controller.dispose);
+
+    await controller.initialize();
+    await controller.selectProfile(child);
+    controller.diagnostics.enabled = true;
+    await controller.setLibraries({'movies'});
+    await controller.artworkForPath(Uri.parse('/art'));
+    final playback = controller.playbackFor('movie');
+    await playback.release();
+
+    expect(plex.accountTokens, ['cloud-token-sentinel']);
+    expect(plex.homeUsersTokens, ['cloud-token-sentinel']);
+    expect(plex.discoveredTokens, ['home-token-sentinel']);
+    expect(plex.selectedTokens, everyElement('pms-token-sentinel'));
+    expect(plex.libraryTokens, everyElement('pms-token-sentinel'));
+    expect(plex.itemTokens, everyElement('pms-token-sentinel'));
+    expect(plex.playlistTokens, everyElement('pms-token-sentinel'));
+    expect(plex.artworkToken, 'pms-token-sentinel');
+    expect(playback.plexToken, 'pms-token-sentinel');
+    expect(plex.releaseTokens, ['pms-token-sentinel']);
+    expect(
+      [
+        ...plex.selectedTokens,
+        ...plex.libraryTokens,
+        ...plex.itemTokens,
+        ...plex.playlistTokens,
+        plex.artworkToken,
+        playback.plexToken,
+        ...plex.releaseTokens,
+      ].whereType<String>(),
+      everyElement('pms-token-sentinel'),
+    );
+    expect(controller.servers.single.toString(), isNot(contains('sentinel')));
+    expect(store.state.toJson().toString(), isNot(contains('sentinel')));
+    final diagnosticSnapshot = [
+      for (final entry in controller.diagnostics.entries)
+        {
+          'area': entry.area,
+          'message': entry.message,
+          'context': entry.context,
+        },
+    ];
+    expect(diagnosticSnapshot.toString(), isNot(contains('sentinel')));
+  });
+
+  test('concurrent PMS authorization failures coalesce one refresh', () async {
+    final selected = _server('server');
+    final refresh = Completer<List<PlexServerAccess>>();
+    var discoveries = 0;
+    final artworkTokens = <String>[];
+    final plex = _FakePlex()
+      ..serversResult = [selected]
+      ..connectionResult = selected.connections.single
+      ..discoverServersHandler = (_) {
+        discoveries++;
+        if (discoveries == 1) {
+          return Future.value([
+            PlexServerAccess(server: selected, token: 'pms-token-1'),
+          ]);
+        }
+        return refresh.future;
+      }
+      ..artworkHandler = (_, token, _) async {
+        artworkTokens.add(token);
+        if (token == 'pms-token-1') {
+          throw const PlexException('auth-invalid', 'Expired');
+        }
+        return Uint8List.fromList([4]);
+      };
+    final controller = LineupController(
+      store: _MemoryStore(
+        const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+      ),
+      credentials: _MemoryCredentials(accountToken: 'cloud-token'),
+      plex: plex,
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+
+    final first = controller.artworkForPath(Uri.parse('/one'));
+    final second = controller.artworkForPath(Uri.parse('/two'));
+    await Future<void>.delayed(Duration.zero);
+    expect(discoveries, 2);
+    refresh.complete([
+      PlexServerAccess(server: selected, token: 'pms-token-2'),
+    ]);
+
+    expect(await Future.wait([first, second]), [
+      Uint8List.fromList([4]),
+      Uint8List.fromList([4]),
+    ]);
+    expect(discoveries, 2);
+    expect(artworkTokens, [
+      'pms-token-1',
+      'pms-token-1',
+      'pms-token-2',
+      'pms-token-2',
+    ]);
+  });
+
+  test(
+    'server selection never substitutes the cloud token for missing access',
+    () async {
+      final plex = _FakePlex();
+      final controller = LineupController(
+        store: _MemoryStore(),
+        credentials: _MemoryCredentials(accountToken: 'cloud-token-sentinel'),
+        plex: plex,
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+
+      await controller.selectServer(_server('missing'));
+
+      expect(controller.server, isNull);
+      expect(controller.error, 'Plex server authorization is unavailable.');
+      expect(plex.selectedTokens, isEmpty);
+    },
+  );
+
+  test(
+    'saved server restore fails when discovery has no access record',
+    () async {
+      final plex = _FakePlex();
+      final controller = LineupController(
+        store: _MemoryStore(
+          const PersistedState(selectedServerByProfile: {'owner': 'missing'}),
+        ),
+        credentials: _MemoryCredentials(accountToken: 'cloud-token-sentinel'),
+        plex: plex,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+
+      expect(controller.server, isNull);
+      expect(controller.connection, isNull);
+      expect(controller.stage, SetupStage.servers);
+      expect(controller.error, 'Plex server authorization is unavailable.');
+      expect(plex.selectedTokens, isEmpty);
+    },
+  );
+
+  test('PMS authorization retries stop after one refreshed request', () async {
+    final selected = _server('server');
+    var discoveries = 0;
+    var artworkCalls = 0;
+    final plex = _FakePlex()
+      ..serversResult = [selected]
+      ..connectionResult = selected.connections.single
+      ..discoverServersHandler = (_) async {
+        discoveries++;
+        return [
+          PlexServerAccess(
+            server: selected,
+            token: discoveries == 1 ? 'pms-token-1' : 'pms-token-2',
+          ),
+        ];
+      }
+      ..artworkHandler = (_, _, _) async {
+        artworkCalls++;
+        throw const PlexException('auth-invalid', 'Expired');
+      };
+    final controller = LineupController(
+      store: _MemoryStore(
+        const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+      ),
+      credentials: _MemoryCredentials(accountToken: 'cloud-token'),
+      plex: plex,
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+
+    await expectLater(
+      controller.artworkForPath(Uri.parse('/art')),
+      throwsA(isA<PlexException>()),
+    );
+
+    expect(discoveries, 2);
+    expect(artworkCalls, 2);
+  });
+
+  test(
+    'logout prevents an in-flight PMS refresh from installing access',
+    () async {
+      final selected = _server('server');
+      final refresh = Completer<List<PlexServerAccess>>();
+      var discoveries = 0;
+      final plex = _FakePlex()
+        ..serversResult = [selected]
+        ..connectionResult = selected.connections.single
+        ..discoverServersHandler = (_) {
+          discoveries++;
+          return discoveries == 1
+              ? Future.value([
+                  PlexServerAccess(server: selected, token: 'pms-token-1'),
+                ])
+              : refresh.future;
+        }
+        ..artworkHandler = (_, _, _) async =>
+            throw const PlexException('auth-invalid', 'Expired');
+      final controller = LineupController(
+        store: _MemoryStore(
+          const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+        ),
+        credentials: _MemoryCredentials(accountToken: 'cloud-token'),
+        plex: plex,
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+
+      final artwork = controller.artworkForPath(Uri.parse('/art'));
+      await Future<void>.delayed(Duration.zero);
+      expect(await controller.logout(), isTrue);
+      refresh.complete([
+        PlexServerAccess(server: selected, token: 'pms-token-2'),
+      ]);
+      await expectLater(artwork, throwsA(isA<PlexException>()));
+
+      expect(controller.server, isNull);
+      expect(controller.connection, isNull);
+      expect(controller.servers, isEmpty);
+    },
+  );
+
+  test('profile supersession prevents stale PMS access installation', () async {
+    const owner = PlexHomeUser(id: 'owner', name: 'Owner', protected: false);
+    const child = PlexHomeUser(id: 'child', name: 'Child', protected: false);
+    final ownerServer = _server('owner-server');
+    final childServer = _server('child-server');
+    final staleRefresh = Completer<List<PlexServerAccess>>();
+    var discoveries = 0;
+    final artworkTokens = <String>[];
+    final plex = _FakePlex()
+      ..homeUsersResult = const [owner, child]
+      ..discoverServersHandler = (token) {
+        discoveries++;
+        if (discoveries == 1) {
+          return Future.value([
+            PlexServerAccess(server: ownerServer, token: 'owner-pms-1'),
+          ]);
+        }
+        if (discoveries == 2) return staleRefresh.future;
+        expect(token, 'profile-token');
+        return Future.value([
+          PlexServerAccess(server: childServer, token: 'child-pms'),
+        ]);
+      }
+      ..artworkHandler = (_, token, _) async {
+        artworkTokens.add(token);
+        if (token == 'owner-pms-1') {
+          throw const PlexException('auth-invalid', 'Expired');
+        }
+        return Uint8List.fromList([7]);
+      };
+    final controller = LineupController(
+      store: _MemoryStore(
+        const PersistedState(
+          profileId: 'owner',
+          selectedServerByProfile: {'owner': 'owner-server'},
+        ),
+      ),
+      credentials: _MemoryCredentials(accountToken: 'cloud-token'),
+      plex: plex,
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+
+    final staleArtwork = controller.artworkForPath(Uri.parse('/old'));
+    await Future<void>.delayed(Duration.zero);
+    await controller.selectProfile(child);
+    await controller.selectServer(childServer);
+    staleRefresh.complete([
+      PlexServerAccess(server: ownerServer, token: 'owner-pms-2'),
+    ]);
+    await expectLater(staleArtwork, throwsA(isA<PlexException>()));
+
+    expect(controller.profile, child);
+    expect(controller.server?.id, 'child-server');
+    expect(controller.connection?.uri, childServer.connections.single.uri);
+    expect(await controller.artworkForPath(Uri.parse('/child')), [7]);
+    expect(artworkTokens.last, 'child-pms');
+  });
+
+  test(
+    'server supersession starts an unmatched refresh and rejects stale access',
+    () async {
+      final first = _server('first');
+      final second = _server('second');
+      final staleRefresh = Completer<List<PlexServerAccess>>();
+      var discoveries = 0;
+      final plex = _FakePlex()
+        ..discoverServersHandler = (_) {
+          discoveries++;
+          if (discoveries == 1) {
+            return Future.value([
+              PlexServerAccess(server: first, token: 'first-pms-1'),
+              PlexServerAccess(server: second, token: 'second-pms-1'),
+            ]);
+          }
+          if (discoveries == 2) return staleRefresh.future;
+          return Future.value([
+            PlexServerAccess(server: first, token: 'first-pms-1'),
+            PlexServerAccess(server: second, token: 'second-pms-2'),
+          ]);
+        }
+        ..librariesHandler = (_, token) async {
+          if (token == 'second-pms-1') {
+            throw const PlexException('auth-invalid', 'Expired');
+          }
+          return const [];
+        }
+        ..artworkHandler = (_, token, _) async {
+          if (token == 'first-pms-1') {
+            throw const PlexException('auth-invalid', 'Expired');
+          }
+          return Uint8List.fromList([8]);
+        };
+      final controller = LineupController(
+        store: _MemoryStore(
+          const PersistedState(selectedServerByProfile: {'owner': 'first'}),
+        ),
+        credentials: _MemoryCredentials(accountToken: 'cloud-token'),
+        plex: plex,
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+
+      final staleArtwork = controller.artworkForPath(Uri.parse('/first'));
+      await Future<void>.delayed(Duration.zero);
+      await controller.selectServer(second);
+      expect(discoveries, 3);
+      expect(controller.server?.id, 'second');
+      expect(plex.libraryTokens, contains('second-pms-2'));
+
+      staleRefresh.complete([
+        PlexServerAccess(server: first, token: 'first-pms-2'),
+        PlexServerAccess(server: second, token: 'second-pms-1'),
+      ]);
+      await expectLater(staleArtwork, throwsA(isA<PlexException>()));
+
+      expect(controller.server?.id, 'second');
+      expect(controller.connection?.uri, second.connections.single.uri);
+      expect(await controller.artworkForPath(Uri.parse('/second')), [8]);
+      expect(plex.artworkToken, 'second-pms-2');
+    },
+  );
+
+  test('selection cancellation rejects its stale PMS refresh', () async {
+    final old = _server('old');
+    final next = _server('next');
+    final refresh = Completer<List<PlexServerAccess>>();
+    var discoveries = 0;
+    final plex = _FakePlex()
+      ..discoverServersHandler = (_) {
+        discoveries++;
+        return discoveries == 1
+            ? Future.value([
+                PlexServerAccess(server: old, token: 'old-pms'),
+                PlexServerAccess(server: next, token: 'next-pms-1'),
+              ])
+            : refresh.future;
+      }
+      ..selectConnectionHandler = (server, token) async {
+        if (server.id == 'next' && token == 'next-pms-1') {
+          throw const PlexException('auth-required', 'Expired');
+        }
+        return server.connections.single;
+      };
+    final controller = LineupController(
+      store: _MemoryStore(
+        const PersistedState(selectedServerByProfile: {'owner': 'old'}),
+      ),
+      credentials: _MemoryCredentials(accountToken: 'cloud-token'),
+      plex: plex,
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+    controller
+      ..stage = SetupStage.ready
+      ..showServers();
+
+    final selection = controller.selectServer(next);
+    await Future<void>.delayed(Duration.zero);
+    expect(discoveries, 2);
+    controller.cancelServerSelection();
+    refresh.complete([
+      PlexServerAccess(server: old, token: 'old-pms'),
+      PlexServerAccess(server: next, token: 'next-pms-2'),
+    ]);
+    await selection;
+
+    expect(controller.server?.id, 'old');
+    expect(controller.connection?.uri, old.connections.single.uri);
+    await controller.artworkForPath(Uri.parse('/old'));
+    expect(plex.artworkToken, 'old-pms');
+  });
 
   test('playback requests remove Plex tokens without an empty query', () {
     final tokenOnly = LineupPlaybackRequest(
@@ -117,39 +555,28 @@ void main() {
   );
 
   test('failed library loading stays on Channel Setup with an error', () async {
-    final controller =
-        LineupController(
-            store: _MemoryStore(),
-            credentials: _MemoryCredentials(accountToken: 'token'),
-            plex: _FakePlex()
-              ..libraryItemsHandler = (_, _, _, _) async =>
-                  throw const PlexException('offline', 'Library unavailable'),
-          )
-          ..connection = PlexConnection(
-            uri: Uri.parse('https://plex.example:32400'),
-            local: true,
-            relay: false,
-          )
-          ..libraries = const [
-            PlexLibrary(
-              id: 'movies',
-              title: 'Movies',
-              type: PlexLibraryType.movie,
-            ),
-          ]
-          ..stage = SetupStage.channelSetup;
+    final selected = _server('server');
+    final controller = LineupController(
+      store: _MemoryStore(
+        const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+      ),
+      credentials: _MemoryCredentials(accountToken: 'token'),
+      plex: _FakePlex()
+        ..serversResult = [selected]
+        ..connectionResult = selected.connections.single
+        ..librariesResult = const [
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+        ]
+        ..libraryItemsHandler = (_, _, _, _) async =>
+            throw const PlexException('offline', 'Library unavailable'),
+    );
     addTearDown(controller.dispose);
     await controller.initialize();
-    controller
-      ..connection = PlexConnection(
-        uri: Uri.parse('https://plex.example:32400'),
-        local: true,
-        relay: false,
-      )
-      ..libraries = const [
-        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
-      ]
-      ..stage = SetupStage.channelSetup;
+    controller.stage = SetupStage.channelSetup;
 
     final loaded = await controller.setLibraries({'movies'});
 
@@ -526,6 +953,7 @@ void main() {
       ..homeUsersResult = const [
         PlexHomeUser(id: 'owner', name: 'Owner', protected: false),
       ]
+      ..serversResult = [nextServer]
       ..selectConnectionHandler = (_, _) => probe.future;
     final controller = LineupController(
       store: _MemoryStore(),
@@ -629,7 +1057,9 @@ void main() {
     final controller = LineupController(
       store: store,
       credentials: _MemoryCredentials(accountToken: 'token'),
-      plex: _FakePlex()..connectionResult = nextServer.connections.single,
+      plex: _FakePlex()
+        ..serversResult = [nextServer]
+        ..connectionResult = nextServer.connections.single,
     );
     addTearDown(controller.dispose);
     await controller.initialize();
@@ -909,8 +1339,19 @@ class _FakePlex extends PlexClient {
   Future<String?> Function(PlexPin)? pollHandler;
   Future<List<PlexMediaItem>> Function(Uri, String, String, PlexLibraryType)?
   libraryItemsHandler;
+  Future<List<PlexLibrary>> Function(Uri, String)? librariesHandler;
+  Future<List<PlexServerAccess>> Function(String)? discoverServersHandler;
+  Future<Uint8List> Function(Uri, String, Uri)? artworkHandler;
   final discoveredTokens = <String>[];
+  final accountTokens = <String>[];
+  final homeUsersTokens = <String>[];
+  final selectedTokens = <String>[];
+  final libraryTokens = <String>[];
+  final itemTokens = <String>[];
+  final playlistTokens = <String>[];
+  final releaseTokens = <String>[];
   List<PlexServer> serversResult = const [];
+  String resourceToken = 'pms-token';
   PlexConnection? connectionResult;
   Future<PlexConnection> Function(PlexServer, String)? selectConnectionHandler;
   Future<String> Function(String, String, String?)? switchHomeUserHandler;
@@ -923,12 +1364,16 @@ class _FakePlex extends PlexClient {
   String? artworkToken;
 
   @override
-  Future<PlexAccount> account(String token) =>
-      accountHandler?.call(token) ?? Future.value(accountResult);
+  Future<PlexAccount> account(String token) {
+    accountTokens.add(token);
+    return accountHandler?.call(token) ?? Future.value(accountResult);
+  }
 
   @override
-  Future<List<PlexHomeUser>> homeUsers(String accountToken) async =>
-      homeUsersResult;
+  Future<List<PlexHomeUser>> homeUsers(String accountToken) async {
+    homeUsersTokens.add(accountToken);
+    return homeUsersResult;
+  }
 
   @override
   Future<String> switchHomeUser(
@@ -942,9 +1387,14 @@ class _FakePlex extends PlexClient {
   }
 
   @override
-  Future<List<PlexServer>> discoverServers(String token) async {
+  Future<List<PlexServerAccess>> discoverServers(String token) async {
     discoveredTokens.add(token);
-    return serversResult;
+    final handler = discoverServersHandler;
+    if (handler != null) return handler(token);
+    return [
+      for (final server in serversResult)
+        PlexServerAccess(server: server, token: resourceToken),
+    ];
   }
 
   @override
@@ -952,6 +1402,7 @@ class _FakePlex extends PlexClient {
     PlexServer server,
     String token,
   ) async {
+    selectedTokens.add(token);
     final handler = selectConnectionHandler;
     if (handler != null) return handler(server, token);
     return connectionResult ?? server.connections.first;
@@ -960,7 +1411,8 @@ class _FakePlex extends PlexClient {
   @override
   Future<List<PlexLibrary>> libraries(Uri server, String token) async {
     librariesCalls++;
-    return librariesResult;
+    libraryTokens.add(token);
+    return librariesHandler?.call(server, token) ?? librariesResult;
   }
 
   @override
@@ -983,13 +1435,22 @@ class _FakePlex extends PlexClient {
     String token,
     String libraryId,
     PlexLibraryType libraryType,
-  ) =>
-      libraryItemsHandler?.call(server, token, libraryId, libraryType) ??
-      Future.value(const []);
+  ) async {
+    itemTokens.add(token);
+    return await libraryItemsHandler?.call(
+          server,
+          token,
+          libraryId,
+          libraryType,
+        ) ??
+        const [];
+  }
 
   @override
-  Future<PlexPlaylistCatalog> playlists(Uri server, String token) async =>
-      const PlexPlaylistCatalog(playlists: [], failedIds: {});
+  Future<PlexPlaylistCatalog> playlists(Uri server, String token) async {
+    playlistTokens.add(token);
+    return const PlexPlaylistCatalog(playlists: [], failedIds: {});
+  }
 
   @override
   Future<Uint8List> artwork(
@@ -1001,7 +1462,18 @@ class _FakePlex extends PlexClient {
     artworkServer = server;
     artworkPath = path;
     artworkToken = token;
+    final handler = artworkHandler;
+    if (handler != null) return handler(server, token, path);
     return Uint8List.fromList([1, 2, 3]);
+  }
+
+  @override
+  Future<void> releasePlaybackSession({
+    required Uri server,
+    required String token,
+    required String sessionId,
+  }) async {
+    releaseTokens.add(token);
   }
 
   @override

@@ -11,6 +11,26 @@ import '../channels/channel.dart';
 import '../playback/stream_policy.dart';
 import 'plex_models.dart';
 
+class PlexServerAccess {
+  PlexServerAccess({required this.server, required String token})
+    : token = _requiredToken(token);
+
+  final PlexServer server;
+  final String token;
+
+  @override
+  String toString() =>
+      'PlexServerAccess(server: ${server.id}, token: <redacted>)';
+
+  static String _requiredToken(String token) {
+    final value = token.trim();
+    if (value.isEmpty) {
+      throw ArgumentError('A PMS resource token is required.');
+    }
+    return value;
+  }
+}
+
 class PlexClient {
   PlexClient({
     required this.clientIdentifier,
@@ -152,7 +172,7 @@ class PlexClient {
     );
   }
 
-  Future<List<PlexServer>> discoverServers(String token) async {
+  Future<List<PlexServerAccess>> discoverServers(String token) async {
     final response = await _send(
       _http.get(
         Uri.https('plex.tv', '/api/v2/resources', {
@@ -163,13 +183,15 @@ class PlexClient {
       ),
     );
     final data = _jsonList(response, {200});
-    final servers = <PlexServer>[];
+    final servers = <PlexServerAccess>[];
     for (final raw in data) {
       final json = _record(raw, 'resource');
       final provides = _optionalText(json['provides'])
           ?.split(',')
           .map((item) => item.trim());
       if (provides?.contains('server') != true) continue;
+      final resourceToken = _optionalText(json['accessToken']);
+      if (resourceToken == null) continue;
       final connections = <PlexConnection>[];
       for (final rawConnection in json['connections'] as List? ?? const []) {
         final connection = _record(rawConnection, 'connection');
@@ -194,11 +216,14 @@ class PlexClient {
       }
       if (connections.isNotEmpty) {
         servers.add(
-          PlexServer(
-            id: _text(json['clientIdentifier'], 'server id'),
-            name: _text(json['name'], 'server name'),
-            connections: connections,
-            owned: _boolean(json['owned']),
+          PlexServerAccess(
+            server: PlexServer(
+              id: _text(json['clientIdentifier'], 'server id'),
+              name: _text(json['name'], 'server name'),
+              connections: connections,
+              owned: _boolean(json['owned']),
+            ),
+            token: resourceToken,
           ),
         );
       }
@@ -387,6 +412,17 @@ class PlexClient {
                   title: _text(playlist['title'], 'playlist title'),
                   items: items,
                 );
+        } on PlexException catch (exception) {
+          if (const {
+            'auth-invalid',
+            'auth-required',
+            'access-denied',
+          }.contains(exception.code)) {
+            rethrow;
+          }
+          final value = raw is Map ? raw['ratingKey'] : null;
+          if (value != null) failed.add('$value');
+          return null;
         } catch (_) {
           final value = raw is Map ? raw['ratingKey'] : null;
           if (value != null) failed.add('$value');
@@ -478,6 +514,15 @@ class PlexClient {
       ..followRedirects = false
       ..headers.addAll(_headers(token));
     final response = await _http.send(request).timeout(requestTimeout);
+    if (response.statusCode == 401 || response.statusCode == 403) {
+      _cancel(response.stream);
+      throw PlexException(
+        response.statusCode == 401 ? 'auth-invalid' : 'access-denied',
+        response.statusCode == 401
+            ? 'Plex authentication is no longer valid.'
+            : 'This Plex profile cannot access that server.',
+      );
+    }
     if (response.statusCode != 200) {
       _cancel(response.stream);
       throw const PlexException(

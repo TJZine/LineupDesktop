@@ -86,7 +86,7 @@ void main() {
         nativePlayer.loadedUri?.queryParameters,
         isNot(contains('X-Plex-Token')),
       );
-      expect(nativePlayer.loadedPlexToken, 'child-token');
+      expect(nativePlayer.loadedPlexToken, 'pms-token');
       nativePlayer.emit(
         PlayerState.playing,
         generation: nativePlayer.generation,
@@ -311,13 +311,13 @@ class _ProductPlex extends PlexClient {
   }
 
   @override
-  Future<List<PlexServer>> discoverServers(String token) async {
+  Future<List<PlexServerAccess>> discoverServers(String token) async {
     if (offline) {
       events.add('servers:offline');
       throw const PlexException('offline', 'The network is unavailable.');
     }
     events.add('servers');
-    return [server];
+    return [PlexServerAccess(server: server, token: 'pms-token')];
   }
 
   @override

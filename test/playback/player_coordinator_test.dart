@@ -812,6 +812,147 @@ void main() {
     expect(lineup.diagnostics.entries.single.context['audioCodec'], 'truehd');
   });
 
+  test(
+    'synchronous native authorization failure loads one replacement',
+    () async {
+      final lineup = _TestLineup(recoverAuthorization: true);
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => _schedule(channel),
+      )..requestViewport(0, 2);
+      await Future<void>.delayed(Duration.zero);
+      final player = _SynchronousAuthorizationPlayer();
+      final coordinator = PlayerCoordinator(
+        player: player,
+        lineup: lineup,
+        guide: guide,
+      );
+      addTearDown(player.close);
+      addTearDown(lineup.dispose);
+      addTearDown(guide.dispose);
+      addTearDown(coordinator.dispose);
+
+      await coordinator.tune('channel-b');
+
+      expect(player.loads, hasLength(2));
+      expect(player.loadPlexTokens, ['test-token-1', 'test-token-2']);
+      expect(lineup.recoveryCalls, 1);
+      expect(lineup.releases, 1);
+      expect(coordinator.error, isNull);
+
+      await coordinator.stop();
+      expect(lineup.releases, 2);
+    },
+  );
+
+  test(
+    'a second native authorization failure is terminal without a loop',
+    () async {
+      final lineup = _TestLineup(recoverAuthorization: true);
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => _schedule(channel),
+      )..requestViewport(0, 2);
+      await Future<void>.delayed(Duration.zero);
+      final player = _SynchronousAuthorizationPlayer(failures: 2);
+      final coordinator = PlayerCoordinator(
+        player: player,
+        lineup: lineup,
+        guide: guide,
+      );
+      addTearDown(player.close);
+      addTearDown(lineup.dispose);
+      addTearDown(guide.dispose);
+      addTearDown(coordinator.dispose);
+
+      await coordinator.tune('channel-b');
+
+      expect(player.loads, hasLength(2));
+      expect(lineup.recoveryCalls, 1);
+      expect(lineup.releasedTokens, ['test-token-1', 'test-token-2']);
+      expect(coordinator.overlay, PlayerOverlay.error);
+      expect(coordinator.status.failureCode, 'http_error');
+      expect(coordinator.status.httpStatus, 401);
+    },
+  );
+
+  test(
+    'non-authorization native failure never invokes token recovery',
+    () async {
+      final lineup = _TestLineup(recoverAuthorization: true);
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => _schedule(channel),
+      )..requestViewport(0, 2);
+      await Future<void>.delayed(Duration.zero);
+      final player = _SynchronousAuthorizationPlayer(
+        failureCode: 'decoder_error',
+        httpStatus: null,
+      );
+      final coordinator = PlayerCoordinator(
+        player: player,
+        lineup: lineup,
+        guide: guide,
+      );
+      addTearDown(player.close);
+      addTearDown(lineup.dispose);
+      addTearDown(guide.dispose);
+      addTearDown(coordinator.dispose);
+
+      await coordinator.tune('channel-b');
+
+      expect(player.loads, hasLength(1));
+      expect(lineup.recoveryCalls, 0);
+      expect(lineup.releasedTokens, ['test-token-1']);
+      expect(coordinator.overlay, PlayerOverlay.error);
+      expect(coordinator.status.failureCode, 'decoder_error');
+    },
+  );
+
+  test(
+    'tune supersession owns and drains pending authorization recovery',
+    () async {
+      final lineup = _TestLineup(
+        recoverAuthorization: true,
+        blockAuthorizationRecovery: true,
+      );
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => _schedule(channel),
+      )..requestViewport(0, 2);
+      await Future<void>.delayed(Duration.zero);
+      final player = _SynchronousAuthorizationPlayer();
+      final coordinator = PlayerCoordinator(
+        player: player,
+        lineup: lineup,
+        guide: guide,
+      );
+      addTearDown(player.close);
+      addTearDown(lineup.dispose);
+      addTearDown(guide.dispose);
+      addTearDown(coordinator.dispose);
+
+      final staleTune = coordinator.tune('channel-b');
+      await lineup.recoveryStarted.future;
+      final winningTune = coordinator.tune('channel-0');
+      lineup.finishRecovery.complete();
+      await Future.wait([staleTune, winningTune]);
+
+      expect(player.loadPlexTokens, ['test-token-1', 'test-token-1']);
+      expect(lineup.recoveryCalls, 1);
+      expect(lineup.releasedTokens, ['test-token-1', 'test-token-2']);
+      expect(lineup.currentChannelId, 'channel-0');
+      expect(coordinator.error, isNull);
+
+      await coordinator.stop();
+      expect(lineup.releasedTokens, [
+        'test-token-1',
+        'test-token-2',
+        'test-token-1',
+      ]);
+    },
+  );
+
   test('load side effects roll back when load later fails', () async {
     final lineup = _TestLineup();
     final guide = GuideController(
@@ -1001,14 +1142,18 @@ ScheduleIndex _schedule(Channel channel) => buildSchedule(
 );
 
 class _TestLineup extends LineupController {
-  _TestLineup({int count = 2, this.failSecondPlaybackRequest = false})
-    : super(
-        store: _MemoryStore(),
-        credentials: _Credentials(),
-        plex: PlexClient(
-          clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
-        ),
-      ) {
+  _TestLineup({
+    int count = 2,
+    this.failSecondPlaybackRequest = false,
+    this.recoverAuthorization = false,
+    this.blockAuthorizationRecovery = false,
+  }) : super(
+         store: _MemoryStore(),
+         credentials: _Credentials(),
+         plex: PlexClient(
+           clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+         ),
+       ) {
     channels = List.generate(count, (index) {
       final id = index == 1 ? 'channel-b' : 'channel-$index';
       return Channel(
@@ -1033,7 +1178,13 @@ class _TestLineup extends LineupController {
 
   int releases = 0;
   final bool failSecondPlaybackRequest;
+  final bool recoverAuthorization;
+  final bool blockAuthorizationRecovery;
   int playbackRequests = 0;
+  int recoveryCalls = 0;
+  final releasedTokens = <String>[];
+  final recoveryStarted = Completer<void>();
+  final finishRecovery = Completer<void>();
   int _testContentGeneration = 0;
 
   @override
@@ -1060,14 +1211,32 @@ class _TestLineup extends LineupController {
     if (failSecondPlaybackRequest && playbackRequests == 2) {
       throw StateError('Replacement playback request is unavailable.');
     }
+    return _request(
+      recoverAuthorization ? 'test-token-1' : 'test-token',
+      recoverable: recoverAuthorization,
+    );
+  }
+
+  LineupPlaybackRequest _request(String token, {bool recoverable = false}) {
     return LineupPlaybackRequest(
       Uri.parse(
         'https://media.test/program?x-PLEX-token=must-not-leak&quality=original',
       ),
       () async {
         releases++;
+        releasedTokens.add(token);
       },
-      plexToken: 'test-token',
+      plexToken: token,
+      authorizationRecovery: recoverable
+          ? () async {
+              recoveryCalls++;
+              if (blockAuthorizationRecovery) {
+                recoveryStarted.complete();
+                await finishRecovery.future;
+              }
+              return _request('test-token-2');
+            }
+          : null,
     );
   }
 
@@ -1215,7 +1384,10 @@ class _LoadFailurePlayer extends _Player {
 }
 
 class _EventPlayer extends _Player {
-  final _events = StreamController<PlayerEvent>.broadcast();
+  _EventPlayer({bool sync = false})
+    : _events = StreamController<PlayerEvent>.broadcast(sync: sync);
+
+  final StreamController<PlayerEvent> _events;
   bool failStop = false;
 
   @override
@@ -1275,6 +1447,31 @@ class _EventPlayer extends _Player {
   }
 
   Future<void> close() => _events.close();
+}
+
+class _SynchronousAuthorizationPlayer extends _EventPlayer {
+  _SynchronousAuthorizationPlayer({
+    this.failures = 1,
+    this.failureCode = 'http_error',
+    this.httpStatus = 401,
+  }) : super(sync: true);
+
+  final int failures;
+  final String failureCode;
+  final int? httpStatus;
+
+  @override
+  Future<void> load(Uri media, {String? plexToken, int? generation}) async {
+    await super.load(media, plexToken: plexToken, generation: generation);
+    if (loads.length > failures) return;
+    emitError(
+      recoverable: true,
+      generation: generation,
+      failureCode: failureCode,
+      httpStatus: httpStatus,
+    );
+    throw StateError('native load failed');
+  }
 }
 
 class _BlockingEventPlayer extends _EventPlayer with _BlocksFirstLoad {}

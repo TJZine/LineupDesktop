@@ -66,6 +66,7 @@ void main() {
                 'clientIdentifier': 'safe',
                 'name': 'Server',
                 'provides': 'server',
+                'accessToken': 'pms-token-sentinel',
                 'connections': [
                   {
                     'uri': 'https://plex.example:32400',
@@ -91,13 +92,44 @@ void main() {
         ),
       );
       final servers = await client.discoverServers('private-token');
-      expect(servers.single.connections, hasLength(1));
+      expect(servers.single.server.connections, hasLength(1));
       expect(
-        servers.single.connections.single.uri.toString(),
+        servers.single.server.connections.single.uri.toString(),
         'https://plex.example:32400',
       );
+      expect(servers.single.token, 'pms-token-sentinel');
+      expect(servers.single.toString(), isNot(contains('pms-token-sentinel')));
     },
   );
+
+  test('discovery omits resources without a non-empty PMS token', () async {
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      httpClient: MockClient(
+        (_) async => http.Response(
+          jsonEncode([
+            for (final token in [null, '', '   '])
+              {
+                'clientIdentifier': 'server-${token ?? 'missing'}',
+                'name': 'Server',
+                'provides': 'server',
+                'accessToken': ?token,
+                'connections': [
+                  {
+                    'uri': 'https://plex.example:32400',
+                    'local': true,
+                    'relay': false,
+                  },
+                ],
+              },
+          ]),
+          200,
+        ),
+      ),
+    );
+
+    expect(await client.discoverServers('cloud-token'), isEmpty);
+  });
 
   test(
     'connection probing binds the identity to the selected server',
@@ -616,6 +648,24 @@ void main() {
       expect(request.followRedirects, isFalse);
       expect(canceled.isCompleted, isTrue);
     });
+
+    for (final failure in {401: 'auth-invalid', 403: 'access-denied'}.entries) {
+      test('preserves ${failure.key} authorization classification', () async {
+        final plex = client(
+          (_, _) async =>
+              http.StreamedResponse(const Stream.empty(), failure.key),
+        );
+
+        await expectLater(
+          plex.artwork(
+            Uri.parse('https://plex.example:32400'),
+            'resource-token',
+            Uri.parse('/art'),
+          ),
+          plexError(failure.value),
+        );
+      });
+    }
 
     test('rejects declared-length overflow and cancels the stream', () async {
       final canceled = Completer<void>();

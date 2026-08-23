@@ -25,12 +25,17 @@ enum SetupStage {
 }
 
 class LineupPlaybackRequest {
-  LineupPlaybackRequest(Uri uri, this._release, {this.plexToken})
-    : uri = _withoutPlexToken(uri);
+  LineupPlaybackRequest(
+    Uri uri,
+    this._release, {
+    this.plexToken,
+    this.authorizationRecovery,
+  }) : uri = _withoutPlexToken(uri);
 
   final Uri uri;
   final String? plexToken;
   final Future<void> Function() _release;
+  final Future<LineupPlaybackRequest> Function()? authorizationRecovery;
   bool _released = false;
 
   static Uri _withoutPlexToken(Uri uri) {
@@ -101,6 +106,12 @@ class LineupController extends ChangeNotifier {
   int _epoch = 0;
   String? _accountToken;
   String? _profileToken;
+  Map<String, PlexServerAccess> _serverAccess = const {};
+  String? _pmsToken;
+  String? _serverTargetId;
+  Future<void>? _pmsRefresh;
+  int? _pmsRefreshOperation;
+  String? _pmsRefreshServerId;
   PersistedState _persisted = const PersistedState();
   Timer? _pinTimer;
   int? _busyOperation;
@@ -290,6 +301,10 @@ class LineupController extends ChangeNotifier {
 
   Future<void> selectProfile(PlexHomeUser selected, {String? pin}) async {
     final operation = ++_epoch;
+    _pmsRefresh = null;
+    _pmsRefreshOperation = null;
+    _pmsRefreshServerId = null;
+    _serverTargetId = null;
     _pinTimer?.cancel();
     await _run(
       () async {
@@ -309,6 +324,8 @@ class LineupController extends ChangeNotifier {
         }
         final oldProfile = profile;
         final oldProfileToken = _profileToken;
+        final oldServerAccess = _serverAccess;
+        final oldPmsToken = _pmsToken;
         final oldServer = server;
         final oldConnection = connection;
         final oldLibraries = libraries;
@@ -322,6 +339,11 @@ class LineupController extends ChangeNotifier {
         notifyListeners();
         profile = selected;
         _profileToken = token;
+        _serverAccess = const {};
+        _pmsToken = null;
+        _pmsRefresh = null;
+        _pmsRefreshOperation = null;
+        _pmsRefreshServerId = null;
         server = null;
         connection = null;
         libraries = const [];
@@ -335,6 +357,8 @@ class LineupController extends ChangeNotifier {
         } catch (_) {
           profile = oldProfile;
           _profileToken = oldProfileToken;
+          _serverAccess = oldServerAccess;
+          _pmsToken = oldPmsToken;
           server = oldServer;
           connection = oldConnection;
           libraries = oldLibraries;
@@ -362,7 +386,8 @@ class LineupController extends ChangeNotifier {
     if (token == null) return;
     final discovered = await plex.discoverServers(token);
     if (!_isCurrent(operation)) return;
-    servers = discovered;
+    _serverAccess = {for (final access in discovered) access.server.id: access};
+    servers = List.unmodifiable(discovered.map((access) => access.server));
     stage = SetupStage.servers;
     final profileId = profile?.id ?? account?.id;
     final savedId = profileId == null
@@ -373,6 +398,9 @@ class LineupController extends ChangeNotifier {
         .firstOrNull;
     if (saved != null) {
       await selectServer(saved);
+    } else if (savedId != null) {
+      if (server != null) _clearServerRuntime();
+      error = 'Plex server authorization is unavailable.';
     } else if (server != null) {
       _clearServerRuntime();
       serverSelectionCanCancel = false;
@@ -381,6 +409,10 @@ class LineupController extends ChangeNotifier {
 
   Future<void> refreshServers() async {
     final operation = ++_epoch;
+    _pmsRefresh = null;
+    _pmsRefreshOperation = null;
+    _pmsRefreshServerId = null;
+    _serverTargetId = null;
     await _run(
       () => _discover(operation),
       operation: operation,
@@ -390,32 +422,48 @@ class LineupController extends ChangeNotifier {
 
   Future<void> selectServer(PlexServer selected) async {
     final operation = ++_epoch;
-    await _run(
+    _pmsRefresh = null;
+    _pmsRefreshOperation = null;
+    _pmsRefreshServerId = null;
+    _serverTargetId = selected.id;
+    final oldServer = server;
+    final oldConnection = connection;
+    final oldPmsToken = _pmsToken;
+    final oldLibraries = libraries;
+    final oldSelectedLibraries = selectedLibraryIds;
+    final oldMedia = availableMedia;
+    final oldPlaylists = availablePlaylists;
+    final oldChannels = channels;
+    final oldCurrent = currentChannelId;
+    final oldCanCancel = serverSelectionCanCancel;
+    final succeeded = await _run(
       () async {
-        final token = _profileToken ?? _accountToken;
-        if (token == null) {
-          throw const PlexException('auth-required', 'Link Plex first.');
-        }
-        final selectedConnection = await plex.selectConnection(selected, token);
-        if (!_isCurrent(operation)) return;
-        final loadedLibraries = await plex.libraries(
-          selectedConnection.uri,
-          token,
+        final selectedConnection = await _withPmsAuthorization(
+          operation,
+          selected.id,
+          (token, _) => plex.selectConnection(
+            _serverAccess[selected.id]?.server ?? selected,
+            token,
+          ),
+          connectionIsResult: true,
         );
         if (!_isCurrent(operation)) return;
-        final oldServer = server;
-        final oldConnection = connection;
-        final oldLibraries = libraries;
-        final oldSelectedLibraries = selectedLibraryIds;
-        final oldMedia = availableMedia;
-        final oldPlaylists = availablePlaylists;
-        final oldChannels = channels;
-        final oldCurrent = currentChannelId;
-        final oldCanCancel = serverSelectionCanCancel;
+        _pmsToken = _serverAccess[selected.id]!.token;
+        var workingConnection = selectedConnection;
+        final loadedLibraries = await _withPmsAuthorization(
+          operation,
+          selected.id,
+          (token, refreshedConnection) {
+            workingConnection = refreshedConnection ?? workingConnection;
+            return plex.libraries(workingConnection.uri, token);
+          },
+          connectionOverride: selectedConnection,
+        );
+        if (!_isCurrent(operation)) return;
         serverSelectionCanCancel = false;
         notifyListeners();
-        server = selected;
-        connection = selectedConnection;
+        server = _serverAccess[selected.id]?.server ?? selected;
+        connection = workingConnection;
         libraries = loadedLibraries;
         final profileId = profile?.id ?? account?.id;
         final savedLibraries = profileId == null
@@ -447,6 +495,7 @@ class LineupController extends ChangeNotifier {
         } catch (_) {
           server = oldServer;
           connection = oldConnection;
+          _pmsToken = oldPmsToken;
           libraries = oldLibraries;
           selectedLibraryIds = oldSelectedLibraries;
           availableMedia = oldMedia;
@@ -471,6 +520,19 @@ class LineupController extends ChangeNotifier {
       operation: operation,
       fallbackStage: SetupStage.servers,
     );
+    if (!succeeded && _isCurrent(operation)) {
+      server = oldServer;
+      connection = oldConnection;
+      _pmsToken = oldPmsToken;
+      libraries = oldLibraries;
+      selectedLibraryIds = oldSelectedLibraries;
+      availableMedia = oldMedia;
+      availablePlaylists = oldPlaylists;
+      channels = oldChannels;
+      currentChannelId = oldCurrent;
+      serverSelectionCanCancel = oldCanCancel;
+    }
+    if (_serverTargetId == selected.id) _serverTargetId = null;
   }
 
   Future<bool> setLibraries(Set<String> ids) async {
@@ -508,21 +570,37 @@ class LineupController extends ChangeNotifier {
   }
 
   Future<void> _loadLibraries(int operation, Set<String> ids) async {
-    final token = _profileToken ?? _accountToken;
-    final endpoint = connection?.uri;
-    if (token == null || endpoint == null) {
+    final selectedServer = server;
+    if (selectedServer == null || connection == null) {
       throw const PlexException('server-unreachable', 'Select a server first.');
     }
     final items = <PlexMediaItem>[];
     for (final id in ids) {
       final library = libraries.firstWhere((library) => library.id == id);
-      items.addAll(await plex.libraryItems(endpoint, token, id, library.type));
+      items.addAll(
+        await _withPmsAuthorization(
+          operation,
+          selectedServer.id,
+          (token, refreshedConnection) => plex.libraryItems(
+            (refreshedConnection ?? connection!).uri,
+            token,
+            id,
+            library.type,
+          ),
+        ),
+      );
       if (operation != _epoch) return;
     }
     PlexPlaylistCatalog catalog;
     try {
-      catalog = await plex.playlists(endpoint, token);
+      catalog = await _withPmsAuthorization(
+        operation,
+        selectedServer.id,
+        (token, refreshedConnection) =>
+            plex.playlists((refreshedConnection ?? connection!).uri, token),
+      );
     } on PlexException catch (exception) {
+      if (_isPmsAuthorizationError(exception)) rethrow;
       diagnostics.add('plex-library', 'Playlist discovery unavailable', {
         'error': exception.toString(),
       });
@@ -593,6 +671,10 @@ class LineupController extends ChangeNotifier {
     if (!profileSelectionCanCancel || server == null) return;
     if (busy) {
       ++_epoch;
+      _pmsRefresh = null;
+      _pmsRefreshOperation = null;
+      _pmsRefreshServerId = null;
+      _serverTargetId = null;
       _busyOperation = null;
       busy = false;
     }
@@ -613,6 +695,10 @@ class LineupController extends ChangeNotifier {
     if (!serverSelectionCanCancel || server == null) return;
     if (busy) {
       ++_epoch;
+      _pmsRefresh = null;
+      _pmsRefreshOperation = null;
+      _pmsRefreshServerId = null;
+      _serverTargetId = null;
       _busyOperation = null;
       busy = false;
     }
@@ -750,16 +836,27 @@ class LineupController extends ChangeNotifier {
 
   LineupPlaybackRequest playbackFor(String itemId) {
     final endpoint = connection?.uri;
-    final token = _profileToken ?? _accountToken;
+    final token = _pmsToken;
+    final serverId = server?.id;
     final item = availableMedia
         .where((value) => value.id == itemId)
         .firstOrNull;
-    if (endpoint == null || token == null || item == null) {
+    if (endpoint == null || token == null || serverId == null || item == null) {
       throw const PlexException(
         'playback-unavailable',
         'This program is not available from the current Plex session.',
       );
     }
+    return _playbackRequest(item, endpoint, token, serverId, _epoch);
+  }
+
+  LineupPlaybackRequest _playbackRequest(
+    PlexMediaItem item,
+    Uri endpoint,
+    String token,
+    String serverId,
+    int operation,
+  ) {
     final descriptor = plex.playbackDescriptor(
       server: endpoint,
       item: item,
@@ -781,6 +878,30 @@ class LineupController extends ChangeNotifier {
         sessionId: descriptor.sessionId,
       ),
       plexToken: token,
+      authorizationRecovery: () async {
+        await _refreshPmsAccess(operation, serverId);
+        if (!_isCurrent(operation) || server?.id != serverId) {
+          throw const PlexException(
+            'playback-unavailable',
+            'This program is not available from the current Plex session.',
+          );
+        }
+        final refreshedEndpoint = connection?.uri;
+        final refreshedToken = _pmsToken;
+        if (refreshedEndpoint == null || refreshedToken == null) {
+          throw const PlexException(
+            'authorization-unavailable',
+            'Plex server authorization is unavailable.',
+          );
+        }
+        return _playbackRequest(
+          item,
+          refreshedEndpoint,
+          refreshedToken,
+          serverId,
+          operation,
+        );
+      },
     );
   }
 
@@ -790,12 +911,16 @@ class LineupController extends ChangeNotifier {
   }
 
   Future<Uint8List?> artworkForPath(Uri path) async {
-    final endpoint = connection?.uri;
-    final token = _profileToken ?? _accountToken;
-    if (endpoint == null || token == null || path.toString().isEmpty) {
+    final serverId = server?.id;
+    if (serverId == null || connection == null || path.toString().isEmpty) {
       return null;
     }
-    return plex.artwork(endpoint, token, path);
+    return _withPmsAuthorization(
+      _epoch,
+      serverId,
+      (token, refreshedConnection) =>
+          plex.artwork((refreshedConnection ?? connection!).uri, token, path),
+    );
   }
 
   Future<void> setCurrentChannel(String? id) async {
@@ -862,6 +987,10 @@ class LineupController extends ChangeNotifier {
 
   Future<bool> _performLogout() async {
     ++_epoch;
+    _pmsRefresh = null;
+    _pmsRefreshOperation = null;
+    _pmsRefreshServerId = null;
+    _serverTargetId = null;
     _pinTimer?.cancel();
     _busyOperation = null;
     busy = true;
@@ -898,6 +1027,12 @@ class LineupController extends ChangeNotifier {
     serverSelectionCanCancel = false;
     _accountToken = null;
     _profileToken = null;
+    _serverAccess = const {};
+    _pmsToken = null;
+    _serverTargetId = null;
+    _pmsRefresh = null;
+    _pmsRefreshOperation = null;
+    _pmsRefreshServerId = null;
     secureCancellationRequired = false;
     _contentGeneration++;
     stage = SetupStage.welcome;
@@ -985,6 +1120,11 @@ class LineupController extends ChangeNotifier {
   void _clearServerRuntime() {
     server = null;
     connection = null;
+    _pmsToken = null;
+    _serverTargetId = null;
+    _pmsRefresh = null;
+    _pmsRefreshOperation = null;
+    _pmsRefreshServerId = null;
     libraries = const [];
     selectedLibraryIds = const {};
     availableMedia = const [];
@@ -996,6 +1136,96 @@ class LineupController extends ChangeNotifier {
     _scheduleWorkerMedia = null;
     _scheduleWorkerPlaylists = null;
     _contentGeneration++;
+  }
+
+  Future<T> _withPmsAuthorization<T>(
+    int operation,
+    String serverId,
+    Future<T> Function(String token, PlexConnection? connection) request, {
+    PlexConnection? connectionOverride,
+    bool connectionIsResult = false,
+  }) async {
+    final access = _serverAccess[serverId];
+    if (access == null || access.token.isEmpty) {
+      throw const PlexException(
+        'authorization-unavailable',
+        'Plex server authorization is unavailable.',
+      );
+    }
+    try {
+      return await request(access.token, connectionOverride);
+    } on PlexException catch (exception) {
+      if (!_isPmsAuthorizationError(exception)) rethrow;
+      await _refreshPmsAccess(operation, serverId);
+      if (!_isCurrentPmsTarget(operation, serverId)) {
+        throw const PlexException(
+          'authorization-unavailable',
+          'Plex server authorization is unavailable.',
+        );
+      }
+      final refreshed = _serverAccess[serverId];
+      final refreshedConnection = connection;
+      if (refreshed == null || refreshedConnection == null) {
+        throw const PlexException(
+          'authorization-unavailable',
+          'Plex server authorization is unavailable.',
+        );
+      }
+      if (connectionIsResult) return refreshedConnection as T;
+      return request(refreshed.token, refreshedConnection);
+    }
+  }
+
+  Future<void> _refreshPmsAccess(int operation, String serverId) {
+    final active = _pmsRefresh;
+    if (active != null &&
+        _pmsRefreshOperation == operation &&
+        _pmsRefreshServerId == serverId) {
+      return active;
+    }
+    final refresh = _performPmsRefresh(operation, serverId);
+    _pmsRefresh = refresh;
+    _pmsRefreshOperation = operation;
+    _pmsRefreshServerId = serverId;
+    return refresh.whenComplete(() {
+      if (identical(_pmsRefresh, refresh)) {
+        _pmsRefresh = null;
+        _pmsRefreshOperation = null;
+        _pmsRefreshServerId = null;
+      }
+    });
+  }
+
+  Future<void> _performPmsRefresh(int operation, String serverId) async {
+    final profileToken = _profileToken ?? _accountToken;
+    if (profileToken == null) {
+      throw const PlexException('auth-required', 'Link Plex first.');
+    }
+    final discovered = await plex.discoverServers(profileToken);
+    final refreshed = discovered
+        .where((access) => access.server.id == serverId)
+        .firstOrNull;
+    if (refreshed == null) {
+      throw const PlexException(
+        'authorization-unavailable',
+        'Plex server authorization is unavailable.',
+      );
+    }
+    final selectedConnection = await plex.selectConnection(
+      refreshed.server,
+      refreshed.token,
+    );
+    if (!_isCurrentPmsTarget(operation, serverId) ||
+        (_profileToken ?? _accountToken) != profileToken) {
+      throw const PlexException(
+        'authorization-unavailable',
+        'Plex server authorization is unavailable.',
+      );
+    }
+    _serverAccess = {for (final access in discovered) access.server.id: access};
+    servers = List.unmodifiable(discovered.map((access) => access.server));
+    _pmsToken = refreshed.token;
+    connection = selectedConnection;
   }
 
   Future<bool> _run(
@@ -1032,6 +1262,18 @@ class LineupController extends ChangeNotifier {
 
   bool _isCurrent(int operation) => !_disposed && operation == _epoch;
 
+  bool _isCurrentPmsTarget(int operation, String serverId) =>
+      _isCurrent(operation) &&
+      (_serverTargetId == null
+          ? server?.id == serverId
+          : _serverTargetId == serverId);
+
+  static bool _isPmsAuthorizationError(PlexException exception) => const {
+    'auth-invalid',
+    'auth-required',
+    'access-denied',
+  }.contains(exception.code);
+
   @override
   void notifyListeners() {
     if (!_disposed) super.notifyListeners();
@@ -1047,6 +1289,12 @@ class LineupController extends ChangeNotifier {
     _busyOperation = null;
     busy = false;
     _scheduleWorker?.dispose();
+    _serverAccess = const {};
+    _pmsToken = null;
+    _serverTargetId = null;
+    _pmsRefresh = null;
+    _pmsRefreshOperation = null;
+    _pmsRefreshServerId = null;
     final pin = activePin;
     if (pin == null) {
       plex.close();
