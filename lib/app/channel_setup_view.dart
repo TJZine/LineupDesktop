@@ -319,11 +319,11 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
     final (label, message) = switch (status) {
       LibraryScanStatus.scanning => (
         'Scanning selected libraries',
-        '${controller.libraryScanCompletedItems} items scanned',
+        'Pages scanned: ${controller.libraryScanCompletedPages} · Items scanned: ${controller.libraryScanCompletedItems}',
       ),
       LibraryScanStatus.complete => (
         'Library scan complete',
-        '${controller.libraryScanCompletedItems} items scanned',
+        'Pages scanned: ${controller.libraryScanCompletedPages} · Items scanned: ${controller.libraryScanCompletedItems}',
       ),
       LibraryScanStatus.empty => (
         'Selected libraries are empty',

@@ -382,6 +382,7 @@ void main() {
           ),
         ]
         ..libraryScanStatus = status
+        ..libraryScanCompletedPages = 3
         ..libraryScanCompletedItems = 50
         ..libraryScanTotalItems = 100
         ..error = error;
@@ -398,6 +399,7 @@ void main() {
       find.bySemanticsLabel('Scanning selected libraries'),
       findsOneWidget,
     );
+    expect(find.text('Pages scanned: 3 · Items scanned: 50'), findsOneWidget);
     expect(find.widgetWithText(OutlinedButton, 'Cancel scan'), findsOneWidget);
     expect(
       tester
@@ -429,6 +431,7 @@ void main() {
 
     await pumpStatus(LibraryScanStatus.complete);
     expect(find.bySemanticsLabel('Library scan complete'), findsOneWidget);
+    expect(find.text('Pages scanned: 3 · Items scanned: 50'), findsOneWidget);
     expect(find.text('Retry scan'), findsNothing);
   });
 
