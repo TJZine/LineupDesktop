@@ -15,11 +15,6 @@ enum LineupThemeName {
 
   final String storageKey;
   final String label;
-
-  static LineupThemeName fromStorage(Object? value) => values.firstWhere(
-    (theme) => theme.storageKey == value,
-    orElse: () => emberSteel,
-  );
 }
 
 class LineupSettings {
@@ -116,57 +111,91 @@ class LineupSettings {
   };
 
   factory LineupSettings.fromJson(Object? value) {
-    if (value is! Map) return const LineupSettings();
-    final json = Map<String, Object?>.from(value);
-    T enumValue<T extends Enum>(List<T> values, String key, T fallback) =>
-        values.where((value) => value.name == json[key]).firstOrNull ??
-        fallback;
-    int number(String key, int fallback) {
-      final value = json[key];
-      return value is num && value.isFinite ? value.toInt() : fallback;
+    if (value is! Map) throw const FormatException('Invalid settings');
+    late final Map<String, Object?> json;
+    try {
+      json = Map<String, Object?>.from(value);
+    } catch (error) {
+      throw FormatException('Invalid settings', error);
+    }
+    const fields = {
+      'theme',
+      'guideHours',
+      'pastMinutes',
+      'guideDensity',
+      'guideLayoutMode',
+      'guideInfoBackgroundMode',
+      'preferClearLogos',
+      'libraryTabsEnabled',
+      'nowWatchingBanner',
+      'osdAutoHideSeconds',
+      'audioSetupComplete',
+      'reduceMotion',
+      'largeFocusIndicators',
+      'profilePickerOnStartup',
+      'diagnosticsEnabled',
+    };
+    final keys = json.keys.toSet();
+    if (!keys.containsAll(fields) || keys.difference(fields).isNotEmpty) {
+      throw const FormatException('Settings fields are not canonical');
     }
 
-    int option(String key, int fallback, List<int> options) {
-      final value = number(key, fallback);
-      return options.reduce((best, candidate) {
-        final bestDistance = (best - value).abs();
-        final candidateDistance = (candidate - value).abs();
-        return candidateDistance <= bestDistance ? candidate : best;
-      });
+    T enumValue<T>(List<T> values, String key, String Function(T) storage) {
+      final persisted = json[key];
+      if (persisted is! String) throw FormatException('Invalid $key');
+      return values.where((value) => storage(value) == persisted).firstOrNull ??
+          (throw FormatException('Invalid $key'));
+    }
+
+    int option(String key, List<int> options) {
+      final persisted = json[key];
+      if (persisted is! int || !options.contains(persisted)) {
+        throw FormatException('Invalid $key');
+      }
+      return persisted;
+    }
+
+    bool boolean(String key) {
+      final persisted = json[key];
+      if (persisted is! bool) throw FormatException('Invalid $key');
+      return persisted;
     }
 
     return LineupSettings(
-      theme: LineupThemeName.fromStorage(json['theme']),
-      guideHours: option('guideHours', 2, guideHoursOptions),
-      pastMinutes: option('pastMinutes', 30, pastMinutesOptions),
+      theme: enumValue(
+        LineupThemeName.values,
+        'theme',
+        (theme) => theme.storageKey,
+      ),
+      guideHours: option('guideHours', guideHoursOptions),
+      pastMinutes: option('pastMinutes', pastMinutesOptions),
       guideDensity: enumValue(
         GuideDensity.values,
         'guideDensity',
-        GuideDensity.comfortable,
+        (density) => density.name,
       ),
       guideLayoutMode: enumValue(
         GuideLayoutMode.values,
         'guideLayoutMode',
-        GuideLayoutMode.pictureInPicture,
+        (mode) => mode.name,
       ),
       guideInfoBackgroundMode: enumValue(
         GuideInfoBackgroundMode.values,
         'guideInfoBackgroundMode',
-        GuideInfoBackgroundMode.bleed,
+        (mode) => mode.name,
       ),
-      preferClearLogos: json['preferClearLogos'] != false,
-      libraryTabsEnabled: json['libraryTabsEnabled'] != false,
-      nowWatchingBanner: json['nowWatchingBanner'] != false,
+      preferClearLogos: boolean('preferClearLogos'),
+      libraryTabsEnabled: boolean('libraryTabsEnabled'),
+      nowWatchingBanner: boolean('nowWatchingBanner'),
       osdAutoHideSeconds: option(
         'osdAutoHideSeconds',
-        4,
         osdAutoHideSecondsOptions,
       ),
-      audioSetupComplete: json['audioSetupComplete'] == true,
-      reduceMotion: json['reduceMotion'] == true,
-      largeFocusIndicators: json['largeFocusIndicators'] == true,
-      profilePickerOnStartup: json['profilePickerOnStartup'] == true,
-      diagnosticsEnabled: json['diagnosticsEnabled'] == true,
+      audioSetupComplete: boolean('audioSetupComplete'),
+      reduceMotion: boolean('reduceMotion'),
+      largeFocusIndicators: boolean('largeFocusIndicators'),
+      profilePickerOnStartup: boolean('profilePickerOnStartup'),
+      diagnosticsEnabled: boolean('diagnosticsEnabled'),
     );
   }
 }

@@ -203,18 +203,17 @@ void main() {
       }
     });
 
-    test('preserves settings value normalization', () {
-      final state = PersistedState.fromJson(
-        _canonicalJson()
-          ..['settings'] = {
-            'guideHours': 5,
-            'pastMinutes': 29,
-            'osdAutoHideSeconds': 7,
-          },
+    test('rejects noncanonical settings values', () {
+      expect(
+        () => PersistedState.fromJson(
+          _canonicalJson()
+            ..['settings'] = {
+              ...const LineupSettings().toJson(),
+              'guideHours': 5,
+            },
+        ),
+        throwsFormatException,
       );
-      expect(state.settings.guideHours, 6);
-      expect(state.settings.pastMinutes, 30);
-      expect(state.settings.osdAutoHideSeconds, 8);
     });
   });
 
@@ -244,6 +243,44 @@ void main() {
             'server': [
               _channelJson(artworkKey: 'clearLogo', artworkValue: 'http://['),
             ],
+          },
+        },
+    ),
+    'noncanonical settings JSON': _encodedState(
+      _canonicalJson()
+        ..['settings'] = {
+          ...const LineupSettings().toJson(),
+          'guideHours': 2.5,
+        },
+    ),
+    'noncanonical channel JSON': _encodedState(
+      _canonicalJson()
+        ..['channelsByProfileServer'] = {
+          'profile': {
+            'server': [_channelJson()..['future'] = true],
+          },
+        },
+    ),
+    'noncanonical source JSON': _encodedState(
+      _canonicalJson()
+        ..['channelsByProfileServer'] = {
+          'profile': {
+            'server': [
+              _channelJson()
+                ..['source'] = {
+                  'type': 'playlist',
+                  'playlistId': 'playlist',
+                  'future': true,
+                },
+            ],
+          },
+        },
+    ),
+    'noncanonical item JSON': _encodedState(
+      _canonicalJson()
+        ..['channelsByProfileServer'] = {
+          'profile': {
+            'server': [_channelJson(artworkKey: 'future')],
           },
         },
     ),

@@ -357,8 +357,8 @@ appear only with concrete product requirements and working consumers.
 All preference changes apply immediately through one controller-owned state
 transaction. The Settings UI disables further edits during that save and
 reports a failure while retaining the previous value. One queue serializes
-snapshot, save, commit, and rollback across state domains. Restore normalizes
-invalid enum/numeric values.
+snapshot, save, commit, and rollback across state domains. Restore accepts only
+the current writer's exact schema and quarantines invalid values.
 
 | Desktop preference/state | Default and choices | Persistence and runtime consumer |
 | --- | --- | --- |

@@ -87,18 +87,23 @@ class PersistedState {
 }
 
 Map<String, Object?> _stringKeyedMap(Object? value, String name) {
-  if (value is! Map || value.keys.any((key) => key is! String)) {
-    throw FormatException('Invalid $name.');
+  if (value is! Map) throw FormatException('Invalid $name.');
+  try {
+    return Map<String, Object?>.from(value);
+  } catch (error) {
+    throw FormatException('Invalid $name.', error);
   }
-  return {for (final entry in value.entries) entry.key as String: entry.value};
 }
 
 Map<String, String> _flatStringMap(Object? value) {
-  final map = _stringKeyedMap(value, 'server selections');
-  if (map.values.any((value) => value is! String)) {
+  if (value is! Map) {
     throw const FormatException('Invalid server selections.');
   }
-  return {for (final entry in map.entries) entry.key: entry.value as String};
+  try {
+    return Map<String, String>.from(value);
+  } catch (error) {
+    throw FormatException('Invalid server selections.', error);
+  }
 }
 
 Map<String, Map<String, List<Channel>>> _channelSelections(Object? value) {

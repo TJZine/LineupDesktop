@@ -14,7 +14,6 @@ void main() {
         'DirecTV Classic',
         'Glassmorphism',
       ]);
-      expect(LineupThemeName.fromStorage(null), LineupThemeName.emberSteel);
     },
   );
 

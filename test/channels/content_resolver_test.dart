@@ -96,9 +96,22 @@ void main() {
       id: 'new',
       title: 'New item',
       duration: Duration(minutes: 1),
+      showTitle: 'Show',
+      showThumb: '/show-thumb',
       poster: Uri(path: '/poster'),
       backdrop: Uri(path: '/backdrop'),
       clearLogo: Uri(path: '/logo'),
+      summary: 'Summary',
+      contentRating: 'TV-14',
+      genres: const ['Drama'],
+      year: 2026,
+      seasonNumber: 2,
+      episodeNumber: 3,
+      resolution: '1080',
+      videoCodec: 'h264',
+      audioCodec: 'aac',
+      audioChannels: 6,
+      dynamicRange: 'sdr',
     );
     expect(ChannelItem.fromJson(item.toJson()).toJson(), item.toJson());
     expect(item.toJson(), containsPair('poster', '/poster'));
@@ -115,5 +128,99 @@ void main() {
       }),
       throwsFormatException,
     );
+  });
+
+  test('all content source variants round-trip canonically', () {
+    final sources = <ContentSource>[
+      const LibrarySource(
+        libraryId: 'movies',
+        libraryType: PlexLibraryType.movie,
+        includeWatched: false,
+        filters: {'genre': 'Comedy'},
+      ),
+      const PlaylistSource('playlist'),
+      const ManualSource([
+        ChannelItem(id: 'item', title: 'Item', duration: Duration(minutes: 1)),
+      ]),
+      const MixedSource(
+        interleave: true,
+        sources: [PlaylistSource('playlist')],
+      ),
+    ];
+
+    for (final source in sources) {
+      expect(ContentSource.fromJson(source.toJson()).toJson(), source.toJson());
+    }
+  });
+
+  test('content sources reject missing, unknown, null, and invalid fields', () {
+    for (final invalid in [
+      {'type': 'playlist'},
+      {'type': 'playlist', 'playlistId': 'playlist', 'future': true},
+      {'type': 'library', 'libraryId': 'movies', 'libraryType': 'movie'},
+      {
+        'type': 'library',
+        'libraryId': 'movies',
+        'libraryType': 'future',
+        'includeWatched': true,
+      },
+      {
+        'type': 'library',
+        'libraryId': 'movies',
+        'libraryType': 'movie',
+        'includeWatched': true,
+        'filters': null,
+      },
+      {'type': 'manual', 'items': null},
+      {'type': 'mixed', 'interleave': 1, 'sources': <Object?>[]},
+      {'type': 'future'},
+    ]) {
+      expect(() => ContentSource.fromJson(invalid), throwsFormatException);
+    }
+  });
+
+  test('channel items reject noncanonical fields and numeric values', () {
+    const canonical = {'id': 'item', 'title': 'Item', 'durationMs': 60000};
+    for (final invalid in [
+      {...canonical}..remove('title'),
+      {...canonical, 'future': true},
+      {...canonical, 'durationMs': 60000.0},
+      {...canonical, 'year': 2026.0},
+      {...canonical, 'summary': null},
+      {
+        ...canonical,
+        'genres': ['Drama', 7],
+      },
+    ]) {
+      expect(() => ChannelItem.fromJson(invalid), throwsFormatException);
+    }
+  });
+
+  test('channels round-trip and reject noncanonical persisted values', () {
+    final channel = Channel(
+      id: 'channel',
+      number: 7,
+      name: 'Channel',
+      source: const PlaylistSource('playlist'),
+      playbackMode: PlaybackMode.block,
+      anchor: DateTime.utc(2026, 8, 23),
+      shuffleSeed: 42,
+      blockSize: 3,
+      builderKey: 'builder',
+    );
+    expect(Channel.fromJson(channel.toJson()).toJson(), channel.toJson());
+
+    final canonical = channel.toJson();
+    for (final invalid in [
+      {...canonical}..remove('anchor'),
+      {...canonical, 'future': true},
+      {...canonical, 'number': 7.0},
+      {...canonical, 'shuffleSeed': 42.0},
+      {...canonical, 'playbackMode': 'future'},
+      {...canonical, 'blockSize': null},
+      {...canonical, 'builderKey': null},
+    ]) {
+      expect(() => Channel.fromJson(invalid), throwsFormatException);
+    }
   });
 }
