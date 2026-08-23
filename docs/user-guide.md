@@ -63,6 +63,11 @@ Choose a discovered server. Lineup prioritizes usable direct connections before
 relay connections and records only the selected connection type and measured
 probe latency.
 
+Plex supplies each discovered server with its own PMS credential, separate from
+the Plex.tv account or Home-profile credential. Lineup keeps that server
+credential only for the running session and uses it only to contact that PMS;
+it is not saved in application state or shown in the interface.
+
 When no server appears:
 
 - confirm Plex Media Server is running and reachable;
@@ -93,6 +98,11 @@ strategy, channels can be generated per library or across selected libraries.
 
 The review step applies the accepted plan atomically. Cancelling or a failed
 save preserves the previous lineup.
+
+Scanning selected libraries reports completed pages and items and can be
+cancelled while it is running. Cancellation preserves the previous selection
+and media. Empty libraries, media without a playable positive duration, and a
+temporary scan failure are shown separately, and each can be retried.
 
 ## Main destinations
 
@@ -167,6 +177,18 @@ The mini Guide displays a bounded group of nearby channels without leaving
 playback. Selecting a row replaces the current tune through the same Player
 owner.
 
+When one Plex item contains sequential media parts, Lineup continues through
+them under the same tune. Progress and cross-part seeking use aggregate timing
+only when the required part durations are known; otherwise the Player shows
+the current part's timing rather than estimating missing boundaries.
+
+The timed OSD and mini Guide remain open while keyboard focus is inside their
+controls. Leaving the active overlay restarts its full timeout. Reduce Motion
+removes Player overlay transition time, and audio/subtitle panels initially
+focus the selected track (or **Off** when no subtitle is selected). These
+behaviors are deterministically tested in Flutter; physical Windows
+screen-reader and assistive-technology validation remains pending.
+
 ## Keyboard and remote controls
 
 Media and remote keys depend on what the operating system and input device
@@ -228,13 +250,19 @@ supports:
 
 Deletion requires confirmation and cannot be undone.
 
+Generated channels and channels backed by filtered libraries, playlists, or
+mixed sources keep their source read-only in the editor. You can change their
+name, number, and playback mode without changing their source or generated
+identity. Plain manual and unfiltered-library custom channels retain full source
+editing. There is no implicit generated-to-custom conversion.
+
 ## Settings
 
 | Category | Current controls |
 | --- | --- |
 | Appearance | Ember & Steel, Slate & Pine, Swiss Minimal, DirecTV Classic, and Glassmorphism themes |
 | Guide | Classic with PiP or Overlay presentation; detailed 2-hour, wide 3-hour, or desktop-extended 4/6/8/12-hour windows; 0-180 minute past window; comfortable or compact rows; color-bleed/theme/artwork information backgrounds; clear-logo preference; library filters; Now Playing context; 2-15 second OSD auto-hide |
-| Accessibility | Reduce motion for management/Guide and larger keyboard/controller focus indicators; Player motion coverage is still incomplete |
+| Accessibility | Reduce motion across management, Guide, and Player transitions; larger keyboard/controller focus indicators |
 | Account | Switch Plex Home profile, switch or clear Plex server selection, and optionally show the profile picker at startup |
 | Support | Enable or disable bounded redacted diagnostic recording |
 
@@ -246,10 +274,11 @@ active and the screen shows an error.
 Diagnostics are disabled by default. Enable **Record redacted diagnostics** in
 **Settings > Support** before reproducing a problem that needs support context.
 
-The application structurally excludes known credentials, authorization headers,
-token-bearing URLs, and private paths. Arbitrary exception text is not yet a
-provably safe producer boundary, so treat every entry as potentially sensitive.
-Redaction lowers risk but does not replace review. Before sharing anything:
+The application stores diagnostic context only from a small allowlist of
+bounded structured facts; arbitrary exception and native message text is not
+recorded. It also redacts known credentials, authorization headers,
+token-bearing URLs, and private paths as defense in depth. Diagnostics may
+still describe private activity, so review them before sharing anything:
 
 1. Inspect every line and screenshot.
 2. Remove private media titles or account details that are not needed.
@@ -274,6 +303,7 @@ vulnerabilities only through the private process in
 | Audio plays but video is black or hidden | Record the exact window size, display scaling, fullscreen state, Guide layout, whether audio continues, and whether the problem follows a resize/minimize/restore transition. Treat this as a native-composition failure and report it with the current commit. |
 | A replacement channel leaves stale audio/video | Stop testing that scenario, record both channel transitions and timestamps, and report it as a native playback-lifetime failure. |
 | A setting or lineup change fails | The previous state should remain. Retry after confirming the Plex server and local storage are available. |
+| A banner says saved app data was corrupt | Lineup moved malformed or schema-invalid state aside and started with empty state. Dismiss the banner after reviewing the resulting setup. Other storage read failures stop startup instead of resetting data. |
 | A private portable package does not launch | Verify the complete package was extracted, `SYSTEM-REQUIREMENTS.txt` is satisfied, the archive hash matches, and the GPU driver supplies `vulkan-1.dll`. |
 
 ## Known limitations
@@ -283,12 +313,14 @@ vulnerabilities only through the private process in
   physical acceptance matrix on the current branch.
 - macOS playback is intentionally unsupported.
 - Audio-output selection and passthrough controls are not exposed.
-- Reduce Motion does not yet suppress every Player overlay transition, and
-  timed overlays do not yet suspend dismissal while controls retain focus.
 - The native player deliberately has no application codec/container/HDR
   allowlist. Representative codec, HDR, TrueHD/DTS-to-PCM, text/image subtitle,
   multi-monitor, and high-DPI coverage remains deeper validation work rather
-  than a reason to force browser-style transcode or burn-in.
+  than a reason to force browser-style transcode, subtitle burn-in, or a
+  passthrough decode gate.
+- Alternate Plex media-version selection and failed/cancelled Home-profile token
+  compensation remain later work. Sequential parts of the selected version are
+  implemented and deterministically tested.
 - Gamepad, signing, and clean-system package coverage remain later release work.
 - Pre-release behavior and persisted state may change before the first public
   version.
