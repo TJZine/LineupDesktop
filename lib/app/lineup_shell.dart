@@ -629,6 +629,12 @@ class _ChannelEditorState extends State<ChannelEditor> {
     LibrarySource(:final includeWatched) => includeWatched,
     _ => true,
   };
+  late final bool _sourceReadOnly = switch (widget.channel) {
+    Channel(builderKey: != null) => true,
+    Channel(source: LibrarySource(:final filters)) => filters.isNotEmpty,
+    Channel(source: PlaylistSource() || MixedSource()) => true,
+    _ => false,
+  };
   bool _saving = false;
   String? _error;
   int _nextNumber() {
@@ -640,6 +646,12 @@ class _ChannelEditorState extends State<ChannelEditor> {
       }
     }
     return 1;
+  }
+
+  int? _editedBlockSize() {
+    if (_mode != PlaybackMode.block) return null;
+    final existing = widget.channel?.blockSize;
+    return existing != null && existing > 0 ? existing : 3;
   }
 
   @override
@@ -700,44 +712,54 @@ class _ChannelEditorState extends State<ChannelEditor> {
                 },
               ),
               const SizedBox(height: 12),
-              SegmentedButton<bool>(
-                segments: const [
-                  ButtonSegment(value: false, label: Text('Entire library')),
-                  ButtonSegment(value: true, label: Text('Hand-picked')),
-                ],
-                selected: {_manual},
-                onSelectionChanged: (value) =>
-                    setState(() => _manual = value.single),
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                initialValue:
-                    widget.controller.libraries.any(
-                      (library) =>
-                          library.id == _libraryId &&
-                          widget.controller.selectedLibraryIds.contains(
-                            library.id,
-                          ),
-                    )
-                    ? _libraryId
-                    : null,
-                decoration: const InputDecoration(labelText: 'Content library'),
-                items: [
-                  for (final library in widget.controller.libraries.where(
-                    (library) => widget.controller.selectedLibraryIds.contains(
-                      library.id,
-                    ),
-                  ))
-                    DropdownMenuItem(
-                      value: library.id,
-                      child: Text(library.title),
-                    ),
-                ],
-                onChanged: _manual
-                    ? null
-                    : (value) => setState(() => _libraryId = value),
-              ),
-              if (_manual) ...[
+              if (_sourceReadOnly)
+                InputDecorator(
+                  decoration: const InputDecoration(
+                    labelText: 'Channel source (read-only)',
+                  ),
+                  child: Text(_sourceLabel(widget.channel!.source)),
+                ),
+              if (!_sourceReadOnly)
+                SegmentedButton<bool>(
+                  segments: const [
+                    ButtonSegment(value: false, label: Text('Entire library')),
+                    ButtonSegment(value: true, label: Text('Hand-picked')),
+                  ],
+                  selected: {_manual},
+                  onSelectionChanged: (value) =>
+                      setState(() => _manual = value.single),
+                ),
+              if (!_sourceReadOnly) const SizedBox(height: 12),
+              if (!_sourceReadOnly)
+                DropdownButtonFormField<String>(
+                  initialValue:
+                      widget.controller.libraries.any(
+                        (library) =>
+                            library.id == _libraryId &&
+                            widget.controller.selectedLibraryIds.contains(
+                              library.id,
+                            ),
+                      )
+                      ? _libraryId
+                      : null,
+                  decoration: const InputDecoration(
+                    labelText: 'Content library',
+                  ),
+                  items: [
+                    for (final library in widget.controller.libraries.where(
+                      (library) => widget.controller.selectedLibraryIds
+                          .contains(library.id),
+                    ))
+                      DropdownMenuItem(
+                        value: library.id,
+                        child: Text(library.title),
+                      ),
+                  ],
+                  onChanged: _manual
+                      ? null
+                      : (value) => setState(() => _libraryId = value),
+                ),
+              if (!_sourceReadOnly && _manual) ...[
                 const SizedBox(height: 12),
                 SizedBox(
                   height: 240,
@@ -811,16 +833,17 @@ class _ChannelEditorState extends State<ChannelEditor> {
                 onSelectionChanged: (value) =>
                     setState(() => _mode = value.single),
               ),
-              if (!_manual)
+              if (!_sourceReadOnly && !_manual)
                 SwitchListTile(
                   value: _includeWatched,
                   title: const Text('Include watched items'),
                   onChanged: (value) => setState(() => _includeWatched = value),
                 ),
-              Text(
-                '${widget.controller.availableMedia.length} loaded items are available.',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
+              if (!_sourceReadOnly)
+                Text(
+                  '${widget.controller.availableMedia.length} loaded items are available.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
             ],
           ),
         ),
@@ -844,6 +867,24 @@ class _ChannelEditorState extends State<ChannelEditor> {
       _error = null;
     });
     try {
+      final original = widget.channel;
+      if (_sourceReadOnly) {
+        await widget.controller.saveChannel(
+          Channel(
+            id: original!.id,
+            number: int.parse(_number.text),
+            name: _name.text.trim(),
+            source: original.source,
+            playbackMode: _mode,
+            anchor: original.anchor,
+            shuffleSeed: original.shuffleSeed,
+            blockSize: _editedBlockSize(),
+            builderKey: original.builderKey,
+          ),
+        );
+        if (mounted) Navigator.pop(context);
+        return;
+      }
       final id = _libraryId;
       if (!_manual && id == null) {
         throw const FormatException('Select a library');
@@ -889,7 +930,8 @@ class _ChannelEditorState extends State<ChannelEditor> {
           playbackMode: _mode,
           anchor: widget.channel?.anchor ?? DateTime.now().toUtc(),
           shuffleSeed: widget.channel?.shuffleSeed ?? channelId.hashCode,
-          blockSize: _mode == PlaybackMode.block ? 3 : null,
+          blockSize: _editedBlockSize(),
+          builderKey: widget.channel?.builderKey,
         ),
       );
       if (mounted) Navigator.pop(context);

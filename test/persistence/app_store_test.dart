@@ -14,15 +14,24 @@ void main() {
     final store = FileAppStore(directory);
     final channel = Channel(
       id: 'stable-id',
-      number: 7,
-      name: 'Comedy',
-      source: const LibrarySource(
-        libraryId: '1',
-        libraryType: PlexLibraryType.movie,
+      number: 42,
+      name: 'Edited generated channel',
+      source: const MixedSource(
+        interleave: true,
+        sources: [
+          LibrarySource(
+            libraryId: '1',
+            libraryType: PlexLibraryType.movie,
+            includeWatched: false,
+            filters: {'genre': 'Comedy'},
+          ),
+          PlaylistSource('playlist-1'),
+        ],
       ),
-      playbackMode: PlaybackMode.shuffle,
-      anchor: DateTime.utc(2026),
-      shuffleSeed: 4,
+      playbackMode: PlaybackMode.block,
+      anchor: DateTime.utc(2026, 8, 23, 12),
+      shuffleSeed: 8675309,
+      blockSize: 7,
       builderKey: 'builder-key',
     );
     await store.save(
@@ -52,10 +61,9 @@ void main() {
       restored.state.selectedLibraryIdsByProfileServer['profile']?['server'],
       ['1'],
     );
-    expect(
-      restored.state.channelsByProfileServer['profile']?['server']?.single.id,
-      'stable-id',
-    );
+    final restoredChannel =
+        restored.state.channelsByProfileServer['profile']?['server']?.single;
+    expect(restoredChannel?.toJson(), channel.toJson());
     expect(
       restored.state.currentChannelByProfileServer['profile']?['server'],
       'stable-id',
