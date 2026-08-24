@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -16,6 +17,10 @@ import 'package:lineup_desktop/plex/plex_client.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 import 'package:lineup_desktop/ui/app_theme.dart';
 import 'package:lineup_desktop/ui/app_ui.dart';
+
+final _fixtureArtwork = base64Decode(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+);
 
 void main() {
   testWidgets('unsupported macOS backend keeps the Flutter player accessible', (
@@ -74,7 +79,7 @@ void main() {
 
     await tester.sendKeyDownEvent(LogicalKeyboardKey.keyI);
     await tester.sendKeyRepeatEvent(LogicalKeyboardKey.keyI);
-    expect(fixture.player.overlay, PlayerOverlay.osd);
+    expect(fixture.player.overlay, PlayerOverlay.nowPlaying);
 
     await tester.sendKeyDownEvent(LogicalKeyboardKey.f11);
     await tester.sendKeyRepeatEvent(LogicalKeyboardKey.f11);
@@ -340,6 +345,8 @@ void main() {
     expect(fixture.player.overlay, PlayerOverlay.osd);
 
     await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
+    expect(fixture.player.overlay, PlayerOverlay.nowPlaying);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
     expect(fixture.player.overlay, PlayerOverlay.none);
     await tester.sendKeyEvent(LogicalKeyboardKey.numpadEnter);
     expect(fixture.player.overlay, PlayerOverlay.osd);
@@ -430,6 +437,7 @@ void main() {
     await tester.pumpAndSettle();
     fixture.player.showOsd();
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 1));
     await tester.pump(const Duration(milliseconds: 175));
     expect(slides, findsOneWidget);
     expect(
@@ -822,6 +830,373 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     fixture.dispose();
   });
+
+  testWidgets('rich Now Playing renders metadata, artwork, and one surface', (
+    tester,
+  ) async {
+    final fixture = _Fixture(PlayerState.playing, richProgram: true);
+    await tester.binding.setSurfaceSize(const Size(1280, 720));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final semantics = tester.ensureSemantics();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(size: Size(1280, 720)),
+          child: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(fixture.lineup.settings.preferClearLogos, isTrue);
+    fixture.player.showNowPlaying();
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('player-now-playing-surface')), findsOneWidget);
+    expect(
+      tester.getSize(find.byKey(const Key('player-now-playing-surface'))),
+      const Size(1280, 720),
+    );
+    expect(
+      MediaQuery.sizeOf(
+        tester.element(find.byKey(const Key('player-now-playing-surface'))),
+      ),
+      const Size(1280, 720),
+    );
+    expect(fixture.lineup.artworkRequests, hasLength(3));
+    expect(find.byType(Image), findsNWidgets(3));
+    expect(find.byKey(const Key('player-now-playing-logo')), findsOneWidget);
+    expect(find.text('Season 2 • Episode 6'), findsOneWidget);
+    expect(
+      find.text('A synthetic synopsis for deterministic tests.'),
+      findsOneWidget,
+    );
+    expect(find.text('TV-14'), findsOneWidget);
+    expect(
+      find.bySemanticsLabel(
+        RegExp(r'^Now playing\. Channel 7, Channel\..*Program'),
+      ),
+      findsOneWidget,
+    );
+
+    fixture.player.showOsd();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 1));
+    expect(find.bySemanticsLabel(RegExp(r'^Now playing\.')), findsNothing);
+    expect(find.bySemanticsLabel(RegExp('Playback controls')), findsOneWidget);
+
+    semantics.dispose();
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
+  testWidgets('Now Playing input replaces the surface and still executes', (
+    tester,
+  ) async {
+    final fixture = _Fixture(
+      PlayerState.playing,
+      richProgram: true,
+      tracks: const [
+        PlayerTrack(id: 1, type: PlayerTrackType.audio, selected: true),
+      ],
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+    await tester.pump();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
+    expect(fixture.player.overlay, PlayerOverlay.nowPlaying);
+    await tester.sendKeyEvent(LogicalKeyboardKey.space);
+    expect(fixture.native.transportCommands, 1);
+    expect(fixture.player.overlay, PlayerOverlay.osd);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
+    expect(fixture.player.overlay, PlayerOverlay.audioTracks);
+
+    fixture.player.closeOverlay();
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
+    await tester.tapAt(const Offset(5, 5));
+    expect(fixture.player.overlay, PlayerOverlay.osd);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
+  testWidgets('compact layout drops artwork and disabled logos skip fetching', (
+    tester,
+  ) async {
+    final fixture = _Fixture(PlayerState.playing, richProgram: true);
+    await tester.binding.setSurfaceSize(const Size(800, 600));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+    await tester.pump();
+
+    fixture.player.showNowPlaying();
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.byKey(const Key('player-now-playing-title')), findsOneWidget);
+    expect(find.byKey(const Key('player-now-playing-logo')), findsNothing);
+    expect(fixture.lineup.artworkRequests, isEmpty);
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+
+    final disabled = _Fixture(
+      PlayerState.playing,
+      richProgram: true,
+      preferClearLogos: false,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(size: Size(1280, 720)),
+          child: PlayerView(controller: disabled.player, openGuide: () {}),
+        ),
+      ),
+    );
+    await tester.pump();
+    disabled.player.showNowPlaying();
+    await tester.pumpAndSettle();
+
+    expect(disabled.lineup.artworkRequests, hasLength(2));
+    expect(
+      disabled.lineup.artworkRequests,
+      isNot(contains(Uri.parse('test://logo'))),
+    );
+    expect(find.byKey(const Key('player-now-playing-logo')), findsNothing);
+    expect(find.byKey(const Key('player-now-playing-title')), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    disabled.dispose();
+  });
+
+  testWidgets('Guide clock replacement updates the visible current program', (
+    tester,
+  ) async {
+    var now = DateTime.utc(2026, 1, 1, 12);
+    final fixture = _Fixture(
+      PlayerState.playing,
+      shortPrograms: true,
+      guideClock: () => now,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+    await tester.pump();
+    fixture.player.showNowPlaying();
+    await tester.pump();
+    expect(find.text('Program'), findsOneWidget);
+
+    now = now.add(const Duration(hours: 1));
+    fixture.guide.playToNow();
+    await tester.pump();
+
+    expect(fixture.player.overlay, PlayerOverlay.nowPlaying);
+    expect(find.text('Replacement Program'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
+  testWidgets('same program ID with a new path rejects stale artwork', (
+    tester,
+  ) async {
+    final fixture = _Fixture(
+      PlayerState.playing,
+      richProgram: true,
+      blockArtwork: true,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(size: Size(1280, 720)),
+          child: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      ),
+    );
+    await tester.pump();
+    fixture.player.showNowPlaying();
+    await tester.pump();
+    expect(fixture.lineup.artworkRequests, hasLength(3));
+
+    fixture.lineup.replaceArtwork('-replacement');
+    expect(fixture.player.overlay, PlayerOverlay.none);
+    fixture.guide.requestViewport(0, 1);
+    await tester.pump();
+    await tester.pump();
+    fixture.player.showNowPlaying();
+    await tester.pump();
+
+    for (final entry in fixture.lineup.artworkCompletions.entries.where(
+      (entry) => !entry.key.toString().contains('replacement'),
+    )) {
+      entry.value.complete(_fixtureArtwork);
+    }
+    await tester.pump();
+
+    expect(find.byKey(const Key('player-now-playing-logo')), findsNothing);
+    expect(find.byKey(const Key('player-now-playing-title')), findsOneWidget);
+
+    expect(
+      fixture.lineup.artworkRequests.map((path) => path.toString()),
+      containsAll([
+        'test://poster-replacement',
+        'test://backdrop-replacement',
+        'test://logo-replacement',
+      ]),
+    );
+    for (final entry in fixture.lineup.artworkCompletions.entries.where(
+      (entry) => entry.key.toString().contains('replacement'),
+    )) {
+      entry.value.complete(_fixtureArtwork);
+    }
+    await tester.pumpAndSettle();
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
+  testWidgets('content generation retires and refetches Now Playing artwork', (
+    tester,
+  ) async {
+    final fixture = _Fixture(PlayerState.playing, richProgram: true);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(size: Size(1280, 720)),
+          child: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      ),
+    );
+    await tester.pump();
+    fixture.player.showNowPlaying();
+    await tester.pumpAndSettle();
+    expect(fixture.lineup.artworkRequests, hasLength(3));
+
+    fixture.lineup.bumpContentGeneration();
+    await tester.pump();
+    expect(fixture.player.overlay, PlayerOverlay.none);
+    fixture.guide.requestViewport(0, 1);
+    await tester.pump();
+    await tester.pump();
+    fixture.player.showNowPlaying();
+    await tester.pumpAndSettle();
+
+    expect(fixture.lineup.artworkRequests, hasLength(6));
+    expect(find.byKey(const Key('player-now-playing-logo')), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
+  testWidgets(
+    'artwork failure falls back and cached failure is not refetched',
+    (tester) async {
+      final fixture = _Fixture(
+        PlayerState.playing,
+        richProgram: true,
+        failArtwork: true,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MediaQuery(
+            data: const MediaQueryData(size: Size(1280, 720)),
+            child: PlayerView(controller: fixture.player, openGuide: () {}),
+          ),
+        ),
+      );
+      await tester.pump();
+      fixture.player.showNowPlaying();
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('player-now-playing-logo')), findsNothing);
+      expect(find.byKey(const Key('player-now-playing-title')), findsOneWidget);
+      expect(fixture.lineup.artworkRequests, hasLength(3));
+
+      fixture.player.closeOverlay();
+      fixture.player.showNowPlaying();
+      await tester.pumpAndSettle();
+      expect(fixture.lineup.artworkRequests, hasLength(3));
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    },
+  );
+
+  testWidgets('Now Playing reflows from 800x600 through 4K', (tester) async {
+    final fixture = _Fixture(PlayerState.playing, richProgram: true);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+
+    for (final size in const [
+      Size(800, 600),
+      Size(LineupLayout.compact - 1, 700),
+      Size(LineupLayout.compact, 700),
+      Size(1280, 720),
+      Size(1920, 1080),
+      Size(3840, 2160),
+    ]) {
+      tester.view.physicalSize = size;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      );
+      await tester.pump();
+      fixture.player.showNowPlaying();
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.getSize(find.byKey(const Key('player-now-playing-surface'))),
+        size,
+      );
+      expect(tester.takeException(), isNull, reason: '$size');
+    }
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
+  testWidgets('Reduce Motion settles Now Playing in one pump', (tester) async {
+    final fixture = _Fixture(PlayerState.playing, richProgram: true);
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(disableAnimations: true),
+          child: child!,
+        ),
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+    await tester.pump();
+
+    fixture.player.showNowPlaying();
+    await tester.pump();
+
+    final switcher = tester.widget<AnimatedSwitcher>(
+      find.byType(AnimatedSwitcher),
+    );
+    expect(switcher.duration, Duration.zero);
+    expect(tester.hasRunningAnimations, isFalse);
+    expect(find.byKey(const Key('player-now-playing-surface')), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
 }
 
 class _Fixture {
@@ -833,10 +1208,25 @@ class _Fixture {
     List<PlayerTrack> tracks = const [],
     int channelCount = 1,
     Duration? overlayTimeout,
+    bool richProgram = false,
+    bool preferClearLogos = true,
+    bool failArtwork = false,
+    bool blockArtwork = false,
+    bool shortPrograms = false,
+    DateTime Function()? guideClock,
   }) {
-    lineup = _Lineup(channelCount);
+    lineup = _Lineup(
+      channelCount,
+      richProgram: richProgram,
+      preferClearLogos: preferClearLogos,
+      failArtwork: failArtwork,
+      blockArtwork: blockArtwork,
+      shortPrograms: shortPrograms,
+      anchorNow: guideClock?.call(),
+    );
     guide = GuideController(
       lineup: lineup,
+      clock: guideClock,
       loadSchedule: (channel) async => buildSchedule(
         (channel.source as ManualSource).items,
         mode: channel.playbackMode,
@@ -871,14 +1261,21 @@ class _Fixture {
 }
 
 class _Lineup extends LineupController {
-  _Lineup(int channelCount)
-    : super(
-        store: _Store(),
-        credentials: _Credentials(),
-        plex: PlexClient(
-          clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
-        ),
-      ) {
+  _Lineup(
+    int channelCount, {
+    bool richProgram = false,
+    bool preferClearLogos = true,
+    this.failArtwork = false,
+    this.blockArtwork = false,
+    bool shortPrograms = false,
+    DateTime? anchorNow,
+  }) : super(
+         store: _Store(),
+         credentials: _Credentials(),
+         plex: PlexClient(
+           clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+         ),
+       ) {
     channels = List.generate(
       channelCount,
       (index) => Channel(
@@ -886,20 +1283,82 @@ class _Lineup extends LineupController {
         number: 7 + index,
         name: index == 0 ? 'Channel' : 'Channel $index',
         source: ManualSource([
-          ChannelItem(
-            id: index == 0 ? 'program' : 'program-$index',
-            title: index == 0 ? 'Program' : 'Program $index',
-            duration: const Duration(hours: 24),
+          _fixtureItem(
+            index,
+            rich: richProgram,
+            duration: shortPrograms
+                ? const Duration(hours: 1)
+                : const Duration(hours: 24),
           ),
+          if (shortPrograms)
+            _fixtureItem(
+              index,
+              rich: richProgram,
+              suffix: '-next',
+              duration: const Duration(hours: 1),
+            ),
         ]),
         playbackMode: PlaybackMode.sequential,
-        anchor: DateTime.now().subtract(const Duration(hours: 1)),
+        anchor: (anchorNow ?? DateTime.now()).subtract(
+          shortPrograms
+              ? const Duration(minutes: 30)
+              : const Duration(hours: 1),
+        ),
         shuffleSeed: index + 1,
       ),
       growable: false,
     );
     currentChannelId = 'channel';
+    settings = LineupSettings(preferClearLogos: preferClearLogos);
     stage = SetupStage.ready;
+  }
+
+  final artworkRequests = <Uri>[];
+  final bool failArtwork;
+  final bool blockArtwork;
+  final artworkCompletions = <Uri, Completer<Uint8List?>>{};
+  int _contentGeneration = 0;
+
+  @override
+  int get contentGeneration => _contentGeneration;
+
+  @override
+  Future<Uint8List?> artworkForPath(Uri path) async {
+    artworkRequests.add(path);
+    if (failArtwork) return null;
+    if (blockArtwork) {
+      return (artworkCompletions[path] ??= Completer<Uint8List?>()).future;
+    }
+    return _fixtureArtwork;
+  }
+
+  void replaceArtwork(String tag, {bool bumpGeneration = false}) {
+    final channel = channels.first;
+    channels = [
+      Channel(
+        id: channel.id,
+        number: channel.number,
+        name: channel.name,
+        source: ManualSource([
+          _fixtureItem(
+            0,
+            rich: true,
+            artworkTag: tag,
+            duration: const Duration(hours: 24),
+          ),
+        ]),
+        playbackMode: channel.playbackMode,
+        anchor: channel.anchor,
+        shuffleSeed: channel.shuffleSeed,
+      ),
+    ];
+    if (bumpGeneration) _contentGeneration++;
+    notifyListeners();
+  }
+
+  void bumpContentGeneration() {
+    _contentGeneration++;
+    notifyListeners();
   }
 
   @override
@@ -908,6 +1367,32 @@ class _Lineup extends LineupController {
         LineupPlaybackPart(uri: Uri.parse('lineup-test://$itemId')),
       ]);
 }
+
+ChannelItem _fixtureItem(
+  int index, {
+  required bool rich,
+  String suffix = '',
+  String artworkTag = '',
+  required Duration duration,
+}) => ChannelItem(
+  id: '${index == 0 ? 'program' : 'program-$index'}$suffix',
+  title: suffix.isEmpty
+      ? (index == 0 ? 'Program' : 'Program $index')
+      : 'Replacement Program',
+  duration: duration,
+  showTitle: rich ? 'Lineup Stories' : null,
+  poster: rich ? Uri.parse('test://poster$artworkTag') : null,
+  backdrop: rich ? Uri.parse('test://backdrop$artworkTag') : null,
+  clearLogo: rich ? Uri.parse('test://logo$artworkTag') : null,
+  summary: rich ? 'A synthetic synopsis for deterministic tests.' : null,
+  contentRating: rich ? 'TV-14' : null,
+  genres: rich ? const ['Drama', 'Adventure'] : const [],
+  year: rich ? 2026 : null,
+  seasonNumber: rich ? 2 : null,
+  episodeNumber: rich ? 6 : null,
+  resolution: rich ? '1080p' : null,
+  videoCodec: rich ? 'h264' : null,
+);
 
 class _Native implements NativePlayer {
   _Native(

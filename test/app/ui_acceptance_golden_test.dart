@@ -20,6 +20,8 @@ import '../support/ui_fixture.dart';
 const _viewport = Size(1280, 720);
 const _goldenKey = Key('visual-acceptance-boundary');
 final _fixedNow = DateTime.utc(2026, 1, 15, 3, 17);
+final _syntheticArtwork = File('assets/branding/lineup-logo-mark.png')
+    .readAsBytesSync();
 
 void main() {
   setUpAll(_loadPinnedTestFont);
@@ -298,6 +300,35 @@ void main() {
     await _match(tester, 'player-osd-1280x720.png', additionalPumps: 2);
   });
 
+  testWidgets('player Now Playing', (tester) async {
+    final fixture =
+        _readyFixture(
+            playerState: const PlayerStatus(
+              state: PlayerState.playing,
+              message: 'Playing',
+            ),
+          )
+          ..controller.channels = _richPlayerChannels
+          ..controller.settings = const LineupSettings(reduceMotion: true);
+    await _pump(tester, fixture.build());
+    await _openDestination(tester, 'Player');
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
+    await tester.pump();
+
+    expect(find.byKey(const Key('player-now-playing-surface')), findsOneWidget);
+    final context = tester.element(find.byKey(_goldenKey));
+    await tester.runAsync(
+      () => precacheImage(MemoryImage(_syntheticArtwork), context),
+    );
+    await tester.pump();
+    await _match(
+      tester,
+      'player-now-playing-1280x720.png',
+      precacheLogo: true,
+      additionalPumps: 2,
+    );
+  });
+
   testWidgets('Mini Guide', (tester) async {
     final fixture = _readyFixture(
       playerState: const PlayerStatus(
@@ -504,6 +535,9 @@ class _VisualController extends FixtureController {
   Map<String, LibraryScanFact> get libraryScanFacts => scanFacts;
 
   @override
+  Future<Uint8List?> artworkForPath(Uri path) async => _syntheticArtwork;
+
+  @override
   Future<ScheduleIndex> loadScheduleFor(Channel channel) async => buildSchedule(
     (channel.source as ManualSource).items,
     mode: channel.playbackMode,
@@ -562,3 +596,46 @@ final _channels = List.generate(
   ),
   growable: false,
 );
+
+final _richPlayerChannels = [
+  for (final channel in _channels)
+    if (channel.id != 'channel-1')
+      channel
+    else
+      Channel(
+        id: channel.id,
+        number: channel.number,
+        name: channel.name,
+        source: ManualSource([
+          for (var program = 0; program < 8; program++)
+            ChannelItem(
+              id: 'program-1-$program',
+              title: const [
+                'City Stories',
+                'After Midnight',
+                'World in Focus',
+                'The Long Way Home',
+              ][program % 4],
+              showTitle: program.isEven ? 'Lineup Originals' : null,
+              duration: Duration(minutes: 24 + program * 4),
+              poster: Uri.parse('test://poster-$program'),
+              backdrop: Uri.parse('test://backdrop-$program'),
+              clearLogo: Uri.parse('test://logo-$program'),
+              summary: 'A small-town radio host follows a mysterious signal across the night.',
+              contentRating: 'TV-14',
+              genres: const ['Drama', 'Mystery'],
+              year: 2026,
+              seasonNumber: program.isEven ? 1 : null,
+              episodeNumber: program.isEven ? program + 1 : null,
+              resolution: '1080p',
+              videoCodec: 'h264',
+              audioCodec: 'aac',
+              audioChannels: 6,
+              dynamicRange: 'SDR',
+            ),
+        ]),
+        playbackMode: channel.playbackMode,
+        anchor: channel.anchor,
+        shuffleSeed: channel.shuffleSeed,
+      ),
+];
