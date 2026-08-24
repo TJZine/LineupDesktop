@@ -316,6 +316,37 @@ void main() {
     expect(controller.pin, '1345');
   });
 
+  testWidgets('profile badges remain reachable from 800x600 through 4K', (
+    tester,
+  ) async {
+    final controller = FixtureController()
+      ..stage = SetupStage.profiles
+      ..profile = const PlexHomeUser(
+        id: 'profile',
+        name: 'Profile',
+        protected: true,
+        admin: true,
+        restricted: true,
+      )
+      ..profiles = const [
+        PlexHomeUser(
+          id: 'profile',
+          name: 'Profile',
+          protected: true,
+          admin: true,
+          restricted: true,
+        ),
+      ];
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    for (final size in [const Size(800, 600), const Size(3840, 2160)]) {
+      await tester.binding.setSurfaceSize(size);
+      await tester.pumpWidget(UiFixture(controller: controller).build());
+      await tester.pumpAndSettle();
+      expect(find.text('Active'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    }
+  });
+
   testWidgets('Channel Setup remains reachable at the practical minimum', (
     tester,
   ) async {

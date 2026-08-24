@@ -780,6 +780,10 @@ List<PlexHomeUser> _parseHomeUsers(String body) {
           'Plex user',
       protected: _boolean(normalized['protected']),
       thumb: Uri.tryParse(_optionalText(normalized['thumb']) ?? ''),
+      admin: _boolean(normalized['admin'] ?? normalized['isadmin']),
+      restricted: normalized.containsKey('restricted')
+          ? _boolean(normalized['restricted'])
+          : null,
     );
   }
   return users.values.toList();

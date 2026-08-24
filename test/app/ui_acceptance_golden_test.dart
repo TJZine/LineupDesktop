@@ -31,9 +31,20 @@ void main() {
   testWidgets('profile selection', (tester) async {
     final fixture = UiFixture()
       ..controller.stage = SetupStage.profiles
+      ..controller.profile = const PlexHomeUser(
+        id: 'adult',
+        name: 'Alex',
+        protected: false,
+        admin: true,
+      )
       ..controller.profiles = const [
-        PlexHomeUser(id: 'adult', name: 'Alex', protected: false),
-        PlexHomeUser(id: 'child', name: 'Family', protected: true),
+        PlexHomeUser(id: 'adult', name: 'Alex', protected: false, admin: true),
+        PlexHomeUser(
+          id: 'child',
+          name: 'Family',
+          protected: true,
+          restricted: true,
+        ),
       ];
 
     await _pump(tester, fixture.build());

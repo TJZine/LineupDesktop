@@ -303,6 +303,7 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
             for (final user in widget.controller.profiles)
               _ProfileCard(
                 user: user,
+                active: user.id == widget.controller.profile?.id,
                 autofocus: user == widget.controller.profiles.first,
                 onPressed: widget.controller.busy
                     ? null
@@ -536,16 +537,18 @@ class _PinCell extends StatelessWidget {
 class _ProfileCard extends StatelessWidget {
   const _ProfileCard({
     required this.user,
+    required this.active,
     required this.autofocus,
     required this.onPressed,
   });
   final PlexHomeUser user;
+  final bool active;
   final bool autofocus;
   final VoidCallback? onPressed;
   @override
   Widget build(BuildContext context) => SizedBox(
-    width: 178,
-    height: 244,
+    width: 210,
+    height: 280,
     child: LineupSelectionCard(
       selected: false,
       autofocus: autofocus,
@@ -574,16 +577,45 @@ class _ProfileCard extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
             ),
-            if (user.protected)
-              const Padding(
-                padding: EdgeInsets.only(top: 8),
-                child: Chip(
-                  avatar: Icon(Icons.lock, size: 15),
-                  label: Text('PIN'),
+            if (user.protected ||
+                user.admin ||
+                user.restricted == true ||
+                active)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 4,
+                  runSpacing: 4,
+                  children: [
+                    if (user.protected) const _ProfileBadge('PIN'),
+                    if (user.admin) const _ProfileBadge('Admin'),
+                    if (user.restricted == true)
+                      const _ProfileBadge('Restricted'),
+                    if (active) const _ProfileBadge('Active'),
+                  ],
                 ),
               ),
           ],
         ),
+      ),
+    ),
+  );
+}
+
+class _ProfileBadge extends StatelessWidget {
+  const _ProfileBadge(this.label);
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    label: label,
+    child: ExcludeSemantics(
+      child: Chip(
+        visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
+        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        labelPadding: const EdgeInsets.symmetric(horizontal: 4),
+        label: Text(label, style: const TextStyle(fontSize: 11)),
       ),
     ),
   );

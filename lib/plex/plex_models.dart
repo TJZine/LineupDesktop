@@ -22,12 +22,16 @@ class PlexHomeUser {
     required this.name,
     required this.protected,
     this.thumb,
+    this.admin = false,
+    this.restricted,
   });
 
   final String id;
   final String name;
   final bool protected;
   final Uri? thumb;
+  final bool admin;
+  final bool? restricted;
 }
 
 class PlexPin {

@@ -536,6 +536,65 @@ void main() {
     expect(controller.profileSelectionCanceled, isTrue);
   });
 
+  testWidgets('profile cards expose only established role and active badges', (
+    tester,
+  ) async {
+    const active = PlexHomeUser(
+      id: 'active',
+      name: 'Primary',
+      protected: true,
+      admin: true,
+    );
+    const restricted = PlexHomeUser(
+      id: 'restricted',
+      name: 'Kids',
+      protected: false,
+      restricted: true,
+    );
+    const standard = PlexHomeUser(
+      id: 'standard',
+      name: 'Standard',
+      protected: false,
+      restricted: false,
+    );
+    final controller = _FakeController()
+      ..stage = SetupStage.profiles
+      ..profile = active
+      ..profiles = const [standard, active, restricted];
+
+    await tester.pumpWidget(
+      LineupBootstrap(player: _FakePlayer(), controller: controller),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('PIN'), findsOneWidget);
+    expect(find.text('Admin'), findsOneWidget);
+    expect(find.text('Restricted'), findsOneWidget);
+    expect(find.text('Active'), findsOneWidget);
+    expect(find.bySemanticsLabel(RegExp('.*PIN.*')), findsOneWidget);
+    expect(find.bySemanticsLabel(RegExp('.*Admin.*')), findsOneWidget);
+    expect(find.bySemanticsLabel(RegExp('.*Restricted.*')), findsOneWidget);
+    expect(find.bySemanticsLabel(RegExp('.*Active.*')), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    expect(controller.selectedProfile, standard);
+  });
+
+  testWidgets('profile cards show no Active badge without a current profile', (
+    tester,
+  ) async {
+    final controller = _FakeController()
+      ..stage = SetupStage.profiles
+      ..profiles = const [
+        PlexHomeUser(id: 'standard', name: 'Standard', protected: false),
+      ];
+    await tester.pumpWidget(
+      LineupBootstrap(player: _FakePlayer(), controller: controller),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Active'), findsNothing);
+  });
+
   testWidgets('onboarding rebuilds without a listening parent', (tester) async {
     final controller = _FakeController()
       ..stage = SetupStage.linking

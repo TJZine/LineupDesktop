@@ -1038,6 +1038,66 @@ void main() {
     },
   );
 
+  test('Plex Home JSON preserves explicit role facts', () async {
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      httpClient: MockClient(
+        (_) async => http.Response(
+          jsonEncode({
+            'User': [
+              {
+                'id': 'admin',
+                'title': 'Admin profile',
+                'ADMIN': 'yes',
+                'restricted': false,
+              },
+              {
+                'id': 'restricted',
+                'title': 'Restricted profile',
+                'IsAdMiN': 0,
+                'ReStRiCtEd': 'true',
+              },
+              {'id': 'standard', 'title': 'Standard profile'},
+            ],
+          }),
+          200,
+        ),
+      ),
+    );
+
+    final users = await client.homeUsers('account-secret');
+    expect(users[0].admin, isTrue);
+    expect(users[0].restricted, isFalse);
+    expect(users[1].admin, isFalse);
+    expect(users[1].restricted, isTrue);
+    expect(users[2].admin, isFalse);
+    expect(users[2].restricted, isNull);
+  });
+
+  test('Plex Home XML preserves explicit role facts', () async {
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      httpClient: MockClient(
+        (_) async => http.Response(
+          '<MediaContainer>'
+          '<User id="admin" title="Admin profile" admin="1" restricted="false"/>'
+          '<User id="restricted" title="Restricted profile" isAdmin="false" restricted="yes"/>'
+          '<User id="standard" title="Standard profile"/>'
+          '</MediaContainer>',
+          200,
+        ),
+      ),
+    );
+
+    final users = await client.homeUsers('account-secret');
+    expect(users[0].admin, isTrue);
+    expect(users[0].restricted, isFalse);
+    expect(users[1].admin, isFalse);
+    expect(users[1].restricted, isTrue);
+    expect(users[2].admin, isFalse);
+    expect(users[2].restricted, isNull);
+  });
+
   test('Plex Home v2 server failure falls back to legacy', () async {
     final paths = <String>[];
     final client = PlexClient(
