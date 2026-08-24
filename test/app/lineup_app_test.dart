@@ -453,6 +453,64 @@ void main() {
     expect(controller.linkingCanceled, isTrue);
   });
 
+  testWidgets(
+    'terminal linking failure is live, focused, and keyboard retryable',
+    (tester) async {
+      final controller = _FakeController()
+        ..stage = SetupStage.linking
+        ..activePin = PlexPin(
+          id: 1,
+          code: 'ABCD',
+          expiresAt: DateTime.now().add(const Duration(minutes: 2)),
+        );
+      await tester.pumpWidget(
+        LineupBootstrap(player: _FakePlayer(), controller: controller),
+      );
+      await tester.pumpAndSettle();
+
+      controller.stopLinking();
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('Waiting for sign-in…'), findsNothing);
+      expect(find.bySemanticsLabel('Plex sign-in stopped'), findsOneWidget);
+      expect(
+        tester.getSemantics(find.text('Synthetic safe Plex failure.')),
+        matchesSemantics(
+          label: 'Synthetic safe Plex failure.',
+          isLiveRegion: true,
+        ),
+      );
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        'Retry secure cancellation',
+      );
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.select);
+      expect(controller.linkingRequested, isTrue);
+    },
+  );
+
+  testWidgets('terminal linking failure fits compact onboarding', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(640, 560);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final controller = _FakeController()
+      ..stage = SetupStage.linking
+      ..error = 'Synthetic safe Plex failure.';
+
+    await tester.pumpWidget(
+      LineupBootstrap(player: _FakePlayer(), controller: controller),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Request a new code'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('busy profile selection moves focus to its enabled cancel', (
     tester,
   ) async {
@@ -780,6 +838,13 @@ class _FakeController extends LineupController {
 
   void requireSecureCancellation() {
     secureCancellationRequired = true;
+    error = 'Synthetic secure credential storage failure.';
+    notifyListeners();
+  }
+
+  void stopLinking() {
+    activePin = null;
+    error = 'Synthetic safe Plex failure.';
     notifyListeners();
   }
 

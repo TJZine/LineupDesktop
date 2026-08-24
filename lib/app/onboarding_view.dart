@@ -29,13 +29,13 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
   Timer? _clock;
   final _linkActionFocus = FocusNode(debugLabel: 'Retry secure cancellation');
   final _profileCancelFocus = FocusNode(debugLabel: 'Cancel profile selection');
-  late bool _secureCancellationRequired;
+  late bool _linkingStopped;
   late bool _busy;
 
   @override
   void initState() {
     super.initState();
-    _secureCancellationRequired = widget.controller.secureCancellationRequired;
+    _linkingStopped = _isLinkingStopped(widget.controller);
     _busy = widget.controller.busy;
     widget.controller.addListener(_controllerChanged);
     _clock = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -50,7 +50,7 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.controller == widget.controller) return;
     oldWidget.controller.removeListener(_controllerChanged);
-    _secureCancellationRequired = widget.controller.secureCancellationRequired;
+    _linkingStopped = _isLinkingStopped(widget.controller);
     _busy = widget.controller.busy;
     widget.controller.addListener(_controllerChanged);
   }
@@ -58,18 +58,16 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
   void _controllerChanged() {
     if (!mounted) return;
     final controller = widget.controller;
-    final nextSecureCancellationRequired =
-        controller.secureCancellationRequired;
     final nextBusy = controller.busy;
-    final retryNeedsFocus =
-        !_secureCancellationRequired && nextSecureCancellationRequired;
+    final nextLinkingStopped = _isLinkingStopped(controller);
+    final retryNeedsFocus = !_linkingStopped && nextLinkingStopped;
     final cancelNeedsFocus =
         !_busy &&
         nextBusy &&
         controller.stage == SetupStage.profiles &&
         controller.profileSelectionCanCancel;
     setState(() {
-      _secureCancellationRequired = nextSecureCancellationRequired;
+      _linkingStopped = nextLinkingStopped;
       _busy = nextBusy;
     });
     final target = retryNeedsFocus
@@ -83,6 +81,11 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
       });
     }
   }
+
+  static bool _isLinkingStopped(LineupController controller) =>
+      controller.stage == SetupStage.linking &&
+      controller.error != null &&
+      (controller.activePin == null || controller.secureCancellationRequired);
 
   @override
   void dispose() {
@@ -170,6 +173,7 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
 
   Widget _linking() {
     final pin = widget.controller.activePin;
+    final stopped = _isLinkingStopped(widget.controller);
     final remaining = pin == null
         ? Duration.zero
         : pin.expiresAt.difference(DateTime.now());
@@ -179,65 +183,75 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
     final code = (pin?.code ?? '----').padRight(4, '-').substring(0, 4);
     return _HeroContent(
       title: 'Sign in to Plex',
-      subtitle: 'Scan the QR code or visit plex.tv/link',
+      subtitle: stopped
+          ? 'Sign-in stopped. Request a new code to try again.'
+          : 'Scan the QR code or visit plex.tv/link',
       child: Column(
         children: [
           const SizedBox(height: 16),
-          Wrap(
-            alignment: WrapAlignment.center,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 42,
-            runSpacing: 28,
-            children: [
-              if (pin != null)
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: QrImageView(
-                    data: 'https://plex.tv/link',
-                    size: 190,
-                    padding: EdgeInsets.zero,
-                    semanticsLabel: 'QR code for plex.tv/link',
-                  ),
-                ),
-              Column(
-                children: [
-                  Semantics(
-                    liveRegion: true,
-                    label: 'Plex link code ${code.split('').join(' ')}',
-                    excludeSemantics: true,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        for (final character in code.characters)
-                          _PinCell(character),
-                      ],
+          if (!stopped)
+            Wrap(
+              alignment: WrapAlignment.center,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 42,
+              runSpacing: 28,
+              children: [
+                if (pin != null)
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: QrImageView(
+                      data: 'https://plex.tv/link',
+                      size: 190,
+                      padding: EdgeInsets.zero,
+                      semanticsLabel: 'QR code for plex.tv/link',
                     ),
                   ),
-                  const SizedBox(height: 18),
-                  Text(
-                    pin == null ? 'Requesting PIN…' : 'Waiting for sign-in…',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  if (pin != null) ...[
-                    const SizedBox(height: 10),
-                    Chip(
-                      avatar: const Icon(Icons.schedule, size: 18),
-                      label: Text(
-                        'Expires in $time',
-                        style: const TextStyle(
-                          fontFeatures: [FontFeature.tabularFigures()],
-                        ),
+                Column(
+                  children: [
+                    Semantics(
+                      liveRegion: true,
+                      label: 'Plex link code ${code.split('').join(' ')}',
+                      excludeSemantics: true,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          for (final character in code.characters)
+                            _PinCell(character),
+                        ],
                       ),
                     ),
+                    const SizedBox(height: 18),
+                    Text(
+                      pin == null ? 'Requesting PIN…' : 'Waiting for sign-in…',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    if (pin != null) ...[
+                      const SizedBox(height: 10),
+                      Chip(
+                        avatar: const Icon(Icons.schedule, size: 18),
+                        label: Text(
+                          'Expires in $time',
+                          style: const TextStyle(
+                            fontFeatures: [FontFeature.tabularFigures()],
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
-                ],
-              ),
-            ],
-          ),
+                ),
+              ],
+            ),
+          if (stopped)
+            Icon(
+              Icons.link_off,
+              size: 72,
+              color: Theme.of(context).colorScheme.error,
+              semanticLabel: 'Plex sign-in stopped',
+            ),
           const SizedBox(height: 28),
           Wrap(
             spacing: 12,
@@ -255,6 +269,8 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
                 child: Text(
                   widget.controller.secureCancellationRequired
                       ? 'Retry secure cancellation'
+                      : stopped
+                      ? 'Request a new code'
                       : pin == null
                       ? 'Request PIN'
                       : 'Request a new code',

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -27,6 +28,34 @@ void main() {
       ),
     );
   });
+
+  for (final failure in <Object>[
+    const SocketException('opaque socket detail'),
+    http.ClientException('opaque client detail'),
+  ]) {
+    test('${failure.runtimeType} maps to a finite transport code', () async {
+      final client = PlexClient(
+        clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+        httpClient: MockClient((_) async => throw failure),
+      );
+      await expectLater(
+        client.createPin(),
+        throwsA(
+          isA<PlexException>()
+              .having(
+                (exception) => exception.code,
+                'code',
+                'network-unavailable',
+              )
+              .having(
+                (exception) => exception.message,
+                'message',
+                isNot(contains('opaque')),
+              ),
+        ),
+      );
+    });
+  }
 
   test('PIN requests send stable identity without a credential', () async {
     late http.Request request;
@@ -1008,6 +1037,97 @@ void main() {
       ]);
     },
   );
+
+  test('Plex Home v2 server failure falls back to legacy', () async {
+    final paths = <String>[];
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      httpClient: MockClient((request) async {
+        paths.add(request.url.path);
+        return request.url.path.contains('/v2/')
+            ? http.Response('', 503)
+            : http.Response(
+                '<MediaContainer><User id="7" title="Home" protected="0"/></MediaContainer>',
+                200,
+              );
+      }),
+    );
+
+    expect((await client.homeUsers('account-secret')).single.id, '7');
+    expect(paths, ['/api/v2/home/users', '/api/home/users']);
+  });
+
+  test('Plex Home legacy server failure is terminal', () async {
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      httpClient: MockClient(
+        (request) async => request.url.path.contains('/v2/')
+            ? http.Response('', 404)
+            : http.Response('', 503),
+      ),
+    );
+
+    await expectLater(
+      client.homeUsers('account-secret'),
+      throwsA(
+        isA<PlexException>().having(
+          (exception) => exception.code,
+          'code',
+          'server-unreachable',
+        ),
+      ),
+    );
+  });
+
+  for (final status in [404, 405]) {
+    test('missing legacy Plex Home inventory is empty', () async {
+      final client = PlexClient(
+        clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+        httpClient: MockClient((_) async => http.Response('', status)),
+      );
+
+      expect(await client.homeUsers('account-secret'), isEmpty);
+    });
+  }
+
+  for (final payload in ['{"users":', '<MediaContainer>']) {
+    test('malformed successful Plex Home payload is a parse error', () async {
+      final client = PlexClient(
+        clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+        httpClient: MockClient((_) async => http.Response(payload, 200)),
+      );
+
+      await expectLater(
+        client.homeUsers('account-secret'),
+        throwsA(
+          isA<PlexException>().having(
+            (exception) => exception.code,
+            'code',
+            'parse-error',
+          ),
+        ),
+      );
+    });
+  }
+
+  for (final payload in [
+    jsonEncode({'users': []}),
+    '<MediaContainer/>',
+  ]) {
+    test('valid empty Plex Home inventory remains empty', () async {
+      var calls = 0;
+      final client = PlexClient(
+        clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+        httpClient: MockClient((_) async {
+          calls++;
+          return http.Response(payload, 200);
+        }),
+      );
+
+      expect(await client.homeUsers('account-secret'), isEmpty);
+      expect(calls, 2);
+    });
+  }
 }
 
 List<PlexPlaybackPartDescriptor> _directPlaybackDescriptor(String partPath) =>

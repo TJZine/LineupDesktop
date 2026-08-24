@@ -1301,38 +1301,173 @@ void main() {
     poll.complete(null);
   });
 
-  test('PIN polling diagnostics retain only the Plex failure code', () async {
+  test(
+    'PIN polling failure stops safely without scheduling another poll',
+    () async {
+      final plex = _FakePlex()
+        ..pinResult = PlexPin(
+          id: 6,
+          code: 'EFGH',
+          expiresAt: DateTime.now().add(const Duration(minutes: 1)),
+        )
+        ..pollHandler = (_) async =>
+            throw const PlexException('poll-failed', 'opaque-secret-sentinel');
+      final controller = LineupController(
+        store: _MemoryStore(),
+        credentials: _MemoryCredentials(),
+        plex: plex,
+        pinPollInterval: const Duration(milliseconds: 1),
+      )..diagnostics.enabled = true;
+      addTearDown(controller.dispose);
+
+      await controller.startLinking();
+      while (controller.activePin != null) {
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      expect(plex.pollCalls, 1);
+      expect(plex.cancelPinCalls, 1);
+      expect(controller.error, contains('could not complete Plex sign-in'));
+      expect(controller.error, isNot(contains('opaque-secret-sentinel')));
+      expect(controller.diagnostics.entries.single.message, 'PIN poll failed');
+      expect(controller.diagnostics.entries.single.context, {
+        'code': 'unexpected',
+      });
+      expect(
+        '${controller.diagnostics.entries.single.message}'
+        '${controller.diagnostics.entries.single.context}',
+        isNot(contains('opaque-secret-sentinel')),
+      );
+
+      await controller.startLinking();
+      expect(plex.createPinCalls, 2);
+      expect(controller.activePin, isNotNull);
+    },
+  );
+
+  for (final failurePoint in ['account', 'home']) {
+    test(
+      '$failurePoint failure retires the current PIN before credential write',
+      () async {
+        final plex = _FakePlex()
+          ..pinResult = PlexPin(
+            id: 61,
+            code: 'SAFE',
+            expiresAt: DateTime.now().add(const Duration(minutes: 1)),
+          )
+          ..pollHandler = (_) async => 'cloud-token-sentinel';
+        if (failurePoint == 'account') {
+          plex.accountHandler = (_) async => throw const PlexException(
+            'auth-invalid',
+            'opaque-secret-sentinel',
+          );
+        } else {
+          plex.homeUsersHandler = (_) async => throw const PlexException(
+            'parse-error',
+            'opaque-secret-sentinel',
+          );
+        }
+        final credentials = _MemoryCredentials();
+        final controller = LineupController(
+          store: _MemoryStore(),
+          credentials: credentials,
+          plex: plex,
+          pinPollInterval: const Duration(milliseconds: 1),
+        );
+        addTearDown(controller.dispose);
+
+        await controller.startLinking();
+        while (controller.activePin != null) {
+          await Future<void>.delayed(const Duration(milliseconds: 1));
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+
+        expect(plex.pollCalls, 1);
+        expect(plex.cancelPinCalls, 1);
+        expect(credentials.accountToken, isNull);
+        expect(controller.account, isNull);
+        expect(controller.profiles, isEmpty);
+        expect(controller.error, isNot(contains('opaque-secret-sentinel')));
+      },
+    );
+  }
+
+  test('a stale PIN failure cannot replace cancellation state', () async {
+    final poll = Completer<String?>();
     final plex = _FakePlex()
       ..pinResult = PlexPin(
-        id: 6,
-        code: 'EFGH',
+        id: 62,
+        code: 'SAFE',
         expiresAt: DateTime.now().add(const Duration(minutes: 1)),
       )
-      ..pollHandler = (_) async =>
-          throw const PlexException('poll-failed', 'opaque-secret-sentinel');
+      ..pollHandler = (_) => poll.future;
     final controller = LineupController(
       store: _MemoryStore(),
       credentials: _MemoryCredentials(),
       plex: plex,
       pinPollInterval: const Duration(milliseconds: 1),
-    )..diagnostics.enabled = true;
+    );
     addTearDown(controller.dispose);
 
     await controller.startLinking();
-    while (controller.diagnostics.entries.isEmpty) {
+    while (plex.pollCalls == 0) {
       await Future<void>.delayed(const Duration(milliseconds: 1));
     }
     await controller.cancelLinking();
+    poll.completeError(const PlexException('auth-invalid', 'old failure'));
+    await Future<void>.delayed(Duration.zero);
 
-    for (final entry in controller.diagnostics.entries) {
-      expect(entry.message, 'PIN poll failed');
-      expect(entry.context, {'code': 'poll-failed'});
-      expect(
-        '${entry.message}${entry.context}',
-        isNot(contains('opaque-secret-sentinel')),
-      );
-    }
+    expect(controller.stage, SetupStage.welcome);
+    expect(controller.error, isNull);
   });
+
+  test(
+    'ambiguous credential write requires queued cleanup before a new PIN',
+    () async {
+      final credentials = _AmbiguousWriteCredentials();
+      final plex = _FakePlex()
+        ..pinResult = PlexPin(
+          id: 63,
+          code: 'SAFE',
+          expiresAt: DateTime.now().add(const Duration(minutes: 1)),
+        )
+        ..homeUsersResult = const [
+          PlexHomeUser(id: 'owner', name: 'Owner', protected: false),
+        ]
+        ..pollHandler = (_) async => 'cloud-token-sentinel';
+      final controller = LineupController(
+        store: _MemoryStore(),
+        credentials: credentials,
+        plex: plex,
+        pinPollInterval: const Duration(milliseconds: 1),
+      );
+      addTearDown(controller.dispose);
+
+      await controller.startLinking();
+      while (!controller.secureCancellationRequired) {
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      }
+
+      expect(controller.activePin?.id, 63);
+      expect(controller.account, isNull);
+      expect(controller.profiles, isEmpty);
+      expect(controller.error, contains('secure credential storage'));
+      expect(credentials.accountToken, 'cloud-token-sentinel');
+
+      final retry = controller.startLinking();
+      await credentials.clearStarted.future;
+      expect(plex.createPinCalls, 1);
+      credentials.finishClear.complete();
+      await retry;
+      expect(plex.createPinCalls, 1);
+      expect(controller.stage, SetupStage.welcome);
+      expect(credentials.accountToken, isNull);
+
+      await controller.startLinking();
+      expect(plex.createPinCalls, 2);
+    },
+  );
 
   test(
     'failed settings persistence does not leak into the next save',
@@ -1911,8 +2046,8 @@ void main() {
         'PIN cancellation failed',
       ]);
       expect(controller.diagnostics.entries.map((entry) => entry.context), [
+        {'code': 'credential-cleanup-failed'},
         {'code': 'unexpected'},
-        {'code': 'cancel-failed'},
       ]);
       expect(
         controller.diagnostics.entries
@@ -2383,6 +2518,24 @@ class _MemoryCredentials implements CredentialStore {
       profileTokens[profileId] = token;
 }
 
+class _AmbiguousWriteCredentials extends _MemoryCredentials {
+  final clearStarted = Completer<void>();
+  final finishClear = Completer<void>();
+
+  @override
+  Future<void> writeAccountToken(String token) async {
+    accountToken = token;
+    throw StateError('opaque-secret-sentinel');
+  }
+
+  @override
+  Future<void> clear() async {
+    clearStarted.complete();
+    await finishClear.future;
+    await super.clear();
+  }
+}
+
 class _BlockingCredentials extends _MemoryCredentials {
   _BlockingCredentials() : super();
 
@@ -2549,6 +2702,7 @@ class _FakePlex extends PlexClient {
   List<PlexHomeUser> homeUsersResult = const [];
   PlexPin? pinResult;
   Future<PlexAccount> Function(String)? accountHandler;
+  Future<List<PlexHomeUser>> Function(String)? homeUsersHandler;
   Future<String?> Function(PlexPin)? pollHandler;
   Future<List<PlexMediaItem>> Function(Uri, String, String, PlexLibraryType)?
   libraryItemsHandler;
@@ -2580,6 +2734,7 @@ class _FakePlex extends PlexClient {
   Future<String> Function(String, String, String?)? switchHomeUserHandler;
   List<PlexLibrary> librariesResult = const [];
   int pollCalls = 0;
+  int createPinCalls = 0;
   int cancelPinCalls = 0;
   Object? cancelPinFailure;
   int librariesCalls = 0;
@@ -2596,7 +2751,7 @@ class _FakePlex extends PlexClient {
   @override
   Future<List<PlexHomeUser>> homeUsers(String accountToken) async {
     homeUsersTokens.add(accountToken);
-    return homeUsersResult;
+    return homeUsersHandler?.call(accountToken) ?? homeUsersResult;
   }
 
   @override
@@ -2640,7 +2795,10 @@ class _FakePlex extends PlexClient {
   }
 
   @override
-  Future<PlexPin> createPin() async => pinResult!;
+  Future<PlexPin> createPin() async {
+    createPinCalls++;
+    return pinResult!;
+  }
 
   @override
   Future<String?> pollPin(PlexPin pin) {

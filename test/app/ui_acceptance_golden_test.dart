@@ -40,6 +40,17 @@ void main() {
     await _match(tester, 'profiles-1280x720.png');
   });
 
+  testWidgets('terminal Plex linking failure', (tester) async {
+    final fixture = UiFixture()
+      ..controller.stage = SetupStage.linking
+      ..controller.error =
+          'Lineup could not connect to Plex. Check your connection and request a new code.';
+
+    await _pump(tester, fixture.build());
+    expect(find.text('Waiting for sign-in…'), findsNothing);
+    await _match(tester, 'auth-link-failure-1280x720.png');
+  });
+
   testWidgets('Channel Setup review', (tester) async {
     final controller = _VisualController()
       ..stage = SetupStage.channelSetup

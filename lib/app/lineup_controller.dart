@@ -219,7 +219,13 @@ class LineupController extends ChangeNotifier {
     _pinTimer?.cancel();
     await _run(
       () async {
-        final pin = await plex.createPin();
+        late final PlexPin pin;
+        try {
+          pin = await plex.createPin();
+        } catch (exception) {
+          final code = _linkFailureCode(exception);
+          throw PlexException(code, _linkFailureMessage(code));
+        }
         if (operation != _epoch) return;
         activePin = pin;
         stage = SetupStage.linking;
@@ -245,7 +251,7 @@ class LineupController extends ChangeNotifier {
     } catch (exception) {
       cleanupFailure = exception;
       diagnostics.add('application', 'Credential cleanup failed', {
-        'code': exception is PlexException ? exception.code : 'unexpected',
+        'code': 'credential-cleanup-failed',
       });
     }
     if (pin != null) {
@@ -253,7 +259,7 @@ class LineupController extends ChangeNotifier {
         await plex.cancelPin(pin);
       } catch (exception) {
         diagnostics.add('plex-auth', 'PIN cancellation failed', {
-          'code': exception is PlexException ? exception.code : 'unexpected',
+          'code': _linkFailureCode(exception),
         });
       }
     }
@@ -276,7 +282,9 @@ class LineupController extends ChangeNotifier {
     _pinTimer?.cancel();
     _pinTimer = Timer(pinPollInterval, () async {
       await _pollPin(operation, pin);
-      if (operation == _epoch && activePin?.id == pin.id) {
+      if (operation == _epoch &&
+          activePin?.id == pin.id &&
+          !secureCancellationRequired) {
         _schedulePinPoll(operation, pin);
       }
     });
@@ -297,16 +305,28 @@ class LineupController extends ChangeNotifier {
       _pinTimer?.cancel();
       final validated = await plex.account(token);
       if (operation != _epoch) return;
-      if (!await _writeCredential(
-        operation,
-        () => credentials.writeAccountToken(token),
-      )) {
+      final homeUsers = await plex.homeUsers(token);
+      if (operation != _epoch) return;
+      try {
+        if (!await _writeCredential(
+          operation,
+          () => credentials.writeAccountToken(token),
+        )) {
+          return;
+        }
+      } catch (_) {
+        if (operation != _epoch) return;
+        secureCancellationRequired = true;
+        error = 'Lineup could not confirm secure credential storage. Retry secure cancellation before signing in again.';
+        diagnostics.add('plex-auth', 'Credential write failed', {
+          'code': 'credential-write-failed',
+        });
+        notifyListeners();
         return;
       }
       account = validated;
       _accountToken = token;
-      profiles = await plex.homeUsers(token);
-      if (operation != _epoch) return;
+      profiles = homeUsers;
       activePin = null;
       if (profiles.length > 1) {
         stage = SetupStage.profiles;
@@ -318,11 +338,53 @@ class LineupController extends ChangeNotifier {
       }
       notifyListeners();
     } catch (exception) {
-      diagnostics.add('plex-auth', 'PIN poll failed', {
-        'code': exception is PlexException ? exception.code : 'unexpected',
-      });
+      if (operation != _epoch) return;
+      _pinTimer?.cancel();
+      activePin = null;
+      final code = _linkFailureCode(exception);
+      error = _linkFailureMessage(code);
+      diagnostics.add('plex-auth', 'PIN poll failed', {'code': code});
+      notifyListeners();
+      try {
+        await plex.cancelPin(pin);
+      } catch (cancelException) {
+        if (operation != _epoch) return;
+        diagnostics.add('plex-auth', 'PIN cancellation failed', {
+          'code': _linkFailureCode(cancelException),
+        });
+      }
     }
   }
+
+  static String _linkFailureCode(Object exception) {
+    final code = exception is PlexException ? exception.code : 'unexpected';
+    if (code == 'network-timeout') return 'network-timeout';
+    if (const {
+      'network-unavailable',
+      'server-unreachable',
+      'offline',
+    }.contains(code)) {
+      return 'network-unavailable';
+    }
+    if (code == 'rate-limited') return 'rate-limited';
+    if (const {'auth-invalid', 'access-denied'}.contains(code)) {
+      return 'auth-denied';
+    }
+    if (const {'parse-error', 'resource-not-found'}.contains(code)) {
+      return 'response-unavailable';
+    }
+    return 'unexpected';
+  }
+
+  static String _linkFailureMessage(String code) => switch (code) {
+    'network-timeout' => 'Plex did not respond in time. Check your connection and request a new code.',
+    'network-unavailable' => 'Lineup could not connect to Plex. Check your connection and request a new code.',
+    'rate-limited' => 'Plex is receiving too many requests. Wait a moment, then request a new code.',
+    'auth-denied' =>
+      'Plex did not accept this sign-in. Request a new code and try again.',
+    'response-unavailable' => 'Plex returned an unavailable or malformed response. Request a new code and try again.',
+    _ => 'Lineup could not complete Plex sign-in. Request a new code and try again.',
+  };
 
   Future<void> selectProfile(PlexHomeUser selected, {String? pin}) async {
     final operation = ++_epoch;
