@@ -631,25 +631,77 @@ class _ServerCard extends StatelessWidget {
   final PlexConnection? connection;
   final VoidCallback? onPressed;
   @override
-  Widget build(BuildContext context) => Card(
-    child: ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
-      leading: const Icon(Icons.dns_outlined, size: 34),
-      title: Text(
-        server.name,
-        style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w700),
+  Widget build(BuildContext context) {
+    final availableTypes = server.connections.map(plexConnectionType).toSet();
+    final availability = [
+      for (final type in const ['Direct local', 'Direct remote', 'Relay'])
+        if (availableTypes.contains(type)) '$type available',
+    ];
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 16),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Padding(
+              padding: EdgeInsets.only(top: 2),
+              child: Icon(Icons.dns_outlined, size: 34),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    server.name,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 19,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(server.owned ? 'Owned server' : 'Shared server'),
+                  if (availability.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 6,
+                      children: [
+                        for (final label in availability)
+                          Chip(
+                            visualDensity: const VisualDensity(
+                              horizontal: -4,
+                              vertical: -4,
+                            ),
+                            materialTapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
+                            label: Text(label),
+                          ),
+                      ],
+                    ),
+                  ],
+                  if (connection != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      'Selected connection: ${plexConnectionDescription(connection!)}',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            FilledButton(
+              onPressed: onPressed,
+              child: Text(connection == null ? 'Connect' : 'Reconnect'),
+            ),
+          ],
+        ),
       ),
-      subtitle: Text(
-        connection == null
-            ? '${server.owned ? 'Owned server' : 'Shared server'} • ${server.connections.length} secure connection${server.connections.length == 1 ? '' : 's'}'
-            : '${server.owned ? 'Owned server' : 'Shared server'} • ${plexConnectionDescription(connection!)}',
-      ),
-      trailing: FilledButton(
-        onPressed: onPressed,
-        child: Text(connection == null ? 'Connect' : 'Reconnect'),
-      ),
-    ),
-  );
+    );
+  }
 }
 
 class _ProfilePinDialog extends StatefulWidget {

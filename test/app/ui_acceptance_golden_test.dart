@@ -62,6 +62,57 @@ void main() {
     await _match(tester, 'auth-link-failure-1280x720.png');
   });
 
+  testWidgets('server selection', (tester) async {
+    final selected = PlexServer(
+      id: 'studio',
+      name: 'Studio Server',
+      owned: true,
+      connections: [
+        PlexConnection(
+          uri: Uri.parse('https://local.synthetic.invalid'),
+          local: true,
+          relay: false,
+        ),
+        PlexConnection(
+          uri: Uri.parse('https://remote.synthetic.invalid'),
+          local: false,
+          relay: false,
+        ),
+        PlexConnection(
+          uri: Uri.parse('https://relay.synthetic.invalid'),
+          local: false,
+          relay: true,
+        ),
+      ],
+    );
+    final fixture = UiFixture()
+      ..controller.stage = SetupStage.servers
+      ..controller.server = selected
+      ..controller.connection = PlexConnection(
+        uri: Uri.parse('https://selected.synthetic.invalid'),
+        local: true,
+        relay: false,
+        latency: const Duration(milliseconds: 126),
+      )
+      ..controller.servers = [
+        selected,
+        PlexServer(
+          id: 'shared',
+          name: 'Family Server',
+          connections: [
+            PlexConnection(
+              uri: Uri.parse('https://shared.synthetic.invalid'),
+              local: false,
+              relay: false,
+            ),
+          ],
+        ),
+      ];
+
+    await _pump(tester, fixture.build());
+    await _match(tester, 'server-selection-1280x720.png');
+  });
+
   testWidgets('Channel Setup review', (tester) async {
     final controller = _VisualController()
       ..stage = SetupStage.channelSetup

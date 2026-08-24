@@ -75,14 +75,29 @@ class PlexConnection {
 }
 
 String plexConnectionDescription(PlexConnection connection) {
-  final type = connection.relay
-      ? 'Plex Relay'
-      : connection.local
-      ? 'Direct local'
-      : 'Direct remote';
+  final type = plexConnectionType(connection);
   final latency = connection.latency;
-  return '$type${latency == null ? '' : ' • ${latency.inMilliseconds} ms measured'}';
+  final milliseconds = latency?.inMilliseconds;
+  final warning = milliseconds == null
+      ? null
+      : milliseconds >= 500
+      ? 'Very slow'
+      : milliseconds >= 100
+      ? 'Slow'
+      : null;
+  return [
+    type,
+    if (connection.relay) 'Limited',
+    if (milliseconds != null) '$milliseconds ms measured',
+    ?warning,
+  ].join(' • ');
 }
+
+String plexConnectionType(PlexConnection connection) => connection.relay
+    ? 'Relay'
+    : connection.local
+    ? 'Direct local'
+    : 'Direct remote';
 
 class PlexLibrary {
   const PlexLibrary({

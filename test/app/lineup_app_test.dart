@@ -677,6 +677,93 @@ void main() {
     expect(find.bySemanticsLabel('Plex link code W X Y Z'), findsOneWidget);
   });
 
+  testWidgets('server cards separate availability from selected facts', (
+    tester,
+  ) async {
+    final selected = PlexServer(
+      id: 'selected',
+      name: 'Studio',
+      owned: true,
+      connections: [
+        PlexConnection(
+          uri: Uri.parse('https://local.synthetic.invalid:32400'),
+          local: true,
+          relay: false,
+        ),
+        PlexConnection(
+          uri: Uri.parse('https://remote.synthetic.invalid:32400'),
+          local: false,
+          relay: false,
+        ),
+        PlexConnection(
+          uri: Uri.parse('https://relay.synthetic.invalid:32400'),
+          local: true,
+          relay: true,
+        ),
+      ],
+    );
+    final shared = PlexServer(
+      id: 'shared',
+      name: 'Shared',
+      connections: [
+        PlexConnection(
+          uri: Uri.parse('https://shared.synthetic.invalid:32400'),
+          local: false,
+          relay: false,
+        ),
+      ],
+    );
+    final controller = _FakeController()
+      ..stage = SetupStage.servers
+      ..servers = [selected, shared]
+      ..server = selected
+      ..connection = PlexConnection(
+        uri: Uri.parse('https://selected.synthetic.invalid:32400'),
+        local: false,
+        relay: false,
+        latency: const Duration(milliseconds: 500),
+      )
+      ..error = 'Lineup could not reach that Plex server. Try again.';
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: UpstreamOnboardingView(
+          controller: controller,
+          onLogout: () async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Owned server'), findsOneWidget);
+    expect(find.text('Shared server'), findsOneWidget);
+    expect(find.text('Direct local available'), findsOneWidget);
+    expect(find.text('Direct remote available'), findsNWidgets(2));
+    expect(find.text('Relay available'), findsOneWidget);
+    expect(
+      find.text(
+        'Selected connection: Direct remote • 500 ms measured • Very slow',
+      ),
+      findsOneWidget,
+    );
+    expect(find.textContaining('Selected connection:'), findsOneWidget);
+    expect(
+      find.text('Lineup could not reach that Plex server. Try again.'),
+      findsOneWidget,
+    );
+    for (final endpoint in [
+      'local.synthetic.invalid',
+      'remote.synthetic.invalid',
+      'relay.synthetic.invalid',
+      'shared.synthetic.invalid',
+      'selected.synthetic.invalid',
+      '32400',
+    ]) {
+      expect(find.textContaining(endpoint), findsNothing);
+    }
+  });
+
   testWidgets('protected profile PIN submits after four remote digits', (
     tester,
   ) async {

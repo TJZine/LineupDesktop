@@ -347,6 +347,63 @@ void main() {
     }
   });
 
+  testWidgets('server hierarchy stays reachable and semantic when compact', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(800, 600));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final server = PlexServer(
+      id: 'server',
+      name:
+          'A deliberately long synthetic server name that must remain readable',
+      owned: true,
+      connections: [
+        PlexConnection(
+          uri: Uri.parse('https://local.synthetic.invalid'),
+          local: true,
+          relay: false,
+        ),
+        PlexConnection(
+          uri: Uri.parse('https://remote.synthetic.invalid'),
+          local: false,
+          relay: false,
+        ),
+        PlexConnection(
+          uri: Uri.parse('https://relay.synthetic.invalid'),
+          local: false,
+          relay: true,
+        ),
+      ],
+    );
+    final controller = FixtureController()
+      ..stage = SetupStage.servers
+      ..servers = [server]
+      ..server = server
+      ..connection = PlexConnection(
+        uri: Uri.parse('https://selected.synthetic.invalid'),
+        local: true,
+        relay: false,
+        latency: const Duration(milliseconds: 100),
+      );
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(UiFixture(controller: controller).build());
+    await tester.pumpAndSettle();
+
+    expect(find.bySemanticsLabel(RegExp('Owned server')), findsOneWidget);
+    expect(
+      find.bySemanticsLabel(RegExp('Direct local available')),
+      findsOneWidget,
+    );
+    expect(
+      find.bySemanticsLabel(RegExp('Direct remote available')),
+      findsOneWidget,
+    );
+    expect(find.bySemanticsLabel(RegExp('Relay available')), findsOneWidget);
+    expect(find.bySemanticsLabel('Reconnect'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('Channel Setup remains reachable at the practical minimum', (
     tester,
   ) async {
