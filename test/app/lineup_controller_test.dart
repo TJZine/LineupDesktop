@@ -1660,6 +1660,56 @@ void main() {
     );
   }
 
+  test('post-auth discovery failure keeps authenticated state and offers server retry', () async {
+    final server = _server('server');
+    var discoveries = 0;
+    final plex = _FakePlex()
+      ..pinResult = PlexPin(
+        id: 64,
+        code: 'SAFE',
+        expiresAt: DateTime.now().add(const Duration(minutes: 1)),
+      )
+      ..discoverServersHandler = (_) async {
+        discoveries++;
+        if (discoveries == 1) {
+          throw const PlexException(
+            'network-unavailable',
+            'Plex servers are unavailable.',
+          );
+        }
+        return [PlexServerAccess(server: server, token: 'pms-token')];
+      }
+      ..pollHandler = (_) async => 'cloud-token-sentinel';
+    final credentials = _MemoryCredentials();
+    final controller = LineupController(
+      store: _MemoryStore(),
+      credentials: credentials,
+      plex: plex,
+      pinPollInterval: const Duration(milliseconds: 1),
+    );
+    addTearDown(controller.dispose);
+
+    await controller.startLinking();
+    while (controller.stage != SetupStage.servers || controller.busy) {
+      await Future<void>.delayed(const Duration(milliseconds: 1));
+    }
+
+    expect(credentials.accountToken, 'cloud-token-sentinel');
+    expect(controller.account, plex.accountResult);
+    expect(controller.activePin, isNull);
+    expect(controller.error, 'Plex servers are unavailable.');
+    expect(plex.cancelPinCalls, 0);
+
+    await controller.refreshServers();
+
+    expect(controller.error, isNull);
+    expect(controller.servers.single.id, server.id);
+    expect(plex.discoveredTokens, [
+      'cloud-token-sentinel',
+      'cloud-token-sentinel',
+    ]);
+  });
+
   test('a stale PIN failure cannot replace cancellation state', () async {
     final poll = Completer<String?>();
     final plex = _FakePlex()

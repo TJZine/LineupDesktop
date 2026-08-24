@@ -352,7 +352,11 @@ class LineupController extends ChangeNotifier {
         await selectProfile(profiles.single);
       } else {
         _profileToken = token;
-        await _discover(operation);
+        await _run(
+          () => _discover(operation),
+          operation: operation,
+          fallbackStage: SetupStage.servers,
+        );
       }
       notifyListeners();
     } catch (exception) {
