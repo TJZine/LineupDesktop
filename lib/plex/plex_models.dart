@@ -1,5 +1,6 @@
 import '../channels/channel.dart';
-import '../playback/stream_policy.dart';
+
+enum DynamicRange { sdr, hdr10, hlg, dolbyVision, unknown }
 
 class PlexAccount {
   const PlexAccount({
@@ -109,32 +110,23 @@ class PlexPlaylistCatalog {
   final Set<String> failedIds;
 }
 
-class PlexTrack {
-  const PlexTrack({
-    required this.id,
-    required this.type,
-    required this.codec,
-    this.language,
-    this.selected = false,
-    this.isDefault = false,
-    this.forced = false,
-    this.delivery,
-  });
+typedef PlexLibraryPageProgress = ({
+  int completedPages,
+  int completedItems,
+  int? totalItems,
+});
 
-  final String id;
-  final int type;
-  final String codec;
-  final String? language;
-  final bool selected;
-  final bool isDefault;
-  final bool forced;
-  final SubtitleDelivery? delivery;
+class PlexMediaPart {
+  PlexMediaPart({required this.path, this.duration})
+    : assert(duration == null || duration.inMicroseconds > 0);
+
+  final String path;
+  final Duration? duration;
 }
 
 class PlexMediaItem {
   const PlexMediaItem({
     required this.id,
-    required this.key,
     required this.title,
     required this.type,
     required this.duration,
@@ -145,12 +137,11 @@ class PlexMediaItem {
     this.grandparentThumbPath,
     this.artPath,
     this.clearLogoPath,
-    this.partPath,
+    this.parts = const [],
     this.container,
     this.videoCodec,
     this.audioCodec,
     this.dynamicRange = DynamicRange.unknown,
-    this.tracks = const [],
     this.genres = const [],
     this.collections = const [],
     this.directors = const [],
@@ -168,7 +159,6 @@ class PlexMediaItem {
   });
 
   final String id;
-  final String key;
   final String title;
   final String type;
   final Duration duration;
@@ -179,12 +169,11 @@ class PlexMediaItem {
   final String? grandparentThumbPath;
   final String? artPath;
   final String? clearLogoPath;
-  final String? partPath;
+  final List<PlexMediaPart> parts;
   final String? container;
   final String? videoCodec;
   final String? audioCodec;
   final DynamicRange dynamicRange;
-  final List<PlexTrack> tracks;
   final List<String> genres;
   final List<String> collections;
   final List<String> directors;
@@ -201,17 +190,7 @@ class PlexMediaItem {
   final bool viewed;
 }
 
-class PlexPlaybackDescriptor {
-  const PlexPlaybackDescriptor({
-    required this.uri,
-    required this.decision,
-    required this.sessionId,
-  });
-
-  final Uri uri;
-  final StreamDecision decision;
-  final String sessionId;
-}
+typedef PlexPlaybackPartDescriptor = ({Uri uri, Duration? duration});
 
 class PlexException implements Exception {
   const PlexException(this.code, this.message);

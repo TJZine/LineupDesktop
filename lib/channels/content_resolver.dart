@@ -68,7 +68,7 @@ ChannelItem channelItemFor(PlexMediaItem item) => ChannelItem(
   duration: item.duration,
   showTitle: item.grandparentTitle,
   showThumb: item.grandparentThumbPath,
-  artwork: _uriPath(item.thumbPath),
+  poster: _uriPath(item.thumbPath),
   backdrop: _uriPath(item.artPath),
   clearLogo: _uriPath(item.clearLogoPath),
   summary: item.summary,

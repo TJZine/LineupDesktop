@@ -5,7 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:lineup_desktop/channels/channel.dart';
-import 'package:lineup_desktop/playback/stream_policy.dart';
 import 'package:lineup_desktop/plex/plex_client.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
 
@@ -66,6 +65,7 @@ void main() {
                 'clientIdentifier': 'safe',
                 'name': 'Server',
                 'provides': 'server',
+                'accessToken': 'pms-token-sentinel',
                 'connections': [
                   {
                     'uri': 'https://plex.example:32400',
@@ -91,13 +91,44 @@ void main() {
         ),
       );
       final servers = await client.discoverServers('private-token');
-      expect(servers.single.connections, hasLength(1));
+      expect(servers.single.server.connections, hasLength(1));
       expect(
-        servers.single.connections.single.uri.toString(),
+        servers.single.server.connections.single.uri.toString(),
         'https://plex.example:32400',
       );
+      expect(servers.single.token, 'pms-token-sentinel');
+      expect(servers.single.toString(), isNot(contains('pms-token-sentinel')));
     },
   );
+
+  test('discovery omits resources without a non-empty PMS token', () async {
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      httpClient: MockClient(
+        (_) async => http.Response(
+          jsonEncode([
+            for (final token in [null, '', '   '])
+              {
+                'clientIdentifier': 'server-${token ?? 'missing'}',
+                'name': 'Server',
+                'provides': 'server',
+                'accessToken': ?token,
+                'connections': [
+                  {
+                    'uri': 'https://plex.example:32400',
+                    'local': true,
+                    'relay': false,
+                  },
+                ],
+              },
+          ]),
+          200,
+        ),
+      ),
+    );
+
+    expect(await client.discoverServers('cloud-token'), isEmpty);
+  });
 
   test(
     'connection probing binds the identity to the selected server',
@@ -400,39 +431,106 @@ void main() {
     expect(probed.length, 8);
   });
 
-  test('playback descriptors reject unsupported facts', () {
+  test('an empty ordered part list is unsupported media', () {
     final client = PlexClient(
       clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
     );
     expect(
       () => client.playbackDescriptor(
         server: Uri.parse('https://plex.example:32400'),
-        item: const PlexMediaItem(
-          id: '1',
-          key: '/library/metadata/1',
-          title: 'Movie',
+        item: PlexMediaItem(
+          id: 'empty',
+          title: 'Empty',
           type: 'movie',
-          duration: Duration(minutes: 1),
-          partPath: '/library/parts/1/file.mkv',
-          dynamicRange: DynamicRange.unknown,
-        ),
-        capabilities: const StreamCapabilities(
-          containers: {'mkv'},
-          videoCodecs: {'h264'},
-          audioCodecs: {'aac'},
+          duration: Duration.zero,
         ),
       ),
-      throwsA(isA<PlexException>()),
+      throwsA(
+        isA<PlexException>().having(
+          (exception) => exception.code,
+          'code',
+          'unsupported',
+        ),
+      ),
     );
   });
 
   test('direct play retains the selected Plex server origin', () {
     final descriptor = _directPlaybackDescriptor('/library/parts/1/file.mkv');
 
-    expect(descriptor.decision.kind, StreamDecisionKind.directPlay);
     expect(
-      descriptor.uri,
+      descriptor.single.uri,
       Uri.parse('https://plex.example:32400/library/parts/1/file.mkv'),
+    );
+  });
+
+  test('multipart descriptors preserve order and origin', () {
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+    );
+    final descriptor = client.playbackDescriptor(
+      server: Uri.parse('https://plex.example:32400'),
+      item: PlexMediaItem(
+        id: '1',
+        title: 'Movie',
+        type: 'movie',
+        duration: Duration(minutes: 2),
+        parts: [
+          PlexMediaPart(
+            path: '/library/parts/one.mkv',
+            duration: Duration(minutes: 1),
+          ),
+          PlexMediaPart(path: '/library/parts/two.mkv'),
+        ],
+        container: 'mkv',
+        videoCodec: 'h264',
+        audioCodec: 'aac',
+        dynamicRange: DynamicRange.sdr,
+      ),
+    );
+
+    expect(descriptor.map((part) => part.uri), [
+      Uri.parse('https://plex.example:32400/library/parts/one.mkv'),
+      Uri.parse('https://plex.example:32400/library/parts/two.mkv'),
+    ]);
+    expect(descriptor.first.duration, const Duration(minutes: 1));
+    expect(descriptor.last.duration, isNull);
+    expect(
+      descriptor.expand((part) => part.uri.queryParameters.keys),
+      isNot(contains('X-Plex-Token')),
+    );
+    expect(
+      () => descriptor.add((
+        uri: Uri.parse('https://plex.example/new'),
+        duration: null,
+      )),
+      throwsUnsupportedError,
+    );
+  });
+
+  test('multipart descriptors reject a cross-origin part', () {
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+    );
+    expect(
+      () => client.playbackDescriptor(
+        server: Uri.parse('https://plex.example:32400'),
+        item: PlexMediaItem(
+          id: '1',
+          title: 'Movie',
+          type: 'movie',
+          duration: Duration(minutes: 2),
+          parts: [
+            PlexMediaPart(path: '/library/parts/one.mkv'),
+            PlexMediaPart(path: 'https://attacker.example/two.mkv'),
+          ],
+          container: 'mkv',
+          videoCodec: 'h264',
+          audioCodec: 'aac',
+          dynamicRange: DynamicRange.sdr,
+        ),
+      ),
+      throwsA(isA<PlexException>()),
     );
   });
 
@@ -456,87 +554,6 @@ void main() {
       );
     });
   }
-
-  test('direct stream uses the Plex universal HLS contract', () {
-    final client = PlexClient(
-      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
-    );
-    final descriptor = client.playbackDescriptor(
-      server: Uri.parse('https://plex.example:32400'),
-      item: const PlexMediaItem(
-        id: '1',
-        key: '/library/metadata/1',
-        title: 'Movie',
-        type: 'movie',
-        duration: Duration(minutes: 1),
-        partPath: '/library/parts/1/file.mkv',
-        container: 'mkv',
-        videoCodec: 'h264',
-        audioCodec: 'aac',
-        dynamicRange: DynamicRange.sdr,
-      ),
-      capabilities: const StreamCapabilities(
-        containers: {'mp4'},
-        videoCodecs: {'h264'},
-        audioCodecs: {'aac'},
-      ),
-    );
-    expect(descriptor.decision.kind, StreamDecisionKind.directStream);
-    expect(
-      descriptor.uri.queryParameters,
-      containsPair('path', '/library/metadata/1'),
-    );
-    expect(descriptor.uri.path, '/video/:/transcode/universal/start.m3u8');
-    expect(descriptor.uri.queryParameters, containsPair('protocol', 'hls'));
-    expect(descriptor.uri.queryParameters, containsPair('mediaIndex', '0'));
-    expect(descriptor.uri.queryParameters, containsPair('partIndex', '0'));
-    expect(descriptor.uri.queryParameters, containsPair('directPlay', '0'));
-    expect(descriptor.uri.queryParameters, containsPair('directStream', '1'));
-    expect(
-      descriptor.uri.queryParameters,
-      containsPair(
-        'X-Plex-Client-Identifier',
-        'lineup-desktop-test-abcdefghijklmnopqrst',
-      ),
-    );
-    expect(
-      descriptor.uri.queryParameters.keys.map((key) => key.toLowerCase()),
-      isNot(contains('x-plex-token')),
-    );
-  });
-
-  test('transcode disables direct play and direct stream', () {
-    final descriptor =
-        PlexClient(clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst')
-            .playbackDescriptor(
-              server: Uri.parse('https://plex.example:32400'),
-              item: const PlexMediaItem(
-                id: '1',
-                key: '/library/metadata/1',
-                title: 'Movie',
-                type: 'movie',
-                duration: Duration(minutes: 1),
-                partPath: '/library/parts/1/file.mkv',
-                container: 'mkv',
-                videoCodec: 'vc1',
-                audioCodec: 'dca',
-                dynamicRange: DynamicRange.sdr,
-              ),
-              capabilities: const StreamCapabilities(
-                containers: {'mkv'},
-                videoCodecs: {'h264'},
-                audioCodecs: {'dca'},
-              ),
-            );
-
-    expect(descriptor.decision.kind, StreamDecisionKind.transcode);
-    expect(descriptor.uri.queryParameters, containsPair('directPlay', '0'));
-    expect(descriptor.uri.queryParameters, containsPair('directStream', '0'));
-    expect(
-      descriptor.uri.queryParameters,
-      containsPair('directStreamAudio', '0'),
-    );
-  });
 
   group('artwork transport', () {
     Matcher plexError(String code) => throwsA(
@@ -616,6 +633,24 @@ void main() {
       expect(request.followRedirects, isFalse);
       expect(canceled.isCompleted, isTrue);
     });
+
+    for (final failure in {401: 'auth-invalid', 403: 'access-denied'}.entries) {
+      test('preserves ${failure.key} authorization classification', () async {
+        final plex = client(
+          (_, _) async =>
+              http.StreamedResponse(const Stream.empty(), failure.key),
+        );
+
+        await expectLater(
+          plex.artwork(
+            Uri.parse('https://plex.example:32400'),
+            'resource-token',
+            Uri.parse('/art'),
+          ),
+          plexError(failure.value),
+        );
+      });
+    }
 
     test('rejects declared-length overflow and cancels the stream', () async {
       final canceled = Completer<void>();
@@ -722,6 +757,8 @@ void main() {
         'secret',
         '7',
         PlexLibraryType.show,
+        isCurrent: () => true,
+        onProgress: (_) {},
       );
       final playlists = await client.playlists(
         Uri.parse('https://plex.example:32400'),
@@ -736,6 +773,198 @@ void main() {
       expect(requests.last.host, 'plex.example');
       expect(requests.last.path, '/playlists/p1/items');
       expect(playlists.failedIds, isEmpty);
+    },
+  );
+
+  test(
+    'library pagination reports exact progress without page snapshots',
+    () async {
+      var requests = 0;
+      final progress = <PlexLibraryPageProgress>[];
+      final client = PlexClient(
+        clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+        httpClient: MockClient((request) async {
+          requests++;
+          final start = int.parse(
+            request.url.queryParameters['X-Plex-Container-Start']!,
+          );
+          const total = 2505;
+          final count = (total - start).clamp(0, 100);
+          return http.Response(
+            jsonEncode({
+              'MediaContainer': {
+                'totalSize': total,
+                'Metadata': [
+                  for (var index = 0; index < count; index++)
+                    {
+                      'ratingKey': '${start + index}',
+                      'key': '/library/metadata/${start + index}',
+                      'title': 'Item ${start + index}',
+                      'type': 'movie',
+                      'duration': 1000,
+                    },
+                ],
+              },
+            }),
+            200,
+          );
+        }),
+      );
+
+      final items = await client.libraryItems(
+        Uri.parse('https://plex.example:32400'),
+        'secret',
+        '7',
+        PlexLibraryType.movie,
+        isCurrent: () => true,
+        onProgress: progress.add,
+      );
+
+      expect(items, hasLength(2505));
+      expect(requests, 26);
+      expect(
+        progress.map((value) => value.completedItems),
+        orderedEquals([
+          for (var count = 100; count <= 2500; count += 100) count,
+          2505,
+        ]),
+      );
+      expect(progress.last.completedPages, 26);
+      expect(progress.last.totalItems, 2505);
+    },
+  );
+
+  test('library pagination checks cancellation before the next page', () async {
+    var current = true;
+    var requests = 0;
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      httpClient: MockClient((_) async {
+        requests++;
+        current = false;
+        return http.Response(
+          jsonEncode({
+            'MediaContainer': {
+              'totalSize': 200,
+              'Metadata': [
+                for (var index = 0; index < 100; index++)
+                  {
+                    'ratingKey': '$index',
+                    'key': '/library/metadata/$index',
+                    'title': 'Item $index',
+                    'type': 'movie',
+                    'duration': 1000,
+                  },
+              ],
+            },
+          }),
+          200,
+        );
+      }),
+    );
+
+    await expectLater(
+      client.libraryItems(
+        Uri.parse('https://plex.example:32400'),
+        'secret',
+        '7',
+        PlexLibraryType.movie,
+        isCurrent: () => current,
+        onProgress: (_) {},
+      ),
+      throwsA(
+        isA<PlexException>().having((error) => error.code, 'code', 'cancelled'),
+      ),
+    );
+    expect(requests, 1);
+  });
+
+  test(
+    'one thousand full pages return when the reported total is reached',
+    () async {
+      var requests = 0;
+      final page = jsonEncode({
+        'MediaContainer': {
+          'totalSize': 100000,
+          'Metadata': [
+            for (var index = 0; index < 100; index++)
+              {
+                'ratingKey': '$index',
+                'key': '/library/metadata/$index',
+                'title': 'Item $index',
+                'type': 'movie',
+                'duration': 1000,
+              },
+          ],
+        },
+      });
+      final client = PlexClient(
+        clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+        httpClient: MockClient((_) async {
+          requests++;
+          return http.Response(page, 200);
+        }),
+      );
+
+      final items = await client.libraryItems(
+        Uri.parse('https://plex.example:32400'),
+        'secret',
+        '7',
+        PlexLibraryType.movie,
+        isCurrent: () => true,
+        onProgress: (_) {},
+      );
+
+      expect(items, hasLength(100000));
+      expect(requests, 1000);
+    },
+  );
+
+  test(
+    'one thousand full library pages fail visibly instead of truncating',
+    () async {
+      var requests = 0;
+      final page = jsonEncode({
+        'MediaContainer': {
+          'totalSize': 100001,
+          'Metadata': [
+            for (var index = 0; index < 100; index++)
+              {
+                'ratingKey': '$index',
+                'key': '/library/metadata/$index',
+                'title': 'Item $index',
+                'type': 'movie',
+                'duration': 1000,
+              },
+          ],
+        },
+      });
+      final client = PlexClient(
+        clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+        httpClient: MockClient((_) async {
+          requests++;
+          return http.Response(page, 200);
+        }),
+      );
+
+      await expectLater(
+        client.libraryItems(
+          Uri.parse('https://plex.example:32400'),
+          'secret',
+          '7',
+          PlexLibraryType.movie,
+          isCurrent: () => true,
+          onProgress: (_) {},
+        ),
+        throwsA(
+          isA<PlexException>().having(
+            (error) => error.code,
+            'code',
+            'library-scale-exceeded',
+          ),
+        ),
+      );
+      expect(requests, 1000);
     },
   );
 
@@ -781,21 +1010,19 @@ void main() {
   );
 }
 
-PlexPlaybackDescriptor _directPlaybackDescriptor(String partPath) =>
+List<PlexPlaybackPartDescriptor> _directPlaybackDescriptor(String partPath) =>
     PlexClient(clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst')
         .playbackDescriptor(
           server: Uri.parse('https://plex.example:32400'),
           item: PlexMediaItem(
             id: '1',
-            key: '/library/metadata/1',
             title: 'Movie',
             type: 'movie',
             duration: const Duration(minutes: 1),
-            partPath: partPath,
+            parts: [PlexMediaPart(path: partPath)],
             container: 'mkv',
             videoCodec: 'h264',
             audioCodec: 'aac',
             dynamicRange: DynamicRange.sdr,
           ),
-          capabilities: const StreamCapabilities.unrestricted(),
         );

@@ -31,6 +31,11 @@ abstract interface class NativePlayer {
   Future<void> setFullscreen(bool fullscreen);
   Future<void> selectTrack(PlayerTrackType type, int? id);
   Future<void> setVolume(double volume);
+
+  /// Immediately invalidates any active load before awaiting native cleanup.
+  ///
+  /// A pending [load] must settle with [PlayerUnavailable], and events from
+  /// that retired load must be ignored even while native cleanup is pending.
   Future<void> stop();
   Future<void> dispose();
 }

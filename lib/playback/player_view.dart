@@ -191,7 +191,7 @@ class _PlayerViewState extends State<PlayerView> {
     } else if (key == LogicalKeyboardKey.mediaPause) {
       unawaited(controller.player.pause());
     } else if (key == LogicalKeyboardKey.mediaStop) {
-      unawaited(controller.stop());
+      unawaited(controller.requestStop());
     } else if (key == LogicalKeyboardKey.mediaRewind) {
       unawaited(controller.seekBy(const Duration(seconds: -10)));
     } else if (key == LogicalKeyboardKey.mediaFastForward) {
@@ -207,6 +207,12 @@ class _PlayerViewState extends State<PlayerView> {
   @override
   Widget build(BuildContext context) {
     final controller = widget.controller;
+    final overlay = controller.overlay;
+    final presentationGeneration = controller.overlayPresentationGeneration;
+    final presentationKey = ValueKey((overlay, presentationGeneration));
+    final transitionDuration = MediaQuery.disableAnimationsOf(context)
+        ? Duration.zero
+        : const Duration(milliseconds: 350);
     return Material(
       color: Colors.transparent,
       child: Focus(
@@ -227,8 +233,16 @@ class _PlayerViewState extends State<PlayerView> {
               children: [
                 PlayerSurface(controller: controller),
                 AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 350),
-                  reverseDuration: const Duration(milliseconds: 350),
+                  duration: transitionDuration,
+                  reverseDuration: transitionDuration,
+                  layoutBuilder: (currentChild, previousChildren) => Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      for (final child in previousChildren)
+                        ExcludeFocus(child: child),
+                      ?currentChild,
+                    ],
+                  ),
                   transitionBuilder: (child, animation) {
                     final fade = CurvedAnimation(
                       parent: animation,
@@ -239,7 +253,9 @@ class _PlayerViewState extends State<PlayerView> {
                       opacity: fade,
                       child: child,
                     );
-                    if (child.key != const ValueKey(PlayerOverlay.osd)) {
+                    final childOverlay =
+                        (child.key as ValueKey<(PlayerOverlay, int)>).value.$1;
+                    if (childOverlay != PlayerOverlay.osd) {
                       return transitioned;
                     }
                     return SlideTransition(
@@ -250,9 +266,21 @@ class _PlayerViewState extends State<PlayerView> {
                       child: transitioned,
                     );
                   },
-                  child: KeyedSubtree(
-                    key: ValueKey(controller.overlay),
-                    child: switch (controller.overlay) {
+                  child: Focus(
+                    key: presentationKey,
+                    canRequestFocus: false,
+                    onFocusChange: (focused) {
+                      if (!focused ||
+                          FocusManager.instance.highlightMode ==
+                              FocusHighlightMode.traditional) {
+                        controller.overlayFocusChanged(
+                          overlay,
+                          presentationGeneration,
+                          focused,
+                        );
+                      }
+                    },
+                    child: switch (overlay) {
                       PlayerOverlay.osd => _Osd(
                         controller: controller,
                         openMenu: widget.openMenu,
@@ -805,66 +833,70 @@ class _Tracks extends StatelessWidget {
       alignment: Alignment.centerRight,
       child: SafeArea(
         minimum: EdgeInsets.all(roles.overlaySafeArea),
-        child: Card(
-          key: const Key('playback-options-rail'),
-          child: SizedBox(
-            width: 460,
-            height: double.infinity,
-            child: Padding(
-              padding: const EdgeInsets.all(18),
-              child: Column(
-                children: [
-                  Text(
-                    type == PlayerTrackType.audio
-                        ? 'Audio tracks'
-                        : 'Subtitles',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                  const SizedBox(height: 12),
-                  Expanded(
-                    child: ListView(
-                      key: const Key('playback-options-list'),
-                      children: [
-                        if (type == PlayerTrackType.subtitle)
-                          ListTile(
-                            autofocus: true,
-                            leading: Icon(
-                              tracks.any((track) => track.selected)
-                                  ? Icons.radio_button_unchecked
-                                  : Icons.radio_button_checked,
-                            ),
-                            title: const Text('Off'),
-                            onTap: () => controller.selectTrack(type, null),
-                          ),
-                        for (final (index, track) in tracks.indexed)
-                          ListTile(
-                            autofocus:
-                                type == PlayerTrackType.audio && index == 0,
-                            leading: Icon(
-                              track.selected
-                                  ? Icons.radio_button_checked
-                                  : Icons.radio_button_unchecked,
-                            ),
-                            title: Text(
-                              track.title ??
-                                  track.language ??
-                                  '${track.type.name} ${track.id}',
-                            ),
-                            subtitle: track.codec == null
-                                ? null
-                                : Text(track.codec!),
-                            onTap: () => controller.selectTrack(type, track.id),
-                          ),
-                      ],
+        child: FocusScope(
+          child: Card(
+            key: const Key('playback-options-rail'),
+            child: SizedBox(
+              width: 460,
+              height: double.infinity,
+              child: Padding(
+                padding: const EdgeInsets.all(18),
+                child: Column(
+                  children: [
+                    Text(
+                      type == PlayerTrackType.audio
+                          ? 'Audio tracks'
+                          : 'Subtitles',
+                      style: Theme.of(context).textTheme.titleLarge,
                     ),
-                  ),
-                  TextButton(
-                    autofocus:
-                        tracks.isEmpty && type != PlayerTrackType.subtitle,
-                    onPressed: controller.closeOverlay,
-                    child: const Text('Back'),
-                  ),
-                ],
+                    const SizedBox(height: 12),
+                    Expanded(
+                      child: ListView(
+                        key: const Key('playback-options-list'),
+                        children: [
+                          if (type == PlayerTrackType.subtitle)
+                            ListTile(
+                              autofocus: !tracks.any((track) => track.selected),
+                              selected: !tracks.any((track) => track.selected),
+                              leading: Icon(
+                                tracks.any((track) => track.selected)
+                                    ? Icons.radio_button_unchecked
+                                    : Icons.radio_button_checked,
+                              ),
+                              title: const Text('Off'),
+                              onTap: () => controller.selectTrack(type, null),
+                            ),
+                          for (final track in tracks)
+                            ListTile(
+                              autofocus: track.selected,
+                              selected: track.selected,
+                              leading: Icon(
+                                track.selected
+                                    ? Icons.radio_button_checked
+                                    : Icons.radio_button_unchecked,
+                              ),
+                              title: Text(
+                                track.title ??
+                                    track.language ??
+                                    '${track.type.name} ${track.id}',
+                              ),
+                              subtitle: track.codec == null
+                                  ? null
+                                  : Text(track.codec!),
+                              onTap: () =>
+                                  controller.selectTrack(type, track.id),
+                            ),
+                        ],
+                      ),
+                    ),
+                    TextButton(
+                      autofocus:
+                          tracks.isEmpty && type != PlayerTrackType.subtitle,
+                      onPressed: controller.closeOverlay,
+                      child: const Text('Back'),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

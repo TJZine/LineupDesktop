@@ -286,7 +286,6 @@ void main() {
       ..availableMedia = [
         PlexMediaItem(
           id: 'available',
-          key: '/library/metadata/available',
           title: 'Available program',
           type: 'movie',
           duration: const Duration(minutes: 30),
@@ -319,6 +318,195 @@ void main() {
 
     final source = controller.channels.single.source as ManualSource;
     expect(source.items.map((item) => item.id), ['available', 'unavailable']);
+  });
+
+  for (final testCase
+      in <
+        ({
+          String name,
+          ContentSource source,
+          PlaybackMode initialMode,
+          int? initialBlockSize,
+          PlaybackMode savedMode,
+          int? savedBlockSize,
+        })
+      >[
+        (
+          name: 'generated filtered library',
+          source: const LibrarySource(
+            libraryId: 'movies',
+            libraryType: PlexLibraryType.movie,
+            includeWatched: false,
+            filters: {'genre': 'Comedy'},
+          ),
+          initialMode: PlaybackMode.block,
+          initialBlockSize: 5,
+          savedMode: PlaybackMode.sequential,
+          savedBlockSize: null,
+        ),
+        (
+          name: 'generated playlist',
+          source: const PlaylistSource('playlist-1'),
+          initialMode: PlaybackMode.shuffle,
+          initialBlockSize: 7,
+          savedMode: PlaybackMode.block,
+          savedBlockSize: 7,
+        ),
+        (
+          name: 'generated mixed source',
+          source: const MixedSource(
+            interleave: true,
+            sources: [
+              LibrarySource(
+                libraryId: 'shows',
+                libraryType: PlexLibraryType.show,
+                filters: {'year': '2026'},
+              ),
+              PlaylistSource('playlist-2'),
+            ],
+          ),
+          initialMode: PlaybackMode.shuffle,
+          initialBlockSize: null,
+          savedMode: PlaybackMode.block,
+          savedBlockSize: 3,
+        ),
+      ]) {
+    testWidgets('${testCase.name} edits metadata without changing provenance', (
+      tester,
+    ) async {
+      final original = Channel(
+        id: 'generated',
+        number: 10,
+        name: 'Original',
+        source: testCase.source,
+        playbackMode: testCase.initialMode,
+        anchor: DateTime.utc(2026, 8, 23, 12),
+        shuffleSeed: 8675309,
+        blockSize: testCase.initialBlockSize,
+        builderKey: 'builder:${testCase.name}',
+      );
+      final controller = FixtureController()
+        ..stage = SetupStage.ready
+        ..channels = [original];
+      addTearDown(controller.dispose);
+
+      await _openChannelEditor(tester, controller, original);
+
+      expect(find.text('Channel source (read-only)'), findsOneWidget);
+      expect(find.text('Entire library'), findsNothing);
+      expect(find.text('Hand-picked'), findsNothing);
+      expect(find.textContaining('Convert'), findsNothing);
+      await tester.enterText(find.byType(TextFormField).first, 'Renamed');
+      await tester.enterText(find.byType(TextFormField).at(1), '42');
+      await tester.tap(find.text(_modeLabel(testCase.savedMode)));
+      await tester.pump();
+      await tester.tap(find.text('Save channel'));
+      await tester.pumpAndSettle();
+
+      final saved = controller.channels.single;
+      expect(saved.name, 'Renamed');
+      expect(saved.number, 42);
+      expect(saved.source.toJson(), original.source.toJson());
+      expect(saved.builderKey, original.builderKey);
+      expect(saved.anchor, original.anchor);
+      expect(saved.shuffleSeed, original.shuffleSeed);
+      expect(saved.playbackMode, testCase.savedMode);
+      expect(saved.blockSize, testCase.savedBlockSize);
+    });
+  }
+
+  testWidgets('channel source editability follows the lossless source matrix', (
+    tester,
+  ) async {
+    const item = ChannelItem(
+      id: 'item',
+      title: 'Program',
+      duration: Duration(minutes: 30),
+    );
+    final cases = <(ContentSource, bool)>[
+      (
+        const LibrarySource(
+          libraryId: 'movies',
+          libraryType: PlexLibraryType.movie,
+          filters: {'genre': 'Comedy'},
+        ),
+        true,
+      ),
+      (const PlaylistSource('playlist-1'), true),
+      (const MixedSource(sources: [PlaylistSource('playlist-1')]), true),
+      (
+        const LibrarySource(
+          libraryId: 'movies',
+          libraryType: PlexLibraryType.movie,
+        ),
+        false,
+      ),
+      (const ManualSource([item]), false),
+    ];
+    final controller = FixtureController()
+      ..stage = SetupStage.ready
+      ..libraries = const [
+        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
+      ]
+      ..selectedLibraryIds = const {'movies'};
+    addTearDown(controller.dispose);
+
+    for (var index = 0; index < cases.length; index++) {
+      final (source, readOnly) = cases[index];
+      final channel = Channel(
+        id: 'channel-$index',
+        number: index + 1,
+        name: 'Channel $index',
+        source: source,
+        playbackMode: PlaybackMode.shuffle,
+        anchor: DateTime.utc(2026),
+        shuffleSeed: index,
+      );
+      await _openChannelEditor(tester, controller, channel);
+      expect(
+        find.text('Channel source (read-only)'),
+        readOnly ? findsOneWidget : findsNothing,
+      );
+      expect(
+        find.text('Entire library'),
+        readOnly ? findsNothing : findsOneWidget,
+      );
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+    }
+  });
+
+  testWidgets('read-only channel cancel and failed save keep the original', (
+    tester,
+  ) async {
+    final original = Channel(
+      id: 'playlist',
+      number: 12,
+      name: 'Playlist channel',
+      source: const PlaylistSource('playlist-1'),
+      playbackMode: PlaybackMode.shuffle,
+      anchor: DateTime.utc(2026),
+      shuffleSeed: 12,
+      builderKey: 'playlist:playlist-1',
+    );
+    final controller = FixtureController(store: _FailNextSaveStore())
+      ..stage = SetupStage.ready
+      ..channels = [original];
+    addTearDown(controller.dispose);
+
+    await _openChannelEditor(tester, controller, original);
+    await tester.enterText(find.byType(TextFormField).first, 'Cancelled');
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(controller.channels.single.toJson(), original.toJson());
+
+    await _openChannelEditor(tester, controller, original);
+    await tester.enterText(find.byType(TextFormField).first, 'Failed');
+    await tester.tap(find.text('Save channel'));
+    await tester.pumpAndSettle();
+
+    expect(controller.channels.single.toJson(), original.toJson());
+    expect(find.text('The channel could not be saved.'), findsOneWidget);
   });
 
   testWidgets('settings dropdowns stay disabled until persistence completes', (
@@ -427,9 +615,9 @@ void main() {
       final intendedFocus = FocusManager.instance.primaryFocus;
       expect(intendedFocus, isNotNull);
 
-      await tester.drag(find.byType(GridView), const Offset(0, -2400));
+      await tester.drag(find.byType(CustomScrollView), const Offset(0, -2400));
       await tester.pumpAndSettle();
-      await tester.drag(find.byType(GridView), const Offset(0, 2400));
+      await tester.drag(find.byType(CustomScrollView), const Offset(0, 2400));
       await tester.pumpAndSettle();
 
       expect(FocusManager.instance.primaryFocus, same(intendedFocus));
@@ -476,6 +664,35 @@ Future<void> _confirmDelete(WidgetTester tester) async {
   await tester.tap(find.text('Delete channel'));
   await tester.pumpAndSettle();
 }
+
+Future<void> _openChannelEditor(
+  WidgetTester tester,
+  FixtureController controller,
+  Channel channel,
+) async {
+  await tester.pumpWidget(
+    MaterialApp(
+      home: Builder(
+        builder: (context) => TextButton(
+          onPressed: () => showDialog<void>(
+            context: context,
+            builder: (_) =>
+                ChannelEditor(controller: controller, channel: channel),
+          ),
+          child: const Text('Open editor'),
+        ),
+      ),
+    ),
+  );
+  await tester.tap(find.text('Open editor'));
+  await tester.pumpAndSettle();
+}
+
+String _modeLabel(PlaybackMode mode) => switch (mode) {
+  PlaybackMode.sequential => 'Sequential',
+  PlaybackMode.shuffle => 'Shuffle',
+  PlaybackMode.block => 'Blocks',
+};
 
 class _FailNextSaveStore extends FixtureStore {
   bool _failNextSave = true;

@@ -10,7 +10,6 @@ import 'package:lineup_desktop/guide/guide_controller.dart';
 import 'package:lineup_desktop/persistence/app_store.dart';
 import 'package:lineup_desktop/playback/native_player.dart';
 import 'package:lineup_desktop/playback/player_coordinator.dart';
-import 'package:lineup_desktop/playback/stream_policy.dart';
 import 'package:lineup_desktop/plex/plex_client.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
 
@@ -86,7 +85,7 @@ void main() {
         nativePlayer.loadedUri?.queryParameters,
         isNot(contains('X-Plex-Token')),
       );
-      expect(nativePlayer.loadedPlexToken, 'child-token');
+      expect(nativePlayer.loadedPlexToken, 'pms-token');
       nativePlayer.emit(
         PlayerState.playing,
         generation: nativePlayer.generation,
@@ -155,7 +154,7 @@ void main() {
       rebuild.stop();
       expect(controller.channels, hasLength(1000));
       expect(
-        (await store.load()).channelsByProfileServer['child']!['server']!,
+        (await store.load()).state.channelsByProfileServer['child']!['server']!,
         hasLength(1000),
       );
       // ignore: avoid_print
@@ -195,10 +194,10 @@ void main() {
       addTearDown(restoredPlayer.dispose);
       await restoredPlayer.tune(controller.channels.first.id);
       expect(await restoredPlayer.logout(), isTrue);
+      expect(restoredNativePlayer.stopCalls, 1);
       expect(controller.stage, SetupStage.welcome);
       expect(credentials.accountToken, isNull);
       expect(credentials.profileTokens, isEmpty);
-      expect(events, contains('playback:release'));
       expect(
         events,
         containsAllInOrder([
@@ -311,13 +310,13 @@ class _ProductPlex extends PlexClient {
   }
 
   @override
-  Future<List<PlexServer>> discoverServers(String token) async {
+  Future<List<PlexServerAccess>> discoverServers(String token) async {
     if (offline) {
       events.add('servers:offline');
       throw const PlexException('offline', 'The network is unavailable.');
     }
     events.add('servers');
-    return [server];
+    return [PlexServerAccess(server: server, token: 'pms-token')];
   }
 
   @override
@@ -347,19 +346,20 @@ class _ProductPlex extends PlexClient {
     Uri server,
     String token,
     String libraryId,
-    PlexLibraryType libraryType,
-  ) async {
+    PlexLibraryType libraryType, {
+    required bool Function() isCurrent,
+    required void Function(PlexLibraryPageProgress progress) onProgress,
+  }) async {
     events.add('library:$libraryId');
     return List.generate(
       12,
       (index) => PlexMediaItem(
         id: 'movie-$index',
-        key: '/library/metadata/$index',
         title: 'Movie $index',
         type: 'movie',
         duration: const Duration(minutes: 30),
         libraryId: libraryId,
-        partPath: '/library/parts/$index/file.mp4',
+        parts: [PlexMediaPart(path: '/library/parts/$index/file.mp4')],
         container: 'mp4',
         videoCodec: 'h264',
         audioCodec: 'aac',
@@ -374,15 +374,6 @@ class _ProductPlex extends PlexClient {
       const PlexPlaylistCatalog(playlists: [], failedIds: {});
 
   @override
-  Future<void> releasePlaybackSession({
-    required Uri server,
-    required String token,
-    required String sessionId,
-  }) async {
-    events.add('playback:release');
-  }
-
-  @override
   void close() {}
 }
 
@@ -395,6 +386,7 @@ class _ProductPlayer implements NativePlayer {
   Uri? loadedUri;
   String? loadedPlexToken;
   int generation = 0;
+  int stopCalls = 0;
   PlayerStatus _status = const PlayerStatus(
     state: PlayerState.idle,
     message: 'Idle',
@@ -468,7 +460,7 @@ class _ProductPlayer implements NativePlayer {
   @override
   Future<void> setVolume(double volume) async {}
   @override
-  Future<void> stop() async {}
+  Future<void> stop() async => stopCalls++;
   @override
   Future<void> dispose() => _events.close();
 }

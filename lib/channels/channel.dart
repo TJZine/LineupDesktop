@@ -11,29 +11,55 @@ sealed class ContentSource {
   Map<String, Object?> toJson();
 
   static ContentSource fromJson(Object? value) {
-    if (value is! Map) throw const FormatException('Invalid content source');
-    final json = Map<String, Object?>.from(value);
-    return switch (json['type']) {
-      'library' => LibrarySource(
-        libraryId: _string(json['libraryId']),
-        libraryType: PlexLibraryType.values.byName(
-          _string(json['libraryType']),
-        ),
-        includeWatched: json['includeWatched'] == true,
-        filters: Map<String, String>.from(json['filters'] as Map? ?? const {}),
-      ),
-      'manual' => ManualSource(
-        (json['items'] as List? ?? const []).map(ChannelItem.fromJson).toList(),
-      ),
-      'playlist' => PlaylistSource(_string(json['playlistId'])),
-      'mixed' => MixedSource(
-        sources: (json['sources'] as List? ?? const [])
-            .map(ContentSource.fromJson)
-            .toList(),
-        interleave: json['interleave'] == true,
-      ),
-      _ => throw const FormatException('Unknown content source type'),
-    };
+    try {
+      final json = _object(value, 'content source');
+      return switch (json['type']) {
+        'library' => () {
+          _requireFields(
+            json,
+            const {'type', 'libraryId', 'libraryType', 'includeWatched'},
+            const {'filters'},
+          );
+          return LibrarySource(
+            libraryId: _string(json['libraryId']),
+            libraryType: _enumValue(
+              PlexLibraryType.values,
+              json['libraryType'],
+            ),
+            includeWatched: _boolean(json['includeWatched']),
+            filters: json.containsKey('filters')
+                ? Map<String, String>.from(_nonNull(json, 'filters') as Map)
+                : const {},
+          );
+        }(),
+        'manual' => () {
+          _requireFields(json, const {'type', 'items'});
+          return ManualSource(
+            List<Object?>.from(_nonNull(json, 'items') as List)
+                .map(ChannelItem.fromJson)
+                .toList(),
+          );
+        }(),
+        'playlist' => () {
+          _requireFields(json, const {'type', 'playlistId'});
+          return PlaylistSource(_string(json['playlistId']));
+        }(),
+        'mixed' => () {
+          _requireFields(json, const {'type', 'interleave', 'sources'});
+          return MixedSource(
+            sources: List<Object?>.from(_nonNull(json, 'sources') as List)
+                .map(ContentSource.fromJson)
+                .toList(),
+            interleave: _boolean(json['interleave']),
+          );
+        }(),
+        _ => throw const FormatException('Unknown content source type'),
+      };
+    } on FormatException {
+      rethrow;
+    } catch (error) {
+      throw FormatException('Invalid content source', error);
+    }
   }
 }
 
@@ -105,7 +131,7 @@ class ChannelItem {
     required this.duration,
     this.showTitle,
     this.showThumb,
-    this.artwork,
+    this.poster,
     this.backdrop,
     this.clearLogo,
     this.summary,
@@ -127,8 +153,7 @@ class ChannelItem {
   final String? showTitle;
   final String? showThumb;
 
-  /// The poster/thumb path retained under the legacy `artwork` JSON key.
-  final Uri? artwork;
+  final Uri? poster;
   final Uri? backdrop;
   final Uri? clearLogo;
   final String? summary;
@@ -149,7 +174,7 @@ class ChannelItem {
     'durationMs': duration.inMilliseconds,
     if (showTitle != null) 'showTitle': showTitle,
     if (showThumb != null) 'showThumb': showThumb,
-    if (artwork != null) 'artwork': artwork.toString(),
+    if (poster != null) 'poster': poster.toString(),
     if (backdrop != null) 'backdrop': backdrop.toString(),
     if (clearLogo != null) 'clearLogo': clearLogo.toString(),
     if (summary != null) 'summary': summary,
@@ -166,40 +191,62 @@ class ChannelItem {
   };
 
   factory ChannelItem.fromJson(Object? value) {
-    final json = Map<String, Object?>.from(value as Map);
-    final duration = Duration(
-      milliseconds: (json['durationMs'] as num).toInt(),
-    );
-    if (duration <= Duration.zero) {
-      throw const FormatException('Invalid item duration');
+    try {
+      final json = _object(value, 'channel item');
+      _requireFields(
+        json,
+        const {'id', 'title', 'durationMs'},
+        const {
+          'showTitle',
+          'showThumb',
+          'poster',
+          'backdrop',
+          'clearLogo',
+          'summary',
+          'contentRating',
+          'genres',
+          'year',
+          'seasonNumber',
+          'episodeNumber',
+          'resolution',
+          'videoCodec',
+          'audioCodec',
+          'audioChannels',
+          'dynamicRange',
+        },
+      );
+      final duration = Duration(milliseconds: _integer(json['durationMs']));
+      if (duration <= Duration.zero) {
+        throw const FormatException('Invalid item duration');
+      }
+      return ChannelItem(
+        id: _string(json['id']),
+        title: _string(json['title']),
+        duration: duration,
+        showTitle: _optionalString(json, 'showTitle'),
+        showThumb: _optionalString(json, 'showThumb'),
+        poster: _optionalUri(json, 'poster'),
+        backdrop: _optionalUri(json, 'backdrop'),
+        clearLogo: _optionalUri(json, 'clearLogo'),
+        summary: _optionalString(json, 'summary'),
+        contentRating: _optionalString(json, 'contentRating'),
+        genres: json.containsKey('genres')
+            ? List<String>.from(_nonNull(json, 'genres') as List)
+            : const [],
+        year: _optionalInteger(json, 'year'),
+        seasonNumber: _optionalInteger(json, 'seasonNumber'),
+        episodeNumber: _optionalInteger(json, 'episodeNumber'),
+        resolution: _optionalString(json, 'resolution'),
+        videoCodec: _optionalString(json, 'videoCodec'),
+        audioCodec: _optionalString(json, 'audioCodec'),
+        audioChannels: _optionalInteger(json, 'audioChannels'),
+        dynamicRange: _optionalString(json, 'dynamicRange'),
+      );
+    } on FormatException {
+      rethrow;
+    } catch (error) {
+      throw FormatException('Invalid channel item', error);
     }
-    return ChannelItem(
-      id: _string(json['id']),
-      title: _string(json['title']),
-      duration: duration,
-      showTitle: json['showTitle'] as String?,
-      showThumb: json['showThumb'] as String?,
-      artwork: json['artwork'] is String
-          ? Uri.tryParse(json['artwork'] as String)
-          : null,
-      backdrop: json['backdrop'] is String
-          ? Uri.tryParse(json['backdrop'] as String)
-          : null,
-      clearLogo: json['clearLogo'] is String
-          ? Uri.tryParse(json['clearLogo'] as String)
-          : null,
-      summary: json['summary'] as String?,
-      contentRating: json['contentRating'] as String?,
-      genres: List<String>.from(json['genres'] as List? ?? const []),
-      year: (json['year'] as num?)?.toInt(),
-      seasonNumber: (json['seasonNumber'] as num?)?.toInt(),
-      episodeNumber: (json['episodeNumber'] as num?)?.toInt(),
-      resolution: json['resolution'] as String?,
-      videoCodec: json['videoCodec'] as String?,
-      audioCodec: json['audioCodec'] as String?,
-      audioChannels: (json['audioChannels'] as num?)?.toInt(),
-      dynamicRange: json['dynamicRange'] as String?,
-    );
   }
 }
 
@@ -258,18 +305,37 @@ class Channel {
   };
 
   factory Channel.fromJson(Object? value) {
-    final json = Map<String, Object?>.from(value as Map);
-    return Channel(
-      id: _string(json['id']),
-      number: (json['number'] as num).toInt(),
-      name: _string(json['name']),
-      source: ContentSource.fromJson(json['source']),
-      playbackMode: PlaybackMode.values.byName(_string(json['playbackMode'])),
-      anchor: DateTime.parse(_string(json['anchor'])).toUtc(),
-      shuffleSeed: (json['shuffleSeed'] as num).toInt(),
-      blockSize: (json['blockSize'] as num?)?.toInt(),
-      builderKey: json['builderKey'] as String?,
-    );
+    try {
+      final json = _object(value, 'channel');
+      _requireFields(
+        json,
+        const {
+          'id',
+          'number',
+          'name',
+          'source',
+          'playbackMode',
+          'anchor',
+          'shuffleSeed',
+        },
+        const {'blockSize', 'builderKey'},
+      );
+      return Channel(
+        id: _string(json['id']),
+        number: _integer(json['number']),
+        name: _string(json['name']),
+        source: ContentSource.fromJson(json['source']),
+        playbackMode: _enumValue(PlaybackMode.values, json['playbackMode']),
+        anchor: DateTime.parse(_string(json['anchor'])).toUtc(),
+        shuffleSeed: _integer(json['shuffleSeed']),
+        blockSize: _optionalInteger(json, 'blockSize'),
+        builderKey: _optionalString(json, 'builderKey'),
+      );
+    } on FormatException {
+      rethrow;
+    } catch (error) {
+      throw FormatException('Invalid channel', error);
+    }
   }
 }
 
@@ -284,6 +350,63 @@ String _string(Object? value) {
     throw const FormatException('Required text is missing');
   }
   return value.trim();
+}
+
+Map<String, Object?> _object(Object? value, String name) {
+  if (value is! Map) throw FormatException('Invalid $name');
+  try {
+    return Map<String, Object?>.from(value);
+  } catch (error) {
+    throw FormatException('Invalid $name', error);
+  }
+}
+
+void _requireFields(
+  Map<String, Object?> json,
+  Set<String> required, [
+  Set<String> optional = const {},
+]) {
+  final keys = json.keys.toSet();
+  if (!keys.containsAll(required) ||
+      keys.difference({...required, ...optional}).isNotEmpty) {
+    throw const FormatException('Fields are not canonical');
+  }
+}
+
+Object _nonNull(Map<String, Object?> json, String key) =>
+    json[key] ?? (throw FormatException('Invalid $key'));
+
+bool _boolean(Object? value) {
+  if (value is! bool) throw const FormatException('Invalid Boolean');
+  return value;
+}
+
+int _integer(Object? value) {
+  if (value is! int) throw const FormatException('Invalid integer');
+  return value;
+}
+
+int? _optionalInteger(Map<String, Object?> json, String key) =>
+    json.containsKey(key) ? _integer(_nonNull(json, key)) : null;
+
+String? _optionalString(Map<String, Object?> json, String key) {
+  if (!json.containsKey(key)) return null;
+  final value = _nonNull(json, key);
+  if (value is! String) throw FormatException('Invalid $key');
+  return value;
+}
+
+T _enumValue<T extends Enum>(List<T> values, Object? value) {
+  if (value is! String) throw const FormatException('Invalid enum');
+  return values.where((candidate) => candidate.name == value).firstOrNull ??
+      (throw const FormatException('Invalid enum'));
+}
+
+Uri? _optionalUri(Map<String, Object?> json, String key) {
+  if (!json.containsKey(key)) return null;
+  final value = _nonNull(json, key);
+  if (value is! String) throw FormatException('Invalid $key');
+  return Uri.tryParse(value) ?? (throw FormatException('Invalid $key'));
 }
 
 void _validateSource(ContentSource source, int depth) {

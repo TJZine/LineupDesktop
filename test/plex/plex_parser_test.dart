@@ -1,12 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:lineup_desktop/playback/stream_policy.dart';
 import 'package:lineup_desktop/plex/plex_client.dart';
+import 'package:lineup_desktop/plex/plex_models.dart';
 
 void main() {
   test('parses collection metadata for builder sources', () {
     final item = parseMediaItem({
       'ratingKey': '1',
-      'key': '/library/metadata/1',
       'title': 'Movie',
       'type': 'movie',
       'duration': 1000,
@@ -17,7 +16,7 @@ void main() {
     expect(item.collections, ['Friday Night']);
   });
 
-  test('parses media, part, streams, and Dolby Vision facts', () {
+  test('parses media, part, and Dolby Vision facts', () {
     final item = parseMediaItem({
       'ratingKey': '42',
       'key': '/library/metadata/42',
@@ -36,13 +35,11 @@ void main() {
           'audioCodec': 'EAC3',
           'videoResolution': '4k',
           'audioChannels': 6,
-          'DOVIPresent': true,
           'Part': [
             {
               'key': '/library/parts/1/file.mkv',
               'Stream': [
-                {'id': 1, 'streamType': 2, 'codec': 'eac3', 'selected': 1},
-                {'id': 2, 'streamType': 3, 'codec': 'srt', 'key': '/subs/2'},
+                {'codec': 'dovi'},
               ],
             },
           ],
@@ -52,13 +49,104 @@ void main() {
     expect(item.container, 'mkv');
     expect(item.videoCodec, 'hevc');
     expect(item.dynamicRange, DynamicRange.dolbyVision);
-    expect(item.tracks.last.delivery, SubtitleDelivery.sidecar);
     expect(item.summary, 'A first episode.');
     expect(item.contentRating, 'TV-14');
     expect(item.seasonNumber, 1);
     expect(item.episodeNumber, 2);
     expect(item.videoResolution, '4k');
     expect(item.audioChannels, 6);
+  });
+
+  test('preserves every ordered part with positive nullable durations', () {
+    final item = parseMediaItem({
+      'ratingKey': 'multi',
+      'key': '/library/metadata/multi',
+      'title': 'Multi-part movie',
+      'type': 'movie',
+      'duration': 3000,
+      'Media': [
+        {
+          'container': 'mkv',
+          'videoCodec': 'h264',
+          'audioCodec': 'aac',
+          'Part': [
+            {'key': '/library/parts/one.mkv', 'duration': 1000},
+            {'key': '/library/parts/two.mkv', 'duration': 0},
+            {'key': '/library/parts/three.mkv', 'duration': -1},
+          ],
+        },
+        {
+          'container': 'mp4',
+          'Part': [
+            {'key': '/ignored-alternate.mp4'},
+          ],
+        },
+      ],
+    });
+
+    expect(item.parts.map((part) => part.path), [
+      '/library/parts/one.mkv',
+      '/library/parts/two.mkv',
+      '/library/parts/three.mkv',
+    ]);
+    expect(item.parts.map((part) => part.duration), [
+      const Duration(seconds: 1),
+      null,
+      null,
+    ]);
+  });
+
+  test('drops media parts without a usable path', () {
+    final item = parseMediaItem({
+      'ratingKey': 'malformed-parts',
+      'title': 'Malformed parts',
+      'type': 'movie',
+      'duration': 3000,
+      'Media': [
+        {
+          'Part': [
+            {'duration': 1000},
+            {'key': '   ', 'duration': 1000},
+            {'key': '/library/parts/valid.mkv', 'duration': 1000},
+          ],
+        },
+      ],
+    });
+    final unsupported = parseMediaItem({
+      'ratingKey': 'no-usable-parts',
+      'title': 'No usable parts',
+      'type': 'movie',
+      'duration': 1000,
+      'Media': [
+        {
+          'Part': [
+            {},
+            {'key': ''},
+          ],
+        },
+      ],
+    });
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+    );
+    addTearDown(client.close);
+
+    expect(item.parts.map((part) => part.path), ['/library/parts/valid.mkv']);
+    expect(item.parts.single.duration, const Duration(seconds: 1));
+    expect(unsupported.parts, isEmpty);
+    expect(
+      () => client.playbackDescriptor(
+        server: Uri.parse('https://plex.example:32400'),
+        item: unsupported,
+      ),
+      throwsA(
+        isA<PlexException>().having(
+          (exception) => exception.code,
+          'code',
+          'unsupported',
+        ),
+      ),
+    );
   });
 
   test(

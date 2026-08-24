@@ -149,7 +149,7 @@ void main() {
             duration: items.first.duration,
             showTitle: items.first.showTitle,
             showThumb: items.first.showThumb,
-            artwork: items.first.artwork,
+            poster: items.first.poster,
           ),
           ...items.skip(1),
         ]),
@@ -211,7 +211,7 @@ void main() {
             id: 'old-art',
             title: 'Old artwork',
             duration: Duration(hours: 1),
-            artwork: Uri.parse('/old'),
+            poster: Uri.parse('/old'),
           ),
           start: start,
           end: start.add(const Duration(hours: 1)),
@@ -380,7 +380,7 @@ void main() {
                 id: 'art-$index',
                 title: 'Artwork $index',
                 duration: const Duration(hours: 1),
-                artwork: Uri.parse('/art/$index'),
+                poster: Uri.parse('/art/$index'),
               ),
               start: start,
               end: start.add(const Duration(hours: 1)),
@@ -429,7 +429,7 @@ void main() {
           id: 'art',
           title: 'Artwork',
           duration: const Duration(hours: 1),
-          artwork: Uri.parse('/art'),
+          poster: Uri.parse('/art'),
         ),
         start: start,
         end: start.add(const Duration(hours: 1)),
@@ -465,7 +465,7 @@ void main() {
           title: 'Episode',
           duration: const Duration(hours: 1),
           showThumb: '/show-poster',
-          artwork: Uri.parse('/episode-thumb'),
+          poster: Uri.parse('/episode-thumb'),
           backdrop: Uri.parse('/backdrop'),
           clearLogo: Uri.parse('/clear-logo'),
         ),
@@ -520,7 +520,6 @@ void main() {
               2000,
               (index) => PlexMediaItem(
                 id: 'item-$index',
-                key: '/library/metadata/$index',
                 title: 'Item $index',
                 type: 'movie',
                 duration: const Duration(minutes: 30),
@@ -928,7 +927,8 @@ class _MemoryStore implements AppStore {
   @override
   Future<String> clientIdentifier() async => 'test';
   @override
-  Future<PersistedState> load() async => const PersistedState();
+  Future<AppStoreLoadResult> load() async =>
+      const AppStoreLoadResult(PersistedState());
   @override
   Future<void> save(PersistedState state) async {}
 }

@@ -90,7 +90,6 @@ Channel _manualChannel(ChannelItem item) => Channel(
 
 const _mediaItem = PlexMediaItem(
   id: 'item',
-  key: '/library/metadata/item',
   title: 'Item',
   type: 'movie',
   duration: Duration(minutes: 30),
@@ -101,7 +100,6 @@ class _UnsendableMediaItem extends PlexMediaItem {
   _UnsendableMediaItem(this.unsendable)
     : super(
         id: 'unsendable',
-        key: '/library/metadata/unsendable',
         title: 'Unsendable',
         type: 'movie',
         duration: const Duration(minutes: 30),
@@ -126,7 +124,6 @@ class _ExitingMediaItem extends PlexMediaItem {
   const _ExitingMediaItem()
     : super(
         id: 'exiting',
-        key: '/library/metadata/exiting',
         title: 'Exiting',
         type: 'movie',
         duration: const Duration(minutes: 30),

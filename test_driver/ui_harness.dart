@@ -42,10 +42,10 @@ class HarnessController extends LineupController {
   );
 
   @override
-  LineupPlaybackRequest playbackFor(String itemId) => LineupPlaybackRequest(
-    Uri.parse('lineup-test://synthetic/$itemId'),
-    () async {},
-  );
+  LineupPlaybackRequest playbackFor(String itemId) =>
+      LineupPlaybackRequest.parts([
+        LineupPlaybackPart(uri: Uri.parse('lineup-test://synthetic/$itemId')),
+      ]);
 
   @override
   Future<void> setCurrentChannel(String? id) async {
@@ -195,7 +195,8 @@ class _HarnessStore implements AppStore {
   @override
   Future<String> clientIdentifier() async => 'harness';
   @override
-  Future<PersistedState> load() async => const PersistedState();
+  Future<AppStoreLoadResult> load() async =>
+      const AppStoreLoadResult(PersistedState());
   @override
   Future<void> save(PersistedState state) async {}
 }

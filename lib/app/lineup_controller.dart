@@ -9,7 +9,6 @@ import '../channels/scheduler.dart';
 import '../channels/schedule_worker.dart';
 import '../diagnostics/diagnostics.dart';
 import '../persistence/app_store.dart';
-import '../playback/stream_policy.dart';
 import '../plex/plex_client.dart';
 import '../plex/plex_models.dart';
 import '../settings/lineup_settings.dart';
@@ -24,14 +23,27 @@ enum SetupStage {
   ready,
 }
 
-class LineupPlaybackRequest {
-  LineupPlaybackRequest(Uri uri, this._release, {this.plexToken})
-    : uri = _withoutPlexToken(uri);
+enum LibraryScanStatus {
+  idle,
+  scanning,
+  complete,
+  empty,
+  unsupported,
+  transientFailure,
+  cancelled,
+}
 
-  final Uri uri;
+class LineupPlaybackRequest {
+  LineupPlaybackRequest.parts(
+    List<LineupPlaybackPart> parts, {
+    this.plexToken,
+    this.authorizationRecovery,
+  }) : assert(parts.isNotEmpty),
+       parts = List.unmodifiable(parts);
+
+  final List<LineupPlaybackPart> parts;
   final String? plexToken;
-  final Future<void> Function() _release;
-  bool _released = false;
+  final Future<LineupPlaybackRequest> Function()? authorizationRecovery;
 
   static Uri _withoutPlexToken(Uri uri) {
     final query = Map<String, List<String>>.fromEntries(
@@ -51,12 +63,15 @@ class LineupPlaybackRequest {
           )
         : uri.replace(queryParameters: query);
   }
+}
 
-  Future<void> release() async {
-    if (_released) return;
-    _released = true;
-    await _release();
-  }
+class LineupPlaybackPart {
+  LineupPlaybackPart({required Uri uri, this.duration})
+    : assert(duration == null || duration > Duration.zero),
+      uri = LineupPlaybackRequest._withoutPlexToken(uri);
+
+  final Uri uri;
+  final Duration? duration;
 }
 
 class LineupController extends ChangeNotifier {
@@ -97,10 +112,20 @@ class LineupController extends ChangeNotifier {
   bool profileSelectionCanCancel = false;
   bool serverSelectionCanCancel = false;
   bool secureCancellationRequired = false;
+  LibraryScanStatus libraryScanStatus = LibraryScanStatus.idle;
+  int libraryScanCompletedPages = 0;
+  int libraryScanCompletedItems = 0;
+  int? libraryScanTotalItems;
   String? error;
   int _epoch = 0;
   String? _accountToken;
   String? _profileToken;
+  Map<String, PlexServerAccess> _serverAccess = const {};
+  String? _pmsToken;
+  String? _serverTargetId;
+  Future<PlexConnection>? _pmsRefresh;
+  int? _pmsRefreshOperation;
+  String? _pmsRefreshServerId;
   PersistedState _persisted = const PersistedState();
   Timer? _pinTimer;
   int? _busyOperation;
@@ -109,18 +134,23 @@ class LineupController extends ChangeNotifier {
   ScheduleWorker? _scheduleWorker;
   final ScheduleWorkerFactory _scheduleWorkerFactory;
   Future<void> _credentialOperations = Future.value();
+  Future<void> _stateOperations = Future.value();
   Future<bool>? _logoutFuture;
-  int _settingsGeneration = 0;
   int _contentGeneration = 0;
   bool _disposed = false;
+
+  String? startupRecoveryNotice;
 
   int get contentGeneration => _contentGeneration;
 
   Future<void> initialize() async {
     final operation = ++_epoch;
-    final persisted = await store.load();
+    final loadResult = await store.load();
     if (!_isCurrent(operation)) return;
-    _persisted = persisted;
+    _persisted = loadResult.state;
+    startupRecoveryNotice = loadResult.recoveredCorruptState
+        ? 'Saved app data was corrupt and has been reset.'
+        : null;
     settings = _persisted.settings;
     diagnostics.enabled = settings.diagnosticsEnabled;
     channels = const [];
@@ -174,6 +204,12 @@ class LineupController extends ChangeNotifier {
     );
   }
 
+  void dismissStartupRecoveryNotice() {
+    if (startupRecoveryNotice == null) return;
+    startupRecoveryNotice = null;
+    notifyListeners();
+  }
+
   Future<void> startLinking() async {
     if (secureCancellationRequired) {
       await cancelLinking();
@@ -209,7 +245,7 @@ class LineupController extends ChangeNotifier {
     } catch (exception) {
       cleanupFailure = exception;
       diagnostics.add('application', 'Credential cleanup failed', {
-        'error': exception.toString(),
+        'code': exception is PlexException ? exception.code : 'unexpected',
       });
     }
     if (pin != null) {
@@ -217,7 +253,7 @@ class LineupController extends ChangeNotifier {
         await plex.cancelPin(pin);
       } catch (exception) {
         diagnostics.add('plex-auth', 'PIN cancellation failed', {
-          'error': exception.toString(),
+          'code': exception is PlexException ? exception.code : 'unexpected',
         });
       }
     }
@@ -283,13 +319,15 @@ class LineupController extends ChangeNotifier {
       notifyListeners();
     } catch (exception) {
       diagnostics.add('plex-auth', 'PIN poll failed', {
-        'error': exception.toString(),
+        'code': exception is PlexException ? exception.code : 'unexpected',
       });
     }
   }
 
   Future<void> selectProfile(PlexHomeUser selected, {String? pin}) async {
     final operation = ++_epoch;
+    _invalidatePmsRefresh();
+    _serverTargetId = null;
     _pinTimer?.cancel();
     await _run(
       () async {
@@ -307,48 +345,59 @@ class LineupController extends ChangeNotifier {
         )) {
           return;
         }
-        final oldProfile = profile;
-        final oldProfileToken = _profileToken;
-        final oldServer = server;
-        final oldConnection = connection;
-        final oldLibraries = libraries;
-        final oldSelectedLibraries = selectedLibraryIds;
-        final oldMedia = availableMedia;
-        final oldPlaylists = availablePlaylists;
-        final oldChannels = channels;
-        final oldCurrent = currentChannelId;
-        final oldCanCancel = profileSelectionCanCancel;
-        profileSelectionCanCancel = false;
-        notifyListeners();
-        profile = selected;
-        _profileToken = token;
-        server = null;
-        connection = null;
-        libraries = const [];
-        selectedLibraryIds = const {};
-        availableMedia = const [];
-        availablePlaylists = const [];
-        channels = const [];
-        currentChannelId = null;
-        try {
-          await _save();
-        } catch (_) {
-          profile = oldProfile;
-          _profileToken = oldProfileToken;
-          server = oldServer;
-          connection = oldConnection;
-          libraries = oldLibraries;
-          selectedLibraryIds = oldSelectedLibraries;
-          availableMedia = oldMedia;
-          availablePlaylists = oldPlaylists;
-          channels = oldChannels;
-          currentChannelId = oldCurrent;
-          profileSelectionCanCancel = oldCanCancel;
-          rethrow;
-        }
+        await _queueStateOperation(operation, () async {
+          final oldProfile = profile;
+          final oldProfileToken = _profileToken;
+          final oldServerAccess = _serverAccess;
+          final oldPmsToken = _pmsToken;
+          final oldServer = server;
+          final oldConnection = connection;
+          final oldLibraries = libraries;
+          final oldSelectedLibraries = selectedLibraryIds;
+          final oldMedia = availableMedia;
+          final oldPlaylists = availablePlaylists;
+          final oldChannels = channels;
+          final oldCurrent = currentChannelId;
+          final oldCanCancel = profileSelectionCanCancel;
+          profileSelectionCanCancel = false;
+          notifyListeners();
+          profile = selected;
+          _profileToken = token;
+          _serverAccess = const {};
+          _pmsToken = null;
+          _invalidatePmsRefresh();
+          server = null;
+          connection = null;
+          libraries = const [];
+          selectedLibraryIds = const {};
+          availableMedia = const [];
+          availablePlaylists = const [];
+          channels = const [];
+          currentChannelId = null;
+          try {
+            await _save();
+          } catch (_) {
+            profile = oldProfile;
+            _profileToken = oldProfileToken;
+            _serverAccess = oldServerAccess;
+            _pmsToken = oldPmsToken;
+            server = oldServer;
+            connection = oldConnection;
+            libraries = oldLibraries;
+            selectedLibraryIds = oldSelectedLibraries;
+            availableMedia = oldMedia;
+            availablePlaylists = oldPlaylists;
+            channels = oldChannels;
+            currentChannelId = oldCurrent;
+            profileSelectionCanCancel = oldCanCancel;
+            rethrow;
+          }
+          if (_disposed) return;
+          _resetLibraryScan();
+          _contentGeneration++;
+          notifyListeners();
+        });
         if (!_isCurrent(operation)) return;
-        _contentGeneration++;
-        notifyListeners();
         await _discover(operation);
         if (operation == _epoch) profileSelectionCanCancel = false;
       },
@@ -362,7 +411,8 @@ class LineupController extends ChangeNotifier {
     if (token == null) return;
     final discovered = await plex.discoverServers(token);
     if (!_isCurrent(operation)) return;
-    servers = discovered;
+    _serverAccess = {for (final access in discovered) access.server.id: access};
+    servers = List.unmodifiable(discovered.map((access) => access.server));
     stage = SetupStage.servers;
     final profileId = profile?.id ?? account?.id;
     final savedId = profileId == null
@@ -373,6 +423,9 @@ class LineupController extends ChangeNotifier {
         .firstOrNull;
     if (saved != null) {
       await selectServer(saved);
+    } else if (savedId != null) {
+      if (server != null) _clearServerRuntime();
+      error = 'Plex server authorization is unavailable.';
     } else if (server != null) {
       _clearServerRuntime();
       serverSelectionCanCancel = false;
@@ -381,6 +434,8 @@ class LineupController extends ChangeNotifier {
 
   Future<void> refreshServers() async {
     final operation = ++_epoch;
+    _invalidatePmsRefresh();
+    _serverTargetId = null;
     await _run(
       () => _discover(operation),
       operation: operation,
@@ -390,79 +445,107 @@ class LineupController extends ChangeNotifier {
 
   Future<void> selectServer(PlexServer selected) async {
     final operation = ++_epoch;
+    _invalidatePmsRefresh();
+    _serverTargetId = selected.id;
     await _run(
       () async {
-        final token = _profileToken ?? _accountToken;
-        if (token == null) {
-          throw const PlexException('auth-required', 'Link Plex first.');
-        }
-        final selectedConnection = await plex.selectConnection(selected, token);
-        if (!_isCurrent(operation)) return;
-        final loadedLibraries = await plex.libraries(
-          selectedConnection.uri,
-          token,
+        final selectedConnection = await _withPmsAuthorization(
+          operation,
+          selected.id,
+          (token, refreshedConnection) => refreshedConnection != null
+              ? Future.value(refreshedConnection)
+              : plex.selectConnection(
+                  _serverAccess[selected.id]!.server,
+                  token,
+                ),
         );
         if (!_isCurrent(operation)) return;
-        final oldServer = server;
-        final oldConnection = connection;
-        final oldLibraries = libraries;
-        final oldSelectedLibraries = selectedLibraryIds;
-        final oldMedia = availableMedia;
-        final oldPlaylists = availablePlaylists;
-        final oldChannels = channels;
-        final oldCurrent = currentChannelId;
-        final oldCanCancel = serverSelectionCanCancel;
-        serverSelectionCanCancel = false;
-        notifyListeners();
-        server = selected;
-        connection = selectedConnection;
-        libraries = loadedLibraries;
-        final profileId = profile?.id ?? account?.id;
-        final savedLibraries = profileId == null
-            ? const <String>[]
-            : _persisted.selectedLibraryIdsByProfileServer[profileId]?[selected
-                      .id] ??
-                  const <String>[];
-        final availableIds = loadedLibraries
-            .map((library) => library.id)
-            .toSet();
-        selectedLibraryIds = Set.unmodifiable(
-          savedLibraries.where(availableIds.contains),
+        var workingConnection = selectedConnection;
+        final loadedLibraries = await _withPmsAuthorization(
+          operation,
+          selected.id,
+          (token, refreshedConnection) {
+            workingConnection = refreshedConnection ?? workingConnection;
+            return plex.libraries(workingConnection.uri, token);
+          },
+          connectionOverride: selectedConnection,
         );
-        availableMedia = const [];
-        availablePlaylists = const [];
-        channels = List.unmodifiable(
-          profileId == null
-              ? const <Channel>[]
-              : _persisted.channelsByProfileServer[profileId]?[selected.id] ??
-                    const <Channel>[],
-        );
-        currentChannelId = profileId == null
-            ? null
-            : _persisted.currentChannelByProfileServer[profileId]?[selected.id];
-        stage = SetupStage.channelSetup;
-        channelSetupCanCancel = false;
-        try {
-          await _save();
-        } catch (_) {
-          server = oldServer;
-          connection = oldConnection;
-          libraries = oldLibraries;
-          selectedLibraryIds = oldSelectedLibraries;
-          availableMedia = oldMedia;
-          availablePlaylists = oldPlaylists;
-          channels = oldChannels;
-          currentChannelId = oldCurrent;
-          serverSelectionCanCancel = oldCanCancel;
-          rethrow;
-        }
         if (!_isCurrent(operation)) return;
-        _contentGeneration++;
-        notifyListeners();
+        await _queueStateOperation(operation, () async {
+          final oldServer = server;
+          final oldConnection = connection;
+          final oldPmsToken = _pmsToken;
+          final oldLibraries = libraries;
+          final oldSelectedLibraries = selectedLibraryIds;
+          final oldMedia = availableMedia;
+          final oldPlaylists = availablePlaylists;
+          final oldChannels = channels;
+          final oldCurrent = currentChannelId;
+          final oldCanCancel = serverSelectionCanCancel;
+          serverSelectionCanCancel = false;
+          notifyListeners();
+          server = _serverAccess[selected.id]!.server;
+          connection = workingConnection;
+          _pmsToken = _serverAccess[selected.id]!.token;
+          libraries = loadedLibraries;
+          final profileId = profile?.id ?? account?.id;
+          final savedLibraries = profileId == null
+              ? const <String>[]
+              : _persisted
+                        .selectedLibraryIdsByProfileServer[profileId]?[selected
+                        .id] ??
+                    const <String>[];
+          final availableIds = loadedLibraries
+              .map((library) => library.id)
+              .toSet();
+          selectedLibraryIds = Set.unmodifiable(
+            savedLibraries.where(availableIds.contains),
+          );
+          availableMedia = const [];
+          availablePlaylists = const [];
+          channels = List.unmodifiable(
+            profileId == null
+                ? const <Channel>[]
+                : _persisted.channelsByProfileServer[profileId]?[selected.id] ??
+                      const <Channel>[],
+          );
+          currentChannelId = profileId == null
+              ? null
+              : _persisted.currentChannelByProfileServer[profileId]?[selected
+                    .id];
+          stage = SetupStage.channelSetup;
+          channelSetupCanCancel = false;
+          try {
+            await _save();
+          } catch (_) {
+            server = oldServer;
+            connection = oldConnection;
+            _pmsToken = oldPmsToken;
+            libraries = oldLibraries;
+            selectedLibraryIds = oldSelectedLibraries;
+            availableMedia = oldMedia;
+            availablePlaylists = oldPlaylists;
+            channels = oldChannels;
+            currentChannelId = oldCurrent;
+            serverSelectionCanCancel = oldCanCancel;
+            rethrow;
+          }
+          if (_disposed) return;
+          _resetLibraryScan();
+          _contentGeneration++;
+          notifyListeners();
+        });
+        if (!_isCurrent(operation)) return;
         if (selectedLibraryIds.isNotEmpty && channels.isNotEmpty) {
-          await _loadLibraries(operation, selectedLibraryIds);
+          final loaded = await _loadLibraries(operation, selectedLibraryIds);
           if (operation != _epoch) return;
-          stage = SetupStage.ready;
+          _requireAvailablePlaylists(loaded.failedPlaylistIds);
+          libraryScanStatus = loaded.status;
+          availableMedia = loaded.media;
+          availablePlaylists = loaded.playlists;
+          stage = libraryScanStatus == LibraryScanStatus.complete
+              ? SetupStage.ready
+              : SetupStage.channelSetup;
         } else if (!settings.audioSetupComplete) {
           stage = SetupStage.audio;
         }
@@ -471,11 +554,12 @@ class LineupController extends ChangeNotifier {
       operation: operation,
       fallbackStage: SetupStage.servers,
     );
+    if (_serverTargetId == selected.id) _serverTargetId = null;
   }
 
   Future<bool> setLibraries(Set<String> ids) async {
     final operation = ++_epoch;
-    return _run(
+    final loaded = await _run(
       () async {
         final allowed = libraries.map((library) => library.id).toSet();
         if (ids.isEmpty || !allowed.containsAll(ids)) {
@@ -484,71 +568,186 @@ class LineupController extends ChangeNotifier {
             'Select one or more libraries from the current server.',
           );
         }
-        final oldSelectedLibraries = selectedLibraryIds;
-        final oldMedia = availableMedia;
-        final oldPlaylists = availablePlaylists;
-        await _loadLibraries(operation, ids);
+        final loaded = await _loadLibraries(operation, ids);
         if (operation != _epoch) return;
-        selectedLibraryIds = Set.unmodifiable(ids);
-        try {
-          await _save();
-        } catch (_) {
-          selectedLibraryIds = oldSelectedLibraries;
-          availableMedia = oldMedia;
-          availablePlaylists = oldPlaylists;
-          rethrow;
-        }
-        if (!_isCurrent(operation)) return;
-        _contentGeneration++;
-        notifyListeners();
+        await _queueStateOperation(operation, () async {
+          libraryScanStatus = loaded.status;
+          _requireAvailablePlaylists(loaded.failedPlaylistIds);
+          final oldSelectedLibraries = selectedLibraryIds;
+          final oldMedia = availableMedia;
+          final oldPlaylists = availablePlaylists;
+          selectedLibraryIds = Set.unmodifiable(ids);
+          availableMedia = loaded.media;
+          availablePlaylists = loaded.playlists;
+          try {
+            await _save();
+          } catch (_) {
+            selectedLibraryIds = oldSelectedLibraries;
+            availableMedia = oldMedia;
+            availablePlaylists = oldPlaylists;
+            rethrow;
+          }
+          if (_disposed) return;
+          _contentGeneration++;
+          notifyListeners();
+        });
       },
       operation: operation,
       fallbackStage: SetupStage.channelSetup,
     );
+    return loaded;
   }
 
-  Future<void> _loadLibraries(int operation, Set<String> ids) async {
-    final token = _profileToken ?? _accountToken;
-    final endpoint = connection?.uri;
-    if (token == null || endpoint == null) {
+  Future<
+    ({
+      Set<String> failedPlaylistIds,
+      List<PlexMediaItem> media,
+      List<PlexPlaylist> playlists,
+      LibraryScanStatus status,
+    })
+  >
+  _loadLibraries(int operation, Set<String> ids) async {
+    final selectedServer = server;
+    if (selectedServer == null || connection == null) {
       throw const PlexException('server-unreachable', 'Select a server first.');
     }
-    final items = <PlexMediaItem>[];
-    for (final id in ids) {
-      final library = libraries.firstWhere((library) => library.id == id);
-      items.addAll(await plex.libraryItems(endpoint, token, id, library.type));
-      if (operation != _epoch) return;
-    }
-    PlexPlaylistCatalog catalog;
+    libraryScanStatus = LibraryScanStatus.scanning;
+    libraryScanCompletedPages = 0;
+    libraryScanCompletedItems = 0;
+    libraryScanTotalItems = null;
+    notifyListeners();
     try {
-      catalog = await plex.playlists(endpoint, token);
-    } on PlexException catch (exception) {
-      diagnostics.add('plex-library', 'Playlist discovery unavailable', {
-        'error': exception.toString(),
-      });
-      catalog = const PlexPlaylistCatalog(playlists: [], failedIds: {});
+      final selected = libraries
+          .where((library) => ids.contains(library.id))
+          .toList(growable: false);
+      final results = List<List<PlexMediaItem>?>.filled(selected.length, null);
+      final pages = List<int>.filled(selected.length, 0);
+      final itemCounts = List<int>.filled(selected.length, 0);
+      final totals = List<int?>.filled(selected.length, null);
+      var nextLibrary = 0;
+      Future<void> loadNext() async {
+        while (_isCurrent(operation)) {
+          final index = nextLibrary++;
+          if (index >= selected.length) return;
+          final library = selected[index];
+          results[index] = await _withPmsAuthorization(
+            operation,
+            selectedServer.id,
+            (token, refreshedConnection) => plex.libraryItems(
+              (refreshedConnection ?? connection!).uri,
+              token,
+              library.id,
+              library.type,
+              isCurrent: () => _isCurrent(operation),
+              onProgress: (progress) {
+                if (!_isCurrent(operation)) return;
+                if (progress.completedPages > pages[index]) {
+                  pages[index] = progress.completedPages;
+                }
+                if (progress.completedItems > itemCounts[index]) {
+                  itemCounts[index] = progress.completedItems;
+                }
+                totals[index] = progress.totalItems ?? totals[index];
+                libraryScanCompletedPages = pages.fold(0, (a, b) => a + b);
+                libraryScanCompletedItems = itemCounts.fold(0, (a, b) => a + b);
+                libraryScanTotalItems = totals.every((total) => total != null)
+                    ? totals.whereType<int>().fold<int>(0, (a, b) => a + b)
+                    : null;
+                notifyListeners();
+              },
+            ),
+          );
+        }
+      }
+
+      await Future.wait(
+        List.generate(selected.length.clamp(0, 4), (_) => loadNext()),
+      );
+      if (!_isCurrent(operation)) {
+        return (
+          failedPlaylistIds: const <String>{},
+          media: const <PlexMediaItem>[],
+          playlists: const <PlexPlaylist>[],
+          status: LibraryScanStatus.cancelled,
+        );
+      }
+      final items = results
+          .whereType<List<PlexMediaItem>>()
+          .expand((items) => items)
+          .toList();
+      PlexPlaylistCatalog catalog;
+      try {
+        catalog = await _withPmsAuthorization(
+          operation,
+          selectedServer.id,
+          (token, refreshedConnection) =>
+              plex.playlists((refreshedConnection ?? connection!).uri, token),
+        );
+      } on PlexException catch (exception) {
+        if (_isPmsAuthorizationError(exception)) rethrow;
+        diagnostics.add('plex-library', 'Playlist discovery unavailable', {
+          'code': exception.code,
+        });
+        catalog = const PlexPlaylistCatalog(playlists: [], failedIds: {});
+      }
+      if (operation != _epoch) {
+        return (
+          failedPlaylistIds: const <String>{},
+          media: const <PlexMediaItem>[],
+          playlists: const <PlexPlaylist>[],
+          status: LibraryScanStatus.cancelled,
+        );
+      }
+      if (catalog.failedIds.isNotEmpty) {
+        diagnostics.add('plex-library', 'Some playlists could not be loaded', {
+          'count': catalog.failedIds.length,
+        });
+      }
+      final playable = items
+          .where((item) => item.duration > Duration.zero)
+          .toList();
+      final status = items.isEmpty
+          ? LibraryScanStatus.empty
+          : playable.isEmpty
+          ? LibraryScanStatus.unsupported
+          : LibraryScanStatus.complete;
+      return (
+        failedPlaylistIds: Set<String>.unmodifiable(catalog.failedIds),
+        media: List<PlexMediaItem>.unmodifiable(playable),
+        playlists: List<PlexPlaylist>.unmodifiable(catalog.playlists),
+        status: status,
+      );
+    } catch (_) {
+      if (_isCurrent(operation)) {
+        libraryScanStatus = LibraryScanStatus.transientFailure;
+        notifyListeners();
+      }
+      rethrow;
     }
-    if (operation != _epoch) return;
+  }
+
+  void cancelLibraryScan() {
+    if (libraryScanStatus != LibraryScanStatus.scanning) return;
+    ++_epoch;
+    _busyOperation = null;
+    busy = false;
+    error = null;
+    libraryScanStatus = LibraryScanStatus.cancelled;
+    notifyListeners();
+  }
+
+  void _requireAvailablePlaylists(Set<String> failedIds) {
     final required = channels
         .map((channel) => channel.source)
         .whereType<PlaylistSource>()
         .map((source) => source.playlistId)
         .toSet();
-    if (catalog.failedIds.any(required.contains)) {
+    if (failedIds.any(required.contains)) {
       throw const PlexException(
         'playlist-unavailable',
         'A playlist used by this lineup could not be loaded. Retry setup.',
       );
     }
-    if (catalog.failedIds.isNotEmpty) {
-      diagnostics.add('plex-library', 'Some playlists could not be loaded', {
-        'count': catalog.failedIds.length,
-      });
-    }
-    availableMedia = List.unmodifiable(
-      items.where((item) => item.duration > Duration.zero),
-    );
-    availablePlaylists = catalog.playlists;
   }
 
   Future<void> completeAudioSetup() async {
@@ -561,7 +760,7 @@ class LineupController extends ChangeNotifier {
       error =
           'Could not save audio settings. Check device storage and try again.';
       diagnostics.add('application', 'Audio setup persistence failed', {
-        'error': exception.toString(),
+        'code': exception is PlexException ? exception.code : 'unexpected',
       });
       notifyListeners();
     }
@@ -575,6 +774,7 @@ class LineupController extends ChangeNotifier {
 
   void cancelChannelSetup() {
     if (channelSetupCanCancel) {
+      cancelLibraryScan();
       channelSetupCanCancel = false;
       error = null;
       stage = SetupStage.ready;
@@ -593,6 +793,8 @@ class LineupController extends ChangeNotifier {
     if (!profileSelectionCanCancel || server == null) return;
     if (busy) {
       ++_epoch;
+      _invalidatePmsRefresh();
+      _serverTargetId = null;
       _busyOperation = null;
       busy = false;
     }
@@ -613,6 +815,8 @@ class LineupController extends ChangeNotifier {
     if (!serverSelectionCanCancel || server == null) return;
     if (busy) {
       ++_epoch;
+      _invalidatePmsRefresh();
+      _serverTargetId = null;
       _busyOperation = null;
       busy = false;
     }
@@ -623,11 +827,11 @@ class LineupController extends ChangeNotifier {
   }
 
   Future<void> clearSavedServer() async {
-    final profileId = profile?.id ?? account?.id;
-    if (profileId == null) return;
     final operation = ++_epoch;
     await _run(
-      () async {
+      () => _queueStateOperation(operation, () async {
+        final profileId = profile?.id ?? account?.id;
+        if (profileId == null) return;
         final selections = Map<String, String>.of(
           _persisted.selectedServerByProfile,
         )..remove(profileId);
@@ -642,12 +846,11 @@ class LineupController extends ChangeNotifier {
               _persisted.currentChannelByProfileServer,
         );
         await store.save(next);
-        if (operation != _epoch) return;
         _persisted = next;
         _clearServerRuntime();
         serverSelectionCanCancel = false;
         stage = SetupStage.servers;
-      },
+      }),
       operation: operation,
       fallbackStage: SetupStage.servers,
     );
@@ -657,70 +860,76 @@ class LineupController extends ChangeNotifier {
     List<Channel> planned, {
     required ChannelBuildMode mode,
   }) async {
-    final oldChannels = channels;
-    final oldCurrent = currentChannelId;
-    final oldCurrentIndex = oldChannels.indexWhere(
-      (channel) => channel.id == oldCurrent,
-    );
-    final next = switch (mode) {
-      ChannelBuildMode.replace => [...planned],
-      ChannelBuildMode.append => [...channels, ...planned],
-      ChannelBuildMode.merge => [
-        ...channels.where(
-          (existing) => !planned.any(
-            (candidate) =>
-                candidate.builderKey != null &&
-                candidate.builderKey == existing.builderKey,
+    final operation = _epoch;
+    await _queueStateOperation(operation, () async {
+      final oldChannels = channels;
+      final oldCurrent = currentChannelId;
+      final oldCurrentIndex = oldChannels.indexWhere(
+        (channel) => channel.id == oldCurrent,
+      );
+      final next = switch (mode) {
+        ChannelBuildMode.replace => [...planned],
+        ChannelBuildMode.append => [...channels, ...planned],
+        ChannelBuildMode.merge => [
+          ...channels.where(
+            (existing) => !planned.any(
+              (candidate) =>
+                  candidate.builderKey != null &&
+                  candidate.builderKey == existing.builderKey,
+            ),
           ),
-        ),
-        ...planned,
-      ],
-    }..sort((a, b) => a.number.compareTo(b.number));
-    for (final channel in next) {
-      channel.validate(next);
-    }
-    channels = List.unmodifiable(next);
-    currentChannelId = channels.any((channel) => channel.id == oldCurrent)
-        ? oldCurrent
-        : channels.isEmpty
-        ? null
-        : channels[oldCurrentIndex.clamp(0, channels.length - 1)].id;
-    try {
-      await _save();
-      if (_disposed) return;
-      stage = SetupStage.ready;
-      notifyListeners();
-    } catch (_) {
-      channels = oldChannels;
-      currentChannelId = oldCurrent;
-      rethrow;
-    }
+          ...planned,
+        ],
+      }..sort((a, b) => a.number.compareTo(b.number));
+      for (final channel in next) {
+        channel.validate(next);
+      }
+      channels = List.unmodifiable(next);
+      currentChannelId = channels.any((channel) => channel.id == oldCurrent)
+          ? oldCurrent
+          : channels.isEmpty
+          ? null
+          : channels[oldCurrentIndex.clamp(0, channels.length - 1)].id;
+      try {
+        await _save();
+        if (_disposed) return;
+        stage = SetupStage.ready;
+        notifyListeners();
+      } catch (_) {
+        channels = oldChannels;
+        currentChannelId = oldCurrent;
+        rethrow;
+      }
+    });
   }
 
   Future<void> saveChannel(Channel channel) async {
-    channel.validate(channels);
-    final next = [...channels];
-    final index = next.indexWhere((candidate) => candidate.id == channel.id);
-    if (index < 0) {
-      next.add(channel);
-    } else {
-      next[index] = channel;
-    }
-    final old = channels;
-    final oldCurrent = currentChannelId;
-    channels = List.unmodifiable(
-      next..sort((a, b) => a.number.compareTo(b.number)),
-    );
-    currentChannelId ??= channel.id;
-    try {
-      await _save();
-      if (_disposed) return;
-      notifyListeners();
-    } catch (_) {
-      channels = old;
-      currentChannelId = oldCurrent;
-      rethrow;
-    }
+    final operation = _epoch;
+    await _queueStateOperation(operation, () async {
+      channel.validate(channels);
+      final next = [...channels];
+      final index = next.indexWhere((candidate) => candidate.id == channel.id);
+      if (index < 0) {
+        next.add(channel);
+      } else {
+        next[index] = channel;
+      }
+      final old = channels;
+      final oldCurrent = currentChannelId;
+      channels = List.unmodifiable(
+        next..sort((a, b) => a.number.compareTo(b.number)),
+      );
+      currentChannelId ??= channel.id;
+      try {
+        await _save();
+        if (_disposed) return;
+        notifyListeners();
+      } catch (_) {
+        channels = old;
+        currentChannelId = oldCurrent;
+        rethrow;
+      }
+    });
   }
 
   ScheduleIndex scheduleFor(Channel channel) => buildSchedule(
@@ -750,105 +959,146 @@ class LineupController extends ChangeNotifier {
 
   LineupPlaybackRequest playbackFor(String itemId) {
     final endpoint = connection?.uri;
-    final token = _profileToken ?? _accountToken;
+    final token = _pmsToken;
+    final serverId = server?.id;
     final item = availableMedia
         .where((value) => value.id == itemId)
         .firstOrNull;
-    if (endpoint == null || token == null || item == null) {
+    if (endpoint == null || token == null || serverId == null || item == null) {
       throw const PlexException(
         'playback-unavailable',
         'This program is not available from the current Plex session.',
       );
     }
-    final descriptor = plex.playbackDescriptor(
-      server: endpoint,
-      item: item,
-      capabilities: const StreamCapabilities.unrestricted(),
-    );
+    return _playbackRequest(item, endpoint, token, serverId, _epoch);
+  }
+
+  LineupPlaybackRequest _playbackRequest(
+    PlexMediaItem item,
+    Uri endpoint,
+    String token,
+    String serverId,
+    int operation,
+  ) {
+    final descriptor = plex.playbackDescriptor(server: endpoint, item: item);
     diagnostics.add('playback', 'Plex playback selected', {
-      'mode': descriptor.decision.kind.name,
       'container': item.container,
       'videoCodec': item.videoCodec,
       'audioCodec': item.audioCodec,
       'dynamicRange': item.dynamicRange.name,
-      'reason': descriptor.decision.reasons.join(','),
     });
-    return LineupPlaybackRequest(
-      descriptor.uri,
-      () => plex.releasePlaybackSession(
-        server: endpoint,
-        token: token,
-        sessionId: descriptor.sessionId,
-      ),
+    return LineupPlaybackRequest.parts(
+      [
+        for (final part in descriptor)
+          LineupPlaybackPart(uri: part.uri, duration: part.duration),
+      ],
       plexToken: token,
+      authorizationRecovery: () async {
+        await _refreshPmsAccess(operation, serverId);
+        if (!_isCurrent(operation) || server?.id != serverId) {
+          throw const PlexException(
+            'playback-unavailable',
+            'This program is not available from the current Plex session.',
+          );
+        }
+        final refreshedEndpoint = connection?.uri;
+        final refreshedToken = _pmsToken;
+        if (refreshedEndpoint == null || refreshedToken == null) {
+          throw const PlexException(
+            'authorization-unavailable',
+            'Plex server authorization is unavailable.',
+          );
+        }
+        return _playbackRequest(
+          item,
+          refreshedEndpoint,
+          refreshedToken,
+          serverId,
+          operation,
+        );
+      },
     );
   }
 
   Future<Uint8List?> artworkFor(ChannelItem item) async {
-    final artwork = item.artwork;
-    return artwork == null ? null : artworkForPath(artwork);
+    final poster = item.poster;
+    return poster == null ? null : artworkForPath(poster);
   }
 
   Future<Uint8List?> artworkForPath(Uri path) async {
-    final endpoint = connection?.uri;
-    final token = _profileToken ?? _accountToken;
-    if (endpoint == null || token == null || path.toString().isEmpty) {
+    final serverId = server?.id;
+    if (serverId == null || connection == null || path.toString().isEmpty) {
       return null;
     }
-    return plex.artwork(endpoint, token, path);
+    return _withPmsAuthorization(
+      _epoch,
+      serverId,
+      (token, refreshedConnection) =>
+          plex.artwork((refreshedConnection ?? connection!).uri, token, path),
+    );
   }
 
   Future<void> setCurrentChannel(String? id) async {
-    if (id == currentChannelId ||
-        (id != null && !channels.any((channel) => channel.id == id))) {
-      return;
-    }
-    final old = currentChannelId;
-    currentChannelId = id;
-    try {
-      await _save();
-      if (_disposed) return;
-      notifyListeners();
-    } catch (_) {
-      currentChannelId = old;
-      rethrow;
-    }
+    final operation = _epoch;
+    await _queueStateOperation(operation, () async {
+      if (id == currentChannelId ||
+          (id != null && !channels.any((channel) => channel.id == id))) {
+        return;
+      }
+      final old = currentChannelId;
+      currentChannelId = id;
+      try {
+        await _save();
+        if (_disposed) return;
+        notifyListeners();
+      } catch (_) {
+        currentChannelId = old;
+        rethrow;
+      }
+    });
   }
 
   Future<void> deleteChannel(String id) async {
-    final old = channels;
-    final oldCurrent = currentChannelId;
-    final removedIndex = channels.indexWhere((channel) => channel.id == id);
-    channels = List.unmodifiable(channels.where((channel) => channel.id != id));
-    if (currentChannelId == id) {
-      currentChannelId = channels.isEmpty
-          ? null
-          : channels[removedIndex.clamp(0, channels.length - 1)].id;
-    }
-    try {
-      await _save();
-      if (_disposed) return;
-      notifyListeners();
-    } catch (_) {
-      channels = old;
-      currentChannelId = oldCurrent;
-      rethrow;
-    }
+    final operation = _epoch;
+    await _queueStateOperation(operation, () async {
+      final old = channels;
+      final oldCurrent = currentChannelId;
+      final removedIndex = channels.indexWhere((channel) => channel.id == id);
+      channels = List.unmodifiable(
+        channels.where((channel) => channel.id != id),
+      );
+      if (currentChannelId == id) {
+        currentChannelId = channels.isEmpty
+            ? null
+            : channels[removedIndex.clamp(0, channels.length - 1)].id;
+      }
+      try {
+        await _save();
+        if (_disposed) return;
+        notifyListeners();
+      } catch (_) {
+        channels = old;
+        currentChannelId = oldCurrent;
+        rethrow;
+      }
+    });
   }
 
   Future<void> updateSettings(LineupSettings value) async {
-    final generation = ++_settingsGeneration;
-    final old = settings;
-    settings = value;
-    try {
-      await _save();
-      if (generation != _settingsGeneration) return;
-      diagnostics.enabled = value.diagnosticsEnabled;
-      notifyListeners();
-    } catch (_) {
-      if (generation == _settingsGeneration) settings = old;
-      rethrow;
-    }
+    final operation = _epoch;
+    await _queueStateOperation(operation, () async {
+      final old = settings;
+      settings = value;
+      try {
+        await _save();
+        if (_disposed) return;
+        diagnostics.enabled = value.diagnosticsEnabled;
+        notifyListeners();
+      } catch (_) {
+        settings = old;
+        rethrow;
+      }
+    });
   }
 
   Future<bool> logout() {
@@ -862,47 +1112,65 @@ class LineupController extends ChangeNotifier {
 
   Future<bool> _performLogout() async {
     ++_epoch;
+    final stateBeforeLogout = _stateOperations;
+    final releaseStateOperations = Completer<void>();
+    _stateOperations = stateBeforeLogout.then(
+      (_) => releaseStateOperations.future,
+    );
+    _invalidatePmsRefresh();
+    _serverTargetId = null;
     _pinTimer?.cancel();
     _busyOperation = null;
     busy = true;
     notifyListeners();
     try {
-      await _clearCredentials();
-    } catch (exception) {
+      try {
+        await _clearCredentials();
+      } catch (exception) {
+        if (_disposed) return false;
+        error = 'Lineup could not securely sign out. Check system credential storage and try again.';
+        diagnostics.add('application', 'Credential cleanup failed', {
+          'code': exception is PlexException ? exception.code : 'unexpected',
+        });
+        return false;
+      }
       if (_disposed) return false;
-      error = 'Lineup could not securely sign out. Check system credential storage and try again.';
-      diagnostics.add('application', 'Credential cleanup failed', {
-        'error': exception.toString(),
-      });
-      return false;
+      await stateBeforeLogout;
+      if (_disposed) return false;
+      ++_epoch;
+      account = null;
+      profile = null;
+      profiles = const [];
+      servers = const [];
+      server = null;
+      connection = null;
+      libraries = const [];
+      availableMedia = const [];
+      availablePlaylists = const [];
+      _scheduleWorker?.dispose();
+      _scheduleWorker = null;
+      _scheduleWorkerMedia = null;
+      _scheduleWorkerPlaylists = null;
+      selectedLibraryIds = const {};
+      channels = const [];
+      currentChannelId = null;
+      channelSetupCanCancel = false;
+      profileSelectionCanCancel = false;
+      serverSelectionCanCancel = false;
+      _accountToken = null;
+      _profileToken = null;
+      _serverAccess = const {};
+      _pmsToken = null;
+      _serverTargetId = null;
+      _invalidatePmsRefresh();
+      secureCancellationRequired = false;
+      _contentGeneration++;
+      stage = SetupStage.welcome;
+      error = null;
+      return true;
+    } finally {
+      releaseStateOperations.complete();
     }
-    if (_disposed) return false;
-    account = null;
-    profile = null;
-    profiles = const [];
-    servers = const [];
-    server = null;
-    connection = null;
-    libraries = const [];
-    availableMedia = const [];
-    availablePlaylists = const [];
-    _scheduleWorker?.dispose();
-    _scheduleWorker = null;
-    _scheduleWorkerMedia = null;
-    _scheduleWorkerPlaylists = null;
-    selectedLibraryIds = const {};
-    channels = const [];
-    currentChannelId = null;
-    channelSetupCanCancel = false;
-    profileSelectionCanCancel = false;
-    serverSelectionCanCancel = false;
-    _accountToken = null;
-    _profileToken = null;
-    secureCancellationRequired = false;
-    _contentGeneration++;
-    stage = SetupStage.welcome;
-    error = null;
-    return true;
   }
 
   void _finishLogout() {
@@ -961,6 +1229,18 @@ class LineupController extends ChangeNotifier {
     if (!_disposed) _persisted = next;
   }
 
+  Future<void> _queueStateOperation(
+    int operation,
+    Future<void> Function() body,
+  ) {
+    final queued = _stateOperations.then((_) async {
+      if (!_isCurrent(operation)) return;
+      await body();
+    });
+    _stateOperations = queued.then<void>((_) {}, onError: (_, _) {});
+    return queued;
+  }
+
   Future<bool> _writeCredential(
     int operation,
     Future<void> Function() write,
@@ -985,10 +1265,14 @@ class LineupController extends ChangeNotifier {
   void _clearServerRuntime() {
     server = null;
     connection = null;
+    _pmsToken = null;
+    _serverTargetId = null;
+    _invalidatePmsRefresh();
     libraries = const [];
     selectedLibraryIds = const {};
     availableMedia = const [];
     availablePlaylists = const [];
+    _resetLibraryScan();
     channels = const [];
     currentChannelId = null;
     _scheduleWorker?.dispose();
@@ -996,6 +1280,122 @@ class LineupController extends ChangeNotifier {
     _scheduleWorkerMedia = null;
     _scheduleWorkerPlaylists = null;
     _contentGeneration++;
+  }
+
+  void _resetLibraryScan() {
+    libraryScanStatus = LibraryScanStatus.idle;
+    libraryScanCompletedPages = 0;
+    libraryScanCompletedItems = 0;
+    libraryScanTotalItems = null;
+  }
+
+  Future<T> _withPmsAuthorization<T>(
+    int operation,
+    String serverId,
+    Future<T> Function(String token, PlexConnection? connection) request, {
+    PlexConnection? connectionOverride,
+  }) async {
+    final access = _serverAccess[serverId];
+    if (access == null || access.token.isEmpty) {
+      throw const PlexException(
+        'authorization-unavailable',
+        'Plex server authorization is unavailable.',
+      );
+    }
+    PlexServerAccess retryAccess;
+    PlexConnection retryConnection;
+    try {
+      return await request(access.token, connectionOverride);
+    } on PlexException catch (exception) {
+      if (!_isPmsAuthorizationError(exception)) rethrow;
+      final currentAccess = _serverAccess[serverId];
+      final currentConnection = server?.id == serverId ? connection : null;
+      if (!identical(currentAccess, access) &&
+          currentAccess != null &&
+          currentConnection != null) {
+        retryAccess = currentAccess;
+        retryConnection = currentConnection;
+      } else {
+        retryConnection = await _refreshPmsAccess(operation, serverId);
+        final refreshed = _serverAccess[serverId];
+        if (refreshed == null) {
+          throw const PlexException(
+            'authorization-unavailable',
+            'Plex server authorization is unavailable.',
+          );
+        }
+        retryAccess = refreshed;
+      }
+      if (!_isCurrentPmsTarget(operation, serverId)) {
+        throw const PlexException(
+          'authorization-unavailable',
+          'Plex server authorization is unavailable.',
+        );
+      }
+    }
+    return request(retryAccess.token, retryConnection);
+  }
+
+  void _invalidatePmsRefresh() {
+    _pmsRefresh = null;
+    _pmsRefreshOperation = null;
+    _pmsRefreshServerId = null;
+  }
+
+  Future<PlexConnection> _refreshPmsAccess(int operation, String serverId) {
+    final active = _pmsRefresh;
+    if (active != null &&
+        _pmsRefreshOperation == operation &&
+        _pmsRefreshServerId == serverId) {
+      return active;
+    }
+    final refresh = _performPmsRefresh(operation, serverId);
+    _pmsRefresh = refresh;
+    _pmsRefreshOperation = operation;
+    _pmsRefreshServerId = serverId;
+    return refresh.whenComplete(() {
+      if (identical(_pmsRefresh, refresh)) {
+        _invalidatePmsRefresh();
+      }
+    });
+  }
+
+  Future<PlexConnection> _performPmsRefresh(
+    int operation,
+    String serverId,
+  ) async {
+    final profileToken = _profileToken ?? _accountToken;
+    if (profileToken == null) {
+      throw const PlexException('auth-required', 'Link Plex first.');
+    }
+    final discovered = await plex.discoverServers(profileToken);
+    final refreshed = discovered
+        .where((access) => access.server.id == serverId)
+        .firstOrNull;
+    if (refreshed == null) {
+      throw const PlexException(
+        'authorization-unavailable',
+        'Plex server authorization is unavailable.',
+      );
+    }
+    final selectedConnection = await plex.selectConnection(
+      refreshed.server,
+      refreshed.token,
+    );
+    if (!_isCurrentPmsTarget(operation, serverId) ||
+        (_profileToken ?? _accountToken) != profileToken) {
+      throw const PlexException(
+        'authorization-unavailable',
+        'Plex server authorization is unavailable.',
+      );
+    }
+    _serverAccess = {for (final access in discovered) access.server.id: access};
+    servers = List.unmodifiable(discovered.map((access) => access.server));
+    if (_serverTargetId != serverId) {
+      _pmsToken = refreshed.token;
+      connection = selectedConnection;
+    }
+    return selectedConnection;
   }
 
   Future<bool> _run(
@@ -1018,7 +1418,7 @@ class LineupController extends ChangeNotifier {
           : 'Lineup could not complete that request.';
       stage = fallbackStage;
       diagnostics.add('application', 'Operation failed', {
-        'error': exception.toString(),
+        'code': exception is PlexException ? exception.code : 'unexpected',
       });
       return false;
     } finally {
@@ -1032,6 +1432,18 @@ class LineupController extends ChangeNotifier {
 
   bool _isCurrent(int operation) => !_disposed && operation == _epoch;
 
+  bool _isCurrentPmsTarget(int operation, String serverId) =>
+      _isCurrent(operation) &&
+      (_serverTargetId == null
+          ? server?.id == serverId
+          : _serverTargetId == serverId);
+
+  static bool _isPmsAuthorizationError(PlexException exception) => const {
+    'auth-invalid',
+    'auth-required',
+    'access-denied',
+  }.contains(exception.code);
+
   @override
   void notifyListeners() {
     if (!_disposed) super.notifyListeners();
@@ -1042,11 +1454,14 @@ class LineupController extends ChangeNotifier {
     if (_disposed) return;
     _disposed = true;
     ++_epoch;
-    ++_settingsGeneration;
     _pinTimer?.cancel();
     _busyOperation = null;
     busy = false;
     _scheduleWorker?.dispose();
+    _serverAccess = const {};
+    _pmsToken = null;
+    _serverTargetId = null;
+    _invalidatePmsRefresh();
     final pin = activePin;
     if (pin == null) {
       plex.close();

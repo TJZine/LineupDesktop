@@ -112,19 +112,34 @@ navigation do not enter C++.
   five-row mini Guide, full Guide, channel entry, available audio/subtitle
   tracks, recoverable/terminal errors, sleep timer, fullscreen intent, cursor
   timeout, cancellable epoch-safe auto-hide, and input/focus restoration.
-  Product state does not move into the native player.
+  Ordered Plex parts remain one Flutter-owned playback lifetime: the
+  coordinator gives every native load its own generation, advances natural
+  completion once, and maps only known part boundaries. Native events remain
+  the track-state authority.
+  Keyboard focus in the active timed OSD or mini Guide suspends dismissal;
+  presentation generations reject stale focus callbacks. Player transitions
+  use Flutter's effective Reduce Motion setting, and track rails initially
+  focus the selected track. Product state does not move into the native player.
 - A Dart product engine for Plex PIN authentication, Plex Home profiles,
   server discovery/probing, library and media parsing, privileged playback
   descriptors, deterministic channels/schedules, channel suggestions,
   playback policy, settings, redacted diagnostics, and durable state.
+- Plex.tv account and Home-profile credentials are used only with Plex.tv.
+  Resource discovery returns a separate PMS-issued credential for each server;
+  the controller retains it only in private runtime scope and uses it for that
+  server's probes, libraries, artwork, and playback. A bounded
+  authorization recovery refreshes the same server credential once without
+  exposing it through public models, persisted state, URLs, or diagnostics.
 - Profile and selected-server state remains scoped by Plex profile. The
-  application controller serializes secure credential writes with logout,
-  rejects stale profile/server operations, clears unavailable runtime server
-  state without crossing scopes, and retains per-server lineups when a saved
-  selection is explicitly cleared. One content generation invalidates Guide
-  caches and player work across committed profile, server, and library changes.
-  Connection priority is applied before an eight-endpoint probe bound; only the
-  selected direct/local/relay type and its actually measured latency are retained.
+  application controller serializes whole state mutations through
+  snapshot/save/commit or rollback, serializes secure credential writes with
+  logout, rejects stale profile/server operations, clears unavailable runtime
+  server state without crossing scopes, and retains per-server lineups when a
+  saved selection is explicitly cleared. One content generation invalidates
+  Guide caches and player work across committed profile, server, and library
+  changes. Connection priority is applied before an eight-endpoint probe bound;
+  only the selected direct/local/relay type and its actually measured latency
+  are retained.
 - Upstream-shaped, remote-first onboarding for Plex QR/PIN linking, Home
   profile/PIN selection, secure server recovery, first-run audio intent, and
   Channel Setup. Channel Setup owns library selection, all eight source
@@ -132,6 +147,21 @@ navigation do not enter C++.
   preview/review/confirmation, and atomic application for up to 1,000
   channels. Custom channel editing, Settings, and diagnostics remain separate
   Flutter workflows.
+- Channel Setup inventories up to four selected libraries concurrently while
+  preserving library and page order. Page size and pagination are bounded; it
+  reports page/item progress and item totals when available, rejects stale
+  results, and supports active cancellation.
+  Empty libraries, unsupported media, transient failures, and cancellation are
+  distinct states. Generated, filtered-library, playlist, and mixed channels
+  expose their source read-only during editing; metadata-only saves preserve
+  source and generated identity.
+- State loading treats malformed or schema-invalid JSON as corruption, moves it
+  aside, and starts empty with a dismissible recovery banner. Missing state
+  starts empty; transient read or quarantine failures stop startup instead of
+  silently replacing data. Diagnostics accept only bounded structured facts
+  from a finite allowlist; arbitrary exception and native message text never
+  enters diagnostic storage. Existing message redaction remains defense in
+  depth.
 - Keychain-backed credential ownership on macOS. Unsigned development builds
   use the legacy macOS Keychain compatibility mode; production signing must
   enable and validate the data-protection Keychain. Tokens remain outside
@@ -159,9 +189,11 @@ original Plex streams without a codec, container, or HDR allowlist and without
 treating native audio passthrough as a decode gate. It lets libmpv/FFmpeg demux,
 decode video and supported audio such as TrueHD and DTS-family tracks, convert
 audio to the system output (normally PCM), render subtitles, and tone-map as
-needed. Passthrough, server transcode, and explicit subtitle sidecar loading are
-separate optional/fallback capabilities justified only by a concrete product
-requirement or demonstrated native gap.
+needed. This application-completeness batch adds no browser codec allowlist,
+compulsory server transcode/remux, subtitle burn-in framework, or passthrough
+decode gate. Passthrough, server fallback, and explicit subtitle sidecar loading
+remain separate capabilities justified only by a concrete product requirement
+or demonstrated native gap.
 
 ## Dependency decision
 

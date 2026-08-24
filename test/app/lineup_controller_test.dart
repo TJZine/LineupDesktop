@@ -15,51 +15,589 @@ void main() {
   test(
     'artworkForPath uses the active authenticated server transport',
     () async {
-      final plex = _FakePlex();
+      final selected = _server('server');
+      final plex = _FakePlex()
+        ..serversResult = [selected]
+        ..connectionResult = selected.connections.single;
       final controller = LineupController(
-        store: _MemoryStore(),
+        store: _MemoryStore(
+          const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+        ),
         credentials: _MemoryCredentials(accountToken: 'account-token'),
         plex: plex,
       );
       addTearDown(controller.dispose);
 
       await controller.initialize();
-      controller.connection = PlexConnection(
-        uri: Uri.parse('https://plex.example:32400'),
-        local: true,
-        relay: false,
-      );
 
       final bytes = await controller.artworkForPath(Uri.parse('/show/art'));
 
       expect(bytes, Uint8List.fromList([1, 2, 3]));
       expect(plex.artworkServer, controller.connection!.uri);
       expect(plex.artworkPath, Uri.parse('/show/art'));
-      expect(plex.artworkToken, 'account-token');
+      expect(plex.artworkToken, 'pms-token');
     },
   );
 
-  test('playback requests remove Plex tokens without an empty query', () {
-    final tokenOnly = LineupPlaybackRequest(
-      Uri.parse(
-        'https://user@plex.example:32400/video%2Fpart?X-Plex-Token=secret#section%2Fone',
-      ),
-      () async {},
+  test('selected-server requests use only the PMS resource token', () async {
+    const owner = PlexHomeUser(id: 'owner', name: 'Owner', protected: false);
+    const child = PlexHomeUser(id: 'child', name: 'Child', protected: false);
+    final selected = _server('server');
+    final item = PlexMediaItem(
+      id: 'movie',
+      title: 'Movie',
+      type: 'movie',
+      duration: const Duration(minutes: 1),
+      libraryId: 'movies',
+      parts: [
+        PlexMediaPart(
+          path: '/library/parts/movie/one.mp4',
+          duration: Duration(seconds: 30),
+        ),
+        PlexMediaPart(path: '/library/parts/movie/two.mp4'),
+      ],
+      container: 'mp4',
+      videoCodec: 'h264',
+      audioCodec: 'aac',
+      dynamicRange: DynamicRange.sdr,
     );
-    final mixed = LineupPlaybackRequest(
-      Uri.parse(
-        'https://plex.example/video?quality=original&X-Plex-Token=secret&quality=mobile#part',
+    final plex = _FakePlex()
+      ..resourceToken = 'pms-token-sentinel'
+      ..homeUsersResult = const [owner, child]
+      ..switchHomeUserHandler = (accountToken, userId, _) async {
+        expect(accountToken, 'cloud-token-sentinel');
+        expect(userId, 'child');
+        return 'home-token-sentinel';
+      }
+      ..serversResult = [selected]
+      ..connectionResult = selected.connections.single
+      ..librariesResult = const [
+        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
+      ]
+      ..libraryItemsHandler = (_, _, _, _) async => [item];
+    final store = _MemoryStore(
+      const PersistedState(selectedServerByProfile: {'child': 'server'}),
+    );
+    final controller = LineupController(
+      store: store,
+      credentials: _MemoryCredentials(accountToken: 'cloud-token-sentinel'),
+      plex: plex,
+    );
+    addTearDown(controller.dispose);
+
+    await controller.initialize();
+    await controller.selectProfile(child);
+    controller.diagnostics.enabled = true;
+    await controller.setLibraries({'movies'});
+    await controller.artworkForPath(Uri.parse('/art'));
+    plex.playbackDescriptorResult = [
+      (
+        uri: Uri.parse('https://plex.example/one.mp4'),
+        duration: const Duration(seconds: 30),
       ),
-      () async {},
+      (uri: Uri.parse('https://plex.example/two.mp4'), duration: null),
+    ];
+    final playback = controller.playbackFor('movie');
+
+    expect(plex.accountTokens, ['cloud-token-sentinel']);
+    expect(plex.homeUsersTokens, ['cloud-token-sentinel']);
+    expect(plex.discoveredTokens, ['home-token-sentinel']);
+    expect(plex.selectedTokens, everyElement('pms-token-sentinel'));
+    expect(plex.libraryTokens, everyElement('pms-token-sentinel'));
+    expect(plex.itemTokens, everyElement('pms-token-sentinel'));
+    expect(plex.playlistTokens, everyElement('pms-token-sentinel'));
+    expect(plex.artworkToken, 'pms-token-sentinel');
+    expect(playback.plexToken, 'pms-token-sentinel');
+    expect(playback.parts.map((part) => part.uri), [
+      Uri.parse('https://plex.example/one.mp4'),
+      Uri.parse('https://plex.example/two.mp4'),
+    ]);
+    expect(
+      [
+        ...plex.selectedTokens,
+        ...plex.libraryTokens,
+        ...plex.itemTokens,
+        ...plex.playlistTokens,
+        plex.artworkToken,
+        playback.plexToken,
+      ].whereType<String>(),
+      everyElement('pms-token-sentinel'),
+    );
+    expect(controller.servers.single.toString(), isNot(contains('sentinel')));
+    expect(store.state.toJson().toString(), isNot(contains('sentinel')));
+    final diagnosticSnapshot = [
+      for (final entry in controller.diagnostics.entries)
+        {
+          'area': entry.area,
+          'message': entry.message,
+          'context': entry.context,
+        },
+    ];
+    expect(diagnosticSnapshot.toString(), isNot(contains('sentinel')));
+    expect(
+      controller.diagnostics.entries.single.message,
+      'Plex playback selected',
+    );
+    expect(controller.diagnostics.entries.single.context, {
+      'container': 'mp4',
+      'videoCodec': 'h264',
+      'audioCodec': 'aac',
+      'dynamicRange': 'sdr',
+    });
+  });
+
+  test('concurrent PMS authorization failures coalesce one refresh', () async {
+    final selected = _server('server');
+    final refresh = Completer<List<PlexServerAccess>>();
+    var discoveries = 0;
+    final artworkTokens = <String>[];
+    final plex = _FakePlex()
+      ..serversResult = [selected]
+      ..connectionResult = selected.connections.single
+      ..discoverServersHandler = (_) {
+        discoveries++;
+        if (discoveries == 1) {
+          return Future.value([
+            PlexServerAccess(server: selected, token: 'pms-token-1'),
+          ]);
+        }
+        return refresh.future;
+      }
+      ..artworkHandler = (_, token, _) async {
+        artworkTokens.add(token);
+        if (token == 'pms-token-1') {
+          throw const PlexException('auth-invalid', 'Expired');
+        }
+        return Uint8List.fromList([4]);
+      };
+    final controller = LineupController(
+      store: _MemoryStore(
+        const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+      ),
+      credentials: _MemoryCredentials(accountToken: 'cloud-token'),
+      plex: plex,
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+
+    final first = controller.artworkForPath(Uri.parse('/one'));
+    final second = controller.artworkForPath(Uri.parse('/two'));
+    await Future<void>.delayed(Duration.zero);
+    expect(discoveries, 2);
+    refresh.complete([
+      PlexServerAccess(server: selected, token: 'pms-token-2'),
+    ]);
+
+    expect(await Future.wait([first, second]), [
+      Uint8List.fromList([4]),
+      Uint8List.fromList([4]),
+    ]);
+    expect(discoveries, 2);
+    expect(artworkTokens, [
+      'pms-token-1',
+      'pms-token-1',
+      'pms-token-2',
+      'pms-token-2',
+    ]);
+  });
+
+  test('late old-token failure reuses refreshed PMS access', () async {
+    final initialServer = _server('server');
+    final refreshedConnection = PlexConnection(
+      uri: Uri.parse('https://refreshed.example:32400'),
+      local: true,
+      relay: false,
+    );
+    final refreshedServer = PlexServer(
+      id: initialServer.id,
+      name: initialServer.name,
+      owned: initialServer.owned,
+      connections: [refreshedConnection],
+    );
+    final firstFailure = Completer<Uint8List>();
+    final lateFailure = Completer<Uint8List>();
+    final artworkRequests = <(Uri, String, Uri)>[];
+    var discoveries = 0;
+    final plex = _FakePlex()
+      ..discoverServersHandler = (_) async {
+        discoveries++;
+        return [
+          PlexServerAccess(
+            server: discoveries == 1 ? initialServer : refreshedServer,
+            token: discoveries == 1 ? 'pms-token-1' : 'pms-token-2',
+          ),
+        ];
+      }
+      ..selectConnectionHandler = (server, _) async {
+        return server.connections.single;
+      }
+      ..artworkHandler = (server, token, path) {
+        artworkRequests.add((server, token, path));
+        if (token == 'pms-token-1') {
+          return path.path == '/first'
+              ? firstFailure.future
+              : lateFailure.future;
+        }
+        return Future.value(Uint8List.fromList([4]));
+      };
+    final controller = LineupController(
+      store: _MemoryStore(
+        const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+      ),
+      credentials: _MemoryCredentials(accountToken: 'cloud-token'),
+      plex: plex,
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+
+    final first = controller.artworkForPath(Uri.parse('/first'));
+    final second = controller.artworkForPath(Uri.parse('/second'));
+    await Future<void>.delayed(Duration.zero);
+    firstFailure.completeError(const PlexException('auth-invalid', 'Expired'));
+    expect(await first, Uint8List.fromList([4]));
+
+    lateFailure.completeError(const PlexException('auth-invalid', 'Expired'));
+    expect(await second, Uint8List.fromList([4]));
+
+    expect(discoveries, 2);
+    expect(plex.selectedTokens, ['pms-token-1', 'pms-token-2']);
+    expect(artworkRequests, [
+      (
+        initialServer.connections.single.uri,
+        'pms-token-1',
+        Uri.parse('/first'),
+      ),
+      (
+        initialServer.connections.single.uri,
+        'pms-token-1',
+        Uri.parse('/second'),
+      ),
+      (refreshedConnection.uri, 'pms-token-2', Uri.parse('/first')),
+      (refreshedConnection.uri, 'pms-token-2', Uri.parse('/second')),
+    ]);
+  });
+
+  test(
+    'server selection never substitutes the cloud token for missing access',
+    () async {
+      final plex = _FakePlex();
+      final controller = LineupController(
+        store: _MemoryStore(),
+        credentials: _MemoryCredentials(accountToken: 'cloud-token-sentinel'),
+        plex: plex,
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+
+      await controller.selectServer(_server('missing'));
+
+      expect(controller.server, isNull);
+      expect(controller.error, 'Plex server authorization is unavailable.');
+      expect(plex.selectedTokens, isEmpty);
+    },
+  );
+
+  test(
+    'saved server restore fails when discovery has no access record',
+    () async {
+      final plex = _FakePlex();
+      final controller = LineupController(
+        store: _MemoryStore(
+          const PersistedState(selectedServerByProfile: {'owner': 'missing'}),
+        ),
+        credentials: _MemoryCredentials(accountToken: 'cloud-token-sentinel'),
+        plex: plex,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+
+      expect(controller.server, isNull);
+      expect(controller.connection, isNull);
+      expect(controller.stage, SetupStage.servers);
+      expect(controller.error, 'Plex server authorization is unavailable.');
+      expect(plex.selectedTokens, isEmpty);
+    },
+  );
+
+  test('PMS authorization retries stop after one refreshed request', () async {
+    final selected = _server('server');
+    var discoveries = 0;
+    var artworkCalls = 0;
+    final plex = _FakePlex()
+      ..serversResult = [selected]
+      ..connectionResult = selected.connections.single
+      ..discoverServersHandler = (_) async {
+        discoveries++;
+        return [
+          PlexServerAccess(
+            server: selected,
+            token: discoveries == 1 ? 'pms-token-1' : 'pms-token-2',
+          ),
+        ];
+      }
+      ..artworkHandler = (_, _, _) async {
+        artworkCalls++;
+        throw const PlexException('auth-invalid', 'Expired');
+      };
+    final controller = LineupController(
+      store: _MemoryStore(
+        const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+      ),
+      credentials: _MemoryCredentials(accountToken: 'cloud-token'),
+      plex: plex,
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+
+    await expectLater(
+      controller.artworkForPath(Uri.parse('/art')),
+      throwsA(isA<PlexException>()),
     );
 
+    expect(discoveries, 2);
+    expect(artworkCalls, 2);
+  });
+
+  test(
+    'logout prevents an in-flight PMS refresh from installing access',
+    () async {
+      final selected = _server('server');
+      final refresh = Completer<List<PlexServerAccess>>();
+      var discoveries = 0;
+      final plex = _FakePlex()
+        ..serversResult = [selected]
+        ..connectionResult = selected.connections.single
+        ..discoverServersHandler = (_) {
+          discoveries++;
+          return discoveries == 1
+              ? Future.value([
+                  PlexServerAccess(server: selected, token: 'pms-token-1'),
+                ])
+              : refresh.future;
+        }
+        ..artworkHandler = (_, _, _) async =>
+            throw const PlexException('auth-invalid', 'Expired');
+      final controller = LineupController(
+        store: _MemoryStore(
+          const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+        ),
+        credentials: _MemoryCredentials(accountToken: 'cloud-token'),
+        plex: plex,
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+
+      final artwork = controller.artworkForPath(Uri.parse('/art'));
+      await Future<void>.delayed(Duration.zero);
+      expect(await controller.logout(), isTrue);
+      refresh.complete([
+        PlexServerAccess(server: selected, token: 'pms-token-2'),
+      ]);
+      await expectLater(artwork, throwsA(isA<PlexException>()));
+
+      expect(controller.server, isNull);
+      expect(controller.connection, isNull);
+      expect(controller.servers, isEmpty);
+    },
+  );
+
+  test('profile supersession prevents stale PMS access installation', () async {
+    const owner = PlexHomeUser(id: 'owner', name: 'Owner', protected: false);
+    const child = PlexHomeUser(id: 'child', name: 'Child', protected: false);
+    final ownerServer = _server('owner-server');
+    final childServer = _server('child-server');
+    final staleRefresh = Completer<List<PlexServerAccess>>();
+    var discoveries = 0;
+    final artworkTokens = <String>[];
+    final plex = _FakePlex()
+      ..homeUsersResult = const [owner, child]
+      ..discoverServersHandler = (token) {
+        discoveries++;
+        if (discoveries == 1) {
+          return Future.value([
+            PlexServerAccess(server: ownerServer, token: 'owner-pms-1'),
+          ]);
+        }
+        if (discoveries == 2) return staleRefresh.future;
+        expect(token, 'profile-token');
+        return Future.value([
+          PlexServerAccess(server: childServer, token: 'child-pms'),
+        ]);
+      }
+      ..artworkHandler = (_, token, _) async {
+        artworkTokens.add(token);
+        if (token == 'owner-pms-1') {
+          throw const PlexException('auth-invalid', 'Expired');
+        }
+        return Uint8List.fromList([7]);
+      };
+    final controller = LineupController(
+      store: _MemoryStore(
+        const PersistedState(
+          profileId: 'owner',
+          selectedServerByProfile: {'owner': 'owner-server'},
+        ),
+      ),
+      credentials: _MemoryCredentials(accountToken: 'cloud-token'),
+      plex: plex,
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+
+    final staleArtwork = controller.artworkForPath(Uri.parse('/old'));
+    await Future<void>.delayed(Duration.zero);
+    await controller.selectProfile(child);
+    await controller.selectServer(childServer);
+    staleRefresh.complete([
+      PlexServerAccess(server: ownerServer, token: 'owner-pms-2'),
+    ]);
+    await expectLater(staleArtwork, throwsA(isA<PlexException>()));
+
+    expect(controller.profile, child);
+    expect(controller.server?.id, 'child-server');
+    expect(controller.connection?.uri, childServer.connections.single.uri);
+    expect(await controller.artworkForPath(Uri.parse('/child')), [7]);
+    expect(artworkTokens.last, 'child-pms');
+  });
+
+  test(
+    'server supersession starts an unmatched refresh and rejects stale access',
+    () async {
+      final first = _server('first');
+      final second = _server('second');
+      final staleRefresh = Completer<List<PlexServerAccess>>();
+      var discoveries = 0;
+      final plex = _FakePlex()
+        ..discoverServersHandler = (_) {
+          discoveries++;
+          if (discoveries == 1) {
+            return Future.value([
+              PlexServerAccess(server: first, token: 'first-pms-1'),
+              PlexServerAccess(server: second, token: 'second-pms-1'),
+            ]);
+          }
+          if (discoveries == 2) return staleRefresh.future;
+          return Future.value([
+            PlexServerAccess(server: first, token: 'first-pms-1'),
+            PlexServerAccess(server: second, token: 'second-pms-2'),
+          ]);
+        }
+        ..librariesHandler = (_, token) async {
+          if (token == 'second-pms-1') {
+            throw const PlexException('auth-invalid', 'Expired');
+          }
+          return const [];
+        }
+        ..artworkHandler = (_, token, _) async {
+          if (token == 'first-pms-1') {
+            throw const PlexException('auth-invalid', 'Expired');
+          }
+          return Uint8List.fromList([8]);
+        };
+      final controller = LineupController(
+        store: _MemoryStore(
+          const PersistedState(selectedServerByProfile: {'owner': 'first'}),
+        ),
+        credentials: _MemoryCredentials(accountToken: 'cloud-token'),
+        plex: plex,
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+
+      final staleArtwork = controller.artworkForPath(Uri.parse('/first'));
+      await Future<void>.delayed(Duration.zero);
+      await controller.selectServer(second);
+      expect(discoveries, 3);
+      expect(controller.server?.id, 'second');
+      expect(plex.libraryTokens, contains('second-pms-2'));
+
+      staleRefresh.complete([
+        PlexServerAccess(server: first, token: 'first-pms-2'),
+        PlexServerAccess(server: second, token: 'second-pms-1'),
+      ]);
+      await expectLater(staleArtwork, throwsA(isA<PlexException>()));
+
+      expect(controller.server?.id, 'second');
+      expect(controller.connection?.uri, second.connections.single.uri);
+      expect(await controller.artworkForPath(Uri.parse('/second')), [8]);
+      expect(plex.artworkToken, 'second-pms-2');
+    },
+  );
+
+  test('selection cancellation rejects its stale PMS refresh', () async {
+    final old = _server('old');
+    final next = _server('next');
+    final refresh = Completer<List<PlexServerAccess>>();
+    var discoveries = 0;
+    final plex = _FakePlex()
+      ..discoverServersHandler = (_) {
+        discoveries++;
+        return discoveries == 1
+            ? Future.value([
+                PlexServerAccess(server: old, token: 'old-pms'),
+                PlexServerAccess(server: next, token: 'next-pms-1'),
+              ])
+            : refresh.future;
+      }
+      ..selectConnectionHandler = (server, token) async {
+        if (server.id == 'next' && token == 'next-pms-1') {
+          throw const PlexException('auth-required', 'Expired');
+        }
+        return server.connections.single;
+      };
+    final controller = LineupController(
+      store: _MemoryStore(
+        const PersistedState(selectedServerByProfile: {'owner': 'old'}),
+      ),
+      credentials: _MemoryCredentials(accountToken: 'cloud-token'),
+      plex: plex,
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+    controller
+      ..stage = SetupStage.ready
+      ..showServers();
+
+    final selection = controller.selectServer(next);
+    await Future<void>.delayed(Duration.zero);
+    expect(discoveries, 2);
+    controller.cancelServerSelection();
+    refresh.complete([
+      PlexServerAccess(server: old, token: 'old-pms'),
+      PlexServerAccess(server: next, token: 'next-pms-2'),
+    ]);
+    await selection;
+
+    expect(controller.server?.id, 'old');
+    expect(controller.connection?.uri, old.connections.single.uri);
+    await controller.artworkForPath(Uri.parse('/old'));
+    expect(plex.artworkToken, 'old-pms');
+  });
+
+  test('playback requests remove Plex tokens without an empty query', () {
+    final tokenOnly = LineupPlaybackRequest.parts([
+      LineupPlaybackPart(
+        uri: Uri.parse(
+          'https://user@plex.example:32400/video%2Fpart?X-Plex-Token=secret#section%2Fone',
+        ),
+      ),
+    ]);
+    final mixed = LineupPlaybackRequest.parts([
+      LineupPlaybackPart(
+        uri: Uri.parse(
+          'https://plex.example/video?quality=original&X-Plex-Token=secret&quality=mobile#part',
+        ),
+      ),
+    ]);
+
     expect(
-      tokenOnly.uri,
+      tokenOnly.parts.single.uri,
       Uri.parse('https://user@plex.example:32400/video%2Fpart#section%2Fone'),
     );
-    expect(tokenOnly.uri.hasQuery, isFalse);
-    expect(mixed.uri.fragment, 'part');
-    expect(mixed.uri.queryParametersAll, {
+    expect(tokenOnly.parts.single.uri.hasQuery, isFalse);
+    expect(mixed.parts.single.uri.fragment, 'part');
+    expect(mixed.parts.single.uri.queryParametersAll, {
       'quality': ['original', 'mobile'],
     });
   });
@@ -117,53 +655,560 @@ void main() {
   );
 
   test('failed library loading stays on Channel Setup with an error', () async {
-    final controller =
-        LineupController(
-            store: _MemoryStore(),
-            credentials: _MemoryCredentials(accountToken: 'token'),
-            plex: _FakePlex()
-              ..libraryItemsHandler = (_, _, _, _) async =>
-                  throw const PlexException('offline', 'Library unavailable'),
-          )
-          ..connection = PlexConnection(
-            uri: Uri.parse('https://plex.example:32400'),
-            local: true,
-            relay: false,
-          )
-          ..libraries = const [
-            PlexLibrary(
-              id: 'movies',
-              title: 'Movies',
-              type: PlexLibraryType.movie,
-            ),
-          ]
-          ..stage = SetupStage.channelSetup;
+    final selected = _server('server');
+    final controller = LineupController(
+      store: _MemoryStore(
+        const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+      ),
+      credentials: _MemoryCredentials(accountToken: 'token'),
+      plex: _FakePlex()
+        ..serversResult = [selected]
+        ..connectionResult = selected.connections.single
+        ..librariesResult = const [
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+        ]
+        ..libraryItemsHandler = (_, _, _, _) async =>
+            throw const PlexException('offline', 'opaque-secret-sentinel'),
+    );
     addTearDown(controller.dispose);
     await controller.initialize();
     controller
-      ..connection = PlexConnection(
-        uri: Uri.parse('https://plex.example:32400'),
-        local: true,
-        relay: false,
-      )
-      ..libraries = const [
-        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
-      ]
-      ..stage = SetupStage.channelSetup;
+      ..stage = SetupStage.channelSetup
+      ..diagnostics.enabled = true;
 
     final loaded = await controller.setLibraries({'movies'});
 
     expect(loaded, isFalse);
     expect(controller.stage, SetupStage.channelSetup);
-    expect(controller.error, 'Library unavailable');
+    expect(controller.error, 'opaque-secret-sentinel');
+    expect(controller.diagnostics.entries.single.message, 'Operation failed');
+    expect(controller.diagnostics.entries.single.context, {'code': 'offline'});
+    expect(
+      '${controller.diagnostics.entries.single.message}'
+      '${controller.diagnostics.entries.single.context}',
+      isNot(contains('opaque-secret-sentinel')),
+    );
   });
 
-  test('audio persistence failure stays retryable and visible', () async {
+  test('library scans bound concurrency and publish inventory-ordered exact progress', () async {
+    final selected = _server('server');
+    var active = 0;
+    var peak = 0;
+    var requests = 0;
+    final perLibrary = <String, int>{};
+    final plex = _FakePlex()
+      ..serversResult = [selected]
+      ..connectionResult = selected.connections.single
+      ..librariesResult = [
+        for (var index = 0; index < 6; index++)
+          PlexLibrary(
+            id: 'library-$index',
+            title: 'Library $index',
+            type: PlexLibraryType.movie,
+          ),
+      ]
+      ..libraryItemsScanHandler =
+          (_, _, libraryId, _, isCurrent, onProgress) async {
+            requests++;
+            active++;
+            perLibrary[libraryId] = (perLibrary[libraryId] ?? 0) + 1;
+            peak = active > peak ? active : peak;
+            final index = int.parse(libraryId.split('-').last);
+            await Future<void>.delayed(Duration(milliseconds: 6 - index));
+            active--;
+            if (!isCurrent()) {
+              throw const PlexException('cancelled', 'cancelled');
+            }
+            onProgress(const (
+              completedPages: 1,
+              completedItems: 1,
+              totalItems: 1,
+            ));
+            return [
+              PlexMediaItem(
+                id: libraryId,
+                title: libraryId,
+                type: 'movie',
+                duration: const Duration(minutes: 1),
+                libraryId: libraryId,
+              ),
+            ];
+          };
     final controller = LineupController(
-      store: _MemoryStore()..failNextSave = true,
-      credentials: _MemoryCredentials(),
-      plex: _FakePlex(),
-    )..stage = SetupStage.audio;
+      store: _MemoryStore(
+        const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+      ),
+      credentials: _MemoryCredentials(accountToken: 'token'),
+      plex: plex,
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+    final observedItems = <int>[];
+    controller.addListener(() {
+      if (controller.libraryScanStatus == LibraryScanStatus.scanning) {
+        observedItems.add(controller.libraryScanCompletedItems);
+      }
+    });
+
+    final loaded = await controller.setLibraries({
+      'library-5',
+      'library-4',
+      'library-3',
+      'library-2',
+      'library-1',
+      'library-0',
+    });
+
+    expect(loaded, isTrue);
+    expect(peak, 4);
+    expect(perLibrary.values, everyElement(1));
+    expect(requests, 6);
+    expect(
+      controller.availableMedia.map((item) => item.libraryId),
+      orderedEquals([for (var index = 0; index < 6; index++) 'library-$index']),
+    );
+    expect(observedItems, orderedEquals(observedItems.toList()..sort()));
+    expect(controller.libraryScanCompletedPages, 6);
+    expect(controller.libraryScanCompletedItems, 6);
+    expect(controller.libraryScanTotalItems, 6);
+    expect(controller.libraryScanStatus, LibraryScanStatus.complete);
+  });
+
+  test(
+    'authorization retry cannot regress aggregate library progress',
+    () async {
+      final selected = _server('server');
+      var calls = 0;
+      final plex = _FakePlex()
+        ..serversResult = [selected]
+        ..connectionResult = selected.connections.single
+        ..librariesResult = const [
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+        ]
+        ..libraryItemsScanHandler = (_, _, libraryId, _, _, onProgress) async {
+          calls++;
+          if (calls == 1) {
+            onProgress(const (
+              completedPages: 2,
+              completedItems: 2,
+              totalItems: 3,
+            ));
+            throw const PlexException('auth-required', 'refresh');
+          }
+          onProgress(const (
+            completedPages: 1,
+            completedItems: 1,
+            totalItems: 3,
+          ));
+          onProgress(const (
+            completedPages: 3,
+            completedItems: 3,
+            totalItems: 3,
+          ));
+          return [
+            for (var index = 0; index < 3; index++)
+              PlexMediaItem(
+                id: '$index',
+                title: 'Item $index',
+                type: 'movie',
+                duration: const Duration(minutes: 1),
+                libraryId: libraryId,
+              ),
+          ];
+        };
+      final controller = LineupController(
+        store: _MemoryStore(
+          const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+        ),
+        credentials: _MemoryCredentials(accountToken: 'token'),
+        plex: plex,
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+      final observed = <int>[];
+      controller.addListener(() {
+        if (controller.libraryScanStatus == LibraryScanStatus.scanning) {
+          observed.add(controller.libraryScanCompletedItems);
+        }
+      });
+
+      expect(await controller.setLibraries({'movies'}), isTrue);
+
+      expect(calls, 2);
+      expect(observed, orderedEquals(observed.toList()..sort()));
+      expect(observed, containsAllInOrder([2, 2, 3]));
+      expect(controller.libraryScanCompletedPages, 3);
+      expect(controller.libraryScanCompletedItems, 3);
+      expect(controller.libraryScanTotalItems, 3);
+    },
+  );
+
+  test('cancelled library scan preserves committed content and superseding scan wins', () async {
+    final selected = _server('server');
+    final firstStarted = Completer<void>();
+    final releaseFirst = Completer<void>();
+    final plex = _FakePlex()
+      ..serversResult = [selected]
+      ..connectionResult = selected.connections.single
+      ..librariesResult = const [
+        PlexLibrary(id: 'first', title: 'First', type: PlexLibraryType.movie),
+        PlexLibrary(id: 'second', title: 'Second', type: PlexLibraryType.movie),
+      ]
+      ..libraryItemsScanHandler =
+          (_, _, libraryId, _, isCurrent, onProgress) async {
+            if (libraryId == 'first') {
+              firstStarted.complete();
+              await releaseFirst.future;
+              if (!isCurrent()) {
+                throw const PlexException('cancelled', 'cancelled');
+              }
+            }
+            onProgress(const (
+              completedPages: 1,
+              completedItems: 1,
+              totalItems: 1,
+            ));
+            return [
+              PlexMediaItem(
+                id: libraryId,
+                title: libraryId,
+                type: 'movie',
+                duration: const Duration(minutes: 1),
+                libraryId: libraryId,
+              ),
+            ];
+          };
+    final controller = LineupController(
+      store: _MemoryStore(
+        const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+      ),
+      credentials: _MemoryCredentials(accountToken: 'token'),
+      plex: plex,
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+    controller
+      ..selectedLibraryIds = const {'committed'}
+      ..availableMedia = const [
+        PlexMediaItem(
+          id: 'committed',
+          title: 'Committed',
+          type: 'movie',
+          duration: Duration(minutes: 1),
+        ),
+      ];
+
+    final first = controller.setLibraries({'first'});
+    await firstStarted.future;
+    controller.cancelLibraryScan();
+    expect(controller.libraryScanStatus, LibraryScanStatus.cancelled);
+    expect(controller.selectedLibraryIds, {'committed'});
+    expect(controller.availableMedia.single.id, 'committed');
+
+    final second = controller.setLibraries({'second'});
+    releaseFirst.complete();
+    expect(await first, isFalse);
+    expect(await second, isTrue);
+    expect(controller.selectedLibraryIds, {'second'});
+    expect(controller.availableMedia.single.id, 'second');
+    expect(controller.libraryScanStatus, LibraryScanStatus.complete);
+  });
+
+  test(
+    'route cancellation invalidates an active scan before returning ready',
+    () async {
+      final selected = _server('server');
+      final started = Completer<void>();
+      final release = Completer<void>();
+      final store = _CountingMemoryStore(
+        const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+      );
+      final plex = _FakePlex()
+        ..serversResult = [selected]
+        ..connectionResult = selected.connections.single
+        ..librariesResult = const [
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+        ]
+        ..libraryItemsScanHandler = (_, _, _, _, isCurrent, _) async {
+          started.complete();
+          await release.future;
+          if (!isCurrent()) {
+            throw const PlexException('cancelled', 'cancelled');
+          }
+          return const [];
+        };
+      final controller = LineupController(
+        store: store,
+        credentials: _MemoryCredentials(accountToken: 'token'),
+        plex: plex,
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+      controller
+        ..stage = SetupStage.channelSetup
+        ..channelSetupCanCancel = true
+        ..selectedLibraryIds = const {'committed'}
+        ..availableMedia = const [
+          PlexMediaItem(
+            id: 'committed',
+            title: 'Committed',
+            type: 'movie',
+            duration: Duration(minutes: 1),
+          ),
+        ];
+      final savesBeforeScan = store.saveCalls;
+
+      final scan = controller.setLibraries({'movies'});
+      await started.future;
+      controller.cancelChannelSetup();
+      release.complete();
+
+      expect(await scan, isFalse);
+      expect(controller.stage, SetupStage.ready);
+      expect(controller.selectedLibraryIds, {'committed'});
+      expect(controller.availableMedia.single.id, 'committed');
+      expect(store.saveCalls, savesBeforeScan);
+    },
+  );
+
+  test('cancelling a scan schedules no queued fifth library', () async {
+    final selected = _server('server');
+    final fourStarted = Completer<void>();
+    final release = Completer<void>();
+    final started = <String>[];
+    final plex = _FakePlex()
+      ..serversResult = [selected]
+      ..connectionResult = selected.connections.single
+      ..librariesResult = [
+        for (var index = 0; index < 5; index++)
+          PlexLibrary(
+            id: 'library-$index',
+            title: 'Library $index',
+            type: PlexLibraryType.movie,
+          ),
+      ]
+      ..libraryItemsScanHandler = (_, _, libraryId, _, isCurrent, _) async {
+        started.add(libraryId);
+        if (started.length == 4) fourStarted.complete();
+        await release.future;
+        if (!isCurrent()) {
+          throw const PlexException('cancelled', 'cancelled');
+        }
+        return const [];
+      };
+    final controller = LineupController(
+      store: _MemoryStore(
+        const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+      ),
+      credentials: _MemoryCredentials(accountToken: 'token'),
+      plex: plex,
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+
+    final scan = controller.setLibraries({
+      for (var index = 0; index < 5; index++) 'library-$index',
+    });
+    await fourStarted.future;
+    controller.cancelLibraryScan();
+    release.complete();
+
+    expect(await scan, isFalse);
+    expect(started, [for (var index = 0; index < 4; index++) 'library-$index']);
+    expect(controller.libraryScanStatus, LibraryScanStatus.cancelled);
+  });
+
+  test(
+    'library scan distinguishes empty unsupported and transient failures',
+    () async {
+      final selected = _server('server');
+      var result = 0;
+      final plex = _FakePlex()
+        ..serversResult = [selected]
+        ..connectionResult = selected.connections.single
+        ..librariesResult = const [
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+        ]
+        ..libraryItemsHandler = (_, _, libraryId, _) async => switch (result) {
+          0 => const [],
+          1 => [
+            PlexMediaItem(
+              id: 'zero',
+              title: 'Zero',
+              type: 'movie',
+              duration: Duration.zero,
+              libraryId: libraryId,
+            ),
+          ],
+          2 => throw const PlexException(
+            'network-timeout',
+            'Plex did not respond in time. Try again.',
+          ),
+          3 => throw const PlexException(
+            'server-unreachable',
+            'Plex request failed (503).',
+          ),
+          _ => throw const PlexException(
+            'library-scale-exceeded',
+            'This library is too large to scan safely.',
+          ),
+        };
+      final controller = LineupController(
+        store: _MemoryStore(
+          const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+        ),
+        credentials: _MemoryCredentials(accountToken: 'token'),
+        plex: plex,
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+
+      expect(await controller.setLibraries({'movies'}), isTrue);
+      expect(controller.libraryScanStatus, LibraryScanStatus.empty);
+      result = 1;
+      expect(await controller.setLibraries({'movies'}), isTrue);
+      expect(controller.libraryScanStatus, LibraryScanStatus.unsupported);
+      result = 2;
+      expect(await controller.setLibraries({'movies'}), isFalse);
+      expect(controller.libraryScanStatus, LibraryScanStatus.transientFailure);
+      expect(controller.error, contains('did not respond'));
+      result = 3;
+      expect(await controller.setLibraries({'movies'}), isFalse);
+      expect(controller.libraryScanStatus, LibraryScanStatus.transientFailure);
+      expect(controller.error, contains('503'));
+      result = 4;
+      expect(await controller.setLibraries({'movies'}), isFalse);
+      expect(controller.libraryScanStatus, LibraryScanStatus.transientFailure);
+      expect(controller.error, contains('too large'));
+    },
+  );
+
+  test('restored library scan failure reaches a terminal state', () async {
+    final selected = _server('server');
+    final plex = _FakePlex()
+      ..serversResult = [selected]
+      ..connectionResult = selected.connections.single
+      ..librariesResult = const [
+        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
+      ]
+      ..playlistsHandler = (_, _) async => throw const PlexException(
+        'auth-invalid',
+        'Plex authorization expired.',
+      );
+    final controller = LineupController(
+      store: _MemoryStore(
+        PersistedState(
+          selectedServerByProfile: const {'owner': 'server'},
+          selectedLibraryIdsByProfileServer: const {
+            'owner': {
+              'server': ['movies'],
+            },
+          },
+          channelsByProfileServer: {
+            'owner': {
+              'server': [_channel('saved')],
+            },
+          },
+        ),
+      ),
+      credentials: _MemoryCredentials(accountToken: 'token'),
+      plex: plex,
+    );
+    addTearDown(controller.dispose);
+
+    await controller.initialize();
+
+    expect(controller.libraryScanStatus, LibraryScanStatus.transientFailure);
+    expect(controller.busy, isFalse);
+    expect(controller.error, 'Plex authorization expired.');
+  });
+
+  test(
+    'playlist diagnostics retain Plex code and bounded failure count',
+    () async {
+      final selected = _server('server');
+      var calls = 0;
+      final plex = _FakePlex()
+        ..serversResult = [selected]
+        ..connectionResult = selected.connections.single
+        ..librariesResult = const [
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+        ]
+        ..playlistsHandler = (_, _) async {
+          calls++;
+          if (calls == 1) {
+            throw const PlexException(
+              'playlist-failed',
+              'opaque-secret-sentinel',
+            );
+          }
+          return const PlexPlaylistCatalog(
+            playlists: [],
+            failedIds: {'missing-1', 'missing-2'},
+          );
+        };
+      final controller = LineupController(
+        store: _MemoryStore(
+          const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+        ),
+        credentials: _MemoryCredentials(accountToken: 'token'),
+        plex: plex,
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+      controller
+        ..stage = SetupStage.channelSetup
+        ..diagnostics.enabled = true;
+
+      expect(await controller.setLibraries({'movies'}), isTrue);
+      var entry = controller.diagnostics.entries.single;
+      expect(entry.message, 'Playlist discovery unavailable');
+      expect(entry.context, {'code': 'playlist-failed'});
+      expect(
+        '${entry.message}${entry.context}',
+        isNot(contains('opaque-secret-sentinel')),
+      );
+
+      controller.diagnostics.enabled = false;
+      controller.diagnostics.enabled = true;
+      expect(await controller.setLibraries({'movies'}), isTrue);
+      entry = controller.diagnostics.entries.single;
+      expect(entry.message, 'Some playlists could not be loaded');
+      expect(entry.context, {'count': 2});
+    },
+  );
+
+  test('audio persistence failure stays retryable and visible', () async {
+    final controller =
+        LineupController(
+            store: _MemoryStore()
+              ..failNextSave = true
+              ..failureMessage = 'opaque-secret-sentinel',
+            credentials: _MemoryCredentials(),
+            plex: _FakePlex(),
+          )
+          ..stage = SetupStage.audio
+          ..diagnostics.enabled = true;
     addTearDown(controller.dispose);
 
     await controller.completeAudioSetup();
@@ -171,6 +1216,13 @@ void main() {
     expect(controller.stage, SetupStage.audio);
     expect(controller.settings.audioSetupComplete, isFalse);
     expect(controller.error, contains('Could not save audio settings'));
+    final entry = controller.diagnostics.entries.single;
+    expect(entry.message, 'Audio setup persistence failed');
+    expect(entry.context, {'code': 'unexpected'});
+    expect(
+      '${entry.message}${entry.context}',
+      isNot(contains('opaque-secret-sentinel')),
+    );
   });
 
   test(
@@ -249,6 +1301,39 @@ void main() {
     poll.complete(null);
   });
 
+  test('PIN polling diagnostics retain only the Plex failure code', () async {
+    final plex = _FakePlex()
+      ..pinResult = PlexPin(
+        id: 6,
+        code: 'EFGH',
+        expiresAt: DateTime.now().add(const Duration(minutes: 1)),
+      )
+      ..pollHandler = (_) async =>
+          throw const PlexException('poll-failed', 'opaque-secret-sentinel');
+    final controller = LineupController(
+      store: _MemoryStore(),
+      credentials: _MemoryCredentials(),
+      plex: plex,
+      pinPollInterval: const Duration(milliseconds: 1),
+    )..diagnostics.enabled = true;
+    addTearDown(controller.dispose);
+
+    await controller.startLinking();
+    while (controller.diagnostics.entries.isEmpty) {
+      await Future<void>.delayed(const Duration(milliseconds: 1));
+    }
+    await controller.cancelLinking();
+
+    for (final entry in controller.diagnostics.entries) {
+      expect(entry.message, 'PIN poll failed');
+      expect(entry.context, {'code': 'poll-failed'});
+      expect(
+        '${entry.message}${entry.context}',
+        isNot(contains('opaque-secret-sentinel')),
+      );
+    }
+  });
+
   test(
     'failed settings persistence does not leak into the next save',
     () async {
@@ -287,6 +1372,179 @@ void main() {
     },
   );
 
+  test(
+    'failed settings settles before a queued channel transaction derives',
+    () async {
+      final store = _ControlledSaveStore();
+      final selected = _server('server');
+      final controller = LineupController(
+        store: store,
+        credentials: _MemoryCredentials(),
+        plex: _FakePlex(),
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+      controller
+        ..account = const PlexAccount(id: 'owner', name: 'Owner', email: '')
+        ..server = selected
+        ..connection = selected.connections.single;
+      store.blockNext(fail: true);
+
+      final settings = controller.updateSettings(
+        const LineupSettings(diagnosticsEnabled: true),
+      );
+      await store.blockedSaveStarted.future;
+      final channel = controller.saveChannel(_channel('queued'));
+      await Future<void>.delayed(Duration.zero);
+
+      expect(controller.channels, isEmpty);
+      store.releaseBlockedSave();
+      await expectLater(settings, throwsStateError);
+      await channel;
+
+      expect(controller.settings.diagnosticsEnabled, isFalse);
+      expect(controller.channels.single.id, 'queued');
+      expect(store.state.settings.diagnosticsEnabled, isFalse);
+      expect(
+        store.state.channelsByProfileServer['owner']!['server']!.single.id,
+        'queued',
+      );
+    },
+  );
+
+  test('failed channel settles before queued settings derives', () async {
+    final store = _ControlledSaveStore();
+    final selected = _server('server');
+    final existing = _channel('existing');
+    final controller = LineupController(
+      store: store,
+      credentials: _MemoryCredentials(),
+      plex: _FakePlex(),
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+    controller
+      ..account = const PlexAccount(id: 'owner', name: 'Owner', email: '')
+      ..server = selected
+      ..connection = selected.connections.single
+      ..channels = [existing]
+      ..currentChannelId = existing.id;
+    store.blockNext(fail: true);
+
+    final channel = controller.deleteChannel(existing.id);
+    await store.blockedSaveStarted.future;
+    final settings = controller.updateSettings(
+      const LineupSettings(nowWatchingBanner: false),
+    );
+    store.releaseBlockedSave();
+
+    await expectLater(channel, throwsStateError);
+    await settings;
+    expect(controller.channels, [existing]);
+    expect(controller.currentChannelId, existing.id);
+    expect(controller.settings.nowWatchingBanner, isFalse);
+    expect(store.state.settings.nowWatchingBanner, isFalse);
+    expect(store.state.channelsByProfileServer['owner']!['server'], [existing]);
+  });
+
+  test(
+    'failed settings settles before a queued current-channel mutation',
+    () async {
+      final store = _ControlledSaveStore();
+      final selected = _server('server');
+      final first = _channel('first');
+      final second = Channel(
+        id: 'second',
+        number: 2,
+        name: 'Second channel',
+        source: first.source,
+        playbackMode: first.playbackMode,
+        anchor: first.anchor,
+        shuffleSeed: first.shuffleSeed,
+      );
+      final controller = LineupController(
+        store: store,
+        credentials: _MemoryCredentials(),
+        plex: _FakePlex(),
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+      controller
+        ..account = const PlexAccount(id: 'owner', name: 'Owner', email: '')
+        ..server = selected
+        ..channels = [first, second]
+        ..currentChannelId = first.id;
+      store.blockNext(fail: true);
+
+      final settings = controller.updateSettings(
+        const LineupSettings(diagnosticsEnabled: true),
+      );
+      await store.blockedSaveStarted.future;
+      final current = controller.setCurrentChannel(second.id);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(controller.currentChannelId, first.id);
+      store.releaseBlockedSave();
+      await expectLater(settings, throwsStateError);
+      await current;
+      expect(controller.settings.diagnosticsEnabled, isFalse);
+      expect(controller.currentChannelId, second.id);
+      expect(
+        store.state.currentChannelByProfileServer['owner']!['server'],
+        second.id,
+      );
+    },
+  );
+
+  test(
+    'failed settings settles before a queued library transaction applies',
+    () async {
+      final selected = _server('server');
+      final store = _ControlledSaveStore(
+        const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+      );
+      final plex = _FakePlex()
+        ..homeUsersResult = const [
+          PlexHomeUser(id: 'owner', name: 'Owner', protected: false),
+        ]
+        ..serversResult = [selected]
+        ..connectionResult = selected.connections.single
+        ..librariesResult = const [
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+        ];
+      final controller = LineupController(
+        store: store,
+        credentials: _MemoryCredentials(accountToken: 'account-token'),
+        plex: plex,
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+      store.blockNext(fail: true);
+
+      final settings = controller.updateSettings(
+        const LineupSettings(diagnosticsEnabled: true),
+      );
+      await store.blockedSaveStarted.future;
+      final libraries = controller.setLibraries({'movies'});
+      await Future<void>.delayed(Duration.zero);
+      store.releaseBlockedSave();
+
+      await expectLater(settings, throwsStateError);
+      expect(await libraries, isTrue);
+      expect(controller.settings.diagnosticsEnabled, isFalse);
+      expect(controller.selectedLibraryIds, {'movies'});
+      expect(store.state.settings.diagnosticsEnabled, isFalse);
+      expect(
+        store.state.selectedLibraryIdsByProfileServer['owner']!['server'],
+        ['movies'],
+      );
+    },
+  );
+
   test('logout clears a credential write that was already in flight', () async {
     final credentials = _BlockingCredentials();
     final plex = _FakePlex()
@@ -312,6 +1570,276 @@ void main() {
 
     expect(credentials.accountToken, isNull);
     expect(controller.stage, SetupStage.welcome);
+  });
+
+  test('profile scope apply waits for an older state transaction', () async {
+    const owner = PlexHomeUser(id: 'owner', name: 'Owner', protected: false);
+    const child = PlexHomeUser(id: 'child', name: 'Child', protected: false);
+    final store = _ControlledSaveStore();
+    final controller = LineupController(
+      store: store,
+      credentials: _MemoryCredentials(accountToken: 'account-token'),
+      plex: _FakePlex()..homeUsersResult = const [owner, child],
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+    controller
+      ..profile = owner
+      ..stage = SetupStage.ready;
+    store.blockNext();
+
+    final settings = controller.updateSettings(
+      const LineupSettings(nowWatchingBanner: false),
+    );
+    await store.blockedSaveStarted.future;
+    final selection = controller.selectProfile(child);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(controller.profile, owner);
+    store.releaseBlockedSave();
+    await settings;
+    await selection;
+
+    expect(controller.profile, child);
+    expect(store.savedStates[store.savedStates.length - 2].profileId, owner.id);
+    expect(store.savedStates.last.profileId, child.id);
+  });
+
+  test('server scope apply waits for an older state transaction', () async {
+    final oldServer = _server('old');
+    final nextServer = _server('next');
+    final store = _ControlledSaveStore(
+      const PersistedState(selectedServerByProfile: {'owner': 'old'}),
+    );
+    final plex = _FakePlex()
+      ..homeUsersResult = const [
+        PlexHomeUser(id: 'owner', name: 'Owner', protected: false),
+      ]
+      ..serversResult = [oldServer, nextServer]
+      ..librariesResult = const [];
+    final controller = LineupController(
+      store: store,
+      credentials: _MemoryCredentials(accountToken: 'account-token'),
+      plex: plex,
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+    controller.stage = SetupStage.ready;
+    store.blockNext();
+
+    final settings = controller.updateSettings(
+      const LineupSettings(nowWatchingBanner: false),
+    );
+    await store.blockedSaveStarted.future;
+    final selection = controller.selectServer(nextServer);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(controller.server?.id, oldServer.id);
+    store.releaseBlockedSave();
+    await settings;
+    await selection;
+
+    expect(controller.server?.id, nextServer.id);
+    expect(
+      store.savedStates[store.savedStates.length - 2].selectedServerByProfile,
+      {'owner': oldServer.id},
+    );
+    expect(store.savedStates.last.selectedServerByProfile, {
+      'owner': nextServer.id,
+    });
+  });
+
+  test(
+    'target authorization refresh waits for queued server scope apply',
+    () async {
+      final oldServer = _server('old');
+      final nextServer = _server('next');
+      final refreshedNext = PlexConnection(
+        uri: Uri.parse('https://next-refreshed.example:32400'),
+        local: true,
+        relay: false,
+        latency: const Duration(milliseconds: 8),
+      );
+      final targetLibrariesRequested = Completer<void>();
+      var discoveries = 0;
+      final store = _ControlledSaveStore(
+        const PersistedState(selectedServerByProfile: {'owner': 'old'}),
+      );
+      final plex = _FakePlex()
+        ..homeUsersResult = const [
+          PlexHomeUser(id: 'owner', name: 'Owner', protected: false),
+        ]
+        ..serversResult = [oldServer, nextServer]
+        ..discoverServersHandler = (_) async {
+          discoveries++;
+          return [
+            PlexServerAccess(
+              server: oldServer,
+              token: discoveries == 1 ? 'old-token-1' : 'old-token-2',
+            ),
+            PlexServerAccess(
+              server: nextServer,
+              token: discoveries == 1 ? 'next-token-1' : 'next-token-2',
+            ),
+          ];
+        }
+        ..selectConnectionHandler = (selected, token) async {
+          if (selected.id == nextServer.id && token == 'next-token-1') {
+            throw const PlexException('auth-invalid', 'Expired');
+          }
+          if (selected.id == nextServer.id) return refreshedNext;
+          return oldServer.connections.single;
+        }
+        ..librariesHandler = (_, token) async {
+          if (token == 'next-token-2' &&
+              !targetLibrariesRequested.isCompleted) {
+            targetLibrariesRequested.complete();
+          }
+          return const [];
+        };
+      final controller = LineupController(
+        store: store,
+        credentials: _MemoryCredentials(accountToken: 'account-token'),
+        plex: plex,
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+      controller.stage = SetupStage.ready;
+      store.blockNext();
+
+      final settings = controller.updateSettings(
+        const LineupSettings(nowWatchingBanner: false),
+      );
+      await store.blockedSaveStarted.future;
+      final selection = controller.selectServer(nextServer);
+      await targetLibrariesRequested.future;
+
+      expect(discoveries, 2);
+      expect(controller.server?.id, oldServer.id);
+      expect(controller.connection, oldServer.connections.single);
+      await controller.artworkForPath(Uri.parse('/old-art'));
+      expect(plex.artworkServer, oldServer.connections.single.uri);
+      expect(plex.artworkToken, 'old-token-2');
+
+      store.releaseBlockedSave();
+      await settings;
+      await selection;
+
+      expect(controller.server?.id, nextServer.id);
+      expect(controller.connection, refreshedNext);
+      await controller.artworkForPath(Uri.parse('/next-art'));
+      expect(plex.artworkServer, refreshedNext.uri);
+      expect(plex.artworkToken, 'next-token-2');
+    },
+  );
+
+  test(
+    'failed old transaction rolls back while profile network later fails',
+    () async {
+      const owner = PlexHomeUser(id: 'owner', name: 'Owner', protected: false);
+      const child = PlexHomeUser(id: 'child', name: 'Child', protected: false);
+      final switched = Completer<String>();
+      final store = _ControlledSaveStore();
+      final controller = LineupController(
+        store: store,
+        credentials: _MemoryCredentials(accountToken: 'account-token'),
+        plex: _FakePlex()
+          ..homeUsersResult = const [owner, child]
+          ..switchHomeUserHandler = (_, _, _) => switched.future,
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+      controller
+        ..profile = owner
+        ..stage = SetupStage.ready;
+      store.blockNext(fail: true);
+
+      final settings = controller.updateSettings(
+        const LineupSettings(diagnosticsEnabled: true),
+      );
+      await store.blockedSaveStarted.future;
+      final selection = controller.selectProfile(child);
+      switched.completeError(StateError('switch failed'));
+      await selection;
+      store.releaseBlockedSave();
+
+      await expectLater(settings, throwsStateError);
+      expect(controller.settings.diagnosticsEnabled, isFalse);
+      expect(controller.profile, owner);
+    },
+  );
+
+  test(
+    'logout waits for an applied state transaction before clearing',
+    () async {
+      final store = _ControlledSaveStore();
+      final controller = LineupController(
+        store: store,
+        credentials: _MemoryCredentials(accountToken: 'account-token'),
+        plex: _FakePlex(),
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+      controller
+        ..account = const PlexAccount(id: 'owner', name: 'Owner', email: '')
+        ..stage = SetupStage.ready;
+      store.blockNext();
+
+      final settings = controller.updateSettings(
+        const LineupSettings(nowWatchingBanner: false),
+      );
+      await store.blockedSaveStarted.future;
+      final logout = controller.logout();
+      await Future<void>.delayed(Duration.zero);
+
+      expect(controller.account?.id, 'owner');
+      store.releaseBlockedSave();
+      await settings;
+      expect(await logout, isTrue);
+      expect(store.state.settings.nowWatchingBanner, isFalse);
+      expect(controller.account, isNull);
+      expect(controller.stage, SetupStage.welcome);
+    },
+  );
+
+  test('queued stale mutation never calls store save', () async {
+    final store = _ControlledSaveStore();
+    final selected = _server('server');
+    final controller = LineupController(
+      store: store,
+      credentials: _MemoryCredentials(accountToken: 'account-token'),
+      plex: _FakePlex(),
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+    controller
+      ..account = const PlexAccount(id: 'owner', name: 'Owner', email: '')
+      ..server = selected
+      ..channels = const []
+      ..stage = SetupStage.ready;
+    var stalePublished = false;
+    controller.addListener(() {
+      stalePublished |= controller.channels.any(
+        (channel) => channel.id == 'stale',
+      );
+    });
+    store.blockNext();
+
+    final settings = controller.updateSettings(
+      const LineupSettings(nowWatchingBanner: false),
+    );
+    await store.blockedSaveStarted.future;
+    final stale = controller.saveChannel(_channel('stale'));
+    final logout = controller.logout();
+    store.releaseBlockedSave();
+
+    await settings;
+    await stale;
+    expect(await logout, isTrue);
+    expect(store.saveCalls, 1);
+    expect(store.state.channelsByProfileServer['owner']!['server'], isEmpty);
+    expect(controller.channels, isEmpty);
+    expect(stalePublished, isFalse);
   });
 
   test('overlapping logout calls share one busy credential cleanup', () async {
@@ -351,13 +1879,20 @@ void main() {
           code: 'WXYZ',
           expiresAt: DateTime.now().add(const Duration(minutes: 1)),
         )
-        ..pollHandler = (_) async => 'late-token';
+        ..pollHandler = (_) async {
+          return 'late-token';
+        }
+        ..cancelPinFailure = const PlexException(
+          'cancel-failed',
+          'opaque-secret-sentinel',
+        );
       final controller = LineupController(
         store: _MemoryStore(),
         credentials: credentials,
         plex: plex,
         pinPollInterval: const Duration(milliseconds: 1),
       );
+      controller.diagnostics.enabled = true;
       addTearDown(controller.dispose);
 
       await controller.startLinking();
@@ -371,6 +1906,20 @@ void main() {
       expect(controller.error, isNot(contains('late-token')));
       expect(credentials.accountToken, 'late-token');
       expect(plex.cancelPinCalls, 1);
+      expect(controller.diagnostics.entries.map((entry) => entry.message), [
+        'Credential cleanup failed',
+        'PIN cancellation failed',
+      ]);
+      expect(controller.diagnostics.entries.map((entry) => entry.context), [
+        {'code': 'unexpected'},
+        {'code': 'cancel-failed'},
+      ]);
+      expect(
+        controller.diagnostics.entries
+            .map((entry) => '${entry.message}${entry.context}')
+            .join(),
+        isNot(contains('opaque-secret-sentinel')),
+      );
 
       expect(await controller.cancelLinking(), isTrue);
       expect(controller.stage, SetupStage.welcome);
@@ -389,11 +1938,8 @@ void main() {
               plex: _FakePlex(),
             )
             ..stage = SetupStage.ready
-            ..account = const PlexAccount(
-              id: 'owner',
-              name: 'Owner',
-              email: '',
-            );
+            ..account = const PlexAccount(id: 'owner', name: 'Owner', email: '')
+            ..diagnostics.enabled = true;
       addTearDown(controller.dispose);
 
       expect(await controller.logout(), isFalse);
@@ -401,7 +1947,19 @@ void main() {
       expect(controller.stage, SetupStage.ready);
       expect(controller.account?.id, 'owner');
       expect(controller.error, contains('securely sign out'));
-      expect(controller.error, isNot(contains('keychain-token-secret')));
+      expect(controller.error, isNot(contains('opaque-secret-sentinel')));
+      expect(
+        controller.diagnostics.entries.single.message,
+        'Credential cleanup failed',
+      );
+      expect(controller.diagnostics.entries.single.context, {
+        'code': 'unexpected',
+      });
+      expect(
+        '${controller.diagnostics.entries.single.message}'
+        '${controller.diagnostics.entries.single.context}',
+        isNot(contains('opaque-secret-sentinel')),
+      );
     },
   );
 
@@ -461,13 +2019,40 @@ void main() {
     final initialization = controller.initialize();
     controller.dispose();
     store.finishLoad.complete(
-      const PersistedState(profileId: 'should-not-restore'),
+      const AppStoreLoadResult(PersistedState(profileId: 'should-not-restore')),
     );
     await initialization;
 
     expect(controller.account, isNull);
     expect(controller.stage, SetupStage.welcome);
   });
+
+  test(
+    'startup corruption notice is bounded, path-free, and dismissible',
+    () async {
+      final controller = LineupController(
+        store: _MemoryStore(const PersistedState(), true),
+        credentials: _MemoryCredentials(),
+        plex: _FakePlex(),
+      );
+      addTearDown(controller.dispose);
+      var notifications = 0;
+      controller.addListener(() => notifications++);
+
+      await controller.initialize();
+
+      expect(controller.startupRecoveryNotice, isNotNull);
+      expect(controller.startupRecoveryNotice!.length, lessThan(100));
+      expect(controller.startupRecoveryNotice, isNot(contains('state.json')));
+      expect(controller.startupRecoveryNotice, isNot(contains('/')));
+      final beforeDismiss = notifications;
+
+      controller.dismissStartupRecoveryNotice();
+
+      expect(controller.startupRecoveryNotice, isNull);
+      expect(notifications, beforeDismiss + 1);
+    },
+  );
 
   test(
     'server management preserves scoped lineups when selection is cleared',
@@ -526,6 +2111,7 @@ void main() {
       ..homeUsersResult = const [
         PlexHomeUser(id: 'owner', name: 'Owner', protected: false),
       ]
+      ..serversResult = [nextServer]
       ..selectConnectionHandler = (_, _) => probe.future;
     final controller = LineupController(
       store: _MemoryStore(),
@@ -629,7 +2215,9 @@ void main() {
     final controller = LineupController(
       store: store,
       credentials: _MemoryCredentials(accountToken: 'token'),
-      plex: _FakePlex()..connectionResult = nextServer.connections.single,
+      plex: _FakePlex()
+        ..serversResult = [nextServer]
+        ..connectionResult = nextServer.connections.single,
     );
     addTearDown(controller.dispose);
     await controller.initialize();
@@ -685,7 +2273,7 @@ void main() {
     expect(controller.channels, isEmpty);
   });
 
-  test('a stale settings failure cannot roll back a newer value', () async {
+  test('a failed settings transaction settles before the next value', () async {
     final store = _ConcurrentStore();
     final controller = LineupController(
       store: store,
@@ -699,11 +2287,12 @@ void main() {
       const LineupSettings(diagnosticsEnabled: true),
     );
     await store.firstSaveStarted.future;
-    await controller.updateSettings(
+    final newer = controller.updateSettings(
       const LineupSettings(nowWatchingBanner: false),
     );
     store.failFirstSave.complete();
     await expectLater(stale, throwsStateError);
+    await newer;
 
     expect(controller.settings.nowWatchingBanner, isFalse);
     expect(controller.settings.diagnosticsEnabled, isFalse);
@@ -738,23 +2327,29 @@ Channel _channel(String id) => Channel(
 );
 
 class _MemoryStore implements AppStore {
-  _MemoryStore([this.state = const PersistedState()]);
+  _MemoryStore([
+    this.state = const PersistedState(),
+    this.recoveredCorruptState = false,
+  ]);
 
   PersistedState state;
+  final bool recoveredCorruptState;
   bool failNextSave = false;
+  String failureMessage = 'save failed';
 
   @override
   Future<String> clientIdentifier() async =>
       'lineup-desktop-test-abcdefghijklmnopqrst';
 
   @override
-  Future<PersistedState> load() async => state;
+  Future<AppStoreLoadResult> load() async =>
+      AppStoreLoadResult(state, recoveredCorruptState: recoveredCorruptState);
 
   @override
   Future<void> save(PersistedState value) async {
     if (failNextSave) {
       failNextSave = false;
-      throw StateError('save failed');
+      throw StateError(failureMessage);
     }
     state = value;
   }
@@ -824,7 +2419,7 @@ mixin _FailOnceClear on _MemoryCredentials {
   @override
   Future<void> clear() async {
     clearCalls++;
-    if (clearCalls == 1) throw StateError('keychain-token-secret');
+    if (clearCalls == 1) throw StateError('opaque-secret-sentinel');
     await super.clear();
   }
 }
@@ -837,7 +2432,7 @@ class _FailingClearCredentials extends _MemoryCredentials {
 
   @override
   Future<void> clear() async {
-    throw StateError('keychain-token-secret');
+    throw StateError('opaque-secret-sentinel');
   }
 }
 
@@ -857,11 +2452,59 @@ class _BlockingSaveStore extends _MemoryStore {
   }
 }
 
-class _BlockingLoadStore extends _MemoryStore {
-  final finishLoad = Completer<PersistedState>();
+class _CountingMemoryStore extends _MemoryStore {
+  _CountingMemoryStore([super.state]);
+
+  int saveCalls = 0;
 
   @override
-  Future<PersistedState> load() => finishLoad.future;
+  Future<void> save(PersistedState value) async {
+    saveCalls++;
+    await super.save(value);
+  }
+}
+
+class _ControlledSaveStore extends _MemoryStore {
+  _ControlledSaveStore([super.state]);
+
+  Completer<void> blockedSaveStarted = Completer<void>();
+  Completer<void> _release = Completer<void>();
+  final List<PersistedState> savedStates = [];
+  var saveCalls = 0;
+  var _blocked = false;
+  var _fail = false;
+
+  void blockNext({bool fail = false}) {
+    assert(!_blocked);
+    blockedSaveStarted = Completer<void>();
+    _release = Completer<void>();
+    _blocked = true;
+    _fail = fail;
+  }
+
+  void releaseBlockedSave() => _release.complete();
+
+  @override
+  Future<void> save(PersistedState value) async {
+    saveCalls++;
+    if (_blocked) {
+      blockedSaveStarted.complete();
+      await _release.future;
+      final fail = _fail;
+      _blocked = false;
+      _fail = false;
+      if (fail) throw StateError('save failed');
+    }
+    await super.save(value);
+    savedStates.add(value);
+  }
+}
+
+class _BlockingLoadStore extends _MemoryStore {
+  final finishLoad = Completer<AppStoreLoadResult>();
+
+  @override
+  Future<AppStoreLoadResult> load() => finishLoad.future;
 }
 
 class _ConcurrentStore implements AppStore {
@@ -875,7 +2518,7 @@ class _ConcurrentStore implements AppStore {
       'lineup-desktop-test-abcdefghijklmnopqrst';
 
   @override
-  Future<PersistedState> load() async => state;
+  Future<AppStoreLoadResult> load() async => AppStoreLoadResult(state);
 
   @override
   Future<void> save(PersistedState value) async {
@@ -909,26 +2552,52 @@ class _FakePlex extends PlexClient {
   Future<String?> Function(PlexPin)? pollHandler;
   Future<List<PlexMediaItem>> Function(Uri, String, String, PlexLibraryType)?
   libraryItemsHandler;
+  Future<List<PlexMediaItem>> Function(
+    Uri,
+    String,
+    String,
+    PlexLibraryType,
+    bool Function(),
+    void Function(PlexLibraryPageProgress),
+  )?
+  libraryItemsScanHandler;
+  Future<List<PlexLibrary>> Function(Uri, String)? librariesHandler;
+  Future<PlexPlaylistCatalog> Function(Uri, String)? playlistsHandler;
+  Future<List<PlexServerAccess>> Function(String)? discoverServersHandler;
+  Future<Uint8List> Function(Uri, String, Uri)? artworkHandler;
+  List<PlexPlaybackPartDescriptor>? playbackDescriptorResult;
   final discoveredTokens = <String>[];
+  final accountTokens = <String>[];
+  final homeUsersTokens = <String>[];
+  final selectedTokens = <String>[];
+  final libraryTokens = <String>[];
+  final itemTokens = <String>[];
+  final playlistTokens = <String>[];
   List<PlexServer> serversResult = const [];
+  String resourceToken = 'pms-token';
   PlexConnection? connectionResult;
   Future<PlexConnection> Function(PlexServer, String)? selectConnectionHandler;
   Future<String> Function(String, String, String?)? switchHomeUserHandler;
   List<PlexLibrary> librariesResult = const [];
   int pollCalls = 0;
   int cancelPinCalls = 0;
+  Object? cancelPinFailure;
   int librariesCalls = 0;
   Uri? artworkServer;
   Uri? artworkPath;
   String? artworkToken;
 
   @override
-  Future<PlexAccount> account(String token) =>
-      accountHandler?.call(token) ?? Future.value(accountResult);
+  Future<PlexAccount> account(String token) {
+    accountTokens.add(token);
+    return accountHandler?.call(token) ?? Future.value(accountResult);
+  }
 
   @override
-  Future<List<PlexHomeUser>> homeUsers(String accountToken) async =>
-      homeUsersResult;
+  Future<List<PlexHomeUser>> homeUsers(String accountToken) async {
+    homeUsersTokens.add(accountToken);
+    return homeUsersResult;
+  }
 
   @override
   Future<String> switchHomeUser(
@@ -942,9 +2611,14 @@ class _FakePlex extends PlexClient {
   }
 
   @override
-  Future<List<PlexServer>> discoverServers(String token) async {
+  Future<List<PlexServerAccess>> discoverServers(String token) async {
     discoveredTokens.add(token);
-    return serversResult;
+    final handler = discoverServersHandler;
+    if (handler != null) return handler(token);
+    return [
+      for (final server in serversResult)
+        PlexServerAccess(server: server, token: resourceToken),
+    ];
   }
 
   @override
@@ -952,6 +2626,7 @@ class _FakePlex extends PlexClient {
     PlexServer server,
     String token,
   ) async {
+    selectedTokens.add(token);
     final handler = selectConnectionHandler;
     if (handler != null) return handler(server, token);
     return connectionResult ?? server.connections.first;
@@ -960,7 +2635,8 @@ class _FakePlex extends PlexClient {
   @override
   Future<List<PlexLibrary>> libraries(Uri server, String token) async {
     librariesCalls++;
-    return librariesResult;
+    libraryTokens.add(token);
+    return librariesHandler?.call(server, token) ?? librariesResult;
   }
 
   @override
@@ -975,6 +2651,9 @@ class _FakePlex extends PlexClient {
   @override
   Future<void> cancelPin(PlexPin pin) async {
     cancelPinCalls++;
+    final failure = cancelPinFailure;
+    cancelPinFailure = null;
+    if (failure != null) throw failure;
   }
 
   @override
@@ -982,14 +2661,37 @@ class _FakePlex extends PlexClient {
     Uri server,
     String token,
     String libraryId,
-    PlexLibraryType libraryType,
-  ) =>
-      libraryItemsHandler?.call(server, token, libraryId, libraryType) ??
-      Future.value(const []);
+    PlexLibraryType libraryType, {
+    required bool Function() isCurrent,
+    required void Function(PlexLibraryPageProgress progress) onProgress,
+  }) async {
+    itemTokens.add(token);
+    final scanHandler = libraryItemsScanHandler;
+    if (scanHandler != null) {
+      return scanHandler(
+        server,
+        token,
+        libraryId,
+        libraryType,
+        isCurrent,
+        onProgress,
+      );
+    }
+    return await libraryItemsHandler?.call(
+          server,
+          token,
+          libraryId,
+          libraryType,
+        ) ??
+        const [];
+  }
 
   @override
-  Future<PlexPlaylistCatalog> playlists(Uri server, String token) async =>
-      const PlexPlaylistCatalog(playlists: [], failedIds: {});
+  Future<PlexPlaylistCatalog> playlists(Uri server, String token) async {
+    playlistTokens.add(token);
+    return playlistsHandler?.call(server, token) ??
+        const PlexPlaylistCatalog(playlists: [], failedIds: {});
+  }
 
   @override
   Future<Uint8List> artwork(
@@ -1001,8 +2703,18 @@ class _FakePlex extends PlexClient {
     artworkServer = server;
     artworkPath = path;
     artworkToken = token;
+    final handler = artworkHandler;
+    if (handler != null) return handler(server, token, path);
     return Uint8List.fromList([1, 2, 3]);
   }
+
+  @override
+  List<PlexPlaybackPartDescriptor> playbackDescriptor({
+    required Uri server,
+    required PlexMediaItem item,
+  }) =>
+      playbackDescriptorResult ??
+      super.playbackDescriptor(server: server, item: item);
 
   @override
   void close() {}

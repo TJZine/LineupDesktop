@@ -132,6 +132,30 @@ void main() {
     fixture.dispose();
   });
 
+  testWidgets('media Stop reports failures without an unhandled error', (
+    tester,
+  ) async {
+    final fixture = _Fixture(PlayerState.playing, failStop: true);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.mediaStop);
+    await tester.pump();
+
+    expect(fixture.player.overlay, PlayerOverlay.error);
+    expect(
+      fixture.player.error,
+      'Playback could not be stopped. Retry or choose another channel.',
+    );
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
   testWidgets('numpad Enter commits channel entry', (tester) async {
     final fixture = _Fixture(PlayerState.playing, channelCount: 2);
     await tester.pumpWidget(
@@ -198,6 +222,27 @@ void main() {
       findsOneWidget,
     );
     expect(find.textContaining('synthetic load failure'), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
+  testWidgets('player errors remain named live regions', (tester) async {
+    final fixture = _Fixture(PlayerState.playing, failLoad: true);
+    await fixture.player.loadInitialMedia(Uri.parse('lineup-test://failure'));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+
+    final errorSemantics = tester.widget<Semantics>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is Semantics && widget.properties.label == 'Playback error',
+      ),
+    );
+    expect(errorSemantics.properties.liveRegion, isTrue);
 
     await tester.pumpWidget(const SizedBox.shrink());
     fixture.dispose();
@@ -327,6 +372,7 @@ void main() {
         ),
       );
       await tester.pump();
+      await tester.pump(const Duration(milliseconds: 350));
       expect(
         find.bySemanticsLabel(RegExp('Playback controls')),
         findsOneWidget,
@@ -367,6 +413,9 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 175));
     final transitions = find.byType(AnimatedSwitcher);
+    final switcher = tester.widget<AnimatedSwitcher>(transitions);
+    expect(switcher.duration, const Duration(milliseconds: 350));
+    expect(switcher.reverseDuration, const Duration(milliseconds: 350));
     expect(
       find.descendant(of: transitions, matching: find.byType(FadeTransition)),
       findsWidgets,
@@ -387,6 +436,269 @@ void main() {
       find.descendant(of: slides, matching: find.byType(FadeTransition)),
       findsOneWidget,
     );
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
+  testWidgets('Reduce Motion settles player overlays in one pump', (
+    tester,
+  ) async {
+    final fixture = _Fixture(PlayerState.playing);
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(disableAnimations: true),
+          child: child!,
+        ),
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+
+    fixture.player.showOsd();
+    await tester.pump();
+
+    final switcher = tester.widget<AnimatedSwitcher>(
+      find.byType(AnimatedSwitcher),
+    );
+    expect(switcher.duration, Duration.zero);
+    expect(switcher.reverseDuration, Duration.zero);
+    expect(tester.hasRunningAnimations, isFalse);
+    expect(find.bySemanticsLabel(RegExp('Playback controls')), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
+  testWidgets(
+    'reopened OSD rejects outgoing focus loss and keeps focused semantics',
+    (tester) async {
+      final fixture = _Fixture(
+        PlayerState.playing,
+        overlayTimeout: const Duration(milliseconds: 100),
+      );
+      final rootFocus = FocusNode();
+      addTearDown(rootFocus.dispose);
+      final semantics = tester.ensureSemantics();
+      fixture.player.showOsd();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: PlayerView(
+            controller: fixture.player,
+            focusNode: rootFocus,
+            openGuide: () {},
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+      expect(rootFocus.hasPrimaryFocus, isFalse);
+
+      fixture.player.closeOverlay();
+      await tester.pump();
+      fixture.player.showOsd();
+      await tester.pump();
+      FocusManager.instance.primaryFocus?.unfocus();
+      await tester.pump();
+      rootFocus.requestFocus();
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      expect(fixture.player.overlay, PlayerOverlay.osd);
+      expect(
+        find.bySemanticsLabel(RegExp('Playback controls')),
+        findsOneWidget,
+      );
+      expect(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is Semantics &&
+              widget.properties.label == 'Playback progress',
+        ),
+        findsOneWidget,
+      );
+
+      FocusManager.instance.primaryFocus?.unfocus();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 99));
+      expect(fixture.player.overlay, PlayerOverlay.osd);
+      await tester.pump(const Duration(milliseconds: 2));
+      expect(fixture.player.overlay, PlayerOverlay.none);
+
+      semantics.dispose();
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    },
+  );
+
+  testWidgets('reopened mini Guide rejects outgoing descendant focus loss', (
+    tester,
+  ) async {
+    final fixture = _Fixture(PlayerState.playing);
+    final rootFocus = FocusNode();
+    addTearDown(rootFocus.dispose);
+    fixture.player.showMiniGuide();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PlayerView(
+          controller: fixture.player,
+          focusNode: rootFocus,
+          openGuide: () {},
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    expect(rootFocus.hasPrimaryFocus, isFalse);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump(const Duration(seconds: 9));
+    expect(fixture.player.overlay, PlayerOverlay.miniGuide);
+
+    fixture.player.closeOverlay();
+    await tester.pump();
+    fixture.player.showMiniGuide();
+    await tester.pump();
+    FocusManager.instance.primaryFocus?.unfocus();
+    await tester.pump();
+    rootFocus.requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump(const Duration(seconds: 8));
+
+    expect(fixture.player.overlay, PlayerOverlay.miniGuide);
+    expect(find.bySemanticsLabel(RegExp('Mini Guide')), findsOneWidget);
+
+    FocusManager.instance.primaryFocus?.unfocus();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 7999));
+    expect(fixture.player.overlay, PlayerOverlay.miniGuide);
+    await tester.pump(const Duration(milliseconds: 2));
+    expect(fixture.player.overlay, PlayerOverlay.none);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
+  testWidgets('pointer and root focus do not suspend a timed OSD', (
+    tester,
+  ) async {
+    final fixture = _Fixture(
+      PlayerState.playing,
+      overlayTimeout: const Duration(milliseconds: 100),
+    );
+    final rootFocus = FocusNode();
+    addTearDown(rootFocus.dispose);
+    fixture.player.showOsd();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PlayerView(
+          controller: fixture.player,
+          focusNode: rootFocus,
+          openGuide: () {},
+        ),
+      ),
+    );
+    await tester.pump();
+    rootFocus.requestFocus();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 101));
+
+    expect(fixture.player.overlay, PlayerOverlay.none);
+
+    fixture.player.showOsd();
+    await tester.pump();
+    await tester.tapAt(const Offset(5, 5));
+    await tester.pump(const Duration(milliseconds: 101));
+    expect(fixture.player.overlay, PlayerOverlay.none);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
+  testWidgets('selected track rows receive initial focus', (tester) async {
+    final fixture = _Fixture(
+      PlayerState.playing,
+      tracks: const [
+        PlayerTrack(id: 1, type: PlayerTrackType.audio, selected: false),
+        PlayerTrack(
+          id: 2,
+          type: PlayerTrackType.audio,
+          selected: true,
+          title: 'Selected audio',
+        ),
+        PlayerTrack(
+          id: 3,
+          type: PlayerTrackType.subtitle,
+          selected: true,
+          title: 'Selected subtitles',
+        ),
+      ],
+    );
+    fixture.player.showOsd();
+    fixture.player.showTracks(PlayerTrackType.audio);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+    await tester.pump();
+    expect(
+      Focus.of(tester.element(find.text('Selected audio'))).hasFocus,
+      isTrue,
+    );
+    expect(
+      tester
+          .widget<ListTile>(find.widgetWithText(ListTile, 'Selected audio'))
+          .selected,
+      isTrue,
+    );
+
+    fixture.player.closeOverlay();
+    fixture.player.showTracks(PlayerTrackType.subtitle);
+    await tester.pump();
+    expect(
+      Focus.of(tester.element(find.text('Selected subtitles'))).hasFocus,
+      isTrue,
+    );
+    expect(
+      tester
+          .widget<ListTile>(find.widgetWithText(ListTile, 'Selected subtitles'))
+          .selected,
+      isTrue,
+    );
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
+  testWidgets('subtitle Off receives focus only when no track is selected', (
+    tester,
+  ) async {
+    final fixture = _Fixture(
+      PlayerState.playing,
+      tracks: const [
+        PlayerTrack(id: 3, type: PlayerTrackType.subtitle, selected: false),
+      ],
+    );
+    fixture.player.showOsd();
+    fixture.player.showTracks(PlayerTrackType.subtitle);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+    await tester.pump();
+    expect(Focus.of(tester.element(find.text('Off'))).hasFocus, isTrue);
+    expect(
+      tester.widget<ListTile>(find.widgetWithText(ListTile, 'Off')).selected,
+      isTrue,
+    );
+
     await tester.pumpWidget(const SizedBox.shrink());
     fixture.dispose();
   });
@@ -446,6 +758,7 @@ void main() {
         ),
       );
       await tester.pump();
+      await tester.pumpAndSettle();
 
       final scrollable = find.descendant(
         of: find.byKey(const Key('playback-options-list')),
@@ -515,9 +828,11 @@ class _Fixture {
   _Fixture(
     PlayerState state, {
     bool failLoad = false,
+    bool failStop = false,
     bool blockLoad = false,
     List<PlayerTrack> tracks = const [],
     int channelCount = 1,
+    Duration? overlayTimeout,
   }) {
     lineup = _Lineup(channelCount);
     guide = GuideController(
@@ -531,10 +846,16 @@ class _Fixture {
     native = _Native(
       state,
       failLoad: failLoad,
+      failStop: failStop,
       blockLoad: blockLoad,
       tracks: tracks,
     );
-    player = PlayerCoordinator(player: native, lineup: lineup, guide: guide);
+    player = PlayerCoordinator(
+      player: native,
+      lineup: lineup,
+      guide: guide,
+      overlayTimeout: overlayTimeout,
+    );
   }
 
   late final _Lineup lineup;
@@ -583,13 +904,16 @@ class _Lineup extends LineupController {
 
   @override
   LineupPlaybackRequest playbackFor(String itemId) =>
-      LineupPlaybackRequest(Uri.parse('lineup-test://$itemId'), () async {});
+      LineupPlaybackRequest.parts([
+        LineupPlaybackPart(uri: Uri.parse('lineup-test://$itemId')),
+      ]);
 }
 
 class _Native implements NativePlayer {
   _Native(
     PlayerState state, {
     this.failLoad = false,
+    this.failStop = false,
     this.blockLoad = false,
     this.tracks = const [],
   }) : status = PlayerStatus(
@@ -600,6 +924,7 @@ class _Native implements NativePlayer {
        );
 
   final bool failLoad;
+  final bool failStop;
   final bool blockLoad;
   final loadStarted = Completer<void>();
   final _loadCompletion = Completer<void>();
@@ -660,7 +985,10 @@ class _Native implements NativePlayer {
   @override
   Future<void> setVolume(double volume) async {}
   @override
-  Future<void> stop() async {}
+  Future<void> stop() async {
+    if (failStop) throw const PlayerUnavailable('Synthetic stop failure.');
+  }
+
   @override
   Future<void> dispose() async {}
 }
@@ -669,7 +997,8 @@ class _Store implements AppStore {
   @override
   Future<String> clientIdentifier() async => 'test';
   @override
-  Future<PersistedState> load() async => const PersistedState();
+  Future<AppStoreLoadResult> load() async =>
+      const AppStoreLoadResult(PersistedState());
   @override
   Future<void> save(PersistedState state) async {}
 }

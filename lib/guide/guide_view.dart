@@ -1453,7 +1453,7 @@ class _DetailsState extends State<_Details> {
     final item = program?.scheduled.item;
     final artworkKey = program == null
         ? null
-        : '${program.id}|${widget.controller.lineup.contentGeneration}|${item?.showThumb}|${item?.artwork}|${item?.backdrop}|${item?.clearLogo}|${settings.guideInfoBackgroundMode.name}|${settings.preferClearLogos}';
+        : '${program.id}|${widget.controller.lineup.contentGeneration}|${item?.showThumb}|${item?.poster}|${item?.backdrop}|${item?.clearLogo}|${settings.guideInfoBackgroundMode.name}|${settings.preferClearLogos}';
     if (artworkKey == _artworkProgramId) return;
     _artworkProgramId = artworkKey;
     _poster = null;

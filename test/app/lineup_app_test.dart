@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -13,10 +14,30 @@ import 'package:lineup_desktop/playback/native_player.dart';
 import 'package:lineup_desktop/playback/native_video_surface.dart';
 import 'package:lineup_desktop/plex/plex_client.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
+import 'package:lineup_desktop/settings/lineup_settings.dart';
 
 import '../support/ui_fixture.dart';
 
 void main() {
+  testWidgets('root Reduce Motion setting disables descendant animations', (
+    tester,
+  ) async {
+    final controller = _FakeController()
+      ..settings = const LineupSettings(reduceMotion: true)
+      ..stage = SetupStage.ready;
+    await tester.pumpWidget(
+      LineupBootstrap(player: _FakePlayer(), controller: controller),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      MediaQuery.disableAnimationsOf(
+        tester.element(find.text('Create a channel to build your Guide')),
+      ),
+      isTrue,
+    );
+  });
+
   testWidgets('empty first-run Channel Setup can return to server selection', (
     tester,
   ) async {
@@ -593,6 +614,119 @@ void main() {
     expect(find.text('Guide'), findsNothing);
   });
 
+  testWidgets('real corrupt state reaches the live dismissible banner', (
+    tester,
+  ) async {
+    final directory = Directory.systemTemp.createTempSync(
+      'lineup-bootstrap-test',
+    );
+    addTearDown(() => directory.deleteSync(recursive: true));
+    File('${directory.path}/state.json').writeAsStringSync('{broken');
+    final store = _PreparedFileAppStore(
+      directory,
+      clock: () => DateTime.utc(2026, 8, 23),
+    );
+    await tester.runAsync(store.prepare);
+    final controller = LineupController(
+      store: store,
+      credentials: _MemoryCredentials(),
+      plex: PlexClient(
+        clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      ),
+    );
+    await tester.pumpWidget(
+      LineupBootstrap(player: _FakePlayer(), controller: controller),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(MaterialBanner), findsOneWidget);
+    final semantics = tester.widget<Semantics>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is Semantics &&
+            widget.properties.label == controller.startupRecoveryNotice,
+      ),
+    );
+    expect(semantics.properties.liveRegion, isTrue);
+    expect(controller.startupRecoveryNotice, isNot(contains('/')));
+    final theme = controller.settings.theme;
+
+    await tester.tap(find.widgetWithText(TextButton, 'Dismiss'));
+    await tester.pump();
+
+    expect(find.byType(MaterialBanner), findsNothing);
+    expect(controller.startupRecoveryNotice, isNull);
+    expect(controller.settings.theme, theme);
+  });
+
+  testWidgets('quarantine collision makes startup fail visibly', (
+    tester,
+  ) async {
+    final directory = Directory.systemTemp.createTempSync(
+      'lineup-bootstrap-test',
+    );
+    addTearDown(() => directory.deleteSync(recursive: true));
+    final stateFile = File('${directory.path}/state.json');
+    stateFile.writeAsStringSync('{broken');
+    final instant = DateTime.utc(2026, 8, 23);
+    final quarantine = Directory(
+      '${stateFile.path}.corrupt-${instant.millisecondsSinceEpoch}',
+    );
+    quarantine.createSync();
+    final store = _PreparedFileAppStore(directory, clock: () => instant);
+    await tester.runAsync(store.prepare);
+    final controller = LineupController(
+      store: store,
+      credentials: _MemoryCredentials(),
+      plex: PlexClient(
+        clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      ),
+    );
+    await tester.pumpWidget(
+      LineupBootstrap(player: _FakePlayer(), controller: controller),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Lineup Desktop could not start'), findsOneWidget);
+    expect(find.textContaining(directory.path), findsNothing);
+    expect(stateFile.readAsStringSync(), '{broken');
+    expect(quarantine.existsSync(), isTrue);
+  });
+
+  testWidgets('state directory read failure makes startup fail visibly', (
+    tester,
+  ) async {
+    final directory = Directory.systemTemp.createTempSync(
+      'lineup-bootstrap-test',
+    );
+    addTearDown(() => directory.deleteSync(recursive: true));
+    final stateDirectory = Directory('${directory.path}/state.json');
+    stateDirectory.createSync();
+    final store = _PreparedFileAppStore(directory);
+    await tester.runAsync(store.prepare);
+    final controller = LineupController(
+      store: store,
+      credentials: _MemoryCredentials(),
+      plex: PlexClient(
+        clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      ),
+    );
+    await tester.pumpWidget(
+      LineupBootstrap(player: _FakePlayer(), controller: controller),
+    );
+    await tester.pump();
+
+    expect(find.text('Lineup Desktop could not start'), findsOneWidget);
+    expect(find.textContaining(directory.path), findsNothing);
+    expect(stateDirectory.existsSync(), isTrue);
+    expect(
+      directory.listSync().where(
+        (entry) => entry.path.contains('state.json.corrupt-'),
+      ),
+      isEmpty,
+    );
+  });
+
   testWidgets('makes a missing required Windows engine explicit', (
     tester,
   ) async {
@@ -667,7 +801,9 @@ class _FakeController extends LineupController {
 
   @override
   LineupPlaybackRequest playbackFor(String itemId) =>
-      LineupPlaybackRequest(Uri.parse('lineup-test://synthetic'), () async {});
+      LineupPlaybackRequest.parts([
+        LineupPlaybackPart(uri: Uri.parse('lineup-test://synthetic')),
+      ]);
 
   @override
   Future<ScheduleIndex> loadScheduleFor(Channel channel) async => buildSchedule(
@@ -686,12 +822,35 @@ class _LoadingController extends _FakeController {
   void completeInitialization() => _initialization.complete();
 }
 
+class _PreparedFileAppStore extends FileAppStore {
+  _PreparedFileAppStore(super.directory, {super.clock});
+
+  AppStoreLoadResult? _result;
+  Object? _error;
+
+  Future<void> prepare() async {
+    try {
+      _result = await super.load();
+    } catch (error) {
+      _error = error;
+    }
+  }
+
+  @override
+  Future<AppStoreLoadResult> load() async {
+    if (_error case final error?) throw error;
+    return _result!;
+  }
+}
+
 class _MemoryStore implements AppStore {
   @override
   Future<String> clientIdentifier() async =>
       'lineup-desktop-test-abcdefghijklmnopqrst';
   @override
-  Future<PersistedState> load() async => const PersistedState();
+  Future<AppStoreLoadResult> load() async =>
+      const AppStoreLoadResult(PersistedState());
+
   @override
   Future<void> save(PersistedState state) async {}
 }

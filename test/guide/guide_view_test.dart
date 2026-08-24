@@ -430,7 +430,7 @@ void main() {
             title: 'The Arrival',
             duration: const Duration(hours: 24),
             showTitle: 'Signal House',
-            artwork: Uri(path: '/poster'),
+            poster: Uri(path: '/poster'),
             summary: 'A mysterious signal changes the course of the mission.',
             contentRating: 'TV-14',
             genres: const ['Drama', 'Science Fiction'],
@@ -640,7 +640,7 @@ void main() {
             title: 'The Arrival',
             showTitle: 'Signal House',
             duration: const Duration(hours: 24),
-            artwork: Uri.parse('/poster'),
+            poster: Uri.parse('/poster'),
             clearLogo: Uri.parse('/clear-logo'),
           ),
         ]),
@@ -1008,7 +1008,8 @@ class _Store implements AppStore {
   @override
   Future<String> clientIdentifier() async => 'test';
   @override
-  Future<PersistedState> load() async => const PersistedState();
+  Future<AppStoreLoadResult> load() async =>
+      const AppStoreLoadResult(PersistedState());
   @override
   Future<void> save(PersistedState state) async {}
 }

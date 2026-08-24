@@ -1,15 +1,33 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 import 'package:xml/xml.dart';
 
 import '../channels/channel.dart';
-import '../playback/stream_policy.dart';
 import 'plex_models.dart';
+
+class PlexServerAccess {
+  PlexServerAccess({required this.server, required String token})
+    : token = _requiredToken(token);
+
+  final PlexServer server;
+  final String token;
+
+  @override
+  String toString() =>
+      'PlexServerAccess(server: ${server.id}, token: <redacted>)';
+
+  static String _requiredToken(String token) {
+    final value = token.trim();
+    if (value.isEmpty) {
+      throw ArgumentError('A PMS resource token is required.');
+    }
+    return value;
+  }
+}
 
 class PlexClient {
   PlexClient({
@@ -152,7 +170,7 @@ class PlexClient {
     );
   }
 
-  Future<List<PlexServer>> discoverServers(String token) async {
+  Future<List<PlexServerAccess>> discoverServers(String token) async {
     final response = await _send(
       _http.get(
         Uri.https('plex.tv', '/api/v2/resources', {
@@ -163,13 +181,15 @@ class PlexClient {
       ),
     );
     final data = _jsonList(response, {200});
-    final servers = <PlexServer>[];
+    final servers = <PlexServerAccess>[];
     for (final raw in data) {
       final json = _record(raw, 'resource');
       final provides = _optionalText(json['provides'])
           ?.split(',')
           .map((item) => item.trim());
       if (provides?.contains('server') != true) continue;
+      final resourceToken = _optionalText(json['accessToken']);
+      if (resourceToken == null) continue;
       final connections = <PlexConnection>[];
       for (final rawConnection in json['connections'] as List? ?? const []) {
         final connection = _record(rawConnection, 'connection');
@@ -194,11 +214,14 @@ class PlexClient {
       }
       if (connections.isNotEmpty) {
         servers.add(
-          PlexServer(
-            id: _text(json['clientIdentifier'], 'server id'),
-            name: _text(json['name'], 'server name'),
-            connections: connections,
-            owned: _boolean(json['owned']),
+          PlexServerAccess(
+            server: PlexServer(
+              id: _text(json['clientIdentifier'], 'server id'),
+              name: _text(json['name'], 'server name'),
+              connections: connections,
+              owned: _boolean(json['owned']),
+            ),
+            token: resourceToken,
           ),
         );
       }
@@ -331,12 +354,17 @@ class PlexClient {
     Uri server,
     String token,
     String libraryId,
-    PlexLibraryType libraryType,
-  ) async {
+    PlexLibraryType libraryType, {
+    required bool Function() isCurrent,
+    required void Function(PlexLibraryPageProgress progress) onProgress,
+  }) async {
     final output = <PlexMediaItem>[];
     var start = 0;
     const pageSize = 100;
     for (var page = 0; page < 1000; page++) {
+      if (!isCurrent()) {
+        throw const PlexException('cancelled', 'Library scan cancelled.');
+      }
       final uri = server
           .resolve('/library/sections/$libraryId/all')
           .replace(
@@ -351,10 +379,30 @@ class PlexClient {
       output.addAll(
         metadata.map((item) => parseMediaItem(item, libraryId: libraryId)),
       );
-      if (metadata.length < pageSize) break;
+      if (!isCurrent()) {
+        throw const PlexException('cancelled', 'Library scan cancelled.');
+      }
+      final container = json['MediaContainer'];
+      final totalItems = container is Map
+          ? _optionalInteger(container['totalSize'])
+          : null;
+      onProgress((
+        completedPages: page + 1,
+        completedItems: output.length,
+        totalItems: totalItems,
+      ));
+      if (metadata.length < pageSize ||
+          (totalItems != null &&
+              totalItems >= 0 &&
+              output.length == totalItems)) {
+        return output;
+      }
       start += metadata.length;
     }
-    return output;
+    throw const PlexException(
+      'library-scale-exceeded',
+      'This library is too large to scan safely.',
+    );
   }
 
   Future<PlexPlaylistCatalog> playlists(Uri server, String token) async {
@@ -387,6 +435,17 @@ class PlexClient {
                   title: _text(playlist['title'], 'playlist title'),
                   items: items,
                 );
+        } on PlexException catch (exception) {
+          if (const {
+            'auth-invalid',
+            'auth-required',
+            'access-denied',
+          }.contains(exception.code)) {
+            rethrow;
+          }
+          final value = raw is Map ? raw['ratingKey'] : null;
+          if (value != null) failed.add('$value');
+          return null;
         } catch (_) {
           final value = raw is Map ? raw['ratingKey'] : null;
           if (value != null) failed.add('$value');
@@ -403,62 +462,21 @@ class PlexClient {
     );
   }
 
-  PlexPlaybackDescriptor playbackDescriptor({
+  List<PlexPlaybackPartDescriptor> playbackDescriptor({
     required Uri server,
     required PlexMediaItem item,
-    required StreamCapabilities capabilities,
   }) {
-    if (item.partPath == null) {
+    final mediaParts = item.parts;
+    if (mediaParts.isEmpty) {
       throw const PlexException(
         'unsupported',
         'This item has no playable media part.',
       );
     }
-    final decision = decideStream(
-      StreamFacts(
-        container: item.container,
-        videoCodec: item.videoCodec,
-        audioCodec: item.audioCodec,
-        dynamicRange: item.dynamicRange,
-      ),
-      capabilities,
-    );
-    if (decision.kind == StreamDecisionKind.unsupported) {
-      throw PlexException('unsupported', decision.reasons.join(' '));
-    }
-    final session = _randomId();
-    final uri = decision.kind == StreamDecisionKind.directPlay
-        ? _directPlayUri(server, item.partPath!)
-        : server
-              .resolve('/video/:/transcode/universal/start.m3u8')
-              .replace(
-                queryParameters: {
-                  'path': item.key,
-                  'mediaIndex': '0',
-                  'partIndex': '0',
-                  'protocol': 'hls',
-                  'session': session,
-                  'directPlay': '0',
-                  'directStream':
-                      decision.kind == StreamDecisionKind.directStream
-                      ? '1'
-                      : '0',
-                  'directStreamAudio':
-                      decision.kind == StreamDecisionKind.directStream
-                      ? '1'
-                      : '0',
-                  'fastSeek': '1',
-                  'X-Plex-Client-Identifier': clientIdentifier,
-                  'X-Plex-Product': 'Lineup Desktop',
-                  'X-Plex-Version': '0.1.0',
-                  'X-Plex-Platform': Platform.operatingSystem,
-                },
-              );
-    return PlexPlaybackDescriptor(
-      uri: uri,
-      decision: decision,
-      sessionId: session,
-    );
+    return List.unmodifiable([
+      for (final part in mediaParts)
+        (uri: _directPlayUri(server, part.path), duration: part.duration),
+    ]);
   }
 
   Future<Uint8List> artwork(
@@ -478,6 +496,15 @@ class PlexClient {
       ..followRedirects = false
       ..headers.addAll(_headers(token));
     final response = await _http.send(request).timeout(requestTimeout);
+    if (response.statusCode == 401 || response.statusCode == 403) {
+      _cancel(response.stream);
+      throw PlexException(
+        response.statusCode == 401 ? 'auth-invalid' : 'access-denied',
+        response.statusCode == 401
+            ? 'Plex authentication is no longer valid.'
+            : 'This Plex profile cannot access that server.',
+      );
+    }
     if (response.statusCode != 200) {
       _cancel(response.stream);
       throw const PlexException(
@@ -511,25 +538,6 @@ class PlexClient {
       onError: (Object _, StackTrace _) {},
     );
     unawaited(subscription.cancel().onError((_, _) {}));
-  }
-
-  Future<void> releasePlaybackSession({
-    required Uri server,
-    required String token,
-    required String sessionId,
-  }) async {
-    try {
-      await _send(
-        _http.get(
-          server
-              .resolve('/video/:/transcode/universal/stop')
-              .replace(queryParameters: {'session': sessionId}),
-          headers: _headers(token),
-        ),
-      );
-    } catch (_) {
-      // Lease cleanup is best effort and never replaces playback settlement.
-    }
   }
 
   Future<Map<String, Object?>> _serverJson(Uri uri, String token) async {
@@ -592,32 +600,16 @@ PlexMediaItem parseMediaItem(Object? raw, {String? libraryId}) {
   final media = (json['Media'] as List? ?? const [])
       .whereType<Map>()
       .firstOrNull;
-  final part = (media?['Part'] as List? ?? const [])
+  final parts = (media?['Part'] as List? ?? const [])
+      .whereType<Map>()
+      .map(_parseMediaPart)
+      .nonNulls
+      .toList(growable: false);
+  final firstPart = (media?['Part'] as List? ?? const [])
       .whereType<Map>()
       .firstOrNull;
-  final streams = <PlexTrack>[];
-  for (final rawStream in part?['Stream'] as List? ?? const []) {
-    final stream = _record(rawStream, 'stream');
-    final type = _integer(stream['streamType'], 'stream type');
-    final codec = _text(stream['codec'], 'stream codec').toLowerCase();
-    streams.add(
-      PlexTrack(
-        id: _id(stream['id'], 'stream id'),
-        type: type,
-        codec: codec,
-        language: _optionalText(stream['languageCode'] ?? stream['language']),
-        selected: _boolean(stream['selected']),
-        isDefault: _boolean(stream['default']),
-        forced: _boolean(stream['forced']),
-        delivery: type == 3
-            ? _subtitleDelivery(codec, _optionalText(stream['key']))
-            : null,
-      ),
-    );
-  }
   return PlexMediaItem(
     id: _id(json['ratingKey'], 'media id'),
-    key: _text(json['key'], 'media key'),
     title: _text(json['title'], 'media title'),
     type: _text(json['type'], 'media type'),
     duration: Duration(milliseconds: _optionalInteger(json['duration']) ?? 0),
@@ -628,12 +620,11 @@ PlexMediaItem parseMediaItem(Object? raw, {String? libraryId}) {
     grandparentThumbPath: _optionalText(json['grandparentThumb']),
     artPath: _optionalText(json['art']),
     clearLogoPath: _clearLogoPath(json['Image']),
-    partPath: _optionalText(part?['key']),
+    parts: List.unmodifiable(parts),
     container: _optionalText(media?['container'])?.toLowerCase(),
     videoCodec: _optionalText(media?['videoCodec'])?.toLowerCase(),
     audioCodec: _optionalText(media?['audioCodec'])?.toLowerCase(),
-    dynamicRange: _dynamicRange(media, streams),
-    tracks: streams,
+    dynamicRange: _dynamicRange(media, _streamCodecs(firstPart)),
     genres: _tagNames(json['Genre']),
     collections: _tagNames(json['Collection']),
     directors: _tagNames(json['Director']),
@@ -649,6 +640,24 @@ PlexMediaItem parseMediaItem(Object? raw, {String? libraryId}) {
     addedAt: _optionalUnixTime(json['addedAt']),
     viewed: (_optionalInteger(json['viewCount']) ?? 0) > 0,
   );
+}
+
+PlexMediaPart? _parseMediaPart(Map raw) {
+  final path = _optionalText(raw['key']);
+  if (path == null) return null;
+  final milliseconds = _optionalInteger(raw['duration']);
+  return PlexMediaPart(
+    path: path,
+    duration: milliseconds != null && milliseconds > 0
+        ? Duration(milliseconds: milliseconds)
+        : null,
+  );
+}
+
+Iterable<String> _streamCodecs(Map? part) sync* {
+  for (final rawStream in part?['Stream'] as List? ?? const []) {
+    if (rawStream case {'codec': final String codec}) yield codec;
+  }
 }
 
 String? _clearLogoPath(Object? raw) {
@@ -877,22 +886,12 @@ String? _findTokenInXml(String body) {
   return null;
 }
 
-SubtitleDelivery _subtitleDelivery(String codec, String? key) {
-  if ({'pgs', 'vobsub', 'dvd_subtitle'}.contains(codec)) {
-    return SubtitleDelivery.embedded;
-  }
-  if ({'ass', 'ssa', 'srt', 'webvtt'}.contains(codec)) {
-    return key == null ? SubtitleDelivery.embedded : SubtitleDelivery.sidecar;
-  }
-  return key == null ? SubtitleDelivery.unknown : SubtitleDelivery.external;
-}
-
-DynamicRange _dynamicRange(Map? media, List<PlexTrack> tracks) {
+DynamicRange _dynamicRange(Map? media, Iterable<String> streamCodecs) {
   if (_boolean(media?['DOVIPresent']) || media?['DOVIProfile'] != null) {
     return DynamicRange.dolbyVision;
   }
   final facts =
-      '${media?['videoDynamicRange']} ${media?['DOVIProfile']} ${media?['DOVIPresent']} ${tracks.map((track) => track.codec).join(' ')}'
+      '${media?['videoDynamicRange']} ${media?['DOVIProfile']} ${media?['DOVIPresent']} ${streamCodecs.join(' ')}'
           .toLowerCase();
   if (facts.contains('dovi') || facts.contains('dolby vision')) {
     return DynamicRange.dolbyVision;
@@ -904,9 +903,4 @@ DynamicRange _dynamicRange(Map? media, List<PlexTrack> tracks) {
     return DynamicRange.hdr10;
   }
   return media == null ? DynamicRange.unknown : DynamicRange.sdr;
-}
-
-String _randomId() {
-  final random = Random.secure();
-  return List.generate(24, (_) => random.nextInt(16).toRadixString(16)).join();
 }

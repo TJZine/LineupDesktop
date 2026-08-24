@@ -57,11 +57,13 @@ class LineupRuntimeFailure extends StatelessWidget {
 class _LineupBootstrapState extends State<LineupBootstrap> {
   late final Future<void> _startup;
   late LineupSettings _settings;
+  String? _startupRecoveryNotice;
 
   @override
   void initState() {
     super.initState();
     _settings = widget.controller.settings;
+    _startupRecoveryNotice = widget.controller.startupRecoveryNotice;
     widget.controller.addListener(_changed);
     _startup = Future.wait([
       widget.player.initialize(),
@@ -71,12 +73,19 @@ class _LineupBootstrapState extends State<LineupBootstrap> {
 
   void _changed() {
     final settings = widget.controller.settings;
+    final startupRecoveryNotice = widget.controller.startupRecoveryNotice;
     if (settings.theme == _settings.theme &&
         settings.largeFocusIndicators == _settings.largeFocusIndicators &&
-        settings.reduceMotion == _settings.reduceMotion) {
+        settings.reduceMotion == _settings.reduceMotion &&
+        startupRecoveryNotice == _startupRecoveryNotice) {
       return;
     }
-    if (mounted) setState(() => _settings = settings);
+    if (mounted) {
+      setState(() {
+        _settings = settings;
+        _startupRecoveryNotice = startupRecoveryNotice;
+      });
+    }
   }
 
   @override
@@ -121,11 +130,39 @@ class _LineupBootstrapState extends State<LineupBootstrap> {
           if (snapshot.connectionState != ConnectionState.done) {
             return const _StartupProgress();
           }
-          return LineupShell(
-            player: widget.player,
-            controller: widget.controller,
-            initialMediaPath: widget.initialMediaPath,
-            guideClock: widget.guideClock,
+          return Stack(
+            children: [
+              LineupShell(
+                player: widget.player,
+                controller: widget.controller,
+                initialMediaPath: widget.initialMediaPath,
+                guideClock: widget.guideClock,
+              ),
+              if (_startupRecoveryNotice case final notice?)
+                SafeArea(
+                  child: Align(
+                    alignment: Alignment.topCenter,
+                    child: Semantics(
+                      container: true,
+                      liveRegion: true,
+                      label: notice,
+                      child: Material(
+                        child: MaterialBanner(
+                          content: ExcludeSemantics(child: Text(notice)),
+                          actions: [
+                            TextButton(
+                              onPressed: widget
+                                  .controller
+                                  .dismissStartupRecoveryNotice,
+                              child: const Text('Dismiss'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
           );
         },
       ),

@@ -45,13 +45,30 @@ class PersistedState {
 
   factory PersistedState.fromJson(Object? value) {
     if (value is! Map) throw const FormatException('State must be an object.');
-    final json = Map<String, Object?>.from(value);
     try {
+      final json = _stringKeyedMap(value);
+      const fields = {
+        'settings',
+        'profileId',
+        'selectedServerByProfile',
+        'selectedLibraryIdsByProfileServer',
+        'channelsByProfileServer',
+        'currentChannelByProfileServer',
+      };
+      if (json.keys.toSet().difference(fields).isNotEmpty ||
+          !json.keys.toSet().containsAll(fields)) {
+        throw const FormatException('State fields are not canonical.');
+      }
+      final settings = json['settings'];
+      final profileId = json['profileId'];
+      if (settings is! Map || (profileId != null && profileId is! String)) {
+        throw const FormatException('Invalid settings or profile.');
+      }
       return PersistedState(
-        settings: LineupSettings.fromJson(json['settings']),
-        profileId: json['profileId'] as String?,
-        selectedServerByProfile: Map<String, String>.from(
-          json['selectedServerByProfile'] as Map? ?? const {},
+        settings: LineupSettings.fromJson(settings),
+        profileId: profileId as String?,
+        selectedServerByProfile: _flatStringMap(
+          json['selectedServerByProfile'],
         ),
         selectedLibraryIdsByProfileServer: _librarySelections(
           json['selectedLibraryIdsByProfileServer'],
@@ -69,20 +86,24 @@ class PersistedState {
   }
 }
 
+Map<String, Object?> _stringKeyedMap(Object? value) =>
+    Map<String, Object?>.from(value as Map);
+
+Map<String, String> _flatStringMap(Object? value) =>
+    Map<String, String>.from(value as Map);
+
 Map<String, Map<String, List<Channel>>> _channelSelections(Object? value) {
-  if (value == null) return const {};
-  if (value is! Map) throw const FormatException('Invalid channel selections.');
-  final selections = {
-    for (final profile in value.entries)
-      if (profile.key is String && profile.value is Map)
-        profile.key as String: {
-          for (final server in (profile.value as Map).entries)
-            if (server.key is String && server.value is List)
-              server.key as String: (server.value as List)
-                  .map(Channel.fromJson)
-                  .toList(),
-        },
-  };
+  final outer = _stringKeyedMap(value);
+  final selections = <String, Map<String, List<Channel>>>{};
+  for (final profile in outer.entries) {
+    final inner = _stringKeyedMap(profile.value);
+    selections[profile.key] = {
+      for (final server in inner.entries)
+        server.key: server.value is List
+            ? (server.value as List).map(Channel.fromJson).toList()
+            : throw const FormatException('Invalid channel list.'),
+    };
+  }
   for (final profile in selections.values) {
     for (final channels in profile.values) {
       for (final channel in channels) {
@@ -94,41 +115,49 @@ Map<String, Map<String, List<Channel>>> _channelSelections(Object? value) {
 }
 
 Map<String, Map<String, String>> _stringSelections(Object? value) {
-  if (value == null) return const {};
-  if (value is! Map) throw const FormatException('Invalid current channels.');
+  final outer = _stringKeyedMap(value);
   return {
-    for (final profile in value.entries)
-      if (profile.key is String && profile.value is Map)
-        profile.key as String: Map<String, String>.from(profile.value as Map),
+    for (final profile in outer.entries)
+      profile.key: _flatStringMap(profile.value),
   };
 }
 
 Map<String, Map<String, List<String>>> _librarySelections(Object? value) {
-  if (value == null) return const {};
-  if (value is! Map) throw const FormatException('Invalid library selections.');
-  return {
-    for (final profileEntry in value.entries)
-      if (profileEntry.key is String && profileEntry.value is Map)
-        profileEntry.key as String: {
-          for (final serverEntry in (profileEntry.value as Map).entries)
-            if (serverEntry.key is String && serverEntry.value is List)
-              serverEntry.key as String: (serverEntry.value as List)
-                  .whereType<String>()
-                  .toList(),
-        },
-  };
+  final outer = _stringKeyedMap(value);
+  final selections = <String, Map<String, List<String>>>{};
+  for (final profile in outer.entries) {
+    final inner = _stringKeyedMap(profile.value);
+    selections[profile.key] = {
+      for (final server in inner.entries)
+        server.key:
+            server.value is List &&
+                (server.value as List).every((item) => item is String)
+            ? List<String>.from(server.value as List)
+            : throw const FormatException('Invalid library list.'),
+    };
+  }
+  return selections;
 }
 
 abstract interface class AppStore {
-  Future<PersistedState> load();
+  Future<AppStoreLoadResult> load();
   Future<void> save(PersistedState state);
   Future<String> clientIdentifier();
 }
 
+class AppStoreLoadResult {
+  const AppStoreLoadResult(this.state, {this.recoveredCorruptState = false});
+
+  final PersistedState state;
+  final bool recoveredCorruptState;
+}
+
 class FileAppStore implements AppStore {
-  FileAppStore(this.directory);
+  FileAppStore(this.directory, {DateTime Function()? clock})
+    : _clock = clock ?? DateTime.now;
 
   final Directory directory;
+  final DateTime Function() _clock;
   Future<void> _writes = Future.value();
 
   static Future<FileAppStore> create() async => FileAppStore(
@@ -141,29 +170,29 @@ class FileAppStore implements AppStore {
   File get _identityFile => File('${directory.path}/plex-client-identity');
 
   @override
-  Future<PersistedState> load() async {
+  Future<AppStoreLoadResult> load() async {
+    late final String contents;
     try {
-      return PersistedState.fromJson(
-        jsonDecode(await _stateFile.readAsString()),
-      );
+      contents = await _stateFile.readAsString();
     } on PathNotFoundException {
-      return const PersistedState();
-    } catch (_) {
+      return const AppStoreLoadResult(PersistedState());
+    }
+    try {
+      return AppStoreLoadResult(PersistedState.fromJson(jsonDecode(contents)));
+    } on FormatException {
       await _quarantineState();
-      return const PersistedState();
+      return const AppStoreLoadResult(
+        PersistedState(),
+        recoveredCorruptState: true,
+      );
     }
   }
 
   Future<void> _quarantineState() async {
-    if (!await _stateFile.exists()) return;
     final quarantine = File(
-      '${_stateFile.path}.corrupt-${DateTime.now().toUtc().millisecondsSinceEpoch}',
+      '${_stateFile.path}.corrupt-${_clock().toUtc().millisecondsSinceEpoch}',
     );
-    try {
-      await _stateFile.rename(quarantine.path);
-    } catch (_) {
-      // Startup recovery must not fail only because preservation failed.
-    }
+    await _stateFile.rename(quarantine.path);
   }
 
   @override
