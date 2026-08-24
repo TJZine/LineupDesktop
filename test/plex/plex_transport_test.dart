@@ -1147,7 +1147,7 @@ void main() {
   });
 
   for (final status in [404, 405]) {
-    test('missing legacy Plex Home inventory is empty', () async {
+    test('missing legacy Plex Home inventory is empty ($status)', () async {
       final client = PlexClient(
         clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
         httpClient: MockClient((_) async => http.Response('', status)),
@@ -1157,31 +1157,37 @@ void main() {
     });
   }
 
-  for (final payload in ['{"users":', '<MediaContainer>']) {
-    test('malformed successful Plex Home payload is a parse error', () async {
-      final client = PlexClient(
-        clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
-        httpClient: MockClient((_) async => http.Response(payload, 200)),
-      );
+  for (final (format, payload) in [
+    ('JSON', '{"users":'),
+    ('XML', '<MediaContainer>'),
+  ]) {
+    test(
+      'malformed successful Plex Home payload is a parse error ($format)',
+      () async {
+        final client = PlexClient(
+          clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+          httpClient: MockClient((_) async => http.Response(payload, 200)),
+        );
 
-      await expectLater(
-        client.homeUsers('account-secret'),
-        throwsA(
-          isA<PlexException>().having(
-            (exception) => exception.code,
-            'code',
-            'parse-error',
+        await expectLater(
+          client.homeUsers('account-secret'),
+          throwsA(
+            isA<PlexException>().having(
+              (exception) => exception.code,
+              'code',
+              'parse-error',
+            ),
           ),
-        ),
-      );
-    });
+        );
+      },
+    );
   }
 
-  for (final payload in [
-    jsonEncode({'users': []}),
-    '<MediaContainer/>',
+  for (final (format, payload) in [
+    ('JSON', jsonEncode({'users': []})),
+    ('XML', '<MediaContainer/>'),
   ]) {
-    test('valid empty Plex Home inventory remains empty', () async {
+    test('valid empty Plex Home inventory remains empty ($format)', () async {
       var calls = 0;
       final client = PlexClient(
         clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
