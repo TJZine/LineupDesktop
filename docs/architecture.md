@@ -108,10 +108,15 @@ navigation do not enter C++.
   visible-cell semantics, responsive PiP allocation, and selection/time/scroll
   restoration across player transitions.
 - One Flutter player coordinator and overlay model for contract-valid playback
-  projection, the status-sensitive OSD, now-playing information, bounded
-  five-row mini Guide, full Guide, channel entry, available audio/subtitle
-  tracks, recoverable/terminal errors, sleep timer, fullscreen intent, cursor
-  timeout, cancellable epoch-safe auto-hide, and input/focus restoration.
+  projection, the status-sensitive OSD, persistent-on-request rich Now Playing,
+  bounded five-row mini Guide, full Guide, channel entry, available
+  audio/subtitle tracks, recoverable/terminal errors, sleep timer, fullscreen
+  intent, cursor timeout, cancellable epoch-safe auto-hide, and input/focus
+  restoration. Rich Now Playing is one mutually exclusive Flutter overlay, not
+  a route or second playback owner. It reads the current scheduled program and
+  reuses `GuideController`'s bounded artwork futures/cache for poster, backdrop,
+  and optional clear-logo bytes; artwork identity includes the current content
+  generation so replaced content cannot retain stale imagery.
   Ordered Plex parts remain one Flutter-owned playback lifetime: the
   coordinator gives every native load its own generation, advances natural
   completion once, and maps only known part boundaries. Native events remain

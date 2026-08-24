@@ -44,14 +44,20 @@ Select **Sign in to Plex**. Scan the displayed QR code or visit `plex.tv/link`
 on another device and enter the four-character code. The screen shows the
 remaining expiration time.
 
-When a code expires or a request fails, select **Request a new code**. Cancelling
-sign-in removes the pending credential state before returning to the welcome
-screen.
+When a code expires or Plex rejects or cannot complete the current link
+attempt, Lineup stops waiting and presents **Request a new code**. If secure
+credential storage cannot be confirmed, use **Retry secure cancellation**
+before starting another attempt. Cancelling sign-in removes the pending
+credential state before returning to the welcome screen.
 
 ### 2. Choose a Plex Home profile
 
 Select the person who is watching. Protected profiles open a four-digit PIN
 keypad and also accept number-row or numpad input.
+
+Profile cards show `PIN`, `Admin`, and `Restricted` only when the current Plex
+Home response establishes those facts. `Active` identifies the currently
+selected profile when the picker is reopened; it is not a focus indicator.
 
 The profile determines the secure credential scope, selected server, saved
 lineup, and related persisted state. Switching profiles does not intentionally
@@ -60,8 +66,11 @@ reuse another profile's server or lineup.
 ### 3. Select a Plex Media Server
 
 Choose a discovered server. Lineup prioritizes usable direct connections before
-relay connections and records only the selected connection type and measured
-probe latency.
+relay connections. Each card distinguishes an owned server from a shared one
+and lists the secure direct-local, direct-remote, and relay connection types
+currently available. Only the selected server shows its measured path and
+latency; 100–499 ms is labeled **Slow**, 500 ms or more is **Very slow**, and a
+relay is labeled **Limited** rather than failed.
 
 Plex supplies each discovered server with its own PMS credential, separate from
 the Plex.tv account or Home-profile credential. Lineup keeps that server
@@ -99,10 +108,19 @@ strategy, channels can be generated per library or across selected libraries.
 The review step applies the accepted plan atomically. Cancelling or a failed
 save preserves the previous lineup.
 
-Scanning selected libraries reports completed pages and items and can be
-cancelled while it is running. Cancellation preserves the previous selection
-and media. Empty libraries, media without a playable positive duration, and a
-temporary scan failure are shown separately, and each can be retried.
+Scanning selected libraries reports completed pages and items on each library
+card, including the Plex total when supplied, and can be cancelled while it is
+running. Each card distinguishes not scanned, scanning, complete, empty,
+unsupported, failed, and cancelled outcomes. Cancellation or failure preserves
+the previous selection and media; retry repeats the one atomic selected-library
+scan. Playable media requires both a positive duration and a usable media part.
+
+The strategy step reports the accepted proposal count or **No matches** for
+each enabled source family and **Off** for disabled families. The review step
+separates **Create**, **Update**, **Unchanged**, **Remove**, and **Final** counts
+using the selected replace, append, or merge behavior. A limit warning appears
+only when ideas were actually omitted by the channel cap or available channel
+numbers.
 
 ## Main destinations
 
@@ -173,6 +191,16 @@ provides:
 Unavailable tracks or unsupported native actions remain disabled rather than
 showing controls that cannot work.
 
+Press `I` for persistent rich Now Playing details without leaving playback.
+The details surface uses the current scheduled program for channel and episode
+identity, synopsis, schedule progress, available metadata badges, poster, and
+backdrop. When **Use clear logos** is enabled, an available clear logo replaces
+the text identity; a missing or failed logo falls back to the title. Pointer
+movement leaves this reading surface open. Press `I` or Back to close it;
+`Down`, `Enter`, click/tap, or a successful transport action replaces it with
+the OSD, while a failed action retains the safe error surface. `A` or `C` opens
+the requested track list directly when that track type is available.
+
 The mini Guide displays a bounded group of nearby channels without leaving
 playback. Selecting a row replaces the current tune through the same Player
 owner.
@@ -188,6 +216,12 @@ removes Player overlay transition time, and audio/subtitle panels initially
 focus the selected track (or **Off** when no subtitle is selected). These
 behaviors are deterministically tested in Flutter; physical Windows
 screen-reader and assistive-technology validation remains pending.
+
+The committed 1280×720 macOS goldens cover Flutter composition, including the
+rich Now Playing surface and its synthetic artwork. They do not prove Windows
+native video layering, DPI/fullscreen behavior, keyboard or screen-reader
+support, media compatibility, or package readiness; those remain physical
+Windows acceptance work at the exact tested commit.
 
 ## Keyboard and remote controls
 
@@ -209,7 +243,7 @@ report to Flutter.
 | Guide | Close Guide to Player when playback exists; otherwise open the Lineup menu | `Esc`, `Backspace`, Back, `G`, or `F2` |
 | Player | Open full Guide | `G` or `F2` |
 | Player | Show mini Guide | `Up` |
-| Player | Show or hide OSD | `Down` or `Enter` shows; `I` toggles |
+| Player | Show OSD / rich Now Playing | `Down` or `Enter` shows OSD; `I` toggles rich Now Playing details |
 | Player | Seek backward/forward | `Left` or `J` = 10 seconds back; `Right` or `L` = 30 seconds forward |
 | Player | Play or pause | `Space`, `K`, or Media Play/Pause |
 | Player | Previous/next channel | `Page Up` / `Page Down` |
