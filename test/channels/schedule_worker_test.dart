@@ -88,12 +88,13 @@ Channel _manualChannel(ChannelItem item) => Channel(
   shuffleSeed: 1,
 );
 
-const _mediaItem = PlexMediaItem(
+final _mediaItem = PlexMediaItem(
   id: 'item',
   title: 'Item',
   type: 'movie',
   duration: Duration(minutes: 30),
   libraryId: 'library',
+  parts: [PlexMediaPart(path: '/library/parts/item')],
 );
 
 class _UnsendableMediaItem extends PlexMediaItem {

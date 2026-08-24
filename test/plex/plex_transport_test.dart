@@ -773,6 +773,13 @@ void main() {
                     'title': 'Movie',
                     'type': 'movie',
                     'duration': 1000,
+                    'Media': [
+                      {
+                        'Part': [
+                          {'key': '/library/parts/m1'},
+                        ],
+                      },
+                    ],
                   },
                 ],
               },
