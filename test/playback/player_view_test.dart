@@ -879,6 +879,10 @@ void main() {
       ),
       findsOneWidget,
     );
+    expect(
+      find.bySemanticsLabel(RegExp(r'\b\d+ percent complete\b')),
+      findsOneWidget,
+    );
 
     fixture.player.showOsd();
     await tester.pump();

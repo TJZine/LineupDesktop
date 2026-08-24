@@ -679,6 +679,7 @@ class _NowPlaying extends StatelessWidget {
       item.title,
       ?episode,
       '${_time(context, program.scheduled.start)} to ${_time(context, program.scheduled.end)}',
+      '${(progress * 100).round()} percent complete',
       ...badges,
       ?item.summary,
     ].join('. ');

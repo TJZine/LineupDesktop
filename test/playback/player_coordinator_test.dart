@@ -439,6 +439,41 @@ void main() {
     expect(coordinator.overlay, PlayerOverlay.osd);
   });
 
+  test(
+    'Media Stop completion does not replace a superseding overlay',
+    () async {
+      final lineup = _TestLineup();
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => _schedule(channel),
+      )..requestViewport(0, 2);
+      await Future<void>.delayed(Duration.zero);
+      final player = _BlockingStopPlayer();
+      final coordinator = PlayerCoordinator(
+        player: player,
+        lineup: lineup,
+        guide: guide,
+      );
+      addTearDown(() {
+        if (!player.releaseStop.isCompleted) player.releaseStop.complete();
+      });
+      addTearDown(lineup.dispose);
+      addTearDown(guide.dispose);
+      addTearDown(coordinator.dispose);
+
+      await coordinator.tune(lineup.currentChannelId!);
+      coordinator.showNowPlaying();
+      final stop = coordinator.requestStop();
+      await player.stopStarted.future;
+
+      coordinator.showFullGuide();
+      player.releaseStop.complete();
+      await stop;
+
+      expect(coordinator.overlay, PlayerOverlay.fullGuide);
+    },
+  );
+
   test('native telemetry updates do not dismiss Now Playing', () async {
     final lineup = _TestLineup();
     final guide = GuideController(

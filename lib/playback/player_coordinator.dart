@@ -875,9 +875,15 @@ class PlayerCoordinator extends ChangeNotifier {
 
   Future<void> requestStop() async {
     final replaceNowPlaying = _overlay == PlayerOverlay.nowPlaying;
+    final nowPlayingGeneration = _overlayPresentationGeneration;
     try {
       await stop();
-      if (!_disposed && replaceNowPlaying) showOsd();
+      if (!_disposed &&
+          replaceNowPlaying &&
+          _overlay == PlayerOverlay.nowPlaying &&
+          _overlayPresentationGeneration == nowPlayingGeneration) {
+        showOsd();
+      }
     } catch (error) {
       if (_disposed) return;
       _recordPlaybackFailure(error);
