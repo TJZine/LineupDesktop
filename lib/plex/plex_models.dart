@@ -207,6 +207,9 @@ class PlexMediaItem {
   final int? audioChannels;
   final DateTime? addedAt;
   final bool viewed;
+
+  bool get isPlayable =>
+      duration > Duration.zero && parts.any((part) => part.path.isNotEmpty);
 }
 
 typedef PlexPlaybackPartDescriptor = ({Uri uri, Duration? duration});

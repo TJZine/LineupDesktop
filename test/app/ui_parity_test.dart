@@ -441,6 +441,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Select Plex libraries'), findsOneWidget);
+    expect(find.text('Count available after scan'), findsOneWidget);
     await tester.tap(find.text('Configure channels'));
     await tester.pumpAndSettle();
     expect(find.text('Configure the lineup'), findsOneWidget);
@@ -473,10 +474,23 @@ void main() {
         ..libraryScanCompletedPages = 3
         ..libraryScanCompletedItems = 50
         ..libraryScanTotalItems = 100
+        ..scanFacts = {
+          'movies': LibraryScanFact(
+            status: status,
+            completedPages: 3,
+            completedItems: 50,
+            totalItems: 100,
+          ),
+        }
         ..error = error;
       addTearDown(controller.dispose);
       await tester.pumpWidget(
-        MaterialApp(home: UpstreamChannelSetupView(controller: controller)),
+        MaterialApp(
+          home: UpstreamChannelSetupView(
+            key: ValueKey(status),
+            controller: controller,
+          ),
+        ),
       );
       await tester.pump();
       return controller;
@@ -489,6 +503,12 @@ void main() {
     );
     expect(find.text('Pages scanned: 3 · Items scanned: 50'), findsOneWidget);
     expect(find.widgetWithText(OutlinedButton, 'Cancel scan'), findsOneWidget);
+    expect(find.text('Scanning'), findsOneWidget);
+    expect(find.text('50/100 items · 3 pages'), findsOneWidget);
+    expect(
+      find.bySemanticsLabel(RegExp(r'Movies.*Scanning', dotAll: true)),
+      findsOneWidget,
+    );
     expect(
       tester
           .widget<LinearProgressIndicator>(find.byType(LinearProgressIndicator))
@@ -507,6 +527,17 @@ void main() {
       await pumpStatus(state.$1);
       expect(find.bySemanticsLabel(state.$2), findsOneWidget);
       expect(find.widgetWithText(TextButton, 'Retry scan'), findsOneWidget);
+      await tester.drag(find.byType(CustomScrollView), const Offset(0, -180));
+      await tester.pump();
+      expect(
+        find.text(switch (state.$1) {
+          LibraryScanStatus.empty => 'Empty',
+          LibraryScanStatus.unsupported => 'Unsupported',
+          _ => 'Cancelled',
+        }),
+        findsOneWidget,
+      );
+      expect(find.text('50/100 items · 3 pages'), findsOneWidget);
     }
 
     await pumpStatus(
@@ -521,6 +552,14 @@ void main() {
     expect(find.bySemanticsLabel('Library scan complete'), findsOneWidget);
     expect(find.text('Pages scanned: 3 · Items scanned: 50'), findsOneWidget);
     expect(find.text('Retry scan'), findsNothing);
+    expect(find.text('Complete'), findsOneWidget);
+    expect(find.text('50/100 items · 3 pages'), findsOneWidget);
+
+    await tester.binding.setSurfaceSize(const Size(1280, 720));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpAndSettle();
+    expect(find.text('Complete'), findsOneWidget);
+    expect(find.text('50/100 items · 3 pages'), findsOneWidget);
   });
 
   testWidgets('dedicated scan cancellation is not presented as a failure', (
@@ -614,6 +653,11 @@ class _ProfileFixtureController extends FixtureController {
 }
 
 class _SetupFixtureController extends FixtureController {
+  Map<String, LibraryScanFact> scanFacts = const {};
+
+  @override
+  Map<String, LibraryScanFact> get libraryScanFacts => scanFacts;
+
   @override
   Future<bool> setLibraries(Set<String> ids) async {
     selectedLibraryIds = Set.unmodifiable(ids);
@@ -625,6 +669,7 @@ class _SetupFixtureController extends FixtureController {
           type: 'movie',
           duration: const Duration(minutes: 90),
           libraryId: 'movies',
+          parts: [PlexMediaPart(path: '/parts/movie-$index')],
           genres: const ['Drama'],
           addedAt: DateTime.utc(2026, 1, index + 1),
         ),

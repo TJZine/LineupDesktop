@@ -431,7 +431,7 @@ class PlexClient {
           );
           final items = _containerList(itemsJson, 'Metadata')
               .map(parseMediaItem)
-              .where((item) => item.duration > Duration.zero)
+              .where((item) => item.isPlayable)
               .toList(growable: false);
           return items.isEmpty
               ? null

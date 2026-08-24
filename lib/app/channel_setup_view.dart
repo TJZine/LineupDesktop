@@ -244,13 +244,15 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
               SliverGrid(
                 gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
                   maxCrossAxisExtent: 340,
-                  mainAxisExtent: 120,
+                  mainAxisExtent: 132,
                   crossAxisSpacing: 14,
                   mainAxisSpacing: 14,
                 ),
                 delegate: SliverChildBuilderDelegate((_, index) {
                   final library = widget.controller.libraries[index];
                   final selected = _selectedLibraries.contains(library.id);
+                  final scanFact =
+                      widget.controller.libraryScanFacts[library.id];
                   return LineupSelectionCard(
                     selected: selected,
                     autofocus: index == 0 && !_libraryFocusPlaced,
@@ -260,7 +262,7 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
                           : _selectedLibraries.add(library.id),
                     ),
                     child: Padding(
-                      padding: const EdgeInsets.all(18),
+                      padding: const EdgeInsets.all(14),
                       child: Row(
                         children: [
                           Icon(
@@ -292,6 +294,25 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
                                     color: LineupTheme.of(context).mutedText,
                                   ),
                                 ),
+                                Text(
+                                  _libraryScanStatusLabel(scanFact),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: LineupTheme.of(context).mutedText,
+                                  ),
+                                ),
+                                if (scanFact != null &&
+                                    scanFact.status != LibraryScanStatus.idle)
+                                  Text(
+                                    _libraryScanProgressLabel(scanFact),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      color: LineupTheme.of(context).mutedText,
+                                      fontSize: 13,
+                                    ),
+                                  ),
                               ],
                             ),
                           ),
@@ -313,6 +334,26 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
           ),
   );
 
+  String _libraryScanStatusLabel(LibraryScanFact? fact) {
+    if (fact == null) return 'Count available after scan';
+    return switch (fact.status) {
+      LibraryScanStatus.idle => 'Not scanned',
+      LibraryScanStatus.scanning => 'Scanning',
+      LibraryScanStatus.complete => 'Complete',
+      LibraryScanStatus.empty => 'Empty',
+      LibraryScanStatus.unsupported => 'Unsupported',
+      LibraryScanStatus.transientFailure => 'Scan failed',
+      LibraryScanStatus.cancelled => 'Cancelled',
+    };
+  }
+
+  String _libraryScanProgressLabel(LibraryScanFact fact) => [
+    fact.totalItems == null
+        ? '${fact.completedItems} ${fact.completedItems == 1 ? 'item' : 'items'}'
+        : '${fact.completedItems}/${fact.totalItems} ${fact.totalItems == 1 ? 'item' : 'items'}',
+    '${fact.completedPages} ${fact.completedPages == 1 ? 'page' : 'pages'}',
+  ].join(' · ');
+
   Widget _scanStatus() {
     final controller = widget.controller;
     final status = controller.libraryScanStatus;
@@ -331,7 +372,7 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
       ),
       LibraryScanStatus.unsupported => (
         'No playable media found',
-        'Plex returned media, but none has a supported positive duration.',
+        'Plex returned media, but none has a positive duration and usable media part.',
       ),
       LibraryScanStatus.transientFailure => (
         'Library scan failed',

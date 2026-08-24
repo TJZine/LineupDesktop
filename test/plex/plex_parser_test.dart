@@ -175,7 +175,9 @@ void main() {
 
     expect(item.parts.map((part) => part.path), ['/library/parts/valid.mkv']);
     expect(item.parts.single.duration, const Duration(seconds: 1));
+    expect(item.isPlayable, isTrue);
     expect(unsupported.parts, isEmpty);
+    expect(unsupported.isPlayable, isFalse);
     expect(
       () => client.playbackDescriptor(
         server: Uri.parse('https://plex.example:32400'),

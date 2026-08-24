@@ -137,6 +137,75 @@ void main() {
     );
   });
 
+  testWidgets('Channel Setup library outcomes', (tester) async {
+    final controller = _VisualController()
+      ..stage = SetupStage.channelSetup
+      ..libraries = const [
+        PlexLibrary(
+          id: 'movies',
+          title: 'Feature Films',
+          type: PlexLibraryType.movie,
+        ),
+        PlexLibrary(id: 'shows', title: 'Series', type: PlexLibraryType.show),
+        PlexLibrary(
+          id: 'archive',
+          title: 'Archive',
+          type: PlexLibraryType.movie,
+        ),
+        PlexLibrary(
+          id: 'imports',
+          title: 'Recent Imports',
+          type: PlexLibraryType.movie,
+        ),
+      ]
+      ..selectedLibraryIds = const {'movies', 'shows', 'archive', 'imports'}
+      ..libraryScanStatus = LibraryScanStatus.transientFailure
+      ..libraryScanCompletedPages = 8
+      ..libraryScanCompletedItems = 83
+      ..libraryScanTotalItems = 112
+      ..error = 'Plex could not complete the library scan.'
+      ..scanFacts = const {
+        'movies': LibraryScanFact(
+          status: LibraryScanStatus.complete,
+          completedPages: 4,
+          completedItems: 72,
+          totalItems: 72,
+        ),
+        'shows': LibraryScanFact(
+          status: LibraryScanStatus.unsupported,
+          completedPages: 2,
+          completedItems: 8,
+          totalItems: 8,
+        ),
+        'archive': LibraryScanFact(
+          status: LibraryScanStatus.empty,
+          completedPages: 1,
+          totalItems: 0,
+        ),
+        'imports': LibraryScanFact(
+          status: LibraryScanStatus.transientFailure,
+          completedPages: 1,
+          completedItems: 3,
+          totalItems: 32,
+        ),
+      };
+
+    await _pump(
+      tester,
+      UiFixture(controller: controller, guideClock: () => _fixedNow).build(),
+    );
+    expect(find.text('Retry scan'), findsOneWidget);
+    expect(find.text('Complete'), findsOneWidget);
+    expect(find.text('72/72 items · 4 pages'), findsOneWidget);
+    expect(find.text('Unsupported'), findsOneWidget);
+    expect(find.text('8/8 items · 2 pages'), findsOneWidget);
+    expect(find.text('Empty'), findsOneWidget);
+    expect(find.text('0/0 items · 1 page'), findsOneWidget);
+    expect(find.text('Scan failed'), findsOneWidget);
+    expect(find.text('3/32 items · 1 page'), findsOneWidget);
+    await _match(tester, 'channel-setup-libraries-1280x720.png');
+  });
+
   testWidgets('Guide without playback', (tester) async {
     final fixture = _readyFixture()
       ..controller.settings = const LineupSettings(reduceMotion: true);
@@ -407,6 +476,11 @@ UiFixture _readyFixture({PlayerStatus? playerState}) {
 }
 
 class _VisualController extends FixtureController {
+  Map<String, LibraryScanFact> scanFacts = const {};
+
+  @override
+  Map<String, LibraryScanFact> get libraryScanFacts => scanFacts;
+
   @override
   Future<ScheduleIndex> loadScheduleFor(Channel channel) async => buildSchedule(
     (channel.source as ManualSource).items,
@@ -425,6 +499,7 @@ class _VisualController extends FixtureController {
           type: 'movie',
           duration: const Duration(minutes: 90),
           libraryId: 'movies',
+          parts: [PlexMediaPart(path: '/parts/movie-$index')],
           genres: const ['Drama'],
           addedAt: DateTime.utc(2026, 1, index + 1),
         ),

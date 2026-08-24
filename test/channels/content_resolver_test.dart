@@ -4,13 +4,14 @@ import 'package:lineup_desktop/channels/content_resolver.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
 
 void main() {
-  const media = [
+  final media = [
     PlexMediaItem(
       id: 'a',
       title: 'A',
       type: 'movie',
       duration: Duration(minutes: 1),
       libraryId: 'movies',
+      parts: [PlexMediaPart(path: '/parts/a')],
       genres: ['Comedy'],
     ),
     PlexMediaItem(
@@ -19,6 +20,7 @@ void main() {
       type: 'movie',
       duration: Duration(minutes: 1),
       libraryId: 'movies',
+      parts: [PlexMediaPart(path: '/parts/b')],
       genres: ['Drama'],
       viewed: true,
     ),
@@ -28,6 +30,7 @@ void main() {
       type: 'episode',
       duration: Duration(minutes: 1),
       libraryId: 'shows',
+      parts: [PlexMediaPart(path: '/parts/c')],
     ),
   ];
 
@@ -69,6 +72,32 @@ void main() {
     ]);
     expect(resolved.map((item) => item.id), media.map((item) => item.id));
   });
+
+  test(
+    'library and playlist sources reject positive-duration items without parts',
+    () {
+      const unsupported = PlexMediaItem(
+        id: 'unsupported',
+        title: 'Unsupported',
+        type: 'movie',
+        duration: Duration(minutes: 1),
+        libraryId: 'movies',
+      );
+      const library = LibrarySource(
+        libraryId: 'movies',
+        libraryType: PlexLibraryType.movie,
+      );
+      const playlist = PlaylistSource('playlist');
+
+      expect(resolveContent(library, const [unsupported]), isEmpty);
+      expect(
+        resolveContent(playlist, const [], const [
+          PlexPlaylist(id: 'playlist', title: 'Playlist', items: [unsupported]),
+        ]),
+        isEmpty,
+      );
+    },
+  );
 
   test('maps distinct episode artwork and prefers the show poster', () {
     final item = channelItemFor(

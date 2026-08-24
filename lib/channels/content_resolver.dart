@@ -13,6 +13,7 @@ List<ChannelItem> resolveContent(
       playlists
           .where((playlist) => playlist.id == playlistId)
           .expand((playlist) => playlist.items)
+          .where((item) => item.isPlayable)
           .map(channelItemFor)
           .toList(),
     MixedSource(:final sources, :final interleave) =>
@@ -56,10 +57,7 @@ List<ChannelItem> _library(LibrarySource source, List<PlexMediaItem> media) {
       _ => items,
     };
   }
-  return items
-      .where((item) => item.duration > Duration.zero)
-      .map(channelItemFor)
-      .toList();
+  return items.where((item) => item.isPlayable).map(channelItemFor).toList();
 }
 
 ChannelItem channelItemFor(PlexMediaItem item) => ChannelItem(

@@ -290,6 +290,7 @@ void main() {
           type: 'movie',
           duration: const Duration(minutes: 30),
           libraryId: 'movies',
+          parts: [PlexMediaPart(path: '/parts/available')],
           addedAt: DateTime.utc(2026),
         ),
       ];

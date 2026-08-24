@@ -735,6 +735,7 @@ void main() {
                 type: 'movie',
                 duration: const Duration(minutes: 1),
                 libraryId: libraryId,
+                parts: [PlexMediaPart(path: '/parts/$libraryId')],
               ),
             ];
           };
@@ -776,6 +777,17 @@ void main() {
     expect(controller.libraryScanCompletedItems, 6);
     expect(controller.libraryScanTotalItems, 6);
     expect(controller.libraryScanStatus, LibraryScanStatus.complete);
+    expect(
+      controller.libraryScanFacts.values.map((fact) => fact.status),
+      everyElement(LibraryScanStatus.complete),
+    );
+    expect(
+      controller.libraryScanFacts.values.fold<int>(
+        0,
+        (total, fact) => total + fact.completedItems,
+      ),
+      controller.libraryScanCompletedItems,
+    );
   });
 
   test(
@@ -799,7 +811,7 @@ void main() {
             onProgress(const (
               completedPages: 2,
               completedItems: 2,
-              totalItems: 3,
+              totalItems: 4,
             ));
             throw const PlexException('auth-required', 'refresh');
           }
@@ -821,6 +833,7 @@ void main() {
                 type: 'movie',
                 duration: const Duration(minutes: 1),
                 libraryId: libraryId,
+                parts: [PlexMediaPart(path: '/parts/$libraryId')],
               ),
           ];
         };
@@ -847,9 +860,251 @@ void main() {
       expect(observed, containsAllInOrder([2, 2, 3]));
       expect(controller.libraryScanCompletedPages, 3);
       expect(controller.libraryScanCompletedItems, 3);
-      expect(controller.libraryScanTotalItems, 3);
+      expect(controller.libraryScanTotalItems, 4);
+      expect(controller.libraryScanFacts['movies']!.completedPages, 3);
+      expect(controller.libraryScanFacts['movies']!.completedItems, 3);
+      expect(controller.libraryScanFacts['movies']!.totalItems, 4);
     },
   );
+
+  test('per-library facts classify raw and playable results without partial install', () async {
+    final selected = _server('server');
+    final plex = _FakePlex()
+      ..serversResult = [selected]
+      ..connectionResult = selected.connections.single
+      ..librariesResult = const [
+        PlexLibrary(id: 'mixed', title: 'Mixed', type: PlexLibraryType.movie),
+        PlexLibrary(id: 'empty', title: 'Empty', type: PlexLibraryType.movie),
+        PlexLibrary(
+          id: 'unsupported',
+          title: 'Unsupported',
+          type: PlexLibraryType.movie,
+        ),
+        PlexLibrary(id: 'shows', title: 'Shows', type: PlexLibraryType.show),
+      ]
+      ..libraryItemsScanHandler = (_, _, libraryId, _, _, onProgress) async {
+        await Future<void>.delayed(
+          Duration(
+            milliseconds: {
+              'mixed': 4,
+              'empty': 3,
+              'unsupported': 2,
+              'shows': 1,
+            }[libraryId]!,
+          ),
+        );
+        final items = switch (libraryId) {
+          'mixed' => [
+            PlexMediaItem(
+              id: 'playable',
+              title: 'Playable',
+              type: 'movie',
+              duration: Duration(minutes: 1),
+              libraryId: 'mixed',
+              parts: [PlexMediaPart(path: '/parts/playable')],
+            ),
+            PlexMediaItem(
+              id: 'no-part',
+              title: 'No part',
+              type: 'movie',
+              duration: Duration(minutes: 1),
+              libraryId: 'mixed',
+            ),
+          ],
+          'unsupported' => [
+            PlexMediaItem(
+              id: 'unsupported',
+              title: 'Unsupported',
+              type: 'movie',
+              duration: Duration(minutes: 1),
+              libraryId: 'unsupported',
+            ),
+          ],
+          'shows' => [
+            PlexMediaItem(
+              id: 'episode',
+              title: 'Episode',
+              type: 'episode',
+              duration: Duration(minutes: 1),
+              libraryId: 'shows',
+              parts: [PlexMediaPart(path: '/parts/episode')],
+            ),
+          ],
+          _ => const <PlexMediaItem>[],
+        };
+        onProgress((
+          completedPages: 1,
+          completedItems: items.length,
+          totalItems: libraryId == 'unsupported' ? null : items.length,
+        ));
+        return items;
+      };
+    final controller = LineupController(
+      store: _MemoryStore(
+        const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+      ),
+      credentials: _MemoryCredentials(accountToken: 'token'),
+      plex: plex,
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+
+    expect(
+      await controller.setLibraries({'mixed', 'empty', 'unsupported', 'shows'}),
+      isTrue,
+    );
+
+    expect(controller.availableMedia.map((item) => item.id), [
+      'playable',
+      'episode',
+    ]);
+    expect(
+      controller.libraryScanFacts['mixed']!.status,
+      LibraryScanStatus.complete,
+    );
+    expect(controller.libraryScanFacts['mixed']!.completedItems, 2);
+    expect(
+      controller.libraryScanFacts['empty']!.status,
+      LibraryScanStatus.empty,
+    );
+    expect(
+      controller.libraryScanFacts['unsupported']!.status,
+      LibraryScanStatus.unsupported,
+    );
+    expect(
+      controller.libraryScanFacts['shows']!.status,
+      LibraryScanStatus.complete,
+    );
+    expect(controller.libraryScanCompletedPages, 4);
+    expect(controller.libraryScanCompletedItems, 4);
+    expect(controller.libraryScanTotalItems, isNull);
+    expect(
+      () => controller.libraryScanFacts['other'] = const LibraryScanFact(
+        status: LibraryScanStatus.idle,
+      ),
+      throwsUnsupportedError,
+    );
+
+    await controller.clearSavedServer();
+    expect(controller.libraryScanFacts, isEmpty);
+  });
+
+  test('first library failure drains claimed peers and leaves queued libraries idle', () async {
+    final selected = _server('server');
+    final fourStarted = Completer<void>();
+    final failFirst = Completer<void>();
+    final releasePeers = Completer<void>();
+    final firstFailed = Completer<void>();
+    final started = <String>[];
+    final plex = _FakePlex()
+      ..serversResult = [selected]
+      ..connectionResult = selected.connections.single
+      ..librariesResult = [
+        for (var index = 0; index < 7; index++)
+          PlexLibrary(
+            id: 'library-$index',
+            title: 'Library $index',
+            type: PlexLibraryType.movie,
+          ),
+      ]
+      ..libraryItemsScanHandler = (_, _, libraryId, _, _, onProgress) async {
+        started.add(libraryId);
+        if (started.length == 4) fourStarted.complete();
+        if (libraryId == 'library-0') {
+          await failFirst.future;
+          throw const PlexException('first', 'First failure');
+        }
+        onProgress(const (completedPages: 1, completedItems: 1, totalItems: 5));
+        await releasePeers.future;
+        if (libraryId == 'library-3') {
+          throw const PlexException('second', 'Second failure');
+        }
+        onProgress(const (completedPages: 5, completedItems: 5, totalItems: 5));
+        return [
+          PlexMediaItem(
+            id: libraryId,
+            title: libraryId,
+            type: 'movie',
+            duration: const Duration(minutes: 1),
+            libraryId: libraryId,
+            parts: [PlexMediaPart(path: '/parts/$libraryId')],
+          ),
+        ];
+      };
+    final controller = LineupController(
+      store: _MemoryStore(
+        const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+      ),
+      credentials: _MemoryCredentials(accountToken: 'token'),
+      plex: plex,
+    );
+    addTearDown(controller.dispose);
+    controller.addListener(() {
+      if (controller.libraryScanFacts['library-0']?.status ==
+              LibraryScanStatus.transientFailure &&
+          !firstFailed.isCompleted) {
+        firstFailed.complete();
+      }
+    });
+    await controller.initialize();
+    controller
+      ..selectedLibraryIds = const {'committed'}
+      ..availableMedia = [
+        PlexMediaItem(
+          id: 'committed',
+          title: 'Committed',
+          type: 'movie',
+          duration: const Duration(minutes: 1),
+          libraryId: 'committed',
+          parts: [PlexMediaPart(path: '/parts/committed')],
+        ),
+      ];
+
+    final scan = controller.setLibraries({
+      for (var index = 0; index < 7; index++) 'library-$index',
+    });
+    await fourStarted.future;
+    failFirst.complete();
+    await firstFailed.future;
+    final itemsAtFailure = controller.libraryScanCompletedItems;
+    releasePeers.complete();
+
+    expect(await scan, isFalse);
+    expect(controller.error, 'First failure');
+    expect(started, [for (var index = 0; index < 4; index++) 'library-$index']);
+    expect(controller.libraryScanCompletedItems, itemsAtFailure);
+    expect(controller.selectedLibraryIds, {'committed'});
+    expect(controller.availableMedia.single.id, 'committed');
+    expect(
+      controller.libraryScanFacts['library-0']!.status,
+      LibraryScanStatus.transientFailure,
+    );
+    expect(
+      controller.libraryScanFacts['library-1']!.status,
+      LibraryScanStatus.complete,
+    );
+    expect(
+      controller.libraryScanFacts['library-2']!.status,
+      LibraryScanStatus.complete,
+    );
+    expect(
+      controller.libraryScanFacts['library-3']!.status,
+      LibraryScanStatus.transientFailure,
+    );
+    for (var index = 4; index < 7; index++) {
+      expect(
+        controller.libraryScanFacts['library-$index']!.status,
+        LibraryScanStatus.idle,
+      );
+    }
+    expect(
+      controller.libraryScanFacts.values.fold<int>(
+        0,
+        (total, fact) => total + fact.completedItems,
+      ),
+      controller.libraryScanCompletedItems,
+    );
+  });
 
   test('cancelled library scan preserves committed content and superseding scan wins', () async {
     final selected = _server('server');
@@ -883,6 +1138,7 @@ void main() {
                 type: 'movie',
                 duration: const Duration(minutes: 1),
                 libraryId: libraryId,
+                parts: [PlexMediaPart(path: '/parts/$libraryId')],
               ),
             ];
           };
@@ -920,6 +1176,7 @@ void main() {
     expect(controller.selectedLibraryIds, {'second'});
     expect(controller.availableMedia.single.id, 'second');
     expect(controller.libraryScanStatus, LibraryScanStatus.complete);
+    expect(controller.libraryScanFacts.keys, {'second'});
   });
 
   test(
@@ -1028,6 +1285,16 @@ void main() {
     expect(await scan, isFalse);
     expect(started, [for (var index = 0; index < 4; index++) 'library-$index']);
     expect(controller.libraryScanStatus, LibraryScanStatus.cancelled);
+    for (var index = 0; index < 4; index++) {
+      expect(
+        controller.libraryScanFacts['library-$index']!.status,
+        LibraryScanStatus.cancelled,
+      );
+    }
+    expect(
+      controller.libraryScanFacts['library-4']!.status,
+      LibraryScanStatus.idle,
+    );
   });
 
   test(
