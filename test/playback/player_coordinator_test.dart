@@ -807,6 +807,51 @@ void main() {
     expect(lineup.currentChannelId, 'channel-b');
   });
 
+  testWidgets('native stop timeout releases a replacement retry', (
+    tester,
+  ) async {
+    final lineup = _TestLineup();
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    )..requestViewport(0, 2);
+    await tester.pump();
+    final player = _PreemptibleLoadPlayer(blockStop: true);
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(() {
+      if (!player.releaseStop.isCompleted) player.releaseStop.complete();
+    });
+    addTearDown(player.close);
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
+
+    final first = coordinator.tune('channel-0');
+    await player.loadStarted.future;
+    final replacement = coordinator.tune('channel-b');
+    await player.stopStarted.future;
+
+    await tester.pump(const Duration(seconds: 10));
+    await tester.pump();
+    await Future.wait([first, replacement]);
+
+    expect(player.calls, ['load', 'stop']);
+    expect(coordinator.overlay, PlayerOverlay.error);
+    expect(coordinator.canRetry, isTrue);
+
+    await coordinator.retry();
+    expect(player.calls, ['load', 'stop', 'load']);
+    expect(lineup.currentChannelId, 'channel-b');
+    coordinator.closeOverlay();
+
+    player.releaseStop.complete();
+    await tester.pump();
+  });
+
   test('explicit Stop preempts a never-settling load immediately', () async {
     final lineup = _TestLineup();
     final guide = GuideController(

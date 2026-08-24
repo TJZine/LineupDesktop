@@ -158,6 +158,7 @@ class WindowsNativePlayer implements NativePlayer {
 
   @override
   Future<void> stop() async {
+    final loadSequence = _nextLoadId;
     _completePendingLoadError(
       const PlayerUnavailable('The media load was stopped.'),
     );
@@ -165,6 +166,7 @@ class WindowsNativePlayer implements NativePlayer {
     _activeLoadId = null;
     _activeGeneration = null;
     await _invoke('stop');
+    if (_nextLoadId != loadSequence) return;
     _resetMediaState();
     _setStatus(PlayerState.stopped, 'Stopped');
   }

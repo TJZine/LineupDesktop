@@ -464,6 +464,56 @@ void main() {
     expect(player.tracks, isEmpty);
   });
 
+  test('late stop reply cannot reset a replacement load', () async {
+    final calls = <MethodCall>[];
+    final stopReply = Completer<void>();
+    messenger.setMockMethodCallHandler(channel, (call) {
+      calls.add(call);
+      return call.method == 'stop' ? stopReply.future : null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+    final player = WindowsNativePlayer();
+    addTearDown(player.dispose);
+    await player.initialize();
+    final first = player.load(Uri.parse('file:///first.mp4'), generation: 1);
+    await Future<void>.delayed(Duration.zero);
+    final firstId = calls.last.arguments!['loadId']! as int;
+    await _sendNativeEvent(messenger, {
+      'type': 'state',
+      'loadId': firstId,
+      'state': 'playing',
+    });
+    await first;
+
+    final stop = player.stop();
+    await Future<void>.delayed(Duration.zero);
+    final replacement = player.load(
+      Uri.parse('file:///replacement.mp4'),
+      generation: 2,
+    );
+    await Future<void>.delayed(Duration.zero);
+    final replacementId = calls.last.arguments!['loadId']! as int;
+    await _sendNativeEvent(messenger, {
+      'type': 'property',
+      'loadId': replacementId,
+      'name': 'video-codec',
+      'value': 'hevc',
+    });
+    await _sendNativeEvent(messenger, {
+      'type': 'state',
+      'loadId': replacementId,
+      'state': 'playing',
+    });
+    await replacement;
+
+    stopReply.complete();
+    await stop;
+
+    expect(player.status.state, PlayerState.playing);
+    expect(player.telemetry.videoCodec, 'hevc');
+  });
+
   test('load invocation failure retires its load id', () async {
     var loadId = 0;
     messenger.setMockMethodCallHandler(channel, (call) async {

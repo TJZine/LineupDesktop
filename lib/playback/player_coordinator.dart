@@ -20,6 +20,8 @@ enum PlayerOverlay {
 }
 
 class PlayerCoordinator extends ChangeNotifier {
+  static const _nativeStopTimeout = Duration(seconds: 10);
+
   PlayerCoordinator({
     required this.player,
     required this.lineup,
@@ -868,6 +870,19 @@ class PlayerCoordinator extends ChangeNotifier {
     await operation;
   }
 
+  Future<void> requestStop() async {
+    try {
+      await stop();
+    } catch (error) {
+      if (_disposed) return;
+      _recordPlaybackFailure(error);
+      _error =
+          'Playback could not be stopped. Retry or choose another channel.';
+      _canRetry = _retryChannelId != null;
+      _setOverlay(PlayerOverlay.error, timed: false);
+    }
+  }
+
   Future<bool> logout() async {
     if (!await lineup.logout()) return false;
     await _scopeCleanup;
@@ -1320,11 +1335,18 @@ class PlayerCoordinator extends ChangeNotifier {
     if (!force && _activeLoadGeneration == null) return null;
     _retirePlaybackIntent();
     late final Future<void> operation;
-    operation = Future<void>.sync(player.stop).whenComplete(() {
-      if (identical(_nativeStopOperation, operation)) {
-        _nativeStopOperation = null;
-      }
-    });
+    operation = Future<void>.sync(player.stop)
+        .timeout(
+          _nativeStopTimeout,
+          onTimeout: () => throw const PlayerUnavailable(
+            'Native playback did not stop within 10 seconds.',
+          ),
+        )
+        .whenComplete(() {
+          if (identical(_nativeStopOperation, operation)) {
+            _nativeStopOperation = null;
+          }
+        });
     unawaited(operation.catchError((_) {}));
     _nativeStopOperation = operation;
     return operation;

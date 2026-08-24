@@ -132,6 +132,30 @@ void main() {
     fixture.dispose();
   });
 
+  testWidgets('media Stop reports failures without an unhandled error', (
+    tester,
+  ) async {
+    final fixture = _Fixture(PlayerState.playing, failStop: true);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.mediaStop);
+    await tester.pump();
+
+    expect(fixture.player.overlay, PlayerOverlay.error);
+    expect(
+      fixture.player.error,
+      'Playback could not be stopped. Retry or choose another channel.',
+    );
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
   testWidgets('numpad Enter commits channel entry', (tester) async {
     final fixture = _Fixture(PlayerState.playing, channelCount: 2);
     await tester.pumpWidget(
@@ -804,6 +828,7 @@ class _Fixture {
   _Fixture(
     PlayerState state, {
     bool failLoad = false,
+    bool failStop = false,
     bool blockLoad = false,
     List<PlayerTrack> tracks = const [],
     int channelCount = 1,
@@ -821,6 +846,7 @@ class _Fixture {
     native = _Native(
       state,
       failLoad: failLoad,
+      failStop: failStop,
       blockLoad: blockLoad,
       tracks: tracks,
     );
@@ -887,6 +913,7 @@ class _Native implements NativePlayer {
   _Native(
     PlayerState state, {
     this.failLoad = false,
+    this.failStop = false,
     this.blockLoad = false,
     this.tracks = const [],
   }) : status = PlayerStatus(
@@ -897,6 +924,7 @@ class _Native implements NativePlayer {
        );
 
   final bool failLoad;
+  final bool failStop;
   final bool blockLoad;
   final loadStarted = Completer<void>();
   final _loadCompletion = Completer<void>();
@@ -957,7 +985,10 @@ class _Native implements NativePlayer {
   @override
   Future<void> setVolume(double volume) async {}
   @override
-  Future<void> stop() async {}
+  Future<void> stop() async {
+    if (failStop) throw const PlayerUnavailable('Synthetic stop failure.');
+  }
+
   @override
   Future<void> dispose() async {}
 }
