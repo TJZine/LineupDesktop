@@ -96,6 +96,59 @@ void main() {
     ]);
   });
 
+  test('drops media parts without a usable path', () {
+    final item = parseMediaItem({
+      'ratingKey': 'malformed-parts',
+      'title': 'Malformed parts',
+      'type': 'movie',
+      'duration': 3000,
+      'Media': [
+        {
+          'Part': [
+            {'duration': 1000},
+            {'key': '   ', 'duration': 1000},
+            {'key': '/library/parts/valid.mkv', 'duration': 1000},
+          ],
+        },
+      ],
+    });
+    final unsupported = parseMediaItem({
+      'ratingKey': 'no-usable-parts',
+      'title': 'No usable parts',
+      'type': 'movie',
+      'duration': 1000,
+      'Media': [
+        {
+          'Part': [
+            {},
+            {'key': ''},
+          ],
+        },
+      ],
+    });
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+    );
+    addTearDown(client.close);
+
+    expect(item.parts.map((part) => part.path), ['/library/parts/valid.mkv']);
+    expect(item.parts.single.duration, const Duration(seconds: 1));
+    expect(unsupported.parts, isEmpty);
+    expect(
+      () => client.playbackDescriptor(
+        server: Uri.parse('https://plex.example:32400'),
+        item: unsupported,
+      ),
+      throwsA(
+        isA<PlexException>().having(
+          (exception) => exception.code,
+          'code',
+          'unsupported',
+        ),
+      ),
+    );
+  });
+
   test(
     'accepts quoted numeric metadata and ignores invalid optional values',
     () {

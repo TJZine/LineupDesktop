@@ -600,10 +600,11 @@ PlexMediaItem parseMediaItem(Object? raw, {String? libraryId}) {
   final media = (json['Media'] as List? ?? const [])
       .whereType<Map>()
       .firstOrNull;
-  final parts = [
-    for (final rawPart in media?['Part'] as List? ?? const [])
-      if (rawPart is Map) _parseMediaPart(rawPart),
-  ];
+  final parts = (media?['Part'] as List? ?? const [])
+      .whereType<Map>()
+      .map(_parseMediaPart)
+      .nonNulls
+      .toList(growable: false);
   final firstPart = (media?['Part'] as List? ?? const [])
       .whereType<Map>()
       .firstOrNull;
@@ -641,8 +642,9 @@ PlexMediaItem parseMediaItem(Object? raw, {String? libraryId}) {
   );
 }
 
-PlexMediaPart _parseMediaPart(Map raw) {
-  final path = _text(raw['key'], 'media part path');
+PlexMediaPart? _parseMediaPart(Map raw) {
+  final path = _optionalText(raw['key']);
+  if (path == null) return null;
   final milliseconds = _optionalInteger(raw['duration']);
   return PlexMediaPart(
     path: path,
