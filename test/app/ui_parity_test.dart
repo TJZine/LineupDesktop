@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/channel_setup_view.dart';
@@ -376,9 +377,14 @@ void main() {
         ),
       ],
     );
+    const backupServer = PlexServer(
+      id: 'backup-server',
+      name: 'Backup Server',
+      connections: [],
+    );
     final controller = FixtureController()
       ..stage = SetupStage.servers
-      ..servers = [server]
+      ..servers = [server, backupServer]
       ..server = server
       ..connection = PlexConnection(
         uri: Uri.parse('https://selected.synthetic.invalid'),
@@ -386,7 +392,6 @@ void main() {
         relay: false,
         latency: const Duration(milliseconds: 100),
       );
-    addTearDown(controller.dispose);
 
     await tester.pumpWidget(UiFixture(controller: controller).build());
     await tester.pumpAndSettle();
@@ -401,7 +406,18 @@ void main() {
       findsOneWidget,
     );
     expect(find.bySemanticsLabel(RegExp('Relay available')), findsOneWidget);
-    expect(find.bySemanticsLabel('Reconnect'), findsOneWidget);
+    final reconnectSemantics = tester
+        .getSemantics(find.widgetWithText(FilledButton, 'Reconnect'))
+        .getSemanticsData();
+    expect(reconnectSemantics.label, 'Reconnect to ${server.name}');
+    expect(reconnectSemantics.flagsCollection.isButton, isTrue);
+    expect(reconnectSemantics.hasAction(SemanticsAction.focus), isTrue);
+    expect(reconnectSemantics.hasAction(SemanticsAction.tap), isTrue);
+    final connectSemantics = tester
+        .getSemantics(find.widgetWithText(FilledButton, 'Connect'))
+        .getSemanticsData();
+    expect(connectSemantics.label, 'Connect to Backup Server');
+    expect(connectSemantics.hasAction(SemanticsAction.tap), isTrue);
     expect(tester.takeException(), isNull);
   });
 

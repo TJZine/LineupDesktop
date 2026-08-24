@@ -632,11 +632,13 @@ class _ServerCard extends StatelessWidget {
   final VoidCallback? onPressed;
   @override
   Widget build(BuildContext context) {
-    final availableTypes = server.connections.map(plexConnectionType).toSet();
+    final availableKinds = server.connections.map(plexConnectionKind).toSet();
     final availability = [
-      for (final type in const ['Direct local', 'Direct remote', 'Relay'])
-        if (availableTypes.contains(type)) '$type available',
+      for (final kind in PlexConnectionKind.values)
+        if (availableKinds.contains(kind))
+          '${plexConnectionKindLabel(kind)} available',
     ];
+    final action = connection == null ? 'Connect' : 'Reconnect';
     return Card(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 16),
@@ -693,9 +695,14 @@ class _ServerCard extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 12),
-            FilledButton(
-              onPressed: onPressed,
-              child: Text(connection == null ? 'Connect' : 'Reconnect'),
+            MergeSemantics(
+              child: Semantics(
+                label: '$action to ${server.name}',
+                child: FilledButton(
+                  onPressed: onPressed,
+                  child: ExcludeSemantics(child: Text(action)),
+                ),
+              ),
             ),
           ],
         ),

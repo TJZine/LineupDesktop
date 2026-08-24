@@ -40,8 +40,8 @@ void main() {
       'Relay • Limited • 500 ms measured • Very slow',
     );
     expect(
-      plexConnectionType(connection(local: true, relay: true, latency: 1)),
-      'Relay',
+      plexConnectionKind(connection(local: true, relay: true, latency: 1)),
+      PlexConnectionKind.relay,
     );
   });
 

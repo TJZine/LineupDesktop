@@ -74,8 +74,10 @@ class PlexConnection {
   final Duration? latency;
 }
 
+enum PlexConnectionKind { directLocal, directRemote, relay }
+
 String plexConnectionDescription(PlexConnection connection) {
-  final type = plexConnectionType(connection);
+  final type = plexConnectionKindLabel(plexConnectionKind(connection));
   final latency = connection.latency;
   final milliseconds = latency?.inMilliseconds;
   final warning = milliseconds == null
@@ -93,11 +95,18 @@ String plexConnectionDescription(PlexConnection connection) {
   ].join(' • ');
 }
 
-String plexConnectionType(PlexConnection connection) => connection.relay
-    ? 'Relay'
+PlexConnectionKind plexConnectionKind(PlexConnection connection) =>
+    connection.relay
+    ? PlexConnectionKind.relay
     : connection.local
-    ? 'Direct local'
-    : 'Direct remote';
+    ? PlexConnectionKind.directLocal
+    : PlexConnectionKind.directRemote;
+
+String plexConnectionKindLabel(PlexConnectionKind kind) => switch (kind) {
+  PlexConnectionKind.directLocal => 'Direct local',
+  PlexConnectionKind.directRemote => 'Direct remote',
+  PlexConnectionKind.relay => 'Relay',
+};
 
 class PlexLibrary {
   const PlexLibrary({
