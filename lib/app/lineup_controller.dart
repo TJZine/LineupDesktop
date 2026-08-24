@@ -595,10 +595,6 @@ class LineupController extends ChangeNotifier {
       operation: operation,
       fallbackStage: SetupStage.channelSetup,
     );
-    if (_isCurrent(operation) && !loaded) {
-      libraryScanStatus = LibraryScanStatus.transientFailure;
-      notifyListeners();
-    }
     return loaded;
   }
 
@@ -620,106 +616,114 @@ class LineupController extends ChangeNotifier {
     libraryScanCompletedItems = 0;
     libraryScanTotalItems = null;
     notifyListeners();
-    final selected = libraries
-        .where((library) => ids.contains(library.id))
-        .toList(growable: false);
-    final results = List<List<PlexMediaItem>?>.filled(selected.length, null);
-    final pages = List<int>.filled(selected.length, 0);
-    final itemCounts = List<int>.filled(selected.length, 0);
-    final totals = List<int?>.filled(selected.length, null);
-    var nextLibrary = 0;
-    Future<void> loadNext() async {
-      while (_isCurrent(operation)) {
-        final index = nextLibrary++;
-        if (index >= selected.length) return;
-        final library = selected[index];
-        results[index] = await _withPmsAuthorization(
-          operation,
-          selectedServer.id,
-          (token, refreshedConnection) => plex.libraryItems(
-            (refreshedConnection ?? connection!).uri,
-            token,
-            library.id,
-            library.type,
-            isCurrent: () => _isCurrent(operation),
-            onProgress: (progress) {
-              if (!_isCurrent(operation)) return;
-              if (progress.completedPages > pages[index]) {
-                pages[index] = progress.completedPages;
-              }
-              if (progress.completedItems > itemCounts[index]) {
-                itemCounts[index] = progress.completedItems;
-              }
-              totals[index] = progress.totalItems ?? totals[index];
-              libraryScanCompletedPages = pages.fold(0, (a, b) => a + b);
-              libraryScanCompletedItems = itemCounts.fold(0, (a, b) => a + b);
-              libraryScanTotalItems = totals.every((total) => total != null)
-                  ? totals.whereType<int>().fold<int>(0, (a, b) => a + b)
-                  : null;
-              notifyListeners();
-            },
-          ),
+    try {
+      final selected = libraries
+          .where((library) => ids.contains(library.id))
+          .toList(growable: false);
+      final results = List<List<PlexMediaItem>?>.filled(selected.length, null);
+      final pages = List<int>.filled(selected.length, 0);
+      final itemCounts = List<int>.filled(selected.length, 0);
+      final totals = List<int?>.filled(selected.length, null);
+      var nextLibrary = 0;
+      Future<void> loadNext() async {
+        while (_isCurrent(operation)) {
+          final index = nextLibrary++;
+          if (index >= selected.length) return;
+          final library = selected[index];
+          results[index] = await _withPmsAuthorization(
+            operation,
+            selectedServer.id,
+            (token, refreshedConnection) => plex.libraryItems(
+              (refreshedConnection ?? connection!).uri,
+              token,
+              library.id,
+              library.type,
+              isCurrent: () => _isCurrent(operation),
+              onProgress: (progress) {
+                if (!_isCurrent(operation)) return;
+                if (progress.completedPages > pages[index]) {
+                  pages[index] = progress.completedPages;
+                }
+                if (progress.completedItems > itemCounts[index]) {
+                  itemCounts[index] = progress.completedItems;
+                }
+                totals[index] = progress.totalItems ?? totals[index];
+                libraryScanCompletedPages = pages.fold(0, (a, b) => a + b);
+                libraryScanCompletedItems = itemCounts.fold(0, (a, b) => a + b);
+                libraryScanTotalItems = totals.every((total) => total != null)
+                    ? totals.whereType<int>().fold<int>(0, (a, b) => a + b)
+                    : null;
+                notifyListeners();
+              },
+            ),
+          );
+        }
+      }
+
+      await Future.wait(
+        List.generate(selected.length.clamp(0, 4), (_) => loadNext()),
+      );
+      if (!_isCurrent(operation)) {
+        return (
+          failedPlaylistIds: const <String>{},
+          media: const <PlexMediaItem>[],
+          playlists: const <PlexPlaylist>[],
+          status: LibraryScanStatus.cancelled,
         );
       }
-    }
-
-    await Future.wait(
-      List.generate(selected.length.clamp(0, 4), (_) => loadNext()),
-    );
-    if (!_isCurrent(operation)) {
+      final items = results
+          .whereType<List<PlexMediaItem>>()
+          .expand((items) => items)
+          .toList();
+      PlexPlaylistCatalog catalog;
+      try {
+        catalog = await _withPmsAuthorization(
+          operation,
+          selectedServer.id,
+          (token, refreshedConnection) =>
+              plex.playlists((refreshedConnection ?? connection!).uri, token),
+        );
+      } on PlexException catch (exception) {
+        if (_isPmsAuthorizationError(exception)) rethrow;
+        diagnostics.add('plex-library', 'Playlist discovery unavailable', {
+          'code': exception.code,
+        });
+        catalog = const PlexPlaylistCatalog(playlists: [], failedIds: {});
+      }
+      if (operation != _epoch) {
+        return (
+          failedPlaylistIds: const <String>{},
+          media: const <PlexMediaItem>[],
+          playlists: const <PlexPlaylist>[],
+          status: LibraryScanStatus.cancelled,
+        );
+      }
+      if (catalog.failedIds.isNotEmpty) {
+        diagnostics.add('plex-library', 'Some playlists could not be loaded', {
+          'count': catalog.failedIds.length,
+        });
+      }
+      final playable = items
+          .where((item) => item.duration > Duration.zero)
+          .toList();
+      final status = items.isEmpty
+          ? LibraryScanStatus.empty
+          : playable.isEmpty
+          ? LibraryScanStatus.unsupported
+          : LibraryScanStatus.complete;
       return (
-        failedPlaylistIds: const <String>{},
-        media: const <PlexMediaItem>[],
-        playlists: const <PlexPlaylist>[],
-        status: LibraryScanStatus.cancelled,
+        failedPlaylistIds: Set<String>.unmodifiable(catalog.failedIds),
+        media: List<PlexMediaItem>.unmodifiable(playable),
+        playlists: List<PlexPlaylist>.unmodifiable(catalog.playlists),
+        status: status,
       );
+    } catch (_) {
+      if (_isCurrent(operation)) {
+        libraryScanStatus = LibraryScanStatus.transientFailure;
+        notifyListeners();
+      }
+      rethrow;
     }
-    final items = results
-        .whereType<List<PlexMediaItem>>()
-        .expand((items) => items)
-        .toList();
-    PlexPlaylistCatalog catalog;
-    try {
-      catalog = await _withPmsAuthorization(
-        operation,
-        selectedServer.id,
-        (token, refreshedConnection) =>
-            plex.playlists((refreshedConnection ?? connection!).uri, token),
-      );
-    } on PlexException catch (exception) {
-      if (_isPmsAuthorizationError(exception)) rethrow;
-      diagnostics.add('plex-library', 'Playlist discovery unavailable', {
-        'code': exception.code,
-      });
-      catalog = const PlexPlaylistCatalog(playlists: [], failedIds: {});
-    }
-    if (operation != _epoch) {
-      return (
-        failedPlaylistIds: const <String>{},
-        media: const <PlexMediaItem>[],
-        playlists: const <PlexPlaylist>[],
-        status: LibraryScanStatus.cancelled,
-      );
-    }
-    if (catalog.failedIds.isNotEmpty) {
-      diagnostics.add('plex-library', 'Some playlists could not be loaded', {
-        'count': catalog.failedIds.length,
-      });
-    }
-    final playable = items
-        .where((item) => item.duration > Duration.zero)
-        .toList();
-    final status = items.isEmpty
-        ? LibraryScanStatus.empty
-        : playable.isEmpty
-        ? LibraryScanStatus.unsupported
-        : LibraryScanStatus.complete;
-    return (
-      failedPlaylistIds: Set<String>.unmodifiable(catalog.failedIds),
-      media: List<PlexMediaItem>.unmodifiable(playable),
-      playlists: List<PlexPlaylist>.unmodifiable(catalog.playlists),
-      status: status,
-    );
   }
 
   void cancelLibraryScan() {

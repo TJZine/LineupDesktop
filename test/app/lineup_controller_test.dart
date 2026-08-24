@@ -1099,6 +1099,46 @@ void main() {
     },
   );
 
+  test('restored library scan failure reaches a terminal state', () async {
+    final selected = _server('server');
+    final plex = _FakePlex()
+      ..serversResult = [selected]
+      ..connectionResult = selected.connections.single
+      ..librariesResult = const [
+        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
+      ]
+      ..playlistsHandler = (_, _) async => throw const PlexException(
+        'auth-invalid',
+        'Plex authorization expired.',
+      );
+    final controller = LineupController(
+      store: _MemoryStore(
+        PersistedState(
+          selectedServerByProfile: const {'owner': 'server'},
+          selectedLibraryIdsByProfileServer: const {
+            'owner': {
+              'server': ['movies'],
+            },
+          },
+          channelsByProfileServer: {
+            'owner': {
+              'server': [_channel('saved')],
+            },
+          },
+        ),
+      ),
+      credentials: _MemoryCredentials(accountToken: 'token'),
+      plex: plex,
+    );
+    addTearDown(controller.dispose);
+
+    await controller.initialize();
+
+    expect(controller.libraryScanStatus, LibraryScanStatus.transientFailure);
+    expect(controller.busy, isFalse);
+    expect(controller.error, 'Plex authorization expired.');
+  });
+
   test(
     'playlist diagnostics retain Plex code and bounded failure count',
     () async {
