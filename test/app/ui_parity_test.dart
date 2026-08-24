@@ -7,6 +7,7 @@ import 'package:lineup_desktop/app/channel_setup_view.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/app/onboarding_view.dart';
 import 'package:lineup_desktop/channels/channel.dart';
+import 'package:lineup_desktop/channels/channel_builder.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
 import 'package:lineup_desktop/ui/app_ui.dart';
 
@@ -447,11 +448,89 @@ void main() {
     expect(find.text('Configure the lineup'), findsOneWidget);
     expect(find.text('Content Sources'), findsWidgets);
     expect(find.text('Guide Order'), findsOneWidget);
+    expect(
+      find.bySemanticsLabel(RegExp('Playlists: No matches.*Genres: 1')),
+      findsOneWidget,
+    );
+    await tester.tap(find.widgetWithText(SwitchListTile, 'Playlists'));
+    await tester.pump();
+    expect(
+      find.bySemanticsLabel(RegExp('Playlists: Off.*Genres: 1')),
+      findsOneWidget,
+    );
 
     await tester.tap(find.text('Build Channels'));
     await tester.pumpAndSettle();
     expect(find.text('Review expected changes'), findsOneWidget);
     expect(find.text('Confirm & Replace'), findsOneWidget);
+    expect(find.bySemanticsLabel('Create: 2'), findsOneWidget);
+    expect(find.bySemanticsLabel('Update: 0'), findsOneWidget);
+    expect(find.bySemanticsLabel('Unchanged: 0'), findsOneWidget);
+    expect(find.bySemanticsLabel('Remove: 0'), findsOneWidget);
+    expect(find.bySemanticsLabel('Final: 2'), findsOneWidget);
+  });
+
+  testWidgets('Channel Setup merge review matches the applied channel sets', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1600, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final controller = _SetupFixtureController()
+      ..stage = SetupStage.channelSetup
+      ..libraries = const [
+        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
+      ];
+    await controller.setLibraries(const {'movies'});
+    final generated = materializeChannelPlan(
+      proposals: buildChannelProposals(
+        libraries: controller.libraries,
+        items: controller.availableMedia,
+      ),
+      existing: const [],
+      mode: ChannelBuildMode.replace,
+      anchor: DateTime.utc(2026),
+    ).channels;
+    controller.channels = [
+      generated.first,
+      Channel(
+        id: generated.last.id,
+        number: generated.last.number,
+        name: 'Old generated name',
+        source: generated.last.source,
+        playbackMode: PlaybackMode.sequential,
+        anchor: DateTime.utc(2025),
+        shuffleSeed: generated.last.shuffleSeed,
+        builderKey: generated.last.builderKey,
+      ),
+      Channel(
+        id: 'custom',
+        number: 42,
+        name: 'Custom',
+        source: const ManualSource([]),
+        playbackMode: PlaybackMode.sequential,
+        anchor: DateTime.utc(2026),
+        shuffleSeed: 42,
+      ),
+    ];
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      MaterialApp(home: UpstreamChannelSetupView(controller: controller)),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Configure channels'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Build Options'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Merge with lineup'));
+    await tester.pump();
+    await tester.tap(find.text('Review'));
+    await tester.pumpAndSettle();
+
+    expect(find.bySemanticsLabel('Create: 0'), findsOneWidget);
+    expect(find.bySemanticsLabel('Update: 1'), findsOneWidget);
+    expect(find.bySemanticsLabel('Unchanged: 2'), findsOneWidget);
+    expect(find.bySemanticsLabel('Remove: 0'), findsOneWidget);
+    expect(find.bySemanticsLabel('Final: 3'), findsOneWidget);
   });
 
   testWidgets('Channel Setup exposes distinct scan states and actions', (

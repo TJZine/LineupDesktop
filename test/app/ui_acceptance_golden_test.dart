@@ -113,6 +113,28 @@ void main() {
     await _match(tester, 'server-selection-1280x720.png');
   });
 
+  testWidgets('Channel Setup strategies', (tester) async {
+    final controller = _VisualController()
+      ..stage = SetupStage.channelSetup
+      ..libraries = const [
+        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
+      ];
+    await _pump(
+      tester,
+      UiFixture(controller: controller, guideClock: () => _fixedNow).build(),
+    );
+    await tester.tap(find.text('Configure channels'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Configure the lineup'), findsOneWidget);
+    await _match(
+      tester,
+      'channel-setup-strategies-1280x720.png',
+      precacheLogo: true,
+      additionalPumps: 2,
+    );
+  });
+
   testWidgets('Channel Setup review', (tester) async {
     final controller = _VisualController()
       ..stage = SetupStage.channelSetup
