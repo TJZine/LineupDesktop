@@ -519,6 +519,74 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('Channel Setup keeps its footer reachable at 1080p', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1920, 1080));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final controller = FixtureController()
+      ..stage = SetupStage.channelSetup
+      ..libraries = const [
+        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
+        PlexLibrary(id: 'shows', title: 'Shows', type: PlexLibraryType.show),
+      ];
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      MaterialApp(home: UpstreamChannelSetupView(controller: controller)),
+    );
+    await tester.pumpAndSettle();
+
+    final action = find.widgetWithText(FilledButton, 'Configure channels');
+    expect(action, findsOneWidget);
+    expect(tester.getBottomRight(action).dy, lessThanOrEqualTo(1080));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Channel Setup Review keeps staged chrome at compact sizes', (
+    tester,
+  ) async {
+    for (final size in const [Size(800, 600), Size(1280, 720)]) {
+      await tester.binding.setSurfaceSize(size);
+      final controller = _SetupFixtureController()
+        ..stage = SetupStage.channelSetup
+        ..libraries = const [
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+        ];
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: UpstreamChannelSetupView(
+            key: ValueKey(size),
+            controller: controller,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Configure channels'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Build Channels'));
+      await tester.pumpAndSettle();
+
+      final header = find.text('Channel Setup');
+      final review = find.text('Review expected changes');
+      final footer = find.widgetWithText(FilledButton, 'Confirm & Replace');
+      expect(header, findsOneWidget);
+      expect(review, findsOneWidget);
+      expect(footer, findsOneWidget);
+      expect(
+        tester.getBottomLeft(header).dy,
+        lessThan(tester.getTopLeft(review).dy),
+      );
+      expect(tester.getBottomRight(footer).dy, lessThanOrEqualTo(size.height));
+      expect(tester.takeException(), isNull);
+    }
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+  });
+
   testWidgets('Channel Setup retains its three-stage product structure', (
     tester,
   ) async {

@@ -2,6 +2,7 @@
 library;
 
 import 'dart:io';
+import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -10,6 +11,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/channels/channel.dart';
+import 'package:lineup_desktop/channels/channel_builder.dart';
 import 'package:lineup_desktop/channels/scheduler.dart';
 import 'package:lineup_desktop/playback/native_player.dart';
 import 'package:lineup_desktop/playback/player_view.dart';
@@ -211,7 +213,13 @@ void main() {
       ];
     await _pump(
       tester,
-      UiFixture(controller: controller, guideClock: () => _fixedNow).build(),
+      TickerMode(
+        enabled: false,
+        child: UiFixture(
+          controller: controller,
+          guideClock: () => _fixedNow,
+        ).build(),
+      ),
     );
     await tester.tap(find.text('Configure channels'));
     await tester.pumpAndSettle();
@@ -219,9 +227,94 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Review expected changes'), findsOneWidget);
+    expect(
+      tester.getBottomLeft(find.text('Channel Setup')).dy,
+      lessThan(tester.getTopLeft(find.text('Review expected changes')).dy),
+    );
+    expect(
+      tester.getBottomRight(find.text('Confirm & Replace')).dy,
+      lessThanOrEqualTo(_viewport.height),
+    );
     await _match(
       tester,
       'channel-setup-review-1280x720.png',
+      precacheLogo: true,
+      additionalPumps: 2,
+    );
+  });
+
+  testWidgets('Channel Setup progress', (tester) async {
+    final controller = _PendingVisualController()
+      ..stage = SetupStage.channelSetup
+      ..libraries = const [
+        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
+      ];
+    await _pump(
+      tester,
+      TickerMode(
+        enabled: false,
+        child: UiFixture(
+          controller: controller,
+          guideClock: () => _fixedNow,
+        ).build(),
+      ),
+    );
+    await _openChannelSetupApply(tester);
+
+    expect(find.bySemanticsLabel('Applying channels'), findsOneWidget);
+    expect(
+      tester.getBottomLeft(find.text('Channel Setup')).dy,
+      lessThan(tester.getTopLeft(find.text('Applying your lineup')).dy),
+    );
+    expect(
+      tester.getTopLeft(find.text('Channel Setup')).dy,
+      greaterThanOrEqualTo(0),
+    );
+    expect(find.text('Step 3 of 3'), findsOneWidget);
+    for (final element in tester.allElements) {
+      element.renderObject?.markNeedsPaint();
+    }
+    await tester.pump();
+    await _match(
+      tester,
+      'channel-setup-progress-1280x720.png',
+      precacheLogo: true,
+      additionalPumps: 2,
+    );
+  });
+
+  testWidgets('Channel Setup complete', (tester) async {
+    final controller = _PendingVisualController()
+      ..stage = SetupStage.channelSetup
+      ..libraries = const [
+        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
+      ];
+    await _pump(
+      tester,
+      TickerMode(
+        enabled: false,
+        child: UiFixture(
+          controller: controller,
+          guideClock: () => _fixedNow,
+        ).build(),
+      ),
+    );
+    await _openChannelSetupApply(tester);
+    controller.finishApply();
+    await tester.pumpAndSettle();
+
+    expect(find.bySemanticsLabel('Channel update complete'), findsOneWidget);
+    expect(
+      tester.getBottomLeft(find.text('Channel Setup')).dy,
+      lessThan(tester.getTopLeft(find.text('Your lineup is ready')).dy),
+    );
+    expect(
+      tester.getBottomRight(find.text('Done')).dy,
+      lessThanOrEqualTo(_viewport.height),
+    );
+    await _match(
+      tester,
+      'channel-setup-complete-1280x720.png',
       precacheLogo: true,
       additionalPumps: 2,
     );
@@ -282,7 +375,13 @@ void main() {
 
     await _pump(
       tester,
-      UiFixture(controller: controller, guideClock: () => _fixedNow).build(),
+      TickerMode(
+        enabled: false,
+        child: UiFixture(
+          controller: controller,
+          guideClock: () => _fixedNow,
+        ).build(),
+      ),
     );
     expect(find.text('Retry scan'), findsOneWidget);
     expect(find.text('Complete'), findsOneWidget);
@@ -293,7 +392,12 @@ void main() {
     expect(find.text('0/0 items · 1 page'), findsOneWidget);
     expect(find.text('Scan failed'), findsOneWidget);
     expect(find.text('3/32 items · 1 page'), findsOneWidget);
-    await _match(tester, 'channel-setup-libraries-1280x720.png');
+    await _match(
+      tester,
+      'channel-setup-libraries-1280x720.png',
+      precacheLogo: true,
+      additionalPumps: 2,
+    );
   });
 
   testWidgets('Guide without playback', (tester) async {
@@ -714,6 +818,32 @@ class _VisualController extends FixtureController {
     libraryScanStatus = LibraryScanStatus.complete;
     return true;
   }
+}
+
+class _PendingVisualController extends _VisualController {
+  final _apply = Completer<void>();
+
+  @override
+  Future<void> applyChannelPlan(
+    List<Channel> planned, {
+    required ChannelBuildMode mode,
+  }) async {
+    await _apply.future;
+    await super.applyChannelPlan(planned, mode: mode);
+  }
+
+  void finishApply() => _apply.complete();
+}
+
+Future<void> _openChannelSetupApply(WidgetTester tester) async {
+  await tester.tap(find.text('Configure channels'));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('Build Channels'));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('This will replace your current lineup'));
+  await tester.pump();
+  await tester.tap(find.text('Confirm & Replace'));
+  await tester.pump();
 }
 
 final _channels = List.generate(

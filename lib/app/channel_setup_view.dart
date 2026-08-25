@@ -17,6 +17,16 @@ enum _SetupCategory {
   guideOrder,
 }
 
+enum _BuildPhase { review, applying, failed, complete }
+
+typedef _PlanImpact = ({
+  int create,
+  int update,
+  int unchanged,
+  int remove,
+  int finalCount,
+});
+
 class UpstreamChannelSetupView extends StatefulWidget {
   const UpstreamChannelSetupView({required this.controller, super.key});
 
@@ -46,11 +56,13 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
   PlaybackMode? _variantMode;
   int _variantBlockSize = 3;
   bool _replaceConfirmed = false;
-  bool _building = false;
+  _BuildPhase _buildPhase = _BuildPhase.review;
   bool _libraryFocusPlaced = false;
   bool _strategyFocusPlaced = false;
+  final _phaseActionFocus = FocusNode(debugLabel: 'Channel Setup phase action');
   String? _error;
   ({List<Channel> channels, bool truncated})? _planned;
+  _PlanImpact? _appliedImpact;
 
   @override
   void initState() {
@@ -63,6 +75,12 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _libraryFocusPlaced = true;
     });
+  }
+
+  @override
+  void dispose() {
+    _phaseActionFocus.dispose();
+    super.dispose();
   }
 
   List<PlexLibrary> get _libraries => widget.controller.libraries
@@ -106,7 +124,8 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   _header(),
-                  if (_error != null) _errorBanner(),
+                  if (_error != null && _buildPhase != _BuildPhase.failed)
+                    _errorBanner(),
                   const SizedBox(height: 16),
                   Expanded(child: _body()),
                 ],
@@ -232,105 +251,109 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
             title: 'No movie or show libraries found',
             message: 'Choose another Plex server with accessible movie or show libraries.',
           )
-        : CustomScrollView(
-            slivers: [
-              if (widget.controller.libraryScanStatus != LibraryScanStatus.idle)
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.only(bottom: 14),
-                    child: _scanStatus(),
-                  ),
-                ),
-              SliverGrid(
-                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                  maxCrossAxisExtent: 340,
-                  mainAxisExtent: 132,
-                  crossAxisSpacing: 14,
-                  mainAxisSpacing: 14,
-                ),
-                delegate: SliverChildBuilderDelegate((_, index) {
-                  final library = widget.controller.libraries[index];
-                  final selected = _selectedLibraries.contains(library.id);
-                  final scanFact =
-                      widget.controller.libraryScanFacts[library.id];
-                  return LineupSelectionCard(
-                    selected: selected,
-                    autofocus: index == 0 && !_libraryFocusPlaced,
-                    onPressed: () => setState(
-                      () => selected
-                          ? _selectedLibraries.remove(library.id)
-                          : _selectedLibraries.add(library.id),
-                    ),
+        : LayoutBuilder(
+            builder: (context, constraints) => CustomScrollView(
+              slivers: [
+                if (widget.controller.libraryScanStatus !=
+                    LibraryScanStatus.idle)
+                  SliverToBoxAdapter(
                     child: Padding(
-                      padding: const EdgeInsets.all(14),
-                      child: Row(
-                        children: [
-                          Icon(
-                            library.type == PlexLibraryType.show
-                                ? Icons.tv
-                                : Icons.movie_outlined,
-                            size: 38,
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  library.title,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                                Text(
-                                  library.type == PlexLibraryType.show
-                                      ? 'TV Shows'
-                                      : 'Movies',
-                                  style: TextStyle(
-                                    color: LineupTheme.of(context).mutedText,
-                                  ),
-                                ),
-                                Text(
-                                  _libraryScanStatusLabel(scanFact),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    color: LineupTheme.of(context).mutedText,
-                                  ),
-                                ),
-                                if (scanFact != null &&
-                                    scanFact.status != LibraryScanStatus.idle)
+                      padding: const EdgeInsets.only(bottom: 14),
+                      child: _scanStatus(),
+                    ),
+                  ),
+                SliverGrid(
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: constraints.maxWidth >= 680 ? 2 : 1,
+                    mainAxisExtent: 132,
+                    crossAxisSpacing: 14,
+                    mainAxisSpacing: 14,
+                  ),
+                  delegate: SliverChildBuilderDelegate((_, index) {
+                    final library = widget.controller.libraries[index];
+                    final selected = _selectedLibraries.contains(library.id);
+                    final scanFact =
+                        widget.controller.libraryScanFacts[library.id];
+                    return LineupSelectionCard(
+                      selected: selected,
+                      autofocus: index == 0 && !_libraryFocusPlaced,
+                      onPressed: () => setState(
+                        () => selected
+                            ? _selectedLibraries.remove(library.id)
+                            : _selectedLibraries.add(library.id),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(14),
+                        child: Row(
+                          children: [
+                            Icon(
+                              library.type == PlexLibraryType.show
+                                  ? Icons.tv
+                                  : Icons.movie_outlined,
+                              size: 38,
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
                                   Text(
-                                    _libraryScanProgressLabel(scanFact),
+                                    library.title,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  Text(
+                                    library.type == PlexLibraryType.show
+                                        ? 'TV Shows'
+                                        : 'Movies',
+                                    style: TextStyle(
+                                      color: LineupTheme.of(context).mutedText,
+                                    ),
+                                  ),
+                                  Text(
+                                    _libraryScanStatusLabel(scanFact),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     style: TextStyle(
                                       color: LineupTheme.of(context).mutedText,
-                                      fontSize: 13,
                                     ),
                                   ),
-                              ],
+                                  if (scanFact != null &&
+                                      scanFact.status != LibraryScanStatus.idle)
+                                    Text(
+                                      _libraryScanProgressLabel(scanFact),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        color: LineupTheme.of(context)
+                                            .mutedText,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                ],
+                              ),
                             ),
-                          ),
-                          Icon(
-                            selected
-                                ? Icons.check_circle
-                                : Icons.circle_outlined,
-                            color: selected
-                                ? LineupTheme.of(context).progressFill
-                                : LineupTheme.of(context).mutedText,
-                          ),
-                        ],
+                            Icon(
+                              selected
+                                  ? Icons.check_circle
+                                  : Icons.circle_outlined,
+                              color: selected
+                                  ? LineupTheme.of(context).progressFill
+                                  : LineupTheme.of(context).mutedText,
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                  );
-                }, childCount: widget.controller.libraries.length),
-              ),
-            ],
+                    );
+                  }, childCount: widget.controller.libraries.length),
+                ),
+              ],
+            ),
           ),
   );
 
@@ -490,25 +513,31 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
         final compact = LineupLayout.isCompactWidth(constraints.maxWidth);
         final rail = _categoryRail(compact);
         final details = _categoryDetails();
+        if (compact) {
+          return ListView(
+            children: [
+              rail,
+              const SizedBox(height: 12),
+              SizedBox(
+                height: constraints.maxHeight.clamp(280, 520),
+                child: details,
+              ),
+              const SizedBox(height: 12),
+              _previewStrip(),
+            ],
+          );
+        }
         return Column(
           children: [
             Expanded(
-              child: compact
-                  ? Column(
-                      children: [
-                        rail,
-                        const SizedBox(height: 12),
-                        Expanded(child: details),
-                      ],
-                    )
-                  : Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        SizedBox(width: 280, child: rail),
-                        const SizedBox(width: 18),
-                        Expanded(child: details),
-                      ],
-                    ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  SizedBox(width: 280, child: rail),
+                  const SizedBox(width: 18),
+                  Expanded(child: details),
+                ],
+              ),
             ),
             const SizedBox(height: 12),
             _previewStrip(),
@@ -862,38 +891,77 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
     final result = _planned;
     final planned = result?.channels ?? const <Channel>[];
     final impact = _planImpact(planned);
+    final phase = _buildPhase;
     return _SetupSurface(
-      title: _building ? 'Building your lineup' : 'Review expected changes',
-      subtitle: _building
-          ? 'Lineup is applying channels and preparing the Guide.'
-          : '${_modeLabel(_mode)} • ${_strategies.length} enabled source families',
-      footer: _building
-          ? const SizedBox.shrink()
-          : _SetupFooter(
-              secondary: [
-                OutlinedButton(
-                  onPressed: () => setState(() => _step = 2),
-                  child: const Text('Back'),
-                ),
-              ],
-              primary: FilledButton.icon(
-                onPressed:
-                    planned.isEmpty ||
-                        (_mode == ChannelBuildMode.replace &&
-                            !_replaceConfirmed)
-                    ? null
-                    : () => _build(planned),
-                icon: const Icon(Icons.auto_awesome),
-                label: Text(
-                  _mode == ChannelBuildMode.replace
-                      ? 'Confirm & Replace'
-                      : 'Confirm & Build',
-                ),
-              ),
+      title: switch (phase) {
+        _BuildPhase.review => 'Review expected changes',
+        _BuildPhase.applying => 'Applying your lineup',
+        _BuildPhase.failed => 'Lineup update failed',
+        _BuildPhase.complete => 'Your lineup is ready',
+      },
+      subtitle: switch (phase) {
+        _BuildPhase.review =>
+          '${_modeLabel(_mode)} • ${_strategies.length} enabled source families',
+        _BuildPhase.applying =>
+          'Lineup is committing the accepted plan as one atomic update.',
+        _BuildPhase.failed =>
+          'The previous lineup is unchanged. Return to Review to try again.',
+        _BuildPhase.complete => 'The accepted plan was saved. Continue when you are ready to open the Guide.',
+      },
+      footer: switch (phase) {
+        _BuildPhase.applying => const SizedBox.shrink(),
+        _BuildPhase.failed => _SetupFooter(
+          secondary: [
+            OutlinedButton(
+              focusNode: _phaseActionFocus,
+              onPressed: () {
+                setState(() {
+                  _buildPhase = _BuildPhase.review;
+                  _error = null;
+                });
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (mounted) _phaseActionFocus.requestFocus();
+                });
+              },
+              child: const Text('Back to Review'),
             ),
-      child: _building
-          ? const _BuildProgress()
-          : ListView(
+          ],
+          primary: const SizedBox.shrink(),
+        ),
+        _BuildPhase.complete => _SetupFooter(
+          secondary: const [],
+          primary: FilledButton.icon(
+            focusNode: _phaseActionFocus,
+            onPressed: widget.controller.completeChannelSetup,
+            icon: const Icon(Icons.arrow_forward),
+            label: const Text('Done'),
+          ),
+        ),
+        _BuildPhase.review => _SetupFooter(
+          secondary: [
+            OutlinedButton(
+              focusNode: _phaseActionFocus,
+              onPressed: () => setState(() => _step = 2),
+              child: const Text('Back'),
+            ),
+          ],
+          primary: FilledButton.icon(
+            onPressed:
+                planned.isEmpty ||
+                    (_mode == ChannelBuildMode.replace && !_replaceConfirmed)
+                ? null
+                : () => _build(planned, impact),
+            icon: const Icon(Icons.auto_awesome),
+            label: Text(
+              _mode == ChannelBuildMode.replace
+                  ? 'Confirm & Replace'
+                  : 'Confirm & Build',
+            ),
+          ),
+        ),
+      },
+      child: phase == _BuildPhase.review
+          ? ListView(
               children: [
                 if (result?.truncated ?? false) ...[
                   const LineupNotice(
@@ -901,6 +969,25 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
                   ),
                   const SizedBox(height: 14),
                 ],
+                Row(
+                  children: [
+                    Text(
+                      '${widget.controller.channels.length}',
+                      style: Theme.of(context).textTheme.headlineMedium
+                          ?.copyWith(fontWeight: FontWeight.w800),
+                    ),
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 10),
+                      child: Icon(Icons.arrow_forward),
+                    ),
+                    Text(
+                      '${impact.finalCount} channels',
+                      style: Theme.of(context).textTheme.headlineMedium
+                          ?.copyWith(fontWeight: FontWeight.w800),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
                 Wrap(
                   spacing: 14,
                   runSpacing: 14,
@@ -955,28 +1042,37 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
                     subtitle: Text(channel.playbackMode.name),
                   ),
               ],
+            )
+          : _BuildProgress(
+              phase: phase,
+              error: _error,
+              impact: _appliedImpact ?? impact,
             ),
     );
   }
 
-  void _prepareReview() => setState(() {
-    _planned = materializeChannelPlan(
-      proposals: _proposals,
-      existing: widget.controller.channels,
-      mode: _mode,
-      seriesMode: _seriesOrdering,
-      seriesBlockSize: _seriesBlockSize,
-      alternateCopies: _alternateLineups ? _alternateCopies : 0,
-      variantMode: _alternateLineups ? _variantMode : null,
-      variantBlockSize: _variantBlockSize,
-      maximumChannels: _maximumChannels,
-      anchor: DateTime.now().toUtc(),
-    );
-    _step = 3;
-  });
+  void _prepareReview() {
+    setState(() {
+      _planned = materializeChannelPlan(
+        proposals: _proposals,
+        existing: widget.controller.channels,
+        mode: _mode,
+        seriesMode: _seriesOrdering,
+        seriesBlockSize: _seriesBlockSize,
+        alternateCopies: _alternateLineups ? _alternateCopies : 0,
+        variantMode: _alternateLineups ? _variantMode : null,
+        variantBlockSize: _variantBlockSize,
+        maximumChannels: _maximumChannels,
+        anchor: DateTime.now().toUtc(),
+      );
+      _step = 3;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _phaseActionFocus.requestFocus();
+    });
+  }
 
-  ({int create, int update, int unchanged, int remove, int finalCount})
-  _planImpact(List<Channel> planned) {
+  _PlanImpact _planImpact(List<Channel> planned) {
     final existing = widget.controller.channels;
     return switch (_mode) {
       ChannelBuildMode.replace => (
@@ -1033,21 +1129,32 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
     };
   }
 
-  Future<void> _build(List<Channel> planned) async {
+  Future<void> _build(List<Channel> planned, _PlanImpact impact) async {
+    FocusManager.instance.primaryFocus?.unfocus();
     setState(() {
-      _building = true;
+      _buildPhase = _BuildPhase.applying;
+      _appliedImpact = impact;
       _error = null;
     });
     try {
       await widget.controller.applyChannelPlan(planned, mode: _mode);
+      if (mounted) {
+        setState(() => _buildPhase = _BuildPhase.complete);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _phaseActionFocus.requestFocus();
+        });
+      }
     } catch (error) {
       if (mounted) {
         setState(() {
-          _building = false;
+          _buildPhase = _BuildPhase.failed;
           _error = safeFormError(
             error,
             'The channel plan could not be applied.',
           );
+        });
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _phaseActionFocus.requestFocus();
         });
       }
     }
@@ -1245,30 +1352,104 @@ class _ImpactCard extends StatelessWidget {
 }
 
 class _BuildProgress extends StatelessWidget {
-  const _BuildProgress();
+  const _BuildProgress({
+    required this.phase,
+    required this.error,
+    required this.impact,
+  });
+
+  final _BuildPhase phase;
+  final String? error;
+  final _PlanImpact impact;
+
   @override
   Widget build(BuildContext context) => Semantics(
     liveRegion: true,
-    child: Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 620),
-        child: const Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            LinearProgressIndicator(),
-            SizedBox(height: 24),
-            Text(
-              'Applying channels…',
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
+    label: switch (phase) {
+      _BuildPhase.applying => 'Applying channels',
+      _BuildPhase.failed => 'Channel update failed',
+      _BuildPhase.complete => 'Channel update complete',
+      _BuildPhase.review => null,
+    },
+    child: ListView(
+      children: [
+        Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 620),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                LinearProgressIndicator(
+                  value: switch (phase) {
+                    _BuildPhase.applying => null,
+                    _BuildPhase.failed => 0,
+                    _BuildPhase.complete => 1,
+                    _BuildPhase.review => 0,
+                  },
+                ),
+                const SizedBox(height: 24),
+                Text(
+                  switch (phase) {
+                    _BuildPhase.applying => 'Applying channels…',
+                    _BuildPhase.failed => 'No changes were saved',
+                    _BuildPhase.complete => 'Channel setup complete',
+                    _BuildPhase.review => '',
+                  },
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(switch (phase) {
+                  _BuildPhase.applying => 'The lineup is being committed atomically. This step cannot be cancelled.',
+                  _BuildPhase.failed =>
+                    error ?? 'The channel plan could not be applied.',
+                  _BuildPhase.complete =>
+                    'The atomic lineup update completed successfully.',
+                  _BuildPhase.review => '',
+                }, textAlign: TextAlign.center),
+              ],
             ),
-            SizedBox(height: 8),
-            Text(
-              'The lineup is committed atomically. The Guide will open when it is ready.',
-              textAlign: TextAlign.center,
-            ),
-          ],
+          ),
         ),
-      ),
+        if (phase == _BuildPhase.complete) ...[
+          const SizedBox(height: 28),
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 14,
+            runSpacing: 14,
+            children: [
+              _ImpactCard(
+                label: 'Create',
+                value: impact.create,
+                icon: Icons.add_circle_outline,
+              ),
+              _ImpactCard(
+                label: 'Update',
+                value: impact.update,
+                icon: Icons.edit_outlined,
+              ),
+              _ImpactCard(
+                label: 'Unchanged',
+                value: impact.unchanged,
+                icon: Icons.check_circle_outline,
+              ),
+              _ImpactCard(
+                label: 'Remove',
+                value: impact.remove,
+                icon: Icons.remove_circle_outline,
+              ),
+              _ImpactCard(
+                label: 'Final',
+                value: impact.finalCount,
+                icon: Icons.live_tv_outlined,
+              ),
+            ],
+          ),
+        ],
+      ],
     ),
   );
 }

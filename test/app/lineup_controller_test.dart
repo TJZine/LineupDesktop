@@ -613,6 +613,7 @@ void main() {
       addTearDown(controller.dispose);
 
       await controller.initialize();
+      controller.stage = SetupStage.channelSetup;
       final planned = List<Channel>.unmodifiable([_channel('planned')]);
 
       await controller.applyChannelPlan(
@@ -621,6 +622,10 @@ void main() {
       );
 
       expect(controller.channels.single.id, 'planned');
+      expect(controller.stage, SetupStage.channelSetup);
+
+      controller.completeChannelSetup();
+
       expect(controller.stage, SetupStage.ready);
     },
   );

@@ -59,6 +59,45 @@ void main() {
     expect(controller.stage, SetupStage.servers);
   });
 
+  testWidgets('successful Channel Setup opens the Guide only after Done', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 720));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final controller = _ChannelSetupController()
+      ..stage = SetupStage.channelSetup
+      ..libraries = const [
+        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
+      ];
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      LineupBootstrap(player: _FakePlayer(), controller: controller),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Configure channels'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Build Channels'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('This will replace your current lineup'));
+    await tester.pump();
+    await tester.tap(find.text('Confirm & Replace'));
+    await tester.pumpAndSettle();
+
+    expect(controller.stage, SetupStage.channelSetup);
+    expect(find.text('Your lineup is ready'), findsOneWidget);
+    expect(find.bySemanticsLabel('Channel update complete'), findsOneWidget);
+    expect(find.bySemanticsLabel('Remove: 0'), findsOneWidget);
+    expect(find.bySemanticsLabel('Final: 2'), findsOneWidget);
+    expect(find.text('Done'), findsOneWidget);
+
+    await tester.tap(find.text('Done'));
+    await tester.pumpAndSettle();
+
+    expect(controller.stage, SetupStage.ready);
+    expect(find.byTooltip('Open Lineup menu'), findsOneWidget);
+  });
+
   testWidgets('startup announcement is a labeled live region', (tester) async {
     final controller = _LoadingController();
 
@@ -1101,6 +1140,27 @@ class _FakeController extends LineupController {
     mode: channel.playbackMode,
     seed: channel.shuffleSeed,
   );
+}
+
+class _ChannelSetupController extends _FakeController {
+  @override
+  Future<bool> setLibraries(Set<String> ids) async {
+    selectedLibraryIds = Set.unmodifiable(ids);
+    availableMedia = [
+      for (var index = 0; index < 12; index++)
+        PlexMediaItem(
+          id: 'movie-$index',
+          title: 'Movie $index',
+          type: 'movie',
+          duration: const Duration(minutes: 90),
+          libraryId: 'movies',
+          parts: [PlexMediaPart(path: '/parts/movie-$index')],
+          genres: const ['Drama'],
+        ),
+    ];
+    libraryScanStatus = LibraryScanStatus.complete;
+    return true;
+  }
 }
 
 class _RetryPinController extends _FakeController {

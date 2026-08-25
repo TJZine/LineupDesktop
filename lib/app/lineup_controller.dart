@@ -1044,7 +1044,6 @@ class LineupController extends ChangeNotifier {
       try {
         await _save();
         if (_disposed) return;
-        stage = SetupStage.ready;
         notifyListeners();
       } catch (_) {
         channels = oldChannels;
@@ -1052,6 +1051,14 @@ class LineupController extends ChangeNotifier {
         rethrow;
       }
     });
+  }
+
+  void completeChannelSetup() {
+    if (stage != SetupStage.channelSetup) return;
+    channelSetupCanCancel = false;
+    error = null;
+    stage = SetupStage.ready;
+    notifyListeners();
   }
 
   Future<void> saveChannel(Channel channel) async {
