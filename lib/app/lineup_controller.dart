@@ -623,8 +623,8 @@ class LineupController extends ChangeNotifier {
         if (selectedLibraryIds.isNotEmpty && channels.isNotEmpty) {
           final loaded = await _loadLibraries(operation, selectedLibraryIds);
           if (operation != _epoch) return;
-          _requireAvailablePlaylists(loaded.failedPlaylistIds);
           libraryScanStatus = loaded.status;
+          _requireAvailablePlaylists(loaded.failedPlaylistIds);
           availableMedia = loaded.media;
           availablePlaylists = loaded.playlists;
           stage = libraryScanStatus == LibraryScanStatus.complete

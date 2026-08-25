@@ -1407,6 +1407,78 @@ void main() {
   });
 
   test(
+    'restored playlist failure preserves the completed scan state',
+    () async {
+      final selected = _server('server');
+      final plex = _FakePlex()
+        ..serversResult = [selected]
+        ..connectionResult = selected.connections.single
+        ..librariesResult = const [
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+        ]
+        ..libraryItemsHandler = (_, _, _, _) async {
+          return [
+            PlexMediaItem(
+              id: 'movie',
+              title: 'Movie',
+              type: 'movie',
+              duration: const Duration(minutes: 1),
+              libraryId: 'movies',
+              parts: [PlexMediaPart(path: '/parts/movie')],
+            ),
+          ];
+        }
+        ..playlistsHandler = (_, _) async => const PlexPlaylistCatalog(
+          playlists: [],
+          failedIds: {'missing-playlist'},
+        );
+      final controller = LineupController(
+        store: _MemoryStore(
+          PersistedState(
+            selectedServerByProfile: const {'owner': 'server'},
+            selectedLibraryIdsByProfileServer: const {
+              'owner': {
+                'server': ['movies'],
+              },
+            },
+            channelsByProfileServer: {
+              'owner': {
+                'server': [
+                  Channel(
+                    id: 'saved',
+                    number: 1,
+                    name: 'Saved channel',
+                    source: const PlaylistSource('missing-playlist'),
+                    playbackMode: PlaybackMode.sequential,
+                    anchor: DateTime.utc(2026),
+                    shuffleSeed: 1,
+                  ),
+                ],
+              },
+            },
+          ),
+        ),
+        credentials: _MemoryCredentials(accountToken: 'token'),
+        plex: plex,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+
+      expect(controller.libraryScanStatus, LibraryScanStatus.complete);
+      expect(controller.busy, isFalse);
+      expect(
+        controller.error,
+        'A playlist used by this lineup could not be loaded. Retry setup.',
+      );
+    },
+  );
+
+  test(
     'playlist diagnostics retain Plex code and bounded failure count',
     () async {
       final selected = _server('server');
