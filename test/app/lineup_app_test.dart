@@ -791,16 +791,80 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Child'));
     await tester.pumpAndSettle();
-    expect(find.bySemanticsLabel('0 of 4 digits entered'), findsOneWidget);
-    await tester.tap(find.widgetWithText(FilledButton, '1'));
+    expect(find.byKey(const Key('profile-pin-progress')), findsOneWidget);
+    await tester.tap(find.bySemanticsLabel('1'));
     await tester.pump();
-    expect(find.bySemanticsLabel('1 of 4 digits entered'), findsOneWidget);
+    expect(
+      tester
+          .widget<Semantics>(find.byKey(const Key('profile-pin-progress')))
+          .properties
+          .label,
+      '1 of 4 digits entered',
+    );
     for (final digit in ['2', '3', '4']) {
-      await tester.tap(find.widgetWithText(FilledButton, digit));
+      await tester.tap(find.bySemanticsLabel(digit));
       await tester.pump();
     }
     expect(controller.selectedProfile, child);
     expect(controller.selectedPin, '1234');
+  });
+
+  testWidgets('rejected profile PIN stays open and accepts a later retry', (
+    tester,
+  ) async {
+    const child = PlexHomeUser(id: 'child', name: 'Child', protected: true);
+    final controller = _RetryPinController()
+      ..stage = SetupStage.profiles
+      ..profiles = const [child];
+    await tester.pumpWidget(
+      LineupBootstrap(player: _FakePlayer(), controller: controller),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Child'));
+    await tester.pumpAndSettle();
+
+    for (final digit in ['1', '2', '3', '4']) {
+      await tester.tap(find.bySemanticsLabel(digit));
+      await tester.pump();
+    }
+    expect(controller.attempts, 1);
+    expect(find.byKey(const Key('profile-pin-sheet')), findsOneWidget);
+    expect(find.bySemanticsLabel('Checking PIN'), findsOneWidget);
+
+    await tester.tap(find.bySemanticsLabel('1'));
+    expect(controller.attempts, 1);
+
+    controller.rejectFirstAttempt();
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('profile-pin-sheet')), findsOneWidget);
+    expect(
+      tester
+          .widget<Semantics>(find.byKey(const Key('profile-pin-progress')))
+          .properties
+          .label,
+      '0 of 4 digits entered',
+    );
+    final errorSemantics = tester.widget<Semantics>(
+      find.byKey(const Key('profile-pin-error')),
+    );
+    expect(errorSemantics.properties.liveRegion, isTrue);
+    expect(
+      errorSemantics.properties.label,
+      'That PIN was not accepted. Try again.',
+    );
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'Profile PIN digit 1',
+    );
+
+    for (final digit in ['4', '3', '2', '1']) {
+      await tester.tap(find.bySemanticsLabel(digit));
+      await tester.pump();
+    }
+    await tester.pumpAndSettle();
+    expect(controller.attempts, 2);
+    expect(controller.pins, ['1234', '4321']);
+    expect(find.byKey(const Key('profile-pin-sheet')), findsNothing);
   });
 
   testWidgets('presents initialization failures without entering the shell', (
@@ -1019,9 +1083,10 @@ class _FakeController extends LineupController {
   }
 
   @override
-  Future<void> selectProfile(PlexHomeUser selected, {String? pin}) async {
+  Future<bool> selectProfile(PlexHomeUser selected, {String? pin}) async {
     selectedProfile = selected;
     selectedPin = pin;
+    return true;
   }
 
   @override
@@ -1036,6 +1101,32 @@ class _FakeController extends LineupController {
     mode: channel.playbackMode,
     seed: channel.shuffleSeed,
   );
+}
+
+class _RetryPinController extends _FakeController {
+  final _firstAttempt = Completer<void>();
+  final List<String> pins = [];
+  int attempts = 0;
+
+  void rejectFirstAttempt() => _firstAttempt.complete();
+
+  @override
+  Future<bool> selectProfile(PlexHomeUser selected, {String? pin}) async {
+    attempts++;
+    pins.add(pin!);
+    if (attempts == 1) {
+      busy = true;
+      notifyListeners();
+      await _firstAttempt.future;
+      busy = false;
+      error = 'That PIN was not accepted. Try again.';
+      notifyListeners();
+      return false;
+    }
+    selectedProfile = selected;
+    selectedPin = pin;
+    return true;
+  }
 }
 
 class _LoadingController extends _FakeController {

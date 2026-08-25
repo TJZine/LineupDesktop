@@ -48,10 +48,58 @@ void main() {
           protected: true,
           restricted: true,
         ),
+        PlexHomeUser(id: 'guest', name: 'Guest', protected: false),
+        PlexHomeUser(
+          id: 'movies',
+          name: 'Movie Night',
+          protected: false,
+          restricted: true,
+        ),
+        PlexHomeUser(
+          id: 'kids',
+          name: 'Kids',
+          protected: false,
+          restricted: true,
+        ),
+        PlexHomeUser(id: 'sports', name: 'Sports', protected: false),
+        PlexHomeUser(id: 'parents', name: 'Parents', protected: true),
+        PlexHomeUser(id: 'weekend', name: 'Weekend', protected: false),
+        PlexHomeUser(
+          id: 'visitor',
+          name: 'Visitor',
+          protected: false,
+          restricted: true,
+        ),
       ];
 
     await _pump(tester, fixture.build());
-    await _match(tester, 'profiles-1280x720.png');
+    await _match(
+      tester,
+      'profiles-1280x720.png',
+      precacheLogo: true,
+      additionalPumps: 1,
+    );
+  });
+
+  testWidgets('protected profile PIN', (tester) async {
+    const profile = PlexHomeUser(
+      id: 'protected',
+      name: 'Taylor',
+      protected: true,
+    );
+    final fixture = UiFixture()
+      ..controller.stage = SetupStage.profiles
+      ..controller.profiles = const [profile];
+
+    await _pump(tester, fixture.build());
+    await tester.tap(find.text('Taylor'));
+    await tester.pumpAndSettle();
+    await _match(
+      tester,
+      'profile-pin-1280x720.png',
+      precacheLogo: true,
+      additionalPumps: 1,
+    );
   });
 
   testWidgets('terminal Plex linking failure', (tester) async {
@@ -113,7 +161,24 @@ void main() {
       ];
 
     await _pump(tester, fixture.build());
-    await _match(tester, 'server-selection-1280x720.png');
+    await _match(
+      tester,
+      'server-selection-1280x720.png',
+      precacheLogo: true,
+      additionalPumps: 1,
+    );
+  });
+
+  testWidgets('Audio Setup', (tester) async {
+    final fixture = UiFixture()..controller.stage = SetupStage.audio;
+
+    await _pump(tester, fixture.build());
+    await _match(
+      tester,
+      'audio-setup-1280x720.png',
+      precacheLogo: true,
+      additionalPumps: 1,
+    );
   });
 
   testWidgets('Channel Setup strategies', (tester) async {

@@ -293,12 +293,13 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
   Widget _profiles() => _HeroContent(
     title: "Who's watching?",
     subtitle: 'Choose a Plex Home profile to continue.',
+    compact: true,
     child: Column(
       children: [
         Wrap(
           alignment: WrapAlignment.center,
-          spacing: 24,
-          runSpacing: 24,
+          spacing: 16,
+          runSpacing: 16,
           children: [
             for (final user in widget.controller.profiles)
               _ProfileCard(
@@ -400,11 +401,23 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
     subtitle: 'Lineup uses the system-selected audio output on Desktop.',
     child: Column(
       children: [
-        const Icon(Icons.volume_up_outlined, size: 64),
-        const SizedBox(height: 14),
-        const Text(
-          'Output devices, passthrough, and native capability controls remain hidden until the Windows player can report and consume them accurately.',
-          textAlign: TextAlign.center,
+        Container(
+          width: 112,
+          height: 112,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: LineupTheme.of(context).elevatedSurface,
+            border: Border.all(color: LineupTheme.of(context).defaultBorder),
+          ),
+          child: const Icon(Icons.volume_up_outlined, size: 54),
+        ),
+        const SizedBox(height: 20),
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 640),
+          child: const Text(
+            'Output devices, passthrough, and native capability controls remain hidden until the Windows player can report and consume them accurately.',
+            textAlign: TextAlign.center,
+          ),
         ),
         const SizedBox(height: 28),
         FilledButton(
@@ -419,13 +432,19 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
   );
 
   Future<void> _selectProfile(PlexHomeUser user) async {
-    if (!user.protected) return widget.controller.selectProfile(user);
-    final pin = await showDialog<String>(
+    if (!user.protected) {
+      await widget.controller.selectProfile(user);
+      return;
+    }
+    await showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (_) => _ProfilePinDialog(user: user),
+      builder: (_) => _ProfilePinDialog(
+        user: user,
+        onSubmit: (pin) => widget.controller.selectProfile(user, pin: pin),
+        error: () => widget.controller.error,
+      ),
     );
-    if (pin != null) await widget.controller.selectProfile(user, pin: pin);
   }
 }
 
@@ -475,10 +494,12 @@ class _HeroContent extends StatelessWidget {
     required this.subtitle,
     required this.child,
     this.step,
+    this.compact = false,
   });
   final String title;
   final String subtitle;
   final String? step;
+  final bool compact;
   final Widget child;
 
   @override
@@ -507,7 +528,7 @@ class _HeroContent extends StatelessWidget {
         style: Theme.of(context).textTheme.titleMedium
             ?.copyWith(color: LineupTheme.of(context).secondaryText),
       ),
-      const SizedBox(height: 30),
+      SizedBox(height: compact ? 16 : 30),
       child,
     ],
   );
@@ -545,21 +566,28 @@ class _ProfileCard extends StatelessWidget {
   final bool active;
   final bool autofocus;
   final VoidCallback? onPressed;
+  int get _badgeCount => [
+    user.protected,
+    user.admin,
+    user.restricted == true,
+    active,
+  ].where((visible) => visible).length;
+
   @override
   Widget build(BuildContext context) => SizedBox(
-    width: 210,
-    height: 280,
+    width: 168,
+    height: _badgeCount > 2 ? 212 : 190,
     child: LineupSelectionCard(
       selected: false,
       autofocus: autofocus,
       onPressed: onPressed,
       child: Padding(
-        padding: const EdgeInsets.all(18),
+        padding: const EdgeInsets.all(8),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             CircleAvatar(
-              radius: 48,
+              radius: 34,
               backgroundImage: user.thumb?.isAbsolute == true
                   ? NetworkImage(user.thumb.toString())
                   : null,
@@ -567,22 +595,22 @@ class _ProfileCard extends StatelessWidget {
                   ? null
                   : Text(
                       user.name.characters.first.toUpperCase(),
-                      style: const TextStyle(fontSize: 34),
+                      style: const TextStyle(fontSize: 26),
                     ),
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 8),
             Text(
               user.name,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
             ),
             if (user.protected ||
                 user.admin ||
                 user.restricted == true ||
                 active)
               Padding(
-                padding: const EdgeInsets.only(top: 8),
+                padding: const EdgeInsets.only(top: 6),
                 child: Wrap(
                   alignment: WrapAlignment.center,
                   spacing: 4,
@@ -611,11 +639,14 @@ class _ProfileBadge extends StatelessWidget {
   Widget build(BuildContext context) => Semantics(
     label: label,
     child: ExcludeSemantics(
-      child: Chip(
-        visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
-        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        labelPadding: const EdgeInsets.symmetric(horizontal: 4),
-        label: Text(label, style: const TextStyle(fontSize: 11)),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: LineupTheme.of(context).elevatedSurface,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: LineupTheme.of(context).defaultBorder),
+        ),
+        child: Text(label, style: const TextStyle(fontSize: 11)),
       ),
     ),
   );
@@ -641,15 +672,15 @@ class _ServerCard extends StatelessWidget {
     final action = connection == null ? 'Connect' : 'Reconnect';
     return Card(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 16),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 13),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Padding(
               padding: EdgeInsets.only(top: 2),
-              child: Icon(Icons.dns_outlined, size: 34),
+              child: Icon(Icons.dns_outlined, size: 30),
             ),
-            const SizedBox(width: 16),
+            const SizedBox(width: 14),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -659,7 +690,7 @@ class _ServerCard extends StatelessWidget {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                      fontSize: 19,
+                      fontSize: 18,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -712,26 +743,60 @@ class _ServerCard extends StatelessWidget {
 }
 
 class _ProfilePinDialog extends StatefulWidget {
-  const _ProfilePinDialog({required this.user});
+  const _ProfilePinDialog({
+    required this.user,
+    required this.onSubmit,
+    required this.error,
+  });
   final PlexHomeUser user;
+  final Future<bool> Function(String pin) onSubmit;
+  final String? Function() error;
   @override
   State<_ProfilePinDialog> createState() => _ProfilePinDialogState();
 }
 
 class _ProfilePinDialogState extends State<_ProfilePinDialog> {
   String _pin = '';
+  String? _error;
+  bool _submitting = false;
   final _keyboardFocus = FocusNode(debugLabel: 'Profile PIN keyboard owner');
+  final _firstDigitFocus = FocusNode(debugLabel: 'Profile PIN digit 1');
 
   @override
   void dispose() {
     _keyboardFocus.dispose();
+    _firstDigitFocus.dispose();
     super.dispose();
   }
 
   void _digit(int digit) {
-    if (_pin.length >= 4) return;
-    setState(() => _pin += '$digit');
-    if (_pin.length == 4) Navigator.pop(context, _pin);
+    if (_submitting || _pin.length >= 4) return;
+    setState(() {
+      _error = null;
+      _pin += '$digit';
+    });
+    if (_pin.length == 4) _submit();
+  }
+
+  Future<void> _submit() async {
+    if (_submitting || _pin.length != 4) return;
+    setState(() => _submitting = true);
+    final accepted = await widget.onSubmit(_pin);
+    if (!mounted) return;
+    if (accepted) {
+      Navigator.pop(context);
+      return;
+    }
+    setState(() {
+      _pin = '';
+      _submitting = false;
+      _error = widget.error();
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _firstDigitFocus.canRequestFocus) {
+        _firstDigitFocus.requestFocus();
+      }
+    });
   }
 
   KeyEventResult _key(FocusNode node, KeyEvent event) {
@@ -762,71 +827,243 @@ class _ProfilePinDialogState extends State<_ProfilePinDialog> {
       _digit(digit);
       return KeyEventResult.handled;
     }
-    if (event.logicalKey == LogicalKeyboardKey.backspace && _pin.isNotEmpty) {
-      setState(() => _pin = _pin.substring(0, _pin.length - 1));
+    if (!_submitting &&
+        event.logicalKey == LogicalKeyboardKey.backspace &&
+        _pin.isNotEmpty) {
+      setState(() {
+        _error = null;
+        _pin = _pin.substring(0, _pin.length - 1);
+      });
       return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
   }
 
   @override
-  Widget build(BuildContext context) => Focus(
-    key: const Key('profile-pin-keyboard-owner'),
-    focusNode: _keyboardFocus,
-    autofocus: true,
-    onKeyEvent: _key,
-    child: AlertDialog(
-      title: Text('Enter PIN for ${widget.user.name}'),
-      content: SizedBox(
-        width: 360,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Semantics(
-              liveRegion: true,
-              label: '${_pin.length} of 4 digits entered',
-              child: ExcludeSemantics(
-                child: Text(
-                  '${List.filled(_pin.length, '●').join()}${List.filled(4 - _pin.length, '○').join()}',
-                  style: const TextStyle(fontSize: 30, letterSpacing: 12),
-                ),
-              ),
-            ),
-            const SizedBox(height: 18),
-            GridView.count(
-              shrinkWrap: true,
-              crossAxisCount: 3,
-              childAspectRatio: 1.8,
-              mainAxisSpacing: 10,
-              crossAxisSpacing: 10,
+  Widget build(BuildContext context) => PopScope(
+    canPop: !_submitting,
+    child: Focus(
+      key: const Key('profile-pin-keyboard-owner'),
+      focusNode: _keyboardFocus,
+      autofocus: true,
+      onKeyEvent: _key,
+      child: Dialog(
+        key: const Key('profile-pin-sheet'),
+        alignment: Alignment.bottomCenter,
+        insetPadding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+        shape: RoundedRectangleBorder(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          side: BorderSide(color: LineupTheme.of(context).defaultBorder),
+        ),
+        child: ConstrainedBox(
+          key: const Key('profile-pin-surface'),
+          constraints: const BoxConstraints(maxWidth: 520),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(28, 22, 28, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                for (var digit = 1; digit <= 9; digit++)
-                  FilledButton(
-                    onPressed: () => _digit(digit),
-                    child: Text('$digit'),
-                  ),
-                IconButton(
-                  tooltip: 'Backspace',
-                  onPressed: _pin.isEmpty
+                CircleAvatar(
+                  radius: 28,
+                  backgroundImage: widget.user.thumb?.isAbsolute == true
+                      ? NetworkImage(widget.user.thumb.toString())
+                      : null,
+                  child: widget.user.thumb?.isAbsolute == true
                       ? null
-                      : () => setState(
-                          () => _pin = _pin.substring(0, _pin.length - 1),
+                      : Text(
+                          widget.user.name.characters.first.toUpperCase(),
+                          style: const TextStyle(fontSize: 22),
                         ),
-                  icon: const Icon(Icons.backspace_outlined),
                 ),
-                FilledButton(
-                  onPressed: () => _digit(0),
-                  child: const Text('0'),
+                const SizedBox(height: 8),
+                Text(
+                  'Enter PIN for ${widget.user.name}',
+                  style: Theme.of(context).textTheme.titleLarge
+                      ?.copyWith(fontWeight: FontWeight.w700),
                 ),
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Cancel'),
+                const SizedBox(height: 14),
+                Semantics(
+                  key: const Key('profile-pin-progress'),
+                  container: true,
+                  explicitChildNodes: true,
+                  liveRegion: true,
+                  label: '${_pin.length} of 4 digits entered',
+                  child: ExcludeSemantics(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        for (var index = 0; index < 4; index++)
+                          Container(
+                            width: 18,
+                            height: 18,
+                            margin: const EdgeInsets.symmetric(horizontal: 7),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: index < _pin.length
+                                  ? LineupTheme.of(context).progressFill
+                                  : Colors.transparent,
+                              border: Border.all(
+                                color: LineupTheme.of(context).focusBorder,
+                                width: 2,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                SizedBox(
+                  width: 254,
+                  child: GridView.count(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    crossAxisCount: 3,
+                    childAspectRatio: 1,
+                    mainAxisSpacing: 10,
+                    crossAxisSpacing: 10,
+                    children: [
+                      for (var digit = 1; digit <= 9; digit++)
+                        _PinKey(
+                          digit: digit,
+                          focusNode: digit == 1 ? _firstDigitFocus : null,
+                          autofocus: digit == 1,
+                          onPressed: _submitting ? null : () => _digit(digit),
+                        ),
+                      _PinControlKey(
+                        tooltip: 'Backspace',
+                        onPressed: _submitting || _pin.isEmpty
+                            ? null
+                            : () => setState(() {
+                                _error = null;
+                                _pin = _pin.substring(0, _pin.length - 1);
+                              }),
+                        child: const Icon(Icons.backspace_outlined),
+                      ),
+                      _PinKey(
+                        digit: 0,
+                        onPressed: _submitting ? null : () => _digit(0),
+                      ),
+                      _PinControlKey(
+                        tooltip: 'Cancel',
+                        onPressed: _submitting
+                            ? null
+                            : () => Navigator.pop(context),
+                        child: const Icon(Icons.close),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  height: 22,
+                  child: _submitting
+                      ? Semantics(
+                          label: 'Checking PIN',
+                          child: const SizedBox.square(
+                            dimension: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        )
+                      : _error == null
+                      ? null
+                      : Semantics(
+                          key: const Key('profile-pin-error'),
+                          container: true,
+                          liveRegion: true,
+                          label: _error,
+                          child: ExcludeSemantics(
+                            child: Text(
+                              _error!,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.error,
+                              ),
+                            ),
+                          ),
+                        ),
                 ),
               ],
             ),
-          ],
+          ),
         ),
       ),
+    ),
+  );
+}
+
+class _PinKey extends StatelessWidget {
+  const _PinKey({
+    required this.digit,
+    required this.onPressed,
+    this.focusNode,
+    this.autofocus = false,
+  });
+
+  final int digit;
+  final VoidCallback? onPressed;
+  final FocusNode? focusNode;
+  final bool autofocus;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    label: '$digit',
+    button: true,
+    child: Stack(
+      fit: StackFit.expand,
+      children: [
+        FilledButton(
+          focusNode: focusNode,
+          autofocus: autofocus,
+          onPressed: onPressed,
+          style: FilledButton.styleFrom(
+            shape: const CircleBorder(),
+            padding: EdgeInsets.zero,
+          ),
+          child: const SizedBox.shrink(),
+        ),
+        Center(
+          child: ExcludeSemantics(
+            child: IgnorePointer(
+              child: Text(
+                '$digit',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onPrimary,
+                  fontSize: 24,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _PinControlKey extends StatelessWidget {
+  const _PinControlKey({
+    required this.tooltip,
+    required this.onPressed,
+    required this.child,
+  });
+
+  final String tooltip;
+  final VoidCallback? onPressed;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Tooltip(
+    message: tooltip,
+    child: FilledButton.tonal(
+      onPressed: onPressed,
+      style: FilledButton.styleFrom(
+        shape: const CircleBorder(),
+        padding: EdgeInsets.zero,
+        textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+      ),
+      child: child,
     ),
   );
 }

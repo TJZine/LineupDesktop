@@ -408,12 +408,12 @@ class LineupController extends ChangeNotifier {
     _ => 'Lineup could not complete Plex sign-in. Request a new code and try again.',
   };
 
-  Future<void> selectProfile(PlexHomeUser selected, {String? pin}) async {
+  Future<bool> selectProfile(PlexHomeUser selected, {String? pin}) {
     final operation = ++_epoch;
     _invalidatePmsRefresh();
     _serverTargetId = null;
     _pinTimer?.cancel();
-    await _run(
+    return _run(
       () async {
         final accountToken = _accountToken;
         if (accountToken == null) {

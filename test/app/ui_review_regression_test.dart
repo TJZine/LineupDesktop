@@ -760,7 +760,8 @@ class _SettingsFixtureController extends FixtureController {
 
 class _ProfileFixtureController extends FixtureController {
   @override
-  Future<void> selectProfile(PlexHomeUser selected, {String? pin}) async {}
+  Future<bool> selectProfile(PlexHomeUser selected, {String? pin}) async =>
+      true;
 }
 
 class _FailingChannelSetupController extends FixtureController {

@@ -336,6 +336,45 @@ void main() {
     expect(controller.pin, '1345');
   });
 
+  testWidgets('PIN and Audio Setup scale from 800x600 through 4K', (
+    tester,
+  ) async {
+    const profile = PlexHomeUser(id: 'child', name: 'Child', protected: true);
+    final controller = _ProfileFixtureController()
+      ..stage = SetupStage.profiles
+      ..profiles = const [profile];
+    final fixture = UiFixture(controller: controller);
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    for (final size in [
+      const Size(800, 600),
+      const Size(1920, 1080),
+      const Size(3840, 2160),
+    ]) {
+      await tester.binding.setSurfaceSize(size);
+      await tester.pumpWidget(fixture.build());
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Child'));
+      await tester.pumpAndSettle();
+
+      final sheet = tester.getRect(
+        find.byKey(const Key('profile-pin-surface')),
+      );
+      expect(sheet.width, lessThanOrEqualTo(520));
+      expect(sheet.bottom, size.height);
+      expect(tester.takeException(), isNull, reason: 'PIN viewport $size');
+      await tester.tap(find.byTooltip('Cancel'));
+      await tester.pumpAndSettle();
+
+      controller.stage = SetupStage.audio;
+      await tester.pumpWidget(fixture.build());
+      await tester.pumpAndSettle();
+      expect(find.text('Continue'), findsOneWidget);
+      expect(tester.takeException(), isNull, reason: 'Audio viewport $size');
+      controller.stage = SetupStage.profiles;
+    }
+  });
+
   testWidgets('profile badges remain reachable from 800x600 through 4K', (
     tester,
   ) async {
@@ -356,22 +395,34 @@ void main() {
           admin: true,
           restricted: true,
         ),
+        PlexHomeUser(id: 'guest', name: 'Guest', protected: false),
+        PlexHomeUser(id: 'family', name: 'Family', protected: true),
+        PlexHomeUser(id: 'kids', name: 'Kids', protected: false),
+        PlexHomeUser(id: 'movies', name: 'Movie Night', protected: false),
+        PlexHomeUser(id: 'sports', name: 'Sports', protected: false),
+        PlexHomeUser(id: 'weekend', name: 'Weekend', protected: false),
+        PlexHomeUser(id: 'visitor', name: 'Visitor', protected: false),
+        PlexHomeUser(id: 'parents', name: 'Parents', protected: true),
       ];
     final fixture = UiFixture(controller: controller);
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    for (final size in [const Size(800, 600), const Size(3840, 2160)]) {
+    for (final size in [
+      const Size(800, 600),
+      const Size(1920, 1080),
+      const Size(3840, 2160),
+    ]) {
       await tester.binding.setSurfaceSize(size);
       await tester.pumpWidget(fixture.build());
       await tester.pumpAndSettle();
       expect(find.text('Active'), findsOneWidget);
-      expect(tester.takeException(), isNull);
+      expect(find.text('Parents'), findsOneWidget);
+      expect(tester.takeException(), isNull, reason: 'viewport $size');
     }
   });
 
-  testWidgets('server hierarchy stays reachable and semantic when compact', (
+  testWidgets('server hierarchy stays reachable across desktop sizes', (
     tester,
   ) async {
-    await tester.binding.setSurfaceSize(const Size(800, 600));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     final server = PlexServer(
       id: 'server',
@@ -412,8 +463,17 @@ void main() {
         latency: const Duration(milliseconds: 100),
       );
 
-    await tester.pumpWidget(UiFixture(controller: controller).build());
-    await tester.pumpAndSettle();
+    final fixture = UiFixture(controller: controller);
+    for (final size in [
+      const Size(800, 600),
+      const Size(1920, 1080),
+      const Size(3840, 2160),
+    ]) {
+      await tester.binding.setSurfaceSize(size);
+      await tester.pumpWidget(fixture.build());
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull, reason: 'server viewport $size');
+    }
 
     expect(find.bySemanticsLabel(RegExp('Owned server')), findsOneWidget);
     expect(
@@ -437,7 +497,6 @@ void main() {
         .getSemanticsData();
     expect(connectSemantics.label, 'Connect to Backup Server');
     expect(connectSemantics.hasAction(SemanticsAction.tap), isTrue);
-    expect(tester.takeException(), isNull);
   });
 
   testWidgets('Channel Setup remains reachable at the practical minimum', (
@@ -761,8 +820,9 @@ class _ProfileFixtureController extends FixtureController {
   String? pin;
 
   @override
-  Future<void> selectProfile(PlexHomeUser selected, {String? pin}) async {
+  Future<bool> selectProfile(PlexHomeUser selected, {String? pin}) async {
     this.pin = pin;
+    return true;
   }
 }
 

@@ -2692,7 +2692,7 @@ void main() {
     expect(controller.stage, SetupStage.ready);
     expect(controller.profile?.id, 'owner');
     switched.complete('child-token');
-    await selection;
+    expect(await selection, isFalse);
 
     expect(controller.profile?.id, 'owner');
     expect(controller.server?.id, 'old');
