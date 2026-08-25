@@ -20,6 +20,8 @@ import '../support/ui_fixture.dart';
 const _viewport = Size(1280, 720);
 const _goldenKey = Key('visual-acceptance-boundary');
 final _fixedNow = DateTime.utc(2026, 1, 15, 3, 17);
+final _syntheticArtwork = File('assets/branding/lineup-logo-mark.png')
+    .readAsBytesSync();
 
 void main() {
   setUpAll(_loadPinnedTestFont);
@@ -31,13 +33,108 @@ void main() {
   testWidgets('profile selection', (tester) async {
     final fixture = UiFixture()
       ..controller.stage = SetupStage.profiles
+      ..controller.profile = const PlexHomeUser(
+        id: 'adult',
+        name: 'Alex',
+        protected: false,
+        admin: true,
+      )
       ..controller.profiles = const [
-        PlexHomeUser(id: 'adult', name: 'Alex', protected: false),
-        PlexHomeUser(id: 'child', name: 'Family', protected: true),
+        PlexHomeUser(id: 'adult', name: 'Alex', protected: false, admin: true),
+        PlexHomeUser(
+          id: 'child',
+          name: 'Family',
+          protected: true,
+          restricted: true,
+        ),
       ];
 
     await _pump(tester, fixture.build());
     await _match(tester, 'profiles-1280x720.png');
+  });
+
+  testWidgets('terminal Plex linking failure', (tester) async {
+    final fixture = UiFixture()
+      ..controller.stage = SetupStage.linking
+      ..controller.error =
+          'Lineup could not connect to Plex. Check your connection and request a new code.';
+
+    await _pump(tester, fixture.build());
+    expect(find.text('Waiting for sign-in…'), findsNothing);
+    await _match(tester, 'auth-link-failure-1280x720.png');
+  });
+
+  testWidgets('server selection', (tester) async {
+    final selected = PlexServer(
+      id: 'studio',
+      name: 'Studio Server',
+      owned: true,
+      connections: [
+        PlexConnection(
+          uri: Uri.parse('https://local.synthetic.invalid'),
+          local: true,
+          relay: false,
+        ),
+        PlexConnection(
+          uri: Uri.parse('https://remote.synthetic.invalid'),
+          local: false,
+          relay: false,
+        ),
+        PlexConnection(
+          uri: Uri.parse('https://relay.synthetic.invalid'),
+          local: false,
+          relay: true,
+        ),
+      ],
+    );
+    final fixture = UiFixture()
+      ..controller.stage = SetupStage.servers
+      ..controller.server = selected
+      ..controller.connection = PlexConnection(
+        uri: Uri.parse('https://selected.synthetic.invalid'),
+        local: true,
+        relay: false,
+        latency: const Duration(milliseconds: 126),
+      )
+      ..controller.servers = [
+        selected,
+        PlexServer(
+          id: 'shared',
+          name: 'Family Server',
+          connections: [
+            PlexConnection(
+              uri: Uri.parse('https://shared.synthetic.invalid'),
+              local: false,
+              relay: false,
+            ),
+          ],
+        ),
+      ];
+
+    await _pump(tester, fixture.build());
+    await _match(tester, 'server-selection-1280x720.png');
+  });
+
+  testWidgets('Channel Setup strategies', (tester) async {
+    final controller = _VisualController()
+      ..stage = SetupStage.channelSetup
+      ..libraries = const [
+        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
+      ];
+    await _pump(
+      tester,
+      UiFixture(controller: controller, guideClock: () => _fixedNow).build(),
+    );
+    await tester.tap(find.text('Configure channels'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Configure the lineup'), findsOneWidget);
+    await _match(
+      tester,
+      'channel-setup-strategies-1280x720.png',
+      precacheLogo: true,
+      additionalPumps: 2,
+    );
   });
 
   testWidgets('Channel Setup review', (tester) async {
@@ -62,6 +159,75 @@ void main() {
       precacheLogo: true,
       additionalPumps: 2,
     );
+  });
+
+  testWidgets('Channel Setup library outcomes', (tester) async {
+    final controller = _VisualController()
+      ..stage = SetupStage.channelSetup
+      ..libraries = const [
+        PlexLibrary(
+          id: 'movies',
+          title: 'Feature Films',
+          type: PlexLibraryType.movie,
+        ),
+        PlexLibrary(id: 'shows', title: 'Series', type: PlexLibraryType.show),
+        PlexLibrary(
+          id: 'archive',
+          title: 'Archive',
+          type: PlexLibraryType.movie,
+        ),
+        PlexLibrary(
+          id: 'imports',
+          title: 'Recent Imports',
+          type: PlexLibraryType.movie,
+        ),
+      ]
+      ..selectedLibraryIds = const {'movies', 'shows', 'archive', 'imports'}
+      ..libraryScanStatus = LibraryScanStatus.transientFailure
+      ..libraryScanCompletedPages = 8
+      ..libraryScanCompletedItems = 83
+      ..libraryScanTotalItems = 112
+      ..error = 'Plex could not complete the library scan.'
+      ..scanFacts = const {
+        'movies': LibraryScanFact(
+          status: LibraryScanStatus.complete,
+          completedPages: 4,
+          completedItems: 72,
+          totalItems: 72,
+        ),
+        'shows': LibraryScanFact(
+          status: LibraryScanStatus.unsupported,
+          completedPages: 2,
+          completedItems: 8,
+          totalItems: 8,
+        ),
+        'archive': LibraryScanFact(
+          status: LibraryScanStatus.empty,
+          completedPages: 1,
+          totalItems: 0,
+        ),
+        'imports': LibraryScanFact(
+          status: LibraryScanStatus.transientFailure,
+          completedPages: 1,
+          completedItems: 3,
+          totalItems: 32,
+        ),
+      };
+
+    await _pump(
+      tester,
+      UiFixture(controller: controller, guideClock: () => _fixedNow).build(),
+    );
+    expect(find.text('Retry scan'), findsOneWidget);
+    expect(find.text('Complete'), findsOneWidget);
+    expect(find.text('72/72 items · 4 pages'), findsOneWidget);
+    expect(find.text('Unsupported'), findsOneWidget);
+    expect(find.text('8/8 items · 2 pages'), findsOneWidget);
+    expect(find.text('Empty'), findsOneWidget);
+    expect(find.text('0/0 items · 1 page'), findsOneWidget);
+    expect(find.text('Scan failed'), findsOneWidget);
+    expect(find.text('3/32 items · 1 page'), findsOneWidget);
+    await _match(tester, 'channel-setup-libraries-1280x720.png');
   });
 
   testWidgets('Guide without playback', (tester) async {
@@ -132,6 +298,35 @@ void main() {
 
     expect(find.byKey(const Key('player-osd-surface')), findsOneWidget);
     await _match(tester, 'player-osd-1280x720.png', additionalPumps: 2);
+  });
+
+  testWidgets('player Now Playing', (tester) async {
+    final fixture =
+        _readyFixture(
+            playerState: const PlayerStatus(
+              state: PlayerState.playing,
+              message: 'Playing',
+            ),
+          )
+          ..controller.channels = _richPlayerChannels
+          ..controller.settings = const LineupSettings(reduceMotion: true);
+    await _pump(tester, fixture.build());
+    await _openDestination(tester, 'Player');
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
+    await tester.pump();
+
+    expect(find.byKey(const Key('player-now-playing-surface')), findsOneWidget);
+    final context = tester.element(find.byKey(_goldenKey));
+    await tester.runAsync(
+      () => precacheImage(MemoryImage(_syntheticArtwork), context),
+    );
+    await tester.pump();
+    await _match(
+      tester,
+      'player-now-playing-1280x720.png',
+      precacheLogo: true,
+      additionalPumps: 2,
+    );
   });
 
   testWidgets('Mini Guide', (tester) async {
@@ -334,6 +529,14 @@ UiFixture _readyFixture({PlayerStatus? playerState}) {
 }
 
 class _VisualController extends FixtureController {
+  Map<String, LibraryScanFact> scanFacts = const {};
+
+  @override
+  Map<String, LibraryScanFact> get libraryScanFacts => scanFacts;
+
+  @override
+  Future<Uint8List?> artworkForPath(Uri path) async => _syntheticArtwork;
+
   @override
   Future<ScheduleIndex> loadScheduleFor(Channel channel) async => buildSchedule(
     (channel.source as ManualSource).items,
@@ -352,6 +555,7 @@ class _VisualController extends FixtureController {
           type: 'movie',
           duration: const Duration(minutes: 90),
           libraryId: 'movies',
+          parts: [PlexMediaPart(path: '/parts/movie-$index')],
           genres: const ['Drama'],
           addedAt: DateTime.utc(2026, 1, index + 1),
         ),
@@ -392,3 +596,46 @@ final _channels = List.generate(
   ),
   growable: false,
 );
+
+final _richPlayerChannels = [
+  for (final channel in _channels)
+    if (channel.id != 'channel-1')
+      channel
+    else
+      Channel(
+        id: channel.id,
+        number: channel.number,
+        name: channel.name,
+        source: ManualSource([
+          for (var program = 0; program < 8; program++)
+            ChannelItem(
+              id: 'program-1-$program',
+              title: const [
+                'City Stories',
+                'After Midnight',
+                'World in Focus',
+                'The Long Way Home',
+              ][program % 4],
+              showTitle: program.isEven ? 'Lineup Originals' : null,
+              duration: Duration(minutes: 24 + program * 4),
+              poster: Uri.parse('test://poster-$program'),
+              backdrop: Uri.parse('test://backdrop-$program'),
+              clearLogo: Uri.parse('test://logo-$program'),
+              summary: 'A small-town radio host follows a mysterious signal across the night.',
+              contentRating: 'TV-14',
+              genres: const ['Drama', 'Mystery'],
+              year: 2026,
+              seasonNumber: program.isEven ? 1 : null,
+              episodeNumber: program.isEven ? program + 1 : null,
+              resolution: '1080p',
+              videoCodec: 'h264',
+              audioCodec: 'aac',
+              audioChannels: 6,
+              dynamicRange: 'SDR',
+            ),
+        ]),
+        playbackMode: channel.playbackMode,
+        anchor: channel.anchor,
+        shuffleSeed: channel.shuffleSeed,
+      ),
+];

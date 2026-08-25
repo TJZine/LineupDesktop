@@ -375,6 +375,169 @@ void main() {
     },
   );
 
+  testWidgets(
+    'Now Playing is persistent, exclusive, and opens tracks directly',
+    (tester) async {
+      final lineup = _TestLineup();
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => _schedule(channel),
+      )..requestViewport(0, 2);
+      await tester.pump();
+      final coordinator = PlayerCoordinator(
+        player: _Player()
+          ..tracks = const [
+            PlayerTrack(id: 1, type: PlayerTrackType.audio, selected: true),
+          ],
+        lineup: lineup,
+        guide: guide,
+        overlayTimeout: const Duration(milliseconds: 10),
+      );
+      addTearDown(lineup.dispose);
+      addTearDown(guide.dispose);
+      addTearDown(coordinator.dispose);
+
+      coordinator.showNowPlaying();
+      expect(coordinator.overlay, PlayerOverlay.nowPlaying);
+      await tester.pump(const Duration(minutes: 1));
+      expect(coordinator.overlay, PlayerOverlay.nowPlaying);
+
+      coordinator.showTracks(PlayerTrackType.audio);
+      expect(coordinator.overlay, PlayerOverlay.audioTracks);
+      coordinator.closeOverlay();
+      expect(coordinator.overlay, PlayerOverlay.osd);
+
+      lineup.clearCurrentChannel();
+      coordinator.showNowPlaying();
+      expect(coordinator.overlay, PlayerOverlay.osd);
+      coordinator.closeOverlay();
+    },
+  );
+
+  test('successful Media Stop replaces Now Playing with the OSD', () async {
+    final lineup = _TestLineup();
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    )..requestViewport(0, 2);
+    await Future<void>.delayed(Duration.zero);
+    final player = _Player();
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
+
+    await coordinator.tune(lineup.currentChannelId!);
+    coordinator.showNowPlaying();
+    await coordinator.requestStop();
+
+    expect(player.stops, 1);
+    expect(coordinator.overlay, PlayerOverlay.osd);
+  });
+
+  test(
+    'Media Stop completion does not replace a superseding overlay',
+    () async {
+      final lineup = _TestLineup();
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => _schedule(channel),
+      )..requestViewport(0, 2);
+      await Future<void>.delayed(Duration.zero);
+      final player = _BlockingStopPlayer();
+      final coordinator = PlayerCoordinator(
+        player: player,
+        lineup: lineup,
+        guide: guide,
+      );
+      addTearDown(() {
+        if (!player.releaseStop.isCompleted) player.releaseStop.complete();
+      });
+      addTearDown(lineup.dispose);
+      addTearDown(guide.dispose);
+      addTearDown(coordinator.dispose);
+
+      await coordinator.tune(lineup.currentChannelId!);
+      coordinator.showNowPlaying();
+      final stop = coordinator.requestStop();
+      await player.stopStarted.future;
+
+      coordinator.showFullGuide();
+      player.releaseStop.complete();
+      await stop;
+
+      expect(coordinator.overlay, PlayerOverlay.fullGuide);
+    },
+  );
+
+  test('native telemetry updates do not dismiss Now Playing', () async {
+    final lineup = _TestLineup();
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    )..requestViewport(0, 2);
+    await Future<void>.delayed(Duration.zero);
+    final player = _EventPlayer();
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(player.close);
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
+
+    await coordinator.tune(lineup.currentChannelId!);
+    coordinator.showNowPlaying();
+    player.emitStatus(
+      PlayerState.paused,
+      generation: player.loadGenerations.single,
+    );
+    await Future<void>.delayed(Duration.zero);
+
+    expect(coordinator.status.state, PlayerState.paused);
+    expect(coordinator.overlay, PlayerOverlay.nowPlaying);
+  });
+
+  testWidgets('failed Media Stop keeps the untimed safe error surface', (
+    tester,
+  ) async {
+    final lineup = _TestLineup();
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    )..requestViewport(0, 2);
+    await tester.pump();
+    final player = _EventPlayer()..failStop = true;
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+      overlayTimeout: const Duration(milliseconds: 10),
+    );
+    addTearDown(player.close);
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
+
+    await coordinator.tune(lineup.currentChannelId!);
+    coordinator.showNowPlaying();
+    await coordinator.requestStop();
+
+    expect(coordinator.overlay, PlayerOverlay.error);
+    expect(
+      coordinator.error,
+      'Playback could not be stopped. Retry or choose another channel.',
+    );
+    await tester.pump(const Duration(minutes: 1));
+    expect(coordinator.overlay, PlayerOverlay.error);
+  });
+
   test(
     'mini Guide pages by logical identity without mounting all channels',
     () async {
@@ -2853,6 +3016,11 @@ class _TestLineup extends LineupController {
 
   void setSettings(LineupSettings value) {
     settings = value;
+    notifyListeners();
+  }
+
+  void clearCurrentChannel() {
+    currentChannelId = null;
     notifyListeners();
   }
 

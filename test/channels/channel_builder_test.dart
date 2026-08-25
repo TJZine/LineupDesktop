@@ -150,7 +150,7 @@ void main() {
       alternateCopies: 2,
       variantMode: PlaybackMode.sequential,
       anchor: DateTime.utc(2026),
-    );
+    ).channels;
     expect(channels.map((channel) => channel.number), [1, 2, 3, 4]);
     expect(channels.map((channel) => channel.name), [
       'Series',
@@ -275,7 +275,7 @@ void main() {
         existing: const [],
         mode: ChannelBuildMode.replace,
         anchor: DateTime.utc(2026),
-      ).single;
+      ).channels.single;
       final custom = Channel(
         id: 'custom',
         number: 2,
@@ -295,9 +295,9 @@ void main() {
         seriesMode: PlaybackMode.shuffle,
         anchor: DateTime.utc(2027),
       );
-      expect(merged.single.id, first.id);
-      expect(merged.single.number, first.number);
-      expect(merged.single.builderKey, first.builderKey);
+      expect(merged.channels.single.id, first.id);
+      expect(merged.channels.single.number, first.number);
+      expect(merged.channels.single.builderKey, first.builderKey);
     },
   );
 
@@ -310,7 +310,7 @@ void main() {
       strategy: BuilderStrategy.recentlyAdded,
       series: true,
     );
-    final channels = materializeChannelPlan(
+    final result = materializeChannelPlan(
       proposals: const [proposal],
       existing: const [],
       mode: ChannelBuildMode.replace,
@@ -319,7 +319,8 @@ void main() {
       maximumChannels: 2,
       anchor: DateTime.utc(2026),
     );
-    expect(channels, hasLength(2));
+    expect(result.channels, hasLength(2));
+    expect(result.truncated, isTrue);
   });
 
   test('merge identity remains stable when playback configuration changes', () {
@@ -337,7 +338,7 @@ void main() {
       mode: ChannelBuildMode.replace,
       seriesMode: PlaybackMode.shuffle,
       anchor: DateTime.utc(2026),
-    ).single;
+    ).channels.single;
     final changed = materializeChannelPlan(
       proposals: const [proposal],
       existing: [first],
@@ -345,10 +346,199 @@ void main() {
       seriesMode: PlaybackMode.block,
       seriesBlockSize: 5,
       anchor: DateTime.utc(2027),
-    ).single;
+    ).channels.single;
     expect(changed.id, first.id);
     expect(changed.number, first.number);
     expect(changed.playbackMode, PlaybackMode.block);
     expect(changed.blockSize, 5);
+  });
+
+  test('maximum 1000 uses a 1001-proposal overflow proof', () {
+    const library = PlexLibrary(
+      id: 'movies',
+      title: 'Movies',
+      type: PlexLibraryType.movie,
+    );
+    final proposals = buildChannelProposals(
+      libraries: const [library],
+      items: [
+        for (var index = 0; index < 1001; index++)
+          PlexMediaItem(
+            id: '$index',
+            title: 'Movie $index',
+            type: 'movie',
+            duration: const Duration(minutes: 1),
+            libraryId: 'movies',
+            genres: ['Genre $index'],
+          ),
+      ],
+      strategies: const {BuilderStrategy.genres},
+      minimumItems: 1,
+      maximumChannels: 1001,
+    );
+    final result = materializeChannelPlan(
+      proposals: proposals,
+      existing: const [],
+      mode: ChannelBuildMode.replace,
+      maximumChannels: 1000,
+      anchor: DateTime.utc(2026),
+    );
+
+    expect(proposals, hasLength(1001));
+    expect(result.channels, hasLength(1000));
+    expect(result.truncated, isTrue);
+    expect(
+      result.channels.any((channel) => channel.name == proposals.last.name),
+      isFalse,
+    );
+  });
+
+  test('truncation distinguishes exact and expanded boundaries', () {
+    const proposal = ChannelProposal(
+      name: 'Series',
+      source: LibrarySource(libraryId: 'tv', libraryType: PlexLibraryType.show),
+      mode: PlaybackMode.shuffle,
+      itemCount: 10,
+      strategy: BuilderStrategy.recentlyAdded,
+      series: true,
+    );
+    final exact = materializeChannelPlan(
+      proposals: const [proposal],
+      existing: const [],
+      mode: ChannelBuildMode.replace,
+      alternateCopies: 1,
+      maximumChannels: 2,
+      anchor: DateTime.utc(2026),
+    );
+    final overflow = materializeChannelPlan(
+      proposals: const [proposal],
+      existing: const [],
+      mode: ChannelBuildMode.replace,
+      alternateCopies: 2,
+      maximumChannels: 2,
+      anchor: DateTime.utc(2026),
+    );
+
+    expect(exact.channels, hasLength(2));
+    expect(exact.truncated, isFalse);
+    expect(overflow.channels, hasLength(2));
+    expect(overflow.truncated, isTrue);
+  });
+
+  test('append and merge report channel-number exhaustion', () {
+    final existing = [
+      for (var number = 1; number <= 1000; number++)
+        Channel(
+          id: 'existing-$number',
+          number: number,
+          name: 'Existing $number',
+          source: const LibrarySource(
+            libraryId: 'movies',
+            libraryType: PlexLibraryType.movie,
+          ),
+          playbackMode: PlaybackMode.shuffle,
+          anchor: DateTime.utc(2026),
+          shuffleSeed: number,
+        ),
+    ];
+    const proposal = ChannelProposal(
+      name: 'Drama',
+      source: LibrarySource(
+        libraryId: 'movies',
+        libraryType: PlexLibraryType.movie,
+        filters: {'genre': 'Drama'},
+      ),
+      mode: PlaybackMode.shuffle,
+      itemCount: 10,
+      strategy: BuilderStrategy.genres,
+    );
+
+    for (final mode in [ChannelBuildMode.append, ChannelBuildMode.merge]) {
+      final result = materializeChannelPlan(
+        proposals: const [proposal],
+        existing: existing,
+        mode: mode,
+        anchor: DateTime.utc(2027),
+      );
+      expect(result.channels, isEmpty, reason: mode.name);
+      expect(result.truncated, isTrue, reason: mode.name);
+    }
+  });
+
+  test('merge reuses exact channels without resetting their schedule', () {
+    const proposal = ChannelProposal(
+      name: 'Series',
+      source: LibrarySource(libraryId: 'tv', libraryType: PlexLibraryType.show),
+      mode: PlaybackMode.shuffle,
+      itemCount: 10,
+      strategy: BuilderStrategy.recentlyAdded,
+      series: true,
+    );
+    final existing = materializeChannelPlan(
+      proposals: const [proposal],
+      existing: const [],
+      mode: ChannelBuildMode.replace,
+      seriesMode: PlaybackMode.block,
+      seriesBlockSize: 4,
+      anchor: DateTime.utc(2026),
+    ).channels.single;
+    final merged = materializeChannelPlan(
+      proposals: const [proposal],
+      existing: [existing],
+      mode: ChannelBuildMode.merge,
+      seriesMode: PlaybackMode.block,
+      seriesBlockSize: 4,
+      anchor: DateTime.utc(2027),
+    ).channels.single;
+
+    expect(merged, same(existing));
+    expect(merged.anchor, DateTime.utc(2026));
+  });
+
+  test('changed merge match receives every requested material field', () {
+    const proposal = ChannelProposal(
+      name: 'Series',
+      source: LibrarySource(libraryId: 'tv', libraryType: PlexLibraryType.show),
+      mode: PlaybackMode.shuffle,
+      itemCount: 10,
+      strategy: BuilderStrategy.recentlyAdded,
+      series: true,
+    );
+    final generated = materializeChannelPlan(
+      proposals: const [proposal],
+      existing: const [],
+      mode: ChannelBuildMode.replace,
+      seriesMode: PlaybackMode.block,
+      seriesBlockSize: 5,
+      anchor: DateTime.utc(2026),
+    ).channels.single;
+    final stale = Channel(
+      id: generated.id,
+      number: 42,
+      name: 'Old name',
+      source: const ManualSource([]),
+      playbackMode: PlaybackMode.sequential,
+      anchor: DateTime.utc(2025),
+      shuffleSeed: generated.shuffleSeed,
+      builderKey: generated.builderKey,
+    );
+    final changed = materializeChannelPlan(
+      proposals: const [proposal],
+      existing: [stale],
+      mode: ChannelBuildMode.merge,
+      seriesMode: PlaybackMode.block,
+      seriesBlockSize: 5,
+      anchor: DateTime.utc(2027),
+    ).channels.single;
+
+    expect(changed, isNot(same(stale)));
+    expect(changed.id, stale.id);
+    expect(changed.number, 42);
+    expect(changed.name, 'Series');
+    expect(changed.source.toJson(), proposal.source.toJson());
+    expect(changed.playbackMode, PlaybackMode.block);
+    expect(changed.blockSize, 5);
+    expect(changed.anchor, DateTime.utc(2027));
+    expect(changed.builderKey, stale.builderKey);
   });
 }

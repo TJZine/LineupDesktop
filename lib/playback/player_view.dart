@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../channels/channel.dart';
+import '../guide/guide_controller.dart';
 import '../ui/app_theme.dart';
 import '../ui/app_ui.dart';
 import 'native_player.dart';
@@ -97,6 +98,7 @@ class _PlayerViewState extends State<PlayerView> {
         controller.overlay == PlayerOverlay.error) {
       return KeyEventResult.ignored;
     }
+    final showingNowPlaying = controller.overlay == PlayerOverlay.nowPlaying;
     if (controller.overlay == PlayerOverlay.channelNumber) {
       final digit = _digit(key);
       if (digit != null) {
@@ -133,6 +135,8 @@ class _PlayerViewState extends State<PlayerView> {
         key == LogicalKeyboardKey.select) {
       if (controller.overlay == PlayerOverlay.miniGuide) {
         unawaited(controller.tuneMiniGuideSelection());
+      } else if (showingNowPlaying) {
+        controller.showOsd();
       } else if (controller.overlay == PlayerOverlay.none) {
         controller.showOsd();
       } else {
@@ -142,7 +146,8 @@ class _PlayerViewState extends State<PlayerView> {
         key == LogicalKeyboardKey.keyK ||
         key == LogicalKeyboardKey.mediaPlayPause) {
       if (controller.overlay != PlayerOverlay.none &&
-          controller.overlay != PlayerOverlay.osd) {
+          controller.overlay != PlayerOverlay.osd &&
+          !showingNowPlaying) {
         return KeyEventResult.ignored;
       }
       unawaited(controller.togglePlayback());
@@ -150,7 +155,8 @@ class _PlayerViewState extends State<PlayerView> {
     } else if (key == LogicalKeyboardKey.arrowLeft ||
         key == LogicalKeyboardKey.keyJ) {
       if (controller.overlay != PlayerOverlay.none &&
-          controller.overlay != PlayerOverlay.osd) {
+          controller.overlay != PlayerOverlay.osd &&
+          !showingNowPlaying) {
         return KeyEventResult.ignored;
       }
       unawaited(controller.seekBy(const Duration(seconds: -10)));
@@ -161,7 +167,8 @@ class _PlayerViewState extends State<PlayerView> {
         controller.showFullGuide();
         widget.openGuide();
       } else if (controller.overlay == PlayerOverlay.none ||
-          controller.overlay == PlayerOverlay.osd) {
+          controller.overlay == PlayerOverlay.osd ||
+          showingNowPlaying) {
         unawaited(controller.seekBy(const Duration(seconds: 30)));
         controller.showOsd();
       } else {
@@ -171,12 +178,12 @@ class _PlayerViewState extends State<PlayerView> {
         controller.overlay == PlayerOverlay.none) {
       controller.showMiniGuide();
     } else if (key == LogicalKeyboardKey.arrowDown &&
-        controller.overlay == PlayerOverlay.none) {
+        (controller.overlay == PlayerOverlay.none || showingNowPlaying)) {
       controller.showOsd();
     } else if (initialPress && key == LogicalKeyboardKey.keyI) {
-      controller.overlay == PlayerOverlay.osd
+      showingNowPlaying
           ? controller.closeOverlay()
-          : controller.showOsd();
+          : controller.showNowPlaying();
     } else if (initialPress &&
         (key == LogicalKeyboardKey.keyF || key == LogicalKeyboardKey.f11)) {
       unawaited(controller.toggleFullscreen());
@@ -188,14 +195,18 @@ class _PlayerViewState extends State<PlayerView> {
       controller.showTracks(PlayerTrackType.subtitle);
     } else if (key == LogicalKeyboardKey.mediaPlay) {
       unawaited(controller.player.play());
+      if (showingNowPlaying) controller.showOsd();
     } else if (key == LogicalKeyboardKey.mediaPause) {
       unawaited(controller.player.pause());
+      if (showingNowPlaying) controller.showOsd();
     } else if (key == LogicalKeyboardKey.mediaStop) {
       unawaited(controller.requestStop());
     } else if (key == LogicalKeyboardKey.mediaRewind) {
       unawaited(controller.seekBy(const Duration(seconds: -10)));
+      if (showingNowPlaying) controller.showOsd();
     } else if (key == LogicalKeyboardKey.mediaFastForward) {
       unawaited(controller.seekBy(const Duration(seconds: 30)));
+      if (showingNowPlaying) controller.showOsd();
     } else {
       final digit = _digit(key);
       if (digit == null) return KeyEventResult.ignored;
@@ -239,7 +250,7 @@ class _PlayerViewState extends State<PlayerView> {
                     alignment: Alignment.center,
                     children: [
                       for (final child in previousChildren)
-                        ExcludeFocus(child: child),
+                        ExcludeFocus(child: ExcludeSemantics(child: child)),
                       ?currentChild,
                     ],
                   ),
@@ -284,6 +295,9 @@ class _PlayerViewState extends State<PlayerView> {
                       PlayerOverlay.osd => _Osd(
                         controller: controller,
                         openMenu: widget.openMenu,
+                      ),
+                      PlayerOverlay.nowPlaying => _NowPlaying(
+                        controller: controller,
                       ),
                       PlayerOverlay.miniGuide => _MiniGuide(
                         controller: controller,
@@ -612,6 +626,394 @@ class _Osd extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _NowPlaying extends StatelessWidget {
+  const _NowPlaying({required this.controller});
+
+  final PlayerCoordinator controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final program = controller.currentProgram;
+    if (program == null) return const SizedBox.shrink();
+    final item = program.scheduled.item;
+    final channel = controller.currentChannel;
+    final telemetry = controller.telemetry;
+    final roles = LineupTheme.of(context);
+    final size = MediaQuery.sizeOf(context);
+    final compact =
+        LineupLayout.isCompactWidth(size.width) || size.height < 650;
+    final preferLogo = controller.lineup.settings.preferClearLogos;
+    final posterPath = _artworkPath(item, GuideArtworkKind.poster);
+    final backdropPath = _artworkPath(item, GuideArtworkKind.backdrop);
+    final logoPath = _artworkPath(item, GuideArtworkKind.clearLogo);
+    final generation = controller.lineup.contentGeneration;
+    final elapsed = controller.guide.now.difference(program.scheduled.start);
+    final span = program.scheduled.end.difference(program.scheduled.start);
+    final progress = span.inMilliseconds <= 0
+        ? 0.0
+        : (elapsed.inMilliseconds / span.inMilliseconds).clamp(0.0, 1.0);
+    final episode = _episodeLabel(item);
+    final badges = <String>{
+      if (item.year != null) '${item.year}',
+      ?item.contentRating,
+      ...item.genres.take(3),
+      ?item.resolution,
+      if (telemetry.width != null && telemetry.height != null)
+        '${telemetry.width}×${telemetry.height}',
+      ?item.videoCodec,
+      ?telemetry.videoCodec,
+      ?item.audioCodec,
+      if (item.audioChannels case final channels?) '${channels}ch',
+      if (telemetry.isHdr) 'HDR' else ?item.dynamicRange,
+      ?telemetry.hardwareDecoder,
+    }.toList(growable: false);
+    final semanticFacts = [
+      'Now playing',
+      if (channel != null) 'Channel ${channel.number}, ${channel.name}',
+      ?item.showTitle,
+      item.title,
+      ?episode,
+      '${_time(context, program.scheduled.start)} to ${_time(context, program.scheduled.end)}',
+      '${(progress * 100).round()} percent complete',
+      ...badges,
+      ?item.summary,
+    ].join('. ');
+    final artworkIdentity = (program.id, generation);
+
+    return ColoredBox(
+      key: const Key('player-now-playing-surface'),
+      color: roles.deepBackground.withValues(alpha: 0.88),
+      child: Semantics(
+        container: true,
+        label: semanticFacts,
+        excludeSemantics: true,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            if (!compact && backdropPath != null)
+              _PlayerArtwork(
+                key: ValueKey((
+                  artworkIdentity,
+                  GuideArtworkKind.backdrop,
+                  backdropPath,
+                )),
+                future: controller.guide.artworkFor(
+                  program,
+                  GuideArtworkKind.backdrop,
+                ),
+                fit: BoxFit.cover,
+              ),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.centerRight,
+                  end: Alignment.centerLeft,
+                  colors: [
+                    roles.scrim.withValues(alpha: compact ? 0.80 : 0.54),
+                    roles.deepBackground.withValues(alpha: 0.96),
+                  ],
+                ),
+              ),
+            ),
+            SafeArea(
+              minimum: EdgeInsets.all(
+                compact ? 24 : (size.width * 0.055).clamp(36, 96),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  if (!compact) ...[
+                    SizedBox(
+                      width: (size.width * 0.20).clamp(190, 340),
+                      height: (size.height * 0.58).clamp(300, 620),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(roles.panelRadius),
+                        child: posterPath == null
+                            ? _ArtworkFallback(roles: roles)
+                            : _PlayerArtwork(
+                                key: ValueKey((
+                                  artworkIdentity,
+                                  GuideArtworkKind.poster,
+                                  posterPath,
+                                )),
+                                future: controller.guide.artworkFor(program),
+                                fit: BoxFit.cover,
+                                fallback: _ArtworkFallback(roles: roles),
+                              ),
+                      ),
+                    ),
+                    SizedBox(width: (size.width * 0.045).clamp(28, 72)),
+                  ],
+                  Expanded(
+                    child: SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          if (channel != null)
+                            Text(
+                              '${channel.number}  •  ${channel.name}',
+                              key: const Key('player-now-playing-channel'),
+                              style: Theme.of(context).textTheme.titleMedium
+                                  ?.copyWith(
+                                    color: roles.progressFill,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                            ),
+                          const SizedBox(height: 12),
+                          if (!compact && preferLogo && logoPath != null)
+                            _NowPlayingIdentity(
+                              key: ValueKey((
+                                artworkIdentity,
+                                GuideArtworkKind.clearLogo,
+                                logoPath,
+                                preferLogo,
+                              )),
+                              controller: controller,
+                              program: program,
+                              compact: compact,
+                            )
+                          else
+                            _NowPlayingTitle(item: item, compact: compact),
+                          if (episode != null) ...[
+                            const SizedBox(height: 8),
+                            Text(
+                              episode,
+                              key: const Key('player-now-playing-episode'),
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                          ],
+                          if (badges.isNotEmpty) ...[
+                            const SizedBox(height: 16),
+                            Wrap(
+                              key: const Key('player-now-playing-badges'),
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: [
+                                for (final badge in badges)
+                                  _NowPlayingBadge(label: badge),
+                              ],
+                            ),
+                          ],
+                          if (item.summary case final summary?) ...[
+                            const SizedBox(height: 18),
+                            Text(
+                              summary,
+                              key: const Key('player-now-playing-summary'),
+                              maxLines: compact ? 4 : 6,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.bodyLarge
+                                  ?.copyWith(
+                                    color: roles.secondaryText,
+                                    height: 1.45,
+                                  ),
+                            ),
+                          ],
+                          const SizedBox(height: 24),
+                          LinearProgressIndicator(
+                            key: const Key('player-now-playing-progress'),
+                            value: progress,
+                            minHeight: 5,
+                            color: roles.progressFill,
+                            backgroundColor: roles.progressTrack,
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            '${_time(context, program.scheduled.start)}–${_time(context, program.scheduled.end)}',
+                            key: const Key('player-now-playing-time'),
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(color: roles.secondaryText),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _NowPlayingIdentity extends StatefulWidget {
+  const _NowPlayingIdentity({
+    required this.controller,
+    required this.program,
+    required this.compact,
+    super.key,
+  });
+
+  final PlayerCoordinator controller;
+  final GuideProgram program;
+  final bool compact;
+
+  @override
+  State<_NowPlayingIdentity> createState() => _NowPlayingIdentityState();
+}
+
+class _NowPlayingIdentityState extends State<_NowPlayingIdentity> {
+  late final Future<Uint8List?> _logo = widget.controller.guide.artworkFor(
+    widget.program,
+    GuideArtworkKind.clearLogo,
+  );
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<Uint8List?>(
+    future: _logo,
+    builder: (context, snapshot) {
+      final bytes = snapshot.data;
+      if (bytes == null) {
+        return _NowPlayingTitle(
+          item: widget.program.scheduled.item,
+          compact: widget.compact,
+        );
+      }
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: widget.compact ? 320 : 520,
+              maxHeight: widget.compact ? 72 : 112,
+            ),
+            child: Image.memory(
+              bytes,
+              key: const Key('player-now-playing-logo'),
+              fit: BoxFit.contain,
+              alignment: Alignment.centerLeft,
+              gaplessPlayback: false,
+              excludeFromSemantics: true,
+              frameBuilder: (context, child, frame, synchronous) =>
+                  synchronous || frame != null
+                  ? child
+                  : _NowPlayingTitle(
+                      item: widget.program.scheduled.item,
+                      compact: widget.compact,
+                    ),
+              errorBuilder: (_, _, _) => _NowPlayingTitle(
+                item: widget.program.scheduled.item,
+                compact: widget.compact,
+              ),
+            ),
+          ),
+          if (widget.program.scheduled.item.showTitle != null) ...[
+            const SizedBox(height: 10),
+            Text(
+              widget.program.scheduled.item.title,
+              key: const Key('player-now-playing-title'),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.headlineSmall
+                  ?.copyWith(fontWeight: FontWeight.w800),
+            ),
+          ],
+        ],
+      );
+    },
+  );
+}
+
+class _NowPlayingTitle extends StatelessWidget {
+  const _NowPlayingTitle({required this.item, required this.compact});
+
+  final ChannelItem item;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      if (item.showTitle != null) ...[
+        Text(
+          item.showTitle!.toUpperCase(),
+          key: const Key('player-now-playing-series'),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
+        const SizedBox(height: 6),
+      ],
+      Text(
+        item.title,
+        key: const Key('player-now-playing-title'),
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        style:
+            (compact
+                    ? Theme.of(context).textTheme.headlineMedium
+                    : Theme.of(context).textTheme.displaySmall)
+                ?.copyWith(fontWeight: FontWeight.w900),
+      ),
+    ],
+  );
+}
+
+class _PlayerArtwork extends StatelessWidget {
+  const _PlayerArtwork({
+    required this.future,
+    required this.fit,
+    this.fallback = const SizedBox.shrink(),
+    super.key,
+  });
+
+  final Future<Uint8List?> future;
+  final BoxFit fit;
+  final Widget fallback;
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<Uint8List?>(
+    future: future,
+    builder: (context, snapshot) => snapshot.data == null
+        ? fallback
+        : Image.memory(
+            snapshot.data!,
+            fit: fit,
+            gaplessPlayback: false,
+            excludeFromSemantics: true,
+            frameBuilder: (context, child, frame, synchronous) =>
+                synchronous || frame != null ? child : fallback,
+            errorBuilder: (_, _, _) => fallback,
+          ),
+  );
+}
+
+class _ArtworkFallback extends StatelessWidget {
+  const _ArtworkFallback({required this.roles});
+
+  final LineupThemeRoles roles;
+
+  @override
+  Widget build(BuildContext context) => ColoredBox(
+    color: roles.primarySurface,
+    child: Icon(Icons.movie_outlined, size: 64, color: roles.mutedText),
+  );
+}
+
+class _NowPlayingBadge extends StatelessWidget {
+  const _NowPlayingBadge({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final roles = LineupTheme.of(context);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: roles.elevatedSurface.withValues(alpha: 0.82),
+        border: Border.all(color: roles.subtleBorder),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+        child: Text(label, style: Theme.of(context).textTheme.labelMedium),
       ),
     );
   }
@@ -1034,6 +1436,29 @@ String _duration(Duration value) {
   final seconds = value.inSeconds.remainder(60).toString().padLeft(2, '0');
   return hours > 0 ? '$hours:$minutes:$seconds' : '$minutes:$seconds';
 }
+
+Uri? _artworkPath(ChannelItem item, GuideArtworkKind kind) => switch (kind) {
+  GuideArtworkKind.poster =>
+    item.showThumb == null || item.showThumb!.isEmpty
+        ? item.poster
+        : Uri.tryParse(item.showThumb!) ?? item.poster,
+  GuideArtworkKind.backdrop => item.backdrop,
+  GuideArtworkKind.clearLogo => item.clearLogo,
+};
+
+String? _episodeLabel(ChannelItem item) {
+  final season = item.seasonNumber;
+  final episode = item.episodeNumber;
+  if (season == null && episode == null) return null;
+  return [
+    if (season != null) 'Season $season',
+    if (episode != null) 'Episode $episode',
+  ].join(' • ');
+}
+
+String _time(BuildContext context, DateTime value) =>
+    MaterialLocalizations.of(context)
+        .formatTimeOfDay(TimeOfDay.fromDateTime(value));
 
 String _quality(PlayerTelemetry value) => [
   if (value.width != null && value.height != null)

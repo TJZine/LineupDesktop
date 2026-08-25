@@ -50,7 +50,7 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
   bool _libraryFocusPlaced = false;
   bool _strategyFocusPlaced = false;
   String? _error;
-  List<Channel>? _planned;
+  ({List<Channel> channels, bool truncated})? _planned;
 
   @override
   void initState() {
@@ -77,7 +77,7 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
     strategyOrder: _strategyOrder,
     crossLibraryStrategies: _crossLibraryStrategies,
     minimumItems: _minimumItems,
-    maximumChannels: _maximumChannels,
+    maximumChannels: _maximumChannels + 1,
   );
 
   @override
@@ -244,13 +244,15 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
               SliverGrid(
                 gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
                   maxCrossAxisExtent: 340,
-                  mainAxisExtent: 120,
+                  mainAxisExtent: 132,
                   crossAxisSpacing: 14,
                   mainAxisSpacing: 14,
                 ),
                 delegate: SliverChildBuilderDelegate((_, index) {
                   final library = widget.controller.libraries[index];
                   final selected = _selectedLibraries.contains(library.id);
+                  final scanFact =
+                      widget.controller.libraryScanFacts[library.id];
                   return LineupSelectionCard(
                     selected: selected,
                     autofocus: index == 0 && !_libraryFocusPlaced,
@@ -260,7 +262,7 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
                           : _selectedLibraries.add(library.id),
                     ),
                     child: Padding(
-                      padding: const EdgeInsets.all(18),
+                      padding: const EdgeInsets.all(14),
                       child: Row(
                         children: [
                           Icon(
@@ -292,6 +294,25 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
                                     color: LineupTheme.of(context).mutedText,
                                   ),
                                 ),
+                                Text(
+                                  _libraryScanStatusLabel(scanFact),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: LineupTheme.of(context).mutedText,
+                                  ),
+                                ),
+                                if (scanFact != null &&
+                                    scanFact.status != LibraryScanStatus.idle)
+                                  Text(
+                                    _libraryScanProgressLabel(scanFact),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      color: LineupTheme.of(context).mutedText,
+                                      fontSize: 13,
+                                    ),
+                                  ),
                               ],
                             ),
                           ),
@@ -313,6 +334,26 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
           ),
   );
 
+  String _libraryScanStatusLabel(LibraryScanFact? fact) {
+    if (fact == null) return 'Count available after scan';
+    return switch (fact.status) {
+      LibraryScanStatus.idle => 'Not scanned',
+      LibraryScanStatus.scanning => 'Scanning',
+      LibraryScanStatus.complete => 'Complete',
+      LibraryScanStatus.empty => 'Empty',
+      LibraryScanStatus.unsupported => 'Unsupported',
+      LibraryScanStatus.transientFailure => 'Scan failed',
+      LibraryScanStatus.cancelled => 'Cancelled',
+    };
+  }
+
+  String _libraryScanProgressLabel(LibraryScanFact fact) => [
+    fact.totalItems == null
+        ? '${fact.completedItems} ${fact.completedItems == 1 ? 'item' : 'items'}'
+        : '${fact.completedItems}/${fact.totalItems} ${fact.totalItems == 1 ? 'item' : 'items'}',
+    '${fact.completedPages} ${fact.completedPages == 1 ? 'page' : 'pages'}',
+  ].join(' · ');
+
   Widget _scanStatus() {
     final controller = widget.controller;
     final status = controller.libraryScanStatus;
@@ -331,7 +372,7 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
       ),
       LibraryScanStatus.unsupported => (
         'No playable media found',
-        'Plex returned media, but none has a supported positive duration.',
+        'Plex returned media, but none has a positive duration and usable media part.',
       ),
       LibraryScanStatus.transientFailure => (
         'Library scan failed',
@@ -750,42 +791,77 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
 
   Widget _previewStrip() {
     final proposals = _proposals;
+    final displayed = proposals.take(_maximumChannels).toList();
+    final summary = displayed.isEmpty
+        ? 'No channel ideas meet the current minimum. Adjust sources or limits.'
+        : '${displayed.length} channel ideas from ${widget.controller.availableMedia.length} loaded programs.';
+    final statuses = [
+      for (final strategy in _strategyOrder)
+        '${builderStrategyLabels[strategy]}: ${_strategyStatus(strategy, displayed)}',
+    ];
     return Semantics(
+      container: true,
       liveRegion: true,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-        decoration: BoxDecoration(
-          color: LineupTheme.of(context).selectedSurface,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: LineupTheme.of(context).defaultBorder),
-        ),
-        child: Row(
-          children: [
-            Icon(
-              Icons.auto_awesome,
-              color: LineupTheme.of(context).progressFill,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                proposals.isEmpty
-                    ? 'No channel ideas meet the current minimum. Adjust sources or limits.'
-                    : '${proposals.length} channels estimated from ${widget.controller.availableMedia.length} loaded programs.',
+      label:
+          '$summary ${statuses.join('. ')}${proposals.length > _maximumChannels ? '. More ideas omitted' : ''}',
+      child: ExcludeSemantics(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          decoration: BoxDecoration(
+            color: LineupTheme.of(context).selectedSurface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: LineupTheme.of(context).defaultBorder),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                Icons.auto_awesome,
+                color: LineupTheme.of(context).progressFill,
               ),
-            ),
-            if (proposals.length >= _maximumChannels)
-              const Chip(label: Text('Limit reached')),
-          ],
+              const SizedBox(width: 12),
+              Expanded(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      Text(summary),
+                      const SizedBox(width: 12),
+                      for (final status in statuses)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: Chip(
+                            visualDensity: VisualDensity.compact,
+                            label: Text(status),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+              if (proposals.length > _maximumChannels)
+                const Chip(label: Text('More ideas omitted')),
+            ],
+          ),
         ),
       ),
     );
   }
 
+  String _strategyStatus(
+    BuilderStrategy strategy,
+    List<ChannelProposal> proposals,
+  ) {
+    if (!_strategies.contains(strategy)) return 'Off';
+    final count = proposals
+        .where((proposal) => proposal.strategy == strategy)
+        .length;
+    return count == 0 ? 'No matches' : '$count';
+  }
+
   Widget _reviewStep() {
-    final planned = _planned ?? const <Channel>[];
-    final removed = _mode == ChannelBuildMode.replace
-        ? widget.controller.channels.length
-        : 0;
+    final result = _planned;
+    final planned = result?.channels ?? const <Channel>[];
+    final impact = _planImpact(planned);
     return _SetupSurface(
       title: _building ? 'Building your lineup' : 'Review expected changes',
       subtitle: _building
@@ -819,40 +895,39 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
           ? const _BuildProgress()
           : ListView(
               children: [
+                if (result?.truncated ?? false) ...[
+                  const LineupNotice(
+                    message: 'The channel limit or available channel numbers omitted some ideas.',
+                  ),
+                  const SizedBox(height: 14),
+                ],
                 Wrap(
                   spacing: 14,
                   runSpacing: 14,
                   children: [
                     _ImpactCard(
-                      label: 'Create or update',
-                      value: planned.length,
+                      label: 'Create',
+                      value: impact.create,
                       icon: Icons.add_circle_outline,
                     ),
                     _ImpactCard(
+                      label: 'Update',
+                      value: impact.update,
+                      icon: Icons.edit_outlined,
+                    ),
+                    _ImpactCard(
+                      label: 'Unchanged',
+                      value: impact.unchanged,
+                      icon: Icons.check_circle_outline,
+                    ),
+                    _ImpactCard(
                       label: 'Remove',
-                      value: removed,
+                      value: impact.remove,
                       icon: Icons.remove_circle_outline,
                     ),
                     _ImpactCard(
-                      label: 'Final lineup',
-                      value: switch (_mode) {
-                        ChannelBuildMode.replace => planned.length,
-                        ChannelBuildMode.append =>
-                          widget.controller.channels.length + planned.length,
-                        ChannelBuildMode.merge =>
-                          widget.controller.channels.length +
-                              planned
-                                  .where(
-                                    (candidate) =>
-                                        !widget.controller.channels.any(
-                                          (existing) =>
-                                              candidate.builderKey != null &&
-                                              existing.builderKey ==
-                                                  candidate.builderKey,
-                                        ),
-                                  )
-                                  .length,
-                      },
+                      label: 'Final',
+                      value: impact.finalCount,
                       icon: Icons.live_tv_outlined,
                     ),
                   ],
@@ -899,6 +974,64 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
     );
     _step = 3;
   });
+
+  ({int create, int update, int unchanged, int remove, int finalCount})
+  _planImpact(List<Channel> planned) {
+    final existing = widget.controller.channels;
+    return switch (_mode) {
+      ChannelBuildMode.replace => (
+        create: planned.length,
+        update: 0,
+        unchanged: 0,
+        remove: existing.length,
+        finalCount: planned.length,
+      ),
+      ChannelBuildMode.append => (
+        create: planned.length,
+        update: 0,
+        unchanged: existing.length,
+        remove: 0,
+        finalCount: existing.length + planned.length,
+      ),
+      ChannelBuildMode.merge => () {
+        var create = 0;
+        var update = 0;
+        var unchanged = 0;
+        for (final candidate in planned) {
+          final matched = existing
+              .where(
+                (channel) =>
+                    candidate.builderKey != null &&
+                    channel.builderKey == candidate.builderKey,
+              )
+              .firstOrNull;
+          if (matched == null) {
+            create++;
+          } else if (identical(candidate, matched)) {
+            unchanged++;
+          } else {
+            update++;
+          }
+        }
+        unchanged += existing
+            .where(
+              (channel) => !planned.any(
+                (candidate) =>
+                    candidate.builderKey != null &&
+                    candidate.builderKey == channel.builderKey,
+              ),
+            )
+            .length;
+        return (
+          create: create,
+          update: update,
+          unchanged: unchanged,
+          remove: 0,
+          finalCount: existing.length + create,
+        );
+      }(),
+    };
+  }
 
   Future<void> _build(List<Channel> planned) async {
     setState(() {
@@ -1069,36 +1202,42 @@ class _ImpactCard extends StatelessWidget {
   final int value;
   final IconData icon;
   @override
-  Widget build(BuildContext context) => SizedBox(
-    width: 240,
-    child: Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Row(
-          children: [
-            Icon(icon, size: 32),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '$value',
-                    style: Theme.of(context).textTheme.headlineMedium
-                        ?.copyWith(fontWeight: FontWeight.w800),
+  Widget build(BuildContext context) => Semantics(
+    container: true,
+    label: '$label: $value',
+    child: ExcludeSemantics(
+      child: SizedBox(
+        width: 190,
+        child: Card(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Row(
+              children: [
+                Icon(icon, size: 32),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '$value',
+                        style: Theme.of(context).textTheme.headlineMedium
+                            ?.copyWith(fontWeight: FontWeight.w800),
+                      ),
+                      Text(
+                        label,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: LineupTheme.of(context).secondaryText,
+                        ),
+                      ),
+                    ],
                   ),
-                  Text(
-                    label,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: LineupTheme.of(context).secondaryText,
-                    ),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     ),

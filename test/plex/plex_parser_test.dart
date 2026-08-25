@@ -3,6 +3,48 @@ import 'package:lineup_desktop/plex/plex_client.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
 
 void main() {
+  test('formats connection routes and measured latency boundaries', () {
+    PlexConnection connection({
+      required bool local,
+      required bool relay,
+      required int latency,
+    }) => PlexConnection(
+      uri: Uri.parse('https://synthetic.invalid'),
+      local: local,
+      relay: relay,
+      latency: Duration(milliseconds: latency),
+    );
+
+    expect(
+      plexConnectionDescription(
+        connection(local: true, relay: false, latency: 99),
+      ),
+      'Direct local • 99 ms measured',
+    );
+    expect(
+      plexConnectionDescription(
+        connection(local: false, relay: false, latency: 100),
+      ),
+      'Direct remote • 100 ms measured • Slow',
+    );
+    expect(
+      plexConnectionDescription(
+        connection(local: false, relay: false, latency: 499),
+      ),
+      'Direct remote • 499 ms measured • Slow',
+    );
+    expect(
+      plexConnectionDescription(
+        connection(local: true, relay: true, latency: 500),
+      ),
+      'Relay • Limited • 500 ms measured • Very slow',
+    );
+    expect(
+      plexConnectionKind(connection(local: true, relay: true, latency: 1)),
+      PlexConnectionKind.relay,
+    );
+  });
+
   test('parses collection metadata for builder sources', () {
     final item = parseMediaItem({
       'ratingKey': '1',
@@ -133,7 +175,9 @@ void main() {
 
     expect(item.parts.map((part) => part.path), ['/library/parts/valid.mkv']);
     expect(item.parts.single.duration, const Duration(seconds: 1));
+    expect(item.isPlayable, isTrue);
     expect(unsupported.parts, isEmpty);
+    expect(unsupported.isPlayable, isFalse);
     expect(
       () => client.playbackDescriptor(
         server: Uri.parse('https://plex.example:32400'),

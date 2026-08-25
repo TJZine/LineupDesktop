@@ -453,6 +453,64 @@ void main() {
     expect(controller.linkingCanceled, isTrue);
   });
 
+  testWidgets(
+    'terminal linking failure is live, focused, and keyboard retryable',
+    (tester) async {
+      final controller = _FakeController()
+        ..stage = SetupStage.linking
+        ..activePin = PlexPin(
+          id: 1,
+          code: 'ABCD',
+          expiresAt: DateTime.now().add(const Duration(minutes: 2)),
+        );
+      await tester.pumpWidget(
+        LineupBootstrap(player: _FakePlayer(), controller: controller),
+      );
+      await tester.pumpAndSettle();
+
+      controller.stopLinking();
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('Waiting for sign-in…'), findsNothing);
+      expect(find.bySemanticsLabel('Plex sign-in stopped'), findsOneWidget);
+      expect(
+        tester.getSemantics(find.text('Synthetic safe Plex failure.')),
+        matchesSemantics(
+          label: 'Synthetic safe Plex failure.',
+          isLiveRegion: true,
+        ),
+      );
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        'Retry secure cancellation',
+      );
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.select);
+      expect(controller.linkingRequested, isTrue);
+    },
+  );
+
+  testWidgets('terminal linking failure fits compact onboarding', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(640, 560);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final controller = _FakeController()
+      ..stage = SetupStage.linking
+      ..error = 'Synthetic safe Plex failure.';
+
+    await tester.pumpWidget(
+      LineupBootstrap(player: _FakePlayer(), controller: controller),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Request a new code'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('busy profile selection moves focus to its enabled cancel', (
     tester,
   ) async {
@@ -476,6 +534,65 @@ void main() {
     );
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
     expect(controller.profileSelectionCanceled, isTrue);
+  });
+
+  testWidgets('profile cards expose only established role and active badges', (
+    tester,
+  ) async {
+    const active = PlexHomeUser(
+      id: 'active',
+      name: 'Primary',
+      protected: true,
+      admin: true,
+    );
+    const restricted = PlexHomeUser(
+      id: 'restricted',
+      name: 'Kids',
+      protected: false,
+      restricted: true,
+    );
+    const standard = PlexHomeUser(
+      id: 'standard',
+      name: 'Standard',
+      protected: false,
+      restricted: false,
+    );
+    final controller = _FakeController()
+      ..stage = SetupStage.profiles
+      ..profile = active
+      ..profiles = const [standard, active, restricted];
+
+    await tester.pumpWidget(
+      LineupBootstrap(player: _FakePlayer(), controller: controller),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('PIN'), findsOneWidget);
+    expect(find.text('Admin'), findsOneWidget);
+    expect(find.text('Restricted'), findsOneWidget);
+    expect(find.text('Active'), findsOneWidget);
+    expect(find.bySemanticsLabel(RegExp('.*PIN.*')), findsOneWidget);
+    expect(find.bySemanticsLabel(RegExp('.*Admin.*')), findsOneWidget);
+    expect(find.bySemanticsLabel(RegExp('.*Restricted.*')), findsOneWidget);
+    expect(find.bySemanticsLabel(RegExp('.*Active.*')), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    expect(controller.selectedProfile, standard);
+  });
+
+  testWidgets('profile cards show no Active badge without a current profile', (
+    tester,
+  ) async {
+    final controller = _FakeController()
+      ..stage = SetupStage.profiles
+      ..profiles = const [
+        PlexHomeUser(id: 'standard', name: 'Standard', protected: false),
+      ];
+    await tester.pumpWidget(
+      LineupBootstrap(player: _FakePlayer(), controller: controller),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Active'), findsNothing);
   });
 
   testWidgets('onboarding rebuilds without a listening parent', (tester) async {
@@ -558,6 +675,93 @@ void main() {
     controller.notifyListeners();
     await tester.pump();
     expect(find.bySemanticsLabel('Plex link code W X Y Z'), findsOneWidget);
+  });
+
+  testWidgets('server cards separate availability from selected facts', (
+    tester,
+  ) async {
+    final selected = PlexServer(
+      id: 'selected',
+      name: 'Studio',
+      owned: true,
+      connections: [
+        PlexConnection(
+          uri: Uri.parse('https://local.synthetic.invalid:32400'),
+          local: true,
+          relay: false,
+        ),
+        PlexConnection(
+          uri: Uri.parse('https://remote.synthetic.invalid:32400'),
+          local: false,
+          relay: false,
+        ),
+        PlexConnection(
+          uri: Uri.parse('https://relay.synthetic.invalid:32400'),
+          local: true,
+          relay: true,
+        ),
+      ],
+    );
+    final shared = PlexServer(
+      id: 'shared',
+      name: 'Shared',
+      connections: [
+        PlexConnection(
+          uri: Uri.parse('https://shared.synthetic.invalid:32400'),
+          local: false,
+          relay: false,
+        ),
+      ],
+    );
+    final controller = _FakeController()
+      ..stage = SetupStage.servers
+      ..servers = [selected, shared]
+      ..server = selected
+      ..connection = PlexConnection(
+        uri: Uri.parse('https://selected.synthetic.invalid:32400'),
+        local: false,
+        relay: false,
+        latency: const Duration(milliseconds: 500),
+      )
+      ..error = 'Lineup could not reach that Plex server. Try again.';
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: UpstreamOnboardingView(
+          controller: controller,
+          onLogout: () async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Owned server'), findsOneWidget);
+    expect(find.text('Shared server'), findsOneWidget);
+    expect(find.text('Direct local available'), findsOneWidget);
+    expect(find.text('Direct remote available'), findsNWidgets(2));
+    expect(find.text('Relay available'), findsOneWidget);
+    expect(
+      find.text(
+        'Selected connection: Direct remote • 500 ms measured • Very slow',
+      ),
+      findsOneWidget,
+    );
+    expect(find.textContaining('Selected connection:'), findsOneWidget);
+    expect(
+      find.text('Lineup could not reach that Plex server. Try again.'),
+      findsOneWidget,
+    );
+    for (final endpoint in [
+      'local.synthetic.invalid',
+      'remote.synthetic.invalid',
+      'relay.synthetic.invalid',
+      'shared.synthetic.invalid',
+      'selected.synthetic.invalid',
+      '32400',
+    ]) {
+      expect(find.textContaining(endpoint), findsNothing);
+    }
   });
 
   testWidgets('protected profile PIN submits after four remote digits', (
@@ -780,6 +984,13 @@ class _FakeController extends LineupController {
 
   void requireSecureCancellation() {
     secureCancellationRequired = true;
+    error = 'Synthetic secure credential storage failure.';
+    notifyListeners();
+  }
+
+  void stopLinking() {
+    activePin = null;
+    error = 'Synthetic safe Plex failure.';
     notifyListeners();
   }
 

@@ -1,12 +1,14 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/channel_setup_view.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/app/onboarding_view.dart';
 import 'package:lineup_desktop/channels/channel.dart';
+import 'package:lineup_desktop/channels/channel_builder.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
 import 'package:lineup_desktop/ui/app_ui.dart';
 
@@ -316,6 +318,109 @@ void main() {
     expect(controller.pin, '1345');
   });
 
+  testWidgets('profile badges remain reachable from 800x600 through 4K', (
+    tester,
+  ) async {
+    final controller = FixtureController()
+      ..stage = SetupStage.profiles
+      ..profile = const PlexHomeUser(
+        id: 'profile',
+        name: 'Profile',
+        protected: true,
+        admin: true,
+        restricted: true,
+      )
+      ..profiles = const [
+        PlexHomeUser(
+          id: 'profile',
+          name: 'Profile',
+          protected: true,
+          admin: true,
+          restricted: true,
+        ),
+      ];
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    for (final size in [const Size(800, 600), const Size(3840, 2160)]) {
+      await tester.binding.setSurfaceSize(size);
+      await tester.pumpWidget(UiFixture(controller: controller).build());
+      await tester.pumpAndSettle();
+      expect(find.text('Active'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    }
+  });
+
+  testWidgets('server hierarchy stays reachable and semantic when compact', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(800, 600));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final server = PlexServer(
+      id: 'server',
+      name:
+          'A deliberately long synthetic server name that must remain readable',
+      owned: true,
+      connections: [
+        PlexConnection(
+          uri: Uri.parse('https://local.synthetic.invalid'),
+          local: true,
+          relay: false,
+        ),
+        PlexConnection(
+          uri: Uri.parse('https://remote.synthetic.invalid'),
+          local: false,
+          relay: false,
+        ),
+        PlexConnection(
+          uri: Uri.parse('https://relay.synthetic.invalid'),
+          local: false,
+          relay: true,
+        ),
+      ],
+    );
+    const backupServer = PlexServer(
+      id: 'backup-server',
+      name: 'Backup Server',
+      connections: [],
+    );
+    final controller = FixtureController()
+      ..stage = SetupStage.servers
+      ..servers = [server, backupServer]
+      ..server = server
+      ..connection = PlexConnection(
+        uri: Uri.parse('https://selected.synthetic.invalid'),
+        local: true,
+        relay: false,
+        latency: const Duration(milliseconds: 100),
+      );
+
+    await tester.pumpWidget(UiFixture(controller: controller).build());
+    await tester.pumpAndSettle();
+
+    expect(find.bySemanticsLabel(RegExp('Owned server')), findsOneWidget);
+    expect(
+      find.bySemanticsLabel(RegExp('Direct local available')),
+      findsOneWidget,
+    );
+    expect(
+      find.bySemanticsLabel(RegExp('Direct remote available')),
+      findsOneWidget,
+    );
+    expect(find.bySemanticsLabel(RegExp('Relay available')), findsOneWidget);
+    final reconnectSemantics = tester
+        .getSemantics(find.widgetWithText(FilledButton, 'Reconnect'))
+        .getSemanticsData();
+    expect(reconnectSemantics.label, 'Reconnect to ${server.name}');
+    expect(reconnectSemantics.flagsCollection.isButton, isTrue);
+    expect(reconnectSemantics.hasAction(SemanticsAction.focus), isTrue);
+    expect(reconnectSemantics.hasAction(SemanticsAction.tap), isTrue);
+    final connectSemantics = tester
+        .getSemantics(find.widgetWithText(FilledButton, 'Connect'))
+        .getSemanticsData();
+    expect(connectSemantics.label, 'Connect to Backup Server');
+    expect(connectSemantics.hasAction(SemanticsAction.tap), isTrue);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('Channel Setup remains reachable at the practical minimum', (
     tester,
   ) async {
@@ -353,16 +458,95 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Select Plex libraries'), findsOneWidget);
+    expect(find.text('Count available after scan'), findsOneWidget);
     await tester.tap(find.text('Configure channels'));
     await tester.pumpAndSettle();
     expect(find.text('Configure the lineup'), findsOneWidget);
     expect(find.text('Content Sources'), findsWidgets);
     expect(find.text('Guide Order'), findsOneWidget);
+    expect(
+      find.bySemanticsLabel(RegExp('Playlists: No matches.*Genres: 1')),
+      findsOneWidget,
+    );
+    await tester.tap(find.widgetWithText(SwitchListTile, 'Playlists'));
+    await tester.pump();
+    expect(
+      find.bySemanticsLabel(RegExp('Playlists: Off.*Genres: 1')),
+      findsOneWidget,
+    );
 
     await tester.tap(find.text('Build Channels'));
     await tester.pumpAndSettle();
     expect(find.text('Review expected changes'), findsOneWidget);
     expect(find.text('Confirm & Replace'), findsOneWidget);
+    expect(find.bySemanticsLabel('Create: 2'), findsOneWidget);
+    expect(find.bySemanticsLabel('Update: 0'), findsOneWidget);
+    expect(find.bySemanticsLabel('Unchanged: 0'), findsOneWidget);
+    expect(find.bySemanticsLabel('Remove: 0'), findsOneWidget);
+    expect(find.bySemanticsLabel('Final: 2'), findsOneWidget);
+  });
+
+  testWidgets('Channel Setup merge review matches the applied channel sets', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1600, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final controller = _SetupFixtureController()
+      ..stage = SetupStage.channelSetup
+      ..libraries = const [
+        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
+      ];
+    await controller.setLibraries(const {'movies'});
+    final generated = materializeChannelPlan(
+      proposals: buildChannelProposals(
+        libraries: controller.libraries,
+        items: controller.availableMedia,
+      ),
+      existing: const [],
+      mode: ChannelBuildMode.replace,
+      anchor: DateTime.utc(2026),
+    ).channels;
+    controller.channels = [
+      generated.first,
+      Channel(
+        id: generated.last.id,
+        number: generated.last.number,
+        name: 'Old generated name',
+        source: generated.last.source,
+        playbackMode: PlaybackMode.sequential,
+        anchor: DateTime.utc(2025),
+        shuffleSeed: generated.last.shuffleSeed,
+        builderKey: generated.last.builderKey,
+      ),
+      Channel(
+        id: 'custom',
+        number: 42,
+        name: 'Custom',
+        source: const ManualSource([]),
+        playbackMode: PlaybackMode.sequential,
+        anchor: DateTime.utc(2026),
+        shuffleSeed: 42,
+      ),
+    ];
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      MaterialApp(home: UpstreamChannelSetupView(controller: controller)),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Configure channels'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Build Options'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Merge with lineup'));
+    await tester.pump();
+    await tester.tap(find.text('Review'));
+    await tester.pumpAndSettle();
+
+    expect(find.bySemanticsLabel('Create: 0'), findsOneWidget);
+    expect(find.bySemanticsLabel('Update: 1'), findsOneWidget);
+    expect(find.bySemanticsLabel('Unchanged: 2'), findsOneWidget);
+    expect(find.bySemanticsLabel('Remove: 0'), findsOneWidget);
+    expect(find.bySemanticsLabel('Final: 3'), findsOneWidget);
   });
 
   testWidgets('Channel Setup exposes distinct scan states and actions', (
@@ -385,10 +569,23 @@ void main() {
         ..libraryScanCompletedPages = 3
         ..libraryScanCompletedItems = 50
         ..libraryScanTotalItems = 100
+        ..scanFacts = {
+          'movies': LibraryScanFact(
+            status: status,
+            completedPages: 3,
+            completedItems: 50,
+            totalItems: 100,
+          ),
+        }
         ..error = error;
       addTearDown(controller.dispose);
       await tester.pumpWidget(
-        MaterialApp(home: UpstreamChannelSetupView(controller: controller)),
+        MaterialApp(
+          home: UpstreamChannelSetupView(
+            key: ValueKey(status),
+            controller: controller,
+          ),
+        ),
       );
       await tester.pump();
       return controller;
@@ -401,6 +598,12 @@ void main() {
     );
     expect(find.text('Pages scanned: 3 · Items scanned: 50'), findsOneWidget);
     expect(find.widgetWithText(OutlinedButton, 'Cancel scan'), findsOneWidget);
+    expect(find.text('Scanning'), findsOneWidget);
+    expect(find.text('50/100 items · 3 pages'), findsOneWidget);
+    expect(
+      find.bySemanticsLabel(RegExp(r'Movies.*Scanning', dotAll: true)),
+      findsOneWidget,
+    );
     expect(
       tester
           .widget<LinearProgressIndicator>(find.byType(LinearProgressIndicator))
@@ -419,6 +622,17 @@ void main() {
       await pumpStatus(state.$1);
       expect(find.bySemanticsLabel(state.$2), findsOneWidget);
       expect(find.widgetWithText(TextButton, 'Retry scan'), findsOneWidget);
+      await tester.drag(find.byType(CustomScrollView), const Offset(0, -180));
+      await tester.pump();
+      expect(
+        find.text(switch (state.$1) {
+          LibraryScanStatus.empty => 'Empty',
+          LibraryScanStatus.unsupported => 'Unsupported',
+          _ => 'Cancelled',
+        }),
+        findsOneWidget,
+      );
+      expect(find.text('50/100 items · 3 pages'), findsOneWidget);
     }
 
     await pumpStatus(
@@ -433,6 +647,14 @@ void main() {
     expect(find.bySemanticsLabel('Library scan complete'), findsOneWidget);
     expect(find.text('Pages scanned: 3 · Items scanned: 50'), findsOneWidget);
     expect(find.text('Retry scan'), findsNothing);
+    expect(find.text('Complete'), findsOneWidget);
+    expect(find.text('50/100 items · 3 pages'), findsOneWidget);
+
+    await tester.binding.setSurfaceSize(const Size(1280, 720));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpAndSettle();
+    expect(find.text('Complete'), findsOneWidget);
+    expect(find.text('50/100 items · 3 pages'), findsOneWidget);
   });
 
   testWidgets('dedicated scan cancellation is not presented as a failure', (
@@ -526,6 +748,11 @@ class _ProfileFixtureController extends FixtureController {
 }
 
 class _SetupFixtureController extends FixtureController {
+  Map<String, LibraryScanFact> scanFacts = const {};
+
+  @override
+  Map<String, LibraryScanFact> get libraryScanFacts => scanFacts;
+
   @override
   Future<bool> setLibraries(Set<String> ids) async {
     selectedLibraryIds = Set.unmodifiable(ids);
@@ -537,6 +764,7 @@ class _SetupFixtureController extends FixtureController {
           type: 'movie',
           duration: const Duration(minutes: 90),
           libraryId: 'movies',
+          parts: [PlexMediaPart(path: '/parts/movie-$index')],
           genres: const ['Drama'],
           addedAt: DateTime.utc(2026, 1, index + 1),
         ),

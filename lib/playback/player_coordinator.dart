@@ -11,6 +11,7 @@ import 'native_player.dart';
 enum PlayerOverlay {
   none,
   osd,
+  nowPlaying,
   miniGuide,
   fullGuide,
   audioTracks,
@@ -279,7 +280,9 @@ class PlayerCoordinator extends ChangeNotifier {
         case PlayerState.paused:
         case PlayerState.buffering:
         case PlayerState.seeking:
-          _setOverlay(PlayerOverlay.osd);
+          if (_overlay != PlayerOverlay.nowPlaying) {
+            _setOverlay(PlayerOverlay.osd);
+          }
           break;
         case PlayerState.playing:
           if (_overlay == PlayerOverlay.osd) _scheduleOverlayHide(_overlay);
@@ -871,8 +874,16 @@ class PlayerCoordinator extends ChangeNotifier {
   }
 
   Future<void> requestStop() async {
+    final replaceNowPlaying = _overlay == PlayerOverlay.nowPlaying;
+    final nowPlayingGeneration = _overlayPresentationGeneration;
     try {
       await stop();
+      if (!_disposed &&
+          replaceNowPlaying &&
+          _overlay == PlayerOverlay.nowPlaying &&
+          _overlayPresentationGeneration == nowPlayingGeneration) {
+        showOsd();
+      }
     } catch (error) {
       if (_disposed) return;
       _recordPlaybackFailure(error);
@@ -1010,6 +1021,12 @@ class PlayerCoordinator extends ChangeNotifier {
   }
 
   void showOsd() => _setOverlay(PlayerOverlay.osd);
+
+  void showNowPlaying() {
+    if (currentProgram == null) return;
+    _setOverlay(PlayerOverlay.nowPlaying, timed: false);
+  }
+
   void showMiniGuide() {
     _miniGuideChannelId =
         lineup.currentChannelId ?? lineup.channels.firstOrNull?.id;
@@ -1020,7 +1037,11 @@ class PlayerCoordinator extends ChangeNotifier {
   void showFullGuide() => _setOverlay(PlayerOverlay.fullGuide, timed: false);
 
   void showTracks(PlayerTrackType type) {
-    if (_overlay != PlayerOverlay.none && _overlay != PlayerOverlay.osd) return;
+    if (_overlay != PlayerOverlay.none &&
+        _overlay != PlayerOverlay.osd &&
+        _overlay != PlayerOverlay.nowPlaying) {
+      return;
+    }
     if (!_tracks.any((track) => track.type == type)) return;
     _setOverlay(
       type == PlayerTrackType.audio
@@ -1265,7 +1286,11 @@ class PlayerCoordinator extends ChangeNotifier {
   }
 
   void _guideChanged() {
-    if (_overlay == PlayerOverlay.miniGuide || _overlay == PlayerOverlay.osd) {
+    if (_overlay == PlayerOverlay.nowPlaying && currentProgram == null) {
+      closeOverlay();
+    } else if (_overlay == PlayerOverlay.miniGuide ||
+        _overlay == PlayerOverlay.osd ||
+        _overlay == PlayerOverlay.nowPlaying) {
       notifyListeners();
     }
   }

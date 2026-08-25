@@ -29,13 +29,13 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
   Timer? _clock;
   final _linkActionFocus = FocusNode(debugLabel: 'Retry secure cancellation');
   final _profileCancelFocus = FocusNode(debugLabel: 'Cancel profile selection');
-  late bool _secureCancellationRequired;
+  late bool _linkingStopped;
   late bool _busy;
 
   @override
   void initState() {
     super.initState();
-    _secureCancellationRequired = widget.controller.secureCancellationRequired;
+    _linkingStopped = _isLinkingStopped(widget.controller);
     _busy = widget.controller.busy;
     widget.controller.addListener(_controllerChanged);
     _clock = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -50,7 +50,7 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.controller == widget.controller) return;
     oldWidget.controller.removeListener(_controllerChanged);
-    _secureCancellationRequired = widget.controller.secureCancellationRequired;
+    _linkingStopped = _isLinkingStopped(widget.controller);
     _busy = widget.controller.busy;
     widget.controller.addListener(_controllerChanged);
   }
@@ -58,18 +58,16 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
   void _controllerChanged() {
     if (!mounted) return;
     final controller = widget.controller;
-    final nextSecureCancellationRequired =
-        controller.secureCancellationRequired;
     final nextBusy = controller.busy;
-    final retryNeedsFocus =
-        !_secureCancellationRequired && nextSecureCancellationRequired;
+    final nextLinkingStopped = _isLinkingStopped(controller);
+    final retryNeedsFocus = !_linkingStopped && nextLinkingStopped;
     final cancelNeedsFocus =
         !_busy &&
         nextBusy &&
         controller.stage == SetupStage.profiles &&
         controller.profileSelectionCanCancel;
     setState(() {
-      _secureCancellationRequired = nextSecureCancellationRequired;
+      _linkingStopped = nextLinkingStopped;
       _busy = nextBusy;
     });
     final target = retryNeedsFocus
@@ -83,6 +81,11 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
       });
     }
   }
+
+  static bool _isLinkingStopped(LineupController controller) =>
+      controller.stage == SetupStage.linking &&
+      controller.error != null &&
+      (controller.activePin == null || controller.secureCancellationRequired);
 
   @override
   void dispose() {
@@ -170,6 +173,7 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
 
   Widget _linking() {
     final pin = widget.controller.activePin;
+    final stopped = _isLinkingStopped(widget.controller);
     final remaining = pin == null
         ? Duration.zero
         : pin.expiresAt.difference(DateTime.now());
@@ -179,65 +183,75 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
     final code = (pin?.code ?? '----').padRight(4, '-').substring(0, 4);
     return _HeroContent(
       title: 'Sign in to Plex',
-      subtitle: 'Scan the QR code or visit plex.tv/link',
+      subtitle: stopped
+          ? 'Sign-in stopped. Request a new code to try again.'
+          : 'Scan the QR code or visit plex.tv/link',
       child: Column(
         children: [
           const SizedBox(height: 16),
-          Wrap(
-            alignment: WrapAlignment.center,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 42,
-            runSpacing: 28,
-            children: [
-              if (pin != null)
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: QrImageView(
-                    data: 'https://plex.tv/link',
-                    size: 190,
-                    padding: EdgeInsets.zero,
-                    semanticsLabel: 'QR code for plex.tv/link',
-                  ),
-                ),
-              Column(
-                children: [
-                  Semantics(
-                    liveRegion: true,
-                    label: 'Plex link code ${code.split('').join(' ')}',
-                    excludeSemantics: true,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        for (final character in code.characters)
-                          _PinCell(character),
-                      ],
+          if (!stopped)
+            Wrap(
+              alignment: WrapAlignment.center,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 42,
+              runSpacing: 28,
+              children: [
+                if (pin != null)
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: QrImageView(
+                      data: 'https://plex.tv/link',
+                      size: 190,
+                      padding: EdgeInsets.zero,
+                      semanticsLabel: 'QR code for plex.tv/link',
                     ),
                   ),
-                  const SizedBox(height: 18),
-                  Text(
-                    pin == null ? 'Requesting PIN…' : 'Waiting for sign-in…',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  if (pin != null) ...[
-                    const SizedBox(height: 10),
-                    Chip(
-                      avatar: const Icon(Icons.schedule, size: 18),
-                      label: Text(
-                        'Expires in $time',
-                        style: const TextStyle(
-                          fontFeatures: [FontFeature.tabularFigures()],
-                        ),
+                Column(
+                  children: [
+                    Semantics(
+                      liveRegion: true,
+                      label: 'Plex link code ${code.split('').join(' ')}',
+                      excludeSemantics: true,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          for (final character in code.characters)
+                            _PinCell(character),
+                        ],
                       ),
                     ),
+                    const SizedBox(height: 18),
+                    Text(
+                      pin == null ? 'Requesting PIN…' : 'Waiting for sign-in…',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    if (pin != null) ...[
+                      const SizedBox(height: 10),
+                      Chip(
+                        avatar: const Icon(Icons.schedule, size: 18),
+                        label: Text(
+                          'Expires in $time',
+                          style: const TextStyle(
+                            fontFeatures: [FontFeature.tabularFigures()],
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
-                ],
-              ),
-            ],
-          ),
+                ),
+              ],
+            ),
+          if (stopped)
+            Icon(
+              Icons.link_off,
+              size: 72,
+              color: Theme.of(context).colorScheme.error,
+              semanticLabel: 'Plex sign-in stopped',
+            ),
           const SizedBox(height: 28),
           Wrap(
             spacing: 12,
@@ -255,6 +269,8 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
                 child: Text(
                   widget.controller.secureCancellationRequired
                       ? 'Retry secure cancellation'
+                      : stopped
+                      ? 'Request a new code'
                       : pin == null
                       ? 'Request PIN'
                       : 'Request a new code',
@@ -287,6 +303,7 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
             for (final user in widget.controller.profiles)
               _ProfileCard(
                 user: user,
+                active: user.id == widget.controller.profile?.id,
                 autofocus: user == widget.controller.profiles.first,
                 onPressed: widget.controller.busy
                     ? null
@@ -520,16 +537,18 @@ class _PinCell extends StatelessWidget {
 class _ProfileCard extends StatelessWidget {
   const _ProfileCard({
     required this.user,
+    required this.active,
     required this.autofocus,
     required this.onPressed,
   });
   final PlexHomeUser user;
+  final bool active;
   final bool autofocus;
   final VoidCallback? onPressed;
   @override
   Widget build(BuildContext context) => SizedBox(
-    width: 178,
-    height: 244,
+    width: 210,
+    height: 280,
     child: LineupSelectionCard(
       selected: false,
       autofocus: autofocus,
@@ -558,16 +577,45 @@ class _ProfileCard extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
             ),
-            if (user.protected)
-              const Padding(
-                padding: EdgeInsets.only(top: 8),
-                child: Chip(
-                  avatar: Icon(Icons.lock, size: 15),
-                  label: Text('PIN'),
+            if (user.protected ||
+                user.admin ||
+                user.restricted == true ||
+                active)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 4,
+                  runSpacing: 4,
+                  children: [
+                    if (user.protected) const _ProfileBadge('PIN'),
+                    if (user.admin) const _ProfileBadge('Admin'),
+                    if (user.restricted == true)
+                      const _ProfileBadge('Restricted'),
+                    if (active) const _ProfileBadge('Active'),
+                  ],
                 ),
               ),
           ],
         ),
+      ),
+    ),
+  );
+}
+
+class _ProfileBadge extends StatelessWidget {
+  const _ProfileBadge(this.label);
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    label: label,
+    child: ExcludeSemantics(
+      child: Chip(
+        visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
+        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        labelPadding: const EdgeInsets.symmetric(horizontal: 4),
+        label: Text(label, style: const TextStyle(fontSize: 11)),
       ),
     ),
   );
@@ -583,25 +631,84 @@ class _ServerCard extends StatelessWidget {
   final PlexConnection? connection;
   final VoidCallback? onPressed;
   @override
-  Widget build(BuildContext context) => Card(
-    child: ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
-      leading: const Icon(Icons.dns_outlined, size: 34),
-      title: Text(
-        server.name,
-        style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w700),
+  Widget build(BuildContext context) {
+    final availableKinds = server.connections.map(plexConnectionKind).toSet();
+    final availability = [
+      for (final kind in PlexConnectionKind.values)
+        if (availableKinds.contains(kind))
+          '${plexConnectionKindLabel(kind)} available',
+    ];
+    final action = connection == null ? 'Connect' : 'Reconnect';
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 16),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Padding(
+              padding: EdgeInsets.only(top: 2),
+              child: Icon(Icons.dns_outlined, size: 34),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    server.name,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 19,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(server.owned ? 'Owned server' : 'Shared server'),
+                  if (availability.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 6,
+                      children: [
+                        for (final label in availability)
+                          Chip(
+                            visualDensity: const VisualDensity(
+                              horizontal: -4,
+                              vertical: -4,
+                            ),
+                            materialTapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
+                            label: Text(label),
+                          ),
+                      ],
+                    ),
+                  ],
+                  if (connection != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      'Selected connection: ${plexConnectionDescription(connection!)}',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            MergeSemantics(
+              child: Semantics(
+                label: '$action to ${server.name}',
+                child: FilledButton(
+                  onPressed: onPressed,
+                  child: ExcludeSemantics(child: Text(action)),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
-      subtitle: Text(
-        connection == null
-            ? '${server.owned ? 'Owned server' : 'Shared server'} • ${server.connections.length} secure connection${server.connections.length == 1 ? '' : 's'}'
-            : '${server.owned ? 'Owned server' : 'Shared server'} • ${plexConnectionDescription(connection!)}',
-      ),
-      trailing: FilledButton(
-        onPressed: onPressed,
-        child: Text(connection == null ? 'Connect' : 'Reconnect'),
-      ),
-    ),
-  );
+    );
+  }
 }
 
 class _ProfilePinDialog extends StatefulWidget {

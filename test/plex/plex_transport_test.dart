@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -27,6 +28,34 @@ void main() {
       ),
     );
   });
+
+  for (final failure in <Object>[
+    const SocketException('opaque socket detail'),
+    http.ClientException('opaque client detail'),
+  ]) {
+    test('${failure.runtimeType} maps to a finite transport code', () async {
+      final client = PlexClient(
+        clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+        httpClient: MockClient((_) async => throw failure),
+      );
+      await expectLater(
+        client.createPin(),
+        throwsA(
+          isA<PlexException>()
+              .having(
+                (exception) => exception.code,
+                'code',
+                'network-unavailable',
+              )
+              .having(
+                (exception) => exception.message,
+                'message',
+                isNot(contains('opaque')),
+              ),
+        ),
+      );
+    });
+  }
 
   test('PIN requests send stable identity without a credential', () async {
     late http.Request request;
@@ -744,6 +773,13 @@ void main() {
                     'title': 'Movie',
                     'type': 'movie',
                     'duration': 1000,
+                    'Media': [
+                      {
+                        'Part': [
+                          {'key': '/library/parts/m1'},
+                        ],
+                      },
+                    ],
                   },
                 ],
               },
@@ -1008,6 +1044,163 @@ void main() {
       ]);
     },
   );
+
+  test('Plex Home JSON preserves explicit role facts', () async {
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      httpClient: MockClient(
+        (_) async => http.Response(
+          jsonEncode({
+            'User': [
+              {
+                'id': 'admin',
+                'title': 'Admin profile',
+                'ADMIN': 'yes',
+                'restricted': false,
+              },
+              {
+                'id': 'restricted',
+                'title': 'Restricted profile',
+                'IsAdMiN': 0,
+                'ReStRiCtEd': 'true',
+              },
+              {'id': 'standard', 'title': 'Standard profile'},
+            ],
+          }),
+          200,
+        ),
+      ),
+    );
+
+    final users = await client.homeUsers('account-secret');
+    expect(users[0].admin, isTrue);
+    expect(users[0].restricted, isFalse);
+    expect(users[1].admin, isFalse);
+    expect(users[1].restricted, isTrue);
+    expect(users[2].admin, isFalse);
+    expect(users[2].restricted, isNull);
+  });
+
+  test('Plex Home XML preserves explicit role facts', () async {
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      httpClient: MockClient(
+        (_) async => http.Response(
+          '<MediaContainer>'
+          '<User id="admin" title="Admin profile" admin="1" restricted="false"/>'
+          '<User id="restricted" title="Restricted profile" isAdmin="false" restricted="yes"/>'
+          '<User id="standard" title="Standard profile"/>'
+          '</MediaContainer>',
+          200,
+        ),
+      ),
+    );
+
+    final users = await client.homeUsers('account-secret');
+    expect(users[0].admin, isTrue);
+    expect(users[0].restricted, isFalse);
+    expect(users[1].admin, isFalse);
+    expect(users[1].restricted, isTrue);
+    expect(users[2].admin, isFalse);
+    expect(users[2].restricted, isNull);
+  });
+
+  test('Plex Home v2 server failure falls back to legacy', () async {
+    final paths = <String>[];
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      httpClient: MockClient((request) async {
+        paths.add(request.url.path);
+        return request.url.path.contains('/v2/')
+            ? http.Response('', 503)
+            : http.Response(
+                '<MediaContainer><User id="7" title="Home" protected="0"/></MediaContainer>',
+                200,
+              );
+      }),
+    );
+
+    expect((await client.homeUsers('account-secret')).single.id, '7');
+    expect(paths, ['/api/v2/home/users', '/api/home/users']);
+  });
+
+  test('Plex Home legacy server failure is terminal', () async {
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      httpClient: MockClient(
+        (request) async => request.url.path.contains('/v2/')
+            ? http.Response('', 404)
+            : http.Response('', 503),
+      ),
+    );
+
+    await expectLater(
+      client.homeUsers('account-secret'),
+      throwsA(
+        isA<PlexException>().having(
+          (exception) => exception.code,
+          'code',
+          'server-unreachable',
+        ),
+      ),
+    );
+  });
+
+  for (final status in [404, 405]) {
+    test('missing legacy Plex Home inventory is empty ($status)', () async {
+      final client = PlexClient(
+        clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+        httpClient: MockClient((_) async => http.Response('', status)),
+      );
+
+      expect(await client.homeUsers('account-secret'), isEmpty);
+    });
+  }
+
+  for (final (format, payload) in [
+    ('JSON', '{"users":'),
+    ('XML', '<MediaContainer>'),
+  ]) {
+    test(
+      'malformed successful Plex Home payload is a parse error ($format)',
+      () async {
+        final client = PlexClient(
+          clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+          httpClient: MockClient((_) async => http.Response(payload, 200)),
+        );
+
+        await expectLater(
+          client.homeUsers('account-secret'),
+          throwsA(
+            isA<PlexException>().having(
+              (exception) => exception.code,
+              'code',
+              'parse-error',
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  for (final (format, payload) in [
+    ('JSON', jsonEncode({'users': []})),
+    ('XML', '<MediaContainer/>'),
+  ]) {
+    test('valid empty Plex Home inventory remains empty ($format)', () async {
+      var calls = 0;
+      final client = PlexClient(
+        clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+        httpClient: MockClient((_) async {
+          calls++;
+          return http.Response(payload, 200);
+        }),
+      );
+
+      expect(await client.homeUsers('account-secret'), isEmpty);
+      expect(calls, 2);
+    });
+  }
 }
 
 List<PlexPlaybackPartDescriptor> _directPlaybackDescriptor(String partPath) =>

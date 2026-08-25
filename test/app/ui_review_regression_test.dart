@@ -6,6 +6,7 @@ import 'package:lineup_desktop/app/channel_setup_view.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/app/lineup_shell.dart';
 import 'package:lineup_desktop/channels/channel.dart';
+import 'package:lineup_desktop/channels/channel_builder.dart';
 import 'package:lineup_desktop/persistence/app_store.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
@@ -290,6 +291,7 @@ void main() {
           type: 'movie',
           duration: const Duration(minutes: 30),
           libraryId: 'movies',
+          parts: [PlexMediaPart(path: '/parts/available')],
           addedAt: DateTime.utc(2026),
         ),
       ];
@@ -589,6 +591,45 @@ void main() {
     );
   });
 
+  testWidgets('Channel Setup append review stays exact after apply failure', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1600, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final controller = _FailingChannelSetupController()
+      ..stage = SetupStage.channelSetup
+      ..libraries = const [
+        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
+      ]
+      ..channels = [_channel];
+    final originalChannels = controller.channels;
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      MaterialApp(home: UpstreamChannelSetupView(controller: controller)),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Configure channels'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Build Options'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Append channels'));
+    await tester.pump();
+    await tester.tap(find.text('Review'));
+    await tester.pumpAndSettle();
+
+    expect(find.bySemanticsLabel('Create: 2'), findsOneWidget);
+    expect(find.bySemanticsLabel('Update: 0'), findsOneWidget);
+    expect(find.bySemanticsLabel('Unchanged: 1'), findsOneWidget);
+    expect(find.bySemanticsLabel('Remove: 0'), findsOneWidget);
+    expect(find.bySemanticsLabel('Final: 3'), findsOneWidget);
+
+    await tester.tap(find.text('Confirm & Build'));
+    await tester.pumpAndSettle();
+    expect(find.text('The channel plan could not be applied.'), findsOneWidget);
+    expect(controller.channels, same(originalChannels));
+    expect(find.text('Review expected changes'), findsOneWidget);
+  });
+
   testWidgets(
     'Channel Setup autofocus does not reclaim focus after scrolling',
     (tester) async {
@@ -720,6 +761,32 @@ class _SettingsFixtureController extends FixtureController {
 class _ProfileFixtureController extends FixtureController {
   @override
   Future<void> selectProfile(PlexHomeUser selected, {String? pin}) async {}
+}
+
+class _FailingChannelSetupController extends FixtureController {
+  @override
+  Future<bool> setLibraries(Set<String> ids) async {
+    selectedLibraryIds = Set.unmodifiable(ids);
+    availableMedia = [
+      for (var index = 0; index < 6; index++)
+        PlexMediaItem(
+          id: 'movie-$index',
+          title: 'Movie $index',
+          type: 'movie',
+          duration: const Duration(minutes: 90),
+          libraryId: 'movies',
+          genres: const ['Drama'],
+        ),
+    ];
+    libraryScanStatus = LibraryScanStatus.complete;
+    return true;
+  }
+
+  @override
+  Future<void> applyChannelPlan(
+    List<Channel> planned, {
+    required ChannelBuildMode mode,
+  }) async => throw StateError('synthetic apply failure');
 }
 
 final _channel = Channel(

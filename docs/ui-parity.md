@@ -4,10 +4,10 @@
 > This is a historical, campaign-scoped visual evidence record. For current
 > product classifications, evidence gaps, priorities, and release conclusions,
 > use [Definitive Product Parity](product-parity.md). In particular, current
-> source does not retain the historical 256-program projection ceiling, OSD
-> auto-hide does not suspend for focused controls, and Player overlay motion is
-> not yet covered by Reduce Motion. Those corrections are adjudicated in the
-> current audit without rewriting the original campaign boundaries below.
+> `scheduleWindow` caps current per-row projection at 1,000 programs, and
+> `GuideController` inherits that bound. The historical 256-program statement
+> below was a documentation error rather than an implemented limit and is
+> corrected in place.
 
 This document is the source record for Prompt 3B and Prompt 4B portable UI
 parity, the full Prompt 4C source-defined theme and shell refinement, Prompt 4D
@@ -225,7 +225,7 @@ Relevant upstream paths included:
 | Focused program, selected program, tuned channel, currently airing program and pointer hover | Parity | `GuideController` owns distinct focused and selected identities; tuning remains in `LineupController`/`PlayerCoordinator`; airing is clock-derived; hover is local visual state and cannot retune or replace logical focus. |
 | Vertical/time navigation and jump to now | Parity | Left/right follows scheduled geometry. Up/down carries a focus time into the adjacent row and chooses the overlapping or nearest program. Page navigation is viewport-sized and Play/P jumps to now, matching upstream input intent. |
 | Guide context restoration | Parity | The persistent Guide owner retains channel/program identity, time window, and vertical offset across Guide/PiP/player route disposal and return. Focus repair cannot tune. |
-| Vertical virtualization and bounded derived work | Parity | Fixed-extent lazy rows, bounded overscan, 64-row schedule/index caches, four concurrent schedule loads, a 256-program per-row projection ceiling, 12-entry artwork cache, four artwork loads, and generation rejection remain explicit. A 1,000-channel fixture is covered. |
+| Vertical virtualization and bounded derived work | Parity | Fixed-extent lazy rows, bounded overscan, 64-row schedule/index caches, four concurrent schedule loads, a 1,000-program per-row projection ceiling, 12-entry artwork cache, four artwork loads, and generation rejection remain explicit. A 1,000-channel fixture is covered. |
 | Horizontal ownership | Intentional Desktop adaptation | The visible `guideHours` window is the horizontal viewport and `windowStart` is its owner; navigation advances the window in 30-minute steps. There is no second pixel scroll owner or competing jump-to-now animation. |
 | Guide with PiP allocation | Parity | `PlayerSurface` is the single Flutter/native presentation geometry used by both PiP and full player. Tuning remains in Guide; PiP can then open the full shell. The macOS unsupported surface never fabricates video. |
 | Tune, replacement tune, loading, retry, stopped/ended and stale work | Parity | The retained coordinator serializes tune operations, uses separate tune and native-load generations, rejects stale events, and projects recoverable versus terminal failures without adding widget playback state. |

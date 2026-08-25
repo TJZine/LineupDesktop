@@ -33,6 +33,21 @@ enum LibraryScanStatus {
   cancelled,
 }
 
+@immutable
+class LibraryScanFact {
+  const LibraryScanFact({
+    required this.status,
+    this.completedPages = 0,
+    this.completedItems = 0,
+    this.totalItems,
+  });
+
+  final LibraryScanStatus status;
+  final int completedPages;
+  final int completedItems;
+  final int? totalItems;
+}
+
 class LineupPlaybackRequest {
   LineupPlaybackRequest.parts(
     List<LineupPlaybackPart> parts, {
@@ -116,6 +131,7 @@ class LineupController extends ChangeNotifier {
   int libraryScanCompletedPages = 0;
   int libraryScanCompletedItems = 0;
   int? libraryScanTotalItems;
+  Map<String, LibraryScanFact> _libraryScanFacts = const {};
   String? error;
   int _epoch = 0;
   String? _accountToken;
@@ -142,6 +158,7 @@ class LineupController extends ChangeNotifier {
   String? startupRecoveryNotice;
 
   int get contentGeneration => _contentGeneration;
+  Map<String, LibraryScanFact> get libraryScanFacts => _libraryScanFacts;
 
   Future<void> initialize() async {
     final operation = ++_epoch;
@@ -156,6 +173,7 @@ class LineupController extends ChangeNotifier {
     channels = const [];
     currentChannelId = null;
     selectedLibraryIds = const {};
+    _resetLibraryScan();
     final token = await credentials.readAccountToken();
     if (!_isCurrent(operation)) return;
     if (token == null) {
@@ -219,7 +237,13 @@ class LineupController extends ChangeNotifier {
     _pinTimer?.cancel();
     await _run(
       () async {
-        final pin = await plex.createPin();
+        late final PlexPin pin;
+        try {
+          pin = await plex.createPin();
+        } catch (exception) {
+          final code = _linkFailureCode(exception);
+          throw PlexException(code, _linkFailureMessage(code));
+        }
         if (operation != _epoch) return;
         activePin = pin;
         stage = SetupStage.linking;
@@ -245,7 +269,7 @@ class LineupController extends ChangeNotifier {
     } catch (exception) {
       cleanupFailure = exception;
       diagnostics.add('application', 'Credential cleanup failed', {
-        'code': exception is PlexException ? exception.code : 'unexpected',
+        'code': 'credential-cleanup-failed',
       });
     }
     if (pin != null) {
@@ -253,7 +277,7 @@ class LineupController extends ChangeNotifier {
         await plex.cancelPin(pin);
       } catch (exception) {
         diagnostics.add('plex-auth', 'PIN cancellation failed', {
-          'code': exception is PlexException ? exception.code : 'unexpected',
+          'code': _linkFailureCode(exception),
         });
       }
     }
@@ -276,7 +300,9 @@ class LineupController extends ChangeNotifier {
     _pinTimer?.cancel();
     _pinTimer = Timer(pinPollInterval, () async {
       await _pollPin(operation, pin);
-      if (operation == _epoch && activePin?.id == pin.id) {
+      if (operation == _epoch &&
+          activePin?.id == pin.id &&
+          !secureCancellationRequired) {
         _schedulePinPoll(operation, pin);
       }
     });
@@ -297,16 +323,28 @@ class LineupController extends ChangeNotifier {
       _pinTimer?.cancel();
       final validated = await plex.account(token);
       if (operation != _epoch) return;
-      if (!await _writeCredential(
-        operation,
-        () => credentials.writeAccountToken(token),
-      )) {
+      final homeUsers = await plex.homeUsers(token);
+      if (operation != _epoch) return;
+      try {
+        if (!await _writeCredential(
+          operation,
+          () => credentials.writeAccountToken(token),
+        )) {
+          return;
+        }
+      } catch (_) {
+        if (operation != _epoch) return;
+        secureCancellationRequired = true;
+        error = 'Lineup could not confirm secure credential storage. Retry secure cancellation before signing in again.';
+        diagnostics.add('plex-auth', 'Credential write failed', {
+          'code': 'credential-write-failed',
+        });
+        notifyListeners();
         return;
       }
       account = validated;
       _accountToken = token;
-      profiles = await plex.homeUsers(token);
-      if (operation != _epoch) return;
+      profiles = homeUsers;
       activePin = null;
       if (profiles.length > 1) {
         stage = SetupStage.profiles;
@@ -314,15 +352,61 @@ class LineupController extends ChangeNotifier {
         await selectProfile(profiles.single);
       } else {
         _profileToken = token;
-        await _discover(operation);
+        await _run(
+          () => _discover(operation),
+          operation: operation,
+          fallbackStage: SetupStage.servers,
+        );
       }
       notifyListeners();
     } catch (exception) {
-      diagnostics.add('plex-auth', 'PIN poll failed', {
-        'code': exception is PlexException ? exception.code : 'unexpected',
-      });
+      if (operation != _epoch) return;
+      _pinTimer?.cancel();
+      activePin = null;
+      final code = _linkFailureCode(exception);
+      error = _linkFailureMessage(code);
+      diagnostics.add('plex-auth', 'PIN poll failed', {'code': code});
+      notifyListeners();
+      try {
+        await plex.cancelPin(pin);
+      } catch (cancelException) {
+        if (operation != _epoch) return;
+        diagnostics.add('plex-auth', 'PIN cancellation failed', {
+          'code': _linkFailureCode(cancelException),
+        });
+      }
     }
   }
+
+  static String _linkFailureCode(Object exception) {
+    final code = exception is PlexException ? exception.code : 'unexpected';
+    if (code == 'network-timeout') return 'network-timeout';
+    if (const {
+      'network-unavailable',
+      'server-unreachable',
+      'offline',
+    }.contains(code)) {
+      return 'network-unavailable';
+    }
+    if (code == 'rate-limited') return 'rate-limited';
+    if (const {'auth-invalid', 'access-denied'}.contains(code)) {
+      return 'auth-denied';
+    }
+    if (const {'parse-error', 'resource-not-found'}.contains(code)) {
+      return 'response-unavailable';
+    }
+    return 'unexpected';
+  }
+
+  static String _linkFailureMessage(String code) => switch (code) {
+    'network-timeout' => 'Plex did not respond in time. Check your connection and request a new code.',
+    'network-unavailable' => 'Lineup could not connect to Plex. Check your connection and request a new code.',
+    'rate-limited' => 'Plex is receiving too many requests. Wait a moment, then request a new code.',
+    'auth-denied' =>
+      'Plex did not accept this sign-in. Request a new code and try again.',
+    'response-unavailable' => 'Plex returned an unavailable or malformed response. Request a new code and try again.',
+    _ => 'Lineup could not complete Plex sign-in. Request a new code and try again.',
+  };
 
   Future<void> selectProfile(PlexHomeUser selected, {String? pin}) async {
     final operation = ++_epoch;
@@ -611,58 +695,115 @@ class LineupController extends ChangeNotifier {
     if (selectedServer == null || connection == null) {
       throw const PlexException('server-unreachable', 'Select a server first.');
     }
+    _libraryScanFacts = Map.unmodifiable({
+      for (final id in ids)
+        id: const LibraryScanFact(status: LibraryScanStatus.idle),
+    });
     libraryScanStatus = LibraryScanStatus.scanning;
-    libraryScanCompletedPages = 0;
-    libraryScanCompletedItems = 0;
-    libraryScanTotalItems = null;
+    _updateLibraryScanAggregates();
     notifyListeners();
     try {
       final selected = libraries
           .where((library) => ids.contains(library.id))
           .toList(growable: false);
       final results = List<List<PlexMediaItem>?>.filled(selected.length, null);
-      final pages = List<int>.filled(selected.length, 0);
-      final itemCounts = List<int>.filled(selected.length, 0);
-      final totals = List<int?>.filled(selected.length, null);
       var nextLibrary = 0;
+      Object? firstFailure;
+      StackTrace? firstFailureStack;
       Future<void> loadNext() async {
-        while (_isCurrent(operation)) {
+        while (_isCurrent(operation) && firstFailure == null) {
           final index = nextLibrary++;
           if (index >= selected.length) return;
           final library = selected[index];
-          results[index] = await _withPmsAuthorization(
-            operation,
-            selectedServer.id,
-            (token, refreshedConnection) => plex.libraryItems(
-              (refreshedConnection ?? connection!).uri,
-              token,
-              library.id,
-              library.type,
-              isCurrent: () => _isCurrent(operation),
-              onProgress: (progress) {
-                if (!_isCurrent(operation)) return;
-                if (progress.completedPages > pages[index]) {
-                  pages[index] = progress.completedPages;
-                }
-                if (progress.completedItems > itemCounts[index]) {
-                  itemCounts[index] = progress.completedItems;
-                }
-                totals[index] = progress.totalItems ?? totals[index];
-                libraryScanCompletedPages = pages.fold(0, (a, b) => a + b);
-                libraryScanCompletedItems = itemCounts.fold(0, (a, b) => a + b);
-                libraryScanTotalItems = totals.every((total) => total != null)
-                    ? totals.whereType<int>().fold<int>(0, (a, b) => a + b)
-                    : null;
-                notifyListeners();
-              },
-            ),
+          _setLibraryScanFact(
+            library.id,
+            const LibraryScanFact(status: LibraryScanStatus.scanning),
           );
+          notifyListeners();
+          try {
+            final items = await _withPmsAuthorization(
+              operation,
+              selectedServer.id,
+              (token, refreshedConnection) => plex.libraryItems(
+                (refreshedConnection ?? connection!).uri,
+                token,
+                library.id,
+                library.type,
+                isCurrent: () => _isCurrent(operation),
+                onProgress: (progress) {
+                  if (!_isCurrent(operation) || firstFailure != null) return;
+                  final current = _libraryScanFacts[library.id]!;
+                  _setLibraryScanFact(
+                    library.id,
+                    LibraryScanFact(
+                      status: LibraryScanStatus.scanning,
+                      completedPages:
+                          progress.completedPages > current.completedPages
+                          ? progress.completedPages
+                          : current.completedPages,
+                      completedItems:
+                          progress.completedItems > current.completedItems
+                          ? progress.completedItems
+                          : current.completedItems,
+                      totalItems:
+                          progress.totalItems != null &&
+                              (current.totalItems == null ||
+                                  progress.totalItems! > current.totalItems!)
+                          ? progress.totalItems
+                          : current.totalItems,
+                    ),
+                  );
+                  notifyListeners();
+                },
+              ),
+            );
+            if (!_isCurrent(operation)) return;
+            results[index] = items;
+            final current = _libraryScanFacts[library.id]!;
+            final playable = items.where((item) => item.isPlayable).length;
+            _setLibraryScanFact(
+              library.id,
+              LibraryScanFact(
+                status: items.isEmpty
+                    ? LibraryScanStatus.empty
+                    : playable == 0
+                    ? LibraryScanStatus.unsupported
+                    : LibraryScanStatus.complete,
+                completedPages: current.completedPages,
+                completedItems:
+                    firstFailure == null &&
+                        items.length > current.completedItems
+                    ? items.length
+                    : current.completedItems,
+                totalItems: current.totalItems,
+              ),
+            );
+            notifyListeners();
+          } catch (exception, stack) {
+            if (!_isCurrent(operation)) return;
+            final current = _libraryScanFacts[library.id]!;
+            _setLibraryScanFact(
+              library.id,
+              LibraryScanFact(
+                status: LibraryScanStatus.transientFailure,
+                completedPages: current.completedPages,
+                completedItems: current.completedItems,
+                totalItems: current.totalItems,
+              ),
+            );
+            firstFailure ??= exception;
+            firstFailureStack ??= stack;
+            notifyListeners();
+          }
         }
       }
 
       await Future.wait(
         List.generate(selected.length.clamp(0, 4), (_) => loadNext()),
       );
+      if (firstFailure != null) {
+        Error.throwWithStackTrace(firstFailure!, firstFailureStack!);
+      }
       if (!_isCurrent(operation)) {
         return (
           failedPlaylistIds: const <String>{},
@@ -703,9 +844,7 @@ class LineupController extends ChangeNotifier {
           'count': catalog.failedIds.length,
         });
       }
-      final playable = items
-          .where((item) => item.duration > Duration.zero)
-          .toList();
+      final playable = items.where((item) => item.isPlayable).toList();
       final status = items.isEmpty
           ? LibraryScanStatus.empty
           : playable.isEmpty
@@ -733,6 +872,18 @@ class LineupController extends ChangeNotifier {
     busy = false;
     error = null;
     libraryScanStatus = LibraryScanStatus.cancelled;
+    _libraryScanFacts = Map.unmodifiable({
+      for (final entry in _libraryScanFacts.entries)
+        entry.key: entry.value.status == LibraryScanStatus.scanning
+            ? LibraryScanFact(
+                status: LibraryScanStatus.cancelled,
+                completedPages: entry.value.completedPages,
+                completedItems: entry.value.completedItems,
+                totalItems: entry.value.totalItems,
+              )
+            : entry.value,
+    });
+    _updateLibraryScanAggregates();
     notifyListeners();
   }
 
@@ -1164,6 +1315,7 @@ class LineupController extends ChangeNotifier {
       _serverTargetId = null;
       _invalidatePmsRefresh();
       secureCancellationRequired = false;
+      _resetLibraryScan();
       _contentGeneration++;
       stage = SetupStage.welcome;
       error = null;
@@ -1287,6 +1439,31 @@ class LineupController extends ChangeNotifier {
     libraryScanCompletedPages = 0;
     libraryScanCompletedItems = 0;
     libraryScanTotalItems = null;
+    _libraryScanFacts = const {};
+  }
+
+  void _setLibraryScanFact(String id, LibraryScanFact fact) {
+    _libraryScanFacts = Map.unmodifiable({..._libraryScanFacts, id: fact});
+    _updateLibraryScanAggregates();
+  }
+
+  void _updateLibraryScanAggregates() {
+    libraryScanCompletedPages = _libraryScanFacts.values.fold(
+      0,
+      (total, fact) => total + fact.completedPages,
+    );
+    libraryScanCompletedItems = _libraryScanFacts.values.fold(
+      0,
+      (total, fact) => total + fact.completedItems,
+    );
+    libraryScanTotalItems =
+        _libraryScanFacts.isNotEmpty &&
+            _libraryScanFacts.values.every((fact) => fact.totalItems != null)
+        ? _libraryScanFacts.values.fold<int>(
+            0,
+            (total, fact) => total + fact.totalItems!,
+          )
+        : null;
   }
 
   Future<T> _withPmsAuthorization<T>(

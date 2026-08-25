@@ -22,12 +22,16 @@ class PlexHomeUser {
     required this.name,
     required this.protected,
     this.thumb,
+    this.admin = false,
+    this.restricted,
   });
 
   final String id;
   final String name;
   final bool protected;
   final Uri? thumb;
+  final bool admin;
+  final bool? restricted;
 }
 
 class PlexPin {
@@ -70,15 +74,39 @@ class PlexConnection {
   final Duration? latency;
 }
 
+enum PlexConnectionKind { directLocal, directRemote, relay }
+
 String plexConnectionDescription(PlexConnection connection) {
-  final type = connection.relay
-      ? 'Plex Relay'
-      : connection.local
-      ? 'Direct local'
-      : 'Direct remote';
+  final type = plexConnectionKindLabel(plexConnectionKind(connection));
   final latency = connection.latency;
-  return '$type${latency == null ? '' : ' • ${latency.inMilliseconds} ms measured'}';
+  final milliseconds = latency?.inMilliseconds;
+  final warning = milliseconds == null
+      ? null
+      : milliseconds >= 500
+      ? 'Very slow'
+      : milliseconds >= 100
+      ? 'Slow'
+      : null;
+  return [
+    type,
+    if (connection.relay) 'Limited',
+    if (milliseconds != null) '$milliseconds ms measured',
+    ?warning,
+  ].join(' • ');
 }
+
+PlexConnectionKind plexConnectionKind(PlexConnection connection) =>
+    connection.relay
+    ? PlexConnectionKind.relay
+    : connection.local
+    ? PlexConnectionKind.directLocal
+    : PlexConnectionKind.directRemote;
+
+String plexConnectionKindLabel(PlexConnectionKind kind) => switch (kind) {
+  PlexConnectionKind.directLocal => 'Direct local',
+  PlexConnectionKind.directRemote => 'Direct remote',
+  PlexConnectionKind.relay => 'Relay',
+};
 
 class PlexLibrary {
   const PlexLibrary({
@@ -188,6 +216,9 @@ class PlexMediaItem {
   final int? audioChannels;
   final DateTime? addedAt;
   final bool viewed;
+
+  bool get isPlayable =>
+      duration > Duration.zero && parts.any((part) => part.path.isNotEmpty);
 }
 
 typedef PlexPlaybackPartDescriptor = ({Uri uri, Duration? duration});

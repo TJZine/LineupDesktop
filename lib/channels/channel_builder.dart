@@ -247,7 +247,7 @@ List<ChannelProposal> buildChannelProposals({
   return List.unmodifiable(balanced);
 }
 
-List<Channel> materializeChannelPlan({
+({List<Channel> channels, bool truncated}) materializeChannelPlan({
   required List<ChannelProposal> proposals,
   required List<Channel> existing,
   required ChannelBuildMode mode,
@@ -314,7 +314,12 @@ List<Channel> materializeChannelPlan({
       : existing.map((channel) => channel.number).toSet();
   final output = <Channel>[];
   var next = 1;
-  for (final entry in expanded.take(maximumChannels)) {
+  var truncated = false;
+  for (final entry in expanded) {
+    if (output.length == maximumChannels) {
+      truncated = true;
+      break;
+    }
     final name = '${entry.proposal.name}${entry.suffix}';
     final builderKey = _builderKey(entry.proposal, entry.suffix);
     final matched = mode == ChannelBuildMode.merge
@@ -325,7 +330,17 @@ List<Channel> materializeChannelPlan({
     while (matched == null && used.contains(next) && next <= 1000) {
       next++;
     }
-    if (matched == null && next > 1000) break;
+    if (matched == null && next > 1000) {
+      truncated = true;
+      break;
+    }
+    if (matched != null &&
+        matched.name == name &&
+        matched.playbackMode == entry.mode &&
+        matched.blockSize == entry.blockSize) {
+      output.add(matched);
+      continue;
+    }
     final id = matched?.id ?? createChannelId();
     final number = matched?.number ?? next;
     output.add(
@@ -344,7 +359,7 @@ List<Channel> materializeChannelPlan({
     used.add(number);
     if (matched == null) next++;
   }
-  return List.unmodifiable(output);
+  return (channels: List.unmodifiable(output), truncated: truncated);
 }
 
 bool _containsShows(ContentSource source) => switch (source) {

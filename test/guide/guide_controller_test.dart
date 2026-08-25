@@ -524,6 +524,7 @@ void main() {
                 type: 'movie',
                 duration: const Duration(minutes: 30),
                 libraryId: 'library',
+                parts: [PlexMediaPart(path: '/library/parts/item-$index')],
               ),
             ),
           );

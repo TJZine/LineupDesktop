@@ -111,16 +111,21 @@ class PlexClient {
       final response = await _send(
         _http.get(Uri.https('plex.tv', path), headers: _headers(accountToken)),
       );
-      if (response.statusCode == 404 ||
-          response.statusCode == 405 ||
-          response.statusCode >= 500) {
+      final v2 = path.contains('/v2/');
+      if (v2 &&
+          (response.statusCode == 404 ||
+              response.statusCode == 405 ||
+              response.statusCode >= 500)) {
         continue;
+      }
+      if (!v2 && (response.statusCode == 404 || response.statusCode == 405)) {
+        return const [];
       }
       if (response.statusCode < 200 || response.statusCode >= 300) {
         _throwResponse(response);
       }
       final users = _parseHomeUsers(response.body);
-      if (users.isNotEmpty || path == '/api/home/users') return users;
+      if (users.isNotEmpty || !v2) return users;
     }
     return const [];
   }
@@ -426,7 +431,7 @@ class PlexClient {
           );
           final items = _containerList(itemsJson, 'Metadata')
               .map(parseMediaItem)
-              .where((item) => item.duration > Duration.zero)
+              .where((item) => item.isPlayable)
               .toList(growable: false);
           return items.isEmpty
               ? null
@@ -555,6 +560,16 @@ class PlexClient {
       throw const PlexException(
         'network-timeout',
         'Plex did not respond in time. Try again.',
+      );
+    } on SocketException {
+      throw const PlexException(
+        'network-unavailable',
+        'Plex could not be reached.',
+      );
+    } on http.ClientException {
+      throw const PlexException(
+        'network-unavailable',
+        'Plex could not be reached.',
       );
     }
   }
@@ -697,7 +712,6 @@ int _connectionTier(PlexConnection connection) {
 }
 
 List<PlexHomeUser> _parseHomeUsers(String body) {
-  final json = _tryJson(body);
   final rawUsers = <Object?>[];
   void visit(Object? value, [int depth = 0]) {
     if (depth > 12) return;
@@ -718,8 +732,16 @@ List<PlexHomeUser> _parseHomeUsers(String body) {
     }
   }
 
-  visit(json);
-  if (rawUsers.isEmpty) {
+  try {
+    final json = jsonDecode(body);
+    if (json is! Map && json is! List) {
+      throw const PlexException(
+        'parse-error',
+        'Plex Home response was invalid.',
+      );
+    }
+    visit(json);
+  } on FormatException {
     try {
       final document = XmlDocument.parse(body);
       rawUsers.addAll(
@@ -733,7 +755,12 @@ List<PlexHomeUser> _parseHomeUsers(String body) {
               },
             ),
       );
-    } catch (_) {}
+    } catch (_) {
+      throw const PlexException(
+        'parse-error',
+        'Plex Home response was invalid.',
+      );
+    }
   }
   final users = <String, PlexHomeUser>{};
   for (final raw in rawUsers) {
@@ -753,6 +780,10 @@ List<PlexHomeUser> _parseHomeUsers(String body) {
           'Plex user',
       protected: _boolean(normalized['protected']),
       thumb: Uri.tryParse(_optionalText(normalized['thumb']) ?? ''),
+      admin: _boolean(normalized['admin'] ?? normalized['isadmin']),
+      restricted: normalized.containsKey('restricted')
+          ? _boolean(normalized['restricted'])
+          : null,
     );
   }
   return users.values.toList();
