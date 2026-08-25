@@ -30,9 +30,13 @@ class PlayerView extends StatefulWidget {
 }
 
 class _PlayerViewState extends State<PlayerView> {
+  late PlayerOverlay _renderedOverlay;
+  var _transitioningNowPlaying = false;
+
   @override
   void initState() {
     super.initState();
+    _renderedOverlay = widget.controller.overlay;
     widget.controller.addListener(_changed);
   }
 
@@ -43,7 +47,14 @@ class _PlayerViewState extends State<PlayerView> {
   }
 
   void _changed() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    final nextOverlay = widget.controller.overlay;
+    setState(() {
+      _transitioningNowPlaying =
+          _renderedOverlay == PlayerOverlay.nowPlaying ||
+          nextOverlay == PlayerOverlay.nowPlaying;
+      _renderedOverlay = nextOverlay;
+    });
   }
 
   KeyEventResult _key(FocusNode node, KeyEvent event) {
@@ -223,7 +234,7 @@ class _PlayerViewState extends State<PlayerView> {
     final presentationKey = ValueKey((overlay, presentationGeneration));
     final transitionDuration = MediaQuery.disableAnimationsOf(context)
         ? Duration.zero
-        : const Duration(milliseconds: 350);
+        : Duration(milliseconds: _transitioningNowPlaying ? 200 : 350);
     return Material(
       color: Colors.transparent,
       child: Focus(
@@ -266,6 +277,15 @@ class _PlayerViewState extends State<PlayerView> {
                     );
                     final childOverlay =
                         (child.key as ValueKey<(PlayerOverlay, int)>).value.$1;
+                    if (childOverlay == PlayerOverlay.nowPlaying) {
+                      return SlideTransition(
+                        position: Tween(
+                          begin: const Offset(-1, 0),
+                          end: Offset.zero,
+                        ).animate(fade),
+                        child: transitioned,
+                      );
+                    }
                     if (childOverlay != PlayerOverlay.osd) {
                       return transitioned;
                     }
@@ -647,9 +667,15 @@ class _NowPlaying extends StatelessWidget {
     final size = MediaQuery.sizeOf(context);
     final compact =
         LineupLayout.isCompactWidth(size.width) || size.height < 650;
+    final shelfWidth = size.width >= 2560
+        ? size.width.clamp(0, 1500).toDouble()
+        : (size.width * 0.95).clamp(0, 1180).toDouble();
+    final shelfHeight = compact
+        ? (size.height * 0.56).clamp(300, 380).toDouble()
+        : (size.height * 0.50).clamp(380, 560).toDouble();
+    final showPoster = size.width >= 700 && size.height >= 500;
     final preferLogo = controller.lineup.settings.preferClearLogos;
     final posterPath = _artworkPath(item, GuideArtworkKind.poster);
-    final backdropPath = _artworkPath(item, GuideArtworkKind.backdrop);
     final logoPath = _artworkPath(item, GuideArtworkKind.clearLogo);
     final generation = controller.lineup.contentGeneration;
     final elapsed = controller.guide.now.difference(program.scheduled.start);
@@ -680,77 +706,101 @@ class _NowPlaying extends StatelessWidget {
       ?episode,
       '${_time(context, program.scheduled.start)} to ${_time(context, program.scheduled.end)}',
       '${(progress * 100).round()} percent complete',
+      if (controller.duration > Duration.zero)
+        '${_duration(controller.position)} of ${_duration(controller.duration)} playback',
       ...badges,
       ?item.summary,
     ].join('. ');
     final artworkIdentity = (program.id, generation);
 
-    return ColoredBox(
+    return Align(
       key: const Key('player-now-playing-surface'),
-      color: roles.deepBackground.withValues(alpha: 0.88),
-      child: Semantics(
-        container: true,
-        label: semanticFacts,
-        excludeSemantics: true,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            if (!compact && backdropPath != null)
-              _PlayerArtwork(
-                key: ValueKey((
-                  artworkIdentity,
-                  GuideArtworkKind.backdrop,
-                  backdropPath,
-                )),
-                future: controller.guide.artworkFor(
-                  program,
-                  GuideArtworkKind.backdrop,
-                ),
-                fit: BoxFit.cover,
-              ),
-            DecoratedBox(
+      alignment: Alignment.bottomLeft,
+      child: SafeArea(
+        top: false,
+        right: false,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () {},
+          child: Semantics(
+            container: true,
+            label: semanticFacts,
+            excludeSemantics: true,
+            child: Container(
+              key: const Key('player-now-playing-shelf'),
+              width: shelfWidth,
+              height: shelfHeight,
+              clipBehavior: Clip.antiAlias,
               decoration: BoxDecoration(
+                border: Border(
+                  top: BorderSide(color: roles.subtleBorder),
+                  right: BorderSide(color: roles.subtleBorder),
+                ),
+                borderRadius: BorderRadius.only(
+                  topRight: const Radius.circular(16),
+                ),
                 gradient: LinearGradient(
-                  begin: Alignment.centerRight,
-                  end: Alignment.centerLeft,
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
                   colors: [
-                    roles.scrim.withValues(alpha: compact ? 0.80 : 0.54),
-                    roles.deepBackground.withValues(alpha: 0.96),
+                    roles.scrim.withValues(alpha: 0.62),
+                    roles.overlaySurface.withValues(alpha: 0.86),
                   ],
                 ),
-              ),
-            ),
-            SafeArea(
-              minimum: EdgeInsets.all(
-                compact ? 24 : (size.width * 0.055).clamp(36, 96),
               ),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  if (!compact) ...[
+                  if (showPoster) ...[
                     SizedBox(
-                      width: (size.width * 0.20).clamp(190, 340),
-                      height: (size.height * 0.58).clamp(300, 620),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(roles.panelRadius),
-                        child: posterPath == null
-                            ? _ArtworkFallback(roles: roles)
-                            : _PlayerArtwork(
-                                key: ValueKey((
-                                  artworkIdentity,
-                                  GuideArtworkKind.poster,
-                                  posterPath,
-                                )),
-                                future: controller.guide.artworkFor(program),
-                                fit: BoxFit.cover,
-                                fallback: _ArtworkFallback(roles: roles),
+                      key: const Key('player-now-playing-poster'),
+                      width: (shelfHeight * 2 / 3).clamp(190, 340),
+                      height: shelfHeight,
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          posterPath == null
+                              ? _ArtworkFallback(roles: roles)
+                              : _PlayerArtwork(
+                                  key: ValueKey((
+                                    artworkIdentity,
+                                    GuideArtworkKind.poster,
+                                    posterPath,
+                                  )),
+                                  future: controller.guide.artworkFor(program),
+                                  fit: BoxFit.cover,
+                                  fallback: _ArtworkFallback(roles: roles),
+                                ),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: SizedBox(
+                              width: 48,
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      Colors.transparent,
+                                      roles.overlaySurface.withValues(
+                                        alpha: 0.72,
+                                      ),
+                                    ],
+                                  ),
+                                ),
                               ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    SizedBox(width: (size.width * 0.045).clamp(28, 72)),
                   ],
                   Expanded(
-                    child: SingleChildScrollView(
+                    child: Padding(
+                      padding: EdgeInsets.fromLTRB(
+                        compact ? 18 : 28,
+                        compact ? 16 : 24,
+                        compact ? 18 : 28,
+                        compact ? 14 : 20,
+                      ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -765,8 +815,8 @@ class _NowPlaying extends StatelessWidget {
                                     fontWeight: FontWeight.w800,
                                   ),
                             ),
-                          const SizedBox(height: 12),
-                          if (!compact && preferLogo && logoPath != null)
+                          SizedBox(height: compact ? 6 : 10),
+                          if (preferLogo && logoPath != null)
                             _NowPlayingIdentity(
                               key: ValueKey((
                                 artworkIdentity,
@@ -788,8 +838,8 @@ class _NowPlaying extends StatelessWidget {
                               style: Theme.of(context).textTheme.titleMedium,
                             ),
                           ],
-                          if (badges.isNotEmpty) ...[
-                            const SizedBox(height: 16),
+                          if (!compact && badges.isNotEmpty) ...[
+                            const SizedBox(height: 12),
                             Wrap(
                               key: const Key('player-now-playing-badges'),
                               spacing: 8,
@@ -801,11 +851,11 @@ class _NowPlaying extends StatelessWidget {
                             ),
                           ],
                           if (item.summary case final summary?) ...[
-                            const SizedBox(height: 18),
+                            SizedBox(height: compact ? 8 : 12),
                             Text(
                               summary,
                               key: const Key('player-now-playing-summary'),
-                              maxLines: compact ? 4 : 6,
+                              maxLines: compact ? 2 : 4,
                               overflow: TextOverflow.ellipsis,
                               style: Theme.of(context).textTheme.bodyLarge
                                   ?.copyWith(
@@ -814,7 +864,7 @@ class _NowPlaying extends StatelessWidget {
                                   ),
                             ),
                           ],
-                          const SizedBox(height: 24),
+                          const Spacer(),
                           LinearProgressIndicator(
                             key: const Key('player-now-playing-progress'),
                             value: progress,
@@ -824,7 +874,11 @@ class _NowPlaying extends StatelessWidget {
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            '${_time(context, program.scheduled.start)}–${_time(context, program.scheduled.end)}',
+                            [
+                              if (controller.duration > Duration.zero)
+                                '${_duration(controller.position)} / ${_duration(controller.duration)}',
+                              '${_time(context, program.scheduled.start)}–${_time(context, program.scheduled.end)}',
+                            ].join('  •  '),
                             key: const Key('player-now-playing-time'),
                             style: Theme.of(context).textTheme.bodyMedium
                                 ?.copyWith(color: roles.secondaryText),
@@ -836,7 +890,7 @@ class _NowPlaying extends StatelessWidget {
                 ],
               ),
             ),
-          ],
+          ),
         ),
       ),
     );

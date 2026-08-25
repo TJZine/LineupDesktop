@@ -855,8 +855,8 @@ void main() {
 
     expect(find.byKey(const Key('player-now-playing-surface')), findsOneWidget);
     expect(
-      tester.getSize(find.byKey(const Key('player-now-playing-surface'))),
-      const Size(1280, 720),
+      tester.getSize(find.byKey(const Key('player-now-playing-shelf'))),
+      const Size(1180, 380),
     );
     expect(
       MediaQuery.sizeOf(
@@ -864,8 +864,8 @@ void main() {
       ),
       const Size(1280, 720),
     );
-    expect(fixture.lineup.artworkRequests, hasLength(3));
-    expect(find.byType(Image), findsNWidgets(3));
+    expect(fixture.lineup.artworkRequests, hasLength(2));
+    expect(find.byType(Image), findsNWidgets(2));
     expect(find.byKey(const Key('player-now-playing-logo')), findsOneWidget);
     expect(find.text('Season 2 • Episode 6'), findsOneWidget);
     expect(
@@ -924,66 +924,74 @@ void main() {
 
     fixture.player.closeOverlay();
     await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
-    await tester.tapAt(const Offset(5, 5));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('player-now-playing-shelf')));
+    expect(fixture.player.overlay, PlayerOverlay.nowPlaying);
+    await tester.tapAt(const Offset(799, 5));
     expect(fixture.player.overlay, PlayerOverlay.osd);
 
     await tester.pumpWidget(const SizedBox.shrink());
     fixture.dispose();
   });
 
-  testWidgets('compact layout drops artwork and disabled logos skip fetching', (
-    tester,
-  ) async {
-    final fixture = _Fixture(PlayerState.playing, richProgram: true);
-    await tester.binding.setSurfaceSize(const Size(800, 600));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
-    await tester.pumpWidget(
-      MaterialApp(
-        home: PlayerView(controller: fixture.player, openGuide: () {}),
-      ),
-    );
-    await tester.pump();
-
-    fixture.player.showNowPlaying();
-    await tester.pump();
-    await tester.pump();
-
-    expect(find.byKey(const Key('player-now-playing-title')), findsOneWidget);
-    expect(find.byKey(const Key('player-now-playing-logo')), findsNothing);
-    expect(fixture.lineup.artworkRequests, isEmpty);
-    expect(tester.takeException(), isNull);
-
-    await tester.pumpWidget(const SizedBox.shrink());
-    fixture.dispose();
-
-    final disabled = _Fixture(
-      PlayerState.playing,
-      richProgram: true,
-      preferClearLogos: false,
-    );
-    await tester.pumpWidget(
-      MaterialApp(
-        home: MediaQuery(
-          data: const MediaQueryData(size: Size(1280, 720)),
-          child: PlayerView(controller: disabled.player, openGuide: () {}),
+  testWidgets(
+    'compact layout retains the poster and disabled logos skip fetching',
+    (tester) async {
+      final fixture = _Fixture(PlayerState.playing, richProgram: true);
+      await tester.binding.setSurfaceSize(const Size(800, 600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(
+        MaterialApp(
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
-      ),
-    );
-    await tester.pump();
-    disabled.player.showNowPlaying();
-    await tester.pumpAndSettle();
+      );
+      await tester.pump();
 
-    expect(disabled.lineup.artworkRequests, hasLength(2));
-    expect(
-      disabled.lineup.artworkRequests,
-      isNot(contains(Uri.parse('test://logo'))),
-    );
-    expect(find.byKey(const Key('player-now-playing-logo')), findsNothing);
-    expect(find.byKey(const Key('player-now-playing-title')), findsOneWidget);
+      fixture.player.showNowPlaying();
+      await tester.pump();
+      await tester.pump();
 
-    await tester.pumpWidget(const SizedBox.shrink());
-    disabled.dispose();
-  });
+      expect(find.byKey(const Key('player-now-playing-title')), findsOneWidget);
+      expect(
+        find.byKey(const Key('player-now-playing-poster')),
+        findsOneWidget,
+      );
+      expect(find.byKey(const Key('player-now-playing-logo')), findsOneWidget);
+      expect(fixture.lineup.artworkRequests, hasLength(2));
+      expect(tester.takeException(), isNull);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+
+      final disabled = _Fixture(
+        PlayerState.playing,
+        richProgram: true,
+        preferClearLogos: false,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MediaQuery(
+            data: const MediaQueryData(size: Size(1280, 720)),
+            child: PlayerView(controller: disabled.player, openGuide: () {}),
+          ),
+        ),
+      );
+      await tester.pump();
+      disabled.player.showNowPlaying();
+      await tester.pumpAndSettle();
+
+      expect(disabled.lineup.artworkRequests, hasLength(1));
+      expect(
+        disabled.lineup.artworkRequests,
+        isNot(contains(Uri.parse('test://logo'))),
+      );
+      expect(find.byKey(const Key('player-now-playing-logo')), findsNothing);
+      expect(find.byKey(const Key('player-now-playing-title')), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      disabled.dispose();
+    },
+  );
 
   testWidgets('Guide clock replacement updates the visible current program', (
     tester,
@@ -1034,7 +1042,7 @@ void main() {
     await tester.pump();
     fixture.player.showNowPlaying();
     await tester.pump();
-    expect(fixture.lineup.artworkRequests, hasLength(3));
+    expect(fixture.lineup.artworkRequests, hasLength(2));
 
     fixture.lineup.replaceArtwork('-replacement');
     expect(fixture.player.overlay, PlayerOverlay.none);
@@ -1056,11 +1064,7 @@ void main() {
 
     expect(
       fixture.lineup.artworkRequests.map((path) => path.toString()),
-      containsAll([
-        'test://poster-replacement',
-        'test://backdrop-replacement',
-        'test://logo-replacement',
-      ]),
+      containsAll(['test://poster-replacement', 'test://logo-replacement']),
     );
     for (final entry in fixture.lineup.artworkCompletions.entries.where(
       (entry) => entry.key.toString().contains('replacement'),
@@ -1088,7 +1092,7 @@ void main() {
     await tester.pump();
     fixture.player.showNowPlaying();
     await tester.pumpAndSettle();
-    expect(fixture.lineup.artworkRequests, hasLength(3));
+    expect(fixture.lineup.artworkRequests, hasLength(2));
 
     fixture.lineup.bumpContentGeneration();
     await tester.pump();
@@ -1099,7 +1103,7 @@ void main() {
     fixture.player.showNowPlaying();
     await tester.pumpAndSettle();
 
-    expect(fixture.lineup.artworkRequests, hasLength(6));
+    expect(fixture.lineup.artworkRequests, hasLength(4));
     expect(find.byKey(const Key('player-now-playing-logo')), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
@@ -1128,12 +1132,12 @@ void main() {
 
       expect(find.byKey(const Key('player-now-playing-logo')), findsNothing);
       expect(find.byKey(const Key('player-now-playing-title')), findsOneWidget);
-      expect(fixture.lineup.artworkRequests, hasLength(3));
+      expect(fixture.lineup.artworkRequests, hasLength(2));
 
       fixture.player.closeOverlay();
       fixture.player.showNowPlaying();
       await tester.pumpAndSettle();
-      expect(fixture.lineup.artworkRequests, hasLength(3));
+      expect(fixture.lineup.artworkRequests, hasLength(2));
 
       await tester.pumpWidget(const SizedBox.shrink());
       fixture.dispose();
@@ -1146,15 +1150,13 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     addTearDown(tester.view.resetPhysicalSize);
 
-    for (final size in const [
-      Size(800, 600),
-      Size(LineupLayout.compact - 1, 700),
-      Size(LineupLayout.compact, 700),
-      Size(1280, 720),
-      Size(1920, 1080),
-      Size(3840, 2160),
+    for (final layout in const [
+      (viewport: Size(800, 600), shelf: Size(760, 336)),
+      (viewport: Size(1280, 720), shelf: Size(1180, 380)),
+      (viewport: Size(1920, 1080), shelf: Size(1180, 540)),
+      (viewport: Size(3840, 2160), shelf: Size(1500, 560)),
     ]) {
-      tester.view.physicalSize = size;
+      tester.view.physicalSize = layout.viewport;
       await tester.pumpWidget(
         MaterialApp(
           home: PlayerView(controller: fixture.player, openGuide: () {}),
@@ -1164,11 +1166,12 @@ void main() {
       fixture.player.showNowPlaying();
       await tester.pumpAndSettle();
 
-      expect(
-        tester.getSize(find.byKey(const Key('player-now-playing-surface'))),
-        size,
+      final shelfSize = tester.getSize(
+        find.byKey(const Key('player-now-playing-shelf')),
       );
-      expect(tester.takeException(), isNull, reason: '$size');
+      expect(shelfSize.width, closeTo(layout.shelf.width, 0.01));
+      expect(shelfSize.height, closeTo(layout.shelf.height, 0.01));
+      expect(tester.takeException(), isNull, reason: '${layout.viewport}');
     }
 
     await tester.pumpWidget(const SizedBox.shrink());
@@ -1195,8 +1198,60 @@ void main() {
       find.byType(AnimatedSwitcher),
     );
     expect(switcher.duration, Duration.zero);
+    expect(switcher.reverseDuration, Duration.zero);
     expect(tester.hasRunningAnimations, isFalse);
     expect(find.byKey(const Key('player-now-playing-surface')), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
+  testWidgets('Now Playing enters from the left and exits in 200ms', (
+    tester,
+  ) async {
+    final fixture = _Fixture(PlayerState.playing, richProgram: true);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+
+    fixture.player.showNowPlaying();
+    await tester.pump();
+    var switcher = tester.widget<AnimatedSwitcher>(
+      find.byType(AnimatedSwitcher),
+    );
+    expect(switcher.duration, const Duration(milliseconds: 200));
+    expect(switcher.reverseDuration, const Duration(milliseconds: 200));
+    await tester.pump(const Duration(milliseconds: 100));
+    var slidePositions = tester
+        .widgetList<SlideTransition>(
+          find.ancestor(
+            of: find.byKey(const Key('player-now-playing-surface')),
+            matching: find.byType(SlideTransition),
+          ),
+        )
+        .map((slide) => slide.position.value);
+    expect(slidePositions.any((position) => position.dx < 0), isTrue);
+    expect(slidePositions.every((position) => position.dy == 0), isTrue);
+
+    await tester.pumpAndSettle();
+    fixture.player.closeOverlay();
+    await tester.pump();
+    switcher = tester.widget<AnimatedSwitcher>(find.byType(AnimatedSwitcher));
+    expect(switcher.duration, const Duration(milliseconds: 200));
+    await tester.pump(const Duration(milliseconds: 100));
+    slidePositions = tester
+        .widgetList<SlideTransition>(
+          find.ancestor(
+            of: find.byKey(const Key('player-now-playing-surface')),
+            matching: find.byType(SlideTransition),
+          ),
+        )
+        .map((slide) => slide.position.value);
+    expect(slidePositions.any((position) => position.dx < 0), isTrue);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('player-now-playing-surface')), findsNothing);
 
     await tester.pumpWidget(const SizedBox.shrink());
     fixture.dispose();
