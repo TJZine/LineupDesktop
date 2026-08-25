@@ -339,10 +339,11 @@ void main() {
           restricted: true,
         ),
       ];
+    final fixture = UiFixture(controller: controller);
     addTearDown(() => tester.binding.setSurfaceSize(null));
     for (final size in [const Size(800, 600), const Size(3840, 2160)]) {
       await tester.binding.setSurfaceSize(size);
-      await tester.pumpWidget(UiFixture(controller: controller).build());
+      await tester.pumpWidget(fixture.build());
       await tester.pumpAndSettle();
       expect(find.text('Active'), findsOneWidget);
       expect(tester.takeException(), isNull);
