@@ -58,10 +58,15 @@ class _PlayerViewState extends State<PlayerView> {
           _renderedOverlay == PlayerOverlay.subtitleTracks ||
           nextOverlay == PlayerOverlay.audioTracks ||
           nextOverlay == PlayerOverlay.subtitleTracks;
+      final transitioningMiniGuide =
+          _renderedOverlay == PlayerOverlay.miniGuide ||
+          nextOverlay == PlayerOverlay.miniGuide;
       _overlayTransitionDuration = Duration(
         milliseconds: transitioningNowPlaying
             ? 200
             : transitioningTracks
+            ? 300
+            : transitioningMiniGuide
             ? 300
             : 350,
       );
@@ -308,6 +313,15 @@ class _PlayerViewState extends State<PlayerView> {
                         child: transitioned,
                       );
                     }
+                    if (childOverlay == PlayerOverlay.miniGuide) {
+                      return SlideTransition(
+                        position: Tween(
+                          begin: const Offset(0, -1),
+                          end: Offset.zero,
+                        ).animate(fade),
+                        child: transitioned,
+                      );
+                    }
                     if (childOverlay != PlayerOverlay.osd) {
                       return transitioned;
                     }
@@ -387,7 +401,9 @@ class PlayerSurface extends StatelessWidget {
   Widget build(BuildContext context) {
     final state = controller.status.state;
     final unsupported = state == PlayerState.unsupported;
-    final preparing = state == PlayerState.loading || controller.tuning;
+    final hasError = controller.error != null;
+    final preparing =
+        !hasError && (state == PlayerState.loading || controller.tuning);
     final roles = LineupTheme.of(context);
     return Stack(
       fit: StackFit.expand,
@@ -398,7 +414,7 @@ class PlayerSurface extends StatelessWidget {
           NativeVideoSurface(player: controller.player),
         if (unsupported) _Unsupported(message: controller.status.message),
         if (preparing) const _Loading(label: 'Preparing playback'),
-        if (!preparing && state == PlayerState.buffering)
+        if (!hasError && !preparing && state == PlayerState.buffering)
           const _Loading(label: 'Buffering playback'),
         if (showErrors && controller.error != null)
           _SurfaceError(controller: controller),
@@ -490,9 +506,9 @@ class _Osd extends StatelessWidget {
               end: Alignment.bottomCenter,
               colors: [
                 Colors.transparent,
-                roles.scrim.withValues(alpha: 0.14),
-                roles.scrim.withValues(alpha: 0.38),
-                roles.scrim.withValues(alpha: 0.56),
+                roles.scrim.withValues(alpha: 0.08),
+                roles.scrim.withValues(alpha: 0.30),
+                roles.scrim.withValues(alpha: 0.45),
               ],
               stops: const [0, 0.20, 0.60, 1],
             ),
@@ -535,7 +551,8 @@ class _Osd extends StatelessWidget {
                                 'Nothing playing',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.titleLarge,
+                            style: Theme.of(context).textTheme.titleLarge
+                                ?.copyWith(fontWeight: FontWeight.w700),
                           ),
                           Text(
                             [
@@ -545,6 +562,8 @@ class _Osd extends StatelessWidget {
                             ].nonNulls.join(' • '),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(color: roles.secondaryText),
                           ),
                         ],
                       ),
@@ -570,7 +589,10 @@ class _Osd extends StatelessWidget {
                   children: [
                     Text(
                       '${_duration(controller.position)} / ${_duration(controller.duration)}',
-                      style: Theme.of(context).textTheme.bodySmall,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: roles.secondaryText,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
                     ),
                     const Spacer(),
                     if (next != null && expanded)
@@ -579,7 +601,11 @@ class _Osd extends StatelessWidget {
                           'Up next • ${next.scheduled.item.title}',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodySmall,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: roles.mutedText,
+                                fontWeight: FontWeight.w600,
+                              ),
                         ),
                       ),
                   ],
@@ -638,6 +664,8 @@ class _Osd extends StatelessWidget {
                         controller.sleepDuration == null
                             ? 'Sleep off'
                             : 'Sleep ${controller.sleepDuration!.inMinutes}m',
+                        style: Theme.of(context).textTheme.bodySmall
+                            ?.copyWith(color: roles.secondaryText),
                       ),
                     const Spacer(),
                     if (openMenu != null)
@@ -1124,13 +1152,19 @@ class _MiniGuide extends StatelessWidget {
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
               colors: [
-                roles.overlaySurface,
-                roles.overlaySurface.withValues(alpha: 0.88),
+                roles.scrim.withValues(alpha: 0.60),
+                roles.scrim.withValues(alpha: 0.48),
+                roles.scrim.withValues(alpha: 0.24),
                 Colors.transparent,
               ],
-              stops: const [0, 0.78, 1],
+              stops: const [0, 0.50, 0.80, 1],
+            ),
+            border: Border(bottom: BorderSide(color: roles.subtleBorder)),
+            borderRadius: BorderRadius.vertical(
+              bottom: Radius.circular(roles.panelRadius),
             ),
           ),
+          clipBehavior: Clip.antiAlias,
           child: Semantics(
             container: true,
             explicitChildNodes: true,

@@ -323,6 +323,37 @@ void main() {
     fixture.dispose();
   });
 
+  testWidgets('playback errors replace timed overlays and loading states', (
+    tester,
+  ) async {
+    final fixture = _Fixture(PlayerState.buffering, failLoad: true);
+    fixture.player.showMiniGuide();
+    await fixture.player.loadInitialMedia(Uri.parse('lineup-test://failure'));
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(fixture.player.overlay, PlayerOverlay.error);
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is Semantics && widget.properties.label == 'Playback error',
+      ),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('mini-guide-shelf')), findsNothing);
+    expect(find.byKey(const Key('player-osd-surface')), findsNothing);
+    expect(find.bySemanticsLabel('Preparing playback'), findsNothing);
+    expect(find.bySemanticsLabel('Buffering playback'), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
   testWidgets('core player keyboard controls work while the OSD is visible', (
     tester,
   ) async {
@@ -358,7 +389,7 @@ void main() {
   testWidgets('player OSD and mini Guide reflow at desktop sizes', (
     tester,
   ) async {
-    final fixture = _Fixture(PlayerState.playing);
+    final fixture = _Fixture(PlayerState.playing, channelCount: 5);
     await tester.binding.setSurfaceSize(const Size(800, 600));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     for (final size in const [
@@ -391,22 +422,67 @@ void main() {
       expect(tester.takeException(), isNull, reason: '$size');
     }
 
-    await tester.binding.setSurfaceSize(const Size(1360, 840));
-    fixture.player.showMiniGuide();
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 1));
-    expect(find.bySemanticsLabel(RegExp('Mini Guide')), findsOneWidget);
-    expect(
-      tester.getSize(find.byKey(const Key('mini-guide-shelf'))).width,
-      1360,
-    );
-    expect(find.textContaining('UP/DOWN Browse'), findsOneWidget);
+    for (final size in const [
+      Size(800, 600),
+      Size(1280, 720),
+      Size(1920, 1080),
+    ]) {
+      await tester.binding.setSurfaceSize(size);
+      fixture.player.showMiniGuide();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.bySemanticsLabel(RegExp('Mini Guide')), findsOneWidget);
+      expect(
+        tester.getSize(find.byKey(const Key('mini-guide-shelf'))).width,
+        size.width,
+      );
+      expect(fixture.player.miniGuideChannels, hasLength(5));
+      expect(find.textContaining('UP/DOWN Browse'), findsOneWidget);
+      expect(tester.takeException(), isNull, reason: '$size');
+      fixture.player.closeOverlay();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+    }
 
     await tester.pumpWidget(const SizedBox.shrink());
     fixture.dispose();
   });
 
-  testWidgets('all player overlays fade and only the OSD slides', (
+  testWidgets('player overlays retain 1280x720 layout at DPR2', (tester) async {
+    final fixture = _Fixture(PlayerState.playing);
+    tester.view
+      ..devicePixelRatio = 2
+      ..physicalSize = const Size(2560, 1440);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+    fixture.player.showOsd();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+    expect(
+      tester.getSize(find.byKey(const Key('player-osd-surface'))).width,
+      1280,
+    );
+
+    fixture.player.showMiniGuide();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(
+      tester.getSize(find.byKey(const Key('mini-guide-shelf'))).width,
+      1280,
+    );
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
+  testWidgets('OSD and Mini Guide enter and exit from their attached edges', (
     tester,
   ) async {
     final fixture = _Fixture(PlayerState.playing);
@@ -418,32 +494,56 @@ void main() {
 
     fixture.player.showMiniGuide();
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 175));
+    await tester.pump(const Duration(milliseconds: 100));
     final transitions = find.byType(AnimatedSwitcher);
     final switcher = tester.widget<AnimatedSwitcher>(transitions);
-    expect(switcher.duration, const Duration(milliseconds: 350));
-    expect(switcher.reverseDuration, const Duration(milliseconds: 350));
+    expect(switcher.duration, const Duration(milliseconds: 300));
+    expect(switcher.reverseDuration, const Duration(milliseconds: 300));
     expect(
       find.descendant(of: transitions, matching: find.byType(FadeTransition)),
       findsWidgets,
     );
-    final slides = find.descendant(
-      of: transitions,
-      matching: find.byType(SlideTransition),
+    final miniSlide = tester.widget<SlideTransition>(
+      find
+          .ancestor(
+            of: find.byKey(const Key('mini-guide-shelf')),
+            matching: find.byType(SlideTransition),
+          )
+          .first,
     );
-    expect(slides, findsNothing);
+    expect(miniSlide.position.value.dx, 0);
+    expect(miniSlide.position.value.dy, lessThan(0));
 
+    await tester.pumpAndSettle();
     fixture.player.closeOverlay();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(miniSlide.position.value.dy, lessThan(0));
+
     await tester.pumpAndSettle();
     fixture.player.showOsd();
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 1));
-    await tester.pump(const Duration(milliseconds: 175));
-    expect(slides, findsOneWidget);
-    expect(
-      find.descendant(of: slides, matching: find.byType(FadeTransition)),
-      findsOneWidget,
+    await tester.pump(const Duration(milliseconds: 100));
+    final osdSwitcher = tester.widget<AnimatedSwitcher>(transitions);
+    expect(osdSwitcher.duration, const Duration(milliseconds: 350));
+    expect(osdSwitcher.reverseDuration, const Duration(milliseconds: 350));
+    final osdSlide = tester.widget<SlideTransition>(
+      find
+          .ancestor(
+            of: find.byKey(const Key('player-osd-surface')),
+            matching: find.byType(SlideTransition),
+          )
+          .first,
     );
+    expect(osdSlide.position.value.dx, 0);
+    expect(osdSlide.position.value.dy, greaterThan(0));
+
+    await tester.pumpAndSettle();
+    fixture.player.closeOverlay();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(osdSlide.position.value.dy, greaterThan(0));
+
     await tester.pumpWidget(const SizedBox.shrink());
     fixture.dispose();
   });
@@ -472,6 +572,15 @@ void main() {
     expect(switcher.reverseDuration, Duration.zero);
     expect(tester.hasRunningAnimations, isFalse);
     expect(find.bySemanticsLabel(RegExp('Playback controls')), findsOneWidget);
+
+    fixture.player.closeOverlay();
+    await tester.pump();
+    fixture.player.showMiniGuide();
+    await tester.pump();
+    expect(switcher.duration, Duration.zero);
+    expect(switcher.reverseDuration, Duration.zero);
+    expect(tester.hasRunningAnimations, isFalse);
+    expect(find.bySemanticsLabel(RegExp('Mini Guide')), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
     fixture.dispose();
