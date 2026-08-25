@@ -180,6 +180,116 @@ void main() {
     lineup.dispose();
   });
 
+  testWidgets('1000-channel 12-hour compact Guide stays lazy and focusable', (
+    tester,
+  ) async {
+    final now = DateTime.utc(2026, 1, 1, 12, 15);
+    final lineup = _Lineup(1000)
+      ..settings = const LineupSettings(
+        guideHours: 12,
+        guideDensity: GuideDensity.compact,
+        reduceMotion: true,
+      );
+    lineup.channels = [
+      for (var index = 0; index < 1000; index++)
+        Channel(
+          id: 'channel-$index',
+          number: index + 1,
+          name: 'Channel $index',
+          source: ManualSource([
+            for (var slot = 0; slot < 4; slot++)
+              ChannelItem(
+                id: 'program-$index-$slot',
+                title: 'Program $index-$slot',
+                duration: const Duration(minutes: 30),
+              ),
+          ]),
+          playbackMode: PlaybackMode.sequential,
+          anchor: now.subtract(const Duration(minutes: 15)),
+          shuffleSeed: index,
+        ),
+    ];
+    addTearDown(lineup.dispose);
+    final loadedChannelIds = <String>[];
+    final guide = GuideController(
+      lineup: lineup,
+      clock: () => now,
+      loadSchedule: (channel) async {
+        loadedChannelIds.add(channel.id);
+        return _schedule(channel);
+      },
+    );
+    addTearDown(guide.dispose);
+    await tester.binding.setSurfaceSize(const Size(1600, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final firstViewport = Stopwatch()..start();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: GuideView(
+          controller: guide,
+          onClose: () {},
+          onTune: (_) async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    firstViewport.stop();
+
+    final list = tester.widget<ListView>(
+      find.byKey(const Key('guide-schedule-list')),
+    );
+    final scheduleHeight = tester
+        .getSize(find.byKey(const Key('guide-schedule-list')))
+        .height;
+    final fullyVisibleRows = (scheduleHeight / list.itemExtent!).floor();
+    final programCells = find
+        .byWidgetPredicate((widget) {
+          final key = widget.key;
+          return key is ValueKey<String> &&
+              key.value.startsWith('channel-') &&
+              key.value.contains(':');
+        })
+        .evaluate()
+        .length;
+
+    expect(fullyVisibleRows, 7);
+    expect(programCells, inInclusiveRange(100, 350));
+    expect(loadedChannelIds.length, lessThan(20));
+    expect(loadedChannelIds.toSet().length, loadedChannelIds.length);
+    expect(loadedChannelIds, isNot(contains('channel-999')));
+    expect(guide.cachedRowCount, loadedChannelIds.length);
+    expect(guide.cachedRowCount, lessThanOrEqualTo(64));
+    expect(guide.activeLoadCount, 0);
+    expect(lineup.artworkLoads, 0);
+    for (final channelId in loadedChannelIds) {
+      expect(guide.row(channelId).programs.length, inInclusiveRange(24, 26));
+    }
+
+    final initialProgram = guide.focusedProgramId;
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump();
+    expect(guide.focusedProgramId, isNot(initialProgram));
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump();
+    expect(guide.focusedChannelId, 'channel-1');
+    await tester.sendKeyEvent(LogicalKeyboardKey.pageDown);
+    await tester.pumpAndSettle();
+    expect(guide.focusedChannelId, 'channel-8');
+    expect(loadedChannelIds.length, lessThan(30));
+    expect(guide.cachedRowCount, lessThanOrEqualTo(64));
+    expect(find.text('Channel 999'), findsNothing);
+
+    debugPrint(
+      'GUIDE_DENSE_PROFILE channels=1000 hours=12 rows=$fullyVisibleRows '
+      'firstViewportUs=${firstViewport.elapsedMicroseconds} '
+      'widgets=${tester.allWidgets.length} programCells=$programCells '
+      'scheduleLoads=${loadedChannelIds.length} cachedRows=${guide.cachedRowCount}',
+    );
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('loading, error, retry, and program semantics stay visible', (
     tester,
   ) async {
