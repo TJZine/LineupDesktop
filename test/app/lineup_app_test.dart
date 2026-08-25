@@ -179,6 +179,16 @@ void main() {
     expect(find.text('Theme'), findsOneWidget);
     expect(FocusManager.instance.primaryFocus?.debugLabel, 'Settings');
 
+    await tester.tap(find.byType(DropdownButton<LineupThemeName>));
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(find.text('Theme'), findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Guide');
+
     await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
     await tester.sendKeyEvent(LogicalKeyboardKey.digit5);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
@@ -190,6 +200,10 @@ void main() {
 
     expect(find.text('Theme'), findsOneWidget);
     expect(FocusManager.instance.primaryFocus?.debugLabel, 'Settings');
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
+    await tester.pumpAndSettle();
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Player');
   });
 
   testWidgets('Settings switches profile/server routes and restores focus', (

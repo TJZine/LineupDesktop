@@ -83,6 +83,51 @@ void main() {
     expect(find.byKey(const Key('player-app-menu')), findsOneWidget);
   });
 
+  testWidgets('Settings uses one immersive rail without playback', (
+    tester,
+  ) async {
+    final fixture = UiFixture()..controller.stage = SetupStage.ready;
+    await tester.pumpWidget(fixture.build());
+    await tester.pumpAndSettle();
+
+    await openDestination(tester, 'Settings');
+
+    expect(find.byType(NavigationRail), findsNothing);
+    expect(find.byType(PlayerSurface), findsNothing);
+    expect(find.byType(PlayerView), findsNothing);
+    expect(find.byKey(const Key('settings-category-rail')), findsOneWidget);
+    expect(find.byKey(const Key('settings-detail-pane')), findsOneWidget);
+  });
+
+  testWidgets('Settings mounts one player surface behind its immersive rail', (
+    tester,
+  ) async {
+    final player = FixturePlayer()
+      ..emit(const PlayerStatus(state: PlayerState.ready, message: 'Ready'));
+    final fixture = UiFixture(player: player)
+      ..controller.stage = SetupStage.ready;
+    await tester.pumpWidget(fixture.build());
+    await tester.pumpAndSettle();
+
+    await openDestination(tester, 'Settings');
+
+    expect(find.byType(NavigationRail), findsNothing);
+    expect(find.byType(PlayerSurface), findsOneWidget);
+    expect(find.byType(PlayerView), findsNothing);
+    expect(find.byKey(const Key('settings-immersive-scrim')), findsOneWidget);
+    final decoration =
+        tester
+                .widget<DecoratedBox>(
+                  find.byKey(const Key('settings-immersive-scrim')),
+                )
+                .decoration
+            as BoxDecoration;
+    expect(
+      (decoration.gradient! as LinearGradient).colors,
+      everyElement(predicate<Color>((color) => color.a < 1)),
+    );
+  });
+
   testWidgets('overlay Guide is secondary and keeps playback behind it', (
     tester,
   ) async {

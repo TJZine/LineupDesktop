@@ -69,7 +69,11 @@ void main() {
       (Icons.settings_outlined, 'Settings'),
       (Icons.monitor_heart_outlined, 'Diagnostics'),
     ]) {
-      if (target.$2 != 'Channels') {
+      if (target.$2 == 'Diagnostics') {
+        await tester.tap(find.byTooltip('Open Lineup menu'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Diagnostics').last);
+      } else if (target.$2 != 'Channels') {
         await tester.tap(find.byIcon(target.$1));
       }
       await tester.pumpAndSettle();
@@ -121,13 +125,6 @@ void main() {
       await openDestination(tester, 'Channels');
       expect(find.text('Open Channel builder'), findsOneWidget);
       expect(tester.takeException(), isNull, reason: 'Channels at $size');
-
-      await tester.tap(find.byIcon(Icons.settings_outlined));
-      await tester.pumpAndSettle();
-      expect(find.text('Accessibility'), findsOneWidget);
-      expect(find.text('Remote quality'), findsNothing);
-      expect(find.text('HDR tone mapping'), findsNothing);
-      expect(tester.takeException(), isNull, reason: 'Settings at $size');
       if (size.width >= 2560) {
         expect(
           tester
@@ -140,6 +137,25 @@ void main() {
           isTrue,
         );
       }
+
+      await tester.tap(find.byIcon(Icons.settings_outlined));
+      await tester.pumpAndSettle();
+      expect(find.text('Accessibility'), findsOneWidget);
+      expect(find.text('Remote quality'), findsNothing);
+      expect(find.text('HDR tone mapping'), findsNothing);
+      expect(tester.takeException(), isNull, reason: 'Settings at $size');
+      expect(find.byType(NavigationRail), findsNothing);
+      final categoryRailSize = tester.getSize(
+        find.byKey(const Key('settings-category-rail')),
+      );
+      if (size.width < LineupLayout.compact) {
+        expect(categoryRailSize.width, size.width);
+      } else {
+        expect(
+          categoryRailSize.width,
+          size.width * 0.24 > 320 ? 320 : size.width * 0.24,
+        );
+      }
       if (size == const Size(800, 600)) {
         for (final category in ['Accessibility', 'Account', 'Support']) {
           await tester.ensureVisible(find.text(category).first);
@@ -148,7 +164,9 @@ void main() {
           expect(tester.takeException(), isNull, reason: '$category at $size');
         }
       }
-      await tester.tap(find.byIcon(Icons.monitor_heart_outlined));
+      await tester.tap(find.byTooltip('Open Lineup menu'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Diagnostics').last);
       await tester.pumpAndSettle();
       expect(find.text('Credential-safe diagnostics'), findsOneWidget);
       expect(tester.takeException(), isNull, reason: 'Diagnostics at $size');
@@ -268,8 +286,8 @@ void main() {
       const Size(1920, 1080),
     );
     expect(
-      tester.getSize(find.byKey(const ValueKey('lineup-page-content'))).width,
-      LineupLayout.readableWidth,
+      tester.getSize(find.byKey(const Key('settings-category-rail'))).width,
+      320,
     );
   });
 

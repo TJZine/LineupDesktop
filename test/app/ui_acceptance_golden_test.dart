@@ -12,6 +12,7 @@ import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/channels/scheduler.dart';
 import 'package:lineup_desktop/playback/native_player.dart';
+import 'package:lineup_desktop/playback/player_view.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 
@@ -353,6 +354,22 @@ void main() {
     await _pump(tester, fixture.build());
     await _openDestination(tester, 'Settings');
     await _match(tester, 'settings-slate-pine-1280x720.png');
+  });
+
+  testWidgets('Settings over playback in Ember & Steel', (tester) async {
+    final fixture = _readyFixture(
+      playerState: const PlayerStatus(
+        state: PlayerState.playing,
+        message: 'Playing',
+      ),
+    )..controller.settings = const LineupSettings(reduceMotion: true);
+    await _pump(tester, fixture.build());
+    await _openDestination(tester, 'Settings');
+
+    expect(find.byType(PlayerSurface), findsOneWidget);
+    expect(find.byType(PlayerView), findsNothing);
+    expect(find.byType(NavigationRail), findsNothing);
+    await _match(tester, 'settings-playback-ember-steel-1280x720.png');
   });
 }
 
