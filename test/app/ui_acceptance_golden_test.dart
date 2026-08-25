@@ -330,6 +330,70 @@ void main() {
     );
   });
 
+  testWidgets('player audio track rail', (tester) async {
+    final fixture = _readyFixture(
+      playerState: const PlayerStatus(
+        state: PlayerState.playing,
+        message: 'Playing',
+      ),
+      tracks: const [
+        PlayerTrack(
+          id: 1,
+          type: PlayerTrackType.audio,
+          selected: true,
+          title: 'English',
+          language: 'eng',
+          codec: 'aac',
+        ),
+        PlayerTrack(
+          id: 2,
+          type: PlayerTrackType.audio,
+          selected: false,
+          title: 'Spanish',
+          language: 'spa',
+          codec: 'ac3',
+        ),
+      ],
+    )..controller.settings = const LineupSettings(reduceMotion: true);
+    await _pump(tester, fixture.build());
+    await _openDestination(tester, 'Player');
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
+    await tester.pump();
+
+    expect(find.byKey(const Key('playback-options-rail')), findsOneWidget);
+    await _match(tester, 'player-audio-tracks-1280x720.png');
+  });
+
+  testWidgets('player long subtitle track rail', (tester) async {
+    final fixture = _readyFixture(
+      playerState: const PlayerStatus(
+        state: PlayerState.playing,
+        message: 'Playing',
+      ),
+      tracks: [
+        for (var index = 1; index <= 14; index++)
+          PlayerTrack(
+            id: index,
+            type: PlayerTrackType.subtitle,
+            selected: index == 10,
+            title: 'Subtitle track $index',
+            language: index.isEven ? 'eng' : 'spa',
+            codec: index.isEven ? 'ass' : 'srt',
+          ),
+      ],
+    )..controller.settings = const LineupSettings(reduceMotion: true);
+    await _pump(tester, fixture.build());
+    await _openDestination(tester, 'Player');
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyC);
+    await tester.pumpAndSettle();
+
+    expect(
+      Focus.of(tester.element(find.text('Subtitle track 10'))).hasFocus,
+      isTrue,
+    );
+    await _match(tester, 'player-subtitles-long-1280x720.png');
+  });
+
   testWidgets('Mini Guide', (tester) async {
     final fixture = _readyFixture(
       playerState: const PlayerStatus(
@@ -506,7 +570,10 @@ Future<void> _openDestination(WidgetTester tester, String destination) async {
   await tester.pump(const Duration(milliseconds: 250));
 }
 
-UiFixture _readyFixture({PlayerStatus? playerState}) {
+UiFixture _readyFixture({
+  PlayerStatus? playerState,
+  List<PlayerTrack>? tracks,
+}) {
   final player = FixturePlayer();
   if (playerState != null) {
     player.emit(
@@ -518,20 +585,22 @@ UiFixture _readyFixture({PlayerStatus? playerState}) {
         height: 1080,
         videoCodec: 'h264',
       ),
-      tracks: const [
-        PlayerTrack(
-          id: 1,
-          type: PlayerTrackType.audio,
-          selected: true,
-          title: 'English',
-        ),
-        PlayerTrack(
-          id: 2,
-          type: PlayerTrackType.subtitle,
-          selected: false,
-          title: 'English captions',
-        ),
-      ],
+      tracks:
+          tracks ??
+          const [
+            PlayerTrack(
+              id: 1,
+              type: PlayerTrackType.audio,
+              selected: true,
+              title: 'English',
+            ),
+            PlayerTrack(
+              id: 2,
+              type: PlayerTrackType.subtitle,
+              selected: false,
+              title: 'English captions',
+            ),
+          ],
     );
   }
   final controller = _VisualController()

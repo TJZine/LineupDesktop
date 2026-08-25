@@ -31,7 +31,7 @@ class PlayerView extends StatefulWidget {
 
 class _PlayerViewState extends State<PlayerView> {
   late PlayerOverlay _renderedOverlay;
-  var _transitioningNowPlaying = false;
+  var _overlayTransitionDuration = const Duration(milliseconds: 350);
 
   @override
   void initState() {
@@ -50,9 +50,21 @@ class _PlayerViewState extends State<PlayerView> {
     if (!mounted) return;
     final nextOverlay = widget.controller.overlay;
     setState(() {
-      _transitioningNowPlaying =
+      final transitioningNowPlaying =
           _renderedOverlay == PlayerOverlay.nowPlaying ||
           nextOverlay == PlayerOverlay.nowPlaying;
+      final transitioningTracks =
+          _renderedOverlay == PlayerOverlay.audioTracks ||
+          _renderedOverlay == PlayerOverlay.subtitleTracks ||
+          nextOverlay == PlayerOverlay.audioTracks ||
+          nextOverlay == PlayerOverlay.subtitleTracks;
+      _overlayTransitionDuration = Duration(
+        milliseconds: transitioningNowPlaying
+            ? 200
+            : transitioningTracks
+            ? 300
+            : 350,
+      );
       _renderedOverlay = nextOverlay;
     });
   }
@@ -234,7 +246,7 @@ class _PlayerViewState extends State<PlayerView> {
     final presentationKey = ValueKey((overlay, presentationGeneration));
     final transitionDuration = MediaQuery.disableAnimationsOf(context)
         ? Duration.zero
-        : Duration(milliseconds: _transitioningNowPlaying ? 200 : 350);
+        : _overlayTransitionDuration;
     return Material(
       color: Colors.transparent,
       child: Focus(
@@ -281,6 +293,16 @@ class _PlayerViewState extends State<PlayerView> {
                       return SlideTransition(
                         position: Tween(
                           begin: const Offset(-1, 0),
+                          end: Offset.zero,
+                        ).animate(fade),
+                        child: transitioned,
+                      );
+                    }
+                    if (childOverlay == PlayerOverlay.audioTracks ||
+                        childOverlay == PlayerOverlay.subtitleTracks) {
+                      return SlideTransition(
+                        position: Tween(
+                          begin: const Offset(1, 0),
                           end: Offset.zero,
                         ).animate(fade),
                         child: transitioned,
@@ -1274,90 +1296,201 @@ class _MiniGuideRow extends StatelessWidget {
   }
 }
 
-class _Tracks extends StatelessWidget {
+class _Tracks extends StatefulWidget {
   const _Tracks({required this.controller, required this.type});
   final PlayerCoordinator controller;
   final PlayerTrackType type;
 
   @override
+  State<_Tracks> createState() => _TracksState();
+}
+
+class _TracksState extends State<_Tracks> {
+  late final ScrollController _scrollController;
+
+  @override
+  void initState() {
+    super.initState();
+    final tracks = widget.controller.tracks
+        .where((track) => track.type == widget.type)
+        .toList();
+    final selectedIndex = tracks.indexWhere((track) => track.selected);
+    final listIndex = selectedIndex < 0
+        ? 0
+        : selectedIndex + (widget.type == PlayerTrackType.subtitle ? 1 : 0);
+    _scrollController = ScrollController(
+      initialScrollOffset: (listIndex * 74.0 - 120).clamp(0, double.infinity),
+    );
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final tracks = controller.tracks
-        .where((track) => track.type == type)
+    final tracks = widget.controller.tracks
+        .where((track) => track.type == widget.type)
         .toList();
     final roles = LineupTheme.of(context);
-    return Align(
-      alignment: Alignment.centerRight,
-      child: SafeArea(
-        minimum: EdgeInsets.all(roles.overlaySafeArea),
-        child: FocusScope(
-          child: Card(
-            key: const Key('playback-options-rail'),
-            child: SizedBox(
-              width: 460,
+    final selectedTrack = tracks.where((track) => track.selected).firstOrNull;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final railWidth = (constraints.maxWidth * 0.4).clamp(0.0, 420.0);
+        final padding = constraints.maxWidth <= 800 ? 20.0 : 28.0;
+        return Align(
+          alignment: Alignment.centerRight,
+          child: FocusScope(
+            child: Container(
+              key: const Key('playback-options-rail'),
+              width: railWidth,
               height: double.infinity,
-              child: Padding(
-                padding: const EdgeInsets.all(18),
-                child: Column(
-                  children: [
-                    Text(
-                      type == PlayerTrackType.audio
-                          ? 'Audio tracks'
-                          : 'Subtitles',
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                    const SizedBox(height: 12),
-                    Expanded(
-                      child: ListView(
-                        key: const Key('playback-options-list'),
-                        children: [
-                          if (type == PlayerTrackType.subtitle)
-                            ListTile(
-                              autofocus: !tracks.any((track) => track.selected),
-                              selected: !tracks.any((track) => track.selected),
-                              leading: Icon(
-                                tracks.any((track) => track.selected)
-                                    ? Icons.radio_button_unchecked
-                                    : Icons.radio_button_checked,
-                              ),
-                              title: const Text('Off'),
-                              onTap: () => controller.selectTrack(type, null),
-                            ),
-                          for (final track in tracks)
-                            ListTile(
-                              autofocus: track.selected,
-                              selected: track.selected,
-                              leading: Icon(
-                                track.selected
-                                    ? Icons.radio_button_checked
-                                    : Icons.radio_button_unchecked,
-                              ),
-                              title: Text(
-                                track.title ??
-                                    track.language ??
-                                    '${track.type.name} ${track.id}',
-                              ),
-                              subtitle: track.codec == null
-                                  ? null
-                                  : Text(track.codec!),
-                              onTap: () =>
-                                  controller.selectTrack(type, track.id),
-                            ),
-                        ],
-                      ),
-                    ),
-                    TextButton(
-                      autofocus:
-                          tracks.isEmpty && type != PlayerTrackType.subtitle,
-                      onPressed: controller.closeOverlay,
-                      child: const Text('Back'),
-                    ),
+              padding: EdgeInsets.all(padding),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    roles.scrim.withValues(alpha: 0.54),
+                    roles.scrim.withValues(alpha: 0.74),
                   ],
                 ),
+                border: Border(left: BorderSide(color: roles.subtleBorder)),
+                borderRadius: BorderRadius.horizontal(
+                  left: Radius.circular(roles.panelRadius),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'PLAYBACK OPTIONS',
+                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                      color: roles.mutedText,
+                      letterSpacing: 1.4,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    widget.type == PlayerTrackType.audio
+                        ? 'Audio'
+                        : 'Subtitles',
+                    style: Theme.of(context).textTheme.headlineSmall
+                        ?.copyWith(fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 18),
+                  Expanded(
+                    child: ClipRect(
+                      child: ListView.separated(
+                        key: const Key('playback-options-list'),
+                        controller: _scrollController,
+                        itemCount:
+                            tracks.length +
+                            (widget.type == PlayerTrackType.subtitle ? 1 : 0),
+                        separatorBuilder: (_, _) => const SizedBox(height: 10),
+                        itemBuilder: (context, index) {
+                          final off =
+                              widget.type == PlayerTrackType.subtitle &&
+                              index == 0;
+                          final track = off
+                              ? null
+                              : tracks[index -
+                                    (widget.type == PlayerTrackType.subtitle
+                                        ? 1
+                                        : 0)];
+                          final selected = off
+                              ? selectedTrack == null
+                              : track!.selected;
+                          final metadata = track == null
+                              ? const <String>[]
+                              : [
+                                  if (track.language != null) track.language!,
+                                  if (track.codec != null) track.codec!,
+                                ];
+                          final shape = RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(
+                              roles.panelRadius,
+                            ),
+                            side: BorderSide(
+                              color: selected
+                                  ? roles.progressFill
+                                  : roles.subtleBorder,
+                              width: selected ? 2 : 1,
+                            ),
+                          );
+                          return Material(
+                            color: Colors.transparent,
+                            shape: shape,
+                            clipBehavior: Clip.antiAlias,
+                            child: ListTile(
+                              key: Key(
+                                off
+                                    ? 'playback-track-off'
+                                    : 'playback-track-${widget.type.name}-${track!.id}',
+                              ),
+                              autofocus: selected,
+                              selected: selected,
+                              selectedTileColor: roles.selectedSurface,
+                              focusColor: roles.focusedSurface,
+                              shape: shape,
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 2,
+                              ),
+                              title: Text(
+                                off
+                                    ? 'Off'
+                                    : track!.title ??
+                                          track.language ??
+                                          '${track.type.name} ${track.id}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              subtitle: metadata.isEmpty
+                                  ? null
+                                  : Text(
+                                      metadata.join(' • '),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                              trailing: selected
+                                  ? Icon(
+                                      Icons.check_circle,
+                                      color: roles.progressFill,
+                                      semanticLabel: 'Selected',
+                                    )
+                                  : null,
+                              onTap: () => widget.controller.selectTrack(
+                                widget.type,
+                                track?.id,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextButton.icon(
+                    autofocus:
+                        tracks.isEmpty &&
+                        widget.type != PlayerTrackType.subtitle,
+                    onPressed: widget.controller.closeOverlay,
+                    icon: const Icon(Icons.arrow_back),
+                    label: const Text('Back'),
+                  ),
+                ],
               ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }

@@ -684,6 +684,52 @@ void main() {
     fixture.dispose();
   });
 
+  testWidgets('track rows distinguish focused and selected presentation', (
+    tester,
+  ) async {
+    final fixture = _Fixture(
+      PlayerState.playing,
+      tracks: const [
+        PlayerTrack(
+          id: 1,
+          type: PlayerTrackType.audio,
+          selected: false,
+          title: 'Stereo',
+        ),
+        PlayerTrack(
+          id: 2,
+          type: PlayerTrackType.audio,
+          selected: true,
+          title: 'Surround',
+        ),
+      ],
+    );
+    fixture.player.showTracks(PlayerTrackType.audio);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+    await tester.pump();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pump();
+    final focused = tester.widget<ListTile>(
+      find.byKey(const Key('playback-track-audio-1')),
+    );
+    final selected = tester.widget<ListTile>(
+      find.byKey(const Key('playback-track-audio-2')),
+    );
+    expect(Focus.of(tester.element(find.text('Stereo'))).hasFocus, isTrue);
+    expect(focused.selected, isFalse);
+    expect(selected.selected, isTrue);
+    expect(focused.focusColor, isNot(selected.selectedTileColor));
+    expect((selected.trailing! as Icon).semanticLabel, 'Selected');
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
   testWidgets('subtitle Off receives focus only when no track is selected', (
     tester,
   ) async {
@@ -774,12 +820,197 @@ void main() {
       );
       final position = tester.state<ScrollableState>(scrollable).position;
       expect(position.maxScrollExtent, greaterThan(0));
+      final rail = tester.getRect(
+        find.byKey(const Key('playback-options-rail')),
+      );
+      expect(rail.right, size.width);
+      expect(rail.height, size.height);
+      expect(rail.width, size.width == 800 ? 320 : 420);
       position.jumpTo(position.maxScrollExtent);
       await tester.pump();
       expect(find.text('Audio track 29'), findsOneWidget);
       expect(find.text('Back'), findsOneWidget);
       expect(tester.takeException(), isNull, reason: '$size');
     }
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
+  testWidgets('selected subtitle in a long list is focused and visible', (
+    tester,
+  ) async {
+    final fixture = _Fixture(
+      PlayerState.playing,
+      tracks: [
+        for (var index = 0; index < 30; index++)
+          PlayerTrack(
+            id: index,
+            type: PlayerTrackType.subtitle,
+            selected: index == 24,
+            title: 'Subtitle track $index',
+          ),
+      ],
+    );
+    await tester.binding.setSurfaceSize(const Size(800, 600));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    fixture.player.showTracks(PlayerTrackType.subtitle);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final selected = find.text('Subtitle track 24');
+    final list = find.byKey(const Key('playback-options-list'));
+    expect(Focus.of(tester.element(selected)).hasFocus, isTrue);
+    expect(tester.getRect(list).contains(tester.getCenter(selected)), isTrue);
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
+  testWidgets('track rail keeps proportional bounds through 4K', (
+    tester,
+  ) async {
+    final fixture = _Fixture(
+      PlayerState.playing,
+      tracks: const [
+        PlayerTrack(id: 1, type: PlayerTrackType.audio, selected: true),
+      ],
+    );
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    for (final layout in const [
+      (viewport: Size(800, 600), width: 320.0),
+      (viewport: Size(1280, 720), width: 420.0),
+      (viewport: Size(3840, 2160), width: 420.0),
+    ]) {
+      await tester.binding.setSurfaceSize(layout.viewport);
+      fixture.player.showOsd();
+      fixture.player.showTracks(PlayerTrackType.audio);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final rect = tester.getRect(
+        find.byKey(const Key('playback-options-rail')),
+      );
+      expect(
+        rect,
+        Rect.fromLTWH(
+          layout.viewport.width - layout.width,
+          0,
+          layout.width,
+          layout.viewport.height,
+        ),
+      );
+      expect(tester.takeException(), isNull, reason: '${layout.viewport}');
+    }
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
+  testWidgets('track rails enter from the right and exit in 300ms', (
+    tester,
+  ) async {
+    final fixture = _Fixture(
+      PlayerState.playing,
+      tracks: const [
+        PlayerTrack(id: 1, type: PlayerTrackType.audio, selected: true),
+      ],
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+
+    fixture.player.showTracks(PlayerTrackType.audio);
+    await tester.pump();
+    var switcher = tester.widget<AnimatedSwitcher>(
+      find.byType(AnimatedSwitcher),
+    );
+    expect(switcher.duration, const Duration(milliseconds: 300));
+    expect(switcher.reverseDuration, const Duration(milliseconds: 300));
+    await tester.pump(const Duration(milliseconds: 150));
+    var positions = tester
+        .widgetList<SlideTransition>(
+          find.ancestor(
+            of: find.byKey(const Key('playback-options-rail')),
+            matching: find.byType(SlideTransition),
+          ),
+        )
+        .map((slide) => slide.position.value);
+    expect(positions.any((position) => position.dx > 0), isTrue);
+    expect(positions.every((position) => position.dy == 0), isTrue);
+
+    await tester.pumpAndSettle();
+    fixture.player.closeOverlay();
+    await tester.pump();
+    switcher = tester.widget<AnimatedSwitcher>(find.byType(AnimatedSwitcher));
+    expect(switcher.duration, const Duration(milliseconds: 300));
+    await tester.pump(const Duration(milliseconds: 150));
+    positions = tester
+        .widgetList<SlideTransition>(
+          find.ancestor(
+            of: find.byKey(const Key('playback-options-rail')),
+            matching: find.byType(SlideTransition),
+          ),
+        )
+        .map((slide) => slide.position.value);
+    expect(positions.any((position) => position.dx > 0), isTrue);
+    await tester.pumpAndSettle();
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
+  testWidgets('Reduce Motion settles track rails in one pump', (tester) async {
+    final fixture = _Fixture(
+      PlayerState.playing,
+      tracks: const [
+        PlayerTrack(id: 1, type: PlayerTrackType.audio, selected: true),
+      ],
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(disableAnimations: true),
+          child: child!,
+        ),
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+
+    fixture.player.showTracks(PlayerTrackType.audio);
+    await tester.pump();
+    final switcher = tester.widget<AnimatedSwitcher>(
+      find.byType(AnimatedSwitcher),
+    );
+    expect(switcher.duration, Duration.zero);
+    expect(switcher.reverseDuration, Duration.zero);
+    expect(find.byKey(const Key('playback-options-rail')), findsOneWidget);
+    final slides = tester.widgetList<SlideTransition>(
+      find.ancestor(
+        of: find.byKey(const Key('playback-options-rail')),
+        matching: find.byType(SlideTransition),
+      ),
+    );
+    expect(slides, isNotEmpty);
+    expect(
+      slides.every((slide) => slide.position.value == Offset.zero),
+      isTrue,
+    );
+
+    fixture.player.closeOverlay();
+    await tester.pump();
+    expect(find.byKey(const Key('playback-options-rail')), findsNothing);
 
     await tester.pumpWidget(const SizedBox.shrink());
     fixture.dispose();
