@@ -1131,6 +1131,9 @@ class _MiniGuide extends StatelessWidget {
   Widget build(BuildContext context) {
     final channels = controller.miniGuideChannels;
     final roles = LineupTheme.of(context);
+    final height = MediaQuery.sizeOf(context).height;
+    final rowHeight = height < 720 ? null : (height >= 900 ? 48.0 : 56.0);
+    final compressed = height >= 900;
     return Align(
       alignment: Alignment.topCenter,
       child: SafeArea(
@@ -1143,9 +1146,9 @@ class _MiniGuide extends StatelessWidget {
           ),
           padding: EdgeInsets.fromLTRB(
             roles.overlaySafeArea,
-            12,
+            compressed ? 8 : 12,
             roles.overlaySafeArea,
-            16,
+            compressed ? 10 : 16,
           ),
           decoration: BoxDecoration(
             gradient: LinearGradient(
@@ -1176,12 +1179,16 @@ class _MiniGuide extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   for (final channel in channels)
-                    _MiniGuideRow(controller: controller, channel: channel),
-                  const SizedBox(height: 8),
-                  const Text(
+                    _MiniGuideRow(
+                      controller: controller,
+                      channel: channel,
+                      rowHeight: rowHeight,
+                    ),
+                  SizedBox(height: compressed ? 4 : 8),
+                  Text(
                     'UP/DOWN Browse • CH± Page • OK Watch • RIGHT Full Guide • BACK Close',
                     textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 12),
+                    style: TextStyle(fontSize: compressed ? 11 : 12),
                   ),
                 ],
               ),
@@ -1194,10 +1201,15 @@ class _MiniGuide extends StatelessWidget {
 }
 
 class _MiniGuideRow extends StatelessWidget {
-  const _MiniGuideRow({required this.controller, required this.channel});
+  const _MiniGuideRow({
+    required this.controller,
+    required this.channel,
+    required this.rowHeight,
+  });
 
   final PlayerCoordinator controller;
   final Channel channel;
+  final double? rowHeight;
 
   @override
   Widget build(BuildContext context) {
@@ -1218,7 +1230,85 @@ class _MiniGuideRow extends StatelessWidget {
         ? 0.0
         : now.difference(current.scheduled.start).inMilliseconds /
               spanMilliseconds;
+    final horizontal = rowHeight != null;
+    final channelIdentity = Row(
+      children: [
+        Expanded(
+          child: Text(
+            channel.name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.bodyMedium
+                ?.copyWith(color: foreground, fontWeight: FontWeight.w700),
+          ),
+        ),
+        if (tuned)
+          Icon(
+            Icons.play_circle_fill,
+            size: horizontal ? 16 : 18,
+            color: foreground,
+          ),
+      ],
+    );
+    final currentTitle = Text(
+      current?.scheduled.item.title ?? 'Schedule loading…',
+      key: Key('mini-guide-current-${channel.id}'),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: Theme.of(context).textTheme.bodyMedium
+          ?.copyWith(color: foreground),
+    );
+    final progressBar = current == null
+        ? null
+        : LinearProgressIndicator(
+            value: progress.clamp(0, 1),
+            minHeight: 2,
+            color: focused ? foreground : null,
+            backgroundColor: focused
+                ? foreground.withValues(alpha: 0.25)
+                : null,
+            semanticsLabel: 'Program progress',
+          );
+    final nextTitle = next == null
+        ? null
+        : Text(
+            'Next • ${next.scheduled.item.title}',
+            key: Key('mini-guide-next-${channel.id}'),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.bodySmall
+                ?.copyWith(color: foreground),
+          );
+    final tuneButton = IconButton(
+      style: focused
+          ? IconButton.styleFrom(
+              foregroundColor: foreground,
+              disabledForegroundColor: foreground.withValues(alpha: 0.70),
+            )
+          : null,
+      tooltip: unsupported
+          ? 'Playback unavailable'
+          : tuned
+          ? 'Watching this channel'
+          : 'Watch channel',
+      onPressed: tuned || unsupported
+          ? null
+          : () => controller.tune(channel.id),
+      icon: const Icon(Icons.play_arrow),
+    );
+    final number = SizedBox(
+      width: 46,
+      child: Text(
+        '${channel.number}',
+        style:
+            (horizontal
+                    ? Theme.of(context).textTheme.bodyLarge
+                    : Theme.of(context).textTheme.titleMedium)
+                ?.copyWith(color: foreground, fontWeight: FontWeight.w700),
+      ),
+    );
     return Semantics(
+      key: Key('mini-guide-row-${channel.id}'),
       selected: focused,
       label:
           'Channel ${channel.number}, ${channel.name}. Now ${current?.scheduled.item.title ?? 'schedule loading'}.${next == null ? '' : ' Next ${next.scheduled.item.title}.'}${tuned ? ' Now watching.' : ''}',
@@ -1237,92 +1327,64 @@ class _MiniGuideRow extends StatelessWidget {
           color: Colors.transparent,
           child: InkWell(
             onTap: () => controller.focusMiniGuideChannel(channel.id),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              child: Row(
-                children: [
-                  SizedBox(
-                    width: 46,
-                    child: Text(
-                      '${channel.number}',
-                      style: Theme.of(context).textTheme.titleMedium
-                          ?.copyWith(color: foreground),
+            child: rowHeight == null
+                ? Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
                     ),
-                  ),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    child: Row(
                       children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                channel.name,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  color: foreground,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ),
-                            if (tuned)
-                              Icon(
-                                Icons.play_circle_fill,
-                                size: 18,
-                                color: foreground,
-                              ),
-                          ],
-                        ),
-                        Text(
-                          current?.scheduled.item.title ?? 'Schedule loading…',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(color: foreground),
-                        ),
-                        if (current != null)
-                          LinearProgressIndicator(
-                            value: progress.clamp(0, 1),
-                            minHeight: 2,
-                            color: focused ? foreground : null,
-                            backgroundColor: focused
-                                ? foreground.withValues(alpha: 0.25)
-                                : null,
-                            semanticsLabel: 'Program progress',
+                        number,
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              channelIdentity,
+                              currentTitle,
+                              ?progressBar,
+                              ?nextTitle,
+                            ],
                           ),
-                        if (next != null)
-                          Text(
-                            'Next • ${next.scheduled.item.title}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(color: foreground),
-                          ),
+                        ),
+                        tuneButton,
                       ],
                     ),
-                  ),
-                  IconButton(
-                    style: focused
-                        ? IconButton.styleFrom(
-                            foregroundColor: foreground,
-                            disabledForegroundColor: foreground.withValues(
-                              alpha: 0.70,
+                  )
+                : SizedBox(
+                    height: rowHeight,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      child: Row(
+                        children: [
+                          number,
+                          SizedBox(
+                            width: (MediaQuery.sizeOf(context).width * 0.16)
+                                .clamp(120, 260),
+                            child: channelIdentity,
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(child: currentTitle),
+                          const SizedBox(width: 16),
+                          if (progressBar != null)
+                            SizedBox(
+                              width: (MediaQuery.sizeOf(context).width * 0.12)
+                                  .clamp(96, 220),
+                              child: progressBar,
                             ),
-                          )
-                        : null,
-                    tooltip: unsupported
-                        ? 'Playback unavailable'
-                        : tuned
-                        ? 'Watching this channel'
-                        : 'Watch channel',
-                    onPressed: tuned || unsupported
-                        ? null
-                        : () => controller.tune(channel.id),
-                    icon: const Icon(Icons.play_arrow),
+                          if (nextTitle != null) ...[
+                            const SizedBox(width: 16),
+                            SizedBox(
+                              width: (MediaQuery.sizeOf(context).width * 0.20)
+                                  .clamp(140, 360),
+                              child: nextTitle,
+                            ),
+                          ],
+                          tuneButton,
+                        ],
+                      ),
+                    ),
                   ),
-                ],
-              ),
-            ),
           ),
         ),
       ),

@@ -579,6 +579,22 @@ void main() {
     await _match(tester, 'mini-guide-1280x720.png', additionalPumps: 2);
   });
 
+  testWidgets('Mini Guide at 1920x1080', (tester) async {
+    final fixture = _readyFixture(
+      playerState: const PlayerStatus(
+        state: PlayerState.playing,
+        message: 'Playing',
+      ),
+    );
+    await _pump(tester, fixture.build(), viewport: const Size(1920, 1080));
+    await _openDestination(tester, 'Player');
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pump();
+
+    expect(find.byKey(const Key('mini-guide-shelf')), findsOneWidget);
+    await _match(tester, 'mini-guide-1920x1080.png', additionalPumps: 2);
+  });
+
   testWidgets('Settings in alternate theme', (tester) async {
     final fixture = _readyFixture()
       ..controller.settings = const LineupSettings(
@@ -651,10 +667,14 @@ Future<void> _loadPinnedTestFont() async {
   await (FontLoader('MaterialIcons')..addFont(Future.value(icons))).load();
 }
 
-Future<void> _pump(WidgetTester tester, Widget child) async {
+Future<void> _pump(
+  WidgetTester tester,
+  Widget child, {
+  Size viewport = _viewport,
+}) async {
   tester.view
     ..devicePixelRatio = 1
-    ..physicalSize = _viewport;
+    ..physicalSize = viewport;
   addTearDown(tester.view.resetDevicePixelRatio);
   addTearDown(tester.view.resetPhysicalSize);
   await tester.pumpWidget(RepaintBoundary(key: _goldenKey, child: child));

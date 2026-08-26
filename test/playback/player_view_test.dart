@@ -425,11 +425,21 @@ void main() {
     for (final size in const [
       Size(800, 600),
       Size(1280, 720),
+      Size(1600, 900),
       Size(1920, 1080),
+      Size(3840, 2160),
     ]) {
       await tester.binding.setSurfaceSize(size);
       fixture.player.showMiniGuide();
-      await tester.pump();
+      await tester.pumpWidget(
+        MaterialApp(
+          key: ValueKey(size),
+          home: MediaQuery(
+            data: MediaQueryData(size: size),
+            child: PlayerView(controller: fixture.player, openGuide: () {}),
+          ),
+        ),
+      );
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.bySemanticsLabel(RegExp('Mini Guide')), findsOneWidget);
       expect(
@@ -438,6 +448,33 @@ void main() {
       );
       expect(fixture.player.miniGuideChannels, hasLength(5));
       expect(find.textContaining('UP/DOWN Browse'), findsOneWidget);
+      final shelf = tester.getRect(find.byKey(const Key('mini-guide-shelf')));
+      expect(
+        MediaQuery.sizeOf(
+          tester.element(find.byKey(const Key('mini-guide-shelf'))),
+        ),
+        size,
+      );
+      for (final channel in fixture.player.miniGuideChannels) {
+        final row = tester.getRect(
+          find.byKey(Key('mini-guide-row-${channel.id}')),
+        );
+        expect(row.top, greaterThanOrEqualTo(shelf.top), reason: '$size');
+        expect(row.bottom, lessThanOrEqualTo(shelf.bottom), reason: '$size');
+        if (size.height >= 900) {
+          expect(row.height, 48, reason: '$size');
+        }
+        for (final fact in ['current', 'next']) {
+          final factRect = tester.getRect(
+            find.byKey(Key('mini-guide-$fact-${channel.id}')),
+          );
+          expect(row.contains(factRect.topLeft), isTrue, reason: '$size');
+          expect(row.contains(factRect.bottomRight), isTrue, reason: '$size');
+        }
+      }
+      if (size.height >= 900) {
+        expect(shelf.height / size.height, lessThan(0.34), reason: '$size');
+      }
       expect(tester.takeException(), isNull, reason: '$size');
       fixture.player.closeOverlay();
       await tester.pump();
@@ -476,6 +513,24 @@ void main() {
       tester.getSize(find.byKey(const Key('mini-guide-shelf'))).width,
       1280,
     );
+    expect(tester.takeException(), isNull);
+
+    tester.view.physicalSize = const Size(3840, 2160);
+    await tester.pump();
+    expect(
+      tester.getSize(find.byKey(const Key('mini-guide-shelf'))).width,
+      1920,
+    );
+    expect(
+      tester.getSize(find.byKey(const Key('mini-guide-shelf'))).height / 1080,
+      lessThan(0.34),
+    );
+    for (final channel in fixture.player.miniGuideChannels) {
+      expect(
+        tester.getSize(find.byKey(Key('mini-guide-row-${channel.id}'))).height,
+        48,
+      );
+    }
     expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(const SizedBox.shrink());
