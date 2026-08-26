@@ -524,17 +524,34 @@ void main() {
         find.byKey(const Key('player-osd-surface')),
       );
       expect(surface.width, size.width, reason: '$size');
-      if (size.width >= 1280 && size.height >= 900) {
+      if (size.width >= 1200 && size.height >= 640) {
         expect(
           find.byKey(const Key('player-osd-horizontal-layout')),
           findsOneWidget,
         );
-        expect(surface.height / size.height, lessThan(0.20), reason: '$size');
+        expect(
+          surface.height / size.height,
+          lessThan(size.height < 900 ? 0.24 : 0.20),
+          reason: '$size',
+        );
         final progress = tester.getRect(
           find.byKey(const Key('player-osd-progress-block')),
         );
         final controls = tester.getRect(
           find.byKey(const Key('player-osd-horizontal-layout')),
+        );
+        final identity = tester.getRect(
+          find.byKey(const Key('player-osd-identity')),
+        );
+        final actions = tester.getRect(
+          find.byKey(const Key('player-osd-action-groups')),
+        );
+        expect(identity.right, lessThan(progress.left), reason: '$size');
+        expect(progress.right, lessThan(actions.left), reason: '$size');
+        expect(
+          actions.right,
+          lessThanOrEqualTo(surface.right),
+          reason: '$size',
         );
         expect(progress.center.dy, closeTo(controls.center.dy, 16));
       } else {
@@ -598,10 +615,11 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
 
-      expect(
-        tester.widget<Text>(find.byKey(const Key('player-osd-status'))).data,
-        contains(_statusLabelForTest(state)),
+      final status = tester.widget<Text>(
+        find.byKey(const Key('player-osd-status')),
       );
+      expect(status.data, contains('Channel'));
+      expect(status.data, contains(_statusLabelForTest(state)));
       if (state == PlayerState.unsupported) {
         for (final icon in [
           Icons.skip_previous,

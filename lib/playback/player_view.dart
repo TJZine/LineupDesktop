@@ -483,7 +483,10 @@ class _Osd extends StatelessWidget {
     final unsupported = controller.status.state == PlayerState.unsupported;
     final quality = _quality(controller.telemetry);
     final expanded = !LineupLayout.isCompactWidth(size.width);
-    final horizontal = size.width >= 1280 && size.height >= 900;
+    // 720p desktop still has enough room for the broadcast-style progress
+    // lane; keep the compact 800x600 regime stacked so every action remains
+    // reachable without crowding the identity block.
+    final horizontal = size.width >= 1200 && size.height >= 640;
     final transportActions = <Widget>[
       IconButton(
         tooltip: 'Previous channel',
@@ -531,12 +534,15 @@ class _Osd extends StatelessWidget {
         icon: const Icon(Icons.bedtime_outlined),
       ),
       if (expanded)
-        Text(
-          controller.sleepDuration == null
-              ? 'Sleep off'
-              : 'Sleep ${controller.sleepDuration!.inMinutes}m',
-          style: Theme.of(context).textTheme.bodySmall
-              ?.copyWith(color: roles.secondaryText),
+        Padding(
+          padding: const EdgeInsets.only(left: 4, right: 8),
+          child: Text(
+            controller.sleepDuration == null
+                ? 'Sleep off'
+                : 'Sleep ${controller.sleepDuration!.inMinutes}m',
+            style: Theme.of(context).textTheme.bodySmall
+                ?.copyWith(color: roles.secondaryText),
+          ),
         ),
     ];
     final windowActions = <Widget>[
@@ -593,6 +599,7 @@ class _Osd extends StatelessWidget {
               ),
               Text(
                 [
+                  channel?.name,
                   program?.scheduled.item.showTitle,
                   _statusLabel(controller.status.state),
                   if (quality.isNotEmpty) quality,
@@ -634,22 +641,49 @@ class _Osd extends StatelessWidget {
                 fontFeatures: const [FontFeature.tabularFigures()],
               ),
             ),
-            const Spacer(),
             if (next != null && expanded)
-              Flexible(
-                child: Text(
-                  'Up next • ${next.scheduled.item.title}',
-                  key: const Key('player-osd-next'),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: roles.mutedText,
-                    fontWeight: FontWeight.w600,
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 16),
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: Text(
+                      'Up next • ${next.scheduled.item.title}',
+                      key: const Key('player-osd-next'),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.end,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: roles.mutedText,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ),
                 ),
               ),
           ],
         ),
+      ],
+    );
+    Widget actionGroup(List<Widget> children, {bool separated = true}) =>
+        DecoratedBox(
+          decoration: BoxDecoration(
+            border: separated
+                ? Border(left: BorderSide(color: roles.subtleBorder))
+                : null,
+          ),
+          child: Padding(
+            padding: EdgeInsets.only(left: separated ? 8 : 0),
+            child: Row(mainAxisSize: MainAxisSize.min, children: children),
+          ),
+        );
+    final groupedActions = Row(
+      key: const Key('player-osd-action-groups'),
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        actionGroup(transportActions, separated: false),
+        actionGroup(optionActions),
+        actionGroup(windowActions),
       ],
     );
     return Align(
@@ -661,7 +695,9 @@ class _Osd extends StatelessWidget {
           width: double.infinity,
           padding: EdgeInsets.fromLTRB(
             horizontalInset,
-            horizontal ? 44 : (size.height >= 720 ? 56 : 40),
+            horizontal
+                ? (size.height >= 900 ? 44 : 20)
+                : (size.height >= 720 ? 56 : 40),
             horizontalInset,
             8,
           ),
@@ -685,32 +721,29 @@ class _Osd extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                identity,
-                SizedBox(height: horizontal ? 4 : 6),
                 if (horizontal)
                   Row(
                     key: const Key('player-osd-horizontal-layout'),
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      Expanded(child: progress),
+                      Expanded(flex: 5, child: identity),
                       const SizedBox(width: 24),
-                      ...transportActions,
-                      const SizedBox(width: 12),
-                      ...optionActions,
-                      const SizedBox(width: 12),
-                      ...windowActions,
+                      Expanded(flex: 4, child: progress),
+                      const SizedBox(width: 24),
+                      groupedActions,
                     ],
                   )
                 else ...[
+                  identity,
+                  const SizedBox(height: 6),
                   progress,
-                  Row(
-                    key: const Key('player-osd-stacked-controls'),
-                    children: [
-                      ...transportActions,
-                      ...optionActions,
-                      const Spacer(),
-                      ...windowActions,
-                    ],
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Row(
+                      key: const Key('player-osd-stacked-controls'),
+                      mainAxisSize: MainAxisSize.min,
+                      children: [groupedActions],
+                    ),
                   ),
                 ],
               ],
