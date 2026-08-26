@@ -175,10 +175,15 @@ void main() {
     final shell = tester.getRect(
       find.byKey(const ValueKey('channel-setup-shell')),
     );
+    final header = tester.getRect(
+      find.byKey(const ValueKey('channel-setup-header')),
+    );
+    expect(header.bottom, lessThan(shell.top));
+    expect(
+      tester.getRect(find.widgetWithText(Chip, 'Step 2 of 3')).bottom,
+      lessThan(shell.top),
+    );
     final regions = [
-      shell,
-      tester.getRect(find.byKey(const ValueKey('channel-setup-header'))),
-      tester.getRect(find.widgetWithText(Chip, 'Step 2 of 3')),
       tester.getRect(find.byKey(const ValueKey('channel-setup-strategy-rail'))),
       tester.getRect(
         find.byKey(const ValueKey('channel-setup-strategy-details')),

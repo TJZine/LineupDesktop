@@ -813,6 +813,18 @@ void main() {
     expect(find.bySemanticsLabel('Unchanged: 2'), findsOneWidget);
     expect(find.bySemanticsLabel('Remove: 0'), findsOneWidget);
     expect(find.bySemanticsLabel('Final: 3'), findsOneWidget);
+    final updateSegment = tester.getRect(
+      find.byKey(const ValueKey('channel-setup-impact-update')),
+    );
+    final unchangedSegment = tester.getRect(
+      find.byKey(const ValueKey('channel-setup-impact-unchanged')),
+    );
+    expect(updateSegment.width, greaterThan(0));
+    expect(unchangedSegment.width, greaterThan(updateSegment.width));
+    expect(
+      find.bySemanticsLabel(RegExp('Channel composition.*Update: 1')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('Channel Setup exposes distinct scan states and actions', (

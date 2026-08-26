@@ -123,30 +123,42 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
               ),
               child: Padding(
                 padding: EdgeInsets.all(compact ? 16 : 28),
-                child: Material(
-                  key: const ValueKey('channel-setup-shell'),
-                  color: LineupTheme.of(context).primarySurface,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(
-                      LineupTheme.of(context).panelRadius,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _header(),
+                    const SizedBox(height: 18),
+                    Expanded(
+                      child: Material(
+                        key: const ValueKey('channel-setup-shell'),
+                        color: LineupTheme.of(context).primarySurface,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(
+                            LineupTheme.of(context).panelRadius,
+                          ),
+                          side: BorderSide(
+                            color: LineupTheme.of(context).defaultBorder,
+                          ),
+                        ),
+                        child: Padding(
+                          key: const ValueKey('channel-setup-stage'),
+                          padding: EdgeInsets.all(compact ? 18 : 26),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              if (_error != null &&
+                                  _buildPhase != _BuildPhase.failed)
+                                _errorBanner(),
+                              if (_error != null &&
+                                  _buildPhase != _BuildPhase.failed)
+                                const SizedBox(height: 18),
+                              Expanded(child: _body()),
+                            ],
+                          ),
+                        ),
+                      ),
                     ),
-                    side: BorderSide(
-                      color: LineupTheme.of(context).defaultBorder,
-                    ),
-                  ),
-                  child: Padding(
-                    padding: EdgeInsets.all(compact ? 18 : 26),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        _header(),
-                        if (_error != null && _buildPhase != _BuildPhase.failed)
-                          _errorBanner(),
-                        const SizedBox(height: 18),
-                        Expanded(child: _body()),
-                      ],
-                    ),
-                  ),
+                  ],
                 ),
               ),
             ),
@@ -995,83 +1007,9 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
                   ),
                   const SizedBox(height: 14),
                 ],
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 22,
-                    vertical: 18,
-                  ),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        LineupTheme.of(context).selectedSurface,
-                        LineupTheme.of(context).selectedSurface
-                            .withValues(alpha: 0.22),
-                      ],
-                    ),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: LineupTheme.of(context).defaultBorder,
-                    ),
-                  ),
-                  child: Wrap(
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    spacing: 14,
-                    runSpacing: 8,
-                    children: [
-                      Semantics(
-                        container: true,
-                        label: 'Current: ${widget.controller.channels.length}',
-                        child: ExcludeSemantics(
-                          child: _ImpactCount(
-                            value: widget.controller.channels.length,
-                            label: 'current',
-                          ),
-                        ),
-                      ),
-                      Icon(
-                        Icons.arrow_forward,
-                        color: LineupTheme.of(context).mutedText,
-                      ),
-                      Semantics(
-                        container: true,
-                        label: 'Final: ${impact.finalCount}',
-                        child: ExcludeSemantics(
-                          child: _ImpactCount(
-                            value: impact.finalCount,
-                            label: 'final channels',
-                            emphasized: true,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
-                  children: [
-                    _ImpactCard(
-                      label: 'Create',
-                      value: impact.create,
-                      icon: Icons.add_circle_outline,
-                    ),
-                    _ImpactCard(
-                      label: 'Update',
-                      value: impact.update,
-                      icon: Icons.edit_outlined,
-                    ),
-                    _ImpactCard(
-                      label: 'Unchanged',
-                      value: impact.unchanged,
-                      icon: Icons.check_circle_outline,
-                    ),
-                    _ImpactCard(
-                      label: 'Remove',
-                      value: impact.remove,
-                      icon: Icons.remove_circle_outline,
-                    ),
-                  ],
+                _ImpactHero(
+                  currentCount: widget.controller.channels.length,
+                  impact: impact,
                 ),
                 const SizedBox(height: 22),
                 if (_mode == ChannelBuildMode.replace)
@@ -1390,15 +1328,252 @@ class _ImpactCount extends StatelessWidget {
   );
 }
 
+class _ImpactHero extends StatelessWidget {
+  const _ImpactHero({required this.currentCount, required this.impact});
+
+  final int currentCount;
+  final _PlanImpact impact;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = LineupTheme.of(context);
+    return Container(
+      key: const ValueKey('channel-setup-impact-hero'),
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+      decoration: BoxDecoration(
+        color: palette.selectedSurface.withValues(alpha: 0.28),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: palette.defaultBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'LINEUP TRANSFORMATION',
+            style: TextStyle(
+              color: palette.secondaryText,
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1.1,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: Semantics(
+                  container: true,
+                  label: 'Current: $currentCount',
+                  child: ExcludeSemantics(
+                    child: _ImpactCount(value: currentCount, label: 'current'),
+                  ),
+                ),
+              ),
+              Icon(Icons.arrow_forward, color: palette.mutedText),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Semantics(
+                  container: true,
+                  label: 'Final: ${impact.finalCount}',
+                  child: ExcludeSemantics(
+                    child: _ImpactCount(
+                      value: impact.finalCount,
+                      label: 'final channels',
+                      emphasized: true,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Channel composition',
+            style: Theme.of(context).textTheme.titleSmall
+                ?.copyWith(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 8),
+          _ImpactCompositionBar(impact: impact),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _ImpactLegendItem(
+                label: 'Create',
+                value: impact.create,
+                icon: Icons.add_circle_outline,
+                color: palette.progressFill,
+              ),
+              _ImpactLegendItem(
+                label: 'Update',
+                value: impact.update,
+                icon: Icons.edit_outlined,
+                color: palette.focusBorder,
+              ),
+              _ImpactLegendItem(
+                label: 'Unchanged',
+                value: impact.unchanged,
+                icon: Icons.check_circle_outline,
+                color: palette.tunedSurface,
+              ),
+              _ImpactLegendItem(
+                label: 'Remove',
+                value: impact.remove,
+                icon: Icons.remove_circle_outline,
+                color: Theme.of(context).colorScheme.error,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ImpactCompositionBar extends StatelessWidget {
+  const _ImpactCompositionBar({required this.impact});
+
+  final _PlanImpact impact;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = LineupTheme.of(context);
+    final segments = [
+      (label: 'Create', value: impact.create, color: palette.progressFill),
+      (label: 'Update', value: impact.update, color: palette.focusBorder),
+      (
+        label: 'Unchanged',
+        value: impact.unchanged,
+        color: palette.tunedSurface,
+      ),
+      (
+        label: 'Remove',
+        value: impact.remove,
+        color: Theme.of(context).colorScheme.error,
+      ),
+    ];
+    final total = segments.fold<int>(0, (sum, segment) => sum + segment.value);
+    return Semantics(
+      container: true,
+      label:
+          'Channel composition. ${segments.map((segment) => '${segment.label}: ${segment.value}').join(', ')}.',
+      child: ExcludeSemantics(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            if (total == 0 || constraints.maxWidth <= 0) {
+              return Container(
+                key: const ValueKey('channel-setup-impact-bar'),
+                height: 26,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: palette.progressTrack,
+                  borderRadius: BorderRadius.circular(7),
+                ),
+                child: Text(
+                  'No planned changes',
+                  style: TextStyle(
+                    color: palette.mutedText,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              );
+            }
+            final positive = segments
+                .where((segment) => segment.value > 0)
+                .length;
+            // Keep a nonzero segment visible without letting the floor exceed
+            // the available strip at narrow widths.
+            final minimum = (constraints.maxWidth / positive).clamp(0.0, 18.0);
+            final remainder = constraints.maxWidth - minimum * positive;
+            return ClipRRect(
+              key: const ValueKey('channel-setup-impact-bar'),
+              borderRadius: BorderRadius.circular(7),
+              child: ColoredBox(
+                color: palette.progressTrack,
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 26,
+                  child: Row(
+                    children: [
+                      for (final segment in segments)
+                        SizedBox(
+                          key: ValueKey(
+                            'channel-setup-impact-${segment.label.toLowerCase()}',
+                          ),
+                          width: segment.value == 0
+                              ? 0
+                              : minimum + remainder * segment.value / total,
+                          child: Container(color: segment.color),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class _ImpactLegendItem extends StatelessWidget {
+  const _ImpactLegendItem({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.color,
+  });
+
+  final String label;
+  final int value;
+  final IconData icon;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    container: true,
+    label: '$label: $value',
+    child: ExcludeSemantics(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        decoration: BoxDecoration(
+          color: LineupTheme.of(context).elevatedSurface,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: LineupTheme.of(context).subtleBorder),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 16, color: color),
+            const SizedBox(width: 6),
+            Text(
+              '$label: $value',
+              style: const TextStyle(
+                fontWeight: FontWeight.w700,
+                fontFeatures: [FontFeature.tabularFigures()],
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
 class _ImpactCard extends StatelessWidget {
   const _ImpactCard({
     required this.label,
     required this.value,
     required this.icon,
   });
+
   final String label;
   final int value;
   final IconData icon;
+
   @override
   Widget build(BuildContext context) => Semantics(
     container: true,
