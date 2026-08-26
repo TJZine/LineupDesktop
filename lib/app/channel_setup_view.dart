@@ -519,7 +519,7 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
               rail,
               const SizedBox(height: 12),
               SizedBox(
-                height: constraints.maxHeight.clamp(280, 520),
+                height: constraints.maxHeight.clamp(280, 520).toDouble(),
                 child: details,
               ),
               const SizedBox(height: 12),

@@ -545,7 +545,12 @@ void main() {
   testWidgets('Channel Setup Review keeps staged chrome at compact sizes', (
     tester,
   ) async {
-    for (final size in const [Size(800, 600), Size(1280, 720)]) {
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    for (final size in const [
+      Size(800, 600),
+      Size(800, 1200),
+      Size(1280, 720),
+    ]) {
       await tester.binding.setSurfaceSize(size);
       final controller = _SetupFixtureController()
         ..stage = SetupStage.channelSetup
@@ -584,7 +589,6 @@ void main() {
       expect(tester.getBottomRight(footer).dy, lessThanOrEqualTo(size.height));
       expect(tester.takeException(), isNull);
     }
-    addTearDown(() => tester.binding.setSurfaceSize(null));
   });
 
   testWidgets('Channel Setup retains its three-stage product structure', (
