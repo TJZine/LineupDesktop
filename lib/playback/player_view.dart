@@ -744,6 +744,7 @@ class _NowPlaying extends StatelessWidget {
     final shelfHeight = compact
         ? (size.height * 0.56).clamp(300, 380).toDouble()
         : (size.height * 0.50).clamp(380, 560).toDouble();
+    final denseShelf = compact || shelfHeight < 440;
     final showPoster = size.width >= 700 && size.height >= 500;
     final preferLogo = controller.lineup.settings.preferClearLogos;
     final posterPath = _artworkPath(item, GuideArtworkKind.poster);
@@ -825,7 +826,7 @@ class _NowPlaying extends StatelessWidget {
                   if (showPoster) ...[
                     SizedBox(
                       key: const Key('player-now-playing-poster'),
-                      width: (shelfHeight * 2 / 3).clamp(190, 340),
+                      width: (shelfHeight * 2 / 3).clamp(190, 374),
                       height: shelfHeight,
                       child: Stack(
                         fit: StackFit.expand,
@@ -845,7 +846,7 @@ class _NowPlaying extends StatelessWidget {
                           Align(
                             alignment: Alignment.centerRight,
                             child: SizedBox(
-                              width: 48,
+                              width: compact ? 48 : 64,
                               child: DecoratedBox(
                                 decoration: BoxDecoration(
                                   gradient: LinearGradient(
@@ -867,10 +868,10 @@ class _NowPlaying extends StatelessWidget {
                   Expanded(
                     child: Padding(
                       padding: EdgeInsets.fromLTRB(
-                        compact ? 18 : 28,
-                        compact ? 16 : 24,
-                        compact ? 18 : 28,
-                        compact ? 14 : 20,
+                        denseShelf ? 18 : 28,
+                        denseShelf ? 16 : 24,
+                        denseShelf ? 18 : 28,
+                        denseShelf ? 14 : 20,
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -880,13 +881,14 @@ class _NowPlaying extends StatelessWidget {
                             Text(
                               '${channel.number}  •  ${channel.name}',
                               key: const Key('player-now-playing-channel'),
-                              style: Theme.of(context).textTheme.titleMedium
+                              style: Theme.of(context).textTheme.labelLarge
                                   ?.copyWith(
                                     color: roles.progressFill,
                                     fontWeight: FontWeight.w800,
+                                    letterSpacing: 0.4,
                                   ),
                             ),
-                          SizedBox(height: compact ? 6 : 10),
+                          SizedBox(height: denseShelf ? 6 : 14),
                           if (preferLogo && logoPath != null)
                             _NowPlayingIdentity(
                               key: ValueKey((
@@ -897,20 +899,24 @@ class _NowPlaying extends StatelessWidget {
                               )),
                               controller: controller,
                               program: program,
-                              compact: compact,
+                              compact: denseShelf,
                             )
                           else
-                            _NowPlayingTitle(item: item, compact: compact),
+                            _NowPlayingTitle(item: item, compact: denseShelf),
                           if (episode != null) ...[
-                            const SizedBox(height: 8),
+                            SizedBox(height: denseShelf ? 8 : 10),
                             Text(
                               episode,
                               key: const Key('player-now-playing-episode'),
-                              style: Theme.of(context).textTheme.titleMedium,
+                              style: Theme.of(context).textTheme.titleMedium
+                                  ?.copyWith(
+                                    color: roles.secondaryText,
+                                    fontWeight: FontWeight.w700,
+                                  ),
                             ),
                           ],
                           if (!compact && badges.isNotEmpty) ...[
-                            const SizedBox(height: 12),
+                            const SizedBox(height: 14),
                             Wrap(
                               key: const Key('player-now-playing-badges'),
                               spacing: 8,
@@ -922,11 +928,11 @@ class _NowPlaying extends StatelessWidget {
                             ),
                           ],
                           if (item.summary case final summary?) ...[
-                            SizedBox(height: compact ? 8 : 12),
+                            SizedBox(height: denseShelf ? 8 : 12),
                             Text(
                               summary,
                               key: const Key('player-now-playing-summary'),
-                              maxLines: compact ? 2 : 4,
+                              maxLines: denseShelf ? 2 : 3,
                               overflow: TextOverflow.ellipsis,
                               style: Theme.of(context).textTheme.bodyLarge
                                   ?.copyWith(
@@ -1006,8 +1012,8 @@ class _NowPlayingIdentityState extends State<_NowPlayingIdentity> {
         children: [
           ConstrainedBox(
             constraints: BoxConstraints(
-              maxWidth: widget.compact ? 320 : 520,
-              maxHeight: widget.compact ? 72 : 112,
+              maxWidth: widget.compact ? 360 : 600,
+              maxHeight: widget.compact ? 84 : 132,
             ),
             child: Image.memory(
               bytes,
@@ -1030,11 +1036,11 @@ class _NowPlayingIdentityState extends State<_NowPlayingIdentity> {
             ),
           ),
           if (widget.program.scheduled.item.showTitle != null) ...[
-            const SizedBox(height: 10),
+            SizedBox(height: widget.compact ? 8 : 12),
             Text(
               widget.program.scheduled.item.title,
               key: const Key('player-now-playing-title'),
-              maxLines: 2,
+              maxLines: widget.compact ? 1 : 2,
               overflow: TextOverflow.ellipsis,
               style: Theme.of(context).textTheme.headlineSmall
                   ?.copyWith(fontWeight: FontWeight.w800),
@@ -1134,10 +1140,10 @@ class _NowPlayingBadge extends StatelessWidget {
       decoration: BoxDecoration(
         color: roles.elevatedSurface.withValues(alpha: 0.82),
         border: Border.all(color: roles.subtleBorder),
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(999),
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         child: Text(label, style: Theme.of(context).textTheme.labelMedium),
       ),
     );

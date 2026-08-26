@@ -1715,6 +1715,7 @@ void main() {
     for (final layout in const [
       (viewport: Size(800, 600), shelf: Size(760, 336)),
       (viewport: Size(1280, 720), shelf: Size(1180, 380)),
+      (viewport: Size(1600, 900), shelf: Size(1180, 450)),
       (viewport: Size(1920, 1080), shelf: Size(1180, 540)),
       (viewport: Size(3840, 2160), shelf: Size(1500, 560)),
     ]) {
@@ -1733,12 +1734,148 @@ void main() {
       );
       expect(shelfSize.width, closeTo(layout.shelf.width, 0.01));
       expect(shelfSize.height, closeTo(layout.shelf.height, 0.01));
+      expect(
+        tester
+            .getSize(find.byKey(const Key('player-now-playing-poster')))
+            .width,
+        closeTo((layout.shelf.height * 2 / 3).clamp(190, 374), 0.01),
+      );
+      expect(
+        tester
+            .getSize(find.byKey(const Key('player-now-playing-poster')))
+            .height,
+        closeTo(layout.shelf.height, 1.01),
+      );
+      expect(
+        tester
+            .getRect(find.byKey(const Key('player-now-playing-title')).last)
+            .top,
+        greaterThan(
+          tester.getRect(find.byKey(const Key('player-now-playing-logo'))).top,
+        ),
+      );
       expect(tester.takeException(), isNull, reason: '${layout.viewport}');
     }
+
+    tester.view
+      ..devicePixelRatio = 2
+      ..physicalSize = const Size(3840, 2160);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      tester.getSize(find.byKey(const Key('player-now-playing-shelf'))),
+      const Size(1180, 540),
+    );
+    expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(const SizedBox.shrink());
     fixture.dispose();
   });
+
+  testWidgets(
+    'Now Playing keeps essential hierarchy with missing, long, and sparse metadata',
+    (tester) async {
+      final cases = [
+        (
+          viewport: const Size(1920, 1080),
+          item: _fixtureItem(
+            0,
+            rich: true,
+            includeClearLogo: false,
+            title: 'Missing Logo Program',
+            duration: const Duration(hours: 2),
+          ),
+          logo: false,
+          summary: true,
+          badges: true,
+        ),
+        (
+          viewport: const Size(1600, 900),
+          item: _fixtureItem(
+            0,
+            rich: true,
+            title: 'A deliberately long synthetic episode title that must stay inside the text column',
+            duration: const Duration(hours: 2),
+            summary:
+                'A deliberately long synthetic synopsis that repeats enough detail to exercise the bounded summary allocation without introducing private media facts. '
+                'The remaining text verifies that progress stays reachable below the description.',
+          ),
+          logo: true,
+          summary: true,
+          badges: true,
+        ),
+        (
+          viewport: const Size(800, 600),
+          item: _fixtureItem(
+            0,
+            rich: false,
+            title: 'Sparse Program',
+            duration: const Duration(hours: 2),
+          ),
+          logo: false,
+          summary: false,
+          badges: false,
+        ),
+      ];
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetPhysicalSize);
+
+      for (final testCase in cases) {
+        final fixture = _Fixture(
+          PlayerState.playing,
+          richItemOverride: testCase.item,
+        );
+        tester.view.physicalSize = testCase.viewport;
+        await tester.pumpWidget(
+          MaterialApp(
+            home: PlayerView(controller: fixture.player, openGuide: () {}),
+          ),
+        );
+        fixture.player.showNowPlaying();
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const Key('player-now-playing-title')),
+          findsOneWidget,
+        );
+        expect(find.text(testCase.item.title), findsOneWidget);
+        expect(
+          MediaQuery.sizeOf(
+            tester.element(find.byKey(const Key('player-now-playing-surface'))),
+          ),
+          testCase.viewport,
+        );
+        expect(
+          find.byKey(const Key('player-now-playing-logo')),
+          testCase.logo ? findsOneWidget : findsNothing,
+        );
+        expect(
+          find.byKey(const Key('player-now-playing-progress')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const Key('player-now-playing-summary')),
+          testCase.summary ? findsOneWidget : findsNothing,
+        );
+        expect(
+          find.byKey(const Key('player-now-playing-badges')),
+          testCase.badges && testCase.viewport.height >= 650
+              ? findsOneWidget
+              : findsNothing,
+          reason: testCase.item.id,
+        );
+        expect(tester.takeException(), isNull, reason: testCase.item.id);
+
+        await tester.pumpWidget(const SizedBox.shrink());
+        fixture.dispose();
+      }
+    },
+  );
 
   testWidgets('Reduce Motion settles Now Playing in one pump', (tester) async {
     final fixture = _Fixture(PlayerState.playing, richProgram: true);
@@ -1835,6 +1972,7 @@ class _Fixture {
     bool blockArtwork = false,
     bool shortPrograms = false,
     bool longNextTitle = false,
+    ChannelItem? richItemOverride,
     DateTime Function()? guideClock,
   }) {
     lineup = _Lineup(
@@ -1845,6 +1983,7 @@ class _Fixture {
       blockArtwork: blockArtwork,
       shortPrograms: shortPrograms,
       longNextTitle: longNextTitle,
+      richItemOverride: richItemOverride,
       anchorNow: guideClock?.call(),
     );
     guide = GuideController(
@@ -1892,6 +2031,7 @@ class _Lineup extends LineupController {
     this.blockArtwork = false,
     bool shortPrograms = false,
     bool longNextTitle = false,
+    ChannelItem? richItemOverride,
     DateTime? anchorNow,
   }) : super(
          store: _Store(),
@@ -1907,13 +2047,16 @@ class _Lineup extends LineupController {
         number: 7 + index,
         name: index == 0 ? 'Channel' : 'Channel $index',
         source: ManualSource([
-          _fixtureItem(
-            index,
-            rich: richProgram,
-            duration: shortPrograms
-                ? const Duration(hours: 1)
-                : const Duration(hours: 24),
-          ),
+          if (index == 0 && richItemOverride != null)
+            richItemOverride
+          else
+            _fixtureItem(
+              index,
+              rich: richProgram,
+              duration: shortPrograms
+                  ? const Duration(hours: 1)
+                  : const Duration(hours: 24),
+            ),
           if (shortPrograms)
             _fixtureItem(
               index,
@@ -2001,6 +2144,8 @@ ChannelItem _fixtureItem(
   String suffix = '',
   String artworkTag = '',
   String? title,
+  String? summary,
+  bool includeClearLogo = true,
   required Duration duration,
 }) => ChannelItem(
   id: '${index == 0 ? 'program' : 'program-$index'}$suffix',
@@ -2013,8 +2158,12 @@ ChannelItem _fixtureItem(
   showTitle: rich ? 'Lineup Stories' : null,
   poster: rich ? Uri.parse('test://poster$artworkTag') : null,
   backdrop: rich ? Uri.parse('test://backdrop$artworkTag') : null,
-  clearLogo: rich ? Uri.parse('test://logo$artworkTag') : null,
-  summary: rich ? 'A synthetic synopsis for deterministic tests.' : null,
+  clearLogo: rich && includeClearLogo
+      ? Uri.parse('test://logo$artworkTag')
+      : null,
+  summary: rich
+      ? summary ?? 'A synthetic synopsis for deterministic tests.'
+      : null,
   contentRating: rich ? 'TV-14' : null,
   genres: rich ? const ['Drama', 'Adventure'] : const [],
   year: rich ? 2026 : null,

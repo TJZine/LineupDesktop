@@ -498,18 +498,45 @@ void main() {
           ..controller.settings = const LineupSettings(reduceMotion: true);
     await _pump(tester, fixture.build());
     await _openDestination(tester, 'Player');
-    await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
-    await tester.pump();
-
-    expect(find.byKey(const Key('player-now-playing-surface')), findsOneWidget);
     final context = tester.element(find.byKey(_goldenKey));
     await tester.runAsync(
       () => precacheImage(MemoryImage(_syntheticArtwork), context),
     );
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
     await tester.pump();
+
+    expect(find.byKey(const Key('player-now-playing-surface')), findsOneWidget);
     await _match(
       tester,
       'player-now-playing-1280x720.png',
+      precacheLogo: true,
+      additionalPumps: 2,
+    );
+  });
+
+  testWidgets('player Now Playing at 1920x1080', (tester) async {
+    final fixture =
+        _readyFixture(
+            playerState: const PlayerStatus(
+              state: PlayerState.playing,
+              message: 'Playing',
+            ),
+          )
+          ..controller.channels = _richPlayerChannels
+          ..controller.settings = const LineupSettings(reduceMotion: true);
+    await _pump(tester, fixture.build(), viewport: const Size(1920, 1080));
+    await _openDestination(tester, 'Player');
+    final context = tester.element(find.byKey(_goldenKey));
+    await tester.runAsync(
+      () => precacheImage(MemoryImage(_syntheticArtwork), context),
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
+    await tester.pump();
+
+    expect(find.byKey(const Key('player-now-playing-surface')), findsOneWidget);
+    await _match(
+      tester,
+      'player-now-playing-1920x1080.png',
       precacheLogo: true,
       additionalPumps: 2,
     );
