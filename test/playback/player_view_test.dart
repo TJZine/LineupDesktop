@@ -485,6 +485,173 @@ void main() {
     fixture.dispose();
   });
 
+  testWidgets('OSD uses a shallow horizontal widescreen hierarchy', (
+    tester,
+  ) async {
+    final fixture = _Fixture(
+      PlayerState.playing,
+      shortPrograms: true,
+      longNextTitle: true,
+      guideClock: () => DateTime(2026, 1, 15, 12),
+    );
+    expect(await fixture.guide.ensureCurrentProgram('channel'), isNotNull);
+    expect(fixture.player.nextProgram, isNotNull);
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    for (final size in const [
+      Size(800, 600),
+      Size(1280, 720),
+      Size(1600, 900),
+      Size(1920, 1080),
+      Size(3840, 2160),
+    ]) {
+      await tester.binding.setSurfaceSize(size);
+      fixture.player.showOsd();
+      await tester.pumpWidget(
+        MaterialApp(
+          key: ValueKey(size),
+          home: MediaQuery(
+            data: MediaQueryData(size: size),
+            child: PlayerView(controller: fixture.player, openGuide: () {}),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(fixture.player.nextProgram, isNotNull, reason: '$size');
+
+      final surface = tester.getRect(
+        find.byKey(const Key('player-osd-surface')),
+      );
+      expect(surface.width, size.width, reason: '$size');
+      if (size.width >= 1280 && size.height >= 900) {
+        expect(
+          find.byKey(const Key('player-osd-horizontal-layout')),
+          findsOneWidget,
+        );
+        expect(surface.height / size.height, lessThan(0.20), reason: '$size');
+        final progress = tester.getRect(
+          find.byKey(const Key('player-osd-progress-block')),
+        );
+        final controls = tester.getRect(
+          find.byKey(const Key('player-osd-horizontal-layout')),
+        );
+        expect(progress.center.dy, closeTo(controls.center.dy, 16));
+      } else {
+        expect(
+          find.byKey(const Key('player-osd-stacked-controls')),
+          findsOneWidget,
+        );
+      }
+      expect(
+        find.byKey(const Key('player-osd-next')),
+        size.width >= LineupLayout.compact ? findsOneWidget : findsNothing,
+        reason: '$size',
+      );
+      if (size.width >= LineupLayout.compact) {
+        final next = tester.widget<Text>(
+          find.byKey(const Key('player-osd-next')),
+        );
+        expect(next.data, contains('deliberately long synthetic next program'));
+        expect(next.maxLines, 1);
+        expect(next.overflow, TextOverflow.ellipsis);
+        final progress = tester.getRect(
+          find.byKey(const Key('player-osd-progress-block')),
+        );
+        final nextRect = tester.getRect(
+          find.byKey(const Key('player-osd-next')),
+        );
+        expect(
+          progress.inflate(0.1).contains(nextRect.topLeft),
+          isTrue,
+          reason: '$size',
+        );
+        expect(
+          progress.inflate(0.1).contains(nextRect.bottomRight),
+          isTrue,
+          reason: '$size',
+        );
+      }
+      expect(tester.takeException(), isNull, reason: '$size');
+    }
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
+  testWidgets('OSD keeps status facts and unsupported actions disabled', (
+    tester,
+  ) async {
+    for (final state in [
+      PlayerState.loading,
+      PlayerState.buffering,
+      PlayerState.unsupported,
+    ]) {
+      final fixture = _Fixture(state);
+      fixture.player.showOsd();
+      await tester.pumpWidget(
+        MaterialApp(
+          key: ValueKey(state),
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      expect(
+        tester.widget<Text>(find.byKey(const Key('player-osd-status'))).data,
+        contains(_statusLabelForTest(state)),
+      );
+      if (state == PlayerState.unsupported) {
+        for (final icon in [
+          Icons.skip_previous,
+          Icons.play_arrow,
+          Icons.skip_next,
+          Icons.fullscreen,
+        ]) {
+          expect(
+            tester
+                .widget<IconButton>(find.widgetWithIcon(IconButton, icon))
+                .onPressed,
+            isNull,
+          );
+        }
+      }
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    }
+  });
+
+  testWidgets('OSD keeps its widescreen hierarchy at DPR2', (tester) async {
+    final fixture = _Fixture(PlayerState.playing);
+    tester.view
+      ..devicePixelRatio = 2
+      ..physicalSize = const Size(3840, 2160);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    fixture.player.showOsd();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final surface = tester.getSize(find.byKey(const Key('player-osd-surface')));
+    expect(surface.width, 1920);
+    expect(surface.height / 1080, lessThan(0.20));
+    expect(
+      find.byKey(const Key('player-osd-horizontal-layout')),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
   testWidgets('player overlays retain 1280x720 layout at DPR2', (tester) async {
     final fixture = _Fixture(PlayerState.playing);
     tester.view
@@ -1667,6 +1834,7 @@ class _Fixture {
     bool failArtwork = false,
     bool blockArtwork = false,
     bool shortPrograms = false,
+    bool longNextTitle = false,
     DateTime Function()? guideClock,
   }) {
     lineup = _Lineup(
@@ -1676,6 +1844,7 @@ class _Fixture {
       failArtwork: failArtwork,
       blockArtwork: blockArtwork,
       shortPrograms: shortPrograms,
+      longNextTitle: longNextTitle,
       anchorNow: guideClock?.call(),
     );
     guide = GuideController(
@@ -1722,6 +1891,7 @@ class _Lineup extends LineupController {
     this.failArtwork = false,
     this.blockArtwork = false,
     bool shortPrograms = false,
+    bool longNextTitle = false,
     DateTime? anchorNow,
   }) : super(
          store: _Store(),
@@ -1749,6 +1919,9 @@ class _Lineup extends LineupController {
               index,
               rich: richProgram,
               suffix: '-next',
+              title: longNextTitle
+                  ? 'A deliberately long synthetic next program title that must remain ellipsized'
+                  : null,
               duration: const Duration(hours: 1),
             ),
         ]),
@@ -1827,12 +2000,15 @@ ChannelItem _fixtureItem(
   required bool rich,
   String suffix = '',
   String artworkTag = '',
+  String? title,
   required Duration duration,
 }) => ChannelItem(
   id: '${index == 0 ? 'program' : 'program-$index'}$suffix',
-  title: suffix.isEmpty
-      ? (index == 0 ? 'Program' : 'Program $index')
-      : 'Replacement Program',
+  title:
+      title ??
+      (suffix.isEmpty
+          ? (index == 0 ? 'Program' : 'Program $index')
+          : 'Replacement Program'),
   duration: duration,
   showTitle: rich ? 'Lineup Stories' : null,
   poster: rich ? Uri.parse('test://poster$artworkTag') : null,
@@ -1847,6 +2023,13 @@ ChannelItem _fixtureItem(
   resolution: rich ? '1080p' : null,
   videoCodec: rich ? 'h264' : null,
 );
+
+String _statusLabelForTest(PlayerState state) => switch (state) {
+  PlayerState.loading => 'Loading',
+  PlayerState.buffering => 'Buffering',
+  PlayerState.unsupported => 'Unsupported',
+  _ => throw ArgumentError.value(state),
+};
 
 class _Native implements NativePlayer {
   _Native(

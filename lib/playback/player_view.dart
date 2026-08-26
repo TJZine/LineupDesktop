@@ -464,10 +464,8 @@ class _Osd extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final roles = LineupTheme.of(context);
-    final horizontalInset = (MediaQuery.sizeOf(context).width * 0.05).clamp(
-      24.0,
-      96.0,
-    );
+    final size = MediaQuery.sizeOf(context);
+    final horizontalInset = (size.width * 0.05).clamp(24.0, 96.0);
     final channel = controller.currentChannel;
     final program = controller.currentProgram;
     final next = controller.nextProgram;
@@ -484,8 +482,175 @@ class _Osd extends StatelessWidget {
     );
     final unsupported = controller.status.state == PlayerState.unsupported;
     final quality = _quality(controller.telemetry);
-    final expanded = !LineupLayout.isCompactWidth(
-      MediaQuery.sizeOf(context).width,
+    final expanded = !LineupLayout.isCompactWidth(size.width);
+    final horizontal = size.width >= 1280 && size.height >= 900;
+    final transportActions = <Widget>[
+      IconButton(
+        tooltip: 'Previous channel',
+        onPressed: unsupported ? null : controller.previousChannel,
+        iconSize: 28,
+        icon: const Icon(Icons.skip_previous),
+      ),
+      IconButton(
+        tooltip: controller.status.state == PlayerState.playing
+            ? 'Pause'
+            : 'Play',
+        onPressed: unsupported ? null : controller.togglePlayback,
+        iconSize: 36,
+        icon: Icon(
+          controller.status.state == PlayerState.playing
+              ? Icons.pause
+              : Icons.play_arrow,
+        ),
+      ),
+      IconButton(
+        tooltip: 'Next channel',
+        onPressed: unsupported ? null : controller.nextChannel,
+        iconSize: 28,
+        icon: const Icon(Icons.skip_next),
+      ),
+    ];
+    final optionActions = <Widget>[
+      IconButton(
+        tooltip: audioAvailable ? 'Audio tracks' : 'Audio tracks unavailable',
+        onPressed: audioAvailable
+            ? () => controller.showTracks(PlayerTrackType.audio)
+            : null,
+        icon: const Icon(Icons.audiotrack),
+      ),
+      IconButton(
+        tooltip: subtitlesAvailable ? 'Subtitles' : 'Subtitles unavailable',
+        onPressed: subtitlesAvailable
+            ? () => controller.showTracks(PlayerTrackType.subtitle)
+            : null,
+        icon: const Icon(Icons.subtitles_outlined),
+      ),
+      IconButton(
+        tooltip: 'Sleep timer',
+        onPressed: controller.cycleSleepTimer,
+        icon: const Icon(Icons.bedtime_outlined),
+      ),
+      if (expanded)
+        Text(
+          controller.sleepDuration == null
+              ? 'Sleep off'
+              : 'Sleep ${controller.sleepDuration!.inMinutes}m',
+          style: Theme.of(context).textTheme.bodySmall
+              ?.copyWith(color: roles.secondaryText),
+        ),
+    ];
+    final windowActions = <Widget>[
+      if (openMenu != null)
+        IconButton(
+          key: const Key('player-app-menu'),
+          tooltip: 'Open Lineup menu',
+          onPressed: openMenu,
+          icon: const Icon(Icons.menu),
+        ),
+      IconButton(
+        tooltip: unsupported
+            ? 'Fullscreen unavailable without playback'
+            : controller.fullscreen
+            ? 'Exit fullscreen'
+            : 'Fullscreen',
+        onPressed: unsupported ? null : controller.toggleFullscreen,
+        icon: Icon(
+          controller.fullscreen ? Icons.fullscreen_exit : Icons.fullscreen,
+        ),
+      ),
+    ];
+    final identity = Row(
+      key: const Key('player-osd-identity'),
+      children: [
+        if (channel != null)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: roles.progressFill,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              '${channel.number}',
+              style: TextStyle(
+                color: roles.onFocus,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                program?.scheduled.item.title ??
+                    channel?.name ??
+                    'Nothing playing',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.titleLarge
+                    ?.copyWith(fontWeight: FontWeight.w700),
+              ),
+              Text(
+                [
+                  program?.scheduled.item.showTitle,
+                  _statusLabel(controller.status.state),
+                  if (quality.isNotEmpty) quality,
+                ].nonNulls.join(' • '),
+                key: const Key('player-osd-status'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.bodyMedium
+                    ?.copyWith(color: roles.secondaryText),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+    final progress = Column(
+      key: const Key('player-osd-progress-block'),
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Semantics(
+          label: 'Playback progress',
+          value:
+              '${_duration(controller.position)} of ${_duration(controller.duration)}',
+          child: Slider(
+            value: position.toDouble(),
+            max: (duration <= 0 ? 1 : duration).toDouble(),
+            onChanged: duration <= 0 || unsupported
+                ? null
+                : (value) =>
+                      controller.seekTo(Duration(milliseconds: value.round())),
+          ),
+        ),
+        Row(
+          children: [
+            Text(
+              '${_duration(controller.position)} / ${_duration(controller.duration)}',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: roles.secondaryText,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+            const Spacer(),
+            if (next != null && expanded)
+              Flexible(
+                child: Text(
+                  'Up next • ${next.scheduled.item.title}',
+                  key: const Key('player-osd-next'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: roles.mutedText,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ],
     );
     return Align(
       alignment: Alignment.bottomCenter,
@@ -496,9 +661,9 @@ class _Osd extends StatelessWidget {
           width: double.infinity,
           padding: EdgeInsets.fromLTRB(
             horizontalInset,
-            72,
+            horizontal ? 44 : (size.height >= 720 ? 56 : 40),
             horizontalInset,
-            10,
+            8,
           ),
           decoration: BoxDecoration(
             gradient: LinearGradient(
@@ -520,178 +685,34 @@ class _Osd extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Row(
-                  children: [
-                    if (channel != null)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
-                        ),
-                        decoration: BoxDecoration(
-                          color: roles.progressFill,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          '${channel.number}',
-                          style: TextStyle(
-                            color: roles.onFocus,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                      ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            program?.scheduled.item.title ??
-                                channel?.name ??
-                                'Nothing playing',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.titleLarge
-                                ?.copyWith(fontWeight: FontWeight.w700),
-                          ),
-                          Text(
-                            [
-                              program?.scheduled.item.showTitle,
-                              _statusLabel(controller.status.state),
-                              if (quality.isNotEmpty) quality,
-                            ].nonNulls.join(' • '),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.bodyMedium
-                                ?.copyWith(color: roles.secondaryText),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Semantics(
-                  label: 'Playback progress',
-                  value:
-                      '${_duration(controller.position)} of ${_duration(controller.duration)}',
-                  child: Slider(
-                    value: position.toDouble(),
-                    max: (duration <= 0 ? 1 : duration).toDouble(),
-                    onChanged: duration <= 0 || unsupported
-                        ? null
-                        : (value) => controller.seekTo(
-                            Duration(milliseconds: value.round()),
-                          ),
+                identity,
+                SizedBox(height: horizontal ? 4 : 6),
+                if (horizontal)
+                  Row(
+                    key: const Key('player-osd-horizontal-layout'),
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Expanded(child: progress),
+                      const SizedBox(width: 24),
+                      ...transportActions,
+                      const SizedBox(width: 12),
+                      ...optionActions,
+                      const SizedBox(width: 12),
+                      ...windowActions,
+                    ],
+                  )
+                else ...[
+                  progress,
+                  Row(
+                    key: const Key('player-osd-stacked-controls'),
+                    children: [
+                      ...transportActions,
+                      ...optionActions,
+                      const Spacer(),
+                      ...windowActions,
+                    ],
                   ),
-                ),
-                Row(
-                  children: [
-                    Text(
-                      '${_duration(controller.position)} / ${_duration(controller.duration)}',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: roles.secondaryText,
-                        fontFeatures: const [FontFeature.tabularFigures()],
-                      ),
-                    ),
-                    const Spacer(),
-                    if (next != null && expanded)
-                      Flexible(
-                        child: Text(
-                          'Up next • ${next.scheduled.item.title}',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(
-                                color: roles.mutedText,
-                                fontWeight: FontWeight.w600,
-                              ),
-                        ),
-                      ),
-                  ],
-                ),
-                Row(
-                  children: [
-                    IconButton(
-                      tooltip: 'Previous channel',
-                      onPressed: unsupported
-                          ? null
-                          : controller.previousChannel,
-                      icon: const Icon(Icons.skip_previous),
-                    ),
-                    IconButton(
-                      tooltip: controller.status.state == PlayerState.playing
-                          ? 'Pause'
-                          : 'Play',
-                      onPressed: unsupported ? null : controller.togglePlayback,
-                      icon: Icon(
-                        controller.status.state == PlayerState.playing
-                            ? Icons.pause
-                            : Icons.play_arrow,
-                      ),
-                    ),
-                    IconButton(
-                      tooltip: 'Next channel',
-                      onPressed: unsupported ? null : controller.nextChannel,
-                      icon: const Icon(Icons.skip_next),
-                    ),
-                    IconButton(
-                      tooltip: audioAvailable
-                          ? 'Audio tracks'
-                          : 'Audio tracks unavailable',
-                      onPressed: audioAvailable
-                          ? () => controller.showTracks(PlayerTrackType.audio)
-                          : null,
-                      icon: const Icon(Icons.audiotrack),
-                    ),
-                    IconButton(
-                      tooltip: subtitlesAvailable
-                          ? 'Subtitles'
-                          : 'Subtitles unavailable',
-                      onPressed: subtitlesAvailable
-                          ? () =>
-                                controller.showTracks(PlayerTrackType.subtitle)
-                          : null,
-                      icon: const Icon(Icons.subtitles_outlined),
-                    ),
-                    IconButton(
-                      tooltip: 'Sleep timer',
-                      onPressed: controller.cycleSleepTimer,
-                      icon: const Icon(Icons.bedtime_outlined),
-                    ),
-                    if (expanded)
-                      Text(
-                        controller.sleepDuration == null
-                            ? 'Sleep off'
-                            : 'Sleep ${controller.sleepDuration!.inMinutes}m',
-                        style: Theme.of(context).textTheme.bodySmall
-                            ?.copyWith(color: roles.secondaryText),
-                      ),
-                    const Spacer(),
-                    if (openMenu != null)
-                      IconButton(
-                        key: const Key('player-app-menu'),
-                        tooltip: 'Open Lineup menu',
-                        onPressed: openMenu,
-                        icon: const Icon(Icons.menu),
-                      ),
-                    IconButton(
-                      tooltip: unsupported
-                          ? 'Fullscreen unavailable without playback'
-                          : controller.fullscreen
-                          ? 'Exit fullscreen'
-                          : 'Fullscreen',
-                      onPressed: unsupported
-                          ? null
-                          : controller.toggleFullscreen,
-                      icon: Icon(
-                        controller.fullscreen
-                            ? Icons.fullscreen_exit
-                            : Icons.fullscreen,
-                      ),
-                    ),
-                  ],
-                ),
+                ],
               ],
             ),
           ),

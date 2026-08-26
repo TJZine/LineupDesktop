@@ -470,6 +470,22 @@ void main() {
     await _match(tester, 'player-osd-1280x720.png', additionalPumps: 2);
   });
 
+  testWidgets('player OSD at 1920x1080', (tester) async {
+    final fixture = _readyFixture(
+      playerState: const PlayerStatus(
+        state: PlayerState.paused,
+        message: 'Paused',
+      ),
+    );
+    await _pump(tester, fixture.build(), viewport: const Size(1920, 1080));
+    await _openDestination(tester, 'Player');
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump();
+
+    expect(find.byKey(const Key('player-osd-surface')), findsOneWidget);
+    await _match(tester, 'player-osd-1920x1080.png', additionalPumps: 2);
+  });
+
   testWidgets('player Now Playing', (tester) async {
     final fixture =
         _readyFixture(
