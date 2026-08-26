@@ -329,9 +329,9 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.digit1);
     await tester.sendKeyEvent(LogicalKeyboardKey.digit2);
     await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
-    await tester.sendKeyEvent(LogicalKeyboardKey.digit3);
-    await tester.sendKeyEvent(LogicalKeyboardKey.digit4);
-    await tester.sendKeyEvent(LogicalKeyboardKey.digit5);
+    await tester.sendKeyEvent(LogicalKeyboardKey.numpad3);
+    await tester.sendKeyEvent(LogicalKeyboardKey.numpad4);
+    await tester.sendKeyEvent(LogicalKeyboardKey.numpad5);
     await tester.pumpAndSettle();
     expect(controller.pin, '1345');
   });
@@ -348,6 +348,8 @@ void main() {
 
     for (final size in [
       const Size(800, 600),
+      const Size(1280, 720),
+      const Size(1600, 900),
       const Size(1920, 1080),
       const Size(3840, 2160),
     ]) {
@@ -362,6 +364,36 @@ void main() {
       );
       expect(sheet.width, lessThanOrEqualTo(520));
       expect(sheet.bottom, size.height);
+      final digitButton = tester.widget<FilledButton>(
+        find
+            .descendant(
+              of: find.byKey(const Key('profile-pin-surface')),
+              matching: find.byType(FilledButton),
+            )
+            .first,
+      );
+      final background = digitButton.style?.backgroundColor;
+      expect(
+        background?.resolve(const {}),
+        isNot(background?.resolve(const {WidgetState.pressed})),
+      );
+      expect(
+        tester
+            .getSize(
+              find
+                  .descendant(
+                    of: find.byKey(const Key('profile-pin-surface')),
+                    matching: find.byType(FilledButton),
+                  )
+                  .first,
+            )
+            .shortestSide,
+        greaterThanOrEqualTo(72),
+      );
+      expect(find.byTooltip('Backspace'), findsOneWidget);
+      expect(find.byTooltip('Cancel'), findsOneWidget);
+      expect(find.bySemanticsLabel('Backspace'), findsOneWidget);
+      expect(find.bySemanticsLabel('Cancel'), findsOneWidget);
       expect(tester.takeException(), isNull, reason: 'PIN viewport $size');
       await tester.tap(find.byTooltip('Cancel'));
       await tester.pumpAndSettle();
@@ -408,16 +440,59 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
     for (final size in [
       const Size(800, 600),
+      const Size(1280, 720),
+      const Size(1600, 900),
       const Size(1920, 1080),
       const Size(3840, 2160),
     ]) {
       await tester.binding.setSurfaceSize(size);
       await tester.pumpWidget(fixture.build());
       await tester.pumpAndSettle();
+      final cards = find.byType(LineupSelectionCard);
+      expect(cards, findsNWidgets(9));
+      final cardElements = cards.evaluate();
+      expect(
+        cardElements.map(
+          (element) => (element.renderObject! as RenderBox).size.width,
+        ),
+        everyElement(140),
+      );
+      final tops = cardElements
+          .map(
+            (element) => (element.renderObject! as RenderBox)
+                .localToGlobal(Offset.zero)
+                .dy,
+          )
+          .toList();
+      expect(
+        tops.where((top) => (top - tops.first).abs() < 1),
+        hasLength(size.width == 800 ? 4 : 7),
+      );
       expect(find.text('Active'), findsOneWidget);
       expect(find.text('Parents'), findsOneWidget);
       expect(tester.takeException(), isNull, reason: 'viewport $size');
     }
+
+    await tester.binding.setSurfaceSize(null);
+    tester.view
+      ..devicePixelRatio = 2
+      ..physicalSize = const Size(3840, 2160);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    await tester.pumpWidget(fixture.build());
+    await tester.pumpAndSettle();
+    expect(
+      MediaQuery.sizeOf(tester.element(find.text("Who's watching?"))),
+      const Size(1920, 1080),
+    );
+    expect(find.byType(LineupSelectionCard), findsNWidgets(9));
+    expect(tester.takeException(), isNull, reason: 'physical 4K at DPR2');
+
+    controller.profiles = controller.profiles.take(8).toList();
+    await tester.pumpWidget(fixture.build());
+    await tester.pumpAndSettle();
+    expect(find.byType(LineupSelectionCard), findsNWidgets(8));
+    expect(tester.takeException(), isNull, reason: 'eight-profile population');
   });
 
   testWidgets('server hierarchy stays reachable across desktop sizes', (

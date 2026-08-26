@@ -575,8 +575,12 @@ class _ProfileCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => SizedBox(
-    width: 168,
-    height: _badgeCount > 2 ? 212 : 190,
+    width: 140,
+    height: switch (_badgeCount) {
+      > 3 => 250,
+      > 2 => 222,
+      _ => 184,
+    },
     child: LineupSelectionCard(
       selected: false,
       autofocus: autofocus,
@@ -587,7 +591,7 @@ class _ProfileCard extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             CircleAvatar(
-              radius: 34,
+              radius: 42,
               backgroundImage: user.thumb?.isAbsolute == true
                   ? NetworkImage(user.thumb.toString())
                   : null,
@@ -595,7 +599,7 @@ class _ProfileCard extends StatelessWidget {
                   ? null
                   : Text(
                       user.name.characters.first.toUpperCase(),
-                      style: const TextStyle(fontSize: 26),
+                      style: const TextStyle(fontSize: 30),
                     ),
             ),
             const SizedBox(height: 8),
@@ -610,11 +614,11 @@ class _ProfileCard extends StatelessWidget {
                 user.restricted == true ||
                 active)
               Padding(
-                padding: const EdgeInsets.only(top: 6),
+                padding: const EdgeInsets.only(top: 5),
                 child: Wrap(
                   alignment: WrapAlignment.center,
-                  spacing: 4,
-                  runSpacing: 4,
+                  spacing: 3,
+                  runSpacing: 3,
                   children: [
                     if (user.protected) const _ProfileBadge('PIN'),
                     if (user.admin) const _ProfileBadge('Admin'),
@@ -640,13 +644,19 @@ class _ProfileBadge extends StatelessWidget {
     label: label,
     child: ExcludeSemantics(
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
         decoration: BoxDecoration(
-          color: LineupTheme.of(context).elevatedSurface,
+          color: LineupTheme.of(context).elevatedSurface.withValues(alpha: 0.7),
           borderRadius: BorderRadius.circular(999),
-          border: Border.all(color: LineupTheme.of(context).defaultBorder),
+          border: Border.all(color: LineupTheme.of(context).subtleBorder),
         ),
-        child: Text(label, style: const TextStyle(fontSize: 11)),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: LineupTheme.of(context).secondaryText,
+            fontSize: 10,
+          ),
+        ),
       ),
     ),
   );
@@ -863,25 +873,35 @@ class _ProfilePinDialogState extends State<_ProfilePinDialog> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                CircleAvatar(
-                  radius: 28,
-                  backgroundImage: widget.user.thumb?.isAbsolute == true
-                      ? NetworkImage(widget.user.thumb.toString())
-                      : null,
-                  child: widget.user.thumb?.isAbsolute == true
-                      ? null
-                      : Text(
-                          widget.user.name.characters.first.toUpperCase(),
-                          style: const TextStyle(fontSize: 22),
-                        ),
+                Container(
+                  padding: const EdgeInsets.all(2),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: LineupTheme.of(context).focusBorder
+                          .withValues(alpha: 0.45),
+                    ),
+                  ),
+                  child: CircleAvatar(
+                    radius: 28,
+                    backgroundImage: widget.user.thumb?.isAbsolute == true
+                        ? NetworkImage(widget.user.thumb.toString())
+                        : null,
+                    child: widget.user.thumb?.isAbsolute == true
+                        ? null
+                        : Text(
+                            widget.user.name.characters.first.toUpperCase(),
+                            style: const TextStyle(fontSize: 22),
+                          ),
+                  ),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 10),
                 Text(
                   'Enter PIN for ${widget.user.name}',
                   style: Theme.of(context).textTheme.titleLarge
                       ?.copyWith(fontWeight: FontWeight.w700),
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 16),
                 Semantics(
                   key: const Key('profile-pin-progress'),
                   container: true,
@@ -894,9 +914,9 @@ class _ProfilePinDialogState extends State<_ProfilePinDialog> {
                       children: [
                         for (var index = 0; index < 4; index++)
                           Container(
-                            width: 18,
-                            height: 18,
-                            margin: const EdgeInsets.symmetric(horizontal: 7),
+                            width: 22,
+                            height: 22,
+                            margin: const EdgeInsets.symmetric(horizontal: 8),
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
                               color: index < _pin.length
@@ -912,9 +932,9 @@ class _ProfilePinDialogState extends State<_ProfilePinDialog> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 16),
                 SizedBox(
-                  width: 254,
+                  width: 236,
                   child: GridView.count(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
@@ -1010,34 +1030,17 @@ class _PinKey extends StatelessWidget {
   Widget build(BuildContext context) => Semantics(
     label: '$digit',
     button: true,
-    child: Stack(
-      fit: StackFit.expand,
-      children: [
-        FilledButton(
-          focusNode: focusNode,
-          autofocus: autofocus,
-          onPressed: onPressed,
-          style: FilledButton.styleFrom(
-            shape: const CircleBorder(),
-            padding: EdgeInsets.zero,
-          ),
-          child: const SizedBox.shrink(),
+    child: FilledButton(
+      focusNode: focusNode,
+      autofocus: autofocus,
+      onPressed: onPressed,
+      style: _pinKeyStyle(context),
+      child: ExcludeSemantics(
+        child: Text(
+          '$digit',
+          style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w700),
         ),
-        Center(
-          child: ExcludeSemantics(
-            child: IgnorePointer(
-              child: Text(
-                '$digit',
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.onPrimary,
-                  fontSize: 24,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-          ),
-        ),
-      ],
+      ),
     ),
   );
 }
@@ -1054,16 +1057,54 @@ class _PinControlKey extends StatelessWidget {
   final Widget child;
 
   @override
-  Widget build(BuildContext context) => Tooltip(
-    message: tooltip,
-    child: FilledButton.tonal(
-      onPressed: onPressed,
-      style: FilledButton.styleFrom(
-        shape: const CircleBorder(),
-        padding: EdgeInsets.zero,
-        textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+  Widget build(BuildContext context) => Semantics(
+    label: tooltip,
+    button: true,
+    child: Tooltip(
+      message: tooltip,
+      excludeFromSemantics: true,
+      child: FilledButton(
+        onPressed: onPressed,
+        style: _pinKeyStyle(context, secondary: true),
+        child: child,
       ),
-      child: child,
+    ),
+  );
+}
+
+ButtonStyle _pinKeyStyle(BuildContext context, {bool secondary = false}) {
+  final roles = LineupTheme.of(context);
+  return ButtonStyle(
+    minimumSize: const WidgetStatePropertyAll(Size.zero),
+    padding: const WidgetStatePropertyAll(EdgeInsets.zero),
+    shape: const WidgetStatePropertyAll(CircleBorder()),
+    backgroundColor: WidgetStateProperty.resolveWith((states) {
+      if (states.contains(WidgetState.disabled)) {
+        return roles.elevatedSurface.withValues(alpha: 0.45);
+      }
+      if (states.contains(WidgetState.pressed)) {
+        return roles.progressFill.withValues(alpha: secondary ? 0.14 : 0.28);
+      }
+      if (states.contains(WidgetState.focused)) return roles.focusedSurface;
+      return roles.elevatedSurface.withValues(alpha: secondary ? 0.55 : 0.82);
+    }),
+    foregroundColor: WidgetStateProperty.resolveWith((states) {
+      if (states.contains(WidgetState.disabled)) return roles.mutedText;
+      if (states.contains(WidgetState.focused)) return roles.focusedText;
+      return secondary ? roles.secondaryText : roles.primaryText;
+    }),
+    side: WidgetStateProperty.resolveWith(
+      (states) => BorderSide(
+        color: states.contains(WidgetState.focused)
+            ? roles.focusBorder
+            : roles.subtleBorder,
+        width: states.contains(WidgetState.focused)
+            ? roles.focusBorderWidth
+            : 1,
+      ),
+    ),
+    overlayColor: WidgetStatePropertyAll(
+      roles.progressFill.withValues(alpha: 0.12),
     ),
   );
 }

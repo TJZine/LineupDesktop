@@ -34,50 +34,24 @@ void main() {
   });
 
   testWidgets('profile selection', (tester) async {
-    final fixture = UiFixture()
-      ..controller.stage = SetupStage.profiles
-      ..controller.profile = const PlexHomeUser(
-        id: 'adult',
-        name: 'Alex',
-        protected: false,
-        admin: true,
-      )
-      ..controller.profiles = const [
-        PlexHomeUser(id: 'adult', name: 'Alex', protected: false, admin: true),
-        PlexHomeUser(
-          id: 'child',
-          name: 'Family',
-          protected: true,
-          restricted: true,
-        ),
-        PlexHomeUser(id: 'guest', name: 'Guest', protected: false),
-        PlexHomeUser(
-          id: 'movies',
-          name: 'Movie Night',
-          protected: false,
-          restricted: true,
-        ),
-        PlexHomeUser(
-          id: 'kids',
-          name: 'Kids',
-          protected: false,
-          restricted: true,
-        ),
-        PlexHomeUser(id: 'sports', name: 'Sports', protected: false),
-        PlexHomeUser(id: 'parents', name: 'Parents', protected: true),
-        PlexHomeUser(id: 'weekend', name: 'Weekend', protected: false),
-        PlexHomeUser(
-          id: 'visitor',
-          name: 'Visitor',
-          protected: false,
-          restricted: true,
-        ),
-      ];
+    final fixture = _profileSelectionFixture();
 
     await _pump(tester, fixture.build());
     await _match(
       tester,
       'profiles-1280x720.png',
+      precacheLogo: true,
+      additionalPumps: 1,
+    );
+  });
+
+  testWidgets('profile selection at 1920x1080', (tester) async {
+    final fixture = _profileSelectionFixture();
+
+    await _pump(tester, fixture.build(), viewport: const Size(1920, 1080));
+    await _match(
+      tester,
+      'profiles-1920x1080.png',
       precacheLogo: true,
       additionalPumps: 1,
     );
@@ -724,6 +698,41 @@ Future<void> _pump(
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 250));
 }
+
+UiFixture _profileSelectionFixture() => UiFixture()
+  ..controller.stage = SetupStage.profiles
+  ..controller.profile = const PlexHomeUser(
+    id: 'adult',
+    name: 'Alex',
+    protected: false,
+    admin: true,
+  )
+  ..controller.profiles = const [
+    PlexHomeUser(id: 'adult', name: 'Alex', protected: false, admin: true),
+    PlexHomeUser(
+      id: 'child',
+      name: 'Family',
+      protected: true,
+      restricted: true,
+    ),
+    PlexHomeUser(id: 'guest', name: 'Guest', protected: false),
+    PlexHomeUser(
+      id: 'movies',
+      name: 'A deliberately long synthetic profile name',
+      protected: false,
+      restricted: true,
+    ),
+    PlexHomeUser(id: 'kids', name: 'Kids', protected: false, restricted: true),
+    PlexHomeUser(id: 'sports', name: 'Sports', protected: false),
+    PlexHomeUser(id: 'parents', name: 'Parents', protected: true),
+    PlexHomeUser(id: 'weekend', name: 'Weekend', protected: false),
+    PlexHomeUser(
+      id: 'visitor',
+      name: 'Visitor',
+      protected: false,
+      restricted: true,
+    ),
+  ];
 
 Future<void> _match(
   WidgetTester tester,
