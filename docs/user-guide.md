@@ -118,9 +118,11 @@ scan. Playable media requires both a positive duration and a usable media part.
 The strategy step reports the accepted proposal count or **No matches** for
 each enabled source family and **Off** for disabled families. The review step
 separates **Create**, **Update**, **Unchanged**, **Remove**, and **Final** counts
-using the selected replace, append, or merge behavior. A limit warning appears
-only when ideas were actually omitted by the channel cap or available channel
-numbers.
+using the selected replace, append, or merge behavior. It presents the current
+lineup changing to the final lineup, a proportional composition bar, and sample
+channels. Replace mode requires an explicit confirmation before building. A
+limit warning appears only when ideas were actually omitted by the channel cap
+or available channel numbers.
 
 ## Main destinations
 
@@ -179,7 +181,10 @@ logos and artwork fall back to text and themed surfaces.
 ## Player
 
 Move the pointer or click/tap the Player to show the on-screen controls. The OSD
-provides:
+uses a responsive shallow three-zone broadcast layout at 1280×720 and
+1920×1080: channel/program identity, progress and time, then grouped transport
+and secondary actions. Compact windows keep these controls stacked so every
+action remains reachable. It provides:
 
 - current channel and program information;
 - playback position and seeking;
