@@ -587,7 +587,11 @@ void main() {
 
     expect(
       tester.getTopLeft(find.text('Configure channels')).dy,
-      greaterThan(tester.getTopLeft(find.text('Select All')).dy),
+      tester.getTopLeft(find.text('Select All')).dy,
+    );
+    expect(
+      tester.getTopLeft(find.text('Configure channels')).dx,
+      greaterThan(tester.getTopRight(find.text('Clear All')).dx),
     );
   });
 

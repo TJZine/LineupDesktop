@@ -204,6 +204,35 @@ void main() {
       tester.getSize(find.byKey(const ValueKey('channel-setup-content'))).width,
       UpstreamChannelSetupView.maxContentWidth,
     );
+    final setupContent = tester.getRect(
+      find.byKey(const ValueKey('channel-setup-content')),
+    );
+    final setupShell = tester.getRect(
+      find.byKey(const ValueKey('channel-setup-shell')),
+    );
+    expect(setupShell.width, setupContent.width - 56);
+    expect(setupShell.center.dx, setupContent.center.dx);
+    expect(setupShell.left, greaterThan(0));
+    expect(tester.takeException(), isNull);
+
+    tester.view
+      ..devicePixelRatio = 2
+      ..physicalSize = const Size(3840, 2160);
+    await tester.pumpWidget(
+      MaterialApp(home: UpstreamChannelSetupView(controller: controller)),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      MediaQuery.sizeOf(tester.element(find.text('Channel Setup'))),
+      const Size(1920, 1080),
+    );
+    expect(
+      tester
+          .getRect(find.byKey(const ValueKey('channel-setup-shell')))
+          .center
+          .dx,
+      960,
+    );
     expect(tester.takeException(), isNull);
   });
 
@@ -590,7 +619,14 @@ void main() {
       MaterialApp(home: UpstreamChannelSetupView(controller: controller)),
     );
     await tester.pumpAndSettle();
+    final shell = tester.getRect(
+      find.byKey(const ValueKey('channel-setup-shell')),
+    );
     expect(find.text('Configure channels'), findsOneWidget);
+    expect(shell.left, greaterThan(0));
+    expect(shell.right, lessThan(800));
+    expect(shell.top, greaterThan(0));
+    expect(shell.bottom, lessThan(600));
     expect(tester.takeException(), isNull);
   });
 
@@ -612,7 +648,12 @@ void main() {
     await tester.pumpAndSettle();
 
     final action = find.widgetWithText(FilledButton, 'Configure channels');
+    final shell = tester.getRect(
+      find.byKey(const ValueKey('channel-setup-shell')),
+    );
     expect(action, findsOneWidget);
+    expect(shell.width, lessThan(1920));
+    expect(shell.center.dx, 960);
     expect(tester.getBottomRight(action).dy, lessThanOrEqualTo(1080));
     expect(tester.takeException(), isNull);
   });

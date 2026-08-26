@@ -99,45 +99,65 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
   );
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    body: DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: RadialGradient(
-          center: Alignment(-0.65, -0.75),
-          radius: 1.35,
-          colors: [
-            LineupTheme.of(context).progressFill.withValues(alpha: 0.07),
-            LineupTheme.of(context).deepBackground,
-          ],
+  Widget build(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    final compact = size.width < 900 || size.height < 700;
+    return Scaffold(
+      body: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: RadialGradient(
+            center: Alignment(-0.65, -0.75),
+            radius: 1.35,
+            colors: [
+              LineupTheme.of(context).progressFill.withValues(alpha: 0.07),
+              LineupTheme.of(context).deepBackground,
+            ],
+          ),
         ),
-      ),
-      child: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            key: const ValueKey('channel-setup-content'),
-            constraints: const BoxConstraints(
-              maxWidth: UpstreamChannelSetupView.maxContentWidth,
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(28),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _header(),
-                  if (_error != null && _buildPhase != _BuildPhase.failed)
-                    _errorBanner(),
-                  const SizedBox(height: 16),
-                  Expanded(child: _body()),
-                ],
+        child: SafeArea(
+          child: Center(
+            child: ConstrainedBox(
+              key: const ValueKey('channel-setup-content'),
+              constraints: const BoxConstraints(
+                maxWidth: UpstreamChannelSetupView.maxContentWidth,
+              ),
+              child: Padding(
+                padding: EdgeInsets.all(compact ? 16 : 28),
+                child: Material(
+                  key: const ValueKey('channel-setup-shell'),
+                  color: LineupTheme.of(context).primarySurface,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(
+                      LineupTheme.of(context).panelRadius,
+                    ),
+                    side: BorderSide(
+                      color: LineupTheme.of(context).defaultBorder,
+                    ),
+                  ),
+                  child: Padding(
+                    padding: EdgeInsets.all(compact ? 18 : 26),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _header(),
+                        if (_error != null && _buildPhase != _BuildPhase.failed)
+                          _errorBanner(),
+                        const SizedBox(height: 18),
+                        Expanded(child: _body()),
+                      ],
+                    ),
+                  ),
+                ),
               ),
             ),
           ),
         ),
       ),
-    ),
-  );
+    );
+  }
 
   Widget _header() => LayoutBuilder(
+    key: const ValueKey('channel-setup-header'),
     builder: (context, constraints) {
       final title = Row(
         children: [
@@ -246,10 +266,12 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
       ),
     ),
     child: widget.controller.libraries.isEmpty
-        ? const LineupEmptyState(
-            icon: Icons.video_library_outlined,
-            title: 'No movie or show libraries found',
-            message: 'Choose another Plex server with accessible movie or show libraries.',
+        ? const SingleChildScrollView(
+            child: LineupEmptyState(
+              icon: Icons.video_library_outlined,
+              title: 'No movie or show libraries found',
+              message: 'Choose another Plex server with accessible movie or show libraries.',
+            ),
           )
         : LayoutBuilder(
             builder: (context, constraints) => CustomScrollView(
@@ -560,15 +582,19 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
           ),
         ),
     ];
-    return compact
-        ? SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(children: children),
-          )
-        : ListView(children: children);
+    return KeyedSubtree(
+      key: const ValueKey('channel-setup-strategy-rail'),
+      child: compact
+          ? SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(children: children),
+            )
+          : ListView(children: children),
+    );
   }
 
   Widget _categoryDetails() => Card(
+    key: const ValueKey('channel-setup-strategy-details'),
     child: Padding(
       padding: const EdgeInsets.all(22),
       child: ListView(children: _detailControls()),
@@ -969,28 +995,61 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
                   ),
                   const SizedBox(height: 14),
                 ],
-                Row(
-                  children: [
-                    Text(
-                      '${widget.controller.channels.length}',
-                      style: Theme.of(context).textTheme.headlineMedium
-                          ?.copyWith(fontWeight: FontWeight.w800),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 22,
+                    vertical: 18,
+                  ),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        LineupTheme.of(context).selectedSurface,
+                        LineupTheme.of(context).selectedSurface
+                            .withValues(alpha: 0.22),
+                      ],
                     ),
-                    const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 10),
-                      child: Icon(Icons.arrow_forward),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: LineupTheme.of(context).defaultBorder,
                     ),
-                    Text(
-                      '${impact.finalCount} channels',
-                      style: Theme.of(context).textTheme.headlineMedium
-                          ?.copyWith(fontWeight: FontWeight.w800),
-                    ),
-                  ],
+                  ),
+                  child: Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 14,
+                    runSpacing: 8,
+                    children: [
+                      Semantics(
+                        container: true,
+                        label: 'Current: ${widget.controller.channels.length}',
+                        child: ExcludeSemantics(
+                          child: _ImpactCount(
+                            value: widget.controller.channels.length,
+                            label: 'current',
+                          ),
+                        ),
+                      ),
+                      Icon(
+                        Icons.arrow_forward,
+                        color: LineupTheme.of(context).mutedText,
+                      ),
+                      Semantics(
+                        container: true,
+                        label: 'Final: ${impact.finalCount}',
+                        child: ExcludeSemantics(
+                          child: _ImpactCount(
+                            value: impact.finalCount,
+                            label: 'final channels',
+                            emphasized: true,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 12),
                 Wrap(
-                  spacing: 14,
-                  runSpacing: 14,
+                  spacing: 10,
+                  runSpacing: 10,
                   children: [
                     _ImpactCard(
                       label: 'Create',
@@ -1011,11 +1070,6 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
                       label: 'Remove',
                       value: impact.remove,
                       icon: Icons.remove_circle_outline,
-                    ),
-                    _ImpactCard(
-                      label: 'Final',
-                      value: impact.finalCount,
-                      icon: Icons.live_tv_outlined,
                     ),
                   ],
                 ),
@@ -1195,30 +1249,20 @@ class _SetupSurface extends StatelessWidget {
   final Widget child;
   final Widget footer;
   @override
-  Widget build(BuildContext context) => Material(
-    color: LineupTheme.of(context).primarySurface,
-    shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(LineupTheme.of(context).panelRadius),
-      side: BorderSide(color: LineupTheme.of(context).defaultBorder),
-    ),
-    child: Padding(
-      padding: const EdgeInsets.all(26),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(title, style: Theme.of(context).textTheme.headlineSmall),
-          const SizedBox(height: 5),
-          Text(
-            subtitle,
-            style: TextStyle(color: LineupTheme.of(context).secondaryText),
-          ),
-          const SizedBox(height: 20),
-          Expanded(child: child),
-          const SizedBox(height: 18),
-          footer,
-        ],
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Text(title, style: Theme.of(context).textTheme.headlineSmall),
+      const SizedBox(height: 5),
+      Text(
+        subtitle,
+        style: TextStyle(color: LineupTheme.of(context).secondaryText),
       ),
-    ),
+      const SizedBox(height: 18),
+      Expanded(child: child),
+      const SizedBox(height: 14),
+      footer,
+    ],
   );
 }
 
@@ -1228,31 +1272,41 @@ class _SetupFooter extends StatelessWidget {
   final Widget primary;
 
   @override
-  Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, constraints) {
-      final secondaryActions = Wrap(
-        spacing: 10,
-        runSpacing: 10,
-        children: secondary,
-      );
-      if (LineupLayout.isCompactWidth(constraints.maxWidth)) {
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            secondaryActions,
-            const SizedBox(height: 10),
-            Align(alignment: Alignment.centerRight, child: primary),
-          ],
-        );
-      }
-      return Row(
-        children: [
-          Expanded(child: secondaryActions),
-          const SizedBox(width: 16),
-          primary,
-        ],
-      );
-    },
+  Widget build(BuildContext context) => DecoratedBox(
+    decoration: BoxDecoration(
+      border: Border(
+        top: BorderSide(color: LineupTheme.of(context).subtleBorder),
+      ),
+    ),
+    child: Padding(
+      padding: const EdgeInsets.only(top: 14),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final secondaryActions = Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: secondary,
+          );
+          if (LineupLayout.isCompactWidth(constraints.maxWidth)) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                secondaryActions,
+                const SizedBox(height: 10),
+                Align(alignment: Alignment.centerRight, child: primary),
+              ],
+            );
+          }
+          return Row(
+            children: [
+              Expanded(child: secondaryActions),
+              const SizedBox(width: 16),
+              primary,
+            ],
+          );
+        },
+      ),
+    ),
   );
 }
 
@@ -1299,6 +1353,43 @@ class _RailButton extends StatelessWidget {
   );
 }
 
+class _ImpactCount extends StatelessWidget {
+  const _ImpactCount({
+    required this.value,
+    required this.label,
+    this.emphasized = false,
+  });
+
+  final int value;
+  final String label;
+  final bool emphasized;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min,
+    crossAxisAlignment: CrossAxisAlignment.end,
+    children: [
+      Text(
+        '$value',
+        style: Theme.of(context).textTheme.displaySmall?.copyWith(
+          color: emphasized ? LineupTheme.of(context).progressFill : null,
+          fontWeight: FontWeight.w800,
+          fontFeatures: const [FontFeature.tabularFigures()],
+          height: 1,
+        ),
+      ),
+      const SizedBox(width: 8),
+      Padding(
+        padding: const EdgeInsets.only(bottom: 3),
+        child: Text(
+          label,
+          style: TextStyle(color: LineupTheme.of(context).secondaryText),
+        ),
+      ),
+    ],
+  );
+}
+
 class _ImpactCard extends StatelessWidget {
   const _ImpactCard({
     required this.label,
@@ -1313,38 +1404,31 @@ class _ImpactCard extends StatelessWidget {
     container: true,
     label: '$label: $value',
     child: ExcludeSemantics(
-      child: SizedBox(
-        width: 190,
-        child: Card(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Row(
-              children: [
-                Icon(icon, size: 32),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '$value',
-                        style: Theme.of(context).textTheme.headlineMedium
-                            ?.copyWith(fontWeight: FontWeight.w800),
-                      ),
-                      Text(
-                        label,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: LineupTheme.of(context).secondaryText,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: LineupTheme.of(context).selectedSurface.withValues(alpha: 0.3),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: LineupTheme.of(context).subtleBorder),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 17, color: LineupTheme.of(context).secondaryText),
+            const SizedBox(width: 7),
+            Text(
+              '$value',
+              style: const TextStyle(
+                fontWeight: FontWeight.w800,
+                fontFeatures: [FontFeature.tabularFigures()],
+              ),
             ),
-          ),
+            const SizedBox(width: 5),
+            Text(
+              label,
+              style: TextStyle(color: LineupTheme.of(context).secondaryText),
+            ),
+          ],
         ),
       ),
     ),
@@ -1371,85 +1455,117 @@ class _BuildProgress extends StatelessWidget {
       _BuildPhase.complete => 'Channel update complete',
       _BuildPhase.review => null,
     },
-    child: ListView(
-      children: [
-        Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 620),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                LinearProgressIndicator(
-                  value: switch (phase) {
-                    _BuildPhase.applying => null,
-                    _BuildPhase.failed => 0,
-                    _BuildPhase.complete => 1,
-                    _BuildPhase.review => 0,
-                  },
-                ),
-                const SizedBox(height: 24),
-                Text(
-                  switch (phase) {
-                    _BuildPhase.applying => 'Applying channels…',
-                    _BuildPhase.failed => 'No changes were saved',
-                    _BuildPhase.complete => 'Channel setup complete',
-                    _BuildPhase.review => '',
-                  },
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w700,
+    child: LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: constraints.maxHeight),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 640),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    switch (phase) {
+                      _BuildPhase.applying => Icons.auto_awesome,
+                      _BuildPhase.failed => Icons.error_outline,
+                      _BuildPhase.complete => Icons.check_circle_outline,
+                      _BuildPhase.review => Icons.live_tv_outlined,
+                    },
+                    size: 42,
+                    color: phase == _BuildPhase.failed
+                        ? Theme.of(context).colorScheme.error
+                        : LineupTheme.of(context).progressFill,
                   ),
-                ),
-                const SizedBox(height: 8),
-                Text(switch (phase) {
-                  _BuildPhase.applying => 'The lineup is being committed atomically. This step cannot be cancelled.',
-                  _BuildPhase.failed =>
-                    error ?? 'The channel plan could not be applied.',
-                  _BuildPhase.complete =>
-                    'The atomic lineup update completed successfully.',
-                  _BuildPhase.review => '',
-                }, textAlign: TextAlign.center),
-              ],
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: 420,
+                    child: LinearProgressIndicator(
+                      value: switch (phase) {
+                        _BuildPhase.applying => null,
+                        _BuildPhase.failed => 0,
+                        _BuildPhase.complete => 1,
+                        _BuildPhase.review => 0,
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  Text(
+                    switch (phase) {
+                      _BuildPhase.applying => 'Applying channels…',
+                      _BuildPhase.failed => 'No changes were saved',
+                      _BuildPhase.complete => 'Channel setup complete',
+                      _BuildPhase.review => '',
+                    },
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 7),
+                  Text(
+                    switch (phase) {
+                      _BuildPhase.applying => 'The lineup is being committed atomically. This step cannot be cancelled.',
+                      _BuildPhase.failed =>
+                        error ?? 'The channel plan could not be applied.',
+                      _BuildPhase.complete =>
+                        'The atomic lineup update completed successfully.',
+                      _BuildPhase.review => '',
+                    },
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: LineupTheme.of(context).secondaryText,
+                    ),
+                  ),
+                  if (phase == _BuildPhase.complete) ...[
+                    const SizedBox(height: 18),
+                    Semantics(
+                      container: true,
+                      label: 'Final: ${impact.finalCount}',
+                      child: ExcludeSemantics(
+                        child: _ImpactCount(
+                          value: impact.finalCount,
+                          label: 'channels ready',
+                          emphasized: true,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    Wrap(
+                      alignment: WrapAlignment.center,
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: [
+                        _ImpactCard(
+                          label: 'Create',
+                          value: impact.create,
+                          icon: Icons.add_circle_outline,
+                        ),
+                        _ImpactCard(
+                          label: 'Update',
+                          value: impact.update,
+                          icon: Icons.edit_outlined,
+                        ),
+                        _ImpactCard(
+                          label: 'Unchanged',
+                          value: impact.unchanged,
+                          icon: Icons.check_circle_outline,
+                        ),
+                        _ImpactCard(
+                          label: 'Remove',
+                          value: impact.remove,
+                          icon: Icons.remove_circle_outline,
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
             ),
           ),
         ),
-        if (phase == _BuildPhase.complete) ...[
-          const SizedBox(height: 28),
-          Wrap(
-            alignment: WrapAlignment.center,
-            spacing: 14,
-            runSpacing: 14,
-            children: [
-              _ImpactCard(
-                label: 'Create',
-                value: impact.create,
-                icon: Icons.add_circle_outline,
-              ),
-              _ImpactCard(
-                label: 'Update',
-                value: impact.update,
-                icon: Icons.edit_outlined,
-              ),
-              _ImpactCard(
-                label: 'Unchanged',
-                value: impact.unchanged,
-                icon: Icons.check_circle_outline,
-              ),
-              _ImpactCard(
-                label: 'Remove',
-                value: impact.remove,
-                icon: Icons.remove_circle_outline,
-              ),
-              _ImpactCard(
-                label: 'Final',
-                value: impact.finalCount,
-                icon: Icons.live_tv_outlined,
-              ),
-            ],
-          ),
-        ],
-      ],
+      ),
     ),
   );
 }

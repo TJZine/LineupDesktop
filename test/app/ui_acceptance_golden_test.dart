@@ -171,6 +171,24 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Configure the lineup'), findsOneWidget);
+    final viewport = Offset.zero & _viewport;
+    final shell = tester.getRect(
+      find.byKey(const ValueKey('channel-setup-shell')),
+    );
+    final regions = [
+      shell,
+      tester.getRect(find.byKey(const ValueKey('channel-setup-header'))),
+      tester.getRect(find.widgetWithText(Chip, 'Step 2 of 3')),
+      tester.getRect(find.byKey(const ValueKey('channel-setup-strategy-rail'))),
+      tester.getRect(
+        find.byKey(const ValueKey('channel-setup-strategy-details')),
+      ),
+      tester.getRect(find.widgetWithText(FilledButton, 'Build Channels')),
+    ];
+    for (final region in regions) {
+      expect(viewport.intersect(region), region);
+      expect(shell.intersect(region), region);
+    }
     await _match(
       tester,
       'channel-setup-strategies-1280x720.png',
@@ -212,6 +230,42 @@ void main() {
     await _match(
       tester,
       'channel-setup-review-1280x720.png',
+      precacheLogo: true,
+      additionalPumps: 2,
+    );
+  });
+
+  testWidgets('Channel Setup review at 1920x1080', (tester) async {
+    final controller = _VisualController()
+      ..stage = SetupStage.channelSetup
+      ..libraries = const [
+        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
+      ];
+    await _pump(
+      tester,
+      TickerMode(
+        enabled: false,
+        child: UiFixture(
+          controller: controller,
+          guideClock: () => _fixedNow,
+        ).build(),
+      ),
+      viewport: const Size(1920, 1080),
+    );
+    await tester.tap(find.text('Configure channels'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Build Channels'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Review expected changes'), findsOneWidget);
+    expect(find.bySemanticsLabel('Final: 2'), findsOneWidget);
+    expect(
+      tester.getBottomRight(find.text('Confirm & Replace')).dy,
+      lessThanOrEqualTo(1080),
+    );
+    await _match(
+      tester,
+      'channel-setup-review-1920x1080.png',
       precacheLogo: true,
       additionalPumps: 2,
     );
