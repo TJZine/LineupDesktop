@@ -693,3 +693,91 @@ These Flutter goldens prove composition only. Physical Windows validation of
 native video layering, DirectComposition, hardware media behavior, input,
 accessibility, fullscreen, and packaging remains pending at the exact resulting
 UI-8 commit with the pinned engine recorded in that evidence.
+
+## 2026-08-26 visual-parity polish campaign
+
+### Provenance and scope
+
+This campaign used implementation baseline
+`30003ddddcc611ea4920bad3d6f591a8e5bf2afa`, the locked plan SHA-256
+`23e10f7ef660b8eec061321a6ea658fec779013c6e5c8fedd1b560293e1e2a52`, and
+ended its product work at
+`6714eed8b25b6305934ac90a1a84b9eb3604cee7`. The sequential package commits
+were:
+
+- Mini Guide: `05b7aecc70d56b46f7c62f0f815b8ac748c0ba95`;
+- Player OSD: `dfdc82956d933a624c07414cc458f6b2da555422`;
+- Rich Now Playing: `fdefb61fd7586330d9173d66819c86d7103ea78e`;
+- Profiles and protected PIN: `b64d101847f4991653e3a82377232323d4cd5e55`;
+- Channel Setup: `6714eed8b25b6305934ac90a1a84b9eb3604cee7`.
+
+The comparison retained immutable upstream source
+`b30e27c0025d254b7c3c8fb7a9335070542362bd`. The supplied Player OSD/Mini
+Guide/Now Playing, Profiles/PIN, and Channel Setup screenshot groups were
+reviewed at original pixels during the locked review gate and owning packages.
+The final deterministic-acceptance worker could not re-access those supplied
+files, which limits that worker's independent reinspection but does not erase
+the earlier comparisons. No private screenshot fact, artwork, or personal path
+is reproduced here.
+
+The implementation changed only Flutter presentation owners and their direct
+tests/goldens. It added no dependency and changed no native, engine, runner,
+controller, model, persistence, transport, scheduling, design-system,
+browser/Electron, release, signing, or package owner.
+
+### Resulting Flutter composition
+
+| Surface | Current classification | Accepted result |
+| --- | --- | --- |
+| Mini Guide | Visual parity for Flutter composition | Five shallow broadcast rows retain channel/current/next/progress facts, tuned/focus distinction, paging, tuning, and timeout behavior from compact through widescreen layouts. |
+| Player OSD | Visual parity for Flutter composition | The bottom-rising control plane is shallower at widescreen sizes and groups identity, progress/time, transport, and secondary actions without adding unsupported media facts. |
+| Rich Now Playing | Visual parity for Flutter composition | The source-informed lower-left shelf width remains bounded while poster/text, clear-logo/title fallback, schedule progress, badges, and synopsis have a stronger internal hierarchy. |
+| Profiles and protected PIN | Visual parity for Flutter composition | Smaller remote-first profile cards and quieter idle keypad keys preserve response-backed badges, four-digit submit/retry, focus containment, keyboard/numpad input, and safe errors. |
+| Channel Setup | Visual parity with structural failure coverage | One centered inset composition spans libraries, strategies, review, applying, failure, and completion; review emphasizes current-to-final impact while final apply remains atomic, indeterminate, and noncancelable. |
+
+Exactly five 1920x1080 macOS goldens were added:
+`mini-guide-1920x1080.png`, `player-osd-1920x1080.png`,
+`player-now-playing-1920x1080.png`, `profiles-1920x1080.png`, and
+`channel-setup-review-1920x1080.png`. Ten existing 1280x720 goldens changed:
+Mini Guide, OSD, Now Playing, Profiles, protected-profile PIN, and Channel
+Setup libraries, strategies, review, progress, and completion. The current
+inventory is therefore 25 goldens: the historical 13-golden 2026-08-24 set was
+expanded to 20 by the 2026-08-25 campaign and to 25 by this campaign. Those
+historical counts retain their original date and scope.
+
+### Verification and runtime evidence
+
+Using pinned Flutter 3.47.0 framework revision
+`4cf24164269a5ebf0c16a028a00727d0e77bbb05` and Dart 3.13.0, formatting
+checked 59 files with zero changes, analysis was clean, and the focused
+`player_view`, `guide_view`, `lineup_app`, `ui_parity`,
+`ui_review_regression`, `theme_shell`, and `ui_acceptance_golden` suites passed
+162 tests. The full suite passed 486 tests, the macOS release build succeeded
+at 50.6 MB, `git diff --check` passed, and the post-VPP-6 worktree was clean.
+All 25 golden comparisons passed, and all 15 affected PNGs were individually
+inspected at original pixels and accepted.
+
+The macOS synthetic harness built and launched, and Guide/Classic PiP plus the
+Player were observed. A bounded follow-up run observed Guide vertical paging,
+horizontal navigation, jump-to-now, tuning, the shallow OSD, five-row Mini
+Guide, Rich Now Playing shelf, audio and subtitle rails, Settings over and back
+to Player, and all five themes. The synthetic black Player canvas is expected
+because `HarnessPlayer` provides no video surface. Profiles/PIN and Channel
+Setup were not reachable from the harness ready state; the
+resize/fullscreen/DPI matrix and timeout-retention scenarios were not completely
+rerun. An initial macOS screen-capture failure and Flutter accessibility
+pending-tree warnings limited automation; these are tooling observations, not
+product or physical assistive-technology failures.
+
+### Physical Windows result
+
+VPP-7 was **Blocked/not run** at exact product HEAD
+`6714eed8b25b6305934ac90a1a84b9eb3604cee7`. The local object and pinned
+toolchain were verified, but the available host was Darwin arm64 and no
+authorized physical Windows 10/11 x64 machine, operator, or transport route was
+available. Consequently every physical Windows row remained blocked: there is
+no machine/display/scaling/runtime/build/media identity, evidence directory,
+or new platform-validation/support claim. Native video layering,
+DirectComposition, fullscreen/DPI, physical focus/input, and real-video
+translucency remain pending under
+[Windows Native Acceptance](windows-native-validation.md).
