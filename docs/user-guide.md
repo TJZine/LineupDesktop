@@ -129,7 +129,7 @@ or available channel numbers.
 | Destination | Purpose |
 | --- | --- |
 | Guide | Browse the schedule, inspect focused programs, filter by library, jump to now, tune current programs, and open the Player |
-| Channels | Re-run Channel Builder or create, edit, and delete custom channels |
+| Channels | Generate a lineup or create, inspect, duplicate, edit, and delete individual channels |
 | Settings | Configure themes, Guide behavior, accessibility, Plex profile/server selection, and diagnostics |
 | Diagnostics | Review bounded, redacted support events from the current session |
 | Player | Watch the tuned channel and use playback, track, channel, sleep, and fullscreen controls |
@@ -296,31 +296,47 @@ not depend on that setting. The OSD follows the configured auto-hide duration.
 
 ## Channels
 
-### Channel Builder
+**Generate lineup** is the bulk workflow. It proposes generator-owned channels,
+then lets you replace generated channels, add generated channels, or refresh
+matching generated channels after review. All three modes preserve every custom
+channel. Refresh also preserves a matching generated channel's number, visible
+name, schedule anchor, and shuffle identity while updating its generated
+programming recipe. Completion offers **View lineup** or the separate **Add a
+custom channel** action.
 
-Use **Channel builder** for a generated lineup. The builder can replace, append
-to, or merge with the current lineup after review. Limits are bounded, and the
-accepted plan is written as one lineup change.
+**New channel** opens the full-page Channel Studio for one custom channel.
+Studio also opens when you edit a custom channel, inspect a generated channel,
+or choose **Duplicate as custom** from generated inspection. Generated
+programming remains read-only, but its name and number can be saved with **Save
+identity**. Duplication creates a separate custom draft with a new identity and
+the lowest available channel number; it does not alter the generated source.
 
-### Custom channels
+Custom Studio programming can use one selected library, one Plex video
+playlist, a collection or supported metadata filter, or an explicitly ordered
+hand-picked list. Search, local facets, visible-result bulk selection, and Move
+earlier/Move later controls keep large hand-picked lists usable without a
+network request per edit. A previously saved hand-picked item that is not in
+the current playable inventory remains labeled **Unavailable — retained until
+removed**; it is not scheduled, but Studio does not silently delete it.
 
-Select **Create channel** or edit an existing channel. A custom channel
-supports:
+Playback rhythms are **In order**, **Mix it up**, and **Mini-marathons**.
+Mini-marathons uses blocks of 2 through 5 episodes and requires usable show
+grouping. **Air Check** uses the same content resolver and deterministic
+scheduler as Guide and Player to show what is on now, what follows, cycle and
+timing facts, why content was included, and actionable unavailable or invalid
+states. A new channel saves the same schedule anchor and shuffle identity that
+Air Check previewed.
 
-- a unique channel number from 1 through 1000;
-- an entire selected library or hand-picked media;
-- sequential, shuffle, or block playback;
-- optional inclusion of watched items for library-backed channels; and
-- retention of previously selected hand-picked items that are temporarily
-  unavailable, until explicitly removed.
+Saving and tuning are separate. A successful save leaves Studio in a clean
+saved state and enables **Tune in**. A tune failure does not undo the saved
+channel. A save failure preserves both the prior lineup and the complete draft;
+retry after correcting the reported source, schedule, number, or storage issue.
+If the underlying channel changed while Studio was open, reload it or
+deliberately reapply the draft rather than overwriting newer state. Leaving a
+dirty draft asks whether to discard changes or keep editing.
 
-Deletion requires confirmation and cannot be undone.
-
-Generated channels and channels backed by filtered libraries, playlists, or
-mixed sources keep their source read-only in the editor. You can change their
-name, number, and playback mode without changing their source or generated
-identity. Plain manual and unfiltered-library custom channels retain full source
-editing. There is no implicit generated-to-custom conversion.
+Deletion requires confirmation and cannot be undone. Deleting a generated
+channel also warns that a later Generate lineup refresh may propose it again.
 
 ## Settings
 

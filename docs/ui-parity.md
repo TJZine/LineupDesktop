@@ -781,3 +781,48 @@ or new platform-validation/support claim. Native video layering,
 DirectComposition, fullscreen/DPI, physical focus/input, and real-video
 translucency remain pending under
 [Windows Native Acceptance](windows-native-validation.md).
+
+## 2026-08-27 Channel Studio deterministic acceptance
+
+### Scope and evidence boundary
+
+Channel Studio implementation started from
+`c8d782e880f29b0b7b56565096a42b475faa1b1d`, reached Slice 6 baseline
+`a99695425b216b59102e1dea893933708bfe0962`, and includes the reviewed current
+Slice 7 Studio correction, its direct tests, and six closeout documents. It
+changes Flutter/Dart channel ownership policy, persistence seams, management
+UI, and deterministic schedule projection. It does not change native C++,
+libmpv, DirectComposition, the Flutter engine patch, packaging, or WebViews.
+
+The implemented UI keeps one Channels destination and one number-ordered list.
+**Generate lineup** remains the bulk generator; **New channel** opens the
+full-page Studio. Create, edit custom, inspect generated, and duplicate-as-
+custom modes use explicit textual ownership. Every mode retains Air Check;
+compact layouts show now/next while expanded layouts show bounded surrounding
+schedule context. Source choice, playback rhythm, unavailable retention,
+validation, stale/failure recovery, and save-versus-tune behavior are covered
+by focused widget/controller/scheduler tests.
+
+### Visual and deterministic result
+
+The canonical macOS inventory is now 27 goldens. Two new Studio images cover
+expanded `1280x720` and compact `800x600` authoring. The accepted Slice 1 and
+Slice 3 copy also refreshed the existing Channel Setup review images at
+`1280x720` and `1920x1080` plus completion at `1280x720`. All five images were
+inspected and contain deterministic synthetic facts only. The complete golden
+suite passed 27 of 27 comparisons, and the corrected focused
+Studio/parity/review suite passed 97 tests. The Slice 4 and Slice 5 owning
+matrices passed 197 and 203 tests respectively. Viewport, 200 percent text
+scale, focus, semantics, live
+regions, Reduce Motion, large focus, keyboard reorder, bounded large-library
+filtering, and stale-safe preview behavior are deterministic evidence.
+
+The sequential closeout gate checked 63 formatted files with zero changes,
+reported no analysis issues, passed all 613 repository tests under
+`America/New_York`, and built the 51.0 MB macOS release application.
+
+These results establish Flutter composition and interaction contracts on the
+macOS test harness. No physical Windows campaign was run, so they do not
+establish Windows DPI, keyboard/remote delivery, screen-reader behavior, native
+video layering during **Tune in**, media compatibility, packaging, platform
+validation, or support.

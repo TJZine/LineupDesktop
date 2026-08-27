@@ -1,7 +1,9 @@
 # Channel Studio Implementation Plan
 
-Status: Gate A reviewed and corrected on 2026-08-27; implementation must not
-start until the fresh-session Gate B review passes
+Status: Slices 1 through 6 were implemented, reviewed, pushed, and
+deterministically verified on 2026-08-27. The reviewed Slice 7 closeout
+corrections and final evidence are recorded below; the final commit belongs in
+the handoff.
 
 Locked product contract: [Channel Studio Product and UX Specification](channel-studio-spec.md)
 
@@ -14,6 +16,11 @@ Gate B must start at that commit rather than the repository default branch**
 Slice 1 start baseline: **record in the fresh orchestrator's acceptance ledger
 after all Gate B plan corrections are committed and pushed; do not write a
 self-referential pre-implementation commit hash into this file**
+
+Recorded baselines: Gate A
+`ecde41dab65ca19090b189baef4353bee20061c1`; Gate B and Slice 1 start
+`c8d782e880f29b0b7b56565096a42b475faa1b1d`; Slice 6 implementation
+`a99695425b216b59102e1dea893933708bfe0962`.
 
 ## Objective
 
@@ -1133,6 +1140,28 @@ Windows evidence is calibrated separately below.
 
 Push the commit, confirm the worktree is clean and upstream contains every local
 commit, then produce the final handoff with the completed ledger.
+
+### Slice 7 closeout evidence
+
+The audited committed feature range is the exact Slice 1 start
+`c8d782e880f29b0b7b56565096a42b475faa1b1d` through Slice 6 baseline
+`a99695425b216b59102e1dea893933708bfe0962`, plus the reviewed current Slice 7
+corrections in the Studio owner, its direct tests, and six closeout documents.
+PN-1 through PN-4, OP-1 through OP-7, AU-1 through AU-4, AC-1 through AC-6, and
+UX-1 through UX-5 have observed focused test evidence. Slice 6's pre-correction
+Studio/parity/review run passed 95 tests; the corrected closeout run passed 97
+(58 Studio plus 39 parity/review). The Slice 4 owning matrix passed 197 tests
+(58 + 23 + 77 + 39), and the Slice 5 owning matrix passed 203 tests
+(77 + 9 + 116 + 1). The canonical golden update and non-update runs passed all
+27 comparisons; all 10 focused theme tests passed. The five final
+Studio/Channel Setup goldens named in Slice 6 were visually inspected.
+
+The net-diff audit found no dependency, native/C++, runner, engine-patch,
+packaging, WebView, second ownership path, deferred broadcast feature, or
+private artifact. RG-1 completed with both full formatting checks reporting 63
+files and zero changes, clean analysis, all 613 timezone-pinned repository tests
+passing, and a successful 51.0 MB macOS release build. No physical Windows
+evidence was run; the Windows boundary below remains unchanged.
 
 ## Plan-review checklist
 

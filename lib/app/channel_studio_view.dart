@@ -85,6 +85,8 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
   late PlaybackMode _playbackMode;
   late DateTime _anchor;
   late int _shuffleSeed;
+  DateTime? _candidateAnchor;
+  int? _candidateShuffleSeed;
   late int? _blockSize;
   late String? _builderKey;
   late Channel? _expectedBase;
@@ -156,8 +158,9 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     _search = TextEditingController();
     _source = original?.source ?? _defaultSource();
     _playbackMode = original?.playbackMode ?? PlaybackMode.shuffle;
-    _anchor = original?.anchor ?? _clock().toUtc();
-    _shuffleSeed = original?.shuffleSeed ?? _id.hashCode;
+    _anchor =
+        original?.anchor ?? DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
+    _shuffleSeed = original?.shuffleSeed ?? 0;
     _blockSize = original?.blockSize;
     _builderKey = _generated ? original!.builderKey : null;
     _configureSource(_source);
@@ -330,6 +333,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     final validNumber = _validateNumber(_number.text) == null;
     final identityLooksValid = _name.text.trim().isNotEmpty && validNumber;
     final programmingError = _programmingError;
+    _stageScheduleIdentity(programmingError);
     return LineupPage(
       traversalPolicy: OrderedTraversalPolicy(),
       title:
@@ -486,13 +490,10 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                     onFirstValid: _commitScheduleIdentity,
                     onValidityChanged: (validity) {
                       if (!mounted || _airCheckValidity == validity) return;
-                      setState(() {
-                        _airCheckValidity = validity;
-                        if (validity ==
-                            ChannelAirCheckValidity.retainedOffAir) {
-                          _scheduleIdentityCommitted = true;
-                        }
-                      });
+                      setState(() => _airCheckValidity = validity);
+                      if (validity == ChannelAirCheckValidity.retainedOffAir) {
+                        _commitScheduleIdentity();
+                      }
                     },
                   ),
                 ),
@@ -733,16 +734,28 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
   }
 
   Widget _manualEditor() {
-    final visible = _manualMatches;
+    final inventory = _inventory;
+    final inventoryById = {for (final item in inventory) item.id: item};
+    final facets = _facetOptions(_manualLibraryId, inventory: inventory);
+    final visible = _filteredInventory(
+      inventory: inventory,
+      libraryId: _manualLibraryId,
+      mediaType: _manualMediaType,
+      filters: _manualFilters,
+      search: _search.text,
+    );
     final shown = visible.take(_resultWindow).toList(growable: false);
+    final selectedIds = _manualIds.toSet();
     final unavailable = _manualIds
-        .where((id) => !_inventoryById.containsKey(id))
-        .toList(growable: false);
+        .where((id) => !inventoryById.containsKey(id))
+        .toSet();
+    final countLabel =
+        '${visible.length} matching, ${_manualIds.length} selected';
     _pruneRundownFocus();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _inventoryStatus(),
+        _inventoryStatus(hasInventory: inventory.isNotEmpty),
         TextField(
           key: const Key('studio-search'),
           controller: _search,
@@ -776,8 +789,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                 decoration: const InputDecoration(labelText: 'Media type'),
                 items: [
                   const DropdownMenuItem(value: '', child: Text('All types')),
-                  for (final type
-                      in _inventory.map((item) => item.type).toSet())
+                  for (final type in inventory.map((item) => item.type).toSet())
                     DropdownMenuItem(value: type, child: Text(type)),
                 ],
                 onChanged: _saving
@@ -794,7 +806,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
         for (final key in _facetKeys)
           _facetDropdown(
             key: key,
-            values: _facetOptions(_manualLibraryId)[key] ?? const [],
+            values: facets[key] ?? const [],
             selected: _manualFilters[key],
             onChanged: (value) => _browseChanged(() {
               if (value == null) {
@@ -804,7 +816,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
               }
             }),
           ),
-        Text(_countLabel),
+        Text(countLabel),
         if (_settledCountLabel.isNotEmpty)
           Semantics(
             liveRegion: true,
@@ -816,14 +828,15 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
           children: [
             TextButton(
               onPressed:
-                  _saving || !shown.any((item) => !_manualIds.contains(item.id))
+                  _saving ||
+                      !shown.any((item) => !selectedIds.contains(item.id))
                   ? null
                   : _selectVisible,
               child: const Text('Select visible'),
             ),
             TextButton(
               onPressed:
-                  _saving || !shown.any((item) => _manualIds.contains(item.id))
+                  _saving || !shown.any((item) => selectedIds.contains(item.id))
                   ? null
                   : _clearVisible,
               child: const Text('Clear visible'),
@@ -843,7 +856,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
               final item = shown[index];
               return CheckboxListTile(
                 key: Key('studio-result-${item.id}'),
-                value: _manualIds.contains(item.id),
+                value: selectedIds.contains(item.id),
                 title: Text(item.title),
                 subtitle: item.grandparentTitle == null
                     ? null
@@ -870,6 +883,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
               _manualIds[index],
               index,
               unavailable.contains(_manualIds[index]),
+              inventoryById,
             ),
           ),
         ),
@@ -915,7 +929,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
       )
       .toList(growable: false);
 
-  Widget _inventoryStatus() {
+  Widget _inventoryStatus({bool? hasInventory}) {
     final status = widget.controller.libraryScanStatus;
     if (status == LibraryScanStatus.scanning) {
       final total = widget.controller.libraryScanTotalItems;
@@ -952,7 +966,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
         ],
       );
     }
-    if (_inventory.isEmpty) {
+    if (!(hasInventory ?? _inventory.isNotEmpty)) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1026,9 +1040,12 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
         : (value) => onChanged(value?.isEmpty == true ? null : value),
   );
 
-  Map<String, List<String>> _facetOptions(String? libraryId) {
+  Map<String, List<String>> _facetOptions(
+    String? libraryId, {
+    List<PlexMediaItem>? inventory,
+  }) {
     final values = {for (final key in _facetKeys) key: <String>{}};
-    for (final item in _inventory.where(
+    for (final item in (inventory ?? _inventory).where(
       (item) => libraryId == null || item.libraryId == libraryId,
     )) {
       values['collection']!.addAll(item.collections);
@@ -1049,6 +1066,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
   }
 
   List<PlexMediaItem> _filteredInventory({
+    List<PlexMediaItem>? inventory,
     String? libraryId,
     String? mediaType,
     Map<String, String> filters = const {},
@@ -1056,7 +1074,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     bool includeWatched = true,
   }) {
     final query = search.trim().toLowerCase();
-    var items = _inventory.where(
+    var items = (inventory ?? _inventory).where(
       (item) =>
           (libraryId == null || item.libraryId == libraryId) &&
           (includeWatched || !item.viewed) &&
@@ -1128,8 +1146,13 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     });
   }
 
-  Widget _rundownRow(String id, int index, bool unavailable) {
-    final current = _inventoryById[id];
+  Widget _rundownRow(
+    String id,
+    int index,
+    bool unavailable,
+    Map<String, PlexMediaItem> inventoryById,
+  ) {
+    final current = inventoryById[id];
     final retained = _retainedManualItems[id];
     final title = current?.title ?? retained?.title ?? id;
     final focus = _rundownFocus.putIfAbsent(
@@ -1560,8 +1583,8 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     name: _name.text.trim().isEmpty ? 'New channel' : _name.text.trim(),
     source: _displaySource,
     playbackMode: _playbackMode,
-    anchor: _anchor,
-    shuffleSeed: _shuffleSeed,
+    anchor: _candidateAnchor ?? _anchor,
+    shuffleSeed: _candidateShuffleSeed ?? _shuffleSeed,
     blockSize: _generated
         ? _blockSize
         : widget.mode == ChannelStudioMode.duplicateCustom
@@ -1576,9 +1599,34 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
       _airCheckValidity == ChannelAirCheckValidity.valid ||
       _airCheckValidity == ChannelAirCheckValidity.retainedOffAir;
 
+  void _stageScheduleIdentity(String? programmingError) {
+    if (_scheduleIdentityCommitted ||
+        programmingError != null ||
+        _candidateAnchor != null) {
+      return;
+    }
+    _candidateAnchor = _clock().toUtc();
+    _candidateShuffleSeed = _id.hashCode;
+  }
+
   void _commitScheduleIdentity() {
     if (_scheduleIdentityCommitted || !mounted) return;
-    setState(() => _scheduleIdentityCommitted = true);
+    final anchor = _candidateAnchor;
+    final seed = _candidateShuffleSeed;
+    if (anchor == null || seed == null) return;
+    setState(() {
+      _anchor = anchor;
+      _shuffleSeed = seed;
+      _candidateAnchor = null;
+      _candidateShuffleSeed = null;
+      _scheduleIdentityCommitted = true;
+      _baselineDraftSignature = {
+        ..._baselineDraftSignature,
+        'anchor': anchor.toIso8601String(),
+        'shuffleSeed': seed,
+      };
+      _dirty = !_canonicalEquals(_draftSignature, _baselineDraftSignature);
+    });
   }
 
   Future<void> _save({Channel? rebasedExpected}) async {

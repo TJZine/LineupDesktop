@@ -1,6 +1,9 @@
 # Channel Studio Product and UX Specification
 
-Status: Product direction locked; implementation has not started
+Status: Product direction locked; implemented and deterministically tested
+through the reviewed Slice 7 closeout corrections on 2026-08-27. The Slice 6
+baseline is `a99695425b216b59102e1dea893933708bfe0962`; the final closeout commit
+belongs in the handoff. Physical Windows validation was not run.
 
 Decision date: 2026-08-27
 
@@ -590,55 +593,55 @@ redesign.
 
 ### Product and navigation
 
-- [ ] Channels presents one unified, number-ordered list of generated and custom
+- [x] Channels presents one unified, number-ordered list of generated and custom
       channels with textual ownership.
-- [ ] New channel, Edit custom, Inspect generated, and Duplicate as custom open
+- [x] New channel, Edit custom, Inspect generated, and Duplicate as custom open
       the correct full-page Studio mode.
-- [ ] Channel Studio is not a required Generate Lineup step or a top-level
+- [x] Channel Studio is not a required Generate Lineup step or a top-level
       destination.
-- [ ] Generate Lineup completion can open Channels or start a separate custom
+- [x] Generate Lineup completion can open Channels or start a separate custom
       draft after its own transaction succeeds.
 
 ### Ownership and persistence
 
-- [ ] Replace, add, and refresh generated modes never remove or mutate a custom
+- [x] Replace, add, and refresh generated modes never remove or mutate a custom
       channel.
-- [ ] Generated allocation reserves every custom number.
-- [ ] Refresh preserves matched generated ID, number, user-visible name, anchor,
+- [x] Generated allocation reserves every custom number.
+- [x] Refresh preserves matched generated ID, number, user-visible name, anchor,
       and seed while updating generator-owned programming fields.
-- [ ] Duplicate as custom creates a new ID and free number, clears builder
+- [x] Duplicate as custom creates a new ID and free number, clears builder
       ownership, and preserves the source and scheduling recipe losslessly.
-- [ ] Save is atomic; failure keeps the previous lineup and the complete draft.
-- [ ] Concurrent or stale edits cannot overwrite newer channel state silently.
+- [x] Save is atomic; failure keeps the previous lineup and the complete draft.
+- [x] Concurrent or stale edits cannot overwrite newer channel state silently.
 
 ### Authoring and Air Check
 
-- [ ] A custom channel can use each supported first-release source without
+- [x] A custom channel can use each supported first-release source without
       losing representable Plex provenance.
-- [ ] Hand-picked content supports search, facets, visible bulk actions, and
+- [x] Hand-picked content supports search, facets, visible bulk actions, and
       accessible explicit ordering.
-- [ ] Unavailable saved items remain visible until explicitly removed.
-- [ ] Playback choices use plain language and map exactly to current scheduler
+- [x] Unavailable saved items remain visible until explicitly removed.
+- [x] Playback choices use plain language and map exactly to current scheduler
       behavior; Mini-marathons exposes a valid block size.
-- [ ] Air Check uses the same resolver and scheduler result as the saved Guide
+- [x] Air Check uses the same resolver and scheduler result as the saved Guide
       and playback path.
-- [ ] Preview exposes current and upcoming programs, item count, cycle duration,
+- [x] Preview exposes current and upcoming programs, item count, cycle duration,
       timing, inclusion reason, and actionable failures.
-- [ ] Unsupported filters fail closed instead of broadening resolved content.
-- [ ] Saving a new draft preserves the exact anchor and seed that were previewed.
+- [x] Unsupported filters fail closed instead of broadening resolved content.
+- [x] Saving a new draft preserves the exact anchor and seed that were previewed.
 
 ### UX, accessibility, and scale
 
-- [ ] Expanded and compact layouts preserve the Air Check signature and do not
+- [x] Expanded and compact layouts preserve the Air Check signature and do not
       regress to a modal editor.
-- [ ] All pointer reorder actions have keyboard-visible alternatives.
-- [ ] Focus, semantic state, live-region behavior, text scaling, Reduce Motion,
+- [x] All pointer reorder actions have keyboard-visible alternatives.
+- [x] Focus, semantic state, live-region behavior, text scaling, Reduce Motion,
       and large-focus settings pass focused tests.
-- [ ] The required viewport matrix has no overflow, unreachable primary action,
+- [x] The required viewport matrix has no overflow, unreachable primary action,
       or clipped essential state.
-- [ ] Large-library search and preview remain bounded, stale-safe, and
+- [x] Large-library search and preview remain bounded, stale-safe, and
       responsive under deterministic test load.
-- [ ] Existing Channel Setup, Guide, Player, persistence, and 1,000-channel
+- [x] Existing Channel Setup, Guide, Player, persistence, and 1,000-channel
       product-spine suites remain green.
 
 ## Research references

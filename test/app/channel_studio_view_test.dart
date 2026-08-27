@@ -2481,6 +2481,114 @@ void main() {
     expect(controller.saved!.shuffleSeed, first.shuffleSeed);
   });
 
+  testWidgets(
+    'new schedule identity starts when its source first becomes valid',
+    (tester) async {
+      var now = DateTime.utc(2026, 8, 27, 9);
+      final validAt = now.add(const Duration(hours: 4));
+      final controller = _RecordingSaveController()
+        ..availableMedia = [_media('movie')];
+      addTearDown(controller.dispose);
+
+      await tester.pumpWidget(
+        _studio(controller, ChannelStudioMode.createCustom, clock: () => now),
+      );
+      await tester.pumpAndSettle();
+      expect(controller.loaded, isNull);
+
+      now = validAt;
+      await tester.ensureVisible(find.byKey(const Key('studio-result-movie')));
+      await tester.tap(find.byKey(const Key('studio-result-movie')));
+      await _settleAirCheck(tester);
+      final previewed = controller.loaded!;
+      expect(previewed.anchor, validAt);
+      expect(previewed.shuffleSeed, previewed.id.hashCode);
+      expect(previewed.shuffleSeed, isNot(0));
+
+      await tester.enterText(
+        find.byKey(const Key('studio-name')),
+        'Valid later',
+      );
+      await tester.tap(find.text('Save channel'));
+      await tester.pumpAndSettle();
+      final saved = controller.saved!;
+      expect(saved.anchor, previewed.anchor);
+      expect(saved.shuffleSeed, previewed.shuffleSeed);
+
+      controller
+        ..channels = [saved]
+        ..saved = null;
+      now = validAt.add(const Duration(days: 3));
+      await tester.pumpWidget(
+        _studio(
+          controller,
+          ChannelStudioMode.editCustom,
+          channel: saved,
+          clock: () => now,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const Key('studio-name')), 'Reloaded');
+      await tester.tap(find.text('Save changes'));
+      await tester.pumpAndSettle();
+      expect(controller.saved!.anchor, validAt);
+      expect(controller.saved!.shuffleSeed, saved.shuffleSeed);
+    },
+  );
+
+  testWidgets(
+    'large selected rundown snapshots playable inventory once per build',
+    (tester) async {
+      final retained = List.generate(
+        1200,
+        (index) => ChannelItem(
+          id: 'selected-$index',
+          title: 'Selected $index',
+          duration: const Duration(minutes: 30),
+        ),
+      );
+      final original = _channel(
+        id: 'large-rundown',
+        number: 25,
+        name: 'Large rundown',
+        source: ManualSource(retained),
+      );
+      final controller = _CountingInventoryController()
+        ..channels = [original]
+        ..availableMedia = List.generate(
+          1199,
+          (index) => _media('selected-${index + 1}'),
+        );
+      addTearDown(controller.dispose);
+      controller.playableInventoryReads = 0;
+
+      await tester.pumpWidget(
+        _studio(controller, ChannelStudioMode.editCustom, channel: original),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('1199 matching, 1200 selected'), findsOneWidget);
+      expect(find.text('Unavailable — retained until removed'), findsOneWidget);
+      expect(controller.playableInventoryReads, lessThan(30));
+
+      await tester.ensureVisible(find.byKey(const Key('studio-rundown')));
+      await tester.pump();
+      final readsBeforeScrolling = controller.playableInventoryReads;
+      final rundownScrollable = tester.state<ScrollableState>(
+        find.descendant(
+          of: find.byKey(const Key('studio-rundown')),
+          matching: find.byType(Scrollable),
+        ),
+      );
+      final maximum = rundownScrollable.position.maxScrollExtent;
+      for (final fraction in [0.2, 0.4, 0.6, 0.8, 1.0]) {
+        rundownScrollable.position.jumpTo(maximum * fraction);
+        await tester.pump();
+      }
+      expect(controller.playableInventoryReads, readsBeforeScrolling);
+    },
+  );
+
   testWidgets('Channels schedule health remains lazy for 1000 rows', (
     tester,
   ) async {
@@ -3487,6 +3595,17 @@ class _RecordingSaveController extends FixtureController {
   }) async {
     saved = channel;
     this.expectedBase = expectedBase;
+  }
+}
+
+class _CountingInventoryController extends _RecordingSaveController {
+  int playableInventoryReads = 0;
+
+  @override
+  ({List<PlexMediaItem> media, List<PlexPlaylist> playlists})
+  get playableInventory {
+    playableInventoryReads++;
+    return super.playableInventory;
   }
 }
 

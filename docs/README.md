@@ -53,12 +53,12 @@ audience and purpose.
   Windows proof still required for Guide/PiP behavior.
 - [Channel Studio Specification](channel-studio-spec.md) records the locked
   product direction, ownership semantics, authoring UX, Air Check contract,
-  implementation boundaries, and acceptance criteria for the planned
-  Desktop-specific channel workspace.
+  implementation boundaries, acceptance criteria, and deterministic evidence
+  for the implemented Desktop-specific channel workspace.
 - [Channel Studio Implementation Plan](channel-studio-implementation-plan.md)
   records the reviewed implementation slices, Ponytail constraints,
-  orchestration protocol, verification gates, and handoff requirements for the
-  planned work.
+  orchestration protocol, verification gates, and final evidence for the
+  completed implementation work.
 - [Windows Runtime Provenance](windows-runtime.md) records exact native runtime
   sources, hashes, licenses, package policy, and unresolved redistribution
   gates.

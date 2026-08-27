@@ -56,6 +56,18 @@ recorded below. Exact-commit physical Windows acceptance was blocked/not run
 because no authorized Windows machine/operator/transport route was available;
 this update makes no new Windows platform-validation or support claim.
 
+**Channel Studio update:** 2026-08-27. Six reviewed implementation slices from
+exact start `c8d782e880f29b0b7b56565096a42b475faa1b1d` through Slice 6 baseline
+`a99695425b216b59102e1dea893933708bfe0962`, plus the reviewed current Slice 7
+corrections, replace the modal editor with one full-page Studio, make
+generated/custom ownership explicit, protect custom channels during generation,
+add first-release source authoring and deterministic Air Check, and retain
+atomic stale-safe saves. The corrected Studio/parity/review run passed 97 tests;
+the canonical golden suite passed all 27 comparisons and the five changed or
+added Studio/Channel Setup images were inspected. This is Flutter/Dart
+deterministic and macOS pixel evidence, not physical Windows, native-video,
+assistive-technology, package, or support evidence.
+
 This is the authoritative current product-parity record. The classifications
 in [Portable UI Parity](ui-parity.md) remain historical evidence for their
 named campaigns; they do not override this audit. Current source and observed
@@ -181,16 +193,16 @@ without placing credentials in public facts, durable state, URLs, or diagnostics
 | Actor/studio combine mode | Separate or combined treatment | No combined actor/studio mode | MISSING | P3 | HIGH | Upstream setup types; no Desktop model/control | Product decision before implementation |
 | Base ordering and blocks | Sequential/shuffle/block with block size | Equivalent modes and sizes | PARITY | — | HIGH | `lib/app/channel_setup_view.dart`; `lib/channels/channel_builder.dart` | Builder |
 | Alternate channel variants | Sequential/block variants and copies | Sequential/block plus additional shuffle variants; cap applies after expansion | DESKTOP-ENHANCED | — | HIGH | `lib/app/channel_setup_view.dart`; builder tests | Builder |
-| Build modes | Replace/append/merge with stable generated identity | Equivalent modes and stable `builderKey` merge | PARITY | — | HIGH | `lib/channels/channel_builder.dart`; `lib/app/lineup_controller.dart`; tests | Current behavior remains authoritative; `docs/channel-studio-spec.md` plans custom-preserving generated replace/add/refresh semantics |
+| Build modes | Replace/append/merge with stable generated identity | **Replace generated channels**, **Add generated channels**, and **Refresh generated channels** reserve custom numbers and preserve every custom channel; refresh matches only non-null `builderKey` ownership and preserves matched generated station/schedule identity | DESKTOP-ENHANCED | — | HIGH | `lib/channels/channel_builder.dart`; `lib/app/lineup_controller.dart`; builder/controller/setup tests | Keep `builderKey` as the sole ownership discriminator |
 | Channel limits | Normalized 1–500, default 200 | Explicit 50–1,000 options and fair round-robin allocation | DESKTOP-ENHANCED | — | HIGH | Upstream setup constants; Desktop setup/builder tests | Builder |
 | Strategy preview | Per-strategy estimate, blocked/slow/error/warning states | The synchronous post-scan planner reports accepted count/No matches/Off per strategy and proves omission with one bounded extra proposal; scan and apply failures remain at their owning stages | PARITY | — | HIGH | `lib/channels/channel_builder.dart`; `lib/app/channel_setup_view.dart`; builder/widget tests; strategy golden | Channel Setup |
 | Review diff | Stay/leave/new counts and samples | A centered review makes the current→final hero and proportional composition bar primary, followed by sample channels; exact Create/Update/Unchanged/Remove/Final counts still follow replace, append, and merge semantics, and exact merge matches reuse the existing channel without resetting its schedule | PARITY | — | HIGH | `lib/channels/channel_builder.dart`; `lib/app/channel_setup_view.dart`; builder/review tests; 1280×720 and 1920×1080 review goldens | Channel Setup |
 | Replace confirmation | Explicit destructive acknowledgement | Checkbox gate and disabled confirm until acknowledged | DESKTOP-ENHANCED | — | HIGH | `lib/app/channel_setup_view.dart`; review golden | Channel Setup |
-| Final build progress/cancellation | Stage-specific progress and active cancellation through planning/build | Step 3 owns applying, failed, and complete states. The final local lineup commit is atomic and normally fast, so applying is indeterminate and noncancelable; only Done exits completion. Library inventory is the separate long-running gap above. | INTENTIONAL DESKTOP ADAPTATION | — | MEDIUM | Upstream progress controller; `lib/app/channel_setup_view.dart`; setup progress/completion goldens and widget tests | Measure a 1,000-channel final commit; add cancellation only if materially long |
+| Final build progress/cancellation | Stage-specific progress and active cancellation through planning/build | Step 3 owns applying, failed, and complete states. The final local lineup commit is atomic and normally fast, so applying is indeterminate and noncancelable; completion offers **View lineup** and the separate **Add a custom channel** path. Library inventory is the separate long-running gap above. | INTENTIONAL DESKTOP ADAPTATION | — | MEDIUM | Upstream progress controller; `lib/app/channel_setup_view.dart`; setup progress/completion goldens and widget tests | Measure a 1,000-channel final commit; add cancellation only if materially long |
 | Atomic lineup apply/rollback | Scratch build then atomic commit | Validates full next lineup, one state save, in-memory rollback on failure | PARITY | — | MEDIUM | `lib/app/lineup_controller.dart`; `lib/persistence/app_store.dart` | Add focused delayed/failing apply persistence test |
 | Saved setup configuration | Normalized setup record; explicit rerun resets it | Libraries persist, but strategy/mode/limits reset with view construction | BLOCKED BY DECISION | P2 | HIGH | Upstream setup record/rerun; `lib/app/channel_setup_view.dart` | Define “edit setup” versus “start over” contract |
-| Custom channel creation | Upstream reachable product UI is setup-driven; CRUD service is hidden | Entire-library or hand-picked channels with validation and unavailable-item retention | DESKTOP-ENHANCED | — | HIGH | `lib/app/lineup_shell.dart`; UI regression tests | `docs/channel-studio-spec.md` plans the locked full-page authoring workspace; implementation has not started |
-| Editing generated channels | Upstream does not expose the hidden CRUD service as normal UI | Generated, filtered-library, playlist, and mixed sources are read-only; metadata-only edits preserve exact source, generated identity, and scheduling fields | DESKTOP-ENHANCED | — | HIGH | `lib/app/lineup_shell.dart`; UI and persistence round-trip tests | `docs/channel-studio-spec.md` plans generated inspection and explicit Duplicate as custom; implementation has not started |
+| Custom channel creation | Upstream reachable product UI is setup-driven; CRUD service is hidden | Full-page Studio creates custom channels from a library, playlist, supported collection/filter, or ordered hand-picked source; plain-language rhythms, unavailable retention, Air Check, responsive/accessible editing, atomic rollback, and stale-base recovery are deterministic | DESKTOP-ENHANCED | — | HIGH | `lib/app/channel_studio_view.dart`; `lib/app/channel_air_check.dart`; Studio/Air Check/controller tests; expanded and compact goldens | Physical Windows keyboard/screen-reader and Tune-in composition remain separate evidence |
+| Editing generated channels | Upstream does not expose the hidden CRUD service as normal UI | Generated Studio inspection keeps programming read-only, saves identity against an expected base, and duplicates the complete recipe into a new custom ID/free number without mutating the source channel | DESKTOP-ENHANCED | — | HIGH | `lib/app/channel_studio_view.dart`; Studio/controller/builder tests | Keep generated programming owned by Generate lineup |
 | Delete channel | No normal upstream editor | Confirmed deletion, rollback, and focus restoration | DESKTOP-ENHANCED | — | HIGH | `lib/app/lineup_shell.dart`; UI tests | Channels |
 | Whole-state save transactions | Serialized persistence and scoped state owners | One controller queue serializes mutation, snapshot, save, commit, and rollback across state domains; delayed/failing cross-domain races are deterministic | DESKTOP-ENHANCED | — | HIGH | `lib/app/lineup_controller.dart`; cross-domain controller tests | Persistence |
 | Corrupt/transient state recovery | Startup distinguishes invalid/quarantined state | Malformed or schema-invalid JSON is moved aside and starts empty with a dismissible banner; missing state starts empty, while transient reads and quarantine failures stop startup without replacing data | PARITY | — | HIGH | `lib/persistence/app_store.dart`; store/controller/app tests | Physical app-data smoke remains P2 evidence |
@@ -360,9 +372,10 @@ synchronous per-strategy facts it can prove; review separates exact create,
 update, unchanged, remove, and final sets. Final commit progress remains
 deliberately indeterminate and noncancelable because that save is atomic and
 expected to be short. Its Step 3 surface owns applying, failed, and complete
-states, and only Done exits a completed setup.
-The editor keeps generated and otherwise non-lossless sources read-only while
-allowing metadata changes without changing provenance.
+states. Completion opens the lineup or starts a separate custom draft only
+after the generated transaction succeeds. Channel Studio keeps generated
+programming read-only while allowing stale-safe identity edits and lossless
+duplication into a custom draft.
 
 ### Guide
 
@@ -502,14 +515,15 @@ worker could not re-access those supplied files, which limits that worker's
 independent reinspection without invalidating the earlier comparisons. No
 private fact or personal path is reproduced here.
 
-Current Desktop visual evidence consists of 25 committed macOS goldens. The 20
+Current Desktop visual evidence consists of 27 committed macOS goldens. The 20
 1280×720 baselines cover terminal auth failure; profiles and protected-profile
 PIN; server and audio setup; Channel Setup libraries, strategies, review,
 progress, and completion, with failure covered structurally; Guide without
 playback, Guide PiP, and Overlay Guide; OSD, rich Now Playing, mini Guide, audio
 rail, and long subtitle rail; plus Settings over playback in Ember & Steel and
 Slate & Pine. Five additional 1920×1080 baselines cover Mini Guide, OSD, Rich
-Now Playing, Profiles, and Channel Setup review.
+Now Playing, Profiles, and Channel Setup review. Two Channel Studio baselines
+cover expanded authoring at 1280×720 and compact authoring at 800×600.
 
 The 2026-08-26 campaign updated ten existing 1280×720 files:
 `mini-guide-1280x720.png`, `player-osd-1280x720.png`,
@@ -527,10 +541,10 @@ accurate for their dated verification scopes.
 
 ## Mechanical summary
 
-The matrix contains **147 capabilities**:
+The matrix contains **148 capabilities**:
 
-- 55 **PARITY**;
-- 27 **DESKTOP-ENHANCED**;
+- 54 **PARITY**;
+- 29 **DESKTOP-ENHANCED**;
 - 15 **INTENTIONAL DESKTOP ADAPTATION**;
 - 9 **PARTIAL**;
 - 11 **MISSING**;
@@ -819,6 +833,15 @@ The local build proves macOS UI feasibility, not playback. The live CI proves
 the exact source tree compiles on Windows. The owner report is meaningful
 surface evidence that native video and fullscreen work, but does not by itself
 establish broad format/HDR/subtitle/audio, transition, or package support.
+
+Fresh Channel Studio closeout verification on 2026-08-27 audited the committed
+range through Slice 6 baseline `a99695425b216b59102e1dea893933708bfe0962`
+plus the reviewed current Slice 7 Studio correction, its direct tests, and six
+documentation updates. Both formatting commands checked 63 files with zero
+changes; analysis reported no issues; the full timezone-pinned suite passed 613
+tests; and the macOS release build succeeded at 51.0 MB. These are
+deterministic/widget, macOS pixel, and build facts. No physical Windows or
+native-media campaign was run.
 
 ## Audit limitations
 
