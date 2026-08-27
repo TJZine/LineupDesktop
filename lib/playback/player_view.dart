@@ -845,31 +845,9 @@ class _Osd extends StatelessWidget {
           Positioned(
             top: 24,
             right: horizontalInset,
-            child: Semantics(
-              container: true,
-              button: false,
-              label: 'Channel ${channel.number}, ${channel.name}',
-              child: DecoratedBox(
-                key: const Key('player-osd-channel-bug'),
-                decoration: BoxDecoration(
-                  color: roles.overlaySurface.withValues(alpha: 0.88),
-                  borderRadius: BorderRadius.circular(999),
-                  border: Border.all(color: roles.subtleBorder),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 7,
-                  ),
-                  child: Text(
-                    '${channel.number} • ${channel.name}',
-                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                      color: roles.primaryText,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-              ),
+            child: _ChannelBug(
+              key: const Key('player-osd-channel-bug'),
+              channel: channel,
             ),
           ),
         progressLine,
@@ -895,6 +873,40 @@ class _OsdTitle extends StatelessWidget {
           ?.copyWith(fontWeight: FontWeight.w800),
     ),
   );
+}
+
+class _ChannelBug extends StatelessWidget {
+  const _ChannelBug({required this.channel, super.key});
+
+  final Channel channel;
+
+  @override
+  Widget build(BuildContext context) {
+    final roles = LineupTheme.of(context);
+    return Semantics(
+      container: true,
+      button: false,
+      label: 'Channel ${channel.number}, ${channel.name}',
+      excludeSemantics: true,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: roles.overlaySurface.withValues(alpha: 0.88),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: roles.subtleBorder),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+          child: Text(
+            '${channel.number} • ${channel.name}',
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+              color: roles.primaryText,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _NowPlaying extends StatelessWidget {
@@ -927,224 +939,298 @@ class _NowPlaying extends StatelessWidget {
     final generation = controller.lineup.contentGeneration;
     final elapsed = controller.guide.now.difference(program.scheduled.start);
     final span = program.scheduled.end.difference(program.scheduled.start);
-    final progress = span.inMilliseconds <= 0
+    final nativeDuration = controller.duration;
+    final nativeTimingAvailable = nativeDuration > Duration.zero;
+    final timingDuration = nativeTimingAvailable ? nativeDuration : span;
+    final rawTimingPosition = nativeTimingAvailable
+        ? controller.position
+        : elapsed;
+    final timingPosition = timingDuration <= Duration.zero
+        ? Duration.zero
+        : Duration(
+            milliseconds: rawTimingPosition.inMilliseconds
+                .clamp(0, timingDuration.inMilliseconds)
+                .toInt(),
+          );
+    final progress = timingDuration.inMilliseconds <= 0
         ? 0.0
-        : (elapsed.inMilliseconds / span.inMilliseconds).clamp(0.0, 1.0);
+        : timingPosition.inMilliseconds / timingDuration.inMilliseconds;
     final episode = _episodeLabel(item);
-    final badges = <String>{
-      if (item.year != null) '${item.year}',
+    final dynamicRange = _dynamicRangeLabel(item.dynamicRange, telemetry.isHdr);
+    final badges = <String>[
       ?item.contentRating,
-      ...item.genres.take(3),
-      ?item.resolution,
-      if (telemetry.width != null && telemetry.height != null)
-        '${telemetry.width}×${telemetry.height}',
-      ?item.videoCodec,
-      ?telemetry.videoCodec,
-      ?item.audioCodec,
-      if (item.audioChannels case final channels?) '${channels}ch',
-      if (telemetry.isHdr) 'HDR' else ?item.dynamicRange,
+      if (item.resolution case final resolution?) resolution.toUpperCase(),
+      ?dynamicRange,
+      if (item.audioCodec case final audioCodec?) audioCodec.toUpperCase(),
+      if (item.audioChannels case final channels?) _audioChannels(channels),
+    ];
+    final editorial = [
+      if (item.year != null) '${item.year}',
+      ...item.genres.where((genre) => genre.trim().isNotEmpty).take(3),
+    ].join(' • ');
+    final itemResolution = item.resolution?.toLowerCase();
+    final dimensions = telemetry.width != null && telemetry.height != null
+        ? '${telemetry.width}×${telemetry.height}'
+        : null;
+    final dimensionsMatchCatalog =
+        dimensions != null &&
+        ((itemResolution == '1080p' && telemetry.height == 1080) ||
+            (itemResolution == '720p' && telemetry.height == 720) ||
+            (itemResolution == '4k' &&
+                telemetry.height != null &&
+                telemetry.height! >= 2000));
+    final runtimeFacts = <String>[
+      if (dimensions != null && !dimensionsMatchCatalog) dimensions,
+      if (telemetry.videoCodec case final videoCodec?) videoCodec.toUpperCase(),
       ?telemetry.hardwareDecoder,
-    }.toList(growable: false);
+    ];
+    final playbackFacts = runtimeFacts.isEmpty
+        ? switch (item.videoCodec) {
+            final codec? when codec.trim().isNotEmpty =>
+              'Source • ${codec.toUpperCase()}',
+            _ => null,
+          }
+        : ['Playback', ...runtimeFacts].join(' • ');
+    final playbackTime =
+        '${_duration(timingPosition)} / ${_duration(timingDuration)}';
     final semanticFacts = [
       'Now playing',
-      if (channel != null) 'Channel ${channel.number}, ${channel.name}',
       ?item.showTitle,
       item.title,
       ?episode,
-      '${_time(context, program.scheduled.start)} to ${_time(context, program.scheduled.end)}',
-      '${(progress * 100).round()} percent complete',
-      if (controller.duration > Duration.zero)
-        '${_duration(controller.position)} of ${_duration(controller.duration)} playback',
+      if (timingDuration > Duration.zero)
+        '${_humanDuration(timingDuration)} runtime',
+      if (editorial.isNotEmpty) editorial,
       ...badges,
+      ?playbackFacts,
+      '$playbackTime playback',
       ?item.summary,
     ].join('. ');
     final artworkIdentity = (program.id, generation);
 
-    return Align(
-      key: const Key('player-now-playing-surface'),
-      alignment: Alignment.bottomLeft,
-      child: SafeArea(
-        top: false,
-        right: false,
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () {},
-          child: Semantics(
-            container: true,
-            label: semanticFacts,
-            excludeSemantics: true,
-            child: Container(
-              key: const Key('player-now-playing-shelf'),
-              width: shelfWidth,
-              height: shelfHeight,
-              clipBehavior: Clip.antiAlias,
-              decoration: BoxDecoration(
-                border: Border(
-                  top: BorderSide(color: roles.subtleBorder),
-                  right: BorderSide(color: roles.subtleBorder),
-                ),
-                borderRadius: BorderRadius.only(
-                  topRight: const Radius.circular(16),
-                ),
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    roles.scrim.withValues(alpha: 0.62),
-                    roles.overlaySurface.withValues(alpha: 0.86),
-                  ],
-                ),
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  if (showPoster) ...[
-                    SizedBox(
-                      key: const Key('player-now-playing-poster'),
-                      width: (shelfHeight * 2 / 3).clamp(190, 374),
-                      height: shelfHeight,
-                      child: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          posterPath == null
-                              ? _ArtworkFallback(roles: roles)
-                              : _PlayerArtwork(
-                                  key: ValueKey((
-                                    artworkIdentity,
-                                    GuideArtworkKind.poster,
-                                    posterPath,
-                                  )),
-                                  future: controller.guide.artworkFor(program),
-                                  fit: BoxFit.cover,
-                                  fallback: _ArtworkFallback(roles: roles),
-                                ),
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: SizedBox(
-                              width: compact ? 48 : 64,
-                              child: DecoratedBox(
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    colors: [
-                                      Colors.transparent,
-                                      roles.overlaySurface.withValues(
-                                        alpha: 0.72,
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        Align(
+          key: const Key('player-now-playing-surface'),
+          alignment: Alignment.bottomLeft,
+          child: SafeArea(
+            top: false,
+            right: false,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () {},
+              child: Semantics(
+                container: true,
+                label: semanticFacts,
+                excludeSemantics: true,
+                child: Container(
+                  key: const Key('player-now-playing-shelf'),
+                  width: shelfWidth,
+                  height: shelfHeight,
+                  clipBehavior: Clip.antiAlias,
+                  decoration: BoxDecoration(
+                    border: Border(
+                      top: BorderSide(color: roles.subtleBorder),
+                      right: BorderSide(color: roles.subtleBorder),
+                    ),
+                    borderRadius: BorderRadius.only(
+                      topRight: const Radius.circular(16),
+                    ),
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        roles.scrim.withValues(alpha: 0.62),
+                        roles.overlaySurface.withValues(alpha: 0.86),
+                      ],
+                    ),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      if (showPoster) ...[
+                        SizedBox(
+                          key: const Key('player-now-playing-poster'),
+                          width: (shelfHeight * 2 / 3).clamp(190, 374),
+                          height: shelfHeight,
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              posterPath == null
+                                  ? _ArtworkFallback(roles: roles)
+                                  : _PlayerArtwork(
+                                      key: ValueKey((
+                                        artworkIdentity,
+                                        GuideArtworkKind.poster,
+                                        posterPath,
+                                      )),
+                                      future: controller.guide.artworkFor(
+                                        program,
                                       ),
-                                    ],
+                                      fit: BoxFit.cover,
+                                      fallback: _ArtworkFallback(roles: roles),
+                                    ),
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: SizedBox(
+                                  width: compact ? 48 : 64,
+                                  child: DecoratedBox(
+                                    decoration: BoxDecoration(
+                                      gradient: LinearGradient(
+                                        colors: [
+                                          Colors.transparent,
+                                          roles.overlaySurface.withValues(
+                                            alpha: 0.72,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
                                   ),
                                 ),
                               ),
-                            ),
+                            ],
                           ),
-                        ],
-                      ),
-                    ),
-                  ],
-                  Expanded(
-                    child: Padding(
-                      padding: EdgeInsets.fromLTRB(
-                        denseShelf ? 18 : 28,
-                        denseShelf ? 16 : 24,
-                        denseShelf ? 18 : 28,
-                        denseShelf ? 14 : 20,
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          if (channel != null)
-                            Text(
-                              '${channel.number}  •  ${channel.name}',
-                              key: const Key('player-now-playing-channel'),
-                              style: Theme.of(context).textTheme.labelLarge
-                                  ?.copyWith(
-                                    color: roles.progressFill,
-                                    fontWeight: FontWeight.w800,
-                                    letterSpacing: 0.4,
-                                  ),
-                            ),
-                          SizedBox(height: denseShelf ? 6 : 14),
-                          if (preferLogo && logoPath != null)
-                            _NowPlayingIdentity(
-                              key: ValueKey((
-                                artworkIdentity,
-                                GuideArtworkKind.clearLogo,
-                                logoPath,
-                                preferLogo,
-                              )),
-                              controller: controller,
-                              program: program,
-                              compact: denseShelf,
-                            )
-                          else
-                            _NowPlayingTitle(item: item, compact: denseShelf),
-                          if (episode != null) ...[
-                            SizedBox(height: denseShelf ? 8 : 10),
-                            Text(
-                              episode,
-                              key: const Key('player-now-playing-episode'),
-                              style: Theme.of(context).textTheme.titleMedium
-                                  ?.copyWith(
-                                    color: roles.secondaryText,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                            ),
-                          ],
-                          if (!compact && badges.isNotEmpty) ...[
-                            const SizedBox(height: 14),
-                            Wrap(
-                              key: const Key('player-now-playing-badges'),
-                              spacing: 8,
-                              runSpacing: 8,
-                              children: [
-                                for (final badge in badges)
-                                  _NowPlayingBadge(label: badge),
+                        ),
+                      ],
+                      Expanded(
+                        child: Padding(
+                          padding: EdgeInsets.fromLTRB(
+                            denseShelf ? 18 : 28,
+                            denseShelf ? 16 : 24,
+                            denseShelf ? 18 : 28,
+                            denseShelf ? 14 : 20,
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              if (preferLogo && logoPath != null)
+                                _NowPlayingIdentity(
+                                  key: ValueKey((
+                                    artworkIdentity,
+                                    GuideArtworkKind.clearLogo,
+                                    logoPath,
+                                    preferLogo,
+                                  )),
+                                  controller: controller,
+                                  program: program,
+                                  compact: denseShelf,
+                                )
+                              else
+                                _NowPlayingTitle(
+                                  item: item,
+                                  compact: denseShelf,
+                                ),
+                              if (episode != null) ...[
+                                SizedBox(height: denseShelf ? 8 : 10),
+                                Text(
+                                  episode,
+                                  key: const Key('player-now-playing-episode'),
+                                  style: Theme.of(context).textTheme.titleMedium
+                                      ?.copyWith(
+                                        color: roles.secondaryText,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                ),
                               ],
-                            ),
-                          ],
-                          if (item.summary case final summary?) ...[
-                            SizedBox(height: denseShelf ? 8 : 12),
-                            Text(
-                              summary,
-                              key: const Key('player-now-playing-summary'),
-                              maxLines: denseShelf ? 2 : 3,
-                              overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context).textTheme.bodyLarge
-                                  ?.copyWith(
-                                    color: roles.secondaryText,
-                                    height: 1.45,
+                              if (timingDuration > Duration.zero) ...[
+                                SizedBox(height: denseShelf ? 4 : 6),
+                                Text(
+                                  _humanDuration(timingDuration),
+                                  key: const Key('player-now-playing-runtime'),
+                                  style: Theme.of(context).textTheme.bodyMedium
+                                      ?.copyWith(color: roles.mutedText),
+                                ),
+                              ],
+                              if (!compact && badges.isNotEmpty) ...[
+                                const SizedBox(height: 14),
+                                Wrap(
+                                  key: const Key('player-now-playing-badges'),
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  children: [
+                                    for (final badge in badges)
+                                      _NowPlayingBadge(label: badge),
+                                  ],
+                                ),
+                              ],
+                              if (!compact && playbackFacts != null) ...[
+                                SizedBox(height: denseShelf ? 8 : 10),
+                                Text(
+                                  playbackFacts,
+                                  key: const Key(
+                                    'player-now-playing-runtime-facts',
                                   ),
-                            ),
-                          ],
-                          const Spacer(),
-                          LinearProgressIndicator(
-                            key: const Key('player-now-playing-progress'),
-                            value: progress,
-                            minHeight: 5,
-                            color: roles.progressFill,
-                            backgroundColor: roles.progressTrack,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(context).textTheme.bodySmall
+                                      ?.copyWith(color: roles.mutedText),
+                                ),
+                              ],
+                              if (editorial.isNotEmpty) ...[
+                                SizedBox(height: denseShelf ? 8 : 10),
+                                Text(
+                                  editorial,
+                                  key: const Key(
+                                    'player-now-playing-editorial',
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(context).textTheme.bodySmall
+                                      ?.copyWith(color: roles.mutedText),
+                                ),
+                              ],
+                              if (item.summary case final summary?) ...[
+                                SizedBox(height: denseShelf ? 10 : 14),
+                                Text(
+                                  summary,
+                                  key: const Key('player-now-playing-summary'),
+                                  maxLines: denseShelf ? 3 : 4,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(context).textTheme.bodyLarge
+                                      ?.copyWith(
+                                        color: roles.primaryText,
+                                        height: 1.45,
+                                      ),
+                                ),
+                              ],
+                              const Spacer(),
+                              LinearProgressIndicator(
+                                key: const Key('player-now-playing-progress'),
+                                value: progress,
+                                minHeight: 5,
+                                color: roles.progressFill,
+                                backgroundColor: roles.progressTrack,
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                playbackTime,
+                                key: const Key('player-now-playing-time'),
+                                style: Theme.of(context).textTheme.bodyMedium
+                                    ?.copyWith(color: roles.secondaryText),
+                              ),
+                            ],
                           ),
-                          const SizedBox(height: 8),
-                          Text(
-                            [
-                              if (controller.duration > Duration.zero)
-                                '${_duration(controller.position)} / ${_duration(controller.duration)}',
-                              '${_time(context, program.scheduled.start)}–${_time(context, program.scheduled.end)}',
-                            ].join('  •  '),
-                            key: const Key('player-now-playing-time'),
-                            style: Theme.of(context).textTheme.bodyMedium
-                                ?.copyWith(color: roles.secondaryText),
-                          ),
-                        ],
+                        ),
                       ),
-                    ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
           ),
         ),
-      ),
+        if (channel != null)
+          Positioned(
+            top: 24,
+            right: (size.width * 0.05).clamp(24.0, 96.0),
+            child: _ChannelBug(
+              key: const Key('player-now-playing-channel-bug'),
+              channel: channel,
+            ),
+          ),
+      ],
     );
   }
 }
@@ -1996,6 +2082,40 @@ String? _episodeLabel(ChannelItem item) {
     if (season != null) 'Season $season',
     if (episode != null) 'Episode $episode',
   ].join(' • ');
+}
+
+String? _dynamicRangeLabel(String? value, bool telemetryIsHdr) {
+  final catalog = switch (value?.toLowerCase()) {
+    'sdr' => 'SDR',
+    'hdr' => 'HDR',
+    'hdr10' => 'HDR10',
+    'hlg' => 'HLG',
+    'dolbyvision' || 'dolby vision' => 'DOLBY VISION',
+    final value? when value.trim().isNotEmpty => value.toUpperCase(),
+    _ => null,
+  };
+  if (!telemetryIsHdr) return catalog;
+  return switch (catalog) {
+    'HDR10' || 'HLG' || 'DOLBY VISION' => catalog,
+    _ => 'HDR',
+  };
+}
+
+String _audioChannels(int channels) => switch (channels) {
+  1 => 'MONO',
+  2 => 'STEREO',
+  6 => '5.1',
+  8 => '7.1',
+  _ => '${channels}ch',
+};
+
+String _humanDuration(Duration value) {
+  final minutes = value.inMinutes;
+  final hours = minutes ~/ 60;
+  final remainder = minutes.remainder(60);
+  if (hours == 0) return '${remainder}m';
+  if (remainder == 0) return '${hours}h';
+  return '${hours}h ${remainder}m';
 }
 
 String _time(BuildContext context, DateTime value) =>

@@ -244,7 +244,7 @@ without placing credentials in public facts, durable state, URLs, or diagnostics
 | Preferred/forced subtitle autoselection | Stored language and forced policy affect selection | Native tracks expose current runtime state only; Desktop does not parse or retain preferred/forced Plex facts and has no autoselection consumer | MISSING | P2 | HIGH | upstream settings; native track model | Define the required native facts, then add epoch-safe selection |
 | Lossless/surround audio decode | Settings drive passthrough or alternate browser-compatible track | Native playback does not gate decode on passthrough; pinned libmpv/FFmpeg decodes supported DTS-family, TrueHD, and other tracks and sends the result through the system-selected output, normally as PCM | INTENTIONAL DESKTOP ADAPTATION | — | HIGH | native libmpv options; `docs/windows-runtime.md`; `docs/architecture.md` | Validate representative TrueHD/DTS/DTS-HD tracks; add passthrough only as a separate optional feature |
 | Sleep timer | Off/15/30/60/120 and one-minute warning | Off/30/60/90 cycle; stop failure surfaces safely | INTENTIONAL DESKTOP ADAPTATION | — | HIGH | `lib/playback/player_coordinator.dart`; tests | Optional duration/warning parity P3 |
-| Rich Now Playing details | Standard/cinematic details, synopsis, art, cast, badges | One persistent mutually exclusive lower-left shelf preserves its source-informed width while strengthening poster/text and clear-logo/title hierarchy; it shows current scheduled identity, synopsis, timing/progress, available badges, and artwork while leaving the playback canvas visible; cast remains parked because scheduled state has no complete cast/headshot facts | PARITY | — | HIGH | `lib/playback/player_coordinator.dart`; `lib/playback/player_view.dart`; coordinator/widget tests; 1280×720 and 1920×1080 Now Playing goldens | Physical video/AT remains separate evidence |
+| Rich Now Playing details | Standard/cinematic details, synopsis, art, cast, badges | One persistent mutually exclusive lower-left shelf preserves its source-informed width while strengthening poster/text and clear-logo/title hierarchy; it keeps the shared top-right channel bug and shows current scheduled identity, synopsis, year/genres, concise rating/resolution/dynamic-range/audio badges, and artwork while leaving the playback canvas visible. Its source/runtime playback line appears only when those facts exist, and native position/duration are preferred with schedule timing as fallback when native duration is unavailable. The actor/portrait row remains absent because the current `ChannelItem` has no complete actor/headshot facts; upstream circles are portraits, not initials. Up Next and secondary actions remain OSD-owned. | PARITY | — | HIGH | `lib/playback/player_coordinator.dart`; `lib/playback/player_view.dart`; coordinator/widget tests; 1280×720 and 1920×1080 Now Playing goldens | Physical video/AT remains separate evidence |
 | Fullscreen | Player toggle and platform placement | F/F11/button and native window-placement snapshot/rollback/restore; owner reports surface behavior working | NEEDS EVIDENCE | P2 | MEDIUM | Owner report 2026-08-23; Dart/C++ source and tests; no durable exact-commit report | Later DPI/move/minimize/repetition campaign |
 | Channel entry/CH navigation | Digits and CH± remote behaviors | Digit buffer, PageUp/PageDown channels, explicit error, mini Guide paging | DESKTOP-ENHANCED | — | HIGH | player source/tests | Input |
 | Keyboard/media keys | TV remote/playback key map | By default, Player-local pause/play/seek/stop/rewind/fast-forward keyboard/media shortcuts are blocked while PageUp/PageDown surfing, number entry, Guide/Mini Guide tuning, tracks, sleep, menu, and fullscreen remain available; DVR playback controls restores transport UI and those shortcuts | DESKTOP-ENHANCED | — | HIGH | `lib/app/lineup_shell.dart`; `lib/playback/player_view.dart`; tests | Input |
@@ -382,12 +382,17 @@ callbacks; Player transitions honor Reduce Motion, and playback-options rails
 initially focus the selected native track. These are deterministic Flutter
 claims, not physical screen-reader support. A separate persistent rich Now
 Playing lower-left shelf now uses a stronger poster/text and clear-logo/title
-hierarchy while reading the current scheduled program, reusing the bounded
-Guide artwork cache, applying clear-logo fallback, leaving the playback canvas
-visible, and remaining mutually exclusive
-with OSD, mini Guide, tracks, and errors. Cast/headshots and a separate rich-
-details auto-hide preference remain parked. Browser subtitle delivery modes are
-not a Desktop requirement; the remaining P2 question is whether representative
+hierarchy while reading the current scheduled program, retaining the shared
+top-right channel bug, year/genres, concise rating/resolution/dynamic-range/
+audio badges, synopsis, and truth-gated source/runtime playback facts. It
+prefers native position/duration and falls back to schedule timing when native
+duration is unavailable, leaves the playback canvas visible, and remains
+mutually exclusive with OSD, mini Guide, tracks, and errors. The actor/portrait
+row remains absent because the current `ChannelItem` has no complete
+actor/headshot facts; upstream circles are portraits, not initials. Up Next and
+secondary actions remain OSD-owned. Cast/headshots and a separate rich-details
+auto-hide preference remain parked. Browser subtitle delivery modes are not a
+Desktop requirement; the remaining P2 question is whether representative
 native text/image formats and Plex-managed external sidecars all reach libmpv.
 
 ### Settings

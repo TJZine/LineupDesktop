@@ -211,15 +211,23 @@ hardware-decoder facts when available rather than repeating those facts in the
 default OSD.
 
 Press `I` for persistent rich Now Playing details without leaving playback.
-The details surface uses the current scheduled program for channel and episode
-identity, synopsis, schedule progress, available metadata badges, poster, and
-backdrop. When **Prefer official title artwork** is enabled, an available Plex
-clear logo replaces
-the text identity; a missing or failed logo falls back to the title. Pointer
-movement leaves this reading surface open. Press `I` or Back to close it;
-`Down`, `Enter`, click/tap, or a successful enabled transport action replaces it with
-the OSD, while a failed action retains the safe error surface. `A` or `C` opens
-the requested track list directly when that track type is available.
+The details surface keeps the shared top-right channel bug, then uses the
+current scheduled program for title/episode identity, synopsis, year and
+genres, concise rating/resolution/dynamic-range/audio badges, poster, and
+official title artwork. When **Prefer official title artwork** is enabled, an
+available Plex
+clear logo leads the identity and text remains the fallback when the logo is
+missing, disabled, or fails. Its playback line is shown only for facts that are
+available: source/runtime details are separate, and actual native playback
+position/duration are preferred, with schedule timing used when native duration
+is unavailable. The actor/portrait row remains absent because the current
+`ChannelItem` has no complete actor/headshot facts; the upstream circles are
+actor portraits, not initials. Up Next and secondary actions remain owned by
+the OSD. Pointer movement leaves this reading surface open. Press `I` or Back
+to close it; `Down`, `Enter`, click/tap, or a successful enabled transport
+action replaces it with the OSD, while a failed action retains the safe error
+surface. `A` or `C` opens the requested track list directly when that track type
+is available.
 
 The mini Guide displays a bounded group of nearby channels without leaving
 playback. Selecting a row replaces the current tune through the same Player

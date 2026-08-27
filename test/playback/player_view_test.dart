@@ -820,7 +820,7 @@ void main() {
     );
     expect(
       nowPlayingSemantics.properties.label,
-      allOf(contains('1920×1080'), contains('h264')),
+      allOf(contains('H264'), isNot(contains('1920×1080'))),
     );
 
     await tester.pumpWidget(const SizedBox.shrink());
@@ -1769,6 +1769,11 @@ void main() {
 
     expect(find.byKey(const Key('player-now-playing-surface')), findsOneWidget);
     expect(
+      find.byKey(const Key('player-now-playing-channel-bug')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('player-now-playing-channel')), findsNothing);
+    expect(
       tester.getSize(find.byKey(const Key('player-now-playing-shelf'))),
       const Size(1180, 380),
     );
@@ -1788,13 +1793,18 @@ void main() {
     );
     expect(find.text('TV-14'), findsOneWidget);
     expect(
-      find.bySemanticsLabel(
-        RegExp(r'^Now playing\. Channel 7, Channel\..*Program'),
-      ),
+      find.byKey(const Key('player-now-playing-channel-bug')),
+      findsOneWidget,
+    );
+    expect(find.bySemanticsLabel('Channel 7, Channel'), findsOneWidget);
+    expect(find.bySemanticsLabel('7 • Channel'), findsNothing);
+    expect(find.text('Source • H264'), findsOneWidget);
+    expect(
+      find.bySemanticsLabel(RegExp(r'^Now playing\..*Program')),
       findsOneWidget,
     );
     expect(
-      find.bySemanticsLabel(RegExp(r'\b\d+ percent complete\b')),
+      find.bySemanticsLabel(RegExp(r'10:00 / 1:00:00 playback')),
       findsOneWidget,
     );
 
@@ -1805,6 +1815,68 @@ void main() {
     expect(find.bySemanticsLabel(RegExp('Playback controls')), findsOneWidget);
 
     semantics.dispose();
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
+  testWidgets(
+    'Now Playing falls back to schedule timing without native duration',
+    (tester) async {
+      final now = DateTime.utc(2026, 1, 15, 3);
+      final fixture = _Fixture(
+        PlayerState.playing,
+        richProgram: true,
+        shortPrograms: true,
+        nativeDuration: Duration.zero,
+        guideClock: () => now,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      );
+      await tester.pump();
+      fixture.player.showNowPlaying();
+      await tester.pumpAndSettle();
+
+      expect(find.text('30:00 / 1:00:00'), findsOneWidget);
+      expect(
+        tester
+            .widget<LinearProgressIndicator>(
+              find.byKey(const Key('player-now-playing-progress')),
+            )
+            .value,
+        0.5,
+      );
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    },
+  );
+
+  testWidgets('runtime HDR overrides stale catalog SDR', (tester) async {
+    final fixture = _Fixture(
+      PlayerState.playing,
+      richItemOverride: _fixtureItem(
+        0,
+        rich: true,
+        duration: const Duration(hours: 1),
+        dynamicRange: 'SDR',
+      ),
+      nativeTelemetry: const PlayerTelemetry(gamma: 'pq'),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+    await tester.pump();
+    fixture.player.showNowPlaying();
+    await tester.pumpAndSettle();
+
+    expect(find.bySemanticsLabel(RegExp(r'\. HDR\.')), findsOneWidget);
+    expect(find.bySemanticsLabel(RegExp(r'\. SDR\.')), findsNothing);
+
     await tester.pumpWidget(const SizedBox.shrink());
     fixture.dispose();
   });
@@ -2511,6 +2583,7 @@ ChannelItem _fixtureItem(
   String? title,
   String? summary,
   bool includeClearLogo = true,
+  String? dynamicRange,
   required Duration duration,
 }) => ChannelItem(
   id: '${index == 0 ? 'program' : 'program-$index'}$suffix',
@@ -2535,6 +2608,7 @@ ChannelItem _fixtureItem(
   seasonNumber: rich ? 2 : null,
   episodeNumber: rich ? 6 : null,
   resolution: rich ? '1080p' : null,
+  dynamicRange: dynamicRange,
   videoCodec: rich ? 'h264' : null,
 );
 

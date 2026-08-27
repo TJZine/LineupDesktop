@@ -25,6 +25,8 @@ const _goldenKey = Key('visual-acceptance-boundary');
 final _fixedNow = DateTime.utc(2026, 1, 15, 3, 17);
 final _syntheticArtwork = File('assets/branding/lineup-logo-mark.png')
     .readAsBytesSync();
+final _syntheticWordmark = File('assets/branding/lineup-wordmark.png')
+    .readAsBytesSync();
 
 void main() {
   setUpAll(_loadPinnedTestFont);
@@ -522,6 +524,7 @@ void main() {
   testWidgets('player Now Playing', (tester) async {
     final fixture =
         _readyFixture(
+            useWordmarkArtwork: true,
             playerState: const PlayerStatus(
               state: PlayerState.playing,
               message: 'Playing',
@@ -532,9 +535,10 @@ void main() {
     await _pump(tester, fixture.build());
     await _openDestination(tester, 'Player');
     final context = tester.element(find.byKey(_goldenKey));
-    await tester.runAsync(
-      () => precacheImage(MemoryImage(_syntheticArtwork), context),
-    );
+    await tester.runAsync(() async {
+      await precacheImage(MemoryImage(_syntheticArtwork), context);
+      await precacheImage(MemoryImage(_syntheticWordmark), context);
+    });
     await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
     await tester.pump();
 
@@ -550,6 +554,7 @@ void main() {
   testWidgets('player Now Playing at 1920x1080', (tester) async {
     final fixture =
         _readyFixture(
+            useWordmarkArtwork: true,
             playerState: const PlayerStatus(
               state: PlayerState.playing,
               message: 'Playing',
@@ -560,9 +565,10 @@ void main() {
     await _pump(tester, fixture.build(), viewport: const Size(1920, 1080));
     await _openDestination(tester, 'Player');
     final context = tester.element(find.byKey(_goldenKey));
-    await tester.runAsync(
-      () => precacheImage(MemoryImage(_syntheticArtwork), context),
-    );
+    await tester.runAsync(() async {
+      await precacheImage(MemoryImage(_syntheticArtwork), context);
+      await precacheImage(MemoryImage(_syntheticWordmark), context);
+    });
     await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
     await tester.pump();
 
@@ -873,6 +879,7 @@ Future<void> _openDestination(WidgetTester tester, String destination) async {
 UiFixture _readyFixture({
   PlayerStatus? playerState,
   List<PlayerTrack>? tracks,
+  bool useWordmarkArtwork = false,
 }) {
   final player = FixturePlayer();
   if (playerState != null) {
@@ -904,6 +911,7 @@ UiFixture _readyFixture({
     );
   }
   final controller = _VisualController()
+    ..useWordmarkArtwork = useWordmarkArtwork
     ..stage = SetupStage.ready
     ..channels = _channels
     ..currentChannelId = _channels[1].id;
@@ -916,12 +924,16 @@ UiFixture _readyFixture({
 
 class _VisualController extends FixtureController {
   Map<String, LibraryScanFact> scanFacts = const {};
+  bool useWordmarkArtwork = false;
 
   @override
   Map<String, LibraryScanFact> get libraryScanFacts => scanFacts;
 
   @override
-  Future<Uint8List?> artworkForPath(Uri path) async => _syntheticArtwork;
+  Future<Uint8List?> artworkForPath(Uri path) async =>
+      useWordmarkArtwork && path.toString().contains('logo')
+      ? _syntheticWordmark
+      : _syntheticArtwork;
 
   @override
   Future<ScheduleIndex> loadScheduleFor(Channel channel) async => buildSchedule(
