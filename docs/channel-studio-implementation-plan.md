@@ -135,6 +135,13 @@ Every slice and reviewer must preserve these contracts:
     libraries.
 17. A full 1,000-number lineup has an explicit no-number-available state. New
     and duplicate drafts never fall back to an occupied number.
+18. The ready controller derives one immutable, descriptor-compatible view of
+    the current media and playlist inventories for the selected Plex endpoint.
+    Source validation, preview/Guide scheduling, and the media-first playback
+    lookup all consume that same view. Compatibility requires the existing
+    positive-duration/nonempty-part `PlexMediaItem.isPlayable` fact and the
+    complete-part `PlexClient.playbackDescriptor` contract; no weaker
+    eligibility model or alternate playback path may be introduced.
 
 ## Acceptance ledger
 
@@ -446,11 +453,20 @@ Guide, player, and old editor tests directly forced by these public contracts.
    quarantines an older generated channel. Studio enforces its 2-through-5
    authoring range in Slice 4.
 9. Give `LineupController` one playback-item lookup that searches current
-   `availableMedia` first, then playable items from current video playlists in
-   deterministic playlist/item order. `playbackFor` uses that lookup so every
-   playlist-only item accepted by resolution can tune. Do not copy playlist
-   items into durable state, broaden library selection, or add another playback
-   model.
+   descriptor-compatible media first, then descriptor-compatible items from
+   current video playlists in deterministic playlist/item order.
+   `playbackFor` uses that lookup so every playlist-only item accepted by
+   resolution can tune. Do not copy playlist items into durable state, broaden
+   library selection, or add another playback model.
+10. At the controller boundary, derive one immutable playable inventory for the
+    current endpoint by requiring `PlexMediaItem.isPlayable` and checking every
+    item's complete part list with the existing `PlexClient.playbackDescriptor`
+    contract. Pass those exact media and playlist projections to source
+    validation, synchronous scheduling, and the schedule worker, and search the
+    same projections for playback. Reuse a projection until the endpoint or
+    either authoritative inventory changes so worker identity remains stable. A
+    missing endpoint has no descriptor-compatible inventory. Do not weaken
+    same-server URI validation or duplicate it in the resolver.
 
 **Required tests:**
 
@@ -469,6 +485,14 @@ Guide, player, and old editor tests directly forced by these public contracts.
 - A playable item present only in the current playlist inventory resolves,
   previews, saves, and produces a playback request. Duplicate IDs use the
   documented `availableMedia`-first precedence.
+- A playlist item with no part, zero duration, or a cross-origin part, including
+  a hostile part later in a multipart item, is rejected before validation,
+  preview/scheduling, or save can accept it. A valid same-server multipart
+  playlist item still resolves and tunes through the existing descriptor path.
+- Unchanged endpoint and inventory identities reuse the same immutable playable
+  projections and schedule worker. Replacing media, playlists, or the endpoint
+  rebuilds both, re-evaluates descriptor compatibility, and cannot reuse an
+  eligibility result derived for the prior server origin.
 
 **Focused verification:**
 
@@ -487,10 +511,11 @@ git diff --check
 ready application, a legitimate current manual channel intentionally schedules
 an item absent from `availableMedia`, or strict filter failure would quarantine
 otherwise recoverable state during load. Keep persisted source records intact
-and move the fail-closed behavior to the resolver boundary rather than silently
-broadening or deleting data. Also stop if a playlist item lacks the same
-playable Plex descriptor facts required by `_playbackRequest`; do not paper over
-that mismatch with a second playback path.
+and move the fail-closed behavior to the resolver/controller inventory boundary
+rather than silently broadening or deleting data. The reviewed controller can
+derive descriptor compatibility from its selected endpoint and existing Plex
+client; stop again if doing so would require persisting filtered inventory,
+changing the trusted-origin policy, or adding a second playback path.
 
 ## Slice 3 — full-page Studio routing, identity, and ownership modes
 
