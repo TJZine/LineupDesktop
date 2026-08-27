@@ -1294,9 +1294,9 @@ class _SettingsViewState extends State<SettingsView> {
                       ),
               ),
               SwitchListTile(
-                title: const Text('Prefer clear logos'),
+                title: const Text('Prefer official title artwork'),
                 subtitle: const Text(
-                  'Use Plex title logos in Guide details when available.',
+                  'Use official Plex title artwork in Guide and Player surfaces when available.',
                 ),
                 value: value.preferClearLogos,
                 onChanged: _saving
@@ -1346,6 +1346,20 @@ class _SettingsViewState extends State<SettingsView> {
                     : (item) => _update(
                         widget.controller.settings.copyWith(
                           osdAutoHideSeconds: item,
+                        ),
+                      ),
+              ),
+              SwitchListTile(
+                title: const Text('DVR playback controls'),
+                subtitle: const Text(
+                  'Show transport controls and enable pause, seek, stop, and media-key shortcuts in Player.',
+                ),
+                value: value.dvrControlsEnabled,
+                onChanged: _saving
+                    ? null
+                    : (item) => _update(
+                        widget.controller.settings.copyWith(
+                          dvrControlsEnabled: item,
                         ),
                       ),
               ),

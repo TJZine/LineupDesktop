@@ -102,6 +102,7 @@ void main() {
   ) async {
     final fixture = _Fixture(
       PlayerState.playing,
+      dvrControlsEnabled: true,
       tracks: const [
         PlayerTrack(id: 1, type: PlayerTrackType.audio, selected: true),
         PlayerTrack(id: 2, type: PlayerTrackType.subtitle, selected: false),
@@ -137,10 +138,78 @@ void main() {
     fixture.dispose();
   });
 
+  testWidgets('classic TV mode hides and ignores DVR transport controls', (
+    tester,
+  ) async {
+    final fixture = _Fixture(PlayerState.playing);
+    fixture.player.showOsd();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byTooltip('Previous channel'), findsNothing);
+    expect(find.byTooltip('Play'), findsNothing);
+    expect(find.byTooltip('Next channel'), findsNothing);
+    for (final key in [
+      LogicalKeyboardKey.space,
+      LogicalKeyboardKey.keyJ,
+      LogicalKeyboardKey.keyK,
+      LogicalKeyboardKey.keyL,
+      LogicalKeyboardKey.arrowLeft,
+      LogicalKeyboardKey.arrowRight,
+      LogicalKeyboardKey.mediaPlay,
+      LogicalKeyboardKey.mediaPause,
+      LogicalKeyboardKey.mediaPlayPause,
+      LogicalKeyboardKey.mediaStop,
+      LogicalKeyboardKey.mediaRewind,
+      LogicalKeyboardKey.mediaFastForward,
+    ]) {
+      await tester.sendKeyEvent(key);
+    }
+    expect(fixture.native.transportCommands, 0);
+    expect(fixture.player.overlay, PlayerOverlay.osd);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
+  testWidgets('classic TV mode keeps PageUp and PageDown channel surfing', (
+    tester,
+  ) async {
+    final fixture = _Fixture(PlayerState.playing, channelCount: 2);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.pageDown);
+    await tester.pump();
+    await tester.pump();
+    expect(fixture.lineup.currentChannelId, 'channel-1');
+    await tester.sendKeyEvent(LogicalKeyboardKey.pageUp);
+    await tester.pump();
+    await tester.pump();
+    expect(fixture.lineup.currentChannelId, 'channel');
+    final afterSurfing = fixture.native.transportCommands;
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    expect(fixture.native.transportCommands, afterSurfing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
   testWidgets('media Stop reports failures without an unhandled error', (
     tester,
   ) async {
-    final fixture = _Fixture(PlayerState.playing, failStop: true);
+    final fixture = _Fixture(
+      PlayerState.playing,
+      dvrControlsEnabled: true,
+      failStop: true,
+    );
     await tester.pumpWidget(
       MaterialApp(
         home: PlayerView(controller: fixture.player, openGuide: () {}),
@@ -357,7 +426,7 @@ void main() {
   testWidgets('core player keyboard controls work while the OSD is visible', (
     tester,
   ) async {
-    final fixture = _Fixture(PlayerState.playing);
+    final fixture = _Fixture(PlayerState.playing, dvrControlsEnabled: true);
     fixture.player.showOsd();
     await tester.pumpWidget(
       MaterialApp(
@@ -419,6 +488,12 @@ void main() {
         tester.getSize(find.byKey(const Key('player-osd-surface'))).width,
         size.width,
       );
+      final progressLine = tester.getRect(
+        find.byKey(const Key('player-osd-progress-line')),
+      );
+      expect(progressLine.left, 0, reason: '$size');
+      expect(progressLine.width, size.width, reason: '$size');
+      expect(progressLine.bottom, size.height, reason: '$size');
       expect(tester.takeException(), isNull, reason: '$size');
     }
 
@@ -553,7 +628,7 @@ void main() {
           lessThanOrEqualTo(surface.right),
           reason: '$size',
         );
-        expect(progress.center.dy, closeTo(controls.center.dy, 16));
+        expect(progress.center.dy, closeTo(controls.center.dy, 24));
       } else {
         expect(
           find.byKey(const Key('player-osd-stacked-controls')),
@@ -604,7 +679,7 @@ void main() {
       PlayerState.buffering,
       PlayerState.unsupported,
     ]) {
-      final fixture = _Fixture(state);
+      final fixture = _Fixture(state, dvrControlsEnabled: true);
       fixture.player.showOsd();
       await tester.pumpWidget(
         MaterialApp(
@@ -618,7 +693,7 @@ void main() {
       final status = tester.widget<Text>(
         find.byKey(const Key('player-osd-status')),
       );
-      expect(status.data, contains('Channel'));
+      expect(status.data, isNot(contains('Channel')));
       expect(status.data, contains(_statusLabelForTest(state)));
       if (state == PlayerState.unsupported) {
         for (final icon in [
@@ -641,6 +716,60 @@ void main() {
     }
   });
 
+  testWidgets('OSD uses official title artwork with a text fallback', (
+    tester,
+  ) async {
+    final cases = [
+      (fixture: _Fixture(PlayerState.playing, richProgram: true), logo: true),
+      (
+        fixture: _Fixture(
+          PlayerState.playing,
+          richProgram: true,
+          preferClearLogos: false,
+        ),
+        logo: false,
+      ),
+      (
+        fixture: _Fixture(
+          PlayerState.playing,
+          richProgram: true,
+          failArtwork: true,
+        ),
+        logo: false,
+      ),
+    ];
+    for (final item in cases) {
+      await item.fixture.guide.ensureCurrentProgram('channel');
+      item.fixture.player.showOsd();
+      await tester.pumpWidget(
+        MaterialApp(
+          key: ValueKey(item.logo),
+          home: PlayerView(controller: item.fixture.player, openGuide: () {}),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('player-osd-logo')),
+        item.logo ? findsOneWidget : findsNothing,
+      );
+      if (item.logo) {
+        expect(
+          tester
+              .widget<Semantics>(
+                find.byKey(const Key('player-osd-logo-semantics')),
+              )
+              .properties
+              .label,
+          'Program',
+        );
+      } else {
+        expect(find.byKey(const Key('player-osd-title')), findsOneWidget);
+      }
+      await tester.pumpWidget(const SizedBox.shrink());
+      item.fixture.dispose();
+    }
+  });
+
   testWidgets('OSD keeps its widescreen hierarchy at DPR2', (tester) async {
     final fixture = _Fixture(PlayerState.playing);
     tester.view
@@ -660,6 +789,12 @@ void main() {
     final surface = tester.getSize(find.byKey(const Key('player-osd-surface')));
     expect(surface.width, 1920);
     expect(surface.height / 1080, lessThan(0.20));
+    final progressLine = tester.getRect(
+      find.byKey(const Key('player-osd-progress-line')),
+    );
+    expect(progressLine.left, 0);
+    expect(progressLine.width, 1920);
+    expect(progressLine.bottom, 1080);
     expect(
       find.byKey(const Key('player-osd-horizontal-layout')),
       findsOneWidget,
@@ -668,6 +803,41 @@ void main() {
 
     await tester.pumpWidget(const SizedBox.shrink());
     fixture.dispose();
+  });
+
+  testWidgets('DVR seek target stays clear of OSD action buttons', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    final fixture = _Fixture(PlayerState.playing, dvrControlsEnabled: true);
+    for (final size in const [Size(1280, 720), Size(1920, 1080)]) {
+      await tester.binding.setSurfaceSize(size);
+      fixture.player.showOsd();
+      await tester.pumpWidget(
+        MaterialApp(
+          key: ValueKey(size),
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      );
+      await tester.pump();
+      final seekTarget = tester.getRect(
+        find.byKey(const Key('player-osd-progress-line')),
+      );
+      final actions = tester.getRect(
+        find.byKey(const Key('player-osd-action-groups')),
+      );
+      expect(seekTarget.overlaps(actions), isFalse, reason: '$size');
+      expect(
+        find.bySemanticsLabel('Playback progress'),
+        findsOneWidget,
+        reason: '$size',
+      );
+    }
+    await tester.binding.setSurfaceSize(null);
+    fixture.player.closeOverlay();
+    await tester.pump();
+    fixture.dispose();
+    semantics.dispose();
   });
 
   testWidgets('player overlays retain 1280x720 layout at DPR2', (tester) async {
@@ -1480,6 +1650,7 @@ void main() {
   ) async {
     final fixture = _Fixture(
       PlayerState.playing,
+      dvrControlsEnabled: true,
       richProgram: true,
       tracks: const [
         PlayerTrack(id: 1, type: PlayerTrackType.audio, selected: true),
@@ -1986,6 +2157,7 @@ class _Fixture {
     Duration? overlayTimeout,
     bool richProgram = false,
     bool preferClearLogos = true,
+    bool dvrControlsEnabled = false,
     bool failArtwork = false,
     bool blockArtwork = false,
     bool shortPrograms = false,
@@ -1997,6 +2169,7 @@ class _Fixture {
       channelCount,
       richProgram: richProgram,
       preferClearLogos: preferClearLogos,
+      dvrControlsEnabled: dvrControlsEnabled,
       failArtwork: failArtwork,
       blockArtwork: blockArtwork,
       shortPrograms: shortPrograms,
@@ -2045,6 +2218,7 @@ class _Lineup extends LineupController {
     int channelCount, {
     bool richProgram = false,
     bool preferClearLogos = true,
+    bool dvrControlsEnabled = false,
     this.failArtwork = false,
     this.blockArtwork = false,
     bool shortPrograms = false,
@@ -2097,7 +2271,10 @@ class _Lineup extends LineupController {
       growable: false,
     );
     currentChannelId = 'channel';
-    settings = LineupSettings(preferClearLogos: preferClearLogos);
+    settings = LineupSettings(
+      preferClearLogos: preferClearLogos,
+      dvrControlsEnabled: dvrControlsEnabled,
+    );
     stage = SetupStage.ready;
   }
 

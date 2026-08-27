@@ -92,6 +92,30 @@ class _PlayerViewState extends State<PlayerView> {
       }
       return KeyEventResult.handled;
     }
+    final dvrControlsEnabled = controller.lineup.settings.dvrControlsEnabled;
+    final ordinaryPlayerContext =
+        controller.overlay == PlayerOverlay.none ||
+        controller.overlay == PlayerOverlay.osd ||
+        controller.overlay == PlayerOverlay.nowPlaying;
+    final mediaTransportKey =
+        key == LogicalKeyboardKey.mediaPlay ||
+        key == LogicalKeyboardKey.mediaPause ||
+        key == LogicalKeyboardKey.mediaPlayPause ||
+        key == LogicalKeyboardKey.mediaStop ||
+        key == LogicalKeyboardKey.mediaRewind ||
+        key == LogicalKeyboardKey.mediaFastForward;
+    final keyboardTransportKey =
+        key == LogicalKeyboardKey.space ||
+        key == LogicalKeyboardKey.keyJ ||
+        key == LogicalKeyboardKey.keyK ||
+        key == LogicalKeyboardKey.keyL ||
+        key == LogicalKeyboardKey.arrowLeft ||
+        key == LogicalKeyboardKey.arrowRight;
+    if (!dvrControlsEnabled &&
+        (mediaTransportKey ||
+            (ordinaryPlayerContext && keyboardTransportKey))) {
+      return KeyEventResult.handled;
+    }
     final unsupported = controller.status.state == PlayerState.unsupported;
     final selects =
         key == LogicalKeyboardKey.enter ||
@@ -481,6 +505,7 @@ class _Osd extends StatelessWidget {
       (track) => track.type == PlayerTrackType.subtitle,
     );
     final unsupported = controller.status.state == PlayerState.unsupported;
+    final dvrControlsEnabled = controller.lineup.settings.dvrControlsEnabled;
     final quality = _quality(controller.telemetry);
     final expanded = !LineupLayout.isCompactWidth(size.width);
     // 720p desktop still has enough room for the broadcast-style progress
@@ -565,73 +590,61 @@ class _Osd extends StatelessWidget {
         ),
       ),
     ];
-    final identity = Row(
+    final title = program?.scheduled.item.title ?? 'Nothing playing';
+    final logoPath = program == null
+        ? null
+        : _artworkPath(program.scheduled.item, GuideArtworkKind.clearLogo);
+    final identity = Column(
       key: const Key('player-osd-identity'),
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (channel != null)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: roles.progressFill,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              '${channel.number}',
-              style: TextStyle(
-                color: roles.onFocus,
-                fontWeight: FontWeight.w900,
+        if (controller.lineup.settings.preferClearLogos &&
+            program != null &&
+            logoPath != null)
+          Semantics(
+            key: const Key('player-osd-logo-semantics'),
+            label: title,
+            image: true,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 320, maxHeight: 68),
+              child: _PlayerArtwork(
+                key: ValueKey((
+                  program.id,
+                  controller.lineup.contentGeneration,
+                  logoPath,
+                )),
+                imageKey: const Key('player-osd-logo'),
+                future: controller.guide.artworkFor(
+                  program,
+                  GuideArtworkKind.clearLogo,
+                ),
+                fit: BoxFit.contain,
+                fallback: _OsdTitle(title: title),
               ),
             ),
-          ),
-        const SizedBox(width: 14),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                program?.scheduled.item.title ??
-                    channel?.name ??
-                    'Nothing playing',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.titleLarge
-                    ?.copyWith(fontWeight: FontWeight.w700),
-              ),
-              Text(
-                [
-                  channel?.name,
-                  program?.scheduled.item.showTitle,
-                  _statusLabel(controller.status.state),
-                  if (quality.isNotEmpty) quality,
-                ].nonNulls.join(' • '),
-                key: const Key('player-osd-status'),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.bodyMedium
-                    ?.copyWith(color: roles.secondaryText),
-              ),
-            ],
-          ),
+          )
+        else
+          _OsdTitle(title: title),
+        const SizedBox(height: 4),
+        Text(
+          [
+            program?.scheduled.item.showTitle,
+            _statusLabel(controller.status.state),
+            if (quality.isNotEmpty) quality,
+          ].nonNulls.join(' • '),
+          key: const Key('player-osd-status'),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: Theme.of(context).textTheme.bodyMedium
+              ?.copyWith(color: roles.secondaryText),
         ),
       ],
     );
+    final progressValue = duration <= 0 ? 0.0 : position.toDouble() / duration;
     final progress = Column(
       key: const Key('player-osd-progress-block'),
       mainAxisSize: MainAxisSize.min,
       children: [
-        Semantics(
-          label: 'Playback progress',
-          value:
-              '${_duration(controller.position)} of ${_duration(controller.duration)}',
-          child: Slider(
-            value: position.toDouble(),
-            max: (duration <= 0 ? 1 : duration).toDouble(),
-            onChanged: duration <= 0 || unsupported
-                ? null
-                : (value) =>
-                      controller.seekTo(Duration(milliseconds: value.round())),
-          ),
-        ),
         Row(
           children: [
             Text(
@@ -681,78 +694,183 @@ class _Osd extends StatelessWidget {
       key: const Key('player-osd-action-groups'),
       mainAxisSize: MainAxisSize.min,
       children: [
-        actionGroup(transportActions, separated: false),
-        actionGroup(optionActions),
+        if (dvrControlsEnabled) actionGroup(transportActions, separated: false),
+        actionGroup(optionActions, separated: dvrControlsEnabled),
         actionGroup(windowActions),
       ],
     );
-    return Align(
-      alignment: Alignment.bottomCenter,
-      child: SafeArea(
-        top: false,
-        child: Container(
-          key: const Key('player-osd-surface'),
-          width: double.infinity,
-          padding: EdgeInsets.fromLTRB(
-            horizontalInset,
-            horizontal
-                ? (size.height >= 900 ? 44 : 20)
-                : (size.height >= 720 ? 56 : 40),
-            horizontalInset,
-            8,
-          ),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                Colors.transparent,
-                roles.scrim.withValues(alpha: 0.08),
-                roles.scrim.withValues(alpha: 0.30),
-                roles.scrim.withValues(alpha: 0.45),
-              ],
-              stops: const [0, 0.20, 0.60, 1],
-            ),
-          ),
-          child: Semantics(
-            container: true,
-            label: 'Playback controls',
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (horizontal)
-                  Row(
-                    key: const Key('player-osd-horizontal-layout'),
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Expanded(flex: 5, child: identity),
-                      const SizedBox(width: 24),
-                      Expanded(flex: 4, child: progress),
-                      const SizedBox(width: 24),
-                      groupedActions,
-                    ],
-                  )
-                else ...[
-                  identity,
-                  const SizedBox(height: 6),
-                  progress,
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: Row(
-                      key: const Key('player-osd-stacked-controls'),
-                      mainAxisSize: MainAxisSize.min,
-                      children: [groupedActions],
-                    ),
+    final progressLine = Positioned(
+      key: const Key('player-osd-progress-line'),
+      left: 0,
+      right: 0,
+      bottom: 0,
+      child: SizedBox(
+        height: 40,
+        child: Semantics(
+          label: 'Playback progress',
+          value:
+              '${_duration(controller.position)} of ${_duration(controller.duration)}',
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              Align(
+                alignment: Alignment.bottomCenter,
+                child: SizedBox(
+                  height: 4,
+                  child: LinearProgressIndicator(
+                    value: progressValue,
+                    color: roles.progressFill,
+                    backgroundColor: roles.progressTrack,
                   ),
-                ],
-              ],
-            ),
+                ),
+              ),
+              if (dvrControlsEnabled)
+                SliderTheme(
+                  data: SliderTheme.of(context).copyWith(
+                    trackHeight: 4,
+                    activeTrackColor: Colors.transparent,
+                    inactiveTrackColor: Colors.transparent,
+                    thumbShape: SliderComponentShape.noThumb,
+                    overlayShape: SliderComponentShape.noOverlay,
+                  ),
+                  child: Slider(
+                    value: position.toDouble(),
+                    max: (duration <= 0 ? 1 : duration).toDouble(),
+                    onChanged: duration <= 0 || unsupported
+                        ? null
+                        : (value) => controller.seekTo(
+                            Duration(milliseconds: value.round()),
+                          ),
+                  ),
+                ),
+            ],
           ),
         ),
       ),
     );
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        Align(
+          alignment: Alignment.bottomCenter,
+          child: SafeArea(
+            top: false,
+            child: Container(
+              key: const Key('player-osd-surface'),
+              width: double.infinity,
+              padding: EdgeInsets.fromLTRB(
+                horizontalInset,
+                horizontal
+                    ? (size.height >= 900 ? 44 : 20)
+                    : (size.height >= 720 ? 56 : 40),
+                horizontalInset,
+                12 + (dvrControlsEnabled ? 40 : 0),
+              ),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.transparent,
+                    roles.scrim.withValues(alpha: 0.08),
+                    roles.scrim.withValues(alpha: 0.30),
+                    roles.scrim.withValues(alpha: 0.45),
+                  ],
+                  stops: const [0, 0.20, 0.60, 1],
+                ),
+              ),
+              child: Semantics(
+                container: true,
+                label: 'Playback controls',
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (horizontal)
+                      Row(
+                        key: const Key('player-osd-horizontal-layout'),
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Expanded(flex: 5, child: identity),
+                          const SizedBox(width: 24),
+                          Expanded(flex: 4, child: progress),
+                          const SizedBox(width: 24),
+                          groupedActions,
+                        ],
+                      )
+                    else ...[
+                      identity,
+                      const SizedBox(height: 6),
+                      progress,
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: Row(
+                          key: const Key('player-osd-stacked-controls'),
+                          mainAxisSize: MainAxisSize.min,
+                          children: [groupedActions],
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+        if (channel != null)
+          Positioned(
+            top: 24,
+            right: horizontalInset,
+            child: Semantics(
+              container: true,
+              button: false,
+              label: 'Channel ${channel.number}, ${channel.name}',
+              child: DecoratedBox(
+                key: const Key('player-osd-channel-bug'),
+                decoration: BoxDecoration(
+                  color: roles.overlaySurface.withValues(alpha: 0.88),
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(color: roles.subtleBorder),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 7,
+                  ),
+                  child: Text(
+                    '${channel.number} • ${channel.name}',
+                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      color: roles.primaryText,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        progressLine,
+      ],
+    );
   }
+}
+
+class _OsdTitle extends StatelessWidget {
+  const _OsdTitle({required this.title});
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    label: title,
+    child: Text(
+      title,
+      key: const Key('player-osd-title'),
+      maxLines: 2,
+      overflow: TextOverflow.ellipsis,
+      style: Theme.of(context).textTheme.titleLarge
+          ?.copyWith(fontWeight: FontWeight.w800),
+    ),
+  );
 }
 
 class _NowPlaying extends StatelessWidget {
@@ -1125,12 +1243,14 @@ class _PlayerArtwork extends StatelessWidget {
     required this.future,
     required this.fit,
     this.fallback = const SizedBox.shrink(),
+    this.imageKey,
     super.key,
   });
 
   final Future<Uint8List?> future;
   final BoxFit fit;
   final Widget fallback;
+  final Key? imageKey;
 
   @override
   Widget build(BuildContext context) => FutureBuilder<Uint8List?>(
@@ -1139,6 +1259,7 @@ class _PlayerArtwork extends StatelessWidget {
         ? fallback
         : Image.memory(
             snapshot.data!,
+            key: imageKey,
             fit: fit,
             gaplessPlayback: false,
             excludeFromSemantics: true,

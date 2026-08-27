@@ -30,6 +30,7 @@ class LineupSettings {
     this.guideLayoutMode = GuideLayoutMode.pictureInPicture,
     this.guideInfoBackgroundMode = GuideInfoBackgroundMode.bleed,
     this.preferClearLogos = true,
+    this.dvrControlsEnabled = false,
     this.libraryTabsEnabled = true,
     this.nowWatchingBanner = true,
     this.osdAutoHideSeconds = 4,
@@ -47,6 +48,7 @@ class LineupSettings {
   final GuideLayoutMode guideLayoutMode;
   final GuideInfoBackgroundMode guideInfoBackgroundMode;
   final bool preferClearLogos;
+  final bool dvrControlsEnabled;
   final bool libraryTabsEnabled;
   final bool nowWatchingBanner;
   final int osdAutoHideSeconds;
@@ -64,6 +66,7 @@ class LineupSettings {
     GuideLayoutMode? guideLayoutMode,
     GuideInfoBackgroundMode? guideInfoBackgroundMode,
     bool? preferClearLogos,
+    bool? dvrControlsEnabled,
     bool? libraryTabsEnabled,
     bool? nowWatchingBanner,
     int? osdAutoHideSeconds,
@@ -81,6 +84,7 @@ class LineupSettings {
     guideInfoBackgroundMode:
         guideInfoBackgroundMode ?? this.guideInfoBackgroundMode,
     preferClearLogos: preferClearLogos ?? this.preferClearLogos,
+    dvrControlsEnabled: dvrControlsEnabled ?? this.dvrControlsEnabled,
     libraryTabsEnabled: libraryTabsEnabled ?? this.libraryTabsEnabled,
     nowWatchingBanner: nowWatchingBanner ?? this.nowWatchingBanner,
     osdAutoHideSeconds: osdAutoHideSeconds ?? this.osdAutoHideSeconds,
@@ -100,6 +104,7 @@ class LineupSettings {
     'guideLayoutMode': guideLayoutMode.name,
     'guideInfoBackgroundMode': guideInfoBackgroundMode.name,
     'preferClearLogos': preferClearLogos,
+    'dvrControlsEnabled': dvrControlsEnabled,
     'libraryTabsEnabled': libraryTabsEnabled,
     'nowWatchingBanner': nowWatchingBanner,
     'osdAutoHideSeconds': osdAutoHideSeconds,
@@ -126,6 +131,7 @@ class LineupSettings {
       'guideLayoutMode',
       'guideInfoBackgroundMode',
       'preferClearLogos',
+      'dvrControlsEnabled',
       'libraryTabsEnabled',
       'nowWatchingBanner',
       'osdAutoHideSeconds',
@@ -136,7 +142,9 @@ class LineupSettings {
       'diagnosticsEnabled',
     };
     final keys = json.keys.toSet();
-    if (!keys.containsAll(fields) || keys.difference(fields).isNotEmpty) {
+    final requiredFields = fields.difference({'dvrControlsEnabled'});
+    if (!keys.containsAll(requiredFields) ||
+        keys.difference(fields).isNotEmpty) {
       throw const FormatException('Settings fields are not canonical');
     }
 
@@ -159,6 +167,11 @@ class LineupSettings {
       final persisted = json[key];
       if (persisted is! bool) throw FormatException('Invalid $key');
       return persisted;
+    }
+
+    bool optionalBoolean(String key, {required bool fallback}) {
+      if (!json.containsKey(key)) return fallback;
+      return boolean(key);
     }
 
     return LineupSettings(
@@ -185,6 +198,10 @@ class LineupSettings {
         (mode) => mode.name,
       ),
       preferClearLogos: boolean('preferClearLogos'),
+      dvrControlsEnabled: optionalBoolean(
+        'dvrControlsEnabled',
+        fallback: false,
+      ),
       libraryTabsEnabled: boolean('libraryTabsEnabled'),
       nowWatchingBanner: boolean('nowWatchingBanner'),
       osdAutoHideSeconds: option(
