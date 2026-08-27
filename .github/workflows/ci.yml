@@ -46,6 +46,9 @@ jobs:
           channel: stable
           cache: true
       - id: golden
+        env:
+          # Golden baselines include localized schedule times.
+          TZ: America/New_York
         run: flutter test test/app/ui_acceptance_golden_test.dart
       - name: Upload golden failure images
         if: ${{ failure() && steps.golden.outcome == 'failure' }}
