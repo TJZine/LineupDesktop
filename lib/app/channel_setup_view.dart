@@ -29,11 +29,18 @@ typedef _PlanImpact = ({
 });
 
 class UpstreamChannelSetupView extends StatefulWidget {
-  const UpstreamChannelSetupView({required this.controller, super.key});
+  const UpstreamChannelSetupView({
+    required this.controller,
+    this.onViewLineup,
+    this.onAddCustomChannel,
+    super.key,
+  });
 
   static const maxContentWidth = 1440.0;
 
   final LineupController controller;
+  final VoidCallback? onViewLineup;
+  final VoidCallback? onAddCustomChannel;
 
   @override
   State<UpstreamChannelSetupView> createState() =>
@@ -968,12 +975,21 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
           primary: const SizedBox.shrink(),
         ),
         _BuildPhase.complete => _SetupFooter(
-          secondary: const [],
+          secondary: [
+            OutlinedButton.icon(
+              onPressed:
+                  widget.onAddCustomChannel ??
+                  widget.controller.completeChannelSetup,
+              icon: const Icon(Icons.add),
+              label: const Text('Add a custom channel'),
+            ),
+          ],
           primary: FilledButton.icon(
             focusNode: _phaseActionFocus,
-            onPressed: widget.controller.completeChannelSetup,
+            onPressed:
+                widget.onViewLineup ?? widget.controller.completeChannelSetup,
             icon: const Icon(Icons.arrow_forward),
-            label: const Text('Done'),
+            label: const Text('View lineup'),
           ),
         ),
         _BuildPhase.review => _SetupFooter(

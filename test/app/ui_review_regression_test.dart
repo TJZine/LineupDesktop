@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/channel_setup_view.dart';
+import 'package:lineup_desktop/app/channel_studio_view.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/app/lineup_shell.dart';
 import 'package:lineup_desktop/channels/channel.dart';
@@ -210,7 +211,7 @@ void main() {
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
     await openDestination(tester, 'Channels');
-    await tester.tap(find.text('Create channel'));
+    await tester.tap(find.text('New channel'));
     await tester.pumpAndSettle();
 
     expect(find.text('Include watched items'), findsOneWidget);
@@ -241,7 +242,7 @@ void main() {
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
     await openDestination(tester, 'Channels');
-    await tester.tap(find.text('Create channel'));
+    await tester.tap(find.text('New channel'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextFormField).first, 'Movies');
 
@@ -251,12 +252,7 @@ void main() {
     await tester.tap(find.text('Save channel'));
     await tester.pumpAndSettle();
 
-    expect(
-      find.text(
-        'The selected library is no longer available. Choose another library.',
-      ),
-      findsOneWidget,
-    );
+    expect(find.text('Select a library.'), findsOneWidget);
   });
 
   testWidgets('manual channel edits retain unavailable selected items', (
@@ -303,8 +299,7 @@ void main() {
           builder: (context) => TextButton(
             onPressed: () => showDialog<void>(
               context: context,
-              builder: (_) =>
-                  ChannelEditor(controller: controller, channel: channel),
+              builder: (_) => _studio(controller, channel),
             ),
             child: const Text('Open editor'),
           ),
@@ -314,8 +309,8 @@ void main() {
     await tester.tap(find.text('Open editor'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Unavailable • retained until removed'), findsOneWidget);
-    await tester.tap(find.text('Save channel'));
+    expect(find.text('Unavailable — retained until removed'), findsOneWidget);
+    await tester.tap(find.text('Save changes'));
     await tester.pumpAndSettle();
 
     final source = controller.channels.single.source as ManualSource;
@@ -408,15 +403,16 @@ void main() {
 
       await _openChannelEditor(tester, controller, original);
 
-      expect(find.text('Channel source (read-only)'), findsOneWidget);
+      expect(
+        find.text('Programming is read-only and will be preserved exactly.'),
+        findsOneWidget,
+      );
       expect(find.text('Entire library'), findsNothing);
       expect(find.text('Hand-picked'), findsNothing);
       expect(find.textContaining('Convert'), findsNothing);
       await tester.enterText(find.byType(TextFormField).first, 'Renamed');
       await tester.enterText(find.byType(TextFormField).at(1), '42');
-      await tester.tap(find.text(_modeLabel(testCase.savedMode)));
-      await tester.pump();
-      await tester.tap(find.text('Save channel'));
+      await tester.tap(find.text('Save identity'));
       await tester.pumpAndSettle();
 
       final saved = controller.channels.single;
@@ -426,8 +422,8 @@ void main() {
       expect(saved.builderKey, original.builderKey);
       expect(saved.anchor, original.anchor);
       expect(saved.shuffleSeed, original.shuffleSeed);
-      expect(saved.playbackMode, testCase.savedMode);
-      expect(saved.blockSize, testCase.savedBlockSize);
+      expect(saved.playbackMode, testCase.initialMode);
+      expect(saved.blockSize, testCase.initialBlockSize);
     });
   }
 
@@ -480,7 +476,7 @@ void main() {
       );
       await _openChannelEditor(tester, controller, channel);
       expect(
-        find.text('Channel source (read-only)'),
+        find.text('Programming is read-only and will be preserved exactly.'),
         readOnly ? findsOneWidget : findsNothing,
       );
       expect(
@@ -520,17 +516,17 @@ void main() {
 
     await _openChannelEditor(tester, controller, original);
     await tester.enterText(find.byType(TextFormField).first, 'Cancelled');
-    await tester.tap(find.text('Cancel'));
+    await tester.tap(find.text('Back to Channels'));
     await tester.pumpAndSettle();
     expect(controller.channels.single.toJson(), original.toJson());
 
     await _openChannelEditor(tester, controller, original);
     await tester.enterText(find.byType(TextFormField).first, 'Failed');
-    await tester.tap(find.text('Save channel'));
+    await tester.ensureVisible(find.text('Save identity'));
+    await tester.tap(find.text('Save identity'));
     await tester.pumpAndSettle();
 
     expect(controller.channels.single.toJson(), original.toJson());
-    expect(find.text('The channel could not be saved.'), findsOneWidget);
   });
 
   testWidgets('settings dropdowns stay disabled until persistence completes', (
@@ -696,7 +692,7 @@ void main() {
     expect(find.bySemanticsLabel('Applying channels'), findsOneWidget);
     expect(find.text('Back'), findsNothing);
     expect(find.text('Cancel'), findsNothing);
-    expect(find.text('Done'), findsNothing);
+    expect(find.text('View lineup'), findsNothing);
     expect(controller.stage, SetupStage.channelSetup);
 
     controller.finishApply();
@@ -710,8 +706,8 @@ void main() {
       1,
     );
     expect(controller.stage, SetupStage.channelSetup);
-    expect(Focus.of(tester.element(find.text('Done'))).hasFocus, isTrue);
-    await tester.tap(find.text('Done'));
+    expect(Focus.of(tester.element(find.text('View lineup'))).hasFocus, isTrue);
+    await tester.tap(find.text('View lineup'));
     await tester.pumpAndSettle();
     expect(controller.stage, SetupStage.ready);
   });
@@ -803,8 +799,7 @@ Future<void> _openChannelEditor(
         builder: (context) => TextButton(
           onPressed: () => showDialog<void>(
             context: context,
-            builder: (_) =>
-                ChannelEditor(controller: controller, channel: channel),
+            builder: (_) => _studio(controller, channel),
           ),
           child: const Text('Open editor'),
         ),
@@ -815,11 +810,21 @@ Future<void> _openChannelEditor(
   await tester.pumpAndSettle();
 }
 
-String _modeLabel(PlaybackMode mode) => switch (mode) {
-  PlaybackMode.sequential => 'Sequential',
-  PlaybackMode.shuffle => 'Shuffle',
-  PlaybackMode.block => 'Blocks',
-};
+Widget _studio(FixtureController controller, Channel channel) => Scaffold(
+  body: Builder(
+    builder: (context) => ChannelStudioView(
+      controller: controller,
+      mode: channel.builderKey == null
+          ? ChannelStudioMode.editCustom
+          : ChannelStudioMode.inspectGenerated,
+      channel: channel,
+      onBack: (_) async => Navigator.of(context).maybePop(),
+      onSaved: (_) {},
+      onDuplicate: (_) {},
+      onTune: (_) async => false,
+    ),
+  ),
+);
 
 final _studioMovie = PlexMediaItem(
   id: 'studio-movie',

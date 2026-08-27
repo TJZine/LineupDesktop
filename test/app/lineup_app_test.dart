@@ -59,7 +59,7 @@ void main() {
     expect(controller.stage, SetupStage.servers);
   });
 
-  testWidgets('successful Channel Setup opens the Guide only after Done', (
+  testWidgets('successful Channel Setup opens Channels after durable apply', (
     tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(1280, 720));
@@ -79,7 +79,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Build Channels'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('This will replace your current lineup'));
+    await tester.tap(find.text('Remove 0 generated channels'));
     await tester.pump();
     await tester.tap(find.text('Confirm & Replace'));
     await tester.pumpAndSettle();
@@ -87,15 +87,72 @@ void main() {
     expect(controller.stage, SetupStage.channelSetup);
     expect(find.text('Your lineup is ready'), findsOneWidget);
     expect(find.bySemanticsLabel('Channel update complete'), findsOneWidget);
-    expect(find.bySemanticsLabel('Remove: 0'), findsOneWidget);
+    expect(find.bySemanticsLabel('Generated removed: 0'), findsOneWidget);
     expect(find.bySemanticsLabel('Final: 2'), findsOneWidget);
-    expect(find.text('Done'), findsOneWidget);
+    expect(find.text('View lineup'), findsOneWidget);
+    expect(find.text('Add a custom channel'), findsOneWidget);
 
-    await tester.tap(find.text('Done'));
+    await tester.tap(find.text('View lineup'));
     await tester.pumpAndSettle();
 
     expect(controller.stage, SetupStage.ready);
-    expect(find.byTooltip('Open Lineup menu'), findsOneWidget);
+    expect(find.text('Channels'), findsWidgets);
+  });
+
+  testWidgets('Channel Setup Add custom opens a fresh exhausted draft', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 720));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final controller = _ChannelSetupController()
+      ..stage = SetupStage.channelSetup
+      ..libraries = const [
+        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
+      ];
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      LineupBootstrap(player: _FakePlayer(), controller: controller),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Configure channels'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Build Channels'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Remove 0 generated channels'));
+    await tester.pump();
+    await tester.tap(find.text('Confirm & Replace'));
+    await tester.pumpAndSettle();
+
+    controller.channels = [
+      for (var number = 1; number <= 1000; number++)
+        Channel(
+          id: 'occupied-$number',
+          number: number,
+          name: 'Occupied $number',
+          source: const ManualSource([]),
+          playbackMode: PlaybackMode.sequential,
+          anchor: DateTime.utc(2026),
+          shuffleSeed: number,
+        ),
+    ];
+    controller.notifyListeners();
+    await tester.pump();
+    await tester.tap(find.text('Add a custom channel'));
+    await tester.pumpAndSettle();
+
+    expect(controller.stage, SetupStage.ready);
+    expect(find.text('Create custom channel'), findsOneWidget);
+    expect(
+      find.textContaining('No channel numbers are available'),
+      findsOneWidget,
+    );
+    expect(
+      tester
+          .widget<TextFormField>(find.byKey(const Key('studio-number')))
+          .controller!
+          .text,
+      isEmpty,
+    );
   });
 
   testWidgets('startup announcement is a labeled live region', (tester) async {

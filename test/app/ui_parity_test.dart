@@ -82,7 +82,7 @@ void main() {
         expect(
           tester
               .widget<OutlinedButton>(
-                find.widgetWithText(OutlinedButton, 'Channel builder'),
+                find.widgetWithText(OutlinedButton, 'Generate lineup'),
               )
               .focusNode
               ?.hasFocus,
@@ -123,7 +123,7 @@ void main() {
       await tester.pumpAndSettle();
 
       await openDestination(tester, 'Channels');
-      expect(find.text('Open Channel builder'), findsOneWidget);
+      expect(find.text('Generate lineup'), findsWidgets);
       expect(tester.takeException(), isNull, reason: 'Channels at $size');
       if (size.width >= 2560) {
         expect(
@@ -332,7 +332,7 @@ void main() {
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
     await openDestination(tester, 'Channels');
-    await tester.tap(find.text('Create channel'));
+    await tester.tap(find.text('New channel'));
     await tester.pumpAndSettle();
 
     await tester.enterText(find.byType(TextFormField).first, '');
