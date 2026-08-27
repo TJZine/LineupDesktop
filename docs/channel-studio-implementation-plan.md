@@ -1019,6 +1019,21 @@ the fixes those proofs require.
 11. Use deterministic synthetic titles/artwork only. No credentials, private
     metadata, personal paths, or captured live screenshots enter the repository.
 
+**Reviewed in-slice golden baseline correction (2026-08-27):** Slice 6 stopped
+at commit `36fc5c0f2362d4bb25569da4e766aa0da2fadb25` when the canonical full
+golden update also changed the existing
+`channel-setup-review-1280x720.png` and
+`channel-setup-review-1920x1080.png` baselines. Side-by-side failure artifacts
+confirmed that the only differences are the accepted Slice 1 ownership copy
+and counts: replace now names generated channels, identifies generated removals,
+and states that custom channels are kept. Those two historical baselines were
+not refreshed in Slice 1 because goldens were outside that slice's write set.
+Slice 6 is therefore authorized to refresh exactly those two existing Channel
+Setup goldens, after visual inspection, alongside the two new Studio goldens.
+They do not expand the two-image Studio golden set. No other non-Studio golden
+change is authorized, and generated `test/app/failures/` comparison artifacts
+must not be committed.
+
 **Focused verification:**
 
 ```sh
@@ -1038,7 +1053,9 @@ investigated, not accepted wholesale.
 
 **Stop/replan if:** 200 percent text or 800x600 requires hiding Air Check,
 keyboard parity would require drag-only behavior, shared UI changes regress
-other destinations, or a golden differs outside the intended Studio surface.
+other destinations, or a golden differs outside the intended Studio surface
+other than the two exact reviewed Channel Setup baseline corrections authorized
+above.
 
 ## Slice 7 — documentation, full verification, and closeout audit
 
