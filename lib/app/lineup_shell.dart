@@ -512,6 +512,7 @@ class ChannelsView extends StatefulWidget {
 }
 
 class _ChannelsViewState extends State<ChannelsView> {
+  Future<void>? _generateLineupEntry;
   String? _error;
   ChannelStudioMode? _studioMode;
   Channel? _studioChannel;
@@ -594,6 +595,17 @@ class _ChannelsViewState extends State<ChannelsView> {
     await requestLeave(focusId);
   }
 
+  Future<void> _openGenerateLineupFromStudio() =>
+      _generateLineupEntry ??= _enterGenerateLineupFromStudio();
+
+  Future<void> _enterGenerateLineupFromStudio() async {
+    try {
+      if (await requestLeave()) await widget.controller.enterChannelSetup();
+    } finally {
+      _generateLineupEntry = null;
+    }
+  }
+
   void _showList(String? focusId) {
     setState(() {
       _studioMode = null;
@@ -629,6 +641,7 @@ class _ChannelsViewState extends State<ChannelsView> {
           onBack: closeStudio,
           onSaved: (id) => _returnFocusId = id,
           onDuplicate: _openDuplicate,
+          onOpenGenerateLineup: _openGenerateLineupFromStudio,
           onTune: (id) async {
             final success = await widget.player.tune(id);
             if (success) widget.onOpenPlayer();

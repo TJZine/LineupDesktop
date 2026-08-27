@@ -163,6 +163,13 @@ class LineupController extends ChangeNotifier {
   String? startupRecoveryNotice;
 
   int get contentGeneration => _contentGeneration;
+
+  ({List<PlexMediaItem> media, List<PlexPlaylist> playlists})
+  get playableInventory {
+    _ensurePlayableInventory();
+    return (media: _playableMedia, playlists: _playablePlaylists);
+  }
+
   Map<String, LibraryScanFact> get libraryScanFacts => _libraryScanFacts;
 
   Future<void> initialize() async {

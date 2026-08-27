@@ -7,6 +7,7 @@ import 'package:http/testing.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/channels/channel_builder.dart';
+import 'package:lineup_desktop/channels/content_resolver.dart';
 import 'package:lineup_desktop/channels/schedule_worker.dart';
 import 'package:lineup_desktop/persistence/app_store.dart';
 import 'package:lineup_desktop/plex/plex_client.dart';
@@ -2274,6 +2275,13 @@ void main() {
                     parts: [PlexMediaPart(path: '/zero')],
                   ),
                   PlexMediaItem(
+                    id: 'empty-path',
+                    title: 'Empty path',
+                    type: 'movie',
+                    duration: const Duration(minutes: 1),
+                    parts: [PlexMediaPart(path: '')],
+                  ),
+                  PlexMediaItem(
                     id: 'hostile',
                     title: 'Hostile',
                     type: 'movie',
@@ -2289,6 +2297,8 @@ void main() {
       addTearDown(controller.dispose);
       final channel = _playlistChannel('invalid-playlist');
 
+      expect(controller.playableInventory.playlists.single.items, isEmpty);
+
       expect(() => controller.scheduleFor(channel), throwsFormatException);
       await expectLater(
         controller.loadScheduleFor(channel),
@@ -2298,7 +2308,7 @@ void main() {
         controller.saveChannel(channel, expectedBase: null),
         throwsFormatException,
       );
-      for (final id in ['no-part', 'zero', 'hostile']) {
+      for (final id in ['no-part', 'zero', 'empty-path', 'hostile']) {
         expect(() => controller.playbackFor(id), throwsA(isA<PlexException>()));
       }
       expect(controller.channels, isEmpty);
@@ -2320,6 +2330,8 @@ void main() {
         () => missingEndpoint.scheduleFor(_channel('missing')),
         throwsFormatException,
       );
+      expect(missingEndpoint.playableInventory.media, isEmpty);
+      expect(missingEndpoint.playableInventory.playlists, isEmpty);
       expect(plex.playbackItems, isEmpty);
 
       final broken =
@@ -2371,6 +2383,13 @@ void main() {
       ];
       final channel = _playlistChannel('multipart-channel');
 
+      final playable = controller.playableInventory;
+      expect(playable.playlists.single.items.single.id, 'multipart');
+      expect(
+        playable.playlists.single.items.single.parts.first.duration,
+        isNull,
+      );
+
       expect(controller.scheduleFor(channel).items.single.id, 'multipart');
       await controller.saveChannel(channel, expectedBase: null);
       expect(
@@ -2403,6 +2422,12 @@ void main() {
       addTearDown(controller.dispose);
       final channel = _channel('stable');
 
+      final exposed = controller.playableInventory;
+      final exposedAgain = controller.playableInventory;
+      expect(identical(exposed.media, exposedAgain.media), isTrue);
+      expect(identical(exposed.playlists, exposedAgain.playlists), isTrue);
+      expect(() => exposed.media.add(_playableMovie), throwsUnsupportedError);
+
       await controller.loadScheduleFor(channel);
       await controller.loadScheduleFor(channel);
       expect(mediaInputs, hasLength(1));
@@ -2411,6 +2436,8 @@ void main() {
       final firstPlaylists = playlistInputs.single;
 
       controller.availableMedia = List.of(controller.availableMedia);
+      final rebuilt = controller.playableInventory;
+      expect(identical(rebuilt.media, exposed.media), isFalse);
       await controller.loadScheduleFor(channel);
       expect(mediaInputs, hasLength(2));
       expect(identical(mediaInputs.last, firstMedia), isFalse);
@@ -2447,6 +2474,154 @@ void main() {
         throwsFormatException,
       );
       expect(mediaInputs, hasLength(5));
+    },
+  );
+
+  test(
+    'custom source variants persist and reload with exact programming',
+    () async {
+      final store = _MemoryStore();
+      final selected = _server('server');
+      final fresh = PlexMediaItem(
+        id: 'movie',
+        title: 'Fresh movie',
+        type: 'movie',
+        duration: const Duration(minutes: 2),
+        libraryId: 'movies',
+        genres: const ['Comedy'],
+        parts: [PlexMediaPart(path: '/movie')],
+      );
+      final playlistItem = PlexMediaItem(
+        id: 'playlist-item',
+        title: 'Playlist item',
+        type: 'movie',
+        duration: const Duration(minutes: 3),
+        parts: [PlexMediaPart(path: '/playlist-item')],
+      );
+      final episodes = [
+        for (final show in ['a', 'b'])
+          for (var episode = 1; episode <= 5; episode++)
+            PlexMediaItem(
+              id: '$show$episode',
+              title: '$show$episode',
+              type: 'episode',
+              duration: const Duration(minutes: 20),
+              libraryId: 'shows',
+              grandparentTitle: 'Show $show',
+              parts: [PlexMediaPart(path: '/$show$episode')],
+            ),
+      ];
+      final controller = LineupController(
+        store: store,
+        credentials: _MemoryCredentials(),
+        plex: _FakePlex(),
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+      controller
+        ..account = const PlexAccount(id: 'owner', name: 'Owner', email: '')
+        ..server = selected
+        ..connection = selected.connections.single
+        ..availableMedia = [fresh, ...episodes]
+        ..availablePlaylists = [
+          PlexPlaylist(
+            id: 'playlist',
+            title: 'Playlist',
+            items: [playlistItem],
+          ),
+        ];
+
+      Channel custom(int number, ContentSource source) => Channel(
+        id: 'custom-$number',
+        number: number,
+        name: 'Custom $number',
+        source: source,
+        playbackMode: PlaybackMode.sequential,
+        anchor: DateTime.utc(2026),
+        shuffleSeed: number,
+      );
+
+      final expected = [
+        custom(
+          1,
+          const LibrarySource(
+            libraryId: 'movies',
+            libraryType: PlexLibraryType.movie,
+          ),
+        ),
+        custom(2, const PlaylistSource('playlist')),
+        custom(
+          3,
+          const LibrarySource(
+            libraryId: 'movies',
+            libraryType: PlexLibraryType.movie,
+            includeWatched: false,
+            filters: {'genre': 'Comedy', 'sort': 'added:desc'},
+          ),
+        ),
+        custom(
+          4,
+          ManualSource([
+            const ChannelItem(
+              id: 'missing',
+              title: 'Retained missing',
+              duration: Duration(minutes: 4),
+            ),
+            channelItemFor(fresh),
+          ]),
+        ),
+      ];
+      for (final channel in expected) {
+        await controller.saveChannel(channel, expectedBase: null);
+      }
+      const expectedBlockOrders = {
+        2: ['a1', 'a2', 'b1', 'b2', 'a3', 'a4', 'b3', 'b4', 'a5', 'b5'],
+        3: ['a1', 'a2', 'a3', 'b1', 'b2', 'b3', 'a4', 'a5', 'b4', 'b5'],
+        4: ['a1', 'a2', 'a3', 'a4', 'b1', 'b2', 'b3', 'b4', 'a5', 'b5'],
+        5: ['a1', 'a2', 'a3', 'a4', 'a5', 'b1', 'b2', 'b3', 'b4', 'b5'],
+      };
+      for (var size = 2; size <= 5; size++) {
+        await controller.saveChannel(
+          Channel(
+            id: 'block-$size',
+            number: size + 4,
+            name: 'Block $size',
+            source: ManualSource(episodes.map(channelItemFor).toList()),
+            playbackMode: PlaybackMode.block,
+            anchor: DateTime.utc(2026),
+            shuffleSeed: 1,
+            blockSize: size,
+          ),
+          expectedBase: null,
+        );
+      }
+
+      final reloaded = PersistedState.fromJson(store.state.toJson())
+          .channelsByProfileServer['owner']!['server']!;
+      expect(reloaded, hasLength(8));
+      for (var index = 0; index < expected.length; index++) {
+        expect(
+          reloaded[index].source.toJson(),
+          expected[index].source.toJson(),
+        );
+        expect(reloaded[index].builderKey, isNull);
+      }
+      final manual = reloaded[3].source as ManualSource;
+      expect(manual.items.map((item) => item.id), ['missing', 'movie']);
+      expect(manual.items.first.title, 'Retained missing');
+      expect(manual.items.last.title, 'Fresh movie');
+      expect(controller.scheduleFor(reloaded[3]).items.map((item) => item.id), [
+        'movie',
+      ]);
+      for (var size = 2; size <= 5; size++) {
+        final channel = reloaded[size + 2];
+        expect(channel.playbackMode, PlaybackMode.block);
+        expect(channel.blockSize, size);
+        expect(
+          controller.scheduleFor(channel).items.map((item) => item.id),
+          expectedBlockOrders[size],
+        );
+      }
     },
   );
 

@@ -8,6 +8,7 @@ import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/persistence/app_store.dart';
 import 'package:lineup_desktop/playback/native_player.dart';
 import 'package:lineup_desktop/plex/plex_client.dart';
+import 'package:lineup_desktop/plex/plex_models.dart';
 
 /// Deterministic UI states for widget tests. This file is not imported by the
 /// production composition root.
@@ -45,7 +46,13 @@ class FixtureController extends LineupController {
             (_) async => throw StateError('unexpected HTTP'),
           ),
         ),
-      );
+      ) {
+    connection = PlexConnection(
+      uri: Uri.parse('https://synthetic.invalid'),
+      local: true,
+      relay: false,
+    );
+  }
 
   final FixtureStore fixtureStore;
   final bool restoreOnInitialize;

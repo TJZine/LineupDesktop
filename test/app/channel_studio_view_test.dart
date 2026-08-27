@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/channel_studio_view.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/channels/channel.dart';
+import 'package:lineup_desktop/channels/content_resolver.dart';
 import 'package:lineup_desktop/channels/scheduler.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
 
@@ -274,7 +275,9 @@ void main() {
       mode: PlaybackMode.shuffle,
       blockSize: 11,
     );
-    final controller = _RecordingSaveController()..channels = [original];
+    final controller = _RecordingSaveController()
+      ..channels = [original]
+      ..availablePlaylists = [_playlist('playlist-7')];
     addTearDown(controller.dispose);
 
     await tester.pumpWidget(
@@ -306,6 +309,7 @@ void main() {
     );
     controller
       ..channels = [custom]
+      ..availablePlaylists = [_playlist('custom-playlist')]
       ..saved = null;
     await tester.pumpWidget(
       _studio(controller, ChannelStudioMode.editCustom, channel: custom),
@@ -452,7 +456,16 @@ void main() {
     'identity validation names conflicts and focuses the first error',
     (tester) async {
       final controller = FixtureController()
-        ..channels = [_channel(id: 'taken', number: 7, name: 'The Seven')];
+        ..channels = [_channel(id: 'taken', number: 7, name: 'The Seven')]
+        ..libraries = const [
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+        ]
+        ..selectedLibraryIds = {'movies'}
+        ..availableMedia = [_media('valid', libraryId: 'movies')];
       addTearDown(controller.dispose);
       await tester.pumpWidget(
         _studio(controller, ChannelStudioMode.createCustom),
@@ -559,7 +572,9 @@ void main() {
       name: 'Original',
       source: const PlaylistSource('playlist'),
     );
-    final controller = _FailingSaveController()..channels = [original];
+    final controller = _FailingSaveController()
+      ..channels = [original]
+      ..availablePlaylists = [_playlist('playlist')];
     addTearDown(controller.dispose);
     await tester.pumpWidget(
       _studio(controller, ChannelStudioMode.editCustom, channel: original),
@@ -594,7 +609,9 @@ void main() {
       name: 'Original',
       source: const PlaylistSource('playlist'),
     );
-    final controller = _BlockingSaveController()..channels = [original];
+    final controller = _BlockingSaveController()
+      ..channels = [original]
+      ..availablePlaylists = [_playlist('playlist')];
     addTearDown(controller.dispose);
     await tester.pumpWidget(
       _studio(controller, ChannelStudioMode.editCustom, channel: original),
@@ -643,8 +660,13 @@ void main() {
       name: 'Original',
       source: const ManualSource([
         ChannelItem(
-          id: 'retained',
-          title: 'Retained program',
+          id: 'first',
+          title: 'First program',
+          duration: Duration(minutes: 30),
+        ),
+        ChannelItem(
+          id: 'second',
+          title: 'Second program',
           duration: Duration(minutes: 30),
         ),
       ]),
@@ -661,8 +683,54 @@ void main() {
     await tester.tap(find.byTooltip('Open Original'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const Key('studio-name')), 'Draft');
+    await tester.ensureVisible(find.byKey(const Key('studio-rundown-second')));
+    await tester.tap(find.byKey(const Key('studio-rundown-second')));
+    await tester.ensureVisible(find.text('Save changes'));
     await tester.tap(find.text('Save changes'));
     await tester.pump();
+
+    tester
+        .widget<Focus>(
+          find
+              .ancestor(
+                of: find.byKey(const Key('studio-rundown-second')),
+                matching: find.byType(Focus),
+              )
+              .first,
+        )
+        .focusNode!
+        .requestFocus();
+    await tester.pump();
+    void expectOriginalOrder() {
+      expect(find.byKey(const Key('studio-rundown-first')), findsOneWidget);
+      expect(find.byKey(const Key('studio-rundown-second')), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.byKey(const Key('studio-rundown-first'))).dy,
+        lessThan(
+          tester.getTopLeft(find.byKey(const Key('studio-rundown-second'))).dy,
+        ),
+      );
+    }
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
+    await tester.pump();
+    expectOriginalOrder();
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
+    await tester.pump();
+    expectOriginalOrder();
+    await tester.sendKeyEvent(LogicalKeyboardKey.delete);
+    await tester.pump();
+    expectOriginalOrder();
+    expect(
+      (controller.attempted!.source as ManualSource).items.map(
+        (item) => item.id,
+      ),
+      ['first', 'second'],
+    );
 
     await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
     await tester.sendKeyEvent(LogicalKeyboardKey.digit3);
@@ -684,7 +752,8 @@ void main() {
       ..libraries = const [
         PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
       ]
-      ..selectedLibraryIds = {'movies'};
+      ..selectedLibraryIds = {'movies'}
+      ..availableMedia = [_media('movie', libraryId: 'movies')];
     var tuneCalls = 0;
     addTearDown(controller.dispose);
     await tester.pumpWidget(
@@ -696,6 +765,7 @@ void main() {
             onBack: (_) async {},
             onSaved: (_) {},
             onDuplicate: (_) {},
+            onOpenGenerateLineup: () async {},
             onTune: (_) async {
               tuneCalls++;
               return false;
@@ -755,6 +825,7 @@ void main() {
             onBack: (_) async {},
             onSaved: (_) {},
             onDuplicate: (_) {},
+            onOpenGenerateLineup: () async {},
             onTune: (_) async => false,
           ),
         ),
@@ -830,7 +901,9 @@ void main() {
         name: 'External',
         source: const PlaylistSource('playlist'),
       );
-      final controller = _ExpectedBaseController()..channels = [original];
+      final controller = _ExpectedBaseController()
+        ..channels = [original]
+        ..availablePlaylists = [_playlist('playlist')];
       addTearDown(controller.dispose);
       await tester.pumpWidget(
         _studio(controller, ChannelStudioMode.editCustom, channel: original),
@@ -915,6 +988,1358 @@ void main() {
       expect(controller.channels, isEmpty);
     },
   );
+
+  testWidgets('offers exactly four source choices and retains draft values', (
+    tester,
+  ) async {
+    final controller = _RecordingSaveController()
+      ..libraries = const [
+        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
+        PlexLibrary(id: 'shows', title: 'Shows', type: PlexLibraryType.show),
+      ]
+      ..selectedLibraryIds = {'movies', 'shows'}
+      ..availableMedia = [
+        _media('movie', libraryId: 'movies'),
+        _media(
+          'episode',
+          libraryId: 'shows',
+          type: 'episode',
+          showTitle: 'Show',
+        ),
+      ]
+      ..availablePlaylists = [_playlist('favorites'), _playlist('later')];
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      _studio(controller, ChannelStudioMode.createCustom),
+    );
+    await tester.pumpAndSettle();
+
+    for (final label in const [
+      'Library',
+      'Playlist',
+      'Collection or filter',
+      'Hand-picked',
+    ]) {
+      expect(find.text(label), findsOneWidget);
+    }
+    await tester.tap(find.text('Include watched items'));
+    await tester.pump();
+    await tester.tap(find.text('Playlist'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('studio-playlist')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Playlist later').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Library'));
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<SwitchListTile>(find.byType(SwitchListTile)).value,
+      isFalse,
+    );
+    await tester.tap(find.text('Playlist'));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<DropdownButtonFormField<String>>(
+            find.byKey(const Key('studio-playlist')),
+          )
+          .initialValue,
+      'later',
+    );
+    await tester.tap(find.text('Library'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('studio-name')),
+      'Library pick',
+    );
+    await tester.tap(find.text('Save channel'));
+    await tester.pumpAndSettle();
+    final saved = controller.saved!.source as LibrarySource;
+    expect(saved.libraryId, 'movies');
+    expect(saved.libraryType, PlexLibraryType.movie);
+    expect(saved.includeWatched, isFalse);
+  });
+
+  testWidgets('custom mixed sources stay lossless until explicitly replaced', (
+    tester,
+  ) async {
+    final source = MixedSource(
+      interleave: true,
+      sources: [
+        ManualSource([
+          ChannelItem(
+            id: 'one',
+            title: 'One retained',
+            duration: const Duration(minutes: 30),
+          ),
+        ]),
+        const LibrarySource(
+          libraryId: 'movies',
+          libraryType: PlexLibraryType.movie,
+        ),
+      ],
+    );
+    final original = _channel(
+      id: 'mixed',
+      number: 6,
+      name: 'Mixed',
+      source: source,
+    );
+    final controller = _RecordingSaveController()
+      ..channels = [original]
+      ..libraries = const [
+        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
+      ]
+      ..selectedLibraryIds = {'movies'}
+      ..availableMedia = [_media('movie', libraryId: 'movies')];
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      _studio(controller, ChannelStudioMode.editCustom, channel: original),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.textContaining('mixed source is preserved exactly'),
+      findsOneWidget,
+    );
+    await tester.enterText(
+      find.byKey(const Key('studio-name')),
+      'Mixed renamed',
+    );
+    await tester.tap(find.text('Save changes'));
+    await tester.pumpAndSettle();
+    expect(controller.saved!.source.toJson(), source.toJson());
+    expect(controller.saved!.builderKey, isNull);
+  });
+
+  testWidgets('playlist editor saves the selected live playlist', (
+    tester,
+  ) async {
+    final controller = _RecordingSaveController()
+      ..availablePlaylists = [_playlist('playlist')];
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      _studio(controller, ChannelStudioMode.createCustom),
+    );
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Playlist'));
+    await tester.tap(find.text('Playlist'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('studio-name')), 'Playlist');
+    await tester.ensureVisible(find.text('Save channel'));
+    await tester.tap(find.text('Save channel'));
+    await tester.pumpAndSettle();
+    expect(
+      controller.saved!.source.toJson(),
+      const PlaylistSource('playlist').toJson(),
+    );
+    expect(controller.saved!.builderKey, isNull);
+  });
+
+  testWidgets(
+    'reverting programming restores clean without hiding other edits',
+    (tester) async {
+      final key = GlobalKey<ChannelStudioViewState>();
+      final original = _channel(id: 'revert', number: 7, name: 'Revert');
+      final controller = FixtureController()
+        ..channels = [original]
+        ..libraries = const [
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+        ]
+        ..selectedLibraryIds = {'movies'}
+        ..availableMedia = [_media('movie', libraryId: 'movies')]
+        ..availablePlaylists = [_playlist('playlist')];
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ChannelStudioView(
+              key: key,
+              controller: controller,
+              mode: ChannelStudioMode.editCustom,
+              channel: original,
+              onBack: (_) async {},
+              onSaved: (_) {},
+              onDuplicate: (_) {},
+              onOpenGenerateLineup: () async {},
+              onTune: (_) async => false,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(find.text('Playlist'));
+      await tester.tap(find.text('Playlist'));
+      await tester.pumpAndSettle();
+      expect(key.currentState!.dirty, isTrue);
+      await tester.ensureVisible(find.text('Library'));
+      await tester.tap(find.text('Library'));
+      await tester.pumpAndSettle();
+      expect(key.currentState!.dirty, isFalse);
+
+      await tester.enterText(find.byKey(const Key('studio-name')), 'Changed');
+      await tester.ensureVisible(find.text('Playlist'));
+      await tester.tap(find.text('Playlist'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Library'));
+      await tester.tap(find.text('Library'));
+      await tester.pumpAndSettle();
+      expect(key.currentState!.dirty, isTrue);
+    },
+  );
+
+  testWidgets('different invalid active sources remain dirty', (tester) async {
+    final key = GlobalKey<ChannelStudioViewState>();
+    final original = _channel(
+      id: 'invalid-revert',
+      number: 14,
+      name: 'Invalid source',
+      source: const LibrarySource(
+        libraryId: 'missing',
+        libraryType: PlexLibraryType.movie,
+      ),
+    );
+    final controller = FixtureController()..channels = [original];
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ChannelStudioView(
+            key: key,
+            controller: controller,
+            mode: ChannelStudioMode.editCustom,
+            channel: original,
+            onBack: (_) async {},
+            onSaved: (_) {},
+            onDuplicate: (_) {},
+            onOpenGenerateLineup: () async {},
+            onTune: (_) async => false,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(key.currentState!.dirty, isFalse);
+    await tester.ensureVisible(find.text('Collection or filter'));
+    await tester.tap(find.text('Collection or filter'));
+    await tester.pumpAndSettle();
+    expect(key.currentState!.dirty, isTrue);
+  });
+
+  testWidgets('inventory metadata refresh does not prevent a clean revert', (
+    tester,
+  ) async {
+    final key = GlobalKey<ChannelStudioViewState>();
+    final original = _channel(
+      id: 'metadata-revert',
+      number: 15,
+      name: 'Metadata',
+      source: const ManualSource([
+        ChannelItem(
+          id: 'item',
+          title: 'Stored title',
+          duration: Duration(minutes: 30),
+        ),
+      ]),
+    );
+    final controller = FixtureController()
+      ..channels = [original]
+      ..availableMedia = [_media('item', title: 'First live title')];
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ChannelStudioView(
+            key: key,
+            controller: controller,
+            mode: ChannelStudioMode.editCustom,
+            channel: original,
+            onBack: (_) async {},
+            onSaved: (_) {},
+            onDuplicate: (_) {},
+            onOpenGenerateLineup: () async {},
+            onTune: (_) async => false,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    controller.availableMedia = [_media('item', title: 'Refreshed title')];
+    await tester.enterText(find.byKey(const Key('studio-name')), 'Changed');
+    expect(key.currentState!.dirty, isTrue);
+    await tester.enterText(find.byKey(const Key('studio-name')), 'Metadata');
+    expect(key.currentState!.dirty, isFalse);
+  });
+
+  testWidgets('mixed live children must remain controller-valid', (
+    tester,
+  ) async {
+    final original = _channel(
+      id: 'mixed-invalid',
+      number: 8,
+      name: 'Mixed invalid',
+      source: const MixedSource(
+        sources: [
+          ManualSource([
+            ChannelItem(
+              id: 'retained',
+              title: 'Retained',
+              duration: Duration(minutes: 30),
+            ),
+          ]),
+          LibrarySource(
+            libraryId: 'movies',
+            libraryType: PlexLibraryType.movie,
+          ),
+        ],
+      ),
+    );
+    final controller = FixtureController()
+      ..channels = [original]
+      ..libraries = const [
+        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
+      ]
+      ..selectedLibraryIds = {'movies'}
+      ..libraryScanStatus = LibraryScanStatus.scanning;
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      _studio(controller, ChannelStudioMode.editCustom, channel: original),
+    );
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Loading programming'), findsOneWidget);
+    expect(
+      find.textContaining('match no playable programs. Choose a replacement'),
+      findsOneWidget,
+    );
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.widgetWithText(FilledButton, 'Save changes'),
+          )
+          .onPressed,
+      isNull,
+    );
+    await expectLater(
+      controller.saveChannel(original, expectedBase: original),
+      throwsFormatException,
+    );
+    for (final state in [
+      LibraryScanStatus.idle,
+      LibraryScanStatus.cancelled,
+      LibraryScanStatus.transientFailure,
+    ]) {
+      controller.libraryScanStatus = state;
+      await tester.pumpWidget(
+        _studio(controller, ChannelStudioMode.editCustom, channel: original),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        state == LibraryScanStatus.idle
+            ? find.textContaining('No usable programming is loaded')
+            : find.textContaining('last usable programming'),
+        findsOneWidget,
+      );
+    }
+
+    final unsupported = _channel(
+      id: 'mixed-unsupported',
+      number: 9,
+      name: 'Mixed unsupported',
+      source: const MixedSource(
+        sources: [
+          ManualSource([
+            ChannelItem(
+              id: 'retained',
+              title: 'Retained',
+              duration: Duration(minutes: 30),
+            ),
+          ]),
+          LibrarySource(
+            libraryId: 'movies',
+            libraryType: PlexLibraryType.movie,
+            filters: {'future': 'value'},
+          ),
+        ],
+      ),
+    );
+    controller
+      ..channels = [unsupported]
+      ..availableMedia = [_media('movie', libraryId: 'movies')]
+      ..libraryScanStatus = LibraryScanStatus.idle;
+    await tester.pumpWidget(
+      _studio(controller, ChannelStudioMode.editCustom, channel: unsupported),
+    );
+    await tester.pumpAndSettle();
+    expect(find.textContaining('unsupported filter'), findsOneWidget);
+
+    final emptyPlaylist = _channel(
+      id: 'mixed-empty-playlist',
+      number: 10,
+      name: 'Mixed empty playlist',
+      source: const MixedSource(
+        sources: [
+          ManualSource([
+            ChannelItem(
+              id: 'retained',
+              title: 'Retained',
+              duration: Duration(minutes: 30),
+            ),
+          ]),
+          PlaylistSource('empty'),
+        ],
+      ),
+    );
+    controller
+      ..channels = [emptyPlaylist]
+      ..availablePlaylists = const [
+        PlexPlaylist(id: 'empty', title: 'Empty', items: []),
+      ];
+    await tester.pumpWidget(
+      _studio(controller, ChannelStudioMode.editCustom, channel: emptyPlaylist),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.textContaining('playlist has no playable programs'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('filter facets AND locally and newest-first saves exactly', (
+    tester,
+  ) async {
+    final controller = _RecordingSaveController()
+      ..libraries = const [
+        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
+      ]
+      ..selectedLibraryIds = {'movies'}
+      ..availableMedia = [
+        _media(
+          'older',
+          libraryId: 'movies',
+          genres: ['Comedy'],
+          collections: ['Favorites'],
+          studio: 'Studio A',
+          actors: ['Actor A'],
+          directors: ['Director A'],
+          year: 1994,
+          addedAt: DateTime.utc(2020),
+        ),
+        _media(
+          'newer',
+          libraryId: 'movies',
+          genres: ['Comedy'],
+          collections: ['Favorites'],
+          studio: 'Studio B',
+          year: 1998,
+          addedAt: DateTime.utc(2022),
+        ),
+      ];
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      _studio(controller, ChannelStudioMode.createCustom),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('studio-name')), 'Filtered');
+    await tester.tap(find.text('Collection or filter'));
+    await tester.pumpAndSettle();
+    await _chooseDropdown(tester, 'studio-facet-genre', 'Comedy');
+    await _chooseDropdown(tester, 'studio-facet-studio', 'Studio A');
+    expect(find.text('1 matching programs'), findsOneWidget);
+    await tester.tap(find.text('Newest first'));
+    await tester.pump();
+    await tester.tap(find.text('Save channel'));
+    await tester.pumpAndSettle();
+
+    final source = controller.saved!.source as LibrarySource;
+    expect(source.libraryId, 'movies');
+    expect(source.libraryType, PlexLibraryType.movie);
+    expect(source.filters, {
+      'genre': 'Comedy',
+      'studio': 'Studio A',
+      'sort': 'added:desc',
+    });
+    expect(
+      resolveContent(source, controller.availableMedia).map((item) => item.id),
+      ['older'],
+    );
+    expect(find.textContaining('same-key'), findsNothing);
+  });
+
+  testWidgets(
+    'manual search, bulk actions, unavailable retention, order, and focus agree',
+    (tester) async {
+      final original = _channel(
+        id: 'manual',
+        number: 9,
+        name: 'Manual',
+        source: const ManualSource([
+          ChannelItem(
+            id: 'missing',
+            title: 'Missing favorite',
+            duration: Duration(minutes: 30),
+          ),
+        ]),
+      );
+      final controller = _RecordingSaveController()
+        ..channels = [original]
+        ..libraries = const [
+          PlexLibrary(id: 'shows', title: 'Shows', type: PlexLibraryType.show),
+        ]
+        ..selectedLibraryIds = {'shows'}
+        ..availableMedia = [
+          _media(
+            'one',
+            title: 'Pilot',
+            libraryId: 'shows',
+            type: 'episode',
+            showTitle: 'Alpha Show',
+            genres: ['Comedy'],
+          ),
+          _media(
+            'two',
+            title: 'Finale',
+            libraryId: 'shows',
+            type: 'episode',
+            showTitle: 'Beta Show',
+            genres: ['Drama'],
+          ),
+        ];
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(
+        _studio(controller, ChannelStudioMode.editCustom, channel: original),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Unavailable — retained until removed'), findsOneWidget);
+
+      await tester.enterText(find.byKey(const Key('studio-search')), 'alpha');
+      await tester.pump(const Duration(milliseconds: 350));
+      expect(find.text('1 matching, 1 selected'), findsOneWidget);
+      tester
+          .widget<TextButton>(find.widgetWithText(TextButton, 'Select visible'))
+          .onPressed!();
+      await tester.pump();
+      expect(find.text('1 matching, 2 selected'), findsOneWidget);
+      await tester.enterText(find.byKey(const Key('studio-search')), 'beta');
+      await tester.pump(const Duration(milliseconds: 350));
+      tester
+          .widget<TextButton>(find.widgetWithText(TextButton, 'Select visible'))
+          .onPressed!();
+      await tester.pump();
+      expect(find.byKey(const Key('studio-rundown-missing')), findsOneWidget);
+
+      tester
+          .widget<IconButton>(
+            find.ancestor(
+              of: find.byTooltip('Move Pilot later in channel Manual'),
+              matching: find.byType(IconButton),
+            ),
+          )
+          .onPressed!();
+      await tester.pump();
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        'Selected program Pilot',
+      );
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
+      await tester.pump();
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.delete);
+      await tester.pump();
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        'Selected program Finale',
+      );
+      tester
+          .widget<IconButton>(
+            find.ancestor(
+              of: find.byTooltip('Move Finale earlier in channel Manual'),
+              matching: find.byType(IconButton),
+            ),
+          )
+          .onPressed!();
+      await tester.pump();
+      tester
+          .widget<IconButton>(
+            find.ancestor(
+              of: find.byTooltip('Remove Missing favorite from channel Manual'),
+              matching: find.byType(IconButton),
+            ),
+          )
+          .onPressed!();
+      await tester.pump();
+      await tester.ensureVisible(find.text('Save changes'));
+      await tester.tap(find.text('Save changes'));
+      await tester.pumpAndSettle();
+      expect(
+        (controller.saved!.source as ManualSource).items.map((item) => item.id),
+        ['two'],
+      );
+    },
+  );
+
+  testWidgets('clear visible preserves hidden manual selections', (
+    tester,
+  ) async {
+    final controller = _RecordingSaveController()
+      ..availableMedia = [
+        _media('alpha', title: 'Alpha'),
+        _media('beta', title: 'Beta'),
+      ];
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      _studio(controller, ChannelStudioMode.createCustom),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<TextButton>(find.widgetWithText(TextButton, 'Select visible'))
+          .onPressed,
+      isNotNull,
+    );
+    expect(
+      tester
+          .widget<TextButton>(find.widgetWithText(TextButton, 'Clear visible'))
+          .onPressed,
+      isNull,
+    );
+    tester
+        .widget<TextButton>(find.widgetWithText(TextButton, 'Select visible'))
+        .onPressed!();
+    await tester.pump();
+    await tester.enterText(find.byKey(const Key('studio-search')), 'alpha');
+    await tester.pump(const Duration(milliseconds: 350));
+    tester
+        .widget<TextButton>(find.widgetWithText(TextButton, 'Clear visible'))
+        .onPressed!();
+    await tester.pump();
+    expect(find.byKey(const Key('studio-rundown-alpha')), findsNothing);
+    expect(find.byKey(const Key('studio-rundown-beta')), findsOneWidget);
+  });
+
+  testWidgets('mini-marathons require grouping and expose sizes 2 through 5', (
+    tester,
+  ) async {
+    final controller = _RecordingSaveController()
+      ..availableMedia = [_media('movie')];
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      _studio(controller, ChannelStudioMode.createCustom),
+    );
+    await tester.pumpAndSettle();
+    tester
+        .widget<TextButton>(find.widgetWithText(TextButton, 'Select visible'))
+        .onPressed!();
+    await tester.pump();
+    await tester.enterText(find.byKey(const Key('studio-name')), 'Ungrouped');
+    await tester.pump();
+    await tester.ensureVisible(find.text('Mini-marathons'));
+    await tester.tap(find.text('Mini-marathons'));
+    await tester.pump();
+    expect(
+      find.textContaining('grouped by show title or show artwork'),
+      findsWidgets,
+    );
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.widgetWithText(FilledButton, 'Save channel'),
+          )
+          .onPressed,
+      isNull,
+    );
+
+    controller.availableMedia = [
+      for (final show in ['a', 'b'])
+        for (var episode = 1; episode <= 5; episode++)
+          _media('$show$episode', type: 'episode', showThumb: '/show/$show'),
+    ];
+    const expectedOrders = {
+      2: ['a1', 'a2', 'b1', 'b2', 'a3', 'a4', 'b3', 'b4', 'a5', 'b5'],
+      3: ['a1', 'a2', 'a3', 'b1', 'b2', 'b3', 'a4', 'a5', 'b4', 'b5'],
+      4: ['a1', 'a2', 'a3', 'a4', 'b1', 'b2', 'b3', 'b4', 'a5', 'b5'],
+      5: ['a1', 'a2', 'a3', 'a4', 'a5', 'b1', 'b2', 'b3', 'b4', 'b5'],
+    };
+    for (var size = 2; size <= 5; size++) {
+      controller.saved = null;
+      final original = _channel(
+        id: 'blocks-$size',
+        number: 1,
+        name: 'Blocks',
+        source: ManualSource(
+          controller.availableMedia.map(channelItemFor).toList(),
+        ),
+      );
+      controller.channels = [original];
+      await tester.pumpWidget(
+        _studio(controller, ChannelStudioMode.editCustom, channel: original),
+      );
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Mini-marathons'));
+      await tester.tap(find.text('Mini-marathons'));
+      await tester.pump();
+      await tester.ensureVisible(find.byKey(const Key('studio-block-size')));
+      await tester.tap(find.byKey(const Key('studio-block-size')));
+      await tester.pumpAndSettle();
+      for (var option = 2; option <= 5; option++) {
+        expect(find.text('$option'), findsWidgets);
+      }
+      await tester.tap(find.text('$size').last);
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Save changes'));
+      await tester.tap(find.text('Save changes'));
+      await tester.pumpAndSettle();
+      final saved = controller.saved!;
+      expect(saved.playbackMode, PlaybackMode.block);
+      expect(saved.blockSize, size);
+      final source = saved.source as ManualSource;
+      expect(
+        buildSchedule(
+          source.items,
+          mode: saved.playbackMode,
+          seed: saved.shuffleSeed,
+          blockSize: saved.blockSize!,
+        ).items.map((item) => item.id),
+        expectedOrders[size],
+      );
+    }
+  });
+
+  testWidgets(
+    'inventory states preserve draft and use Generate lineup recovery',
+    (tester) async {
+      final retained = _channel(
+        id: 'retained',
+        number: 4,
+        name: 'Retained',
+        source: const PlaylistSource('gone'),
+      );
+      final controller = FixtureController()
+        ..channels = [retained]
+        ..libraryScanStatus = LibraryScanStatus.transientFailure;
+      var left = 0;
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(
+        _RecoveryHarness(
+          controller: controller,
+          channel: retained,
+          onLeft: () => left++,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('Playlist gone is unavailable'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('last usable programming'), findsOneWidget);
+      await tester.tap(find.text('Retry in Generate lineup'));
+      await tester.pump();
+      expect(left, 1);
+      expect(controller.stage, SetupStage.channelSetup);
+    },
+  );
+
+  testWidgets('large inventories keep a bounded deterministic result window', (
+    tester,
+  ) async {
+    final controller = FixtureController()
+      ..availableMedia = [for (var i = 0; i < 1200; i++) _media('item-$i')];
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      _studio(controller, ChannelStudioMode.createCustom),
+    );
+    await tester.pumpAndSettle();
+    expect(find.textContaining('first 100 of 1200'), findsOneWidget);
+    expect(find.byType(CheckboxListTile).evaluate().length, lessThan(30));
+    await tester.enterText(find.byKey(const Key('studio-search')), 'item-1199');
+    await tester.pump(const Duration(milliseconds: 350));
+    expect(find.byKey(const Key('studio-result-item-1199')), findsOneWidget);
+  });
+
+  testWidgets('filtered edits preserve includeWatched false exactly', (
+    tester,
+  ) async {
+    const source = LibrarySource(
+      libraryId: 'movies',
+      libraryType: PlexLibraryType.movie,
+      includeWatched: false,
+      filters: {'genre': 'Comedy', 'sort': 'added:desc'},
+    );
+    final original = _channel(
+      id: 'filtered',
+      number: 12,
+      name: 'Filtered',
+      source: source,
+    );
+    final controller = _RecordingSaveController()
+      ..channels = [original]
+      ..libraries = const [
+        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
+      ]
+      ..selectedLibraryIds = {'movies'}
+      ..availableMedia = [
+        _media(
+          'comedy',
+          title: 'Fresh comedy',
+          libraryId: 'movies',
+          genres: ['Comedy'],
+        ),
+        _media(
+          'watched-comedy',
+          title: 'Watched comedy',
+          libraryId: 'movies',
+          genres: ['Comedy'],
+          viewed: true,
+        ),
+      ];
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      _studio(controller, ChannelStudioMode.editCustom, channel: original),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('1 matching programs'), findsOneWidget);
+    expect(find.text('Fresh comedy'), findsOneWidget);
+    expect(find.text('Watched comedy'), findsNothing);
+    await tester.tap(find.byKey(const Key('studio-filter-include-watched')));
+    await tester.pump();
+    expect(find.text('2 matching programs'), findsOneWidget);
+    expect(find.text('Watched comedy'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('studio-filter-include-watched')));
+    await tester.pump();
+    expect(find.text('1 matching programs'), findsOneWidget);
+    await tester.enterText(find.byKey(const Key('studio-name')), 'Renamed');
+    await tester.tap(find.text('Save changes'));
+    await tester.pumpAndSettle();
+
+    expect(controller.saved!.source.toJson(), source.toJson());
+    expect(controller.saved!.builderKey, isNull);
+  });
+
+  testWidgets('retained unavailable filter facet is explicit and replaceable', (
+    tester,
+  ) async {
+    final original = _channel(
+      id: 'retained-filter',
+      number: 13,
+      name: 'Retained filter',
+      source: const LibrarySource(
+        libraryId: 'movies',
+        libraryType: PlexLibraryType.movie,
+        filters: {'genre': 'Gone'},
+      ),
+    );
+    final controller = _RecordingSaveController()
+      ..channels = [original]
+      ..libraries = const [
+        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
+      ]
+      ..selectedLibraryIds = {'movies'}
+      ..availableMedia = [
+        _media('comedy', libraryId: 'movies', genres: ['Comedy']),
+      ];
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      _studio(controller, ChannelStudioMode.editCustom, channel: original),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Gone (unavailable — retained)'), findsOneWidget);
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.widgetWithText(FilledButton, 'Save changes'),
+          )
+          .onPressed,
+      isNull,
+    );
+
+    await _chooseDropdown(tester, 'studio-facet-genre', 'Any');
+    expect(find.text('1 matching programs'), findsOneWidget);
+    await _chooseDropdown(tester, 'studio-facet-genre', 'Comedy');
+    await tester.enterText(find.byKey(const Key('studio-name')), 'Recovered');
+    await tester.ensureVisible(find.text('Save changes'));
+    await tester.tap(find.text('Save changes'));
+    await tester.pumpAndSettle();
+    expect((controller.saved!.source as LibrarySource).filters, {
+      'genre': 'Comedy',
+    });
+  });
+
+  testWidgets('filter editor renders a bounded deterministic match sample', (
+    tester,
+  ) async {
+    final controller = FixtureController()
+      ..libraries = const [
+        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
+      ]
+      ..selectedLibraryIds = {'movies'}
+      ..availableMedia = [
+        for (var index = 0; index < 7; index++)
+          _media('sample-$index', title: 'Sample $index', libraryId: 'movies'),
+      ];
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      _studio(controller, ChannelStudioMode.createCustom),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Collection or filter'));
+    await tester.pumpAndSettle();
+    for (var index = 0; index < 5; index++) {
+      expect(find.text('Sample $index'), findsOneWidget);
+    }
+    expect(find.text('Sample 5'), findsNothing);
+    expect(find.text('Showing 5 of 7 matching programs.'), findsOneWidget);
+  });
+
+  testWidgets('missing live sources and zero matches remain actionable', (
+    tester,
+  ) async {
+    final controller = FixtureController()
+      ..libraries = const [
+        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
+      ]
+      ..selectedLibraryIds = {'movies'}
+      ..availableMedia = [
+        _media('drama', libraryId: 'movies', genres: ['Drama']),
+      ];
+    addTearDown(controller.dispose);
+    for (final channel in [
+      _channel(
+        id: 'missing-library',
+        number: 30,
+        name: 'Missing library',
+        source: const LibrarySource(
+          libraryId: 'gone',
+          libraryType: PlexLibraryType.movie,
+        ),
+      ),
+      _channel(
+        id: 'missing-playlist',
+        number: 31,
+        name: 'Missing playlist',
+        source: const PlaylistSource('gone'),
+      ),
+      _channel(
+        id: 'zero-match',
+        number: 32,
+        name: 'Zero match',
+        source: const LibrarySource(
+          libraryId: 'movies',
+          libraryType: PlexLibraryType.movie,
+          filters: {'genre': 'Comedy'},
+        ),
+      ),
+    ]) {
+      controller.channels = [channel];
+      await tester.pumpWidget(
+        _studio(controller, ChannelStudioMode.editCustom, channel: channel),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<FilledButton>(
+              find.widgetWithText(FilledButton, 'Save changes'),
+            )
+            .onPressed,
+        isNull,
+      );
+    }
+    expect(find.textContaining('match no playable programs'), findsOneWidget);
+  });
+
+  testWidgets('no inventory and scan states preserve retained programming', (
+    tester,
+  ) async {
+    final retained = _channel(
+      id: 'scan-retained',
+      number: 33,
+      name: 'Scan retained',
+      source: const ManualSource([
+        ChannelItem(
+          id: 'retained',
+          title: 'Retained',
+          duration: Duration(minutes: 30),
+        ),
+      ]),
+    );
+    final controller = FixtureController()..channels = [retained];
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      _studio(controller, ChannelStudioMode.editCustom, channel: retained),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.textContaining('No usable programming is loaded'),
+      findsOneWidget,
+    );
+    expect(find.text('Unavailable — retained until removed'), findsOneWidget);
+
+    controller
+      ..libraryScanStatus = LibraryScanStatus.scanning
+      ..libraryScanCompletedItems = 4
+      ..libraryScanTotalItems = 10;
+    await tester.pumpWidget(
+      _studio(controller, ChannelStudioMode.editCustom, channel: retained),
+    );
+    await tester.pumpAndSettle();
+    expect(find.textContaining('4 of 10 items loaded'), findsOneWidget);
+    var statusSemantics = tester.widget<Semantics>(
+      find.byKey(const Key('studio-inventory-status')),
+    );
+    expect(statusSemantics.properties.liveRegion, isTrue);
+
+    for (final state in [
+      LibraryScanStatus.cancelled,
+      LibraryScanStatus.transientFailure,
+    ]) {
+      controller.libraryScanStatus = LibraryScanStatus.scanning;
+      await tester.pumpWidget(
+        _studio(controller, ChannelStudioMode.editCustom, channel: retained),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('studio-inventory-status')), findsOneWidget);
+      controller.libraryScanStatus = state;
+      await tester.pumpWidget(
+        _studio(controller, ChannelStudioMode.editCustom, channel: retained),
+      );
+      await tester.pumpAndSettle();
+      expect(find.textContaining('last usable programming'), findsOneWidget);
+      expect(find.text('Retry in Generate lineup'), findsOneWidget);
+      expect(find.text('Unavailable — retained until removed'), findsOneWidget);
+      expect(find.byKey(const Key('studio-inventory-status')), findsOneWidget);
+      statusSemantics = tester.widget<Semantics>(
+        find.byKey(const Key('studio-inventory-status')),
+      );
+      expect(statusSemantics.properties.liveRegion, isTrue);
+    }
+  });
+
+  testWidgets('picker browsing is ephemeral and count announcements settle', (
+    tester,
+  ) async {
+    final key = GlobalKey<ChannelStudioViewState>();
+    final original = _channel(
+      id: 'browse',
+      number: 40,
+      name: 'Browse',
+      source: const ManualSource([
+        ChannelItem(
+          id: 'episode',
+          title: 'Pilot',
+          duration: Duration(minutes: 30),
+          showTitle: 'Alpha Show',
+        ),
+      ]),
+    );
+    final controller = FixtureController()
+      ..channels = [original]
+      ..libraries = const [
+        PlexLibrary(id: 'shows', title: 'Shows', type: PlexLibraryType.show),
+      ]
+      ..selectedLibraryIds = {'shows'}
+      ..availableMedia = [
+        _media(
+          'episode',
+          title: 'Pilot',
+          libraryId: 'shows',
+          type: 'episode',
+          showTitle: 'Alpha Show',
+          genres: ['Comedy'],
+        ),
+      ];
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ChannelStudioView(
+            key: key,
+            controller: controller,
+            mode: ChannelStudioMode.editCustom,
+            channel: original,
+            onBack: (_) async {},
+            onSaved: (_) {},
+            onDuplicate: (_) {},
+            onOpenGenerateLineup: () async {},
+            onTune: (_) async => false,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(key.currentState!.dirty, isFalse);
+    await tester.enterText(find.byKey(const Key('studio-search')), 'alpha');
+    await _chooseDropdown(tester, 'studio-manual-library', 'Shows');
+    await _chooseDropdown(tester, 'studio-media-type', 'episode');
+    await _chooseDropdown(tester, 'studio-facet-genre', 'Comedy');
+    expect(key.currentState!.dirty, isFalse);
+    await tester.enterText(find.byKey(const Key('studio-search')), 'none');
+    await tester.pump(const Duration(milliseconds: 299));
+    expect(
+      tester
+          .widgetList<Semantics>(find.byType(Semantics))
+          .where((widget) => widget.properties.liveRegion == true)
+          .map((widget) => widget.properties.label),
+      isNot(contains('0 matching, 1 selected')),
+    );
+    await tester.pump(const Duration(milliseconds: 1));
+    expect(
+      tester
+          .widgetList<Semantics>(find.byType(Semantics))
+          .where((widget) => widget.properties.liveRegion == true)
+          .map((widget) => widget.properties.label),
+      contains('0 matching, 1 selected'),
+    );
+  });
+
+  testWidgets('bounded bulk preserves matches outside the rendered window', (
+    tester,
+  ) async {
+    final inventory = [for (var i = 0; i < 1200; i++) _media('item-$i')];
+    final original = _channel(
+      id: 'bounded',
+      number: 20,
+      name: 'Bounded',
+      source: ManualSource([channelItemFor(inventory[150])]),
+    );
+    final controller = _RecordingSaveController()
+      ..channels = [original]
+      ..availableMedia = inventory;
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      _studio(controller, ChannelStudioMode.editCustom, channel: original),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<TextButton>(find.widgetWithText(TextButton, 'Clear visible'))
+          .onPressed,
+      isNull,
+    );
+    tester
+        .widget<TextButton>(find.widgetWithText(TextButton, 'Select visible'))
+        .onPressed!();
+    await tester.pump();
+    expect(find.text('1200 matching, 101 selected'), findsOneWidget);
+    expect(
+      tester
+          .widget<TextButton>(find.widgetWithText(TextButton, 'Select visible'))
+          .onPressed,
+      isNull,
+    );
+    tester
+        .widget<TextButton>(find.widgetWithText(TextButton, 'Clear visible'))
+        .onPressed!();
+    await tester.pump();
+    expect(find.text('1200 matching, 1 selected'), findsOneWidget);
+    expect(find.text('Saved'), findsOneWidget);
+    await tester.ensureVisible(find.text('Save changes'));
+    await tester.tap(find.text('Save changes'));
+    await tester.pumpAndSettle();
+    final saved = controller.saved!;
+    expect((saved.source as ManualSource).items.single.id, 'item-150');
+    expect(
+      (Channel.fromJson(saved.toJson()).source as ManualSource).items.single.id,
+      'item-150',
+    );
+  });
+
+  testWidgets('selection captures metadata across inventory loss', (
+    tester,
+  ) async {
+    final controller = _RecordingSaveController()
+      ..availableMedia = [_media('chosen', title: 'Fresh title')];
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      _studio(controller, ChannelStudioMode.createCustom),
+    );
+    await tester.pumpAndSettle();
+    tester
+        .widget<TextButton>(find.widgetWithText(TextButton, 'Select visible'))
+        .onPressed!();
+    await tester.pump();
+    controller.availableMedia = const [];
+    await tester.enterText(find.byKey(const Key('studio-search')), 'reload');
+    await tester.pump();
+    await tester.enterText(find.byKey(const Key('studio-name')), 'Captured');
+    await tester.tap(find.text('Save channel'));
+    await tester.pumpAndSettle();
+    final item = (controller.saved!.source as ManualSource).items.single;
+    expect(item.id, 'chosen');
+    expect(item.title, 'Fresh title');
+  });
+
+  testWidgets('duplicate IDs render once and save media-first metadata', (
+    tester,
+  ) async {
+    final controller = _RecordingSaveController()
+      ..availableMedia = [_media('shared', title: 'Library winner')]
+      ..availablePlaylists = [
+        PlexPlaylist(
+          id: 'playlist',
+          title: 'Playlist',
+          items: [_media('shared', title: 'Playlist duplicate')],
+        ),
+      ];
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      _studio(controller, ChannelStudioMode.createCustom),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('studio-result-shared')), findsOneWidget);
+    expect(find.text('Library winner'), findsOneWidget);
+    expect(find.text('Playlist duplicate'), findsNothing);
+    tester
+        .widget<TextButton>(find.widgetWithText(TextButton, 'Select visible'))
+        .onPressed!();
+    await tester.pump();
+    await tester.enterText(find.byKey(const Key('studio-name')), 'Winner');
+    await tester.tap(find.text('Save channel'));
+    await tester.pumpAndSettle();
+    expect(
+      (controller.saved!.source as ManualSource).items.single.title,
+      'Library winner',
+    );
+  });
+
+  testWidgets('Studio offers only the real public playable projection', (
+    tester,
+  ) async {
+    final valid = PlexMediaItem(
+      id: 'multipart',
+      title: 'Multipart',
+      type: 'movie',
+      duration: const Duration(minutes: 2),
+      parts: [
+        PlexMediaPart(path: '/one'),
+        PlexMediaPart(path: '/two', duration: const Duration(minutes: 1)),
+      ],
+    );
+    final controller = FixtureController()
+      ..availableMedia = [
+        valid,
+        _media('shared', title: 'Media winner'),
+        const PlexMediaItem(
+          id: 'no-parts',
+          title: 'No parts',
+          type: 'movie',
+          duration: Duration(minutes: 1),
+        ),
+        PlexMediaItem(
+          id: 'zero',
+          title: 'Zero',
+          type: 'movie',
+          duration: Duration.zero,
+          parts: [PlexMediaPart(path: '/zero')],
+        ),
+        PlexMediaItem(
+          id: 'empty-path',
+          title: 'Empty path',
+          type: 'movie',
+          duration: const Duration(minutes: 1),
+          parts: [PlexMediaPart(path: '')],
+        ),
+        PlexMediaItem(
+          id: 'hostile',
+          title: 'Hostile',
+          type: 'movie',
+          duration: const Duration(minutes: 1),
+          parts: [
+            PlexMediaPart(path: '/safe'),
+            PlexMediaPart(path: 'https://hostile.invalid/later'),
+          ],
+        ),
+      ]
+      ..availablePlaylists = [
+        PlexPlaylist(
+          id: 'playlist',
+          title: 'Playlist',
+          items: [_media('shared', title: 'Playlist duplicate')],
+        ),
+      ];
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      _studio(controller, ChannelStudioMode.createCustom),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('studio-result-multipart')), findsOneWidget);
+    expect(
+      controller.playableInventory.media.first.parts.first.duration,
+      isNull,
+    );
+    expect(find.byKey(const Key('studio-result-shared')), findsOneWidget);
+    expect(find.text('Media winner'), findsOneWidget);
+    for (final id in ['no-parts', 'zero', 'empty-path', 'hostile']) {
+      expect(find.byKey(Key('studio-result-$id')), findsNothing);
+    }
+
+    controller.connection = null;
+    await tester.pumpWidget(
+      _studio(controller, ChannelStudioMode.createCustom),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(CheckboxListTile), findsNothing);
+    expect(find.textContaining('No usable programming'), findsOneWidget);
+  });
+
+  testWidgets('unavailable manual records persist but do not schedule', (
+    tester,
+  ) async {
+    final original = _channel(
+      id: 'retained-order',
+      number: 22,
+      name: 'Retained order',
+      source: const ManualSource([
+        ChannelItem(
+          id: 'missing',
+          title: 'Missing',
+          duration: Duration(minutes: 30),
+        ),
+        ChannelItem(
+          id: 'available',
+          title: 'Old title',
+          duration: Duration(minutes: 30),
+        ),
+      ]),
+    );
+    final controller = _RecordingSaveController()
+      ..channels = [original]
+      ..availableMedia = [_media('available', title: 'Fresh title')];
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      _studio(controller, ChannelStudioMode.editCustom, channel: original),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('studio-name')), 'Retained');
+    await tester.tap(find.text('Save changes'));
+    await tester.pumpAndSettle();
+    final source = controller.saved!.source as ManualSource;
+    expect(source.items.map((item) => item.id), ['missing', 'available']);
+    expect(source.items.last.title, 'Fresh title');
+    expect(
+      resolveContent(source, controller.availableMedia).map((item) => item.id),
+      ['available'],
+    );
+  });
+}
+
+Future<void> _chooseDropdown(
+  WidgetTester tester,
+  String key,
+  String value,
+) async {
+  await tester.ensureVisible(find.byKey(Key(key)));
+  await tester.tap(find.byKey(Key(key)));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text(value).last);
+  await tester.pumpAndSettle();
 }
 
 Widget _studio(
@@ -931,6 +2356,7 @@ Widget _studio(
       onBack: (_) async {},
       onSaved: (_) {},
       onDuplicate: (_) {},
+      onOpenGenerateLineup: () async {},
       onTune: (_) async => false,
     ),
   ),
@@ -938,6 +2364,46 @@ Widget _studio(
 
 String _fieldText(WidgetTester tester, String key) =>
     tester.widget<TextFormField>(find.byKey(Key(key))).controller!.text;
+
+PlexMediaItem _media(
+  String id, {
+  String? title,
+  String? libraryId,
+  String type = 'movie',
+  String? showTitle,
+  String? showThumb,
+  List<String> genres = const [],
+  List<String> collections = const [],
+  List<String> actors = const [],
+  List<String> directors = const [],
+  String? studio,
+  int? year,
+  DateTime? addedAt,
+  bool viewed = false,
+}) => PlexMediaItem(
+  id: id,
+  title: title ?? id,
+  type: type,
+  duration: const Duration(minutes: 30),
+  libraryId: libraryId,
+  grandparentTitle: showTitle,
+  grandparentThumbPath: showThumb,
+  parts: [PlexMediaPart(path: '/$id')],
+  genres: genres,
+  collections: collections,
+  actors: actors,
+  directors: directors,
+  studio: studio,
+  year: year,
+  addedAt: addedAt,
+  viewed: viewed,
+);
+
+PlexPlaylist _playlist(String id) => PlexPlaylist(
+  id: id,
+  title: 'Playlist $id',
+  items: [_media('$id-item', type: 'episode', showTitle: 'Playlist show')],
+);
 
 Channel _channel({
   required String id,
@@ -970,12 +2436,14 @@ class _FailingSaveController extends FixtureController {
 
 class _BlockingSaveController extends FixtureController {
   final release = Completer<void>();
+  Channel? attempted;
 
   @override
   Future<void> saveChannel(
     Channel channel, {
     required Channel? expectedBase,
   }) async {
+    attempted = channel;
     await release.future;
     throw StateError('synthetic save failure');
   }
@@ -1028,4 +2496,48 @@ class _ExpectedBaseController extends FixtureController {
     channels = [channel];
     notifyListeners();
   }
+}
+
+class _RecoveryHarness extends StatefulWidget {
+  const _RecoveryHarness({
+    required this.controller,
+    required this.channel,
+    required this.onLeft,
+  });
+
+  final FixtureController controller;
+  final Channel channel;
+  final VoidCallback onLeft;
+
+  @override
+  State<_RecoveryHarness> createState() => _RecoveryHarnessState();
+}
+
+class _RecoveryHarnessState extends State<_RecoveryHarness> {
+  var open = true;
+
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+    home: Scaffold(
+      body: open
+          ? ChannelStudioView(
+              controller: widget.controller,
+              mode: ChannelStudioMode.editCustom,
+              channel: widget.channel,
+              onBack: (_) async {
+                widget.onLeft();
+                setState(() => open = false);
+              },
+              onSaved: (_) {},
+              onDuplicate: (_) {},
+              onOpenGenerateLineup: () async {
+                widget.onLeft();
+                setState(() => open = false);
+                widget.controller.enterChannelSetup();
+              },
+              onTune: (_) async => false,
+            )
+          : const SizedBox.shrink(),
+    ),
+  );
 }

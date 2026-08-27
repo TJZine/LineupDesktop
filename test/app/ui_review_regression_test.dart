@@ -217,11 +217,20 @@ void main() {
     expect(find.text('Include watched items'), findsOneWidget);
     await tester.tap(find.byType(SwitchListTile));
     await tester.pump();
+    await tester.ensureVisible(find.text('Hand-picked'));
     await tester.tap(find.text('Hand-picked'));
     await tester.pumpAndSettle();
     expect(find.text('Include watched items'), findsNothing);
 
-    await tester.tap(find.text('Entire library'));
+    final libraryChoice = find.descendant(
+      of: find.byWidgetPredicate(
+        (widget) =>
+            widget.runtimeType.toString().startsWith('SegmentedButton<'),
+      ),
+      matching: find.text('Library'),
+    );
+    await tester.ensureVisible(libraryChoice);
+    await tester.tap(libraryChoice);
     await tester.pumpAndSettle();
     expect(find.text('Include watched items'), findsOneWidget);
     expect(
@@ -253,6 +262,43 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Select a library.'), findsOneWidget);
+  });
+
+  testWidgets('Studio recovery honors keep editing and confirmed discard', (
+    tester,
+  ) async {
+    final controller = _CountingSetupController()..stage = SetupStage.ready;
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(UiFixture(controller: controller).build());
+    await tester.pump();
+    await tester.pump();
+    await openDestination(tester, 'Channels');
+    await tester.tap(find.text('New channel'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('studio-name')), 'Unsaved');
+    await tester.pump();
+
+    await tester.ensureVisible(find.text('Open Generate lineup'));
+    await tester.tap(find.text('Open Generate lineup'));
+    await tester.pumpAndSettle();
+    expect(find.text('Discard changes?'), findsOneWidget);
+    await tester.tap(find.text('Keep editing'));
+    await tester.pumpAndSettle();
+    expect(controller.setupEntries, 0);
+    expect(find.text('Create custom channel'), findsOneWidget);
+
+    await tester.ensureVisible(find.text('Open Generate lineup'));
+    final recovery = tester.widget<TextButton>(
+      find.widgetWithText(TextButton, 'Open Generate lineup'),
+    );
+    recovery.onPressed!();
+    recovery.onPressed!();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Discard changes'));
+    await tester.pumpAndSettle();
+    expect(controller.setupEntries, 1);
+    expect(controller.stage, SetupStage.channelSetup);
+    expect(find.text('Create custom channel'), findsNothing);
   });
 
   testWidgets('manual channel edits retain unavailable selected items', (
@@ -427,7 +473,7 @@ void main() {
     });
   }
 
-  testWidgets('channel source editability follows the lossless source matrix', (
+  testWidgets('custom sources expose authoring or lossless replacement', (
     tester,
   ) async {
     const item = ChannelItem(
@@ -435,25 +481,19 @@ void main() {
       title: 'Program',
       duration: Duration(minutes: 30),
     );
-    final cases = <(ContentSource, bool)>[
-      (
-        const LibrarySource(
-          libraryId: 'movies',
-          libraryType: PlexLibraryType.movie,
-          filters: {'genre': 'Comedy'},
-        ),
-        true,
+    final cases = <ContentSource>[
+      const LibrarySource(
+        libraryId: 'movies',
+        libraryType: PlexLibraryType.movie,
+        filters: {'genre': 'Comedy'},
       ),
-      (const PlaylistSource('playlist-1'), true),
-      (const MixedSource(sources: [PlaylistSource('playlist-1')]), true),
-      (
-        const LibrarySource(
-          libraryId: 'movies',
-          libraryType: PlexLibraryType.movie,
-        ),
-        false,
+      const PlaylistSource('playlist-1'),
+      const MixedSource(sources: [PlaylistSource('playlist-1')]),
+      const LibrarySource(
+        libraryId: 'movies',
+        libraryType: PlexLibraryType.movie,
       ),
-      (const ManualSource([item]), false),
+      const ManualSource([item]),
     ];
     final controller = FixtureController()
       ..stage = SetupStage.ready
@@ -464,7 +504,7 @@ void main() {
     addTearDown(controller.dispose);
 
     for (var index = 0; index < cases.length; index++) {
-      final (source, readOnly) = cases[index];
+      final source = cases[index];
       final channel = Channel(
         id: 'channel-$index',
         number: index + 1,
@@ -477,11 +517,30 @@ void main() {
       await _openChannelEditor(tester, controller, channel);
       expect(
         find.text('Programming is read-only and will be preserved exactly.'),
-        readOnly ? findsOneWidget : findsNothing,
+        findsNothing,
+      );
+      final sourceChoices = find.byWidgetPredicate(
+        (widget) =>
+            widget.runtimeType.toString().startsWith('SegmentedButton<'),
       );
       expect(
-        find.text('Entire library'),
-        readOnly ? findsNothing : findsOneWidget,
+        find.descendant(of: sourceChoices, matching: find.text('Library')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: sourceChoices, matching: find.text('Playlist')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: sourceChoices,
+          matching: find.text('Collection or filter'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: sourceChoices, matching: find.text('Hand-picked')),
+        findsOneWidget,
       );
       await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();
@@ -821,6 +880,7 @@ Widget _studio(FixtureController controller, Channel channel) => Scaffold(
       onBack: (_) async => Navigator.of(context).maybePop(),
       onSaved: (_) {},
       onDuplicate: (_) {},
+      onOpenGenerateLineup: () async {},
       onTune: (_) async => false,
     ),
   ),
@@ -852,6 +912,16 @@ final _studioEpisode = PlexMediaItem(
   parts: [PlexMediaPart(path: '/studio-episode')],
   year: 2026,
 );
+
+class _CountingSetupController extends FixtureController {
+  var setupEntries = 0;
+
+  @override
+  Future<void> enterChannelSetup() async {
+    setupEntries++;
+    await super.enterChannelSetup();
+  }
+}
 
 class _FailNextSaveStore extends FixtureStore {
   bool _failNextSave = true;
