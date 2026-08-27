@@ -494,10 +494,13 @@ class _Osd extends StatelessWidget {
     final program = controller.currentProgram;
     final next = controller.nextProgram;
     final duration = controller.duration.inMilliseconds;
-    final position = controller.position.inMilliseconds.clamp(
-      0,
-      duration <= 0 ? 1 : duration,
-    );
+    final rawPosition = controller.position.inMilliseconds;
+    final position = duration > 0
+        ? rawPosition.clamp(0, duration)
+        : rawPosition < 0
+        ? 0
+        : rawPosition;
+    final displayedPosition = Duration(milliseconds: position.toInt());
     final audioAvailable = controller.tracks.any(
       (track) => track.type == PlayerTrackType.audio,
     );
@@ -506,7 +509,6 @@ class _Osd extends StatelessWidget {
     );
     final unsupported = controller.status.state == PlayerState.unsupported;
     final dvrControlsEnabled = controller.lineup.settings.dvrControlsEnabled;
-    final quality = _quality(controller.telemetry);
     final expanded = !LineupLayout.isCompactWidth(size.width);
     // 720p desktop still has enough room for the broadcast-style progress
     // lane; keep the compact 800x600 regime stacked so every action remains
@@ -538,37 +540,53 @@ class _Osd extends StatelessWidget {
         icon: const Icon(Icons.skip_next),
       ),
     ];
+    final selectedAudio = controller.tracks
+        .where((track) => track.type == PlayerTrackType.audio && track.selected)
+        .firstOrNull;
+    final selectedSubtitles = controller.tracks
+        .where(
+          (track) => track.type == PlayerTrackType.subtitle && track.selected,
+        )
+        .firstOrNull;
+    final audioLabel = _osdTrackLabel('Audio', selectedAudio);
+    final subtitlesLabel = selectedSubtitles == null
+        ? '${expanded ? 'Subtitles' : 'Subs'} • Off'
+        : _osdTrackLabel(expanded ? 'Subtitles' : 'Subs', selectedSubtitles);
+    final sleepLabel = controller.sleepDuration == null
+        ? 'Sleep • Off'
+        : 'Sleep • ${controller.sleepDuration!.inMinutes}m';
     final optionActions = <Widget>[
-      IconButton(
-        tooltip: audioAvailable ? 'Audio tracks' : 'Audio tracks unavailable',
-        onPressed: audioAvailable
-            ? () => controller.showTracks(PlayerTrackType.audio)
-            : null,
-        icon: const Icon(Icons.audiotrack),
-      ),
-      IconButton(
+      _osdAction(
+        context,
+        key: const Key('player-osd-subtitles'),
+        label: subtitlesLabel,
         tooltip: subtitlesAvailable ? 'Subtitles' : 'Subtitles unavailable',
+        icon: Icons.subtitles_outlined,
         onPressed: subtitlesAvailable
             ? () => controller.showTracks(PlayerTrackType.subtitle)
             : null,
-        icon: const Icon(Icons.subtitles_outlined),
+        compact: !expanded,
       ),
-      IconButton(
+      _osdAction(
+        context,
+        key: const Key('player-osd-audio'),
+        label: audioLabel,
+        tooltip: audioAvailable ? 'Audio tracks' : 'Audio tracks unavailable',
+        icon: Icons.audiotrack,
+        onPressed: audioAvailable
+            ? () => controller.showTracks(PlayerTrackType.audio)
+            : null,
+        compact: !expanded,
+      ),
+      _osdAction(
+        context,
+        key: const Key('player-osd-sleep'),
+        label: sleepLabel,
         tooltip: 'Sleep timer',
+        icon: Icons.bedtime_outlined,
         onPressed: controller.cycleSleepTimer,
-        icon: const Icon(Icons.bedtime_outlined),
+        compact: !expanded,
       ),
-      if (expanded)
-        Padding(
-          padding: const EdgeInsets.only(left: 4, right: 8),
-          child: Text(
-            controller.sleepDuration == null
-                ? 'Sleep off'
-                : 'Sleep ${controller.sleepDuration!.inMinutes}m',
-            style: Theme.of(context).textTheme.bodySmall
-                ?.copyWith(color: roles.secondaryText),
-          ),
-        ),
     ];
     final windowActions = <Widget>[
       if (openMenu != null)
@@ -594,6 +612,10 @@ class _Osd extends StatelessWidget {
     final logoPath = program == null
         ? null
         : _artworkPath(program.scheduled.item, GuideArtworkKind.clearLogo);
+    final statusFacts = [
+      program?.scheduled.item.showTitle,
+      _statusLabel(controller.status.state),
+    ].nonNulls.toList(growable: false);
     final identity = Column(
       key: const Key('player-osd-identity'),
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -625,57 +647,60 @@ class _Osd extends StatelessWidget {
           )
         else
           _OsdTitle(title: title),
-        const SizedBox(height: 4),
-        Text(
-          [
-            program?.scheduled.item.showTitle,
-            _statusLabel(controller.status.state),
-            if (quality.isNotEmpty) quality,
-          ].nonNulls.join(' • '),
-          key: const Key('player-osd-status'),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: Theme.of(context).textTheme.bodyMedium
-              ?.copyWith(color: roles.secondaryText),
-        ),
+        if (statusFacts.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          Text(
+            statusFacts.join(' • '),
+            key: const Key('player-osd-status'),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.bodyMedium
+                ?.copyWith(color: roles.secondaryText),
+          ),
+        ],
       ],
     );
     final progressValue = duration <= 0 ? 0.0 : position.toDouble() / duration;
-    final progress = Column(
+    final remaining = duration <= 0
+        ? null
+        : _wholeMinutesLeft(
+            displayedPosition,
+            Duration(milliseconds: duration),
+          );
+    final progress = Row(
       key: const Key('player-osd-progress-block'),
-      mainAxisSize: MainAxisSize.min,
       children: [
-        Row(
-          children: [
-            Text(
-              '${_duration(controller.position)} / ${_duration(controller.duration)}',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: roles.secondaryText,
-                fontFeatures: const [FontFeature.tabularFigures()],
-              ),
-            ),
-            if (next != null && expanded)
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.only(left: 16),
-                  child: Align(
-                    alignment: Alignment.centerRight,
-                    child: Text(
-                      'Up next • ${next.scheduled.item.title}',
-                      key: const Key('player-osd-next'),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.end,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: roles.mutedText,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
+        Text(
+          [
+            '${_duration(displayedPosition)} / ${_duration(controller.duration)}',
+            ?remaining,
+          ].join(' • '),
+          key: const Key('player-osd-timing'),
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: roles.secondaryText,
+            fontFeatures: const [FontFeature.tabularFigures()],
+          ),
+        ),
+        if (next != null) ...[
+          const SizedBox(width: 16),
+          Expanded(
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: Text(
+                'Up next • ${_time(context, next.scheduled.start.toLocal())} • '
+                '${next.scheduled.item.title}',
+                key: const Key('player-osd-next'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.end,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: roles.mutedText,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
-          ],
-        ),
+            ),
+          ),
+        ],
       ],
     );
     Widget actionGroup(List<Widget> children, {bool separated = true}) =>
@@ -709,7 +734,7 @@ class _Osd extends StatelessWidget {
         child: Semantics(
           label: 'Playback progress',
           value:
-              '${_duration(controller.position)} of ${_duration(controller.duration)}',
+              '${_duration(displayedPosition)} of ${_duration(controller.duration)}',
           child: Stack(
             fit: StackFit.expand,
             children: [
@@ -791,9 +816,7 @@ class _Osd extends StatelessWidget {
                         key: const Key('player-osd-horizontal-layout'),
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
-                          Expanded(flex: 5, child: identity),
-                          const SizedBox(width: 24),
-                          Expanded(flex: 4, child: progress),
+                          Expanded(child: identity),
                           const SizedBox(width: 24),
                           groupedActions,
                         ],
@@ -801,7 +824,6 @@ class _Osd extends StatelessWidget {
                     else ...[
                       identity,
                       const SizedBox(height: 6),
-                      progress,
                       Align(
                         alignment: Alignment.centerRight,
                         child: Row(
@@ -811,6 +833,8 @@ class _Osd extends StatelessWidget {
                         ),
                       ),
                     ],
+                    const SizedBox(height: 10),
+                    progress,
                   ],
                 ),
               ),
@@ -1901,6 +1925,60 @@ String _duration(Duration value) {
   return hours > 0 ? '$hours:$minutes:$seconds' : '$minutes:$seconds';
 }
 
+String? _wholeMinutesLeft(Duration position, Duration duration) {
+  if (duration <= Duration.zero) return null;
+  final remaining = duration - position;
+  if (remaining <= Duration.zero) return '0m left';
+  const millisecondsPerMinute =
+      Duration.secondsPerMinute * Duration.millisecondsPerSecond;
+  final minutes =
+      (remaining.inMilliseconds + millisecondsPerMinute - 1) ~/
+      millisecondsPerMinute;
+  return '${minutes}m left';
+}
+
+String _osdTrackLabel(String category, PlayerTrack? track) {
+  final title = track?.title?.trim();
+  final language = track?.language?.trim();
+  final detail = title?.isNotEmpty == true
+      ? title
+      : language?.isNotEmpty == true
+      ? language
+      : null;
+  return detail == null ? category : '$category • $detail';
+}
+
+Widget _osdAction(
+  BuildContext context, {
+  required Key key,
+  required String label,
+  required String tooltip,
+  required IconData icon,
+  required VoidCallback? onPressed,
+  required bool compact,
+}) {
+  final roles = LineupTheme.of(context);
+  return ConstrainedBox(
+    constraints: BoxConstraints(maxWidth: compact ? 132 : 180),
+    child: Tooltip(
+      message: tooltip,
+      child: TextButton.icon(
+        key: key,
+        onPressed: onPressed,
+        icon: Icon(icon, size: compact ? 17 : 18),
+        label: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+        style: TextButton.styleFrom(
+          foregroundColor: roles.primaryText,
+          padding: EdgeInsets.symmetric(horizontal: compact ? 5 : 8),
+          minimumSize: const Size(0, 40),
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          visualDensity: VisualDensity.compact,
+        ),
+      ),
+    ),
+  );
+}
+
 Uri? _artworkPath(ChannelItem item, GuideArtworkKind kind) => switch (kind) {
   GuideArtworkKind.poster =>
     item.showThumb == null || item.showThumb!.isEmpty
@@ -1924,19 +2002,11 @@ String _time(BuildContext context, DateTime value) =>
     MaterialLocalizations.of(context)
         .formatTimeOfDay(TimeOfDay.fromDateTime(value));
 
-String _quality(PlayerTelemetry value) => [
-  if (value.width != null && value.height != null)
-    '${value.width}×${value.height}',
-  if (value.videoCodec != null) value.videoCodec!,
-  if (value.isHdr) 'HDR',
-  if (value.hardwareDecoder != null) value.hardwareDecoder!,
-].join(' • ');
-
-String _statusLabel(PlayerState state) => switch (state) {
-  PlayerState.idle => 'Idle',
+String? _statusLabel(PlayerState state) => switch (state) {
+  PlayerState.idle => null,
   PlayerState.loading => 'Loading',
-  PlayerState.ready => 'Ready',
-  PlayerState.playing => 'Playing',
+  PlayerState.ready => null,
+  PlayerState.playing => null,
   PlayerState.paused => 'Paused',
   PlayerState.buffering => 'Buffering',
   PlayerState.seeking => 'Seeking',

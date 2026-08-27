@@ -184,9 +184,11 @@ Move the pointer or click/tap the Player to show the on-screen controls. The OSD
 uses a responsive shallow broadcast layout at 1280×720 and 1920×1080. The
 channel bug is in the top-right; the lower-left/lower band uses official Plex
 title artwork when available and falls back to text, while secondary actions
-sit in the lower-right. Metadata and actions are restrained, and an edge-to-edge
-progress line is anchored to the absolute bottom. By default, **DVR playback
-controls** is off: transport buttons are
+sit in the lower-right. The timeline tier immediately above the edge-to-edge
+progress line shows `current / total • time left` on the left when duration is
+known and `Up next • scheduled start • title` on the right. Metadata and actions
+are restrained, and the progress line is anchored to the absolute bottom. By
+default, **DVR playback controls** is off: transport buttons are
 hidden and Player-local pause/play, seek, stop, rewind, and fast-forward
 keyboard/media shortcuts are blocked. Page Up/Page Down channel surfing,
 number entry, Guide/Mini Guide tuning, tracks, sleep, menu, and fullscreen
@@ -199,11 +201,14 @@ native or libmpv behavior. It provides:
 - previous channel, play/pause, and next channel when DVR playback controls are enabled;
 - available audio and subtitle tracks;
 - sleep timer state;
-- native quality/decoder/output facts when the Windows player reports them; and
 - fullscreen entry and exit.
 
 Unavailable tracks or unsupported native actions remain disabled rather than
-showing controls that cannot work.
+showing controls that cannot work. The Guide retains the catalog media facts it
+displays, including resolution, dynamic range, and audio facts. Rich Now
+Playing retains detailed source/runtime resolution, video codec, HDR, and
+hardware-decoder facts when available rather than repeating those facts in the
+default OSD.
 
 Press `I` for persistent rich Now Playing details without leaving playback.
 The details surface uses the current scheduled program for channel and episode

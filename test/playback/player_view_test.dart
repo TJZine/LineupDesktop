@@ -606,10 +606,10 @@ void main() {
         );
         expect(
           surface.height / size.height,
-          lessThan(size.height < 900 ? 0.24 : 0.20),
+          lessThan(size.height < 900 ? 0.30 : 0.26),
           reason: '$size',
         );
-        final progress = tester.getRect(
+        final timeline = tester.getRect(
           find.byKey(const Key('player-osd-progress-block')),
         );
         final controls = tester.getRect(
@@ -621,14 +621,14 @@ void main() {
         final actions = tester.getRect(
           find.byKey(const Key('player-osd-action-groups')),
         );
-        expect(identity.right, lessThan(progress.left), reason: '$size');
-        expect(progress.right, lessThan(actions.left), reason: '$size');
+        expect(identity.left, lessThan(actions.left), reason: '$size');
         expect(
           actions.right,
           lessThanOrEqualTo(surface.right),
           reason: '$size',
         );
-        expect(progress.center.dy, closeTo(controls.center.dy, 24));
+        expect(timeline.bottom, closeTo(surface.bottom, 24));
+        expect(timeline.top, greaterThan(controls.bottom));
       } else {
         expect(
           find.byKey(const Key('player-osd-stacked-controls')),
@@ -637,29 +637,42 @@ void main() {
       }
       expect(
         find.byKey(const Key('player-osd-next')),
-        size.width >= LineupLayout.compact ? findsOneWidget : findsNothing,
+        findsOneWidget,
         reason: '$size',
       );
-      if (size.width >= LineupLayout.compact) {
+      {
+        final timing = tester.widget<Text>(
+          find.byKey(const Key('player-osd-timing')),
+        );
+        expect(timing.data, contains('50m left'));
         final next = tester.widget<Text>(
           find.byKey(const Key('player-osd-next')),
         );
         expect(next.data, contains('deliberately long synthetic next program'));
+        final localizedStart =
+            MaterialLocalizations.of(
+              tester.element(find.byKey(const Key('player-osd-surface'))),
+            ).formatTimeOfDay(
+              TimeOfDay.fromDateTime(
+                fixture.player.nextProgram!.scheduled.start.toLocal(),
+              ),
+            );
+        expect(next.data, contains('Up next • $localizedStart •'));
         expect(next.maxLines, 1);
         expect(next.overflow, TextOverflow.ellipsis);
-        final progress = tester.getRect(
+        final timeline = tester.getRect(
           find.byKey(const Key('player-osd-progress-block')),
         );
         final nextRect = tester.getRect(
           find.byKey(const Key('player-osd-next')),
         );
         expect(
-          progress.inflate(0.1).contains(nextRect.topLeft),
+          timeline.inflate(0.1).contains(nextRect.topLeft),
           isTrue,
           reason: '$size',
         );
         expect(
-          progress.inflate(0.1).contains(nextRect.bottomRight),
+          timeline.inflate(0.1).contains(nextRect.bottomRight),
           isTrue,
           reason: '$size',
         );
@@ -711,6 +724,156 @@ void main() {
         }
       }
 
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    }
+  });
+
+  testWidgets('OSD uses stateful labeled track and sleep actions', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 720));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final fixture = _Fixture(
+      PlayerState.playing,
+      tracks: const [
+        PlayerTrack(
+          id: 1,
+          type: PlayerTrackType.audio,
+          selected: true,
+          title: 'English stereo',
+        ),
+        PlayerTrack(
+          id: 2,
+          type: PlayerTrackType.subtitle,
+          selected: false,
+          language: 'English',
+        ),
+      ],
+    );
+    fixture.player.showOsd();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(size: Size(1280, 720)),
+          child: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('Subtitles • Off'), findsOneWidget);
+    expect(find.text('Audio • English stereo'), findsOneWidget);
+    expect(find.text('Sleep • Off'), findsOneWidget);
+    expect(find.byKey(const Key('player-osd-subtitles')), findsOneWidget);
+    expect(find.byKey(const Key('player-osd-audio')), findsOneWidget);
+    expect(find.byKey(const Key('player-osd-sleep')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
+  testWidgets('OSD omits normal-state status and quality telemetry', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 720));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final fixture = _Fixture(
+      PlayerState.playing,
+      richProgram: true,
+      nativeTelemetry: const PlayerTelemetry(
+        width: 1920,
+        height: 1080,
+        videoCodec: 'h264',
+      ),
+    );
+    fixture.player.showOsd();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(size: Size(1280, 720)),
+          child: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final status = tester.widget<Text>(
+      find.byKey(const Key('player-osd-status')),
+    );
+    expect(status.data, 'Lineup Stories');
+    expect(status.data, isNot(contains('Playing')));
+    expect(find.text('1080p'), findsNothing);
+    expect(find.text('1920×1080'), findsNothing);
+    expect(find.text('h264'), findsNothing);
+
+    fixture.player.showNowPlaying();
+    await tester.pumpAndSettle();
+    final nowPlayingSemantics = tester.widget<Semantics>(
+      find
+          .ancestor(
+            of: find.byKey(const Key('player-now-playing-shelf')),
+            matching: find.byType(Semantics),
+          )
+          .first,
+    );
+    expect(
+      nowPlayingSemantics.properties.label,
+      allOf(contains('1920×1080'), contains('h264')),
+    );
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
+  testWidgets('OSD rounds positive remaining minutes up', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 720));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    for (final (position, duration, expected) in [
+      (const Duration(seconds: 1), const Duration(minutes: 1), '1m left'),
+      (
+        const Duration(milliseconds: 59999),
+        const Duration(minutes: 2),
+        '2m left',
+      ),
+      (const Duration(minutes: 1), const Duration(minutes: 1), '0m left'),
+      (
+        const Duration(minutes: 2),
+        const Duration(minutes: 1),
+        '01:00 / 01:00 • 0m left',
+      ),
+      (
+        const Duration(seconds: -1),
+        const Duration(minutes: 1),
+        '00:00 / 01:00 • 1m left',
+      ),
+      (const Duration(seconds: 10), Duration.zero, '00:10 / 00:00'),
+    ]) {
+      final fixture = _Fixture(
+        PlayerState.playing,
+        nativePosition: position,
+        nativeDuration: duration,
+      );
+      fixture.player.showOsd();
+      await tester.pumpWidget(
+        MaterialApp(
+          key: ValueKey(position),
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      );
+      await tester.pump();
+
+      expect(
+        tester.widget<Text>(find.byKey(const Key('player-osd-timing'))).data,
+        contains(expected),
+      );
+      if (duration == Duration.zero) {
+        expect(
+          tester.widget<Text>(find.byKey(const Key('player-osd-timing'))).data,
+          isNot(contains('left')),
+        );
+      }
       await tester.pumpWidget(const SizedBox.shrink());
       fixture.dispose();
     }
@@ -832,6 +995,7 @@ void main() {
         findsOneWidget,
         reason: '$size',
       );
+      expect(tester.takeException(), isNull, reason: '$size');
     }
     await tester.binding.setSurfaceSize(null);
     fixture.player.closeOverlay();
@@ -2164,6 +2328,9 @@ class _Fixture {
     bool longNextTitle = false,
     ChannelItem? richItemOverride,
     DateTime Function()? guideClock,
+    Duration nativePosition = const Duration(minutes: 10),
+    Duration nativeDuration = const Duration(hours: 1),
+    PlayerTelemetry nativeTelemetry = const PlayerTelemetry(),
   }) {
     lineup = _Lineup(
       channelCount,
@@ -2192,6 +2359,9 @@ class _Fixture {
       failStop: failStop,
       blockLoad: blockLoad,
       tracks: tracks,
+      positionValue: nativePosition,
+      durationValue: nativeDuration,
+      telemetryValue: nativeTelemetry,
     );
     player = PlayerCoordinator(
       player: native,
@@ -2382,6 +2552,9 @@ class _Native implements NativePlayer {
     this.failStop = false,
     this.blockLoad = false,
     this.tracks = const [],
+    this.positionValue = const Duration(minutes: 10),
+    this.durationValue = const Duration(hours: 1),
+    this.telemetryValue = const PlayerTelemetry(),
   }) : status = PlayerStatus(
          state: state,
          message: state == PlayerState.unsupported
@@ -2392,6 +2565,9 @@ class _Native implements NativePlayer {
   final bool failLoad;
   final bool failStop;
   final bool blockLoad;
+  final Duration positionValue;
+  final Duration durationValue;
+  final PlayerTelemetry telemetryValue;
   final loadStarted = Completer<void>();
   final _loadCompletion = Completer<void>();
   int transportCommands = 0;
@@ -2400,11 +2576,11 @@ class _Native implements NativePlayer {
   @override
   final PlayerStatus status;
   @override
-  Duration get position => const Duration(minutes: 10);
+  Duration get position => positionValue;
   @override
-  Duration get duration => const Duration(hours: 1);
+  Duration get duration => durationValue;
   @override
-  PlayerTelemetry get telemetry => const PlayerTelemetry();
+  PlayerTelemetry get telemetry => telemetryValue;
   @override
   final List<PlayerTrack> tracks;
   @override
