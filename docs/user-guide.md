@@ -220,10 +220,12 @@ clear logo leads the identity and text remains the fallback when the logo is
 missing, disabled, or fails. Its playback line is shown only for facts that are
 available: source/runtime details are separate, and actual native playback
 position/duration are preferred, with schedule timing used when native duration
-is unavailable. The actor/portrait row remains absent because the current
-`ChannelItem` has no complete actor/headshot facts; the upstream circles are
-actor portraits, not initials. Up Next and secondary actions remain owned by
-the OSD. Pointer movement leaves this reading surface open. Press `I` or Back
+is unavailable. When Plex supplies cast facts, actor portraits appear between
+the synopsis and progress, with names and roles available to accessibility.
+Missing or failed headshots use a neutral person silhouette, never fabricated
+initials, and no cast space is reserved when cast facts are absent. Up Next and
+secondary actions remain owned by the OSD. Pointer movement leaves this reading
+surface open. Press `I` or Back
 to close it; `Down`, `Enter`, click/tap, or a successful enabled transport
 action replaces it with the OSD, while a failed action retains the safe error
 surface. `A` or `C` opens the requested track list directly when that track type

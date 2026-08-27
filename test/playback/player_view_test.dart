@@ -1820,6 +1820,128 @@ void main() {
   });
 
   testWidgets(
+    'Now Playing renders bounded cast portraits, fallbacks, names, and semantics',
+    (tester) async {
+      final fixture = _Fixture(
+        PlayerState.playing,
+        richItemOverride: _fixtureItem(
+          0,
+          rich: true,
+          duration: const Duration(hours: 1),
+          cast: _fixtureCast,
+        ),
+      );
+      await tester.binding.setSurfaceSize(const Size(1280, 720));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final semantics = tester.ensureSemantics();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MediaQuery(
+            data: const MediaQueryData(size: Size(1280, 720)),
+            child: PlayerView(controller: fixture.player, openGuide: () {}),
+          ),
+        ),
+      );
+      await tester.pump();
+      fixture.player.showNowPlaying();
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('player-now-playing-cast')), findsOneWidget);
+      expect(
+        find.byKey(const Key('player-now-playing-cast-portrait-0')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('player-now-playing-cast-fallback-4')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('player-now-playing-cast-more')),
+        findsOneWidget,
+      );
+      expect(find.text('+2'), findsOneWidget);
+      expect(
+        find.text(
+          'Avery Vale • Mina Park • Solomon Reed • Clara Wynn • Noa Bell • Theo March • Imani Cross',
+        ),
+        findsOneWidget,
+      );
+      expect(fixture.lineup.artworkRequests, hasLength(6));
+      expect(
+        find.bySemanticsLabel(
+          RegExp(
+            r'Cast: Avery Vale as Detective Rowan.*Mina Park as Dr\. Lena Quill',
+          ),
+        ),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+
+      semantics.dispose();
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    },
+  );
+
+  testWidgets('failed cast portrait uses the neutral person fallback', (
+    tester,
+  ) async {
+    final fixture = _Fixture(
+      PlayerState.playing,
+      failArtwork: true,
+      richItemOverride: _fixtureItem(
+        0,
+        rich: true,
+        duration: const Duration(hours: 1),
+        cast: [
+          ChannelCastMember(
+            name: 'Avery Vale',
+            portrait: Uri.parse('/library/metadata/test/cast-avery'),
+          ),
+        ],
+      ),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+    await tester.pump();
+    fixture.player.showNowPlaying();
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('player-now-playing-cast-fallback-0')),
+      findsOneWidget,
+    );
+    expect(find.byIcon(Icons.person), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
+  testWidgets('Now Playing omits cast without cast facts', (tester) async {
+    final fixture = _Fixture(PlayerState.playing, richProgram: true);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+    await tester.pump();
+    fixture.player.showNowPlaying();
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('player-now-playing-cast')), findsNothing);
+    expect(
+      find.byKey(const Key('player-now-playing-cast-names')),
+      findsNothing,
+    );
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
+  testWidgets(
     'Now Playing falls back to schedule timing without native duration',
     (tester) async {
       final now = DateTime.utc(2026, 1, 15, 3);
@@ -1980,6 +2102,37 @@ void main() {
     },
   );
 
+  testWidgets('compact Now Playing with cast does not overflow', (
+    tester,
+  ) async {
+    final fixture = _Fixture(
+      PlayerState.playing,
+      richItemOverride: _fixtureItem(
+        0,
+        rich: true,
+        duration: const Duration(hours: 1),
+        cast: _fixtureCast.take(5).toList(growable: false),
+      ),
+    );
+    await tester.binding.setSurfaceSize(const Size(800, 600));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+    await tester.pump();
+    fixture.player.showNowPlaying();
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('player-now-playing-cast')), findsOneWidget);
+    expect(find.text('+1'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
   testWidgets('Guide clock replacement updates the visible current program', (
     tester,
   ) async {
@@ -2131,74 +2284,123 @@ void main() {
     },
   );
 
-  testWidgets('Now Playing reflows from 800x600 through 4K', (tester) async {
-    final fixture = _Fixture(PlayerState.playing, richProgram: true);
-    tester.view.devicePixelRatio = 1;
+  testWidgets('Now Playing reflows with and without cast through 4K', (
+    tester,
+  ) async {
     addTearDown(tester.view.resetDevicePixelRatio);
     addTearDown(tester.view.resetPhysicalSize);
 
-    for (final layout in const [
-      (viewport: Size(800, 600), shelf: Size(760, 336)),
-      (viewport: Size(1280, 720), shelf: Size(1180, 380)),
-      (viewport: Size(1600, 900), shelf: Size(1180, 450)),
-      (viewport: Size(1920, 1080), shelf: Size(1180, 540)),
-      (viewport: Size(3840, 2160), shelf: Size(1500, 560)),
+    for (final variant in const [
+      (
+        castPresent: false,
+        shelves: [
+          Size(760, 336),
+          Size(1180, 380),
+          Size(1180, 450),
+          Size(1180, 540),
+          Size(1500, 560),
+        ],
+        dpr2Shelf: Size(1180, 540),
+      ),
+      (
+        castPresent: true,
+        shelves: [
+          Size(760, 378),
+          Size(1180, 432),
+          Size(1180, 486),
+          Size(1180, 580),
+          Size(1500, 580),
+        ],
+        dpr2Shelf: Size(1180, 580),
+      ),
     ]) {
-      tester.view.physicalSize = layout.viewport;
+      final fixture = variant.castPresent
+          ? _Fixture(
+              PlayerState.playing,
+              richItemOverride: _fixtureItem(
+                0,
+                rich: true,
+                duration: const Duration(hours: 1),
+                cast: _fixtureCast.take(5).toList(growable: false),
+              ),
+            )
+          : _Fixture(PlayerState.playing, richProgram: true);
+      tester.view.devicePixelRatio = 1;
+
+      for (final (index, viewport) in const [
+        Size(800, 600),
+        Size(1280, 720),
+        Size(1600, 900),
+        Size(1920, 1080),
+        Size(3840, 2160),
+      ].indexed) {
+        final expectedShelf = variant.shelves[index];
+        tester.view.physicalSize = viewport;
+        await tester.pumpWidget(
+          MaterialApp(
+            home: PlayerView(controller: fixture.player, openGuide: () {}),
+          ),
+        );
+        await tester.pump();
+        fixture.player.showNowPlaying();
+        await tester.pumpAndSettle();
+
+        final shelfSize = tester.getSize(
+          find.byKey(const Key('player-now-playing-shelf')),
+        );
+        expect(shelfSize.width, closeTo(expectedShelf.width, 0.01));
+        expect(shelfSize.height, closeTo(expectedShelf.height, 0.01));
+        expect(
+          tester
+              .getSize(find.byKey(const Key('player-now-playing-poster')))
+              .width,
+          closeTo((expectedShelf.height * 2 / 3).clamp(190, 374), 0.01),
+        );
+        expect(
+          tester
+              .getSize(find.byKey(const Key('player-now-playing-poster')))
+              .height,
+          closeTo(expectedShelf.height, 1.01),
+        );
+        expect(
+          tester
+              .getRect(find.byKey(const Key('player-now-playing-title')).last)
+              .top,
+          greaterThan(
+            tester
+                .getRect(find.byKey(const Key('player-now-playing-logo')))
+                .top,
+          ),
+        );
+        expect(
+          find.byKey(const Key('player-now-playing-cast')),
+          variant.castPresent ? findsOneWidget : findsNothing,
+        );
+        expect(tester.takeException(), isNull, reason: '$viewport');
+      }
+
+      tester.view
+        ..devicePixelRatio = 2
+        ..physicalSize = const Size(3840, 2160);
       await tester.pumpWidget(
         MaterialApp(
           home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
       );
-      await tester.pump();
-      fixture.player.showNowPlaying();
       await tester.pumpAndSettle();
+      expect(
+        tester.getSize(find.byKey(const Key('player-now-playing-shelf'))),
+        variant.dpr2Shelf,
+      );
+      expect(
+        find.byKey(const Key('player-now-playing-cast')),
+        variant.castPresent ? findsOneWidget : findsNothing,
+      );
+      expect(tester.takeException(), isNull, reason: 'DPR2');
 
-      final shelfSize = tester.getSize(
-        find.byKey(const Key('player-now-playing-shelf')),
-      );
-      expect(shelfSize.width, closeTo(layout.shelf.width, 0.01));
-      expect(shelfSize.height, closeTo(layout.shelf.height, 0.01));
-      expect(
-        tester
-            .getSize(find.byKey(const Key('player-now-playing-poster')))
-            .width,
-        closeTo((layout.shelf.height * 2 / 3).clamp(190, 374), 0.01),
-      );
-      expect(
-        tester
-            .getSize(find.byKey(const Key('player-now-playing-poster')))
-            .height,
-        closeTo(layout.shelf.height, 1.01),
-      );
-      expect(
-        tester
-            .getRect(find.byKey(const Key('player-now-playing-title')).last)
-            .top,
-        greaterThan(
-          tester.getRect(find.byKey(const Key('player-now-playing-logo'))).top,
-        ),
-      );
-      expect(tester.takeException(), isNull, reason: '${layout.viewport}');
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
     }
-
-    tester.view
-      ..devicePixelRatio = 2
-      ..physicalSize = const Size(3840, 2160);
-    await tester.pumpWidget(
-      MaterialApp(
-        home: PlayerView(controller: fixture.player, openGuide: () {}),
-      ),
-    );
-    await tester.pumpAndSettle();
-    expect(
-      tester.getSize(find.byKey(const Key('player-now-playing-shelf'))),
-      const Size(1180, 540),
-    );
-    expect(tester.takeException(), isNull);
-
-    await tester.pumpWidget(const SizedBox.shrink());
-    fixture.dispose();
   });
 
   testWidgets(
@@ -2585,6 +2787,7 @@ ChannelItem _fixtureItem(
   bool includeClearLogo = true,
   String? dynamicRange,
   required Duration duration,
+  List<ChannelCastMember> cast = const [],
 }) => ChannelItem(
   id: '${index == 0 ? 'program' : 'program-$index'}$suffix',
   title:
@@ -2610,7 +2813,34 @@ ChannelItem _fixtureItem(
   resolution: rich ? '1080p' : null,
   dynamicRange: dynamicRange,
   videoCodec: rich ? 'h264' : null,
+  cast: cast,
 );
+
+final _fixtureCast = [
+  ChannelCastMember(
+    name: 'Avery Vale',
+    role: 'Detective Rowan',
+    portrait: Uri.parse('/library/metadata/test/cast-avery'),
+  ),
+  ChannelCastMember(
+    name: 'Mina Park',
+    role: 'Dr. Lena Quill',
+    portrait: Uri.parse('/library/metadata/test/cast-mina'),
+  ),
+  ChannelCastMember(
+    name: 'Solomon Reed',
+    role: 'Arthur Bell',
+    portrait: Uri.parse('/library/metadata/test/cast-solomon'),
+  ),
+  ChannelCastMember(
+    name: 'Clara Wynn',
+    role: 'June Mercer',
+    portrait: Uri.parse('/library/metadata/test/cast-clara'),
+  ),
+  ChannelCastMember(name: 'Noa Bell', role: 'Evelyn Shaw'),
+  ChannelCastMember(name: 'Theo March', role: 'Deputy Ames'),
+  ChannelCastMember(name: 'Imani Cross', role: 'Nora Venn'),
+];
 
 String _statusLabelForTest(PlayerState state) => switch (state) {
   PlayerState.loading => 'Loading',

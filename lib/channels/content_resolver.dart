@@ -80,6 +80,15 @@ ChannelItem channelItemFor(PlexMediaItem item) => ChannelItem(
   audioCodec: item.audioCodec,
   audioChannels: item.audioChannels,
   dynamicRange: item.dynamicRange.name,
+  cast: List.unmodifiable(
+    item.cast.map(
+      (member) => ChannelCastMember(
+        name: member.name,
+        role: member.role,
+        portrait: _uriPath(member.thumbPath),
+      ),
+    ),
+  ),
 );
 
 Uri? _uriPath(String? path) =>

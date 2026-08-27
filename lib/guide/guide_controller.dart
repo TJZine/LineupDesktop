@@ -258,7 +258,15 @@ class GuideController extends ChangeNotifier {
       GuideArtworkKind.clearLogo => item.clearLogo,
     };
     if (path == null || path.toString().isEmpty) return Future.value();
-    final key = '${item.id}|${kind.name}|$path';
+    return _artworkForPath(path, '${item.id}|${kind.name}|$path');
+  }
+
+  Future<Uint8List?> artworkForPath(Uri path) {
+    if (_disposed || path.toString().isEmpty) return Future.value();
+    return _artworkForPath(path, 'path|$path');
+  }
+
+  Future<Uint8List?> _artworkForPath(Uri path, String key) {
     final existing = _artwork.remove(key);
     if (existing != null) {
       _artwork[key] = existing;
@@ -788,7 +796,13 @@ bool _itemEquals(ChannelItem left, ChannelItem right) =>
     left.videoCodec == right.videoCodec &&
     left.audioCodec == right.audioCodec &&
     left.audioChannels == right.audioChannels &&
-    left.dynamicRange == right.dynamicRange;
+    left.dynamicRange == right.dynamicRange &&
+    _listEqualsBy(left.cast, right.cast, _castMemberEquals);
+
+bool _castMemberEquals(ChannelCastMember left, ChannelCastMember right) =>
+    left.name == right.name &&
+    left.role == right.role &&
+    left.portrait == right.portrait;
 
 bool _listEqualsBy<T>(List<T> left, List<T> right, bool Function(T, T) equals) {
   if (identical(left, right)) return true;

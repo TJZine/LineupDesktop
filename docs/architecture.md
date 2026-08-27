@@ -115,8 +115,8 @@ navigation do not enter C++.
   restoration. Rich Now Playing is one mutually exclusive Flutter overlay, not
   a route or second playback owner. It reads the current scheduled program and
   reuses `GuideController`'s bounded artwork futures/cache for poster, backdrop,
-  and optional clear-logo bytes; artwork identity includes the current content
-  generation so replaced content cannot retain stale imagery.
+  optional clear-logo, and cast-portrait bytes; artwork identity includes the
+  current content generation so replaced content cannot retain stale imagery.
   Ordered Plex parts remain one Flutter-owned playback lifetime: the
   coordinator gives every native load its own generation, advances natural
   completion once, and maps only known part boundaries. Native events remain

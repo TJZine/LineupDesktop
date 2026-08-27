@@ -612,6 +612,7 @@ String? _identityId(String body) {
 
 PlexMediaItem parseMediaItem(Object? raw, {String? libraryId}) {
   final json = _record(raw, 'media item');
+  final cast = _castMembers(json['Role']);
   final media = (json['Media'] as List? ?? const [])
       .whereType<Map>()
       .firstOrNull;
@@ -643,7 +644,8 @@ PlexMediaItem parseMediaItem(Object? raw, {String? libraryId}) {
     genres: _tagNames(json['Genre']),
     collections: _tagNames(json['Collection']),
     directors: _tagNames(json['Director']),
-    actors: _tagNames(json['Role']),
+    actors: cast.map((member) => member.name).toList(growable: false),
+    cast: cast,
     studio: _optionalText(json['studio']),
     year: _optionalInteger(json['year']),
     summary: _optionalText(json['summary']),
@@ -694,6 +696,26 @@ List<String> _tagNames(Object? raw) {
     }
   }
   return names;
+}
+
+List<PlexCastMember> _castMembers(Object? raw) {
+  final members = <PlexCastMember>[];
+  final names = <String>{};
+  for (final value in raw as List? ?? const []) {
+    if (value is! Map) continue;
+    final name = _optionalText(value['tag']);
+    if (name == null || !names.add(name.toLowerCase())) continue;
+    members.add(
+      PlexCastMember(
+        name: name,
+        role: _optionalText(value['role']),
+        thumbPath: canonicalCastPortrait(
+          Uri.tryParse(_optionalText(value['thumb']) ?? ''),
+        )?.toString(),
+      ),
+    );
+  }
+  return List.unmodifiable(members);
 }
 
 int _connectionTier(PlexConnection connection) {

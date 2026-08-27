@@ -152,6 +152,14 @@ class PlexMediaPart {
   final Duration? duration;
 }
 
+class PlexCastMember {
+  const PlexCastMember({required this.name, this.role, this.thumbPath});
+
+  final String name;
+  final String? role;
+  final String? thumbPath;
+}
+
 class PlexMediaItem {
   const PlexMediaItem({
     required this.id,
@@ -174,6 +182,7 @@ class PlexMediaItem {
     this.collections = const [],
     this.directors = const [],
     this.actors = const [],
+    this.cast = const [],
     this.studio,
     this.year,
     this.summary,
@@ -206,6 +215,7 @@ class PlexMediaItem {
   final List<String> collections;
   final List<String> directors;
   final List<String> actors;
+  final List<PlexCastMember> cast;
   final String? studio;
   final int? year;
   final String? summary;

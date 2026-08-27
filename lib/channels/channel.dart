@@ -145,6 +145,7 @@ class ChannelItem {
     this.audioCodec,
     this.audioChannels,
     this.dynamicRange,
+    this.cast = const [],
   });
 
   final String id;
@@ -167,6 +168,7 @@ class ChannelItem {
   final String? audioCodec;
   final int? audioChannels;
   final String? dynamicRange;
+  final List<ChannelCastMember> cast;
 
   Map<String, Object?> toJson() => {
     'id': id,
@@ -188,6 +190,8 @@ class ChannelItem {
     if (audioCodec != null) 'audioCodec': audioCodec,
     if (audioChannels != null) 'audioChannels': audioChannels,
     if (dynamicRange != null) 'dynamicRange': dynamicRange,
+    if (cast.isNotEmpty)
+      'cast': cast.map((member) => member.toJson()).toList(growable: false),
   };
 
   factory ChannelItem.fromJson(Object? value) {
@@ -213,6 +217,7 @@ class ChannelItem {
           'audioCodec',
           'audioChannels',
           'dynamicRange',
+          'cast',
         },
       );
       final duration = Duration(milliseconds: _integer(json['durationMs']));
@@ -241,6 +246,13 @@ class ChannelItem {
         audioCodec: _optionalString(json, 'audioCodec'),
         audioChannels: _optionalInteger(json, 'audioChannels'),
         dynamicRange: _optionalString(json, 'dynamicRange'),
+        cast: json.containsKey('cast')
+            ? List<ChannelCastMember>.unmodifiable(
+                (_nonNull(json, 'cast') as List).map(
+                  ChannelCastMember.fromJson,
+                ),
+              )
+            : const [],
       );
     } on FormatException {
       rethrow;
@@ -248,6 +260,53 @@ class ChannelItem {
       throw FormatException('Invalid channel item', error);
     }
   }
+}
+
+class ChannelCastMember {
+  ChannelCastMember({required this.name, this.role, Uri? portrait})
+    : portrait = canonicalCastPortrait(portrait);
+
+  final String name;
+  final String? role;
+  final Uri? portrait;
+
+  Map<String, Object?> toJson() => {
+    'name': name,
+    if (role != null) 'role': role,
+    if (portrait != null) 'portrait': portrait.toString(),
+  };
+
+  factory ChannelCastMember.fromJson(Object? value) {
+    final json = _object(value, 'cast member');
+    _requireFields(json, const {'name'}, const {'role', 'portrait'});
+    return ChannelCastMember(
+      name: _string(json['name']),
+      role: _optionalString(json, 'role'),
+      portrait: _optionalUri(json, 'portrait'),
+    );
+  }
+}
+
+Uri? canonicalCastPortrait(Uri? value) {
+  if (value == null ||
+      value.scheme.isNotEmpty ||
+      value.hasAuthority ||
+      value.hasQuery ||
+      value.hasFragment ||
+      !value.path.startsWith('/library/metadata/')) {
+    return null;
+  }
+  final suffix = value.path.substring('/library/metadata/'.length);
+  if (suffix.isEmpty ||
+      suffix
+          .split('/')
+          .any(
+            (segment) => segment.isEmpty || segment == '.' || segment == '..',
+          ) ||
+      value.pathSegments.any((segment) => segment == '.' || segment == '..')) {
+    return null;
+  }
+  return value.toString() == value.path ? value : null;
 }
 
 class Channel {

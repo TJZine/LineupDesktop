@@ -163,6 +163,48 @@ void main() {
     lineup.dispose();
   });
 
+  test('cast changes make Guide channel content non-current', () async {
+    Channel channel(List<ChannelCastMember> cast) => Channel(
+      id: 'cast-channel',
+      number: 1,
+      name: 'Cast',
+      source: ManualSource([
+        ChannelItem(
+          id: 'episode',
+          title: 'Episode',
+          duration: const Duration(hours: 1),
+          cast: cast,
+        ),
+      ]),
+      playbackMode: PlaybackMode.sequential,
+      anchor: DateTime(2026, 8, 13),
+      shuffleSeed: 1,
+    );
+
+    final lineup = _TestLineup([
+      channel([ChannelCastMember(name: 'Avery Vale')]),
+    ]);
+    var loads = 0;
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (value) async {
+        loads++;
+        return _schedule(value);
+      },
+    )..requestViewport(0, 1);
+    await _settle();
+
+    lineup.setChannels([
+      channel([ChannelCastMember(name: 'Avery Vale', role: 'Detective Rowan')]),
+    ]);
+    guide.requestViewport(0, 1);
+    await _settle();
+
+    expect(loads, 2);
+    guide.dispose();
+    lineup.dispose();
+  });
+
   test('stale schedule result cannot repopulate a replaced lineup', () async {
     final old = _channels(1).single;
     final next = _channels(1, idPrefix: 'new').single;
@@ -491,6 +533,23 @@ void main() {
     ]);
     lineup.completeArtwork();
     expect(await Future.wait(loads), everyElement(isNotNull));
+  });
+
+  test('generic artwork paths share the bounded Guide cache', () async {
+    final lineup = _ArtworkLineup(_channels(1));
+    addTearDown(lineup.dispose);
+    final guide = GuideController(lineup: lineup);
+    addTearDown(guide.dispose);
+    final path = Uri.parse('/cast/avery');
+
+    final first = guide.artworkForPath(path);
+    final cached = guide.artworkForPath(path);
+    await _settle();
+
+    expect(identical(first, cached), isTrue);
+    expect(lineup.artworkPaths, [path]);
+    lineup.completeArtwork();
+    expect(await first, isNotNull);
   });
 
   test('production schedules use the persistent catalog worker', () async {

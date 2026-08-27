@@ -120,6 +120,66 @@ void main() {
     expect(item.clearLogo, Uri.parse('/show/clearlogo'));
   });
 
+  test('maps Plex cast facts without changing the actor-name projection', () {
+    final item = channelItemFor(
+      const PlexMediaItem(
+        id: 'episode',
+        title: 'Episode',
+        type: 'episode',
+        duration: Duration(minutes: 1),
+        actors: ['Avery Vale'],
+        cast: [
+          PlexCastMember(
+            name: 'Avery Vale',
+            role: 'Detective Rowan',
+            thumbPath: '/library/metadata/avery/thumb',
+          ),
+          PlexCastMember(name: 'Mina Park'),
+          PlexCastMember(
+            name: 'Unsafe Absolute',
+            role: 'Reporter',
+            thumbPath: 'https://plex.invalid/library/metadata/2/thumb',
+          ),
+          PlexCastMember(
+            name: 'Unsafe Token',
+            role: 'Dispatcher',
+            thumbPath: '/library/metadata/3/thumb?X-Plex-Token=secret',
+          ),
+          PlexCastMember(
+            name: 'Unsafe Fragment',
+            role: 'Archivist',
+            thumbPath: '/library/metadata/4/thumb#private',
+          ),
+          PlexCastMember(
+            name: 'Unsafe Transcode',
+            thumbPath: '/photo/:/transcode?url=private',
+          ),
+          PlexCastMember(
+            name: 'Unsafe File',
+            thumbPath: '/Users/private/cast.png',
+          ),
+        ],
+      ),
+    );
+
+    expect(item.cast.first.name, 'Avery Vale');
+    expect(item.cast.first.role, 'Detective Rowan');
+    expect(
+      item.cast.first.portrait,
+      Uri.parse('/library/metadata/avery/thumb'),
+    );
+    expect(item.cast[2].name, 'Unsafe Absolute');
+    expect(item.cast[2].role, 'Reporter');
+    expect(item.cast[3].name, 'Unsafe Token');
+    expect(item.cast[3].role, 'Dispatcher');
+    expect(item.cast[4].name, 'Unsafe Fragment');
+    expect(item.cast[4].role, 'Archivist');
+    expect(
+      item.cast.skip(1).map((member) => member.portrait),
+      everyElement(isNull),
+    );
+  });
+
   test('channel item poster, backdrop, and logo round-trip canonically', () {
     final item = ChannelItem(
       id: 'new',
@@ -141,10 +201,29 @@ void main() {
       audioCodec: 'aac',
       audioChannels: 6,
       dynamicRange: 'sdr',
+      cast: [
+        ChannelCastMember(
+          name: 'Avery Vale',
+          role: 'Detective Rowan',
+          portrait: Uri.parse('/library/metadata/avery/thumb'),
+        ),
+        ChannelCastMember(name: 'Mina Park'),
+      ],
     );
     expect(ChannelItem.fromJson(item.toJson()).toJson(), item.toJson());
     expect(item.toJson(), containsPair('poster', '/poster'));
     expect(item.toJson(), isNot(contains('artwork')));
+  });
+
+  test('channel item JSON remains backward compatible without cast', () {
+    final item = ChannelItem.fromJson(const {
+      'id': 'legacy-current',
+      'title': 'Legacy current item',
+      'durationMs': 60000,
+    });
+
+    expect(item.cast, isEmpty);
+    expect(item.toJson(), isNot(contains('cast')));
   });
 
   test('legacy artwork is rejected without a poster fallback', () {

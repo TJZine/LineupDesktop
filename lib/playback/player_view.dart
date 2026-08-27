@@ -929,8 +929,15 @@ class _NowPlaying extends StatelessWidget {
         ? size.width.clamp(0, 1500).toDouble()
         : (size.width * 0.95).clamp(0, 1180).toDouble();
     final shelfHeight = compact
-        ? (size.height * 0.56).clamp(300, 380).toDouble()
-        : (size.height * 0.50).clamp(380, 560).toDouble();
+        ? (size.height * (item.cast.isEmpty ? 0.56 : 0.63))
+              .clamp(300, 380)
+              .toDouble()
+        : (size.height * (item.cast.isEmpty ? 0.50 : 0.54))
+              .clamp(
+                item.cast.isEmpty ? 380 : 432,
+                item.cast.isEmpty ? 560 : 580,
+              )
+              .toDouble();
     final denseShelf = compact || shelfHeight < 440;
     final showPoster = size.width >= 700 && size.height >= 500;
     final preferLogo = controller.lineup.settings.preferClearLogos;
@@ -993,6 +1000,13 @@ class _NowPlaying extends StatelessWidget {
         : ['Playback', ...runtimeFacts].join(' • ');
     final playbackTime =
         '${_duration(timingPosition)} / ${_duration(timingDuration)}';
+    final castFacts = item.cast
+        .map(
+          (member) => member.role == null
+              ? member.name
+              : '${member.name} as ${member.role}',
+        )
+        .join(', ');
     final semanticFacts = [
       'Now playing',
       ?item.showTitle,
@@ -1005,6 +1019,7 @@ class _NowPlaying extends StatelessWidget {
       ?playbackFacts,
       '$playbackTime playback',
       ?item.summary,
+      if (castFacts.isNotEmpty) 'Cast: $castFacts',
     ].join('. ');
     final artworkIdentity = (program.id, generation);
 
@@ -1116,6 +1131,7 @@ class _NowPlaying extends StatelessWidget {
                                   controller: controller,
                                   program: program,
                                   compact: denseShelf,
+                                  hasCast: item.cast.isNotEmpty,
                                 )
                               else
                                 _NowPlayingTitle(
@@ -1186,13 +1202,24 @@ class _NowPlaying extends StatelessWidget {
                                 Text(
                                   summary,
                                   key: const Key('player-now-playing-summary'),
-                                  maxLines: denseShelf ? 3 : 4,
+                                  maxLines: item.cast.isEmpty
+                                      ? (denseShelf ? 3 : 4)
+                                      : (denseShelf ? 2 : 3),
                                   overflow: TextOverflow.ellipsis,
                                   style: Theme.of(context).textTheme.bodyLarge
                                       ?.copyWith(
                                         color: roles.primaryText,
                                         height: 1.45,
                                       ),
+                                ),
+                              ],
+                              if (item.cast.isNotEmpty) ...[
+                                SizedBox(height: denseShelf ? 10 : 14),
+                                _NowPlayingCast(
+                                  controller: controller,
+                                  cast: item.cast,
+                                  compact: compact,
+                                  dense: denseShelf,
                                 ),
                               ],
                               const Spacer(),
@@ -1240,12 +1267,14 @@ class _NowPlayingIdentity extends StatefulWidget {
     required this.controller,
     required this.program,
     required this.compact,
+    required this.hasCast,
     super.key,
   });
 
   final PlayerCoordinator controller;
   final GuideProgram program;
   final bool compact;
+  final bool hasCast;
 
   @override
   State<_NowPlayingIdentity> createState() => _NowPlayingIdentityState();
@@ -1274,7 +1303,11 @@ class _NowPlayingIdentityState extends State<_NowPlayingIdentity> {
           ConstrainedBox(
             constraints: BoxConstraints(
               maxWidth: widget.compact ? 360 : 600,
-              maxHeight: widget.compact ? 84 : 132,
+              maxHeight: widget.hasCast && widget.compact
+                  ? 58
+                  : widget.compact
+                  ? 84
+                  : 132,
             ),
             child: Image.memory(
               bytes,
@@ -1412,6 +1445,110 @@ class _NowPlayingBadge extends StatelessWidget {
       ),
     );
   }
+}
+
+class _NowPlayingCast extends StatelessWidget {
+  const _NowPlayingCast({
+    required this.controller,
+    required this.cast,
+    required this.compact,
+    required this.dense,
+  });
+
+  final PlayerCoordinator controller;
+  final List<ChannelCastMember> cast;
+  final bool compact;
+  final bool dense;
+
+  @override
+  Widget build(BuildContext context) {
+    final roles = LineupTheme.of(context);
+    final limit = compact ? 4 : 5;
+    final visible = cast.take(limit).toList(growable: false);
+    final hidden = cast.length - visible.length;
+    final diameter = dense ? 40.0 : 46.0;
+    return Column(
+      key: const Key('player-now-playing-cast'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            for (final (index, member) in visible.indexed) ...[
+              if (index > 0) const SizedBox(width: 8),
+              SizedBox.square(
+                key: ValueKey('player-now-playing-cast-portrait-$index'),
+                dimension: diameter,
+                child: ClipOval(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: roles.elevatedSurface,
+                      border: Border.all(color: roles.subtleBorder),
+                      shape: BoxShape.circle,
+                    ),
+                    child: member.portrait == null
+                        ? _CastFallback(index: index, roles: roles)
+                        : _PlayerArtwork(
+                            future: controller.guide.artworkForPath(
+                              member.portrait!,
+                            ),
+                            fit: BoxFit.cover,
+                            fallback: _CastFallback(index: index, roles: roles),
+                          ),
+                  ),
+                ),
+              ),
+            ],
+            if (hidden > 0) ...[
+              const SizedBox(width: 8),
+              SizedBox.square(
+                dimension: diameter,
+                child: DecoratedBox(
+                  key: const Key('player-now-playing-cast-more'),
+                  decoration: BoxDecoration(
+                    color: roles.elevatedSurface,
+                    border: Border.all(color: roles.subtleBorder),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Center(
+                    child: Text(
+                      '+$hidden',
+                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                        color: roles.primaryText,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+        const SizedBox(height: 6),
+        Text(
+          cast.map((member) => member.name).join(' • '),
+          key: const Key('player-now-playing-cast-names'),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: Theme.of(context).textTheme.bodySmall
+              ?.copyWith(color: roles.secondaryText),
+        ),
+      ],
+    );
+  }
+}
+
+class _CastFallback extends StatelessWidget {
+  const _CastFallback({required this.index, required this.roles});
+
+  final int index;
+  final LineupThemeRoles roles;
+
+  @override
+  Widget build(BuildContext context) => ColoredBox(
+    key: ValueKey('player-now-playing-cast-fallback-$index'),
+    color: roles.elevatedSurface,
+    child: Icon(Icons.person, color: roles.mutedText),
+  );
 }
 
 class _MiniGuide extends StatelessWidget {
