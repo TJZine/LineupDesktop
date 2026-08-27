@@ -2,12 +2,15 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lineup_desktop/app/channel_air_check.dart';
 import 'package:lineup_desktop/app/channel_setup_view.dart';
 import 'package:lineup_desktop/app/channel_studio_view.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/app/lineup_shell.dart';
 import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/channels/channel_builder.dart';
+import 'package:lineup_desktop/channels/content_resolver.dart';
+import 'package:lineup_desktop/channels/scheduler.dart';
 import 'package:lineup_desktop/persistence/app_store.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
@@ -215,6 +218,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Include watched items'), findsOneWidget);
+    await tester.ensureVisible(find.byType(SwitchListTile));
     await tester.tap(find.byType(SwitchListTile));
     await tester.pump();
     await tester.ensureVisible(find.text('Hand-picked'));
@@ -428,7 +432,7 @@ void main() {
         blockSize: testCase.initialBlockSize,
         builderKey: 'builder:${testCase.name}',
       );
-      final controller = FixtureController()
+      final controller = _ReviewStudioController()
         ..stage = SetupStage.ready
         ..connection = _studioConnection
         ..channels = [original]
@@ -458,7 +462,14 @@ void main() {
       expect(find.textContaining('Convert'), findsNothing);
       await tester.enterText(find.byType(TextFormField).first, 'Renamed');
       await tester.enterText(find.byType(TextFormField).at(1), '42');
-      await tester.tap(find.text('Save identity'));
+      await tester.pump(channelAirCheckDebounce + const Duration(seconds: 1));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Save identity'));
+      tester
+          .widget<FilledButton>(
+            find.widgetWithText(FilledButton, 'Save identity'),
+          )
+          .onPressed!();
       await tester.pumpAndSettle();
 
       final saved = controller.channels.single;
@@ -921,6 +932,16 @@ class _CountingSetupController extends FixtureController {
     setupEntries++;
     await super.enterChannelSetup();
   }
+}
+
+class _ReviewStudioController extends FixtureController {
+  @override
+  Future<ScheduleIndex> loadScheduleFor(Channel channel) async => buildSchedule(
+    resolveContent(channel.source, availableMedia, availablePlaylists),
+    mode: channel.playbackMode,
+    seed: channel.shuffleSeed,
+    blockSize: channel.blockSize ?? 3,
+  );
 }
 
 class _FailNextSaveStore extends FixtureStore {

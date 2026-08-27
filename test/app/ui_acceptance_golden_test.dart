@@ -362,7 +362,7 @@ void main() {
       lessThan(tester.getTopLeft(find.text('Your lineup is ready')).dy),
     );
     expect(
-      tester.getBottomRight(find.text('Done')).dy,
+      tester.getBottomRight(find.text('View lineup')).dy,
       lessThanOrEqualTo(_viewport.height),
     );
     await _match(
@@ -728,6 +728,57 @@ void main() {
     expect(find.byType(NavigationRail), findsNothing);
     await _match(tester, 'settings-playback-ember-steel-1280x720.png');
   });
+
+  testWidgets('Channel Studio expanded custom authoring with Air Check', (
+    tester,
+  ) async {
+    final fixture = _studioFixture();
+    await _pump(tester, fixture.build());
+    await _openDestination(tester, 'Channels');
+    await tester.tap(find.byTooltip('Open Saturday Cartoons'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.pumpAndSettle();
+    await _match(tester, 'channel-studio-expanded-1280x720.png');
+  });
+
+  testWidgets('Channel Studio compact custom authoring with Air Check', (
+    tester,
+  ) async {
+    final fixture = _studioFixture();
+    await _pump(tester, fixture.build(), viewport: const Size(800, 600));
+    await _openDestination(tester, 'Channels');
+    await tester.tap(find.byTooltip('Open Saturday Cartoons'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .state<ScrollableState>(
+            find
+                .descendant(
+                  of: find.byKey(const Key('studio-scroll')),
+                  matching: find.byType(Scrollable),
+                )
+                .first,
+          )
+          .position
+          .pixels,
+      0,
+    );
+    for (final finder in [
+      find.text('Saved'),
+      find.byKey(const Key('channel-air-check')),
+      find.text('Programming'),
+      find.text('Save changes'),
+    ]) {
+      expect(
+        (Offset.zero & const Size(800, 600)).overlaps(tester.getRect(finder)),
+        isTrue,
+      );
+    }
+    await _match(tester, 'channel-studio-compact-800x600.png');
+  });
 }
 
 Future<void> _loadPinnedTestFont() async {
@@ -955,6 +1006,59 @@ UiFixture _readyFixture({
   );
 }
 
+UiFixture _studioFixture() {
+  const programs = [
+    ChannelItem(
+      id: 'cartoon-one',
+      title: 'Moonbase Mystery',
+      showTitle: 'Saturday Signals',
+      duration: Duration(minutes: 30),
+    ),
+    ChannelItem(
+      id: 'cartoon-two',
+      title: 'The Clockwork Cove',
+      showTitle: 'Saturday Signals',
+      duration: Duration(minutes: 30),
+    ),
+    ChannelItem(
+      id: 'cartoon-three',
+      title: 'Rocket Club Rescue',
+      showTitle: 'Junior Orbit',
+      duration: Duration(minutes: 30),
+    ),
+    ChannelItem(
+      id: 'cartoon-four',
+      title: 'Cloud City Picnic',
+      showTitle: 'Junior Orbit',
+      duration: Duration(minutes: 30),
+    ),
+  ];
+  final channel = Channel(
+    id: 'studio-custom',
+    number: 42,
+    name: 'Saturday Cartoons',
+    source: const ManualSource(programs),
+    playbackMode: PlaybackMode.sequential,
+    anchor: DateTime.utc(2026, 1, 15, 3),
+    shuffleSeed: 42,
+  );
+  final controller = _VisualController()
+    ..stage = SetupStage.ready
+    ..channels = [channel]
+    ..availableMedia = [
+      for (final program in programs)
+        PlexMediaItem(
+          id: program.id,
+          title: program.title,
+          type: 'episode',
+          duration: program.duration,
+          grandparentTitle: program.showTitle,
+          parts: [PlexMediaPart(path: '/synthetic/${program.id}')],
+        ),
+    ];
+  return UiFixture(controller: controller, guideClock: () => _fixedNow);
+}
+
 class _VisualController extends FixtureController {
   Map<String, LibraryScanFact> scanFacts = const {};
   bool useWordmarkArtwork = false;
@@ -1014,7 +1118,12 @@ Future<void> _openChannelSetupApply(WidgetTester tester) async {
   await tester.pumpAndSettle();
   await tester.tap(find.text('Build Channels'));
   await tester.pumpAndSettle();
-  await tester.tap(find.text('This will replace your current lineup'));
+  await tester.tap(
+    find.descendant(
+      of: find.byType(CheckboxListTile),
+      matching: find.textContaining('generated channels'),
+    ),
+  );
   await tester.pump();
   await tester.tap(find.text('Confirm & Replace'));
   await tester.pump();

@@ -10,6 +10,8 @@ import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/channels/content_resolver.dart';
 import 'package:lineup_desktop/channels/scheduler.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
+import 'package:lineup_desktop/settings/lineup_settings.dart';
+import 'package:lineup_desktop/ui/app_theme.dart';
 
 import '../support/ui_fixture.dart';
 
@@ -1111,20 +1113,25 @@ void main() {
     ]) {
       expect(find.text(label), findsOneWidget);
     }
+    await tester.ensureVisible(find.text('Include watched items'));
     await tester.tap(find.text('Include watched items'));
     await tester.pump();
+    await tester.ensureVisible(find.text('Playlist'));
     await tester.tap(find.text('Playlist'));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('studio-playlist')));
     await tester.tap(find.byKey(const Key('studio-playlist')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Playlist later').last);
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Library'));
     await tester.tap(find.text('Library'));
     await tester.pumpAndSettle();
     expect(
       tester.widget<SwitchListTile>(find.byType(SwitchListTile)).value,
       isFalse,
     );
+    await tester.ensureVisible(find.text('Playlist'));
     await tester.tap(find.text('Playlist'));
     await tester.pumpAndSettle();
     expect(
@@ -1533,11 +1540,13 @@ void main() {
     );
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const Key('studio-name')), 'Filtered');
+    await tester.ensureVisible(find.text('Collection or filter'));
     await tester.tap(find.text('Collection or filter'));
     await tester.pumpAndSettle();
     await _chooseDropdown(tester, 'studio-facet-genre', 'Comedy');
     await _chooseDropdown(tester, 'studio-facet-studio', 'Studio A');
     expect(find.text('1 matching programs'), findsOneWidget);
+    await tester.ensureVisible(find.text('Newest first'));
     await tester.tap(find.text('Newest first'));
     await _settleAirCheck(tester);
     await tester.tap(find.text('Save channel'));
@@ -1830,6 +1839,7 @@ void main() {
         findsOneWidget,
       );
       expect(find.textContaining('last usable programming'), findsOneWidget);
+      await tester.ensureVisible(find.text('Retry in Generate lineup'));
       await tester.tap(find.text('Retry in Generate lineup'));
       await tester.pump();
       expect(left, 1);
@@ -1898,6 +1908,9 @@ void main() {
     expect(find.text('1 matching programs'), findsOneWidget);
     expect(find.text('Fresh comedy'), findsWidgets);
     expect(find.text('Watched comedy'), findsNothing);
+    await tester.ensureVisible(
+      find.byKey(const Key('studio-filter-include-watched')),
+    );
     await tester.tap(find.byKey(const Key('studio-filter-include-watched')));
     await tester.pump();
     expect(find.text('2 matching programs'), findsOneWidget);
@@ -2902,6 +2915,391 @@ void main() {
     await _settleAirCheck(tester);
     expect(find.byKey(const Key('air-check-on-now-warning')), findsOneWidget);
   });
+
+  testWidgets('Studio reflows across the locked viewport and DPR matrix', (
+    tester,
+  ) async {
+    final controller = _RecordingSaveController()
+      ..availableMedia = [_media('one'), _media('two')];
+    addTearDown(controller.dispose);
+    for (final size in const [
+      Size(800, 600),
+      Size(1280, 720),
+      Size(1360, 840),
+      Size(1600, 900),
+      Size(1920, 1080),
+      Size(3840, 2160),
+    ]) {
+      tester.view
+        ..devicePixelRatio = 1
+        ..physicalSize = size;
+      await tester.pumpWidget(
+        _studio(controller, ChannelStudioMode.createCustom),
+      );
+      await _settleAirCheck(tester);
+      expect(tester.takeException(), isNull, reason: 'viewport $size');
+      expect(find.text('Air Check'), findsOneWidget);
+      expect(find.byKey(const Key('studio-programming')), findsOneWidget);
+      expect(find.byKey(const Key('studio-station')), findsOneWidget);
+      expect(find.text('Save channel'), findsOneWidget);
+      expect(
+        tester.getSize(find.byKey(const ValueKey('lineup-page-content'))).width,
+        lessThanOrEqualTo(1120),
+      );
+      final programmingTop = tester.getTopLeft(
+        find.byKey(const Key('studio-programming')),
+      );
+      final stationTop = tester.getTopLeft(
+        find.byKey(const Key('studio-station')),
+      );
+      if (size.width < 900) {
+        expect(programmingTop.dy, lessThan(stationTop.dy));
+        expect(_studioScrollOffset(tester), 0);
+        for (final finder in [
+          find.text('Draft'),
+          find.byKey(const Key('channel-air-check')),
+          find.text('Programming'),
+          find.text('Save channel'),
+        ]) {
+          _expectIntersectsViewport(tester, finder, size);
+        }
+        await tester.ensureVisible(find.byKey(const Key('studio-name')));
+        await tester.pump();
+        _expectIntersectsViewport(
+          tester,
+          find.byKey(const Key('studio-name')),
+          size,
+        );
+        _expectIntersectsViewport(tester, find.text('Save channel'), size);
+      } else {
+        expect(programmingTop.dy, stationTop.dy);
+      }
+    }
+    tester.view
+      ..devicePixelRatio = 2
+      ..physicalSize = const Size(3840, 2160);
+    await tester.pumpWidget(
+      _studio(controller, ChannelStudioMode.createCustom),
+    );
+    await _settleAirCheck(tester);
+    expect(tester.takeException(), isNull);
+    expect(
+      tester.getSize(find.byKey(const ValueKey('lineup-page-content'))).width,
+      lessThanOrEqualTo(1120),
+    );
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+  });
+
+  testWidgets('200 percent text keeps Studio fields and actions unclipped', (
+    tester,
+  ) async {
+    tester.view
+      ..devicePixelRatio = 1
+      ..physicalSize = const Size(800, 600);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    final controller = _RecordingSaveController()
+      ..availableMedia = [_media('one'), _media('two')]
+      ..libraryScanStatus = LibraryScanStatus.transientFailure;
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      _studio(
+        controller,
+        ChannelStudioMode.createCustom,
+        textScaler: const TextScaler.linear(2),
+      ),
+    );
+    await _settleAirCheck(tester);
+    expect(tester.takeException(), isNull);
+    expect(find.byKey(const Key('channel-air-check')), findsOneWidget);
+    for (final finder in [
+      find.text('Back to Channels'),
+      find.text('Cancel'),
+      find.text('Save channel'),
+    ]) {
+      _expectFitsHorizontally(tester, finder, const Size(800, 600));
+    }
+    for (final finder in [
+      find.textContaining('Library loading failed'),
+      find.text('Retry in Generate lineup'),
+      find.byKey(const Key('studio-name')),
+      find.byKey(const Key('studio-number')),
+    ]) {
+      await tester.ensureVisible(finder);
+      await tester.pump();
+      _expectIntersectsViewport(tester, finder, const Size(800, 600));
+      _expectFitsHorizontally(tester, finder, const Size(800, 600));
+      expect(tester.takeException(), isNull);
+    }
+    tester
+        .widget<FilledButton>(find.widgetWithText(FilledButton, 'Save channel'))
+        .onPressed!();
+    await tester.pump();
+    _expectFitsHorizontally(
+      tester,
+      find.text('Enter a channel name.'),
+      const Size(800, 600),
+    );
+  });
+
+  testWidgets('Air Check program focus uses the configured focus border', (
+    tester,
+  ) async {
+    tester.view
+      ..devicePixelRatio = 1
+      ..physicalSize = const Size(1280, 720);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    for (final duration in const [
+      Duration(minutes: 30),
+      Duration(minutes: 1),
+    ]) {
+      final widths = <double>[];
+      for (final largeFocus in [false, true]) {
+        final program = ChannelItem(
+          id: 'focus-program',
+          title: 'Focus program',
+          duration: duration,
+        );
+        final channel = _channel(
+          id: 'focus-channel',
+          number: 42,
+          name: 'Focus channel',
+          source: ManualSource([program]),
+        );
+        final controller = _RecordingSaveController()
+          ..channels = [channel]
+          ..availableMedia = [_media('focus-program', duration: duration)];
+        addTearDown(controller.dispose);
+        await tester.pumpWidget(
+          _studio(
+            controller,
+            ChannelStudioMode.editCustom,
+            channel: channel,
+            clock: () => DateTime.utc(2026, 1, 1, 1),
+            theme: LineupTheme.forName(
+              LineupThemeName.emberSteel,
+              largeFocusIndicators: largeFocus,
+            ),
+          ),
+        );
+        await _settleAirCheck(tester);
+        final backFocus = tester
+            .widget<TextButton>(
+              find.widgetWithText(TextButton, 'Back to Channels'),
+            )
+            .focusNode!;
+        backFocus.requestFocus();
+        await tester.pump();
+        final buttonFinder = find.descendant(
+          of: find.byKey(const Key('channel-air-check')),
+          matching: find.byType(OutlinedButton),
+        );
+        final inspectedButton = buttonFinder.first;
+        for (var step = 0; step < 20; step++) {
+          final focus = FocusManager.instance.primaryFocus!;
+          if (_focusNodeIsInside(focus, inspectedButton)) break;
+          focus.nextFocus();
+          await tester.pump();
+        }
+        expect(
+          _focusNodeIsInside(
+            FocusManager.instance.primaryFocus!,
+            inspectedButton,
+          ),
+          isTrue,
+        );
+        var button = tester.widget<OutlinedButton>(inspectedButton);
+        if (duration == const Duration(minutes: 1)) {
+          expect(button.style!.minimumSize!.resolve({}), Size.zero);
+          final child = button.child! as SizedBox;
+          expect(child.width, double.infinity);
+          expect(child.height, double.infinity);
+        } else {
+          expect(button.style!.alignment, Alignment.centerLeft);
+          expect(button.child, isA<ExcludeSemantics>());
+        }
+        button.onPressed!();
+        await tester.pump();
+        button = tester.widget<OutlinedButton>(inspectedButton);
+        final roles = LineupTheme.of(tester.element(inspectedButton));
+        final selectedSide = button.style!.side!.resolve({})!;
+        expect(selectedSide.color, roles.progressFill);
+        expect(selectedSide.width, 2);
+        final side = button.style!.side!.resolve({WidgetState.focused})!;
+        expect(side.color, roles.focusBorder);
+        expect(side.width, roles.focusBorderWidth);
+        widths.add(side.width);
+      }
+      expect(widths, [3, 5]);
+    }
+  });
+
+  testWidgets(
+    'ordered traversal follows Air Check and workbench before actions',
+    (tester) async {
+      final original = _channel(
+        id: 'focus-order',
+        number: 42,
+        name: 'Focus order',
+        source: const ManualSource([
+          ChannelItem(id: 'one', title: 'One', duration: Duration(minutes: 30)),
+          ChannelItem(id: 'two', title: 'Two', duration: Duration(minutes: 30)),
+        ]),
+      );
+      final controller = _RecordingSaveController()
+        ..channels = [original]
+        ..availableMedia = [_media('one'), _media('two')];
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(
+        _studio(controller, ChannelStudioMode.editCustom, channel: original),
+      );
+      await _settleAirCheck(tester);
+
+      final backFocus = tester
+          .widget<TextButton>(
+            find.widgetWithText(TextButton, 'Back to Channels'),
+          )
+          .focusNode!;
+      expect(FocusManager.instance.primaryFocus, same(backFocus));
+      backFocus.requestFocus();
+      await tester.pump();
+      backFocus.nextFocus();
+      await tester.pump();
+      expect(
+        _focusNodeIsInside(
+          FocusManager.instance.primaryFocus!,
+          find.byKey(const Key('channel-air-check')),
+        ),
+        isTrue,
+      );
+      for (var step = 0; step < 80; step++) {
+        final focus = FocusManager.instance.primaryFocus!;
+        if (_focusNodeIsInside(
+          focus,
+          find.byKey(const Key('studio-programming')),
+        )) {
+          break;
+        }
+        expect(
+          _focusNodeIsInside(focus, find.byKey(const Key('studio-station'))),
+          isFalse,
+        );
+        focus.nextFocus();
+        await tester.pump();
+      }
+      expect(
+        _focusNodeIsInside(
+          FocusManager.instance.primaryFocus!,
+          find.byKey(const Key('studio-programming')),
+        ),
+        isTrue,
+      );
+      for (var step = 0; step < 80; step++) {
+        final focus = FocusManager.instance.primaryFocus!;
+        if (_focusNodeIsInside(
+          focus,
+          find.byKey(const Key('studio-station')),
+        )) {
+          break;
+        }
+        expect(_focusNodeIsInside(focus, find.text('Cancel')), isFalse);
+        focus.nextFocus();
+        await tester.pump();
+      }
+      expect(
+        _focusNodeIsInside(
+          FocusManager.instance.primaryFocus!,
+          find.byKey(const Key('studio-station')),
+        ),
+        isTrue,
+      );
+      final cancelFocus = tester
+          .widget<TextButton>(find.widgetWithText(TextButton, 'Cancel'))
+          .focusNode!;
+      for (var step = 0; step < 40; step++) {
+        final focus = FocusManager.instance.primaryFocus!;
+        if (identical(focus, cancelFocus)) break;
+        focus.nextFocus();
+        await tester.pump();
+      }
+      expect(FocusManager.instance.primaryFocus, same(cancelFocus));
+    },
+  );
+
+  testWidgets(
+    'Studio consumes every theme with motion and large focus settings',
+    (tester) async {
+      final controller = _RecordingSaveController()
+        ..availableMedia = [_media('one'), _media('two')];
+      addTearDown(controller.dispose);
+      for (final name in LineupThemeName.values) {
+        final theme = LineupTheme.forName(name, largeFocusIndicators: true);
+        await tester.pumpWidget(
+          _studio(
+            controller,
+            ChannelStudioMode.createCustom,
+            theme: theme,
+            disableAnimations: true,
+          ),
+        );
+        await _settleAirCheck(tester);
+        final context = tester.element(find.text('Air Check'));
+        expect(MediaQuery.disableAnimationsOf(context), isTrue);
+        expect(
+          Theme.of(context).extension<LineupThemeRoles>()!.focusBorderWidth,
+          theme.extension<LineupThemeRoles>()!.focusBorderWidth,
+        );
+        expect(tester.takeException(), isNull, reason: name.label);
+      }
+    },
+  );
+}
+
+bool _focusNodeIsInside(FocusNode node, Finder target) {
+  final targetElements = target.evaluate().toSet();
+  Element? element = node.context as Element?;
+  while (element != null) {
+    if (targetElements.contains(element)) return true;
+    Element? parent;
+    element.visitAncestorElements((ancestor) {
+      parent = ancestor;
+      return false;
+    });
+    element = parent;
+  }
+  return false;
+}
+
+double _studioScrollOffset(WidgetTester tester) => tester
+    .state<ScrollableState>(
+      find
+          .descendant(
+            of: find.byKey(const Key('studio-scroll')),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    )
+    .position
+    .pixels;
+
+void _expectIntersectsViewport(
+  WidgetTester tester,
+  Finder finder,
+  Size viewport,
+) {
+  expect((Offset.zero & viewport).overlaps(tester.getRect(finder)), isTrue);
+}
+
+void _expectFitsHorizontally(
+  WidgetTester tester,
+  Finder finder,
+  Size viewport,
+) {
+  final rect = tester.getRect(finder);
+  expect(rect.left, greaterThanOrEqualTo(0));
+  expect(rect.right, lessThanOrEqualTo(viewport.width));
 }
 
 Future<void> _chooseDropdown(
@@ -2926,7 +3324,16 @@ Widget _studio(
   ChannelStudioMode mode, {
   Channel? channel,
   DateTime Function()? clock,
+  TextScaler? textScaler,
+  ThemeData? theme,
+  bool disableAnimations = false,
 }) => MaterialApp(
+  theme: theme,
+  builder: (context, child) => MediaQuery(
+    data: MediaQuery.of(context)
+        .copyWith(textScaler: textScaler, disableAnimations: disableAnimations),
+    child: child!,
+  ),
   home: Scaffold(
     body: ChannelStudioView(
       key: UniqueKey(),
@@ -2973,11 +3380,12 @@ PlexMediaItem _media(
   int? year,
   DateTime? addedAt,
   bool viewed = false,
+  Duration duration = const Duration(minutes: 30),
 }) => PlexMediaItem(
   id: id,
   title: title ?? id,
   type: type,
-  duration: const Duration(minutes: 30),
+  duration: duration,
   libraryId: libraryId,
   grandparentTitle: showTitle,
   grandparentThumbPath: showThumb,

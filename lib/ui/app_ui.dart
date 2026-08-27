@@ -47,15 +47,18 @@ class LineupPage extends StatelessWidget {
     required this.title,
     required this.child,
     this.actions,
+    this.traversalPolicy,
     super.key,
   });
 
   final String title;
   final Widget child;
   final Widget? actions;
+  final FocusTraversalPolicy? traversalPolicy;
 
   @override
   Widget build(BuildContext context) => FocusTraversalGroup(
+    policy: traversalPolicy,
     child: SafeArea(
       child: LayoutBuilder(
         builder: (context, constraints) {

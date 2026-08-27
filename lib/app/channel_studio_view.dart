@@ -71,6 +71,8 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
   static const _countAnnouncementDelay = Duration(milliseconds: 300);
   static const _resultWindow = 100;
   final _form = GlobalKey<FormState>();
+  final _backFocus = FocusNode(debugLabel: 'Back to Channels');
+  final _cancelFocus = FocusNode(debugLabel: 'Cancel Studio');
   final _nameFocus = FocusNode(debugLabel: 'Channel name');
   final _numberFocus = FocusNode(debugLabel: 'Channel number');
   final _saveFocus = FocusNode(debugLabel: 'Save channel');
@@ -242,6 +244,8 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
 
   @override
   void dispose() {
+    _backFocus.dispose();
+    _cancelFocus.dispose();
     _name.dispose();
     _number.dispose();
     _search.dispose();
@@ -327,56 +331,76 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     final identityLooksValid = _name.text.trim().isNotEmpty && validNumber;
     final programmingError = _programmingError;
     return LineupPage(
+      traversalPolicy: OrderedTraversalPolicy(),
       title:
           '${_name.text.trim().isEmpty ? 'New channel' : _name.text.trim()} • ${validNumber ? 'Channel $number' : 'No channel number'} • ${_modeHeaderLabel(_effectiveMode)} • ${_generated ? 'Generated' : 'Custom'}',
       actions: Wrap(
         spacing: 8,
         runSpacing: 8,
         children: [
-          TextButton.icon(
-            onPressed: _saving ? null : () => unawaited(_leave()),
-            icon: const Icon(Icons.arrow_back),
-            label: const Text('Back to Channels'),
+          FocusTraversalOrder(
+            order: const NumericFocusOrder(0),
+            child: TextButton.icon(
+              focusNode: _backFocus,
+              autofocus: true,
+              onPressed: _saving ? null : () => unawaited(_leave()),
+              icon: const Icon(Icons.arrow_back),
+              label: const Text('Back to Channels'),
+            ),
           ),
           if (!_generated)
-            TextButton(
-              onPressed: _saving ? null : () => unawaited(_leave()),
-              child: const Text('Cancel'),
+            FocusTraversalOrder(
+              order: const NumericFocusOrder(4),
+              child: TextButton(
+                focusNode: _cancelFocus,
+                onPressed: _saving ? null : () => unawaited(_leave()),
+                child: const Text('Cancel'),
+              ),
             ),
           if (_generated)
-            OutlinedButton(
-              onPressed: _saving ? null : _duplicate,
-              child: const Text('Duplicate as custom'),
+            FocusTraversalOrder(
+              order: const NumericFocusOrder(4),
+              child: OutlinedButton(
+                onPressed: _saving ? null : _duplicate,
+                child: const Text('Duplicate as custom'),
+              ),
             ),
           if (saved)
-            OutlinedButton.icon(
-              onPressed: _saving ? null : _tune,
-              icon: const Icon(Icons.play_arrow),
-              label: const Text('Tune in'),
+            FocusTraversalOrder(
+              order: const NumericFocusOrder(4),
+              child: OutlinedButton.icon(
+                onPressed: _saving ? null : _tune,
+                icon: const Icon(Icons.play_arrow),
+                label: const Text('Tune in'),
+              ),
             ),
-          FilledButton(
-            focusNode: _saveFocus,
-            onPressed:
-                _saving ||
-                    noNumber ||
-                    (identityLooksValid && programmingError != null) ||
-                    (identityLooksValid && !_airCheckCanSave) ||
-                    (_generated && !_dirty)
-                ? null
-                : _save,
-            child: Text(
-              _saving
-                  ? 'Saving…'
-                  : switch (_effectiveMode) {
-                      ChannelStudioMode.editCustom => 'Save changes',
-                      ChannelStudioMode.inspectGenerated => 'Save identity',
-                      _ => 'Save channel',
-                    },
+          FocusTraversalOrder(
+            order: const NumericFocusOrder(4),
+            child: FilledButton(
+              focusNode: _saveFocus,
+              onPressed:
+                  _saving ||
+                      noNumber ||
+                      (identityLooksValid && programmingError != null) ||
+                      (identityLooksValid && !_airCheckCanSave) ||
+                      (_generated && !_dirty)
+                  ? null
+                  : _save,
+              child: Text(
+                _saving
+                    ? 'Saving…'
+                    : switch (_effectiveMode) {
+                        ChannelStudioMode.editCustom => 'Save changes',
+                        ChannelStudioMode.inspectGenerated => 'Save identity',
+                        _ => 'Save channel',
+                      },
+              ),
             ),
           ),
         ],
       ),
       child: SingleChildScrollView(
+        key: const Key('studio-scroll'),
         child: Form(
           key: _form,
           child: Column(
@@ -445,28 +469,32 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                 ),
               ],
               const SizedBox(height: 16),
-              LayoutBuilder(
-                builder: (context, constraints) => ChannelAirCheck(
-                  controller: widget.controller,
-                  channel: _previewDraft,
-                  originalChannel: _expectedBase,
-                  clock: _clock,
-                  compact: constraints.maxWidth < LineupLayout.compact,
-                  inclusionReason: _sourceLabel(
-                    _displaySource,
-                    widget.controller,
+              FocusTraversalOrder(
+                order: const NumericFocusOrder(1),
+                child: LayoutBuilder(
+                  builder: (context, constraints) => ChannelAirCheck(
+                    controller: widget.controller,
+                    channel: _previewDraft,
+                    originalChannel: _expectedBase,
+                    clock: _clock,
+                    compact: constraints.maxWidth < LineupLayout.compact,
+                    inclusionReason: _sourceLabel(
+                      _displaySource,
+                      widget.controller,
+                    ),
+                    sourceIssue: programmingError,
+                    onFirstValid: _commitScheduleIdentity,
+                    onValidityChanged: (validity) {
+                      if (!mounted || _airCheckValidity == validity) return;
+                      setState(() {
+                        _airCheckValidity = validity;
+                        if (validity ==
+                            ChannelAirCheckValidity.retainedOffAir) {
+                          _scheduleIdentityCommitted = true;
+                        }
+                      });
+                    },
                   ),
-                  sourceIssue: programmingError,
-                  onFirstValid: _commitScheduleIdentity,
-                  onValidityChanged: (validity) {
-                    if (!mounted || _airCheckValidity == validity) return;
-                    setState(() {
-                      _airCheckValidity = validity;
-                      if (validity == ChannelAirCheckValidity.retainedOffAir) {
-                        _scheduleIdentityCommitted = true;
-                      }
-                    });
-                  },
                 ),
               ),
               const SizedBox(height: 16),
@@ -477,17 +505,35 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                   return constraints.maxWidth < LineupLayout.compact
                       ? Column(
                           children: [
-                            programming,
+                            FocusTraversalOrder(
+                              order: const NumericFocusOrder(2),
+                              child: programming,
+                            ),
                             const SizedBox(height: 16),
-                            station,
+                            FocusTraversalOrder(
+                              order: const NumericFocusOrder(3),
+                              child: station,
+                            ),
                           ],
                         )
                       : Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Expanded(flex: 3, child: programming),
+                            Expanded(
+                              flex: 3,
+                              child: FocusTraversalOrder(
+                                order: const NumericFocusOrder(2),
+                                child: programming,
+                              ),
+                            ),
                             const SizedBox(width: 16),
-                            Expanded(flex: 2, child: station),
+                            Expanded(
+                              flex: 2,
+                              child: FocusTraversalOrder(
+                                order: const NumericFocusOrder(3),
+                                child: station,
+                              ),
+                            ),
                           ],
                         );
                 },
@@ -500,6 +546,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
   }
 
   Widget _programmingCard() => LineupSection(
+    key: const Key('studio-programming'),
     title: 'Programming',
     children: [
       Text(_sourceLabel(_displaySource, widget.controller)),
@@ -514,28 +561,38 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
           ),
           const SizedBox(height: 8),
         ],
-        SegmentedButton<_SourceChoice>(
-          multiSelectionEnabled: false,
-          emptySelectionAllowed: _source is MixedSource,
-          segments: const [
-            ButtonSegment(value: _SourceChoice.library, label: Text('Library')),
-            ButtonSegment(
-              value: _SourceChoice.playlist,
-              label: Text('Playlist'),
-            ),
-            ButtonSegment(
-              value: _SourceChoice.filter,
-              label: Text('Collection or filter'),
-            ),
-            ButtonSegment(
-              value: _SourceChoice.handPicked,
-              label: Text('Hand-picked'),
-            ),
-          ],
-          selected: {?_sourceChoice},
-          onSelectionChanged: _saving
-              ? null
-              : (value) => _changed(() => _sourceChoice = value.singleOrNull),
+        LayoutBuilder(
+          builder: (context, constraints) => SegmentedButton<_SourceChoice>(
+            direction:
+                MediaQuery.textScalerOf(context).scale(14) > 21 ||
+                    constraints.maxWidth < 480
+                ? Axis.vertical
+                : Axis.horizontal,
+            multiSelectionEnabled: false,
+            emptySelectionAllowed: _source is MixedSource,
+            segments: const [
+              ButtonSegment(
+                value: _SourceChoice.library,
+                label: Text('Library'),
+              ),
+              ButtonSegment(
+                value: _SourceChoice.playlist,
+                label: Text('Playlist'),
+              ),
+              ButtonSegment(
+                value: _SourceChoice.filter,
+                label: Text('Collection or filter'),
+              ),
+              ButtonSegment(
+                value: _SourceChoice.handPicked,
+                label: Text('Hand-picked'),
+              ),
+            ],
+            selected: {?_sourceChoice},
+            onSelectionChanged: _saving
+                ? null
+                : (value) => _changed(() => _sourceChoice = value.singleOrNull),
+          ),
         ),
         const SizedBox(height: 12),
         switch (_sourceChoice) {
@@ -1174,13 +1231,13 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
   }
 
   Widget _stationCard() => LineupSection(
+    key: const Key('studio-station'),
     title: 'Station',
     children: [
       TextFormField(
         key: const Key('studio-name'),
         controller: _name,
         focusNode: _nameFocus,
-        autofocus: true,
         enabled: !_saving,
         decoration: const InputDecoration(
           labelText: 'Channel name',
@@ -1221,28 +1278,36 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
         ),
         child: _generated
             ? Text(_rhythmLabel(_playbackMode, _blockSize))
-            : SegmentedButton<PlaybackMode>(
-                segments: const [
-                  ButtonSegment(
-                    value: PlaybackMode.sequential,
-                    label: Text('In order'),
-                  ),
-                  ButtonSegment(
-                    value: PlaybackMode.shuffle,
-                    label: Text('Mix it up'),
-                  ),
-                  ButtonSegment(
-                    value: PlaybackMode.block,
-                    label: Text('Mini-marathons'),
-                  ),
-                ],
-                selected: {_playbackMode},
-                onSelectionChanged: _saving
-                    ? null
-                    : (value) => _changed(() {
-                        _playbackMode = value.single;
-                        _blockSize ??= 3;
-                      }),
+            : LayoutBuilder(
+                builder: (context, constraints) =>
+                    SegmentedButton<PlaybackMode>(
+                      direction:
+                          MediaQuery.textScalerOf(context).scale(14) > 21 ||
+                              constraints.maxWidth < 420
+                          ? Axis.vertical
+                          : Axis.horizontal,
+                      segments: const [
+                        ButtonSegment(
+                          value: PlaybackMode.sequential,
+                          label: Text('In order'),
+                        ),
+                        ButtonSegment(
+                          value: PlaybackMode.shuffle,
+                          label: Text('Mix it up'),
+                        ),
+                        ButtonSegment(
+                          value: PlaybackMode.block,
+                          label: Text('Mini-marathons'),
+                        ),
+                      ],
+                      selected: {_playbackMode},
+                      onSelectionChanged: _saving
+                          ? null
+                          : (value) => _changed(() {
+                              _playbackMode = value.single;
+                              _blockSize ??= 3;
+                            }),
+                    ),
               ),
       ),
       if (_generated) ...[

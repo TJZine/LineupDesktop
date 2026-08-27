@@ -361,6 +361,7 @@ class ChannelAirCheckState extends State<ChannelAirCheck> {
     final now = widget.clock();
     final error = _error;
     return Semantics(
+      key: const Key('channel-air-check'),
       container: true,
       label:
           'Air Check for channel ${widget.channel.number} ${widget.channel.name}',
@@ -377,7 +378,11 @@ class ChannelAirCheckState extends State<ChannelAirCheck> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Row(
+              Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 12,
+                runSpacing: 4,
                 children: [
                   Semantics(
                     header: true,
@@ -386,7 +391,6 @@ class ChannelAirCheckState extends State<ChannelAirCheck> {
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
                   ),
-                  const Spacer(),
                   if (_stale) const Text('Updating — preview is stale'),
                 ],
               ),
@@ -464,14 +468,22 @@ class ChannelAirCheckState extends State<ChannelAirCheck> {
               .toList();
     final start = widget.compact ? preview.windowStart : ribbonStart;
     final end = widget.compact ? preview.windowEnd : ribbonEnd;
+    final textScale = MediaQuery.textScalerOf(context).scale(14) / 14;
     return SizedBox(
-      height: widget.compact ? 76 : 104,
+      height: (widget.compact ? 76 : 104) + (textScale - 1).clamp(0, 1) * 52,
       child: LayoutBuilder(
         builder: (context, constraints) => Stack(
           fit: StackFit.expand,
           children: [
-            for (final program in visible)
-              _programButton(program, now, start, end, constraints.maxWidth),
+            for (var index = 0; index < visible.length; index++)
+              _programButton(
+                visible[index],
+                now,
+                start,
+                end,
+                constraints.maxWidth,
+                compactIndex: index,
+              ),
             if (!widget.compact && !now.isBefore(start) && now.isBefore(end))
               Positioned(
                 left: GuideGeometry.programRect(
@@ -502,8 +514,9 @@ class ChannelAirCheckState extends State<ChannelAirCheck> {
     DateTime now,
     DateTime start,
     DateTime end,
-    double width,
-  ) {
+    double width, {
+    required int compactIndex,
+  }) {
     final state = _temporal(program, now);
     final selected = program.id == _selectedId;
     final rect = widget.compact
@@ -543,13 +556,18 @@ class ChannelAirCheckState extends State<ChannelAirCheck> {
                     : LineupTheme.of(context).primarySurface,
               ),
               side: WidgetStateProperty.resolveWith((states) {
-                final emphasized =
-                    selected || states.contains(WidgetState.focused);
+                final focused = states.contains(WidgetState.focused);
                 return BorderSide(
-                  color: emphasized
+                  color: focused
                       ? LineupTheme.of(context).focusBorder
+                      : selected
+                      ? LineupTheme.of(context).progressFill
                       : LineupTheme.of(context).subtleBorder,
-                  width: emphasized ? 2 : 1,
+                  width: focused
+                      ? LineupTheme.of(context).focusBorderWidth
+                      : selected
+                      ? 2
+                      : 1,
                 );
               }),
             ),
@@ -567,15 +585,26 @@ class ChannelAirCheckState extends State<ChannelAirCheck> {
           _selectedId = program.id;
           _selectionFollowsNow = false;
         }),
-        style: OutlinedButton.styleFrom(
+        style: ButtonStyle(
           alignment: Alignment.centerLeft,
-          side: BorderSide(
-            color: selected
-                ? LineupTheme.of(context).focusBorder
-                : LineupTheme.of(context).subtleBorder,
-            width: selected ? 2 : 1,
+          padding: const WidgetStatePropertyAll(
+            EdgeInsets.symmetric(horizontal: 8),
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 8),
+          side: WidgetStateProperty.resolveWith((states) {
+            final focused = states.contains(WidgetState.focused);
+            return BorderSide(
+              color: focused
+                  ? LineupTheme.of(context).focusBorder
+                  : selected
+                  ? LineupTheme.of(context).progressFill
+                  : LineupTheme.of(context).subtleBorder,
+              width: focused
+                  ? LineupTheme.of(context).focusBorderWidth
+                  : selected
+                  ? 2
+                  : 1,
+            );
+          }),
         ),
         child: ExcludeSemantics(
           child: Column(
@@ -598,12 +627,8 @@ class ChannelAirCheckState extends State<ChannelAirCheck> {
       ),
     );
     if (widget.compact) {
-      final index = _preview!.programs.indexOf(program);
-      final currentIndex = _preview!.programs.indexWhere(
-        (item) => item.isCurrentAt(now),
-      );
       return Positioned(
-        left: (index - currentIndex).clamp(0, 1) * (width / 2),
+        left: compactIndex.clamp(0, 1) * (width / 2),
         top: 0,
         bottom: 0,
         width: width / 2,
