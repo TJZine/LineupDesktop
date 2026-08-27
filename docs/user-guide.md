@@ -138,8 +138,9 @@ physical matrix is still pending, so broad format/HDR/device/package wording
 remains provisional rather than unsupported-by-design.
 
 Guide and Player use an immersive layout. Open the **Lineup** menu from either
-surface to reach the other destinations. Management screens use the persistent
-navigation rail.
+surface to reach the other destinations. Channels and Diagnostics use the
+persistent management rail. Settings uses one immersive category rail and,
+when playback is active, keeps the same Player surface behind it.
 
 ## Guide
 

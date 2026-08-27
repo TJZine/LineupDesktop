@@ -52,9 +52,7 @@ class GuideLayoutPolicy {
         ? 78.0
         : 58.0;
     final rowBudget =
-        size.height -
-        (padding * 2 + 48 + 10 + 8 + 52) -
-        minimumRows * rowHeight;
+        size.height - (padding * 2 + 56 + 2 + 8 + 52) - minimumRows * rowHeight;
     final availableShowcaseHeight = rowBudget.clamp(0.0, double.infinity);
     final targetPictureHeight = size.height < 720
         ? _lerp(236.25, 281.25, (size.height - 600) / 120)
@@ -77,7 +75,7 @@ class GuideLayoutPolicy {
     return GuideLayoutPolicy._(
       compact: compact,
       padding: padding,
-      channelRailWidth: compact ? 156 : (size.width >= 1800 ? 232 : 196),
+      channelRailWidth: compact ? 176 : (size.width >= 1800 ? 260 : 216),
       showcaseHeight: showcaseHeight,
       pictureWidth: pictureWidth,
       rowHeight: rowHeight,
@@ -398,9 +396,9 @@ class _GuideViewState extends State<GuideView> {
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
                     colors: [
-                      roles.scrim.withValues(alpha: 0.36),
-                      roles.scrim.withValues(alpha: 0.82),
-                      roles.scrim,
+                      roles.scrim.withValues(alpha: 0.46),
+                      roles.scrim.withValues(alpha: 0.84),
+                      roles.scrim.withValues(alpha: 0.96),
                     ],
                     stops: const [0, 0.28, 0.62],
                   ),
@@ -410,7 +408,7 @@ class _GuideViewState extends State<GuideView> {
                   child: Column(
                     children: [
                       _toolbar(policy),
-                      const SizedBox(height: 10),
+                      const SizedBox(height: 2),
                       if (channels.isEmpty)
                         Expanded(child: schedule)
                       else
@@ -476,7 +474,7 @@ class _ClassicGuideSurface extends StatelessWidget {
       ),
       ColoredBox(
         color: color,
-        child: const SizedBox(width: double.infinity, height: 10),
+        child: const SizedBox(width: double.infinity, height: 2),
       ),
       if (showcase != null)
         SizedBox(
@@ -543,12 +541,19 @@ class _Toolbar extends StatelessWidget {
         ? null
         : controller.currentProgram(tunedChannel.id);
     return SizedBox(
-      height: 48,
+      height: 56,
       child: Row(
         children: [
           Image.asset('assets/branding/lineup-logo-mark.png', height: 26),
           const SizedBox(width: 9),
-          Text('LINEUP', style: Theme.of(context).textTheme.titleLarge),
+          Text(
+            'LINEUP',
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+              color: LineupTheme.of(context).progressFill,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1.3,
+            ),
+          ),
           if (tunedChannel != null &&
               controller.lineup.settings.nowWatchingBanner) ...[
             const SizedBox(width: 18),
@@ -816,19 +821,29 @@ class _TimeHeader extends StatelessWidget {
                                 ),
                               ),
                               child: index % stride == 0
-                                  ? Text(
-                                      _time(
-                                        context,
-                                        controller.windowStart.add(
-                                          Duration(minutes: 30 * index),
+                                  ? Padding(
+                                      padding: const EdgeInsets.only(left: 12),
+                                      child: Align(
+                                        alignment: Alignment.centerLeft,
+                                        child: Text(
+                                          _time(
+                                            context,
+                                            controller.windowStart.add(
+                                              Duration(minutes: 30 * index),
+                                            ),
+                                          ),
+                                          overflow: TextOverflow.clip,
+                                          maxLines: 1,
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .labelLarge
+                                              ?.copyWith(
+                                                color: LineupTheme.of(context)
+                                                    .mutedText,
+                                                fontWeight: FontWeight.w600,
+                                              ),
                                         ),
                                       ),
-                                      textAlign: TextAlign.center,
-                                      overflow: TextOverflow.clip,
-                                      maxLines: 1,
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .labelLarge,
                                     )
                                   : null,
                             ),
@@ -941,7 +956,12 @@ class _GuideRow extends StatelessWidget {
                       width: railWidth < 180 ? 40 : 48,
                       child: Text(
                         '${channel.number}',
-                        style: const TextStyle(fontWeight: FontWeight.w800),
+                        style: TextStyle(
+                          color: LineupTheme.of(context).progressFill,
+                          fontSize: showProvenance ? 18 : 16,
+                          fontWeight: FontWeight.w800,
+                          fontFeatures: const [ui.FontFeature.tabularFigures()],
+                        ),
                       ),
                     ),
                     Expanded(
@@ -1319,6 +1339,7 @@ class _ProgramCellContent extends StatelessWidget {
         final tiny = constraints.maxWidth < 88;
         final richRow = constraints.maxHeight >= 56;
         final showEpisode = episodeCode != null && (wide || focused);
+        final showLive = current && (!tiny || focused);
         final showSubtitle =
             episodeTitle != null && richRow && (medium || focused);
         final showTime = richRow && (wide || (focused && !isEpisode));
@@ -1330,12 +1351,12 @@ class _ProgramCellContent extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            if (showEpisode || current)
+            if (showEpisode || showLive)
               Row(
                 children: [
                   if (showEpisode) _CellEpisodeTag(episodeCode),
                   const Spacer(),
-                  if (current)
+                  if (showLive)
                     Container(
                       width: 7,
                       height: 7,
@@ -1349,7 +1370,7 @@ class _ProgramCellContent extends StatelessWidget {
             if (tiny && !focused)
               Text(
                 primaryTitle,
-                maxLines: 2,
+                maxLines: constraints.maxHeight >= 40 ? 2 : 1,
                 overflow: TextOverflow.ellipsis,
                 style: titleStyle,
               )
@@ -1525,9 +1546,7 @@ class _DetailsState extends State<_Details> {
         colors: [roles.primarySurface, roles.deepBackground],
       ),
     };
-    return Card(
-      margin: EdgeInsets.zero,
-      clipBehavior: Clip.antiAlias,
+    return ClipRect(
       child: AnimatedContainer(
         key: const Key('guide-info-dynamic-background'),
         duration: controller.lineup.settings.reduceMotion
@@ -1567,8 +1586,8 @@ class _DetailsState extends State<_Details> {
             ],
             Padding(
               padding: EdgeInsets.symmetric(
-                horizontal: widget.compact ? 12 : 18,
-                vertical: widget.compact ? 8 : 12,
+                horizontal: widget.compact ? 14 : 20,
+                vertical: widget.compact ? 10 : 14,
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1677,7 +1696,9 @@ class _ProgramDetails extends StatelessWidget {
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisAlignment: showSecondaryMetadata
+                ? MainAxisAlignment.start
+                : MainAxisAlignment.center,
             children: [
               if (channel != null)
                 Text(
@@ -1685,6 +1706,7 @@ class _ProgramDetails extends StatelessWidget {
                   style: Theme.of(context).textTheme.labelLarge?.copyWith(
                     color: LineupTheme.of(context).progressFill,
                     fontWeight: FontWeight.w700,
+                    letterSpacing: 0.3,
                   ),
                 ),
               if (hasClearLogo)
@@ -1720,8 +1742,8 @@ class _ProgramDetails extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style:
                       (showSecondaryMetadata
-                              ? Theme.of(context).textTheme.headlineSmall
-                              : Theme.of(context).textTheme.titleLarge)
+                              ? Theme.of(context).textTheme.headlineMedium
+                              : Theme.of(context).textTheme.headlineSmall)
                           ?.copyWith(fontWeight: FontWeight.w800),
                 ),
               Padding(

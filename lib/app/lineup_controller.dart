@@ -408,12 +408,12 @@ class LineupController extends ChangeNotifier {
     _ => 'Lineup could not complete Plex sign-in. Request a new code and try again.',
   };
 
-  Future<void> selectProfile(PlexHomeUser selected, {String? pin}) async {
+  Future<bool> selectProfile(PlexHomeUser selected, {String? pin}) {
     final operation = ++_epoch;
     _invalidatePmsRefresh();
     _serverTargetId = null;
     _pinTimer?.cancel();
-    await _run(
+    return _run(
       () async {
         final accountToken = _accountToken;
         if (accountToken == null) {
@@ -623,8 +623,8 @@ class LineupController extends ChangeNotifier {
         if (selectedLibraryIds.isNotEmpty && channels.isNotEmpty) {
           final loaded = await _loadLibraries(operation, selectedLibraryIds);
           if (operation != _epoch) return;
-          _requireAvailablePlaylists(loaded.failedPlaylistIds);
           libraryScanStatus = loaded.status;
+          _requireAvailablePlaylists(loaded.failedPlaylistIds);
           availableMedia = loaded.media;
           availablePlaylists = loaded.playlists;
           stage = libraryScanStatus == LibraryScanStatus.complete
@@ -1044,7 +1044,6 @@ class LineupController extends ChangeNotifier {
       try {
         await _save();
         if (_disposed) return;
-        stage = SetupStage.ready;
         notifyListeners();
       } catch (_) {
         channels = oldChannels;
@@ -1052,6 +1051,14 @@ class LineupController extends ChangeNotifier {
         rethrow;
       }
     });
+  }
+
+  void completeChannelSetup() {
+    if (stage != SetupStage.channelSetup) return;
+    channelSetupCanCancel = false;
+    error = null;
+    stage = SetupStage.ready;
+    notifyListeners();
   }
 
   Future<void> saveChannel(Channel channel) async {

@@ -627,7 +627,67 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('The channel plan could not be applied.'), findsOneWidget);
     expect(controller.channels, same(originalChannels));
+    expect(find.text('Lineup update failed'), findsOneWidget);
+    expect(find.text('Review expected changes'), findsNothing);
+    expect(
+      tester
+          .widget<LinearProgressIndicator>(find.byType(LinearProgressIndicator))
+          .value,
+      0,
+    );
+
+    await tester.tap(find.text('Back to Review'));
+    await tester.pumpAndSettle();
     expect(find.text('Review expected changes'), findsOneWidget);
+    expect(find.bySemanticsLabel('Final: 3'), findsOneWidget);
+    expect(Focus.of(tester.element(find.text('Back'))).hasFocus, isTrue);
+  });
+
+  testWidgets('Channel Setup apply is non-cancellable and waits on Complete', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1600, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final controller = _PendingChannelSetupController()
+      ..stage = SetupStage.channelSetup
+      ..libraries = const [
+        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
+      ];
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      MaterialApp(home: UpstreamChannelSetupView(controller: controller)),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Configure channels'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Build Channels'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('This will replace your current lineup'));
+    await tester.pump();
+    await tester.tap(find.text('Confirm & Replace'));
+    await tester.pump();
+
+    expect(find.bySemanticsLabel('Applying channels'), findsOneWidget);
+    expect(find.text('Back'), findsNothing);
+    expect(find.text('Cancel'), findsNothing);
+    expect(find.text('Done'), findsNothing);
+    expect(controller.stage, SetupStage.channelSetup);
+
+    controller.finishApply();
+    await tester.pumpAndSettle();
+
+    expect(find.bySemanticsLabel('Channel update complete'), findsOneWidget);
+    expect(
+      tester
+          .widget<LinearProgressIndicator>(find.byType(LinearProgressIndicator))
+          .value,
+      1,
+    );
+    expect(controller.stage, SetupStage.channelSetup);
+    expect(Focus.of(tester.element(find.text('Done'))).hasFocus, isTrue);
+    await tester.tap(find.text('Done'));
+    await tester.pumpAndSettle();
+    expect(controller.stage, SetupStage.ready);
   });
 
   testWidgets(
@@ -760,7 +820,8 @@ class _SettingsFixtureController extends FixtureController {
 
 class _ProfileFixtureController extends FixtureController {
   @override
-  Future<void> selectProfile(PlexHomeUser selected, {String? pin}) async {}
+  Future<bool> selectProfile(PlexHomeUser selected, {String? pin}) async =>
+      true;
 }
 
 class _FailingChannelSetupController extends FixtureController {
@@ -787,6 +848,18 @@ class _FailingChannelSetupController extends FixtureController {
     List<Channel> planned, {
     required ChannelBuildMode mode,
   }) async => throw StateError('synthetic apply failure');
+}
+
+class _PendingChannelSetupController extends _FailingChannelSetupController {
+  final _apply = Completer<void>();
+
+  @override
+  Future<void> applyChannelPlan(
+    List<Channel> planned, {
+    required ChannelBuildMode mode,
+  }) => _apply.future;
+
+  void finishApply() => _apply.complete();
 }
 
 final _channel = Channel(

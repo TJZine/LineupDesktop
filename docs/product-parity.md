@@ -36,6 +36,15 @@ fallback. Thirteen committed 1280×720 macOS goldens cover Flutter composition.
 These updates do not extend the earlier host, CI, live-PMS, physical Windows,
 native-video, assistive-technology, package, or support evidence boundaries.
 
+**Upstream UI parity update:** 2026-08-25. Seven sequential UI packages ending
+at implementation commit `e4033169bceb8d06284c06a22fb9321751dcdfa3`
+align the principal viewing and first-run surfaces with immutable upstream
+source `b30e27c0025d254b7c3c8fb7a9335070542362bd`. Twenty committed
+1280×720 macOS goldens and responsive widget tests from 800×600 through logical
+4K at DPR2 cover Flutter composition. The UI-8 synthetic macOS harness review
+completed; physical Windows validation remains pending and is not implied by
+this update.
+
 This is the authoritative current product-parity record. The classifications
 in [Portable UI Parity](ui-parity.md) remain historical evidence for their
 named campaigns; they do not override this audit. Current source and observed
@@ -166,7 +175,7 @@ without placing credentials in public facts, durable state, URLs, or diagnostics
 | Strategy preview | Per-strategy estimate, blocked/slow/error/warning states | The synchronous post-scan planner reports accepted count/No matches/Off per strategy and proves omission with one bounded extra proposal; scan and apply failures remain at their owning stages | PARITY | — | HIGH | `lib/channels/channel_builder.dart`; `lib/app/channel_setup_view.dart`; builder/widget tests; strategy golden | Channel Setup |
 | Review diff | Stay/leave/new counts and samples | Exact Create/Update/Unchanged/Remove/Final counts follow replace, append, and merge apply semantics; exact merge matches reuse the existing channel without resetting its schedule | PARITY | — | HIGH | `lib/channels/channel_builder.dart`; `lib/app/channel_setup_view.dart`; builder/review tests and golden | Channel Setup |
 | Replace confirmation | Explicit destructive acknowledgement | Checkbox gate and disabled confirm until acknowledged | DESKTOP-ENHANCED | — | HIGH | `lib/app/channel_setup_view.dart`; review golden | Channel Setup |
-| Final build progress/cancellation | Stage-specific progress and active cancellation through planning/build | Final local lineup commit is atomic and normally fast, so its indeterminate noncancelable state is a scoped adaptation; library inventory is the separate long-running gap above | INTENTIONAL DESKTOP ADAPTATION | — | MEDIUM | Upstream progress controller; `lib/app/channel_setup_view.dart` | Measure a 1,000-channel final commit; add cancellation only if materially long |
+| Final build progress/cancellation | Stage-specific progress and active cancellation through planning/build | Step 3 owns applying, failed, and complete states. The final local lineup commit is atomic and normally fast, so applying is indeterminate and noncancelable; only Done exits completion. Library inventory is the separate long-running gap above. | INTENTIONAL DESKTOP ADAPTATION | — | MEDIUM | Upstream progress controller; `lib/app/channel_setup_view.dart`; setup progress/completion goldens and widget tests | Measure a 1,000-channel final commit; add cancellation only if materially long |
 | Atomic lineup apply/rollback | Scratch build then atomic commit | Validates full next lineup, one state save, in-memory rollback on failure | PARITY | — | MEDIUM | `lib/app/lineup_controller.dart`; `lib/persistence/app_store.dart` | Add focused delayed/failing apply persistence test |
 | Saved setup configuration | Normalized setup record; explicit rerun resets it | Libraries persist, but strategy/mode/limits reset with view construction | BLOCKED BY DECISION | P2 | HIGH | Upstream setup record/rerun; `lib/app/channel_setup_view.dart` | Define “edit setup” versus “start over” contract |
 | Custom channel creation | Upstream reachable product UI is setup-driven; CRUD service is hidden | Entire-library or hand-picked channels with validation and unavailable-item retention | DESKTOP-ENHANCED | — | HIGH | `lib/app/lineup_shell.dart`; UI regression tests | Channels |
@@ -181,8 +190,8 @@ without placing credentials in public facts, durable state, URLs, or diagnostics
 
 | Capability | Upstream behavior/reference | Current Desktop behavior | Classification | Priority | Confidence | Evidence | Owner / next action |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Guide shell/hierarchy | Header, showcase/PiP, channel rail, ruler, grid, Now line | Recognizable responsive composition with dedicated Desktop geometry | PARITY | — | HIGH | `lib/guide/guide_view.dart`; Guide goldens; screenshot `00-23-36` | Guide |
-| Classic PiP and Overlay Guide | Classic video box or full-video overlay | Both modes share one Flutter/native `PlayerSurface` geometry | PARITY | — | HIGH | `lib/app/lineup_shell.dart`; Guide tests/goldens | Native visibility remains separate evidence |
+| Guide shell/hierarchy | Header, showcase/PiP, channel rail, ruler, grid, Now line | Recognizable responsive composition with dedicated Desktop geometry | PARITY | — | HIGH | `lib/guide/guide_view.dart`; no-playback/PiP/Overlay Guide goldens; responsive row/aperture tests; screenshot `00-23-36` | Guide |
+| Classic PiP and Overlay Guide | Classic video box or full-video overlay | Both modes share one Flutter/native `PlayerSurface` geometry | PARITY | — | HIGH | `lib/app/lineup_shell.dart`; no-playback/PiP/Overlay Guide tests and goldens | Native visibility remains separate evidence |
 | Focus/selection/tuned/airing/past states | Distinct browse and playback identities | Distinct state roles, pointer hover, browse without accidental retune | DESKTOP-ENHANCED | — | HIGH | `lib/guide/guide_controller.dart`; `lib/guide/guide_view.dart`; tests | Guide |
 | Time and vertical navigation | Remote/pointer row and program movement, page by five, jump Now | Keyboard/pointer movement preserves focus time, viewport-sized paging, jump Now | PARITY | — | HIGH | Guide controller/view tests | Guide |
 | Current/future/past tuning policy | Only currently airing real programs tune | Same gate; future/past remain browsable for detail | PARITY | — | HIGH | `lib/guide/guide_controller.dart`; tests | Guide |
@@ -212,19 +221,19 @@ without placing credentials in public facts, durable state, URLs, or diagnostics
 | Native HDR decode/output/tone mapping | Browser policy chooses Direct/HDR10/HLS fallback | libmpv accepts original HDR-family streams and owns decode/render/tone mapping; owner reports surface playback working, but representative HDR-output evidence is not recorded | NEEDS EVIDENCE | P2 | MEDIUM | Owner report 2026-08-23; native telemetry/options; `docs/architecture.md`; Windows acceptance plan | Later representative HDR/DV display matrix; add server fallback only for an observed failure class |
 | Load/retry surface and resource cleanup | Typed retry/reload and diagnostics | Recoverable error overlay, same-path retry, stale-load rejection, and native stop ownership | PARITY | — | HIGH | `lib/playback/player_coordinator.dart`; tests | Compatibility fallback is classified separately above |
 | Tune/replacement lifetime | Stale-operation/currentness ownership | Tune generations, serialized operations, and native stop on scope change | PARITY | — | HIGH | coordinator/native source and tests | Physical replacement stress still required |
-| OSD hierarchy | Title/status, progress/buffer, up-next, tracks, sleep | Clean bottom gradient with channel/program/status/telemetry/progress/actions | INTENTIONAL DESKTOP ADAPTATION | — | HIGH | `lib/playback/player_view.dart`; OSD golden; screenshot `00-25-11` | Player UI |
+| OSD hierarchy | Title/status, progress/buffer, up-next, tracks, sleep | Clean bottom-edge gradient with channel/program/status/telemetry/progress/actions | INTENTIONAL DESKTOP ADAPTATION | — | HIGH | `lib/playback/player_view.dart`; OSD golden; screenshot `00-25-11` | Player UI |
 | OSD accessibility-focus timeout | Upstream overlay policy preserves usable focus | Keyboard descendant focus suspends OSD dismissal; valid departure restarts the full timeout and presentation identity rejects stale callbacks | PARITY | — | HIGH | `lib/playback/player_coordinator.dart`; coordinator and widget focus/timer tests | Physical Windows AT remains P2 evidence |
 | Reduce Motion in player overlays | Upstream/CSS honor reduced motion | The effective Flutter Reduce Motion setting makes Player switcher duration and reverse duration zero; normal motion remains 350 ms | PARITY | — | HIGH | `lib/playback/player_view.dart`; root propagation and Player widget tests | Player UI |
-| Mini Guide | Five centered rows, wrap/page/tune/full Guide | Five-row full-width responsive shelf with progress/next/tuned/focus and short-window scrolling | INTENTIONAL DESKTOP ADAPTATION | — | HIGH | coordinator/view tests; mini-guide golden; screenshot `00-27-07` | Player UI |
+| Mini Guide | Five centered rows, wrap/page/tune/full Guide | Five-row top-edge responsive shelf with progress/next/tuned/focus and short-window scrolling | INTENTIONAL DESKTOP ADAPTATION | — | HIGH | coordinator/view tests; mini-guide golden; screenshot `00-27-07` | Player UI |
 | Mini Guide accessibility timeout | Timed upstream overlay | Keyboard descendant focus suspends the eight-second timer; departure restarts it and stale replaced-overlay focus callbacks are ignored | PARITY | — | HIGH | coordinator and real widget traversal/timer tests | Physical Windows AT remains P2 evidence |
-| Audio track selection | Immediate track switch and selected state | Truthful native audio rail and immediate selection | PARITY | — | HIGH | native track model; `lib/playback/player_view.dart`; tests | Playback |
-| Subtitle track selection/off | Grouped delivery modes and immediate selection | Native subtitle list plus Off; no false delivery mode | INTENTIONAL DESKTOP ADAPTATION | — | HIGH | `lib/playback/player_view.dart`; long-list tests; screenshot `00-25-21` | Playback |
+| Audio track selection | Immediate track switch and selected state | Truthful native audio rail and immediate selection | PARITY | — | HIGH | native track model; `lib/playback/player_view.dart`; tests; audio-rail golden | Playback |
+| Subtitle track selection/off | Grouped delivery modes and immediate selection | Native subtitle list plus Off; no false delivery mode | INTENTIONAL DESKTOP ADAPTATION | — | HIGH | `lib/playback/player_view.dart`; long-list tests; long-subtitle-rail golden; screenshot `00-25-21` | Playback |
 | Track selector initial focus | Selected entry is the highlighted primary row | Audio and subtitle rails initially focus the selected track; subtitle Off receives focus only when none is selected | PARITY | — | HIGH | `lib/playback/player_view.dart`; widget focus tests | Player UI |
 | Native subtitle format/delivery breadth | Off/Direct/Standard/Full, browser extraction/burn-in and recovery | libmpv-visible embedded tracks are selected natively and require no browser burn-in mode; Plex-managed external sidecars and representative text/image subtitle breadth are not yet explicitly proved | NEEDS EVIDENCE | P2 | MEDIUM | `lib/plex/plex_client.dart`; native `track-list`/`sid`; Player tests; owner broad-compatibility feedback | Validate SRT/ASS/PGS/VobSub and Plex external sidecars; implement explicit sidecar loading only if the evidence exposes a gap |
 | Preferred/forced subtitle autoselection | Stored language and forced policy affect selection | Native tracks expose current runtime state only; Desktop does not parse or retain preferred/forced Plex facts and has no autoselection consumer | MISSING | P2 | HIGH | upstream settings; native track model | Define the required native facts, then add epoch-safe selection |
 | Lossless/surround audio decode | Settings drive passthrough or alternate browser-compatible track | Native playback does not gate decode on passthrough; pinned libmpv/FFmpeg decodes supported DTS-family, TrueHD, and other tracks and sends the result through the system-selected output, normally as PCM | INTENTIONAL DESKTOP ADAPTATION | — | HIGH | native libmpv options; `docs/windows-runtime.md`; `docs/architecture.md` | Validate representative TrueHD/DTS/DTS-HD tracks; add passthrough only as a separate optional feature |
 | Sleep timer | Off/15/30/60/120 and one-minute warning | Off/30/60/90 cycle; stop failure surfaces safely | INTENTIONAL DESKTOP ADAPTATION | — | HIGH | `lib/playback/player_coordinator.dart`; tests | Optional duration/warning parity P3 |
-| Rich Now Playing details | Standard/cinematic details, synopsis, art, cast, badges | One persistent mutually exclusive Player overlay shows current scheduled identity, synopsis, timing/progress, available badges, poster/backdrop, and optional clear logo; cast remains parked because scheduled state has no complete cast/headshot facts | PARITY | — | HIGH | `lib/playback/player_coordinator.dart`; `lib/playback/player_view.dart`; coordinator/widget tests; Now Playing golden | Physical video/AT remains separate evidence |
+| Rich Now Playing details | Standard/cinematic details, synopsis, art, cast, badges | One persistent mutually exclusive lower-left shelf shows current scheduled identity, synopsis, timing/progress, available badges, poster/backdrop, and optional clear logo while leaving the playback canvas visible; cast remains parked because scheduled state has no complete cast/headshot facts | PARITY | — | HIGH | `lib/playback/player_coordinator.dart`; `lib/playback/player_view.dart`; coordinator/widget tests; Now Playing golden | Physical video/AT remains separate evidence |
 | Fullscreen | Player toggle and platform placement | F/F11/button and native window-placement snapshot/rollback/restore; owner reports surface behavior working | NEEDS EVIDENCE | P2 | MEDIUM | Owner report 2026-08-23; Dart/C++ source and tests; no durable exact-commit report | Later DPI/move/minimize/repetition campaign |
 | Channel entry/CH navigation | Digits and CH± remote behaviors | Digit buffer, PageUp/PageDown channels, explicit error, mini Guide paging | DESKTOP-ENHANCED | — | HIGH | player source/tests | Input |
 | Keyboard/media keys | TV remote/playback key map | Desktop keys, numpad, media transport, Guide/settings shortcuts | DESKTOP-ENHANCED | — | HIGH | `lib/app/lineup_shell.dart`; `lib/playback/player_view.dart`; tests | Input |
@@ -331,7 +340,9 @@ Library cards now retain those outcomes and available PMS totals per selected
 library without a second count request or partial commit. Preview reports only
 synchronous per-strategy facts it can prove; review separates exact create,
 update, unchanged, remove, and final sets. Final commit progress remains
-deliberately indeterminate because that save is atomic and expected to be short.
+deliberately indeterminate and noncancelable because that save is atomic and
+expected to be short. Its Step 3 surface owns applying, failed, and complete
+states, and only Done exits a completed setup.
 The editor keeps generated and otherwise non-lossless sources read-only while
 allowing metadata changes without changing provenance.
 
@@ -345,14 +356,15 @@ horizontal program and semantics work is not yet profiled.
 
 ### Player, OSD, and mini Guide
 
-The compact bottom OSD and five-row top mini Guide are coherent Desktop
+The bottom-edge OSD and five-row top-edge mini Guide are coherent Desktop
 adaptations, with direct goldens and strong input tests. Timed OSD and mini Guide
 dismissal now suspends for keyboard descendant focus and rejects stale overlay
 callbacks; Player transitions honor Reduce Motion, and playback-options rails
 initially focus the selected native track. These are deterministic Flutter
 claims, not physical screen-reader support. A separate persistent rich Now
-Playing overlay now reads the current scheduled program, reuses the bounded
-Guide artwork cache, applies clear-logo fallback, and remains mutually exclusive
+Playing lower-left shelf now reads the current scheduled program, reuses the
+bounded Guide artwork cache, applies clear-logo fallback, leaves the playback
+canvas visible, and remains mutually exclusive
 with OSD, mini Guide, tracks, and errors. Cast/headshots and a separate rich-
 details auto-hide preference remain parked. Browser subtitle delivery modes are
 not a Desktop requirement; the remaining P2 question is whether representative
@@ -360,7 +372,8 @@ native text/image formats and Plex-managed external sidecars all reach libmpv.
 
 ### Settings
 
-The category rail/detail layout, extended Guide choices, accessibility controls,
+The single immersive category rail/detail layout, extended Guide choices,
+accessibility controls,
 account actions, and redacted-diagnostics preference are Desktop value. Every
 visible Desktop preference is persisted and has a current consumer. Missing
 upstream media settings are not superficial Settings gaps: most encode
@@ -372,7 +385,9 @@ All preference changes apply immediately through one controller-owned state
 transaction. The Settings UI disables further edits during that save and
 reports a failure while retaining the previous value. One queue serializes
 snapshot, save, commit, and rollback across state domains. Restore accepts only
-the current writer's exact schema and quarantines invalid values.
+the current writer's exact schema and quarantines invalid values. When playback
+is active, Settings retains that same Player surface behind the scrim; it does
+not introduce a management rail or second player owner.
 
 | Desktop preference/state | Default and choices | Persistence and runtime consumer |
 | --- | --- | --- |
@@ -397,10 +412,11 @@ the current writer's exact schema and quarantines invalid values.
 Ember & Steel, Slate & Pine, Swiss Minimal, DirecTV Classic, and Glassmorphism
 all flow through the same semantic roles across management, Guide, Player, OSD,
 mini Guide, Settings, focus, tuned/current states, and scrims. All five have
-programmatic text/focus contrast checks; Ember & Steel has most accepted pixels
-and Slate & Pine has one Settings golden. The other three lack per-screen pixel
-acceptance, so source/token consistency is stronger evidence than their visual
-regression coverage.
+programmatic text/focus contrast and shared responsive-role checks. Ember &
+Steel is the primary accepted-pixel matrix, including Settings over playback;
+Slate & Pine has the alternate-theme no-playback Settings golden. Swiss
+Minimal, DirecTV Classic, and Glassmorphism have deterministic semantic-role,
+contrast, and responsive coverage rather than separate per-screen goldens.
 
 ### Responsive design
 
@@ -450,12 +466,15 @@ private profile, library, or media facts; this record reproduces none of them.
 | `Screenshot 2026-08-14 at 00-26-52 Lineup.png` | 2026-08-14; supplied as upstream Lineup, commit unknown | 3456×1942; unknown | Settings over video | Private profile/media facts present; LOW | Settings/media-policy reference |
 | `Screenshot 2026-08-14 at 00-27-07 Lineup.png` | 2026-08-14; supplied as upstream Lineup, commit unknown | 3456×1942; unknown | Mini Guide | Private media facts present; LOW | Top-shelf reference |
 
-Current Desktop visual evidence consists of 13 committed 1280×720 macOS
-goldens: terminal auth failure, profiles, server selection, Channel Setup
-libraries, strategies and review, Guide without playback, Guide PiP, Overlay
-Guide, OSD, rich Now Playing, mini Guide, and one alternate-theme Settings
-state. These pixels prove Flutter composition with synthetic facts, not native
-video, physical input/assistive technology, or Windows support.
+Current Desktop visual evidence consists of 20 committed 1280×720 macOS
+goldens: terminal auth failure; profiles and protected-profile PIN; server and
+audio setup; Channel Setup libraries, strategies, review, progress, and
+completion, with failure covered structurally; Guide without playback, Guide
+PiP, and Overlay Guide; OSD,
+rich Now Playing, mini Guide, audio rail, and long subtitle rail; plus Settings
+over playback in Ember & Steel and Slate & Pine. These pixels prove Flutter
+composition with synthetic facts, not native video, physical input/assistive
+technology, or Windows support.
 
 ## Mechanical summary
 
@@ -701,6 +720,22 @@ goldens; the macOS release build succeeded at 50.6 MB; and `git diff --check`
 passed. These are deterministic/widget, macOS pixel, and build facts, not
 physical Windows or native-media evidence.
 
+Fresh upstream UI parity verification on 2026-08-25 used implementation HEAD
+`e4033169bceb8d06284c06a22fb9321751dcdfa3` plus only the UI-8 documentation
+updates recorded here. Whole-repository formatting checked 59 files with zero
+changes; analysis reported no issues; the full suite passed 477 tests; the
+nine-suite focused UI-8 command passed 216 tests, including all 20 committed
+macOS goldens and the Channels/Diagnostics regressions; the macOS release build
+succeeded at 50.6 MB; and `git diff --check` passed. Every one of the 18
+campaign-changed or added goldens was visually re-inspected at original pixels,
+with dimensions/color space, intended alpha, and synthetic visible labels also
+checked. The pinned macOS harness manually traversed all 1,000 channels by
+PageDown, reached channel 1,000, moved horizontally in both the standard and
+compact 12-hour Guide, jumped to now, tuned, opened Player/OSD/mini Guide,
+inspected all five themes, and reflowed through compact, ordinary, and large
+windows. These are Flutter composition, deterministic widget, and macOS runtime
+and build facts, not physical Windows or native-media evidence.
+
 The local build proves macOS UI feasibility, not playback. The live CI proves
 the exact source tree compiles on Windows. The owner report is meaningful
 surface evidence that native video and fullscreen work, but does not by itself
@@ -717,6 +752,10 @@ establish broad format/HDR/subtitle/audio, transition, or package support.
   not modified or trusted.
 - The screenshots are version/viewport uncertain and private-data-bearing, so
   only state/composition was used.
+- Rapid automated PageDown traversal emitted Flutter's macOS accessibility-
+  bridge warnings. Subsequent full accessibility snapshots remained usable and
+  correctly named visible Guide/Player controls, but this smoke test is not
+  physical screen-reader evidence.
 - Legal obligations were not interpreted; the engineering notice mismatch is
   a release gate requiring independent review.
 - The review-context cache was refreshed after its stable architecture and

@@ -38,6 +38,7 @@ class LineupShell extends StatefulWidget {
 
 class _LineupShellState extends State<LineupShell> {
   late int _selectedIndex = widget.initialMediaPath == null ? 0 : 4;
+  int? _settingsReturnIndex;
   late final GuideController _guide;
   late final PlayerCoordinator _player;
   final _playerKey = GlobalKey();
@@ -98,6 +99,13 @@ class _LineupShellState extends State<LineupShell> {
   }
 
   void _select(int index) {
+    if (widget.controller.stage == SetupStage.ready) {
+      if (index == 2 && _selectedIndex != 2) {
+        _settingsReturnIndex = _selectedIndex;
+      } else if (index != 2 && _selectedIndex == 2) {
+        _settingsReturnIndex = null;
+      }
+    }
     if (index == 0) {
       _guideOpenedFromPlayer = _selectedIndex == 4;
       _player.showFullGuide();
@@ -145,6 +153,17 @@ class _LineupShellState extends State<LineupShell> {
   KeyEventResult _globalKey(FocusNode _, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
     final keyboard = HardwareKeyboard.instance;
+    if (_selectedIndex == 2 &&
+        _settingsReturnIndex != null &&
+        !_appMenuOpen &&
+        (event.logicalKey == LogicalKeyboardKey.escape ||
+            event.logicalKey == LogicalKeyboardKey.backspace ||
+            event.logicalKey == LogicalKeyboardKey.goBack)) {
+      final returnIndex = _settingsReturnIndex!;
+      _settingsReturnIndex = null;
+      _select(returnIndex);
+      return KeyEventResult.handled;
+    }
     if (event.logicalKey == LogicalKeyboardKey.f3 &&
         !keyboard.isControlPressed &&
         !keyboard.isMetaPressed &&
@@ -298,6 +317,11 @@ class _LineupShellState extends State<LineupShell> {
       onOpenPlayer: () => _select(4),
       onTune: _tuneFromGuide,
     );
+    final settingsView = SettingsView(
+      controller: controller,
+      focusNode: _settingsFocus,
+      onOpenMenu: _openAppMenu,
+    );
     final views = <Widget>[
       overlayGuide
           ? Stack(
@@ -309,7 +333,7 @@ class _LineupShellState extends State<LineupShell> {
             )
           : guideView,
       ChannelsView(controller: controller, focusNode: _channelsFocus),
-      SettingsView(controller: controller, focusNode: _settingsFocus),
+      settingsView,
       DiagnosticsView(
         controller: controller,
         status: _player.status,
@@ -317,7 +341,16 @@ class _LineupShellState extends State<LineupShell> {
       ),
       playerView,
     ];
-    if (_selectedIndex == 0 || _selectedIndex == 4) {
+    if (_selectedIndex == 0 || _selectedIndex == 2 || _selectedIndex == 4) {
+      final immersiveView = _selectedIndex == 2
+          ? Stack(
+              fit: StackFit.expand,
+              children: [
+                if (hasPlaybackSurface) PlayerSurface(controller: _player),
+                settingsView,
+              ],
+            )
+          : views[_selectedIndex];
       return _withGlobalKeys(
         Scaffold(
           backgroundColor: Colors.transparent,
@@ -329,7 +362,7 @@ class _LineupShellState extends State<LineupShell> {
                 excluding: _appMenuOpen,
                 child: ExcludeFocus(
                   excluding: _appMenuOpen,
-                  child: SafeArea(child: views[_selectedIndex]),
+                  child: SafeArea(child: immersiveView),
                 ),
               ),
               if (_appMenuOpen) _immersiveAppMenu(),
@@ -949,9 +982,15 @@ class _ChannelEditorState extends State<ChannelEditor> {
 enum _SettingsCategory { appearance, guide, accessibility, account, support }
 
 class SettingsView extends StatefulWidget {
-  const SettingsView({required this.controller, this.focusNode, super.key});
+  const SettingsView({
+    required this.controller,
+    this.focusNode,
+    this.onOpenMenu,
+    super.key,
+  });
   final LineupController controller;
   final FocusNode? focusNode;
+  final VoidCallback? onOpenMenu;
 
   @override
   State<SettingsView> createState() => _SettingsViewState();
@@ -973,46 +1012,150 @@ class _SettingsViewState extends State<SettingsView> {
 
   @override
   Widget build(BuildContext context) {
-    return LineupPage(
-      title: 'Settings',
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final compact = constraints.maxWidth < LineupLayout.compact;
-          final categories = _categorySelector(compact);
-          final detail = Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (_saving)
-                const LinearProgressIndicator(
-                  semanticsLabel: 'Saving settings',
-                ),
-              if (_error != null) ...[
-                LineupNotice(message: _error!),
-                const SizedBox(height: 12),
+    final roles = LineupTheme.of(context);
+    return Material(
+      type: MaterialType.transparency,
+      child: FocusTraversalGroup(
+        child: DecoratedBox(
+          key: const Key('settings-immersive-scrim'),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                roles.scrim.withValues(alpha: 0.68),
+                roles.scrim.withValues(alpha: 0.46),
               ],
-              Expanded(child: _categoryDetail()),
-            ],
-          );
-          return compact
-              ? Column(
-                  children: [
-                    categories,
-                    const SizedBox(height: 12),
-                    Expanded(child: detail),
-                  ],
-                )
-              : Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    SizedBox(width: 250, child: categories),
-                    const SizedBox(width: 20),
-                    Expanded(child: detail),
-                  ],
-                );
-        },
+            ),
+          ),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final compact = constraints.maxWidth < LineupLayout.compact;
+              final categories = _categoryRail(compact, constraints.maxWidth);
+              final detail = _detailPane(compact);
+              return compact
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        categories,
+                        Expanded(child: detail),
+                      ],
+                    )
+                  : Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        categories,
+                        Expanded(child: detail),
+                      ],
+                    );
+            },
+          ),
+        ),
       ),
     );
   }
+
+  Widget _categoryRail(bool compact, double width) {
+    final roles = LineupTheme.of(context);
+    final content = Padding(
+      padding: EdgeInsets.fromLTRB(
+        compact ? 20 : 24,
+        compact ? 16 : 24,
+        compact ? 20 : 18,
+        compact ? 14 : 24,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Semantics(
+                  header: true,
+                  child: Text(
+                    'Settings',
+                    style: Theme.of(context).textTheme.headlineMedium,
+                  ),
+                ),
+              ),
+              if (widget.onOpenMenu != null)
+                IconButton(
+                  tooltip: 'Open Lineup menu',
+                  onPressed: widget.onOpenMenu,
+                  icon: const Icon(Icons.menu),
+                ),
+            ],
+          ),
+          Text(
+            'Press Back to return',
+            style: Theme.of(context).textTheme.bodySmall
+                ?.copyWith(color: roles.mutedText),
+          ),
+          SizedBox(height: compact ? 14 : 24),
+          if (compact)
+            _categorySelector(true)
+          else
+            Expanded(child: _categorySelector(false)),
+        ],
+      ),
+    );
+    return DecoratedBox(
+      key: const Key('settings-category-rail'),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            roles.overlaySurface.withValues(alpha: 0.82),
+            roles.deepBackground.withValues(alpha: 0.9),
+          ],
+        ),
+        border: Border(
+          right: compact
+              ? BorderSide.none
+              : BorderSide(color: roles.subtleBorder),
+          bottom: compact
+              ? BorderSide(color: roles.subtleBorder)
+              : BorderSide.none,
+        ),
+        borderRadius: compact
+            ? BorderRadius.only(
+                bottomLeft: Radius.circular(roles.panelRadius),
+                bottomRight: Radius.circular(roles.panelRadius),
+              )
+            : BorderRadius.only(
+                topRight: Radius.circular(roles.panelRadius),
+                bottomRight: Radius.circular(roles.panelRadius),
+              ),
+      ),
+      child: compact
+          ? content
+          : SizedBox(
+              width: width * 0.24 > 320 ? 320 : width * 0.24,
+              child: content,
+            ),
+    );
+  }
+
+  Widget _detailPane(bool compact) => Padding(
+    key: const Key('settings-detail-pane'),
+    padding: EdgeInsets.fromLTRB(
+      compact ? 20 : 40,
+      compact ? 20 : 32,
+      compact ? 20 : 40,
+      compact ? 20 : 32,
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (_saving)
+          const LinearProgressIndicator(semanticsLabel: 'Saving settings'),
+        if (_error != null) ...[
+          LineupNotice(message: _error!),
+          const SizedBox(height: 12),
+        ],
+        Expanded(child: _categoryDetail()),
+      ],
+    ),
+  );
 
   Widget _categorySelector(bool compact) {
     final roles = LineupTheme.of(context);
@@ -1057,7 +1200,7 @@ class _SettingsViewState extends State<SettingsView> {
     final value = widget.controller.settings;
     return ListView(
       children: [
-        LineupSection(
+        _SettingsSection(
           title: _categoryLabel(_category),
           children: switch (_category) {
             _SettingsCategory.appearance => [
@@ -1392,6 +1535,26 @@ class DiagnosticsView extends StatelessWidget {
             ),
       ],
     ),
+  );
+}
+
+class _SettingsSection extends StatelessWidget {
+  const _SettingsSection({required this.title, required this.children});
+
+  final String title;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Semantics(
+        header: true,
+        child: Text(title, style: Theme.of(context).textTheme.headlineMedium),
+      ),
+      const SizedBox(height: 24),
+      ...children,
+    ],
   );
 }
 

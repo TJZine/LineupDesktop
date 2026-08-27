@@ -69,7 +69,11 @@ void main() {
       (Icons.settings_outlined, 'Settings'),
       (Icons.monitor_heart_outlined, 'Diagnostics'),
     ]) {
-      if (target.$2 != 'Channels') {
+      if (target.$2 == 'Diagnostics') {
+        await tester.tap(find.byTooltip('Open Lineup menu'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Diagnostics').last);
+      } else if (target.$2 != 'Channels') {
         await tester.tap(find.byIcon(target.$1));
       }
       await tester.pumpAndSettle();
@@ -121,13 +125,6 @@ void main() {
       await openDestination(tester, 'Channels');
       expect(find.text('Open Channel builder'), findsOneWidget);
       expect(tester.takeException(), isNull, reason: 'Channels at $size');
-
-      await tester.tap(find.byIcon(Icons.settings_outlined));
-      await tester.pumpAndSettle();
-      expect(find.text('Accessibility'), findsOneWidget);
-      expect(find.text('Remote quality'), findsNothing);
-      expect(find.text('HDR tone mapping'), findsNothing);
-      expect(tester.takeException(), isNull, reason: 'Settings at $size');
       if (size.width >= 2560) {
         expect(
           tester
@@ -140,6 +137,25 @@ void main() {
           isTrue,
         );
       }
+
+      await tester.tap(find.byIcon(Icons.settings_outlined));
+      await tester.pumpAndSettle();
+      expect(find.text('Accessibility'), findsOneWidget);
+      expect(find.text('Remote quality'), findsNothing);
+      expect(find.text('HDR tone mapping'), findsNothing);
+      expect(tester.takeException(), isNull, reason: 'Settings at $size');
+      expect(find.byType(NavigationRail), findsNothing);
+      final categoryRailSize = tester.getSize(
+        find.byKey(const Key('settings-category-rail')),
+      );
+      if (size.width < LineupLayout.compact) {
+        expect(categoryRailSize.width, size.width);
+      } else {
+        expect(
+          categoryRailSize.width,
+          size.width * 0.24 > 320 ? 320 : size.width * 0.24,
+        );
+      }
       if (size == const Size(800, 600)) {
         for (final category in ['Accessibility', 'Account', 'Support']) {
           await tester.ensureVisible(find.text(category).first);
@@ -148,7 +164,9 @@ void main() {
           expect(tester.takeException(), isNull, reason: '$category at $size');
         }
       }
-      await tester.tap(find.byIcon(Icons.monitor_heart_outlined));
+      await tester.tap(find.byTooltip('Open Lineup menu'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Diagnostics').last);
       await tester.pumpAndSettle();
       expect(find.text('Credential-safe diagnostics'), findsOneWidget);
       expect(tester.takeException(), isNull, reason: 'Diagnostics at $size');
@@ -268,8 +286,8 @@ void main() {
       const Size(1920, 1080),
     );
     expect(
-      tester.getSize(find.byKey(const ValueKey('lineup-page-content'))).width,
-      LineupLayout.readableWidth,
+      tester.getSize(find.byKey(const Key('settings-category-rail'))).width,
+      320,
     );
   });
 
@@ -318,6 +336,45 @@ void main() {
     expect(controller.pin, '1345');
   });
 
+  testWidgets('PIN and Audio Setup scale from 800x600 through 4K', (
+    tester,
+  ) async {
+    const profile = PlexHomeUser(id: 'child', name: 'Child', protected: true);
+    final controller = _ProfileFixtureController()
+      ..stage = SetupStage.profiles
+      ..profiles = const [profile];
+    final fixture = UiFixture(controller: controller);
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    for (final size in [
+      const Size(800, 600),
+      const Size(1920, 1080),
+      const Size(3840, 2160),
+    ]) {
+      await tester.binding.setSurfaceSize(size);
+      await tester.pumpWidget(fixture.build());
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Child'));
+      await tester.pumpAndSettle();
+
+      final sheet = tester.getRect(
+        find.byKey(const Key('profile-pin-surface')),
+      );
+      expect(sheet.width, lessThanOrEqualTo(520));
+      expect(sheet.bottom, size.height);
+      expect(tester.takeException(), isNull, reason: 'PIN viewport $size');
+      await tester.tap(find.byTooltip('Cancel'));
+      await tester.pumpAndSettle();
+
+      controller.stage = SetupStage.audio;
+      await tester.pumpWidget(fixture.build());
+      await tester.pumpAndSettle();
+      expect(find.text('Continue'), findsOneWidget);
+      expect(tester.takeException(), isNull, reason: 'Audio viewport $size');
+      controller.stage = SetupStage.profiles;
+    }
+  });
+
   testWidgets('profile badges remain reachable from 800x600 through 4K', (
     tester,
   ) async {
@@ -338,21 +395,34 @@ void main() {
           admin: true,
           restricted: true,
         ),
+        PlexHomeUser(id: 'guest', name: 'Guest', protected: false),
+        PlexHomeUser(id: 'family', name: 'Family', protected: true),
+        PlexHomeUser(id: 'kids', name: 'Kids', protected: false),
+        PlexHomeUser(id: 'movies', name: 'Movie Night', protected: false),
+        PlexHomeUser(id: 'sports', name: 'Sports', protected: false),
+        PlexHomeUser(id: 'weekend', name: 'Weekend', protected: false),
+        PlexHomeUser(id: 'visitor', name: 'Visitor', protected: false),
+        PlexHomeUser(id: 'parents', name: 'Parents', protected: true),
       ];
+    final fixture = UiFixture(controller: controller);
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    for (final size in [const Size(800, 600), const Size(3840, 2160)]) {
+    for (final size in [
+      const Size(800, 600),
+      const Size(1920, 1080),
+      const Size(3840, 2160),
+    ]) {
       await tester.binding.setSurfaceSize(size);
-      await tester.pumpWidget(UiFixture(controller: controller).build());
+      await tester.pumpWidget(fixture.build());
       await tester.pumpAndSettle();
       expect(find.text('Active'), findsOneWidget);
-      expect(tester.takeException(), isNull);
+      expect(find.text('Parents'), findsOneWidget);
+      expect(tester.takeException(), isNull, reason: 'viewport $size');
     }
   });
 
-  testWidgets('server hierarchy stays reachable and semantic when compact', (
+  testWidgets('server hierarchy stays reachable across desktop sizes', (
     tester,
   ) async {
-    await tester.binding.setSurfaceSize(const Size(800, 600));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     final server = PlexServer(
       id: 'server',
@@ -393,8 +463,17 @@ void main() {
         latency: const Duration(milliseconds: 100),
       );
 
-    await tester.pumpWidget(UiFixture(controller: controller).build());
-    await tester.pumpAndSettle();
+    final fixture = UiFixture(controller: controller);
+    for (final size in [
+      const Size(800, 600),
+      const Size(1920, 1080),
+      const Size(3840, 2160),
+    ]) {
+      await tester.binding.setSurfaceSize(size);
+      await tester.pumpWidget(fixture.build());
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull, reason: 'server viewport $size');
+    }
 
     expect(find.bySemanticsLabel(RegExp('Owned server')), findsOneWidget);
     expect(
@@ -418,7 +497,6 @@ void main() {
         .getSemanticsData();
     expect(connectSemantics.label, 'Connect to Backup Server');
     expect(connectSemantics.hasAction(SemanticsAction.tap), isTrue);
-    expect(tester.takeException(), isNull);
   });
 
   testWidgets('Channel Setup remains reachable at the practical minimum', (
@@ -439,6 +517,78 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Configure channels'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Channel Setup keeps its footer reachable at 1080p', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1920, 1080));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final controller = FixtureController()
+      ..stage = SetupStage.channelSetup
+      ..libraries = const [
+        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
+        PlexLibrary(id: 'shows', title: 'Shows', type: PlexLibraryType.show),
+      ];
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      MaterialApp(home: UpstreamChannelSetupView(controller: controller)),
+    );
+    await tester.pumpAndSettle();
+
+    final action = find.widgetWithText(FilledButton, 'Configure channels');
+    expect(action, findsOneWidget);
+    expect(tester.getBottomRight(action).dy, lessThanOrEqualTo(1080));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Channel Setup Review keeps staged chrome at compact sizes', (
+    tester,
+  ) async {
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    for (final size in const [
+      Size(800, 600),
+      Size(800, 1200),
+      Size(1280, 720),
+    ]) {
+      await tester.binding.setSurfaceSize(size);
+      final controller = _SetupFixtureController()
+        ..stage = SetupStage.channelSetup
+        ..libraries = const [
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+        ];
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: UpstreamChannelSetupView(
+            key: ValueKey(size),
+            controller: controller,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Configure channels'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Build Channels'));
+      await tester.pumpAndSettle();
+
+      final header = find.text('Channel Setup');
+      final review = find.text('Review expected changes');
+      final footer = find.widgetWithText(FilledButton, 'Confirm & Replace');
+      expect(header, findsOneWidget);
+      expect(review, findsOneWidget);
+      expect(footer, findsOneWidget);
+      expect(
+        tester.getBottomLeft(header).dy,
+        lessThan(tester.getTopLeft(review).dy),
+      );
+      expect(tester.getBottomRight(footer).dy, lessThanOrEqualTo(size.height));
+      expect(tester.takeException(), isNull);
+    }
   });
 
   testWidgets('Channel Setup retains its three-stage product structure', (
@@ -742,8 +892,9 @@ class _ProfileFixtureController extends FixtureController {
   String? pin;
 
   @override
-  Future<void> selectProfile(PlexHomeUser selected, {String? pin}) async {
+  Future<bool> selectProfile(PlexHomeUser selected, {String? pin}) async {
     this.pin = pin;
+    return true;
   }
 }
 

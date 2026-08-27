@@ -61,6 +61,8 @@ void main() {
       await controller.applyChannelPlan([
         channel,
       ], mode: ChannelBuildMode.replace);
+      expect(controller.stage, SetupStage.channelSetup);
+      controller.completeChannelSetup();
       expect(controller.stage, SetupStage.ready);
 
       final guide = GuideController(

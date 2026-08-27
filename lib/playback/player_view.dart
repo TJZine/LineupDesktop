@@ -30,9 +30,13 @@ class PlayerView extends StatefulWidget {
 }
 
 class _PlayerViewState extends State<PlayerView> {
+  late PlayerOverlay _renderedOverlay;
+  var _overlayTransitionDuration = const Duration(milliseconds: 350);
+
   @override
   void initState() {
     super.initState();
+    _renderedOverlay = widget.controller.overlay;
     widget.controller.addListener(_changed);
   }
 
@@ -43,7 +47,31 @@ class _PlayerViewState extends State<PlayerView> {
   }
 
   void _changed() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    final nextOverlay = widget.controller.overlay;
+    setState(() {
+      final transitioningNowPlaying =
+          _renderedOverlay == PlayerOverlay.nowPlaying ||
+          nextOverlay == PlayerOverlay.nowPlaying;
+      final transitioningTracks =
+          _renderedOverlay == PlayerOverlay.audioTracks ||
+          _renderedOverlay == PlayerOverlay.subtitleTracks ||
+          nextOverlay == PlayerOverlay.audioTracks ||
+          nextOverlay == PlayerOverlay.subtitleTracks;
+      final transitioningMiniGuide =
+          _renderedOverlay == PlayerOverlay.miniGuide ||
+          nextOverlay == PlayerOverlay.miniGuide;
+      _overlayTransitionDuration = Duration(
+        milliseconds: transitioningNowPlaying
+            ? 200
+            : transitioningTracks
+            ? 300
+            : transitioningMiniGuide
+            ? 300
+            : 350,
+      );
+      _renderedOverlay = nextOverlay;
+    });
   }
 
   KeyEventResult _key(FocusNode node, KeyEvent event) {
@@ -223,7 +251,7 @@ class _PlayerViewState extends State<PlayerView> {
     final presentationKey = ValueKey((overlay, presentationGeneration));
     final transitionDuration = MediaQuery.disableAnimationsOf(context)
         ? Duration.zero
-        : const Duration(milliseconds: 350);
+        : _overlayTransitionDuration;
     return Material(
       color: Colors.transparent,
       child: Focus(
@@ -266,6 +294,34 @@ class _PlayerViewState extends State<PlayerView> {
                     );
                     final childOverlay =
                         (child.key as ValueKey<(PlayerOverlay, int)>).value.$1;
+                    if (childOverlay == PlayerOverlay.nowPlaying) {
+                      return SlideTransition(
+                        position: Tween(
+                          begin: const Offset(-1, 0),
+                          end: Offset.zero,
+                        ).animate(fade),
+                        child: transitioned,
+                      );
+                    }
+                    if (childOverlay == PlayerOverlay.audioTracks ||
+                        childOverlay == PlayerOverlay.subtitleTracks) {
+                      return SlideTransition(
+                        position: Tween(
+                          begin: const Offset(1, 0),
+                          end: Offset.zero,
+                        ).animate(fade),
+                        child: transitioned,
+                      );
+                    }
+                    if (childOverlay == PlayerOverlay.miniGuide) {
+                      return SlideTransition(
+                        position: Tween(
+                          begin: const Offset(0, -1),
+                          end: Offset.zero,
+                        ).animate(fade),
+                        child: transitioned,
+                      );
+                    }
                     if (childOverlay != PlayerOverlay.osd) {
                       return transitioned;
                     }
@@ -345,7 +401,9 @@ class PlayerSurface extends StatelessWidget {
   Widget build(BuildContext context) {
     final state = controller.status.state;
     final unsupported = state == PlayerState.unsupported;
-    final preparing = state == PlayerState.loading || controller.tuning;
+    final hasError = controller.error != null;
+    final preparing =
+        !hasError && (state == PlayerState.loading || controller.tuning);
     final roles = LineupTheme.of(context);
     return Stack(
       fit: StackFit.expand,
@@ -356,7 +414,7 @@ class PlayerSurface extends StatelessWidget {
           NativeVideoSurface(player: controller.player),
         if (unsupported) _Unsupported(message: controller.status.message),
         if (preparing) const _Loading(label: 'Preparing playback'),
-        if (!preparing && state == PlayerState.buffering)
+        if (!hasError && !preparing && state == PlayerState.buffering)
           const _Loading(label: 'Buffering playback'),
         if (showErrors && controller.error != null)
           _SurfaceError(controller: controller),
@@ -448,9 +506,9 @@ class _Osd extends StatelessWidget {
               end: Alignment.bottomCenter,
               colors: [
                 Colors.transparent,
-                roles.scrim.withValues(alpha: 0.14),
-                roles.scrim.withValues(alpha: 0.38),
-                roles.scrim.withValues(alpha: 0.56),
+                roles.scrim.withValues(alpha: 0.08),
+                roles.scrim.withValues(alpha: 0.30),
+                roles.scrim.withValues(alpha: 0.45),
               ],
               stops: const [0, 0.20, 0.60, 1],
             ),
@@ -493,7 +551,8 @@ class _Osd extends StatelessWidget {
                                 'Nothing playing',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.titleLarge,
+                            style: Theme.of(context).textTheme.titleLarge
+                                ?.copyWith(fontWeight: FontWeight.w700),
                           ),
                           Text(
                             [
@@ -503,6 +562,8 @@ class _Osd extends StatelessWidget {
                             ].nonNulls.join(' • '),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(color: roles.secondaryText),
                           ),
                         ],
                       ),
@@ -528,7 +589,10 @@ class _Osd extends StatelessWidget {
                   children: [
                     Text(
                       '${_duration(controller.position)} / ${_duration(controller.duration)}',
-                      style: Theme.of(context).textTheme.bodySmall,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: roles.secondaryText,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
                     ),
                     const Spacer(),
                     if (next != null && expanded)
@@ -537,7 +601,11 @@ class _Osd extends StatelessWidget {
                           'Up next • ${next.scheduled.item.title}',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodySmall,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: roles.mutedText,
+                                fontWeight: FontWeight.w600,
+                              ),
                         ),
                       ),
                   ],
@@ -596,6 +664,8 @@ class _Osd extends StatelessWidget {
                         controller.sleepDuration == null
                             ? 'Sleep off'
                             : 'Sleep ${controller.sleepDuration!.inMinutes}m',
+                        style: Theme.of(context).textTheme.bodySmall
+                            ?.copyWith(color: roles.secondaryText),
                       ),
                     const Spacer(),
                     if (openMenu != null)
@@ -647,9 +717,15 @@ class _NowPlaying extends StatelessWidget {
     final size = MediaQuery.sizeOf(context);
     final compact =
         LineupLayout.isCompactWidth(size.width) || size.height < 650;
+    final shelfWidth = size.width >= 2560
+        ? size.width.clamp(0, 1500).toDouble()
+        : (size.width * 0.95).clamp(0, 1180).toDouble();
+    final shelfHeight = compact
+        ? (size.height * 0.56).clamp(300, 380).toDouble()
+        : (size.height * 0.50).clamp(380, 560).toDouble();
+    final showPoster = size.width >= 700 && size.height >= 500;
     final preferLogo = controller.lineup.settings.preferClearLogos;
     final posterPath = _artworkPath(item, GuideArtworkKind.poster);
-    final backdropPath = _artworkPath(item, GuideArtworkKind.backdrop);
     final logoPath = _artworkPath(item, GuideArtworkKind.clearLogo);
     final generation = controller.lineup.contentGeneration;
     final elapsed = controller.guide.now.difference(program.scheduled.start);
@@ -680,77 +756,101 @@ class _NowPlaying extends StatelessWidget {
       ?episode,
       '${_time(context, program.scheduled.start)} to ${_time(context, program.scheduled.end)}',
       '${(progress * 100).round()} percent complete',
+      if (controller.duration > Duration.zero)
+        '${_duration(controller.position)} of ${_duration(controller.duration)} playback',
       ...badges,
       ?item.summary,
     ].join('. ');
     final artworkIdentity = (program.id, generation);
 
-    return ColoredBox(
+    return Align(
       key: const Key('player-now-playing-surface'),
-      color: roles.deepBackground.withValues(alpha: 0.88),
-      child: Semantics(
-        container: true,
-        label: semanticFacts,
-        excludeSemantics: true,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            if (!compact && backdropPath != null)
-              _PlayerArtwork(
-                key: ValueKey((
-                  artworkIdentity,
-                  GuideArtworkKind.backdrop,
-                  backdropPath,
-                )),
-                future: controller.guide.artworkFor(
-                  program,
-                  GuideArtworkKind.backdrop,
-                ),
-                fit: BoxFit.cover,
-              ),
-            DecoratedBox(
+      alignment: Alignment.bottomLeft,
+      child: SafeArea(
+        top: false,
+        right: false,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () {},
+          child: Semantics(
+            container: true,
+            label: semanticFacts,
+            excludeSemantics: true,
+            child: Container(
+              key: const Key('player-now-playing-shelf'),
+              width: shelfWidth,
+              height: shelfHeight,
+              clipBehavior: Clip.antiAlias,
               decoration: BoxDecoration(
+                border: Border(
+                  top: BorderSide(color: roles.subtleBorder),
+                  right: BorderSide(color: roles.subtleBorder),
+                ),
+                borderRadius: BorderRadius.only(
+                  topRight: const Radius.circular(16),
+                ),
                 gradient: LinearGradient(
-                  begin: Alignment.centerRight,
-                  end: Alignment.centerLeft,
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
                   colors: [
-                    roles.scrim.withValues(alpha: compact ? 0.80 : 0.54),
-                    roles.deepBackground.withValues(alpha: 0.96),
+                    roles.scrim.withValues(alpha: 0.62),
+                    roles.overlaySurface.withValues(alpha: 0.86),
                   ],
                 ),
-              ),
-            ),
-            SafeArea(
-              minimum: EdgeInsets.all(
-                compact ? 24 : (size.width * 0.055).clamp(36, 96),
               ),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  if (!compact) ...[
+                  if (showPoster) ...[
                     SizedBox(
-                      width: (size.width * 0.20).clamp(190, 340),
-                      height: (size.height * 0.58).clamp(300, 620),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(roles.panelRadius),
-                        child: posterPath == null
-                            ? _ArtworkFallback(roles: roles)
-                            : _PlayerArtwork(
-                                key: ValueKey((
-                                  artworkIdentity,
-                                  GuideArtworkKind.poster,
-                                  posterPath,
-                                )),
-                                future: controller.guide.artworkFor(program),
-                                fit: BoxFit.cover,
-                                fallback: _ArtworkFallback(roles: roles),
+                      key: const Key('player-now-playing-poster'),
+                      width: (shelfHeight * 2 / 3).clamp(190, 340),
+                      height: shelfHeight,
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          posterPath == null
+                              ? _ArtworkFallback(roles: roles)
+                              : _PlayerArtwork(
+                                  key: ValueKey((
+                                    artworkIdentity,
+                                    GuideArtworkKind.poster,
+                                    posterPath,
+                                  )),
+                                  future: controller.guide.artworkFor(program),
+                                  fit: BoxFit.cover,
+                                  fallback: _ArtworkFallback(roles: roles),
+                                ),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: SizedBox(
+                              width: 48,
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      Colors.transparent,
+                                      roles.overlaySurface.withValues(
+                                        alpha: 0.72,
+                                      ),
+                                    ],
+                                  ),
+                                ),
                               ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    SizedBox(width: (size.width * 0.045).clamp(28, 72)),
                   ],
                   Expanded(
-                    child: SingleChildScrollView(
+                    child: Padding(
+                      padding: EdgeInsets.fromLTRB(
+                        compact ? 18 : 28,
+                        compact ? 16 : 24,
+                        compact ? 18 : 28,
+                        compact ? 14 : 20,
+                      ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -765,8 +865,8 @@ class _NowPlaying extends StatelessWidget {
                                     fontWeight: FontWeight.w800,
                                   ),
                             ),
-                          const SizedBox(height: 12),
-                          if (!compact && preferLogo && logoPath != null)
+                          SizedBox(height: compact ? 6 : 10),
+                          if (preferLogo && logoPath != null)
                             _NowPlayingIdentity(
                               key: ValueKey((
                                 artworkIdentity,
@@ -788,8 +888,8 @@ class _NowPlaying extends StatelessWidget {
                               style: Theme.of(context).textTheme.titleMedium,
                             ),
                           ],
-                          if (badges.isNotEmpty) ...[
-                            const SizedBox(height: 16),
+                          if (!compact && badges.isNotEmpty) ...[
+                            const SizedBox(height: 12),
                             Wrap(
                               key: const Key('player-now-playing-badges'),
                               spacing: 8,
@@ -801,11 +901,11 @@ class _NowPlaying extends StatelessWidget {
                             ),
                           ],
                           if (item.summary case final summary?) ...[
-                            const SizedBox(height: 18),
+                            SizedBox(height: compact ? 8 : 12),
                             Text(
                               summary,
                               key: const Key('player-now-playing-summary'),
-                              maxLines: compact ? 4 : 6,
+                              maxLines: compact ? 2 : 4,
                               overflow: TextOverflow.ellipsis,
                               style: Theme.of(context).textTheme.bodyLarge
                                   ?.copyWith(
@@ -814,7 +914,7 @@ class _NowPlaying extends StatelessWidget {
                                   ),
                             ),
                           ],
-                          const SizedBox(height: 24),
+                          const Spacer(),
                           LinearProgressIndicator(
                             key: const Key('player-now-playing-progress'),
                             value: progress,
@@ -824,7 +924,11 @@ class _NowPlaying extends StatelessWidget {
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            '${_time(context, program.scheduled.start)}–${_time(context, program.scheduled.end)}',
+                            [
+                              if (controller.duration > Duration.zero)
+                                '${_duration(controller.position)} / ${_duration(controller.duration)}',
+                              '${_time(context, program.scheduled.start)}–${_time(context, program.scheduled.end)}',
+                            ].join('  •  '),
                             key: const Key('player-now-playing-time'),
                             style: Theme.of(context).textTheme.bodyMedium
                                 ?.copyWith(color: roles.secondaryText),
@@ -836,7 +940,7 @@ class _NowPlaying extends StatelessWidget {
                 ],
               ),
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -1048,13 +1152,19 @@ class _MiniGuide extends StatelessWidget {
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
               colors: [
-                roles.overlaySurface,
-                roles.overlaySurface.withValues(alpha: 0.88),
+                roles.scrim.withValues(alpha: 0.60),
+                roles.scrim.withValues(alpha: 0.48),
+                roles.scrim.withValues(alpha: 0.24),
                 Colors.transparent,
               ],
-              stops: const [0, 0.78, 1],
+              stops: const [0, 0.50, 0.80, 1],
+            ),
+            border: Border(bottom: BorderSide(color: roles.subtleBorder)),
+            borderRadius: BorderRadius.vertical(
+              bottom: Radius.circular(roles.panelRadius),
             ),
           ),
+          clipBehavior: Clip.antiAlias,
           child: Semantics(
             container: true,
             explicitChildNodes: true,
@@ -1220,90 +1330,201 @@ class _MiniGuideRow extends StatelessWidget {
   }
 }
 
-class _Tracks extends StatelessWidget {
+class _Tracks extends StatefulWidget {
   const _Tracks({required this.controller, required this.type});
   final PlayerCoordinator controller;
   final PlayerTrackType type;
 
   @override
+  State<_Tracks> createState() => _TracksState();
+}
+
+class _TracksState extends State<_Tracks> {
+  late final ScrollController _scrollController;
+
+  @override
+  void initState() {
+    super.initState();
+    final tracks = widget.controller.tracks
+        .where((track) => track.type == widget.type)
+        .toList();
+    final selectedIndex = tracks.indexWhere((track) => track.selected);
+    final listIndex = selectedIndex < 0
+        ? 0
+        : selectedIndex + (widget.type == PlayerTrackType.subtitle ? 1 : 0);
+    _scrollController = ScrollController(
+      initialScrollOffset: (listIndex * 74.0 - 120).clamp(0, double.infinity),
+    );
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final tracks = controller.tracks
-        .where((track) => track.type == type)
+    final tracks = widget.controller.tracks
+        .where((track) => track.type == widget.type)
         .toList();
     final roles = LineupTheme.of(context);
-    return Align(
-      alignment: Alignment.centerRight,
-      child: SafeArea(
-        minimum: EdgeInsets.all(roles.overlaySafeArea),
-        child: FocusScope(
-          child: Card(
-            key: const Key('playback-options-rail'),
-            child: SizedBox(
-              width: 460,
+    final selectedTrack = tracks.where((track) => track.selected).firstOrNull;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final railWidth = (constraints.maxWidth * 0.4).clamp(0.0, 420.0);
+        final padding = constraints.maxWidth <= 800 ? 20.0 : 28.0;
+        return Align(
+          alignment: Alignment.centerRight,
+          child: FocusScope(
+            child: Container(
+              key: const Key('playback-options-rail'),
+              width: railWidth,
               height: double.infinity,
-              child: Padding(
-                padding: const EdgeInsets.all(18),
-                child: Column(
-                  children: [
-                    Text(
-                      type == PlayerTrackType.audio
-                          ? 'Audio tracks'
-                          : 'Subtitles',
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                    const SizedBox(height: 12),
-                    Expanded(
-                      child: ListView(
-                        key: const Key('playback-options-list'),
-                        children: [
-                          if (type == PlayerTrackType.subtitle)
-                            ListTile(
-                              autofocus: !tracks.any((track) => track.selected),
-                              selected: !tracks.any((track) => track.selected),
-                              leading: Icon(
-                                tracks.any((track) => track.selected)
-                                    ? Icons.radio_button_unchecked
-                                    : Icons.radio_button_checked,
-                              ),
-                              title: const Text('Off'),
-                              onTap: () => controller.selectTrack(type, null),
-                            ),
-                          for (final track in tracks)
-                            ListTile(
-                              autofocus: track.selected,
-                              selected: track.selected,
-                              leading: Icon(
-                                track.selected
-                                    ? Icons.radio_button_checked
-                                    : Icons.radio_button_unchecked,
-                              ),
-                              title: Text(
-                                track.title ??
-                                    track.language ??
-                                    '${track.type.name} ${track.id}',
-                              ),
-                              subtitle: track.codec == null
-                                  ? null
-                                  : Text(track.codec!),
-                              onTap: () =>
-                                  controller.selectTrack(type, track.id),
-                            ),
-                        ],
-                      ),
-                    ),
-                    TextButton(
-                      autofocus:
-                          tracks.isEmpty && type != PlayerTrackType.subtitle,
-                      onPressed: controller.closeOverlay,
-                      child: const Text('Back'),
-                    ),
+              padding: EdgeInsets.all(padding),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    roles.scrim.withValues(alpha: 0.54),
+                    roles.scrim.withValues(alpha: 0.74),
                   ],
                 ),
+                border: Border(left: BorderSide(color: roles.subtleBorder)),
+                borderRadius: BorderRadius.horizontal(
+                  left: Radius.circular(roles.panelRadius),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'PLAYBACK OPTIONS',
+                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                      color: roles.mutedText,
+                      letterSpacing: 1.4,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    widget.type == PlayerTrackType.audio
+                        ? 'Audio'
+                        : 'Subtitles',
+                    style: Theme.of(context).textTheme.headlineSmall
+                        ?.copyWith(fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 18),
+                  Expanded(
+                    child: ClipRect(
+                      child: ListView.separated(
+                        key: const Key('playback-options-list'),
+                        controller: _scrollController,
+                        itemCount:
+                            tracks.length +
+                            (widget.type == PlayerTrackType.subtitle ? 1 : 0),
+                        separatorBuilder: (_, _) => const SizedBox(height: 10),
+                        itemBuilder: (context, index) {
+                          final off =
+                              widget.type == PlayerTrackType.subtitle &&
+                              index == 0;
+                          final track = off
+                              ? null
+                              : tracks[index -
+                                    (widget.type == PlayerTrackType.subtitle
+                                        ? 1
+                                        : 0)];
+                          final selected = off
+                              ? selectedTrack == null
+                              : track!.selected;
+                          final metadata = track == null
+                              ? const <String>[]
+                              : [
+                                  if (track.language != null) track.language!,
+                                  if (track.codec != null) track.codec!,
+                                ];
+                          final shape = RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(
+                              roles.panelRadius,
+                            ),
+                            side: BorderSide(
+                              color: selected
+                                  ? roles.progressFill
+                                  : roles.subtleBorder,
+                              width: selected ? 2 : 1,
+                            ),
+                          );
+                          return Material(
+                            color: Colors.transparent,
+                            shape: shape,
+                            clipBehavior: Clip.antiAlias,
+                            child: ListTile(
+                              key: Key(
+                                off
+                                    ? 'playback-track-off'
+                                    : 'playback-track-${widget.type.name}-${track!.id}',
+                              ),
+                              autofocus: selected,
+                              selected: selected,
+                              selectedTileColor: roles.selectedSurface,
+                              focusColor: roles.focusedSurface,
+                              shape: shape,
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 2,
+                              ),
+                              title: Text(
+                                off
+                                    ? 'Off'
+                                    : track!.title ??
+                                          track.language ??
+                                          '${track.type.name} ${track.id}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              subtitle: metadata.isEmpty
+                                  ? null
+                                  : Text(
+                                      metadata.join(' • '),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                              trailing: selected
+                                  ? Icon(
+                                      Icons.check_circle,
+                                      color: roles.progressFill,
+                                      semanticLabel: 'Selected',
+                                    )
+                                  : null,
+                              onTap: () => widget.controller.selectTrack(
+                                widget.type,
+                                track?.id,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextButton.icon(
+                    autofocus:
+                        tracks.isEmpty &&
+                        widget.type != PlayerTrackType.subtitle,
+                    onPressed: widget.controller.closeOverlay,
+                    icon: const Icon(Icons.arrow_back),
+                    label: const Text('Back'),
+                  ),
+                ],
               ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }

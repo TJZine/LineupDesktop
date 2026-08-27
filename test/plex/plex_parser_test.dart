@@ -168,6 +168,19 @@ void main() {
         },
       ],
     });
+    final zeroDuration = parseMediaItem({
+      'ratingKey': 'zero-duration',
+      'title': 'Zero duration',
+      'type': 'movie',
+      'duration': 0,
+      'Media': [
+        {
+          'Part': [
+            {'key': '/library/parts/zero-duration.mkv'},
+          ],
+        },
+      ],
+    });
     final client = PlexClient(
       clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
     );
@@ -178,6 +191,9 @@ void main() {
     expect(item.isPlayable, isTrue);
     expect(unsupported.parts, isEmpty);
     expect(unsupported.isPlayable, isFalse);
+    expect(zeroDuration.parts, hasLength(1));
+    expect(zeroDuration.duration, Duration.zero);
+    expect(zeroDuration.isPlayable, isFalse);
     expect(
       () => client.playbackDescriptor(
         server: Uri.parse('https://plex.example:32400'),

@@ -613,6 +613,7 @@ void main() {
       addTearDown(controller.dispose);
 
       await controller.initialize();
+      controller.stage = SetupStage.channelSetup;
       final planned = List<Channel>.unmodifiable([_channel('planned')]);
 
       await controller.applyChannelPlan(
@@ -621,6 +622,10 @@ void main() {
       );
 
       expect(controller.channels.single.id, 'planned');
+      expect(controller.stage, SetupStage.channelSetup);
+
+      controller.completeChannelSetup();
+
       expect(controller.stage, SetupStage.ready);
     },
   );
@@ -1405,6 +1410,78 @@ void main() {
     expect(controller.busy, isFalse);
     expect(controller.error, 'Plex authorization expired.');
   });
+
+  test(
+    'restored playlist failure preserves the completed scan state',
+    () async {
+      final selected = _server('server');
+      final plex = _FakePlex()
+        ..serversResult = [selected]
+        ..connectionResult = selected.connections.single
+        ..librariesResult = const [
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+        ]
+        ..libraryItemsHandler = (_, _, _, _) async {
+          return [
+            PlexMediaItem(
+              id: 'movie',
+              title: 'Movie',
+              type: 'movie',
+              duration: const Duration(minutes: 1),
+              libraryId: 'movies',
+              parts: [PlexMediaPart(path: '/parts/movie')],
+            ),
+          ];
+        }
+        ..playlistsHandler = (_, _) async => const PlexPlaylistCatalog(
+          playlists: [],
+          failedIds: {'missing-playlist'},
+        );
+      final controller = LineupController(
+        store: _MemoryStore(
+          PersistedState(
+            selectedServerByProfile: const {'owner': 'server'},
+            selectedLibraryIdsByProfileServer: const {
+              'owner': {
+                'server': ['movies'],
+              },
+            },
+            channelsByProfileServer: {
+              'owner': {
+                'server': [
+                  Channel(
+                    id: 'saved',
+                    number: 1,
+                    name: 'Saved channel',
+                    source: const PlaylistSource('missing-playlist'),
+                    playbackMode: PlaybackMode.sequential,
+                    anchor: DateTime.utc(2026),
+                    shuffleSeed: 1,
+                  ),
+                ],
+              },
+            },
+          ),
+        ),
+        credentials: _MemoryCredentials(accountToken: 'token'),
+        plex: plex,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+
+      expect(controller.libraryScanStatus, LibraryScanStatus.complete);
+      expect(controller.busy, isFalse);
+      expect(
+        controller.error,
+        'A playlist used by this lineup could not be loaded. Retry setup.',
+      );
+    },
+  );
 
   test(
     'playlist diagnostics retain Plex code and bounded failure count',
@@ -2620,7 +2697,7 @@ void main() {
     expect(controller.stage, SetupStage.ready);
     expect(controller.profile?.id, 'owner');
     switched.complete('child-token');
-    await selection;
+    expect(await selection, isFalse);
 
     expect(controller.profile?.id, 'owner');
     expect(controller.server?.id, 'old');

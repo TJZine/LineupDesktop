@@ -632,3 +632,64 @@ native fullscreen, packaging, or the native video layer. The macOS
 deterministic player rectangle proves Flutter layout only. Prompt 5 remains
 solely responsible for real video inside that region, Windows media behavior,
 native PiP composition, hardware performance and gamepad acceptance.
+
+## 2026-08-25 upstream UI parity campaign
+
+### Provenance and evidence boundary
+
+This current campaign began at implementation baseline
+`3a4b5e33507b354edf76a2959fceaaa5b88d93b3` and comprises seven sequential UI
+packages ending at implementation commit
+`e4033169bceb8d06284c06a22fb9321751dcdfa3`. The immutable upstream source
+authority was `b30e27c0025d254b7c3c8fb7a9335070542362bd`. All 12 supplied screenshots
+were available and re-inspected at original pixels, but their commit, logical
+viewport, and display scale remain unknown; they are supplemental composition
+evidence only. No private screenshot facts are reproduced here.
+
+The pinned Flutter checkout was revision
+`4cf24164269a5ebf0c16a028a00727d0e77bbb05` (Flutter 3.47.0, Dart 3.13.0).
+The campaign retains all 20 committed 1280×720 macOS goldens. UI-8 regenerated
+or added no PNGs.
+
+### Current campaign adjudication
+
+| Surface/state | Classification | Current evidence |
+| --- | --- | --- |
+| Welcome and terminal authorization failure | Structural parity with acceptable Flutter adaptation | Deterministic routing, semantics, recovery, and accepted synthetic-fact pixels. |
+| Profiles and protected-profile PIN | Visual parity | Accepted profile/PIN pixels preserve the remote-first card and keypad hierarchy. |
+| Server selection and audio setup | Structural parity with acceptable Flutter adaptation | Accepted pixels preserve the staged hierarchy without claiming unimplemented platform audio behavior. |
+| Channel Setup libraries, strategies, review, progress, failure, and completion | Visual parity with structural failure coverage | Accepted pixels cover libraries, strategies, review, progress, and completion; widget tests cover the failed state and complete staged flow. Step 3 owns an indeterminate noncancelable apply plus failed/complete outcomes. |
+| Guide without playback, Classic PiP, and Overlay | Visual parity for Flutter composition | Three accepted goldens plus row, aperture, focus, density, and viewport tests; native video visibility is excluded. |
+| Rich Now Playing | Visual parity | Accepted lower-left shelf leaves the playback canvas visible and remains mutually exclusive with other overlays. |
+| OSD and mini Guide | Visual parity | Accepted bottom-edge and top-edge compositions follow the source-defined free-edge language. |
+| Audio and long subtitle rails | Visual parity | Direct accepted pixels plus selected-focus, scrolling, and long-list widget coverage. |
+| Settings with and without active playback | Structural parity with acceptable Flutter adaptation | The Ember & Steel playback golden and Slate & Pine no-playback golden show one immersive category rail; widget tests prove exactly one Player surface only when playback is active. |
+| Channels and Diagnostics | Intentional Desktop adaptation | Their persistent management rail and credential-safe support workflow have deterministic regression coverage. |
+| Five themes | Structural parity with acceptable Flutter adaptation | The same semantic roles, text/focus contrast, and responsive behavior are tested across every theme; only the stated primary and alternate surfaces carry accepted pixels. |
+
+### Matrix and deterministic verification
+
+Responsive coverage includes 800×600, 1100×800, 1280×720, 1600×900,
+1920×1080, and logical 4K at DPR2. The focused UI-8 command passed 216 tests,
+including every committed golden comparison and the Channels/Diagnostics
+regressions. All 18 campaign-changed or added goldens were re-inspected at
+original pixels; file dimensions/color space, intended alpha, and synthetic
+visible labels were independently checked to distinguish preview artifacts
+from clipping. The remaining format, analysis, full-suite, and macOS-build
+results are recorded in the current verification section of
+[Definitive Product Parity](product-parity.md).
+
+The pinned macOS synthetic harness separately confirmed PageDown traversal from
+the first viewport through channel 1,000, horizontal browsing in both the
+standard and compact 12-hour Guide, jump-to-now, tune, Player/OSD/mini Guide,
+all five themes, and compact/ordinary/large resizing. Rapid automated traversal
+emitted Flutter macOS accessibility-bridge warnings, although subsequent full
+accessibility snapshots remained usable and correctly named the visible
+controls. This runtime smoke is not physical screen-reader evidence.
+
+### Windows boundary
+
+These Flutter goldens prove composition only. Physical Windows validation of
+native video layering, DirectComposition, hardware media behavior, input,
+accessibility, fullscreen, and packaging remains pending at the exact resulting
+UI-8 commit with the pinned engine recorded in that evidence.
