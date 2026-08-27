@@ -181,14 +181,22 @@ logos and artwork fall back to text and themed surfaces.
 ## Player
 
 Move the pointer or click/tap the Player to show the on-screen controls. The OSD
-uses a responsive shallow three-zone broadcast layout at 1280×720 and
-1920×1080: channel/program identity, progress and time, then grouped transport
-and secondary actions. Compact windows keep these controls stacked so every
-action remains reachable. It provides:
+uses a responsive shallow broadcast layout at 1280×720 and 1920×1080. The
+channel bug is in the top-right; the lower-left/lower band uses official Plex
+title artwork when available and falls back to text, while secondary actions
+sit in the lower-right. Metadata and actions are restrained, and an edge-to-edge
+progress line is anchored to the absolute bottom. By default, **DVR playback
+controls** is off: transport buttons are
+hidden and Player-local pause/play, seek, stop, rewind, and fast-forward
+keyboard/media shortcuts are blocked. Page Up/Page Down channel surfing,
+number entry, Guide/Mini Guide tuning, tracks, sleep, menu, and fullscreen
+remain available. Enabling **DVR playback controls** restores the transport UI
+and those shortcuts; it changes Flutter presentation/input policy only, not
+native or libmpv behavior. It provides:
 
 - current channel and program information;
-- playback position and seeking;
-- previous channel, play/pause, and next channel;
+- playback position; seeking when DVR playback controls are enabled;
+- previous channel, play/pause, and next channel when DVR playback controls are enabled;
 - available audio and subtitle tracks;
 - sleep timer state;
 - native quality/decoder/output facts when the Windows player reports them; and
@@ -200,10 +208,11 @@ showing controls that cannot work.
 Press `I` for persistent rich Now Playing details without leaving playback.
 The details surface uses the current scheduled program for channel and episode
 identity, synopsis, schedule progress, available metadata badges, poster, and
-backdrop. When **Use clear logos** is enabled, an available clear logo replaces
+backdrop. When **Prefer official title artwork** is enabled, an available Plex
+clear logo replaces
 the text identity; a missing or failed logo falls back to the title. Pointer
 movement leaves this reading surface open. Press `I` or Back to close it;
-`Down`, `Enter`, click/tap, or a successful transport action replaces it with
+`Down`, `Enter`, click/tap, or a successful enabled transport action replaces it with
 the OSD, while a failed action retains the safe error surface. `A` or `C` opens
 the requested track list directly when that track type is available.
 
@@ -212,9 +221,10 @@ playback. Selecting a row replaces the current tune through the same Player
 owner.
 
 When one Plex item contains sequential media parts, Lineup continues through
-them under the same tune. Progress and cross-part seeking use aggregate timing
-only when the required part durations are known; otherwise the Player shows
-the current part's timing rather than estimating missing boundaries.
+them under the same tune. When DVR playback controls are enabled, progress and
+cross-part seeking use aggregate timing only when the required part durations
+are known; otherwise the Player shows the current part's timing rather than
+estimating missing boundaries.
 
 The timed OSD and mini Guide remain open while keyboard focus is inside their
 controls. Leaving the active overlay restarts its full timeout. Reduce Motion
@@ -250,8 +260,8 @@ report to Flutter.
 | Player | Open full Guide | `G` or `F2` |
 | Player | Show mini Guide | `Up` |
 | Player | Show OSD / rich Now Playing | `Down` or `Enter` shows OSD; `I` toggles rich Now Playing details |
-| Player | Seek backward/forward | `Left` or `J` = 10 seconds back; `Right` or `L` = 30 seconds forward |
-| Player | Play or pause | `Space`, `K`, or Media Play/Pause |
+| Player | Seek backward/forward | `Left` or `J` = 10 seconds back; `Right` or `L` = 30 seconds forward (DVR playback controls on) |
+| Player | Play or pause | `Space`, `K`, or Media Play/Pause (DVR playback controls on) |
 | Player | Previous/next channel | `Page Up` / `Page Down` |
 | Player | Enter a channel number | Number keys; confirm with `Enter` while the entry overlay is open |
 | Player | Audio / subtitle tracks | `A` / `C` |
@@ -264,9 +274,10 @@ report to Flutter.
 | Mini Guide | Open full Guide | `Right` |
 | Mini Guide | Close | `Esc`, `Backspace`, or Back |
 
-Dedicated Media Play, Pause, Stop, Rewind, and Fast Forward keys are also
-handled when available. Core playback keys continue to work while the OSD is
-visible, and the OSD follows the configured auto-hide duration.
+Dedicated Media Play, Pause, Stop, Rewind, and Fast Forward keys are handled
+when available only with DVR playback controls enabled. Page Up/Page Down,
+number entry, Guide/Mini Guide tuning, tracks, sleep, menu, and fullscreen do
+not depend on that setting. The OSD follows the configured auto-hide duration.
 
 ## Channels
 
@@ -301,7 +312,7 @@ editing. There is no implicit generated-to-custom conversion.
 | Category | Current controls |
 | --- | --- |
 | Appearance | Ember & Steel, Slate & Pine, Swiss Minimal, DirecTV Classic, and Glassmorphism themes |
-| Guide | Classic with PiP or Overlay presentation; detailed 2-hour, wide 3-hour, or desktop-extended 4/6/8/12-hour windows; 0-180 minute past window; comfortable or compact rows; color-bleed/theme/artwork information backgrounds; clear-logo preference; library filters; Now Playing context; 2-15 second OSD auto-hide |
+| Guide | Classic with PiP or Overlay presentation; detailed 2-hour, wide 3-hour, or desktop-extended 4/6/8/12-hour windows; 0-180 minute past window; comfortable or compact rows; color-bleed/theme/artwork information backgrounds; official title artwork preference; library filters; Now Playing context; 2-15 second OSD auto-hide; optional DVR playback controls |
 | Accessibility | Reduce motion across management, Guide, and Player transitions; larger keyboard/controller focus indicators |
 | Account | Switch Plex Home profile, switch or clear Plex server selection, and optionally show the profile picker at startup |
 | Support | Enable or disable bounded redacted diagnostic recording |
