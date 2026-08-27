@@ -676,12 +676,18 @@ make large manual selections usable without changing scheduling.
 - all `ContentSource` variants and canonical serialization
 - all metadata present on `PlexMediaItem` and `ChannelItem`
 - selected-library and playlist inventory ownership in `LineupController`
+- the cached descriptor-compatible inventory boundary established in Slice 2
 - current builder filter keys and strict resolver behavior from Slice 2
 - the Studio draft/source preservation behavior from Slice 3
 
 **Allowed production writes:**
 
 - `lib/app/channel_studio_view.dart`
+- `lib/app/lineup_controller.dart` only for the smallest read-only exposure of
+  the cached immutable descriptor-compatible media and playlist projections
+  already owned by the controller; do not add a second eligibility path
+- `lib/app/lineup_shell.dart` only for one Channels-owned recovery callback
+  that awaits the existing `requestLeave` result before entering setup
 - `lib/channels/channel.dart` only if a locked source cannot be represented
   losslessly; any such change is a stop/replan event because no extension is
   expected
@@ -690,7 +696,13 @@ make large manual selections usable without changing scheduling.
 **Allowed test writes:**
 
 - `test/app/channel_studio_view_test.dart`
+- `test/app/lineup_controller_test.dart` for the read-only playable-inventory
+  seam and its endpoint/inventory invalidation contract
+- `test/app/ui_review_regression_test.dart` only for the Channels-owned guarded
+  recovery callback
 - `test/channels/content_resolver_test.dart`
+- `test/support/ui_fixture.dart` only if the public projection seam forces the
+  existing deterministic Studio fixture to expose its in-memory inventory
 - persistence round-trip tests only if canonical source serialization changes
 
 **Behavior contract:**
@@ -705,20 +717,30 @@ make large manual selections usable without changing scheduling.
    saved playlist remains named by its retained ID/summary as unavailable and
    may be replaced; it is not silently changed.
 4. Collection/filter starts with a library and browseable values derived from
-   the already-loaded inventory. It permits at most one value for each of
+   the controller's already-loaded descriptor-compatible inventory. It permits
+   at most one value for each of
    collection, genre, studio, actor, director, and decade plus the supported
    newest-first order. Different selected keys combine through the resolver's
    existing AND behavior. The UI does not offer repeated same-key OR, unknown
    fields, or a free-form expression editor.
-5. Filter options and representative/matching counts are derived locally from
-   the loaded inventory. No search or facet change starts a Plex request.
+5. Expose the controller's cached immutable descriptor-compatible media and
+   playlist projections through one read-only seam and use those exact
+   projections for every Studio availability decision, option, count, fresh
+   `ChannelItem` projection, and local resolution. The seam reuses Slice 2's
+   endpoint-and-inventory cache and must not duplicate `playbackDescriptor`
+   checks. Filter options and representative/matching counts are derived
+   locally from that projection. No search or facet change starts a Plex
+   request. Browse candidates are unique by ID using the same deterministic
+   media-first, then playlist/item-order precedence as resolver and playback;
+   a saved fresh `ChannelItem` uses that winning projection.
 6. Hand-picked search matches displayed title and show title case-insensitively.
    Filters include library and media type when present plus collection, genre,
    studio, actor, director, and decade facts already loaded.
 7. Maintain an ordered list of selected IDs, not a set. **Select visible**
-   appends only unselected visible results in current result order. **Clear
-   visible** removes only selected items currently matching the active search
-   and facets. Hidden selections remain selected.
+   appends only unselected results in the same bounded result window the picker
+   actually renders, in current result order. **Clear visible** removes only
+   selected items in that rendered window. Matches outside the bound and other
+   hidden selections remain selected.
 8. The rundown shows current selected order and unavailable retained records.
    Each row exposes Move earlier, Move later, and Remove buttons with channel-
    and item-specific semantics. `Alt+ArrowUp`, `Alt+ArrowDown`, and `Delete` (or
@@ -729,43 +751,65 @@ make large manual selections usable without changing scheduling.
    nearest surviving row. Search never puts focus into a filtered-off result.
 10. Show settled matching and selected counts in a bounded live region. Debounce
     text-derived filtering for announcements, not network activity. Do not
-    announce each keystroke.
+    announce each keystroke. Search text and hand-picked browse facets are
+    ephemeral picker state: changing them does not dirty the persisted channel
+    draft or trigger the discard guard.
 11. A custom source must have at least one resolved or retained program before
     save. Unavailable retained items stay in `ManualSource`; currently available
-    selections save fresh `ChannelItem` projections in explicit order.
+    selections save fresh `ChannelItem` projections in explicit order. Capture
+    that fresh projection when an item is selected so an in-progress reload,
+    cancellation, failure, or endpoint loss cannot erase an unsaved selection.
 12. Playback labels are **In order**, **Mix it up**, and **Mini-marathons**.
     Mini-marathons exposes 2 through 5, defaults to 3, and remains invalid with
-    an explanation when the resolved content has no episode/show grouping. Do
-    not silently switch an invalid selected rhythm.
+    an explanation when the resolved content has no usable show-title or
+    show-thumb grouping understood by the current scheduler. Do not silently
+    switch an invalid selected rhythm.
 13. Custom-owned filtered, playlist, and currently representable mixed sources
     are editable or losslessly inspectable based on representation, never on
     ownership. A preserved mixed source not directly representable remains
     intact while the user chooses a replacement source.
-14. When there is no usable inventory, preserve an existing source and explain
+14. When the descriptor-compatible projection has no usable inventory,
+    preserve an existing source and explain
     that a new channel needs selected Plex libraries or a video playlist. Link
-    to the existing library-owning Generate Lineup route through the same dirty-
-    leave guard. Loading shows bounded progress without disabling identity;
-    cancelled/failed inventory preserves the last usable inventory and offers
-    the owning retry rather than clearing draft selections.
+    to the existing library-owning Generate Lineup route through one
+    Channels-owned callback that enters setup only after the existing
+    `requestLeave` returns true. Loading shows bounded progress without
+    disabling identity; cancelled/failed inventory preserves the last usable
+    inventory and offers the owning scan retry rather than clearing draft
+    selections. A missing endpoint yields no playable projection; endpoint or
+    server recovery remains with the existing setup owner rather than a new
+    Studio policy.
 
 **Required tests:**
 
 - Each source round-trips exact ID, library type, watched choice, filters, order,
-  and custom ownership.
+  and custom ownership, including `includeWatched: false` on a filtered source.
+- Studio consumes the controller's exact cached playable projection: a valid
+  same-server multipart item is offered, while a missing endpoint, an item with
+  no parts or non-positive item duration, an empty part path, and a hostile
+  later multipart origin are unavailable and cannot be introduced as a newly
+  playable manual selection. A nullable part duration remains valid.
+- Duplicate IDs render once and save the media-first projection rather than
+  later playlist metadata, matching resolver and playback precedence.
 - Unsupported same-key multi-select is absent, while different facet types AND
   correctly and newest-first remains exact.
 - Missing library/playlist and zero-match states preserve the draft and disable
   save with actionable copy.
-- No-inventory, loading, cancelled, and failed states retain the draft and route
-  recovery through the existing library-scan owner.
+- No-inventory, loading, cancelled, and failed scan states retain the draft and
+  route recovery through the existing library-scan owner. Keep editing prevents
+  the recovery transition; confirmed discard enters setup exactly once. A
+  missing endpoint exposes no newly playable candidates and remains owned by
+  existing server/setup recovery. Search and hand-picked browse facets alone
+  leave the draft clean and do not invoke the discard guard.
 - Search includes show titles, facet intersections are correct, counts settle,
   and no operation calls Plex.
-- Select/Clear visible preserve hidden selection; reordering and removal preserve
-  exact order through save and reload.
+- Select/Clear visible act on the rendered bounded window and preserve matches
+  outside that window plus every other hidden selection; reordering and removal
+  preserve exact order through save and reload.
 - Unavailable records remain visible and retained but not scheduled.
 - Pointer buttons and keyboard commands produce identical results and focus.
-- Mini-marathon eligibility and every 2-through-5 block size map exactly to the
-  existing scheduler.
+- Mini-marathon eligibility, including show-thumb-only grouping, and every
+  2-through-5 block size map exactly to the existing scheduler.
 - A deterministic large inventory demonstrates local, bounded filtering without
   building every result widget or starting unbounded asynchronous work.
 
@@ -774,7 +818,8 @@ make large manual selections usable without changing scheduling.
 ```sh
 flutter test test/app/channel_studio_view_test.dart
 flutter test test/channels/content_resolver_test.dart test/channels/scheduler_test.dart
-flutter test test/app/ui_parity_test.dart
+flutter test test/app/lineup_controller_test.dart
+flutter test test/app/ui_parity_test.dart test/app/ui_review_regression_test.dart
 dart format --output=none --set-exit-if-changed lib test
 git diff --check
 ```
@@ -782,9 +827,10 @@ git diff --check
 **Commit:** `feat(channels): add Studio programming controls`
 
 **Stop/replan if:** a requested facet needs multiple same-key values, the loaded
-Plex model lacks the required fact, or deterministic scale evidence shows local
-filtering blocks frames. Do not add a rule language, network search, isolate, or
-cache without first recording the concrete gap and updating this plan.
+descriptor-compatible projection lacks the required fact, or deterministic
+scale evidence shows local filtering blocks frames. Do not add a rule language,
+network search, isolate, cache, or second playability policy without first
+recording the concrete gap and updating this plan.
 
 ## Slice 5 — deterministic Air Check and channel health
 
