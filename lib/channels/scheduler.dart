@@ -30,6 +30,18 @@ class ScheduledProgram {
   final int loop;
 }
 
+class ScheduleWindowResult {
+  const ScheduleWindowResult({
+    required this.programs,
+    required this.truncated,
+    required this.lastProjectedEnd,
+  });
+
+  final List<ScheduledProgram> programs;
+  final bool truncated;
+  final DateTime? lastProjectedEnd;
+}
+
 ScheduleIndex buildSchedule(
   List<ChannelItem> content, {
   required PlaybackMode mode,
@@ -96,13 +108,30 @@ List<ScheduledProgram> scheduleWindow(
   DateTime end,
   DateTime anchor,
   ScheduleIndex schedule,
+) => scheduleWindowResult(start, end, anchor, schedule).programs;
+
+ScheduleWindowResult scheduleWindowResult(
+  DateTime start,
+  DateTime end,
+  DateTime anchor,
+  ScheduleIndex schedule,
 ) {
-  if (!end.isAfter(start)) return const [];
+  if (!end.isAfter(start)) {
+    return const ScheduleWindowResult(
+      programs: [],
+      truncated: false,
+      lastProjectedEnd: null,
+    );
+  }
   final programs = <ScheduledProgram>[programAt(start, anchor, schedule)];
   while (programs.last.end.isBefore(end) && programs.length < 1000) {
     programs.add(programAt(programs.last.end, anchor, schedule));
   }
-  return programs;
+  return ScheduleWindowResult(
+    programs: List.unmodifiable(programs),
+    truncated: programs.last.end.isBefore(end),
+    lastProjectedEnd: programs.last.end,
+  );
 }
 
 List<T> seededShuffle<T>(List<T> input, int seed) {

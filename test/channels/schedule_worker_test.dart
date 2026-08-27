@@ -26,7 +26,7 @@ void main() {
   test('send failure does not retain the failed operation', () async {
     final unsendable = ReceivePort();
     addTearDown(unsendable.close);
-    final worker = ScheduleWorker(const [], const []);
+    final worker = ScheduleWorker([_mediaItem], const []);
     addTearDown(worker.dispose);
 
     await expectLater(

@@ -586,6 +586,11 @@ void main() {
                 parts: [PlexMediaPart(path: '/library/parts/item-$index')],
               ),
             ),
+          )
+          ..connection = PlexConnection(
+            uri: Uri.parse('https://guide.example:32400'),
+            local: true,
+            relay: false,
           );
     addTearDown(lineup.dispose);
 
@@ -597,6 +602,64 @@ void main() {
     expect(second.items, hasLength(2000));
     expect(workerCreations, 1);
   });
+
+  test(
+    'Guide projects current manual media and omits unavailable records',
+    () async {
+      final channel = Channel(
+        id: 'manual',
+        number: 1,
+        name: 'Manual',
+        source: const ManualSource([
+          ChannelItem(
+            id: 'current',
+            title: 'Stored title',
+            duration: Duration(hours: 1),
+          ),
+          ChannelItem(
+            id: 'missing',
+            title: 'Missing',
+            duration: Duration(hours: 1),
+          ),
+        ]),
+        playbackMode: PlaybackMode.sequential,
+        anchor: DateTime.utc(2026, 8, 13, 12),
+        shuffleSeed: 1,
+      );
+      final lineup = _TestLineup([channel])
+        ..connection = PlexConnection(
+          uri: Uri.parse('https://guide.example:32400'),
+          local: true,
+          relay: false,
+        )
+        ..availableMedia = [
+          PlexMediaItem(
+            id: 'current',
+            title: 'Current title',
+            type: 'movie',
+            duration: const Duration(hours: 1),
+            parts: [PlexMediaPart(path: '/current')],
+          ),
+        ];
+      final guide = GuideController(
+        lineup: lineup,
+        clock: () => DateTime.utc(2026, 8, 13, 12, 15),
+      )..requestViewport(0, 1);
+      addTearDown(lineup.dispose);
+      addTearDown(guide.dispose);
+
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      expect(guide.row(channel.id).programs, isNotEmpty);
+      expect(
+        guide
+            .row(channel.id)
+            .programs
+            .map((program) => program.scheduled.item.title),
+        everyElement('Current title'),
+      );
+    },
+  );
 
   test(
     'disposed lineup rejects schedule loads without creating a worker',

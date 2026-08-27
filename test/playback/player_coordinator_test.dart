@@ -9,9 +9,74 @@ import 'package:lineup_desktop/persistence/app_store.dart';
 import 'package:lineup_desktop/playback/native_player.dart';
 import 'package:lineup_desktop/playback/player_coordinator.dart';
 import 'package:lineup_desktop/plex/plex_client.dart';
+import 'package:lineup_desktop/plex/plex_models.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 
 void main() {
+  test(
+    'Player tunes the current projection of retained manual content',
+    () async {
+      final lineup = _TestLineup(count: 1);
+      final original = lineup.channels.single;
+      lineup
+        ..channels = [
+          Channel(
+            id: original.id,
+            number: original.number,
+            name: original.name,
+            source: const ManualSource([
+              ChannelItem(
+                id: 'current',
+                title: 'Stored title',
+                duration: Duration(hours: 24),
+              ),
+              ChannelItem(
+                id: 'missing',
+                title: 'Missing',
+                duration: Duration(hours: 24),
+              ),
+            ]),
+            playbackMode: PlaybackMode.sequential,
+            anchor: DateTime.now().subtract(const Duration(hours: 1)),
+            shuffleSeed: 1,
+          ),
+        ]
+        ..connection = PlexConnection(
+          uri: Uri.parse('https://player.example:32400'),
+          local: true,
+          relay: false,
+        )
+        ..availableMedia = [
+          PlexMediaItem(
+            id: 'current',
+            title: 'Current title',
+            type: 'movie',
+            duration: const Duration(hours: 24),
+            parts: [PlexMediaPart(path: '/current')],
+          ),
+        ];
+      final guide = GuideController(lineup: lineup)..requestViewport(0, 1);
+      final player = _Player();
+      final coordinator = PlayerCoordinator(
+        player: player,
+        lineup: lineup,
+        guide: guide,
+      );
+      addTearDown(lineup.dispose);
+      addTearDown(guide.dispose);
+      addTearDown(coordinator.dispose);
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      await coordinator.tune(original.id);
+
+      expect(lineup.lastPlaybackItemId, 'current');
+      expect(
+        guide.currentProgram(original.id)?.scheduled.item.title,
+        'Current title',
+      );
+    },
+  );
+
   test(
     'tune dispatches load, wall-clock seek, and stable current identity',
     () async {
@@ -2996,6 +3061,7 @@ class _TestLineup extends LineupController {
   final bool failAuthorizationRecovery;
   final List<LineupPlaybackPart>? playbackParts;
   int playbackRequests = 0;
+  String? lastPlaybackItemId;
   int recoveryCalls = 0;
   final recoveryStarted = Completer<void>();
   final finishRecovery = Completer<void>();
@@ -3027,6 +3093,7 @@ class _TestLineup extends LineupController {
   @override
   LineupPlaybackRequest playbackFor(String itemId) {
     playbackRequests++;
+    lastPlaybackItemId = itemId;
     if (failSecondPlaybackRequest && playbackRequests == 2) {
       throw StateError('Replacement playback request is unavailable.');
     }

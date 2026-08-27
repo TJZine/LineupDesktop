@@ -362,7 +362,7 @@ void main() {
               LibrarySource(
                 libraryId: 'shows',
                 libraryType: PlexLibraryType.show,
-                filters: {'year': '2026'},
+                filters: {'decade': '2020s'},
               ),
               PlaylistSource('playlist-2'),
             ],
@@ -389,7 +389,21 @@ void main() {
       );
       final controller = FixtureController()
         ..stage = SetupStage.ready
-        ..channels = [original];
+        ..connection = _studioConnection
+        ..channels = [original]
+        ..availableMedia = [_studioMovie, _studioEpisode]
+        ..availablePlaylists = [
+          PlexPlaylist(
+            id: 'playlist-1',
+            title: 'Playlist 1',
+            items: [_studioMovie],
+          ),
+          PlexPlaylist(
+            id: 'playlist-2',
+            title: 'Playlist 2',
+            items: [_studioEpisode],
+          ),
+        ];
       addTearDown(controller.dispose);
 
       await _openChannelEditor(tester, controller, original);
@@ -493,7 +507,15 @@ void main() {
     );
     final controller = FixtureController(store: _FailNextSaveStore())
       ..stage = SetupStage.ready
-      ..channels = [original];
+      ..connection = _studioConnection
+      ..channels = [original]
+      ..availablePlaylists = [
+        PlexPlaylist(
+          id: 'playlist-1',
+          title: 'Playlist 1',
+          items: [_studioMovie],
+        ),
+      ];
     addTearDown(controller.dispose);
 
     await _openChannelEditor(tester, controller, original);
@@ -798,6 +820,33 @@ String _modeLabel(PlaybackMode mode) => switch (mode) {
   PlaybackMode.shuffle => 'Shuffle',
   PlaybackMode.block => 'Blocks',
 };
+
+final _studioMovie = PlexMediaItem(
+  id: 'studio-movie',
+  title: 'Studio movie',
+  type: 'movie',
+  duration: const Duration(minutes: 90),
+  libraryId: 'movies',
+  parts: [PlexMediaPart(path: '/studio-movie')],
+  genres: const ['Comedy'],
+  year: 2026,
+);
+
+final _studioConnection = PlexConnection(
+  uri: Uri.parse('https://studio.example:32400'),
+  local: true,
+  relay: false,
+);
+
+final _studioEpisode = PlexMediaItem(
+  id: 'studio-episode',
+  title: 'Studio episode',
+  type: 'episode',
+  duration: const Duration(minutes: 30),
+  libraryId: 'shows',
+  parts: [PlexMediaPart(path: '/studio-episode')],
+  year: 2026,
+);
 
 class _FailNextSaveStore extends FixtureStore {
   bool _failNextSave = true;

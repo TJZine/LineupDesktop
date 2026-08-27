@@ -133,4 +133,49 @@ void main() {
       lessThan(ordered.indexWhere((item) => item.id == 'b2')),
     );
   });
+
+  test('window result reports exact completion and bounded truncation', () {
+    final minute = buildSchedule(
+      const [
+        ChannelItem(
+          id: 'minute',
+          title: 'Minute',
+          duration: Duration(minutes: 1),
+        ),
+      ],
+      mode: PlaybackMode.sequential,
+      seed: 1,
+    );
+    final exact = scheduleWindowResult(
+      anchor,
+      anchor.add(const Duration(minutes: 1000)),
+      anchor,
+      minute,
+    );
+    final truncated = scheduleWindowResult(
+      anchor,
+      anchor.add(const Duration(minutes: 1001)),
+      anchor,
+      minute,
+    );
+
+    expect(exact.programs.length, 1000);
+    expect(exact.truncated, isFalse);
+    expect(exact.lastProjectedEnd, anchor.add(const Duration(minutes: 1000)));
+    expect(truncated.programs.length, 1000);
+    expect(truncated.truncated, isTrue);
+    expect(
+      truncated.lastProjectedEnd,
+      anchor.add(const Duration(minutes: 1000)),
+    );
+    expect(
+      scheduleWindow(
+        anchor,
+        anchor.add(const Duration(minutes: 2)),
+        anchor,
+        minute,
+      ),
+      hasLength(2),
+    );
+  });
 }

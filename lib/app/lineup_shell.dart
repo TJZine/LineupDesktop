@@ -914,6 +914,7 @@ class _ChannelEditorState extends State<ChannelEditor> {
             blockSize: _editedBlockSize(),
             builderKey: original.builderKey,
           ),
+          expectedBase: original,
         );
         if (mounted) Navigator.pop(context);
         return;
@@ -966,6 +967,7 @@ class _ChannelEditorState extends State<ChannelEditor> {
           blockSize: _editedBlockSize(),
           builderKey: widget.channel?.builderKey,
         ),
+        expectedBase: widget.channel,
       );
       if (mounted) Navigator.pop(context);
     } catch (error) {
