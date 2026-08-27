@@ -164,6 +164,7 @@ do not count.
 | AC-3 | Unsupported filters fail closed | 2 |
 | AC-4 | A new saved channel retains the previewed anchor and seed | 5 |
 | AC-5 | Playlist-only scheduled content is discoverable by playback | 2 |
+| AC-6 | Air Check current/next state stays authoritative as its clock advances | 5 |
 | UX-1 | Compact and expanded layouts retain Air Check and remain full-page | 6 |
 | UX-2 | Pointer reorder has visible keyboard alternatives | 6 |
 | UX-3 | Focus, semantics, live regions, text scale, motion, and focus settings pass | 6 |
@@ -328,9 +329,11 @@ UI, and product-spine test files named above.
    set. Append keeps all channels and adds planned generated channels. Refresh
    replaces matching generated entries, retains unmatched existing entries,
    and keeps every custom entry.
-5. Final full-lineup validation remains inside the serialized controller
-   transaction. A caller that bypasses materialization and supplies a number
-   conflict fails and rolls back.
+5. `applyChannelPlan` accepts only a generator-owned plan: every planned entry
+   must have a non-null `builderKey`. It rejects a caller-supplied null key or
+   number conflict inside the serialized transaction and rolls back. Existing
+   direct test fixtures that exercise this production seam must identify their
+   planned entries as generated rather than weakening this boundary.
 6. Current-channel selection remains stable when its channel survives; the
    existing nearest-row fallback remains when a generated current channel is
    removed.
@@ -351,6 +354,8 @@ UI, and product-spine test files named above.
   generator-owned fields.
 - Unmatched generated and all custom channels remain in refresh.
 - Conflict and persistence failure leave the old lineup/current channel exact.
+- A caller-supplied planned channel with a null builder key is rejected without
+  a store write or state change.
 - Review semantics/counts and confirmation copy distinguish generated removals
   from preserved custom channels.
 - Existing expansion, truncation, 1,000-channel, and deterministic tests remain
@@ -370,9 +375,11 @@ git diff --check
 **Commit:** `fix(channels): preserve custom channels during generation`
 
 **Stop/replan if:** preserving custom numbers makes the accepted maximum-channel
-meaning ambiguous, a plan contains a null builder key, or another current caller
-uses `applyChannelPlan` as a general custom-lineup replacement. Confirm the
-caller and update the plan rather than weakening ownership checks.
+meaning ambiguous or another production caller uses `applyChannelPlan` as a
+general custom-lineup replacement. The reviewed baseline has only the Channel
+Setup production caller; direct test callers are generator-plan fixtures and
+must use non-null builder keys. Confirm any changed caller and update the plan
+rather than weakening ownership checks.
 
 ## Slice 2 — fail-closed resolution, bounded projection, and safe saves
 
@@ -407,9 +414,12 @@ Guide, player, and old editor tests directly forced by these public contracts.
 **Behavior contract:**
 
 1. `resolveContent` accepts only `genre`, `collection`, `studio`, `actor`,
-   `director`, `decade`, and `sort=added:desc`. An unknown key or unsupported
-   value throws a sanitized `FormatException`; it never returns the unfiltered
-   input.
+   `director`, `decade`, and `sort=added:desc`. Decades must use the canonical
+   four-digit decade form produced by the builder (for example `1990s`);
+   malformed decade syntax and unsupported sort values throw a sanitized
+   `FormatException`. Legitimate facet labels may resolve no matches when the
+   value has disappeared. An unknown key or unsupported value never returns the
+   unfiltered input.
 2. Manual resolution walks stored item IDs in stored order, substitutes the
    current playable `PlexMediaItem` projection, and omits IDs absent or
    unplayable in the current authoritative inventory. The stored `ManualSource`
@@ -444,8 +454,8 @@ Guide, player, and old editor tests directly forced by these public contracts.
 
 **Required tests:**
 
-- Every supported filter still resolves correctly; unknown keys and sort values
-  throw and do not broaden results.
+- Every supported filter still resolves correctly; unknown keys, malformed
+  decade values, and unsupported sort values throw and do not broaden results.
 - Manual resolution preserves stored order, refreshes available metadata, omits
   unavailable/unplayable items, and does not modify the stored source.
 - Mixed manual/library/playlist sources remain deterministic.
@@ -503,6 +513,8 @@ the two creation paths into one Channels destination.
 - `lib/app/channel_setup_view.dart`
 - `lib/app/lineup_controller.dart` only for a correction directly required by
   the expected-base save seam established in Slice 2
+- `lib/playback/player_coordinator.dart` only for the smallest explicit tune
+  result seam described below
 - existing shared UI/theme files only if a repeated current primitive is proven
   missing; update this plan first if that is more than a localized extension
 
@@ -513,6 +525,7 @@ the two creation paths into one Channels destination.
 - `test/app/ui_review_regression_test.dart`
 - `test/app/lineup_app_test.dart`
 - `test/app/lineup_controller_test.dart` when the save seam requires it
+- `test/playback/player_coordinator_test.dart` for the explicit tune result
 - `test/support/ui_fixture.dart` only for deterministic public-seam support
 
 **Behavior contract:**
@@ -557,11 +570,23 @@ the two creation paths into one Channels destination.
     saving drafts cannot leave. Keep this seam in the shell/Channels widget—no
     controller draft state, global service, or routing package.
 12. Returning to Channels restores focus to the invoking or saved row. Delete
-    retains its current focus restoration. A deleted or externally changed base
-    is shown as a reload/reapply conflict, never overwritten.
-13. A clean saved Studio exposes **Tune in**. The shell waits for
-    `PlayerCoordinator.tune`; success opens Player, while a coordinator error is
-    returned to Studio without rolling back the saved channel.
+    retains its current focus restoration. A changed base produces a conflict
+    with **Reload channel** and **Reapply my changes**. Reload replaces the
+    draft and expected base from the current canonical channel. Reapply requires
+    explicit confirmation, preserves the complete local draft, rebases it onto
+    the freshly read canonical channel, and performs a second expected-base save;
+    another intervening change is rejected again. If the base was deleted,
+    Studio reports that deletion and offers reload/back recovery only—it never
+    silently recreates the channel.
+13. A clean saved Studio exposes **Tune in**. Add the smallest explicit result
+    to the existing `PlayerCoordinator.tune` operation: it succeeds only when
+    that tune generation remains current, playback is installed for the
+    requested channel, current-channel persistence succeeds, tuning is false,
+    and no coordinator error remains. Stop failure, missing Guide program,
+    playback/load failure, persistence failure, and superseded work return
+    failure even though the coordinator already presents their error state.
+    The shell opens Player only on success; failure remains in Studio with a
+    bounded error and never rolls back the saved channel.
 14. Channel Setup completion exposes **View lineup** and **Add a custom
     channel** only after durable apply. Both complete setup and select Channels;
     the latter then opens a separate new draft. It is never part of the apply
@@ -588,9 +613,13 @@ the two creation paths into one Channels destination.
 - Dirty leave confirmation covers header Back, Cancel, rail, shortcut, and app
   Back; clean leave has no confirmation.
 - Invalid name/number, conflict action, focus-to-first-error, save-in-progress,
-  failure rollback/live announcement, success/clean state, and stale base.
-- Tune success changes destination; tune failure remains in Studio with the
-  saved channel intact.
+  failure rollback/live announcement, success/clean state, and stale-base
+  rejection. Changed-base tests cover reload and confirmed reapply; deleted-base
+  tests prove that neither action recreates the channel.
+- Tune success changes destination. Native stop failure, missing Guide program,
+  playback/load failure, and current-channel persistence failure remain in
+  Studio with the saved channel intact; superseded tune work cannot report
+  success.
 - Generate completion actions occur after apply and open the intended state.
 
 **Focused verification:**
@@ -599,6 +628,7 @@ the two creation paths into one Channels destination.
 flutter test test/app/channel_studio_view_test.dart
 flutter test test/app/ui_parity_test.dart test/app/ui_review_regression_test.dart
 flutter test test/app/lineup_controller_test.dart test/app/lineup_app_test.dart
+flutter test test/playback/player_coordinator_test.dart
 dart format --output=none --set-exit-if-changed lib test
 git diff --check
 ```
@@ -774,7 +804,12 @@ schedule path, then surface schedule health in Channels.
    calculate program boundaries in the widget.
 3. Use the shell's injected clock for deterministic tests and Guide agreement.
    A periodic UI clock moves the visual now line while open, but its semantics
-   are excluded from continuous announcements and the timer is disposed.
+   are excluded from continuous announcements and the timer is disposed. At a
+   program boundary, reproject temporal state and current/next from the already
+   loaded `ScheduleIndex`; when the bounded inspection window no longer contains
+   the required current/next context, roll it forward through the same Slice 2
+   projection. Clock-only movement must not rerun resolution or start another
+   worker request.
 4. Debounce schedule-affecting input by one documented short constant. Permit at
    most one worker request plus one latest pending snapshot. Snapshot identity
    includes source, mode, block size, anchor, seed, and controller content
@@ -820,6 +855,9 @@ schedule path, then surface schedule health in Channels.
 - Empty, missing, unavailable, strict-filter error, generic worker error, stale,
   and truncated states are explicit and do not fabricate programs.
 - Current-program-change warning is exact and absent for identity-only edits.
+- Boundary crossing and a long-open window rollover update On now, next,
+  past/current/future state, selection details, and the current-program-change
+  warning from the authoritative clock without another worker request.
 - Timer movement updates visuals without repeated semantic live announcements.
 - Compact and expanded semantic program lists remain present.
 - Channels issue work remains lazy under a 1,000-channel fixture.
