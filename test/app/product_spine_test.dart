@@ -6,6 +6,7 @@ import 'package:http/testing.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/channels/channel_builder.dart';
+import 'package:lineup_desktop/channels/scheduler.dart';
 import 'package:lineup_desktop/guide/guide_controller.dart';
 import 'package:lineup_desktop/persistence/app_store.dart';
 import 'package:lineup_desktop/playback/native_player.dart';
@@ -71,6 +72,15 @@ void main() {
       )..requestViewport(0, 1);
       addTearDown(guide.dispose);
       await _until(() => guide.currentProgram(channel.id) != null);
+      final expectedProgram = programAt(
+        _ProductPlex.now,
+        channel.anchor,
+        await controller.loadScheduleFor(channel),
+      );
+      final guideProgram = guide.currentProgram(channel.id)!;
+      expect(guideProgram.scheduled.item.id, expectedProgram.item.id);
+      expect(guideProgram.scheduled.start, expectedProgram.start);
+      expect(guideProgram.scheduled.end, expectedProgram.end);
       final nativePlayer = _ProductPlayer(events);
       addTearDown(nativePlayer.dispose);
       final player = PlayerCoordinator(
@@ -82,6 +92,9 @@ void main() {
 
       await player.tune(channel.id);
       expect(player.error, isNull);
+      expect(player.currentProgram!.scheduled.item.id, expectedProgram.item.id);
+      expect(player.currentProgram!.scheduled.start, expectedProgram.start);
+      expect(player.currentProgram!.scheduled.end, expectedProgram.end);
       expect(controller.currentChannelId, channel.id);
       expect(
         nativePlayer.loadedUri?.queryParameters,

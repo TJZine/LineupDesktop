@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -366,6 +367,7 @@ class _LineupShellState extends State<LineupShell> {
         key: _channelsKey,
         controller: controller,
         player: _player,
+        clock: widget.guideClock,
         focusNode: _channelsFocus,
         onOpenPlayer: () => unawaited(_select(4)),
       ),
@@ -499,6 +501,7 @@ class ChannelsView extends StatefulWidget {
     required this.player,
     required this.onOpenPlayer,
     this.focusNode,
+    this.clock,
     super.key,
   });
 
@@ -506,12 +509,16 @@ class ChannelsView extends StatefulWidget {
   final PlayerCoordinator player;
   final VoidCallback onOpenPlayer;
   final FocusNode? focusNode;
+  final DateTime Function()? clock;
 
   @override
   State<ChannelsView> createState() => _ChannelsViewState();
 }
 
 class _ChannelsViewState extends State<ChannelsView> {
+  static const _maximumHealthLoads = 2;
+  static const _maximumPendingHealth = 12;
+  static const _maximumCachedHealth = 1000;
   Future<void>? _generateLineupEntry;
   String? _error;
   ChannelStudioMode? _studioMode;
@@ -522,6 +529,12 @@ class _ChannelsViewState extends State<ChannelsView> {
   Future<bool>? _leaveRequest;
   bool _focusPruneScheduled = false;
   bool _focusPruneNeedsRestore = false;
+  final LinkedHashMap<String, _ChannelHealth> _health = LinkedHashMap();
+  final Queue<Channel> _pendingHealth = Queue();
+  final Map<String, String> _activeHealth = {};
+  int _activeHealthLoads = 0;
+  int _healthEpoch = 0;
+  int? _healthContentGeneration;
   GlobalKey<ChannelStudioViewState> _studioKey =
       GlobalKey<ChannelStudioViewState>();
 
@@ -619,6 +632,7 @@ class _ChannelsViewState extends State<ChannelsView> {
 
   @override
   void dispose() {
+    _healthEpoch++;
     for (final node in {..._openFocus.values, ..._deleteFocus.values}) {
       node.dispose();
     }
@@ -642,6 +656,7 @@ class _ChannelsViewState extends State<ChannelsView> {
           onSaved: (id) => _returnFocusId = id,
           onDuplicate: _openDuplicate,
           onOpenGenerateLineup: _openGenerateLineupFromStudio,
+          clock: widget.clock,
           onTune: (id) async {
             final success = await widget.player.tune(id);
             if (success) widget.onOpenPlayer();
@@ -653,6 +668,12 @@ class _ChannelsViewState extends State<ChannelsView> {
 
     final channels = [...widget.controller.channels]
       ..sort((left, right) => left.number.compareTo(right.number));
+    if (_healthContentGeneration != widget.controller.contentGeneration) {
+      _healthContentGeneration = widget.controller.contentGeneration;
+      _healthEpoch++;
+      _health.clear();
+      _pendingHealth.clear();
+    }
     _scheduleFocusPrune(channels.map((channel) => channel.id).toSet());
     return LineupPage(
       title: 'Channels',
@@ -708,6 +729,7 @@ class _ChannelsViewState extends State<ChannelsView> {
                     separatorBuilder: (_, _) => const SizedBox(height: 8),
                     itemBuilder: (context, index) {
                       final channel = channels[index];
+                      _requestHealth(channel);
                       final ownership = channel.builderKey == null
                           ? 'Custom'
                           : 'Generated';
@@ -719,7 +741,11 @@ class _ChannelsViewState extends State<ChannelsView> {
                           ),
                           title: Text(channel.name),
                           subtitle: Text(
-                            '$ownership • ${channelSourceLabel(channel.source, widget.controller)} • ${channelRhythmLabel(channel.playbackMode, channel.blockSize)}',
+                            [
+                              '$ownership • ${channelSourceLabel(channel.source, widget.controller)} • ${channelRhythmLabel(channel.playbackMode, channel.blockSize)}',
+                              if (_health[channel.id]?.issue == true)
+                                'Schedule issue — open this channel to recover',
+                            ].join('\n'),
                           ),
                           trailing: Wrap(
                             children: [
@@ -756,6 +782,84 @@ class _ChannelsViewState extends State<ChannelsView> {
       ),
     );
   }
+
+  void _requestHealth(Channel channel) {
+    final signature = _healthSignature(channel);
+    final cached = _health[channel.id];
+    if (cached?.signature == signature ||
+        _activeHealth[channel.id] == signature ||
+        _pendingHealth.any(
+          (pending) =>
+              pending.id == channel.id &&
+              _healthSignature(pending) == signature,
+        )) {
+      return;
+    }
+    _pendingHealth.removeWhere((pending) => pending.id == channel.id);
+    if (_pendingHealth.length >= _maximumPendingHealth) {
+      _pendingHealth.removeFirst();
+    }
+    _pendingHealth.add(channel);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _pumpHealth());
+  }
+
+  void _pumpHealth() {
+    if (!mounted) return;
+    var blocked = 0;
+    while (_activeHealthLoads < _maximumHealthLoads &&
+        _pendingHealth.isNotEmpty) {
+      final channel = _pendingHealth.removeFirst();
+      if (_activeHealth.containsKey(channel.id)) {
+        _pendingHealth.add(channel);
+        blocked++;
+        if (blocked >= _pendingHealth.length) break;
+        continue;
+      }
+      blocked = 0;
+      final epoch = _healthEpoch;
+      final signature = _healthSignature(channel);
+      final current = widget.controller.channels
+          .where((item) => item.id == channel.id)
+          .firstOrNull;
+      if (current == null || _healthSignature(current) != signature) {
+        if (current != null) _requestHealth(current);
+        continue;
+      }
+      _activeHealthLoads++;
+      _activeHealth[channel.id] = signature;
+      widget.controller
+          .loadScheduleFor(channel)
+          .then(
+            (_) => _finishHealth(channel.id, signature, false, epoch),
+            onError: (_) => _finishHealth(channel.id, signature, true, epoch),
+          );
+    }
+  }
+
+  void _finishHealth(String id, String signature, bool issue, int epoch) {
+    _activeHealthLoads--;
+    if (_activeHealth[id] == signature) _activeHealth.remove(id);
+    if (!mounted) return;
+    final current = widget.controller.channels
+        .where((channel) => channel.id == id)
+        .firstOrNull;
+    if (epoch == _healthEpoch &&
+        current != null &&
+        _healthSignature(current) == signature) {
+      _health.remove(id);
+      _health[id] = _ChannelHealth(signature, issue);
+      while (_health.length > _maximumCachedHealth) {
+        _health.remove(_health.keys.first);
+      }
+      setState(() {});
+    } else if (current != null) {
+      _requestHealth(current);
+    }
+    _pumpHealth();
+  }
+
+  String _healthSignature(Channel channel) =>
+      '${widget.controller.contentGeneration}|${channel.toJson()}';
 
   void _scheduleFocusPrune(Set<String> liveIds) {
     final staleIds = {
@@ -832,6 +936,13 @@ class _ChannelsViewState extends State<ChannelsView> {
       widget.focusNode?.requestFocus();
     });
   }
+}
+
+class _ChannelHealth {
+  const _ChannelHealth(this.signature, this.issue);
+
+  final String signature;
+  final bool issue;
 }
 
 enum _SettingsCategory { appearance, guide, accessibility, account, support }

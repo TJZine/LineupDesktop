@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lineup_desktop/app/channel_air_check.dart';
 import 'package:lineup_desktop/app/channel_studio_view.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/channels/channel.dart';
@@ -184,6 +185,7 @@ void main() {
     await tester.tap(find.text('New channel'));
     await tester.pumpAndSettle();
     expect(find.text('Create custom channel'), findsOneWidget);
+    expect(find.text('Air Check'), findsOneWidget);
     expect(find.textContaining('New channel • Channel 1 •'), findsOneWidget);
     await tester.tap(find.text('Back to Channels'));
     await tester.pumpAndSettle();
@@ -191,6 +193,7 @@ void main() {
     await tester.tap(find.byTooltip('Open Custom four'));
     await tester.pumpAndSettle();
     expect(find.text('Edit custom channel'), findsOneWidget);
+    expect(find.text('Air Check'), findsOneWidget);
     expect(find.byType(Dialog), findsNothing);
     await tester.tap(find.text('Back to Channels'));
     await tester.pumpAndSettle();
@@ -199,6 +202,7 @@ void main() {
     await tester.tap(find.byTooltip('Open Generated eight'));
     await tester.pumpAndSettle();
     expect(find.text('Inspect generated channel'), findsOneWidget);
+    expect(find.text('Air Check'), findsOneWidget);
     expect(
       find.text('Programming is read-only and will be preserved exactly.'),
       findsOneWidget,
@@ -207,6 +211,7 @@ void main() {
     await tester.tap(find.text('Duplicate as custom'));
     await tester.pumpAndSettle();
     expect(find.text('Duplicate as custom'), findsWidgets);
+    expect(find.text('Air Check'), findsOneWidget);
     expect(find.text('Custom'), findsWidgets);
     expect(
       tester
@@ -229,7 +234,7 @@ void main() {
   });
 
   testWidgets('saved Studio restores focus to its lineup row', (tester) async {
-    final fixture = UiFixture()
+    final fixture = UiFixture(controller: _ShellTuneController())
       ..controller.stage = SetupStage.ready
       ..controller.channels = [
         _channel(
@@ -329,6 +334,7 @@ void main() {
     expect(controller.expectedBase?.toJson(), custom.toJson());
 
     controller.channels = [original];
+    controller.availablePlaylists = [_playlist('playlist-7')];
     controller.saved = null;
     await tester.pumpWidget(
       _studio(
@@ -884,6 +890,89 @@ void main() {
     expect(player.generation, 1);
     expect(find.text('Inspect generated channel'), findsNothing);
     expect(find.text('Edit custom channel'), findsNothing);
+  });
+
+  testWidgets('saved Air Check agrees with Guide and Player boundaries', (
+    tester,
+  ) async {
+    final now = DateTime.utc(2026, 1, 1, 0, 10);
+    final channel = _channel(
+      id: 'agreement',
+      number: 7,
+      name: 'Agreement',
+      source: ManualSource([_itemForHealth(1), _itemForHealth(2)]),
+    );
+    final controller = _AgreementController()
+      ..stage = SetupStage.ready
+      ..channels = [channel];
+    final player = _AgreementPlayer();
+    final fixture = UiFixture(
+      controller: controller,
+      player: player,
+      guideClock: () => now,
+    );
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(fixture.build());
+    await tester.pump();
+    await tester.pump();
+    await openDestination(tester, 'Channels');
+    await tester.tap(find.byTooltip('Open Agreement'));
+    await tester.pumpAndSettle();
+    final expected = programAt(
+      now,
+      channel.anchor,
+      await controller.loadScheduleFor(channel),
+    );
+    expect(
+      find.bySemanticsLabel(
+        RegExp(
+          'Channel 7 Agreement, ${expected.item.title}, ${_testTime(expected.start)} to ${_testTime(expected.end)}, current',
+        ),
+      ),
+      findsOneWidget,
+    );
+    await tester.enterText(
+      find.byKey(const Key('studio-name')),
+      'Saved agreement',
+    );
+    await tester.tap(find.text('Save changes'));
+    await tester.pumpAndSettle();
+    final saved = controller.channels.single;
+    final savedProgram = programAt(
+      now,
+      saved.anchor,
+      await controller.loadScheduleFor(saved),
+    );
+    expect(savedProgram.item.id, expected.item.id);
+    expect(savedProgram.start, expected.start);
+    expect(savedProgram.end, expected.end);
+
+    await tester.tap(find.text('Back to Channels'));
+    await tester.pumpAndSettle();
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+    expect(
+      find.bySemanticsLabel(
+        RegExp(
+          '${savedProgram.item.title}, ${_testTime(savedProgram.start)} to ${_testTime(savedProgram.end)}, currently airing',
+        ),
+      ),
+      findsOneWidget,
+    );
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.digit2);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Open Saved agreement'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Tune in'));
+    for (var index = 0; index < 10; index++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+    expect(player.loaded?.path, '/${savedProgram.item.id}');
   });
 
   testWidgets(
@@ -1450,7 +1539,7 @@ void main() {
     await _chooseDropdown(tester, 'studio-facet-studio', 'Studio A');
     expect(find.text('1 matching programs'), findsOneWidget);
     await tester.tap(find.text('Newest first'));
-    await tester.pump();
+    await _settleAirCheck(tester);
     await tester.tap(find.text('Save channel'));
     await tester.pumpAndSettle();
 
@@ -1577,6 +1666,7 @@ void main() {
           .onPressed!();
       await tester.pump();
       await tester.ensureVisible(find.text('Save changes'));
+      await _settleAirCheck(tester);
       await tester.tap(find.text('Save changes'));
       await tester.pumpAndSettle();
       expect(
@@ -1806,7 +1896,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('1 matching programs'), findsOneWidget);
-    expect(find.text('Fresh comedy'), findsOneWidget);
+    expect(find.text('Fresh comedy'), findsWidgets);
     expect(find.text('Watched comedy'), findsNothing);
     await tester.tap(find.byKey(const Key('studio-filter-include-watched')));
     await tester.pump();
@@ -1816,6 +1906,7 @@ void main() {
     await tester.pump();
     expect(find.text('1 matching programs'), findsOneWidget);
     await tester.enterText(find.byKey(const Key('studio-name')), 'Renamed');
+    await _settleAirCheck(tester);
     await tester.tap(find.text('Save changes'));
     await tester.pumpAndSettle();
 
@@ -1865,6 +1956,7 @@ void main() {
     await _chooseDropdown(tester, 'studio-facet-genre', 'Comedy');
     await tester.enterText(find.byKey(const Key('studio-name')), 'Recovered');
     await tester.ensureVisible(find.text('Save changes'));
+    await _settleAirCheck(tester);
     await tester.tap(find.text('Save changes'));
     await tester.pumpAndSettle();
     expect((controller.saved!.source as LibrarySource).filters, {
@@ -2141,6 +2233,7 @@ void main() {
     expect(find.text('1200 matching, 1 selected'), findsOneWidget);
     expect(find.text('Saved'), findsOneWidget);
     await tester.ensureVisible(find.text('Save changes'));
+    await _settleAirCheck(tester);
     await tester.tap(find.text('Save changes'));
     await tester.pumpAndSettle();
     final saved = controller.saved!;
@@ -2169,6 +2262,7 @@ void main() {
     await tester.enterText(find.byKey(const Key('studio-search')), 'reload');
     await tester.pump();
     await tester.enterText(find.byKey(const Key('studio-name')), 'Captured');
+    await _settleAirCheck(tester);
     await tester.tap(find.text('Save channel'));
     await tester.pumpAndSettle();
     final item = (controller.saved!.source as ManualSource).items.single;
@@ -2201,6 +2295,7 @@ void main() {
         .onPressed!();
     await tester.pump();
     await tester.enterText(find.byKey(const Key('studio-name')), 'Winner');
+    await _settleAirCheck(tester);
     await tester.tap(find.text('Save channel'));
     await tester.pumpAndSettle();
     expect(
@@ -2328,6 +2423,485 @@ void main() {
       ['available'],
     );
   });
+
+  testWidgets('new preview anchor and seed persist exactly through reload', (
+    tester,
+  ) async {
+    final now = DateTime.utc(2026, 8, 27, 13, 45);
+    final controller = _RecordingSaveController()
+      ..libraries = const [
+        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
+      ]
+      ..selectedLibraryIds = {'movies'}
+      ..availableMedia = [_media('movie', libraryId: 'movies')];
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      _studio(controller, ChannelStudioMode.createCustom, clock: () => now),
+    );
+    await tester.pumpAndSettle();
+    final previewed = controller.loaded!;
+    await tester.enterText(find.byKey(const Key('studio-name')), 'Persisted');
+    await tester.tap(find.text('Save channel'));
+    await tester.pumpAndSettle();
+    final first = controller.saved!;
+    expect(first.anchor, previewed.anchor);
+    expect(first.shuffleSeed, previewed.shuffleSeed);
+    expect(first.anchor, now);
+
+    controller
+      ..channels = [first]
+      ..saved = null;
+    await tester.pumpWidget(
+      _studio(
+        controller,
+        ChannelStudioMode.editCustom,
+        channel: first,
+        clock: () => now.add(const Duration(days: 10)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('studio-name')), 'Reloaded');
+    await tester.tap(find.text('Save changes'));
+    await tester.pumpAndSettle();
+    expect(controller.saved!.anchor, first.anchor);
+    expect(controller.saved!.shuffleSeed, first.shuffleSeed);
+  });
+
+  testWidgets('Channels schedule health remains lazy for 1000 rows', (
+    tester,
+  ) async {
+    final controller = _HealthController()
+      ..stage = SetupStage.ready
+      ..channels = [
+        for (var index = 1; index <= 1000; index++)
+          _channel(
+            id: 'health-$index',
+            number: index,
+            name: 'Health $index',
+            source: ManualSource([_itemForHealth(index)]),
+          ),
+      ];
+    final fixture = UiFixture(controller: controller);
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(fixture.build());
+    await tester.pump();
+    await openDestination(tester, 'Channels');
+    await tester.pumpAndSettle();
+
+    expect(controller.requests, greaterThan(0));
+    expect(controller.requests, lessThanOrEqualTo(32));
+    expect(find.byKey(const ValueKey('channel-row-health-1000')), findsNothing);
+  });
+
+  testWidgets('large Channels viewport reaches a quiescent bounded cache', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1200, 5000);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    final controller = _ControlledHealthController()
+      ..stage = SetupStage.ready
+      ..channels = [
+        for (var index = 1; index <= 1000; index++)
+          _channel(
+            id: 'viewport-$index',
+            number: index,
+            name: 'Viewport $index',
+            source: ManualSource([_itemForHealth(index)]),
+          ),
+      ];
+    final fixture = UiFixture(controller: controller);
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(fixture.build());
+    await tester.pump();
+    controller.completePending();
+    await tester.pump();
+    controller.resetMeasurements();
+    await openDestination(tester, 'Channels');
+    await tester.pump();
+
+    var stablePasses = 0;
+    var previousRequests = -1;
+    for (var pass = 0; pass < 100 && stablePasses < 2; pass++) {
+      controller.completePending();
+      await tester.pump();
+      if (controller.pending.isEmpty &&
+          controller.requests == previousRequests) {
+        stablePasses++;
+      } else {
+        stablePasses = 0;
+      }
+      previousRequests = controller.requests;
+    }
+    expect(controller.requests, greaterThan(32));
+    expect(controller.requests, lessThan(1000));
+    expect(controller.pending, isEmpty);
+    expect(controller.maximumActive, lessThanOrEqualTo(2));
+
+    final settledRequests = controller.requests;
+    await tester.pump();
+    await tester.pump();
+    expect(controller.requests, settledRequests);
+    expect(
+      find.byKey(const ValueKey('channel-row-viewport-40')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('Channels health supersedes stale work and recovers issues', (
+    tester,
+  ) async {
+    final controller = _ControlledHealthController()
+      ..stage = SetupStage.ready
+      ..channels = [
+        for (var index = 1; index <= 2; index++)
+          _channel(
+            id: 'controlled-$index',
+            number: index,
+            name: 'Controlled $index',
+            source: ManualSource([_itemForHealth(index)]),
+          ),
+      ];
+    final fixture = UiFixture(controller: controller);
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(fixture.build());
+    await tester.pump();
+    controller.completePending();
+    await tester.pump();
+    controller.resetMeasurements();
+    await openDestination(tester, 'Channels');
+    await tester.pump();
+    expect(controller.pending, hasLength(2));
+    expect(controller.maximumActive, lessThanOrEqualTo(2));
+
+    controller.channels = [
+      Channel.fromJson({
+        ...controller.channels[0].toJson(),
+        'name': 'Controlled 1 latest',
+      }),
+      controller.channels[1],
+    ];
+    controller.notifyListeners();
+    await tester.pump();
+    expect(
+      controller.pending.where((call) => call.channel.id == 'controlled-1'),
+      hasLength(1),
+    );
+    controller.complete('controlled-1', error: StateError('stale failure'));
+    await tester.pump();
+    await tester.pump();
+    await tester.pump();
+    expect(
+      controller.pending
+          .singleWhere((call) => call.channel.id == 'controlled-1')
+          .channel
+          .name,
+      'Controlled 1 latest',
+    );
+    expect(find.textContaining('Schedule issue'), findsNothing);
+
+    controller.complete('controlled-2');
+    controller.complete('controlled-1');
+    await tester.pump();
+    controller.channels = [
+      ...controller.channels,
+      for (var index = 3; index <= 4; index++)
+        _channel(
+          id: 'controlled-$index',
+          number: index,
+          name: 'Controlled $index',
+          source: ManualSource([_itemForHealth(index)]),
+        ),
+    ];
+    controller.generation++;
+    controller.notifyListeners();
+    await tester.pump();
+    expect(controller.pending, hasLength(2));
+
+    controller.channels = [
+      controller.channels[0],
+      controller.channels[1],
+      controller.channels[2],
+      Channel.fromJson({
+        ...controller.channels[3].toJson(),
+        'name': 'Controlled 4 middle',
+      }),
+    ];
+    controller.notifyListeners();
+    await tester.pump();
+    controller.channels = [
+      controller.channels[0],
+      controller.channels[1],
+      controller.channels[2],
+      Channel.fromJson({
+        ...controller.channels[3].toJson(),
+        'name': 'Controlled 4 latest',
+      }),
+    ];
+    controller.notifyListeners();
+    await tester.pump();
+    controller.complete('controlled-1');
+    await tester.pump();
+    await tester.pump();
+    controller.complete('controlled-2');
+    await tester.pump();
+    await tester.pump();
+    expect(
+      controller.pending
+          .singleWhere((call) => call.channel.id == 'controlled-4')
+          .channel
+          .name,
+      'Controlled 4 latest',
+    );
+    controller.complete('controlled-4', error: StateError('health failure'));
+    await tester.pump();
+    await tester.pump();
+    await tester.pump();
+    expect(
+      find.textContaining('Schedule issue — open this channel to recover'),
+      findsOneWidget,
+    );
+
+    controller.generation++;
+    controller.notifyListeners();
+    await tester.pump();
+    for (var pass = 0; pass < 6 && controller.pending.isNotEmpty; pass++) {
+      controller.completePending();
+      await tester.pump();
+    }
+    expect(controller.pending, isEmpty);
+    expect(find.textContaining('Schedule issue'), findsNothing);
+    expect(controller.maximumActive, lessThanOrEqualTo(2));
+  });
+
+  testWidgets('generic unavailable worker failure keeps Save disabled', (
+    tester,
+  ) async {
+    final original = _channel(
+      id: 'generic-failure',
+      number: 31,
+      name: 'Generic failure',
+      source: ManualSource([_itemForHealth(1)]),
+    );
+    final controller = _ScheduleFailureController(
+      StateError('Schedule worker is unavailable'),
+    )..channels = [original];
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      _studio(controller, ChannelStudioMode.editCustom, channel: original),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('could not verify'), findsOneWidget);
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.widgetWithText(FilledButton, 'Save changes'),
+          )
+          .onPressed,
+      isNull,
+    );
+  });
+
+  testWidgets('failed saved-schedule comparison blocks Save until retry', (
+    tester,
+  ) async {
+    final original = _channel(
+      id: 'comparison-failure',
+      number: 34,
+      name: 'Comparison failure',
+      source: ManualSource([_itemForHealth(1), _itemForHealth(2)]),
+    );
+    final controller = _RecordingSaveController()
+      ..channels = [original]
+      ..availableMedia = [
+        _media('program-1', title: 'Program 1'),
+        _media('program-2', title: 'Program 2'),
+      ];
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      _studio(controller, ChannelStudioMode.editCustom, channel: original),
+    );
+    await tester.pumpAndSettle();
+
+    controller.nextScheduleFailure = StateError('baseline worker unavailable');
+    controller.generation++;
+    controller.notifyListeners();
+    tester
+        .widget<IconButton>(
+          find.ancestor(
+            of: find.byTooltip(
+              'Move Program 2 earlier in channel Comparison failure',
+            ),
+            matching: find.byType(IconButton),
+          ),
+        )
+        .onPressed!();
+    await _settleAirCheck(tester);
+
+    expect(find.text('2 playable'), findsOneWidget);
+    expect(find.textContaining('could not compare this draft'), findsOneWidget);
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.widgetWithText(FilledButton, 'Save changes'),
+          )
+          .onPressed,
+      isNull,
+    );
+
+    await tester.ensureVisible(find.text('Retry comparison'));
+    await tester.tap(find.text('Retry comparison'));
+    await _settleAirCheck(tester);
+    expect(find.textContaining('could not compare this draft'), findsNothing);
+    expect(find.byKey(const Key('air-check-on-now-warning')), findsOneWidget);
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.widgetWithText(FilledButton, 'Save changes'),
+          )
+          .onPressed,
+      isNotNull,
+    );
+  });
+
+  testWidgets('off-air saved programming can be repaired and saved', (
+    tester,
+  ) async {
+    final original = _channel(
+      id: 'off-air-repair',
+      number: 35,
+      name: 'Off-air repair',
+      source: ManualSource([_itemForHealth(1), _itemForHealth(2)]),
+    );
+    final controller = _RecordingSaveController()
+      ..channels = [original]
+      ..availableMedia = [
+        _media('program-1', title: 'Program 1'),
+        _media('program-2', title: 'Program 2'),
+      ];
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      _studio(controller, ChannelStudioMode.editCustom, channel: original),
+    );
+    await tester.pumpAndSettle();
+
+    controller.nextScheduleFailure = const FormatException(
+      'FormatException: A channel needs content',
+    );
+    controller.generation++;
+    controller.notifyListeners();
+    tester
+        .widget<IconButton>(
+          find.ancestor(
+            of: find.byTooltip(
+              'Move Program 2 earlier in channel Off-air repair',
+            ),
+            matching: find.byType(IconButton),
+          ),
+        )
+        .onPressed!();
+    await _settleAirCheck(tester);
+
+    expect(find.byKey(const Key('air-check-on-now-warning')), findsOneWidget);
+    expect(find.textContaining('could not compare this draft'), findsNothing);
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.widgetWithText(FilledButton, 'Save changes'),
+          )
+          .onPressed,
+      isNotNull,
+    );
+  });
+
+  testWidgets('retained empty manual resolution remains explicitly saveable', (
+    tester,
+  ) async {
+    final original = _channel(
+      id: 'retained-off-air',
+      number: 32,
+      name: 'Retained off air',
+      source: ManualSource([_itemForHealth(1)]),
+    );
+    final controller = _RecordingSaveController()
+      ..scheduleFailure = const FormatException(
+        'FormatException: A channel needs content',
+      )
+      ..channels = [original];
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      _studio(controller, ChannelStudioMode.editCustom, channel: original),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('explicitly off air'), findsOneWidget);
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.widgetWithText(FilledButton, 'Save changes'),
+          )
+          .onPressed,
+      isNotNull,
+    );
+    await tester.enterText(find.byKey(const Key('studio-name')), 'Retained');
+    await tester.tap(find.text('Save changes'));
+    await tester.pumpAndSettle();
+    expect(controller.saved?.name, 'Retained');
+  });
+
+  testWidgets('successful save becomes the next warning baseline', (
+    tester,
+  ) async {
+    final original = _channel(
+      id: 'warning-baseline',
+      number: 33,
+      name: 'Warning baseline',
+      source: ManualSource([_itemForHealth(1), _itemForHealth(2)]),
+    );
+    final controller = _RecordingSaveController()
+      ..channels = [original]
+      ..availableMedia = [
+        _media('program-1', title: 'Program 1'),
+        _media('program-2', title: 'Program 2'),
+      ];
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      _studio(controller, ChannelStudioMode.editCustom, channel: original),
+    );
+    await tester.pumpAndSettle();
+
+    tester
+        .widget<IconButton>(
+          find.ancestor(
+            of: find.byTooltip(
+              'Move Program 2 earlier in channel Warning baseline',
+            ),
+            matching: find.byType(IconButton),
+          ),
+        )
+        .onPressed!();
+    await _settleAirCheck(tester);
+    expect(find.byKey(const Key('air-check-on-now-warning')), findsOneWidget);
+    await tester.tap(find.text('Save changes'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('air-check-on-now-warning')), findsNothing);
+
+    tester
+        .widget<IconButton>(
+          find.ancestor(
+            of: find.byTooltip(
+              'Move Program 1 earlier in channel Warning baseline',
+            ),
+            matching: find.byType(IconButton),
+          ),
+        )
+        .onPressed!();
+    await _settleAirCheck(tester);
+    expect(find.byKey(const Key('air-check-on-now-warning')), findsOneWidget);
+  });
 }
 
 Future<void> _chooseDropdown(
@@ -2342,10 +2916,16 @@ Future<void> _chooseDropdown(
   await tester.pumpAndSettle();
 }
 
+Future<void> _settleAirCheck(WidgetTester tester) async {
+  await tester.pump(channelAirCheckDebounce);
+  await tester.pumpAndSettle();
+}
+
 Widget _studio(
   FixtureController controller,
   ChannelStudioMode mode, {
   Channel? channel,
+  DateTime Function()? clock,
 }) => MaterialApp(
   home: Scaffold(
     body: ChannelStudioView(
@@ -2358,12 +2938,25 @@ Widget _studio(
       onDuplicate: (_) {},
       onOpenGenerateLineup: () async {},
       onTune: (_) async => false,
+      clock: clock,
     ),
   ),
 );
 
+ChannelItem _itemForHealth(int index) => ChannelItem(
+  id: 'program-$index',
+  title: 'Program $index',
+  duration: const Duration(minutes: 30),
+);
+
 String _fieldText(WidgetTester tester, String key) =>
     tester.widget<TextFormField>(find.byKey(Key(key))).controller!.text;
+
+String _testTime(DateTime value) =>
+    const DefaultMaterialLocalizations().formatTimeOfDay(
+      TimeOfDay.fromDateTime(value),
+      alwaysUse24HourFormat: false,
+    );
 
 PlexMediaItem _media(
   String id, {
@@ -2430,6 +3023,10 @@ Channel _channel({
 
 class _FailingSaveController extends FixtureController {
   @override
+  Future<ScheduleIndex> loadScheduleFor(Channel channel) async =>
+      _testSchedule(channel, this);
+
+  @override
   Future<void> saveChannel(Channel channel, {required Channel? expectedBase}) =>
       Future.error(StateError('synthetic save failure'));
 }
@@ -2437,6 +3034,10 @@ class _FailingSaveController extends FixtureController {
 class _BlockingSaveController extends FixtureController {
   final release = Completer<void>();
   Channel? attempted;
+
+  @override
+  Future<ScheduleIndex> loadScheduleFor(Channel channel) async =>
+      _testSchedule(channel, this);
 
   @override
   Future<void> saveChannel(
@@ -2452,6 +3053,24 @@ class _BlockingSaveController extends FixtureController {
 class _RecordingSaveController extends FixtureController {
   Channel? saved;
   Channel? expectedBase;
+  Channel? loaded;
+  Object? scheduleFailure;
+  Object? nextScheduleFailure;
+  int generation = 0;
+
+  @override
+  int get contentGeneration => generation;
+
+  @override
+  Future<ScheduleIndex> loadScheduleFor(Channel channel) async {
+    loaded = channel;
+    if (scheduleFailure case final failure?) throw failure;
+    if (nextScheduleFailure case final failure?) {
+      nextScheduleFailure = null;
+      throw failure;
+    }
+    return _testSchedule(channel, this);
+  }
 
   @override
   Future<void> saveChannel(
@@ -2481,7 +3100,49 @@ class _ShellTuneController extends FixtureController {
       ]);
 }
 
+class _AgreementController extends FixtureController {
+  @override
+  Future<ScheduleIndex> loadScheduleFor(Channel channel) async => buildSchedule(
+    (channel.source as ManualSource).items,
+    mode: channel.playbackMode,
+    seed: channel.shuffleSeed,
+    blockSize: channel.blockSize ?? 3,
+  );
+
+  @override
+  Future<void> saveChannel(
+    Channel channel, {
+    required Channel? expectedBase,
+  }) async {
+    channels = [channel];
+    notifyListeners();
+  }
+
+  @override
+  LineupPlaybackRequest playbackFor(String itemId) =>
+      LineupPlaybackRequest.parts([
+        LineupPlaybackPart(
+          uri: Uri.parse('https://media.test/$itemId'),
+          duration: const Duration(minutes: 30),
+        ),
+      ]);
+}
+
+class _AgreementPlayer extends FixturePlayer {
+  Uri? loaded;
+
+  @override
+  Future<void> load(Uri media, {String? plexToken, int? generation}) async {
+    loaded = media;
+    await super.load(media, plexToken: plexToken, generation: generation);
+  }
+}
+
 class _ExpectedBaseController extends FixtureController {
+  @override
+  Future<ScheduleIndex> loadScheduleFor(Channel channel) async =>
+      _testSchedule(channel, this);
+
   @override
   Future<void> saveChannel(
     Channel channel, {
@@ -2497,6 +3158,113 @@ class _ExpectedBaseController extends FixtureController {
     notifyListeners();
   }
 }
+
+class _HealthController extends FixtureController {
+  int requests = 0;
+
+  @override
+  Future<ScheduleIndex> loadScheduleFor(Channel channel) async {
+    requests++;
+    return buildSchedule(
+      (channel.source as ManualSource).items,
+      mode: channel.playbackMode,
+      seed: channel.shuffleSeed,
+      blockSize: channel.blockSize ?? 3,
+    );
+  }
+}
+
+class _ScheduleFailureController extends FixtureController {
+  _ScheduleFailureController(this.failure);
+
+  final Object failure;
+
+  @override
+  Future<ScheduleIndex> loadScheduleFor(Channel channel) =>
+      Future.error(failure);
+}
+
+class _ControlledHealthController extends FixtureController {
+  final pending = <_HealthCall>[];
+  final _activeById = <String, int>{};
+  int generation = 0;
+  int requests = 0;
+  int maximumActive = 0;
+
+  @override
+  int get contentGeneration => generation;
+
+  @override
+  Future<ScheduleIndex> loadScheduleFor(Channel channel) {
+    requests++;
+    final completer = Completer<ScheduleIndex>();
+    final call = _HealthCall(channel, completer);
+    pending.add(call);
+    _activeById.update(channel.id, (value) => value + 1, ifAbsent: () => 1);
+    maximumActive = maximumActive < pending.length
+        ? pending.length
+        : maximumActive;
+    void finished() {
+      final remaining = _activeById[channel.id]! - 1;
+      if (remaining == 0) {
+        _activeById.remove(channel.id);
+      } else {
+        _activeById[channel.id] = remaining;
+      }
+    }
+
+    completer.future.then((_) => finished(), onError: (_) => finished());
+    return completer.future;
+  }
+
+  void complete(String id, {Object? error}) {
+    final call = pending.firstWhere((item) => item.channel.id == id);
+    pending.remove(call);
+    if (error != null) {
+      call.completer.completeError(error);
+    } else {
+      call.completer.complete(
+        buildSchedule(
+          (call.channel.source as ManualSource).items,
+          mode: call.channel.playbackMode,
+          seed: call.channel.shuffleSeed,
+          blockSize: call.channel.blockSize ?? 3,
+        ),
+      );
+    }
+  }
+
+  void completePending() {
+    for (final call in [...pending]) {
+      if (pending.contains(call)) complete(call.channel.id);
+    }
+  }
+
+  void resetMeasurements() {
+    pending.clear();
+    requests = 0;
+    maximumActive = 0;
+  }
+}
+
+class _HealthCall {
+  const _HealthCall(this.channel, this.completer);
+
+  final Channel channel;
+  final Completer<ScheduleIndex> completer;
+}
+
+ScheduleIndex _testSchedule(Channel channel, FixtureController controller) =>
+    buildSchedule(
+      resolveContent(
+        channel.source,
+        controller.availableMedia,
+        controller.availablePlaylists,
+      ),
+      mode: channel.playbackMode,
+      seed: channel.shuffleSeed,
+      blockSize: channel.blockSize ?? 3,
+    );
 
 class _RecoveryHarness extends StatefulWidget {
   const _RecoveryHarness({

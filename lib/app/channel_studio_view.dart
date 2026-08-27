@@ -7,6 +7,7 @@ import '../channels/channel.dart';
 import '../channels/content_resolver.dart';
 import '../plex/plex_models.dart';
 import '../ui/app_ui.dart';
+import 'channel_air_check.dart';
 import 'form_error.dart';
 import 'lineup_controller.dart';
 
@@ -48,6 +49,7 @@ class ChannelStudioView extends StatefulWidget {
     required this.onDuplicate,
     required this.onOpenGenerateLineup,
     this.channel,
+    this.clock,
     super.key,
   });
 
@@ -59,6 +61,7 @@ class ChannelStudioView extends StatefulWidget {
   final Future<bool> Function(String channelId) onTune;
   final ValueChanged<Channel> onDuplicate;
   final Future<void> Function() onOpenGenerateLineup;
+  final DateTime Function()? clock;
 
   @override
   State<ChannelStudioView> createState() => ChannelStudioViewState();
@@ -107,6 +110,8 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
   bool _baseDeleted = false;
   String? _error;
   String? _success;
+  ChannelAirCheckValidity _airCheckValidity = ChannelAirCheckValidity.unknown;
+  bool _scheduleIdentityCommitted = false;
 
   bool get saving => _saving;
   bool get dirty => _dirty;
@@ -128,6 +133,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
       _ => null,
     };
     _generated = widget.mode == ChannelStudioMode.inspectGenerated;
+    _scheduleIdentityCommitted = original != null;
     _id = widget.mode == ChannelStudioMode.createCustom
         ? createChannelId()
         : widget.mode == ChannelStudioMode.duplicateCustom
@@ -148,13 +154,15 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     _search = TextEditingController();
     _source = original?.source ?? _defaultSource();
     _playbackMode = original?.playbackMode ?? PlaybackMode.shuffle;
-    _anchor = original?.anchor ?? DateTime.now().toUtc();
+    _anchor = original?.anchor ?? _clock().toUtc();
     _shuffleSeed = original?.shuffleSeed ?? _id.hashCode;
     _blockSize = original?.blockSize;
     _builderKey = _generated ? original!.builderKey : null;
     _configureSource(_source);
     _baselineDraftSignature = _draftSignature;
   }
+
+  DateTime _clock() => (widget.clock ?? DateTime.now)();
 
   ContentSource _defaultSource() {
     final library = widget.controller.libraries
@@ -352,6 +360,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                 _saving ||
                     noNumber ||
                     (identityLooksValid && programmingError != null) ||
+                    (identityLooksValid && !_airCheckCanSave) ||
                     (_generated && !_dirty)
                 ? null
                 : _save,
@@ -415,10 +424,6 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                   message: 'No channel numbers are available. Free or renumber a channel from Channels before saving.',
                 ),
               ],
-              if (!_generated && programmingError != null) ...[
-                const SizedBox(height: 12),
-                LineupNotice(message: programmingError),
-              ],
               if (_conflict || _baseDeleted) ...[
                 const SizedBox(height: 12),
                 Wrap(
@@ -439,6 +444,31 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                   ],
                 ),
               ],
+              const SizedBox(height: 16),
+              LayoutBuilder(
+                builder: (context, constraints) => ChannelAirCheck(
+                  controller: widget.controller,
+                  channel: _previewDraft,
+                  originalChannel: _expectedBase,
+                  clock: _clock,
+                  compact: constraints.maxWidth < LineupLayout.compact,
+                  inclusionReason: _sourceLabel(
+                    _displaySource,
+                    widget.controller,
+                  ),
+                  sourceIssue: programmingError,
+                  onFirstValid: _commitScheduleIdentity,
+                  onValidityChanged: (validity) {
+                    if (!mounted || _airCheckValidity == validity) return;
+                    setState(() {
+                      _airCheckValidity = validity;
+                      if (validity == ChannelAirCheckValidity.retainedOffAir) {
+                        _scheduleIdentityCommitted = true;
+                      }
+                    });
+                  },
+                ),
+              ),
               const SizedBox(height: 16),
               LayoutBuilder(
                 builder: (context, constraints) {
@@ -1459,6 +1489,33 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     builderKey: _builderKey,
   );
 
+  Channel get _previewDraft => Channel(
+    id: _id,
+    number: int.tryParse(_number.text) ?? 1,
+    name: _name.text.trim().isEmpty ? 'New channel' : _name.text.trim(),
+    source: _displaySource,
+    playbackMode: _playbackMode,
+    anchor: _anchor,
+    shuffleSeed: _shuffleSeed,
+    blockSize: _generated
+        ? _blockSize
+        : widget.mode == ChannelStudioMode.duplicateCustom
+        ? _blockSize
+        : _playbackMode == PlaybackMode.block
+        ? (_blockSize ?? 3)
+        : null,
+    builderKey: _builderKey,
+  );
+
+  bool get _airCheckCanSave =>
+      _airCheckValidity == ChannelAirCheckValidity.valid ||
+      _airCheckValidity == ChannelAirCheckValidity.retainedOffAir;
+
+  void _commitScheduleIdentity() {
+    if (_scheduleIdentityCommitted || !mounted) return;
+    setState(() => _scheduleIdentityCommitted = true);
+  }
+
   Future<void> _save({Channel? rebasedExpected}) async {
     final valid = _form.currentState?.validate() ?? false;
     if (!valid) {
@@ -1474,6 +1531,12 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
       return;
     }
     if (_programmingError != null) {
+      return;
+    }
+    if (!_airCheckCanSave || !_scheduleIdentityCommitted) {
+      setState(
+        () => _error = 'Air Check must verify this schedule before the channel can be saved.',
+      );
       return;
     }
     setState(() {
