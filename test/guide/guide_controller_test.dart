@@ -902,6 +902,7 @@ List<Channel> _channels(
     playbackMode: PlaybackMode.sequential,
     anchor: DateTime(2026, 8, 13),
     shuffleSeed: index,
+    builderKey: 'generated-$idPrefix-$index',
   );
 });
 

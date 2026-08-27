@@ -716,7 +716,8 @@ void main() {
       ..stage = SetupStage.channelSetup
       ..libraries = const [
         PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
-      ];
+      ]
+      ..channels = [_channel()];
     addTearDown(controller.dispose);
     await tester.pumpWidget(
       MaterialApp(home: UpstreamChannelSetupView(controller: controller)),
@@ -741,15 +742,27 @@ void main() {
       findsOneWidget,
     );
 
-    await tester.tap(find.text('Build Channels'));
+    await tester.tap(find.text('Review'));
     await tester.pumpAndSettle();
     expect(find.text('Review expected changes'), findsOneWidget);
     expect(find.text('Confirm & Replace'), findsOneWidget);
     expect(find.bySemanticsLabel('Create: 2'), findsOneWidget);
     expect(find.bySemanticsLabel('Update: 0'), findsOneWidget);
-    expect(find.bySemanticsLabel('Unchanged: 0'), findsOneWidget);
-    expect(find.bySemanticsLabel('Remove: 0'), findsOneWidget);
-    expect(find.bySemanticsLabel('Final: 2'), findsOneWidget);
+    expect(find.bySemanticsLabel('Unchanged: 1'), findsOneWidget);
+    expect(find.bySemanticsLabel('Generated removed: 0'), findsOneWidget);
+    expect(find.bySemanticsLabel('Custom kept: 1'), findsOneWidget);
+    expect(find.bySemanticsLabel('Final: 3'), findsOneWidget);
+    expect(
+      find.bySemanticsLabel(
+        'Channel composition. Create: 2, Update: 0, Unchanged: 1, Generated removed: 0.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Remove 0 generated channels'), findsOneWidget);
+    expect(
+      find.text('1 custom channel will remain unchanged.'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('Channel Setup merge review matches the applied channel sets', (
@@ -803,7 +816,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Build Options'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Merge with lineup'));
+    await tester.tap(find.text('Refresh generated channels'));
     await tester.pump();
     await tester.tap(find.text('Review'));
     await tester.pumpAndSettle();
@@ -811,7 +824,8 @@ void main() {
     expect(find.bySemanticsLabel('Create: 0'), findsOneWidget);
     expect(find.bySemanticsLabel('Update: 1'), findsOneWidget);
     expect(find.bySemanticsLabel('Unchanged: 2'), findsOneWidget);
-    expect(find.bySemanticsLabel('Remove: 0'), findsOneWidget);
+    expect(find.bySemanticsLabel('Generated removed: 0'), findsOneWidget);
+    expect(find.bySemanticsLabel('Custom kept: 1'), findsOneWidget);
     expect(find.bySemanticsLabel('Final: 3'), findsOneWidget);
     final updateSegment = tester.getRect(
       find.byKey(const ValueKey('channel-setup-impact-update')),

@@ -310,7 +310,10 @@ List<ChannelProposal> buildChannelProposals({
     }
   }
   final used = mode == ChannelBuildMode.replace
-      ? <int>{}
+      ? existing
+            .where((channel) => channel.builderKey == null)
+            .map((channel) => channel.number)
+            .toSet()
       : existing.map((channel) => channel.number).toSet();
   final output = <Channel>[];
   var next = 1;
@@ -324,7 +327,11 @@ List<ChannelProposal> buildChannelProposals({
     final builderKey = _builderKey(entry.proposal, entry.suffix);
     final matched = mode == ChannelBuildMode.merge
         ? existing
-              .where((channel) => channel.builderKey == builderKey)
+              .where(
+                (channel) =>
+                    channel.builderKey != null &&
+                    channel.builderKey == builderKey,
+              )
               .firstOrNull
         : null;
     while (matched == null && used.contains(next) && next <= 1000) {
@@ -335,7 +342,8 @@ List<ChannelProposal> buildChannelProposals({
       break;
     }
     if (matched != null &&
-        matched.name == name &&
+        jsonEncode(matched.source.toJson()) ==
+            jsonEncode(entry.proposal.source.toJson()) &&
         matched.playbackMode == entry.mode &&
         matched.blockSize == entry.blockSize) {
       output.add(matched);
@@ -347,11 +355,11 @@ List<ChannelProposal> buildChannelProposals({
       Channel(
         id: id,
         number: number,
-        name: name,
+        name: matched?.name ?? name,
         source: entry.proposal.source,
         playbackMode: entry.mode,
-        anchor: anchor ?? DateTime.now().toUtc(),
-        shuffleSeed: id.hashCode,
+        anchor: matched?.anchor ?? anchor ?? DateTime.now().toUtc(),
+        shuffleSeed: matched?.shuffleSeed ?? id.hashCode,
         blockSize: entry.blockSize,
         builderKey: builderKey,
       ),

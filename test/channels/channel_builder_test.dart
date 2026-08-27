@@ -301,6 +301,57 @@ void main() {
     },
   );
 
+  test('all build modes reserve sparse custom channel numbers', () {
+    const proposal = ChannelProposal(
+      name: 'Drama',
+      source: LibrarySource(
+        libraryId: 'movies',
+        libraryType: PlexLibraryType.movie,
+      ),
+      mode: PlaybackMode.shuffle,
+      itemCount: 10,
+      strategy: BuilderStrategy.genres,
+    );
+    final custom = [
+      Channel(
+        id: 'custom-1',
+        number: 1,
+        name: 'Custom 1',
+        source: const LibrarySource(
+          libraryId: 'movies',
+          libraryType: PlexLibraryType.movie,
+        ),
+        playbackMode: PlaybackMode.sequential,
+        anchor: DateTime.utc(2026),
+        shuffleSeed: 1,
+      ),
+      Channel(
+        id: 'custom-1000',
+        number: 1000,
+        name: 'Custom 1000',
+        source: const LibrarySource(
+          libraryId: 'movies',
+          libraryType: PlexLibraryType.movie,
+        ),
+        playbackMode: PlaybackMode.sequential,
+        anchor: DateTime.utc(2026),
+        shuffleSeed: 1000,
+      ),
+    ];
+
+    for (final mode in ChannelBuildMode.values) {
+      final result = materializeChannelPlan(
+        proposals: const [proposal],
+        existing: custom,
+        mode: mode,
+        anchor: DateTime.utc(2027),
+      );
+
+      expect(result.channels.single.number, 2, reason: mode.name);
+      expect(result.truncated, isFalse, reason: mode.name);
+    }
+  });
+
   test('maximum channels applies after series expansion', () {
     const proposal = ChannelProposal(
       name: 'Series',
@@ -534,11 +585,12 @@ void main() {
     expect(changed, isNot(same(stale)));
     expect(changed.id, stale.id);
     expect(changed.number, 42);
-    expect(changed.name, 'Series');
+    expect(changed.name, 'Old name');
     expect(changed.source.toJson(), proposal.source.toJson());
     expect(changed.playbackMode, PlaybackMode.block);
     expect(changed.blockSize, 5);
-    expect(changed.anchor, DateTime.utc(2027));
+    expect(changed.anchor, DateTime.utc(2025));
+    expect(changed.shuffleSeed, stale.shuffleSeed);
     expect(changed.builderKey, stale.builderKey);
   });
 }

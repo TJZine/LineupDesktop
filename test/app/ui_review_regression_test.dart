@@ -616,7 +616,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Build Options'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Append channels'));
+    await tester.tap(find.text('Add generated channels'));
     await tester.pump();
     await tester.tap(find.text('Review'));
     await tester.pumpAndSettle();
@@ -624,7 +624,7 @@ void main() {
     expect(find.bySemanticsLabel('Create: 2'), findsOneWidget);
     expect(find.bySemanticsLabel('Update: 0'), findsOneWidget);
     expect(find.bySemanticsLabel('Unchanged: 1'), findsOneWidget);
-    expect(find.bySemanticsLabel('Remove: 0'), findsOneWidget);
+    expect(find.bySemanticsLabel('Generated removed: 0'), findsOneWidget);
     expect(find.bySemanticsLabel('Final: 3'), findsOneWidget);
 
     await tester.tap(find.text('Confirm & Build'));
@@ -666,7 +666,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Build Channels'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('This will replace your current lineup'));
+    await tester.tap(find.text('Remove 0 generated channels'));
     await tester.pump();
     await tester.tap(find.text('Confirm & Replace'));
     await tester.pump();

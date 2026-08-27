@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -614,7 +615,9 @@ void main() {
 
       await controller.initialize();
       controller.stage = SetupStage.channelSetup;
-      final planned = List<Channel>.unmodifiable([_channel('planned')]);
+      final planned = List<Channel>.unmodifiable([
+        _generatedChannel('planned', 1),
+      ]);
 
       await controller.applyChannelPlan(
         planned,
@@ -627,6 +630,167 @@ void main() {
       controller.completeChannelSetup();
 
       expect(controller.stage, SetupStage.ready);
+    },
+  );
+
+  test('every build mode preserves custom channels exactly', () async {
+    final custom = _channel('custom');
+    final customJson = jsonEncode(custom.toJson());
+
+    for (final mode in ChannelBuildMode.values) {
+      final controller = LineupController(
+        store: _MemoryStore(),
+        credentials: _MemoryCredentials(),
+        plex: _FakePlex(),
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+      controller
+        ..channels = [custom, _generatedChannel('old', 2)]
+        ..currentChannelId = custom.id;
+
+      await controller.applyChannelPlan([
+        _generatedChannel('planned', 3),
+      ], mode: mode);
+
+      expect(
+        jsonEncode(
+          controller.channels
+              .singleWhere((channel) => channel.id == custom.id)
+              .toJson(),
+        ),
+        customJson,
+        reason: mode.name,
+      );
+      expect(controller.currentChannelId, custom.id, reason: mode.name);
+    }
+  });
+
+  test('replace falls back near a removed generated current channel', () async {
+    final custom = _channel('custom');
+    final removed = _generatedChannel('removed', 2);
+    final replacement = _generatedChannel('replacement', 3);
+    final controller = LineupController(
+      store: _MemoryStore(),
+      credentials: _MemoryCredentials(),
+      plex: _FakePlex(),
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+    controller
+      ..channels = [custom, removed]
+      ..currentChannelId = removed.id;
+
+    await controller.applyChannelPlan([
+      replacement,
+    ], mode: ChannelBuildMode.replace);
+
+    expect(controller.channels, [custom, replacement]);
+    expect(controller.currentChannelId, replacement.id);
+  });
+
+  test(
+    'refresh retains unmatched channels and replaces generated matches',
+    () async {
+      final custom = _channel('custom');
+      final matched = _generatedChannel('matched', 2, builderKey: 'match');
+      final unmatched = _generatedChannel('unmatched', 3);
+      final replacement = Channel(
+        id: matched.id,
+        number: matched.number,
+        name: matched.name,
+        source: const LibrarySource(
+          libraryId: 'shows',
+          libraryType: PlexLibraryType.show,
+        ),
+        playbackMode: PlaybackMode.shuffle,
+        anchor: matched.anchor,
+        shuffleSeed: matched.shuffleSeed,
+        builderKey: matched.builderKey,
+      );
+      final controller = LineupController(
+        store: _MemoryStore(),
+        credentials: _MemoryCredentials(),
+        plex: _FakePlex(),
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+      controller.channels = [custom, matched, unmatched];
+
+      await controller.applyChannelPlan([
+        replacement,
+      ], mode: ChannelBuildMode.merge);
+
+      expect(
+        controller.channels,
+        containsAll([custom, unmatched, replacement]),
+      );
+      expect(controller.channels, hasLength(3));
+    },
+  );
+
+  test('invalid generated plans do not write or change state', () async {
+    final store = _CountingMemoryStore();
+    final custom = _channel('custom');
+    final generated = _generatedChannel('generated', 2);
+    final controller = LineupController(
+      store: store,
+      credentials: _MemoryCredentials(),
+      plex: _FakePlex(),
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+    controller
+      ..channels = [custom, generated]
+      ..currentChannelId = generated.id;
+
+    await expectLater(
+      controller.applyChannelPlan([
+        _channel('unowned'),
+      ], mode: ChannelBuildMode.replace),
+      throwsFormatException,
+    );
+    expect(controller.channels, [custom, generated]);
+    expect(controller.currentChannelId, generated.id);
+    expect(store.saveCalls, 0);
+
+    await expectLater(
+      controller.applyChannelPlan([
+        _generatedChannel('conflict', custom.number),
+      ], mode: ChannelBuildMode.append),
+      throwsFormatException,
+    );
+    expect(controller.channels, [custom, generated]);
+    expect(controller.currentChannelId, generated.id);
+    expect(store.saveCalls, 0);
+  });
+
+  test(
+    'failed generated plan persistence rolls back lineup and current channel',
+    () async {
+      final store = _MemoryStore()..failNextSave = true;
+      final custom = _channel('custom');
+      final generated = _generatedChannel('generated', 2);
+      final controller = LineupController(
+        store: store,
+        credentials: _MemoryCredentials(),
+        plex: _FakePlex(),
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+      controller
+        ..channels = [custom, generated]
+        ..currentChannelId = generated.id;
+
+      await expectLater(
+        controller.applyChannelPlan([
+          _generatedChannel('replacement', 2),
+        ], mode: ChannelBuildMode.replace),
+        throwsStateError,
+      );
+
+      expect(controller.channels, [custom, generated]);
+      expect(controller.currentChannelId, generated.id);
     },
   );
 
@@ -2854,6 +3018,21 @@ Channel _channel(String id) => Channel(
   anchor: DateTime.utc(2026),
   shuffleSeed: 1,
 );
+
+Channel _generatedChannel(String id, int number, {String? builderKey}) =>
+    Channel(
+      id: id,
+      number: number,
+      name: 'Generated $id',
+      source: const LibrarySource(
+        libraryId: 'movies',
+        libraryType: PlexLibraryType.movie,
+      ),
+      playbackMode: PlaybackMode.sequential,
+      anchor: DateTime.utc(2026),
+      shuffleSeed: number,
+      builderKey: builderKey ?? 'generated-$id',
+    );
 
 class _MemoryStore implements AppStore {
   _MemoryStore([

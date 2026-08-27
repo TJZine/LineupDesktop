@@ -25,6 +25,7 @@ typedef _PlanImpact = ({
   int unchanged,
   int remove,
   int finalCount,
+  int customKept,
 });
 
 class UpstreamChannelSetupView extends StatefulWidget {
@@ -1015,9 +1016,9 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
                 if (_mode == ChannelBuildMode.replace)
                   CheckboxListTile(
                     value: _replaceConfirmed,
-                    title: const Text('This will replace your current lineup'),
-                    subtitle: const Text(
-                      'Existing channels are removed only after this confirmation.',
+                    title: Text('Remove ${impact.remove} generated channels'),
+                    subtitle: Text(
+                      '${impact.customKept} custom ${impact.customKept == 1 ? 'channel' : 'channels'} will remain unchanged.',
                     ),
                     onChanged: (value) =>
                         setState(() => _replaceConfirmed = value == true),
@@ -1066,13 +1067,17 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
 
   _PlanImpact _planImpact(List<Channel> planned) {
     final existing = widget.controller.channels;
+    final customCount = existing
+        .where((channel) => channel.builderKey == null)
+        .length;
     return switch (_mode) {
       ChannelBuildMode.replace => (
         create: planned.length,
         update: 0,
-        unchanged: 0,
-        remove: existing.length,
-        finalCount: planned.length,
+        unchanged: customCount,
+        remove: existing.length - customCount,
+        finalCount: customCount + planned.length,
+        customKept: customCount,
       ),
       ChannelBuildMode.append => (
         create: planned.length,
@@ -1080,6 +1085,7 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
         unchanged: existing.length,
         remove: 0,
         finalCount: existing.length + planned.length,
+        customKept: customCount,
       ),
       ChannelBuildMode.merge => () {
         var create = 0;
@@ -1116,6 +1122,7 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
           unchanged: unchanged,
           remove: 0,
           finalCount: existing.length + create,
+          customKept: customCount,
         );
       }(),
     };
@@ -1162,16 +1169,18 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
   };
 
   static String _modeLabel(ChannelBuildMode mode) => switch (mode) {
-    ChannelBuildMode.replace => 'Replace lineup',
-    ChannelBuildMode.append => 'Append channels',
-    ChannelBuildMode.merge => 'Merge with lineup',
+    ChannelBuildMode.replace => 'Replace generated channels',
+    ChannelBuildMode.append => 'Add generated channels',
+    ChannelBuildMode.merge => 'Refresh generated channels',
   };
 
   static String _modeDescription(ChannelBuildMode mode) => switch (mode) {
-    ChannelBuildMode.replace => 'Build only the newly planned channels.',
-    ChannelBuildMode.append => 'Keep existing channels and use free numbers.',
+    ChannelBuildMode.replace =>
+      'Keep custom channels and replace only generated channels.',
+    ChannelBuildMode.append =>
+      'Keep all channels and add generated channels at free numbers.',
     ChannelBuildMode.merge =>
-      'Update matching generated channels and keep the rest.',
+      'Refresh matching generated channels and keep all others.',
   };
 }
 
@@ -1418,10 +1427,16 @@ class _ImpactHero extends StatelessWidget {
                 color: palette.tunedSurface,
               ),
               _ImpactLegendItem(
-                label: 'Remove',
+                label: 'Generated removed',
                 value: impact.remove,
                 icon: Icons.remove_circle_outline,
                 color: Theme.of(context).colorScheme.error,
+              ),
+              _ImpactLegendItem(
+                label: 'Custom kept',
+                value: impact.customKept,
+                icon: Icons.lock_outline,
+                color: palette.secondaryText,
               ),
             ],
           ),
@@ -1448,7 +1463,7 @@ class _ImpactCompositionBar extends StatelessWidget {
         color: palette.tunedSurface,
       ),
       (
-        label: 'Remove',
+        label: 'Generated removed',
         value: impact.remove,
         color: Theme.of(context).colorScheme.error,
       ),
@@ -1728,9 +1743,14 @@ class _BuildProgress extends StatelessWidget {
                           icon: Icons.check_circle_outline,
                         ),
                         _ImpactCard(
-                          label: 'Remove',
+                          label: 'Generated removed',
                           value: impact.remove,
                           icon: Icons.remove_circle_outline,
+                        ),
+                        _ImpactCard(
+                          label: 'Custom kept',
+                          value: impact.customKept,
+                          icon: Icons.lock_outline,
                         ),
                       ],
                     ),

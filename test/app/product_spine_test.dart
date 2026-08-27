@@ -241,6 +241,7 @@ Channel _channel(int number, {required DateTime anchor}) => Channel(
   playbackMode: PlaybackMode.sequential,
   anchor: anchor.subtract(const Duration(minutes: 5)),
   shuffleSeed: number,
+  builderKey: 'generated-$number',
 );
 
 class _ProductPlex extends PlexClient {

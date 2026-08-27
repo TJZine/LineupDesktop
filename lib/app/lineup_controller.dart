@@ -1018,16 +1018,24 @@ class LineupController extends ChangeNotifier {
       final oldCurrentIndex = oldChannels.indexWhere(
         (channel) => channel.id == oldCurrent,
       );
+      if (planned.any((channel) => channel.builderKey == null)) {
+        throw const FormatException(
+          'Generated channel plans require builder ownership',
+        );
+      }
       final next = switch (mode) {
-        ChannelBuildMode.replace => [...planned],
+        ChannelBuildMode.replace => [
+          ...channels.where((channel) => channel.builderKey == null),
+          ...planned,
+        ],
         ChannelBuildMode.append => [...channels, ...planned],
         ChannelBuildMode.merge => [
           ...channels.where(
-            (existing) => !planned.any(
-              (candidate) =>
-                  candidate.builderKey != null &&
-                  candidate.builderKey == existing.builderKey,
-            ),
+            (existing) =>
+                existing.builderKey == null ||
+                !planned.any(
+                  (candidate) => candidate.builderKey == existing.builderKey,
+                ),
           ),
           ...planned,
         ],
