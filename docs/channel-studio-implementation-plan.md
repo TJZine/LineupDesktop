@@ -1023,12 +1023,16 @@ the fixes those proofs require.
 at commit `36fc5c0f2362d4bb25569da4e766aa0da2fadb25` when the canonical full
 golden update also changed the existing
 `channel-setup-review-1280x720.png` and
-`channel-setup-review-1920x1080.png` baselines. Side-by-side failure artifacts
-confirmed that the only differences are the accepted Slice 1 ownership copy
-and counts: replace now names generated channels, identifies generated removals,
-and states that custom channels are kept. Those two historical baselines were
-not refreshed in Slice 1 because goldens were outside that slice's write set.
-Slice 6 is therefore authorized to refresh exactly those two existing Channel
+`channel-setup-review-1920x1080.png` baselines. After the first correction was
+pushed, the full update also exposed the stale
+`channel-setup-complete-1280x720.png` baseline. Side-by-side failure artifacts
+confirmed that the only differences across these images are the accepted Slice
+1 ownership copy/counts and the accepted Slice 3 completion actions: replace
+now names generated channels, identifies generated removals, states that custom
+channels are kept, and completion offers **View lineup** plus **Add a custom
+channel** instead of **Done**. These three historical baselines were not
+refreshed in their owning slices because goldens were outside those write sets.
+Slice 6 is therefore authorized to refresh exactly these three existing Channel
 Setup goldens, after visual inspection, alongside the two new Studio goldens.
 They do not expand the two-image Studio golden set. No other non-Studio golden
 change is authorized, and generated `test/app/failures/` comparison artifacts
@@ -1054,7 +1058,7 @@ investigated, not accepted wholesale.
 **Stop/replan if:** 200 percent text or 800x600 requires hiding Air Check,
 keyboard parity would require drag-only behavior, shared UI changes regress
 other destinations, or a golden differs outside the intended Studio surface
-other than the two exact reviewed Channel Setup baseline corrections authorized
+other than the three exact reviewed Channel Setup baseline corrections authorized
 above.
 
 ## Slice 7 — documentation, full verification, and closeout audit
