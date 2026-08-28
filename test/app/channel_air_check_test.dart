@@ -478,6 +478,58 @@ void main() {
     expect(validity, ChannelAirCheckValidity.unknown);
   });
 
+  testWidgets(
+    'nested retained manual content permits only no-content off-air',
+    (tester) async {
+      final controller = _AirController();
+      addTearDown(controller.dispose);
+      var validity = ChannelAirCheckValidity.valid;
+      final channel = Channel.fromJson({
+        ..._channel(items: [_item('retained')]).toJson(),
+        'source': MixedSource(
+          sources: [
+            ManualSource([_item('retained')]),
+          ],
+        ).toJson(),
+      });
+      expect(
+        hasNonemptyRetainedManualContent(
+          const MixedSource(
+            sources: [ManualSource([]), PlaylistSource('live')],
+          ),
+        ),
+        isFalse,
+      );
+
+      controller.nextFailure = const FormatException(
+        'FormatException: A channel needs content',
+      );
+      await tester.pumpWidget(
+        _airCheck(
+          controller,
+          channel,
+          onValidityChanged: (value) => validity = value,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.textContaining('explicitly off air'), findsOneWidget);
+      expect(validity, ChannelAirCheckValidity.retainedOffAir);
+
+      controller.nextFailure = StateError('synthetic worker failure');
+      await tester.pumpWidget(
+        _airCheck(
+          controller,
+          channel,
+          key: UniqueKey(),
+          onValidityChanged: (value) => validity = value,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.textContaining('could not verify'), findsOneWidget);
+      expect(validity, ChannelAirCheckValidity.unknown);
+    },
+  );
+
   testWidgets('on-now warning is exact and ignores identity-only edits', (
     tester,
   ) async {

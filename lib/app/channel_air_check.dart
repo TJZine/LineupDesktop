@@ -319,13 +319,8 @@ class ChannelAirCheckState extends State<ChannelAirCheck> {
     });
   }
 
-  bool get _retainedOffAir => switch (widget.channel.source) {
-    ManualSource(:final items) => items.isNotEmpty,
-    _ => false,
-  };
-
   bool _canRetainOffAir(Object error) {
-    if (!_retainedOffAir) return false;
+    if (!hasNonemptyRetainedManualContent(widget.channel.source)) return false;
     return _isNoContentError(error);
   }
 

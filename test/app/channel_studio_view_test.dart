@@ -1207,6 +1207,49 @@ void main() {
     expect(controller.saved!.builderKey, isNull);
   });
 
+  testWidgets(
+    'nested retained mixed source permits identity-only off-air save',
+    (tester) async {
+      const source = MixedSource(
+        sources: [
+          ManualSource([
+            ChannelItem(
+              id: 'unavailable',
+              title: 'Unavailable retained program',
+              duration: Duration(minutes: 30),
+            ),
+          ]),
+        ],
+      );
+      final original = _channel(
+        id: 'mixed-off-air',
+        number: 16,
+        name: 'Mixed off air',
+        source: source,
+      );
+      final controller = _RecordingSaveController()..channels = [original];
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(
+        _studio(controller, ChannelStudioMode.editCustom, channel: original),
+      );
+      await tester.pumpAndSettle();
+      expect(find.textContaining('explicitly off air'), findsOneWidget);
+
+      await tester.enterText(
+        find.byKey(const Key('studio-name')),
+        'Mixed off air renamed',
+      );
+      final save = tester.widget<FilledButton>(
+        find.widgetWithText(FilledButton, 'Save changes'),
+      );
+      expect(save.onPressed, isNotNull);
+      save.onPressed!();
+      await tester.pumpAndSettle();
+      expect(controller.saved!.source.toJson(), source.toJson());
+      expect(controller.saved!.name, 'Mixed off air renamed');
+    },
+  );
+
   testWidgets('playlist editor saves the selected live playlist', (
     tester,
   ) async {
@@ -1364,6 +1407,17 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    tester
+        .widget<CheckboxListTile>(find.byKey(const Key('studio-result-item')))
+        .onChanged!(false);
+    await tester.pump();
+    expect(key.currentState!.dirty, isTrue);
+    tester
+        .widget<CheckboxListTile>(find.byKey(const Key('studio-result-item')))
+        .onChanged!(true);
+    await tester.pump();
+    expect(key.currentState!.dirty, isFalse);
+
     controller.availableMedia = [_media('item', title: 'Refreshed title')];
     await tester.enterText(find.byKey(const Key('studio-name')), 'Changed');
     expect(key.currentState!.dirty, isTrue);
@@ -2437,6 +2491,426 @@ void main() {
     );
   });
 
+  testWidgets(
+    'repeated persisted manual IDs keep occurrence focus and snapshots',
+    (tester) async {
+      final studioKey = GlobalKey<ChannelStudioViewState>();
+      const first = ChannelItem(
+        id: 'repeat',
+        title: 'First snapshot',
+        duration: Duration(minutes: 20),
+        summary: 'first metadata',
+      );
+      const second = ChannelItem(
+        id: 'repeat',
+        title: 'Second snapshot',
+        duration: Duration(minutes: 30),
+        summary: 'second metadata',
+      );
+      const third = ChannelItem(
+        id: 'repeat',
+        title: 'Third snapshot',
+        duration: Duration(minutes: 40),
+        summary: 'third metadata',
+      );
+      final original = _channel(
+        id: 'repeated-manual',
+        number: 24,
+        name: 'Repeated manual',
+        source: const ManualSource([first, second, third]),
+      );
+      final controller = _RecordingSaveController()..channels = [original];
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(
+        _studio(
+          controller,
+          ChannelStudioMode.editCustom,
+          channel: original,
+          studioKey: studioKey,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final firstRow = find.byKey(const Key('studio-rundown-repeat'));
+      final secondRow = find.ancestor(
+        of: find.text('Second snapshot'),
+        matching: find.byType(ListTile),
+      );
+      final thirdRow = find.ancestor(
+        of: find.text('Third snapshot'),
+        matching: find.byType(ListTile),
+      );
+      expect(firstRow, findsOneWidget);
+      expect(secondRow, findsOneWidget);
+      expect(thirdRow, findsOneWidget);
+      expect(
+        tester.widget<ListTile>(secondRow).key,
+        isNot(tester.widget<ListTile>(thirdRow).key),
+      );
+      final firstFocus = tester
+          .widget<Focus>(
+            find.ancestor(of: firstRow, matching: find.byType(Focus)).first,
+          )
+          .focusNode!;
+      final thirdFocus = tester
+          .widget<Focus>(
+            find.ancestor(of: thirdRow, matching: find.byType(Focus)).first,
+          )
+          .focusNode!;
+      expect(identical(firstFocus, thirdFocus), isFalse);
+
+      thirdFocus.requestFocus();
+      await tester.pump();
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
+      await tester.pump();
+      expect(FocusManager.instance.primaryFocus, same(thirdFocus));
+      expect(studioKey.currentState!.dirty, isTrue);
+      expect(
+        tester.getTopLeft(thirdRow).dy,
+        lessThan(tester.getTopLeft(secondRow).dy),
+      );
+
+      tester
+          .widget<IconButton>(
+            find.ancestor(
+              of: find.byTooltip(
+                'Remove Second snapshot from channel Repeated manual',
+              ),
+              matching: find.byType(IconButton),
+            ),
+          )
+          .onPressed!();
+      await tester.pump();
+      expect(secondRow, findsNothing);
+      expect(firstRow, findsOneWidget);
+      expect(thirdRow, findsOneWidget);
+      expect(FocusManager.instance.primaryFocus, same(thirdFocus));
+
+      await tester.enterText(
+        find.byKey(const Key('studio-name')),
+        'Repeated manual saved',
+      );
+      await tester.ensureVisible(find.text('Save changes'));
+      await _settleAirCheck(tester);
+      await tester.tap(find.text('Save changes'));
+      await tester.pumpAndSettle();
+      final saved = controller.saved!;
+      final savedItems = (saved.source as ManualSource).items;
+      expect(savedItems.map((item) => item.toJson()), [
+        first.toJson(),
+        third.toJson(),
+      ]);
+
+      controller
+        ..channels = [saved]
+        ..saved = null;
+      await tester.pumpWidget(
+        _studio(controller, ChannelStudioMode.editCustom, channel: saved),
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const Key('studio-name')),
+        'Repeated manual reloaded',
+      );
+      await _settleAirCheck(tester);
+      await tester.tap(find.text('Save changes'));
+      await tester.pumpAndSettle();
+      expect(
+        (controller.saved!.source as ManualSource).items.map(
+          (item) => item.toJson(),
+        ),
+        [first.toJson(), third.toJson()],
+      );
+    },
+  );
+
+  testWidgets(
+    'identical unavailable occurrences expose distinct labels and actions',
+    (tester) async {
+      const item = ChannelItem(
+        id: 'same-id',
+        title: 'Same title',
+        duration: Duration(minutes: 30),
+      );
+      final original = _channel(
+        id: 'same-occurrences',
+        number: 25,
+        name: 'Same occurrences',
+        source: const ManualSource([item, item]),
+      );
+      final controller = _RecordingSaveController()..channels = [original];
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(
+        _studio(controller, ChannelStudioMode.editCustom, channel: original),
+      );
+      await tester.pumpAndSettle();
+
+      final rows = find.descendant(
+        of: find.byKey(const Key('studio-rundown')),
+        matching: find.byType(ListTile),
+      );
+      expect(rows, findsNWidgets(2));
+      final firstRow = rows.at(0);
+      final secondRow = rows.at(1);
+      expect(
+        tester
+            .widget<Semantics>(
+              find
+                  .ancestor(of: firstRow, matching: find.byType(Semantics))
+                  .first,
+            )
+            .properties
+            .label,
+        'Same title, item 1 of 2, unavailable — retained until removed',
+      );
+      expect(
+        tester
+            .widget<Semantics>(
+              find
+                  .ancestor(of: secondRow, matching: find.byType(Semantics))
+                  .first,
+            )
+            .properties
+            .label,
+        'Same title, item 2 of 2, unavailable — retained until removed',
+      );
+      expect(
+        find.text('Unavailable — retained until removed'),
+        findsNWidgets(2),
+      );
+      expect(find.text('1 of 2'), findsOneWidget);
+      expect(find.text('2 of 2'), findsOneWidget);
+      expect(
+        find.byTooltip(
+          'Move Same title, item 1 of 2 later in channel Same occurrences',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.byTooltip(
+          'Remove Same title, item 2 of 2 from channel Same occurrences',
+        ),
+        findsOneWidget,
+      );
+
+      final secondKey = tester.widget<ListTile>(secondRow).key!;
+      final secondFocus = tester
+          .widget<Focus>(
+            find.ancestor(of: secondRow, matching: find.byType(Focus)).first,
+          )
+          .focusNode!;
+      secondFocus.requestFocus();
+      await tester.pump();
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
+      await tester.pump();
+      final movedSecond = find.byKey(secondKey);
+      expect(FocusManager.instance.primaryFocus, same(secondFocus));
+      expect(
+        secondFocus.debugLabel,
+        'Selected program Same title, item 1 of 2',
+      );
+      expect(
+        tester.getTopLeft(movedSecond).dy,
+        lessThan(
+          tester.getTopLeft(find.byKey(const Key('studio-rundown-same-id'))).dy,
+        ),
+      );
+
+      tester
+          .widget<IconButton>(
+            find.descendant(
+              of: movedSecond,
+              matching: find.ancestor(
+                of: find.byTooltip(
+                  'Move Same title, item 1 of 2 later in channel Same occurrences',
+                ),
+                matching: find.byType(IconButton),
+              ),
+            ),
+          )
+          .onPressed!();
+      await tester.pump();
+      expect(FocusManager.instance.primaryFocus, same(secondFocus));
+      expect(
+        tester.getTopLeft(movedSecond).dy,
+        greaterThan(
+          tester.getTopLeft(find.byKey(const Key('studio-rundown-same-id'))).dy,
+        ),
+      );
+    },
+  );
+
+  testWidgets('successful save refreshes every retained occurrence snapshot', (
+    tester,
+  ) async {
+    const stored = ChannelItem(
+      id: 'repeat-refresh',
+      title: 'Stored title',
+      duration: Duration(minutes: 20),
+    );
+    final original = _channel(
+      id: 'refresh-occurrences',
+      number: 26,
+      name: 'Refresh occurrences',
+      source: const ManualSource([stored, stored]),
+    );
+    final controller = _RecordingSaveController()
+      ..channels = [original]
+      ..availableMedia = [
+        _media(
+          'repeat-refresh',
+          title: 'Fresh title',
+          duration: const Duration(minutes: 45),
+        ),
+      ];
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      _studio(controller, ChannelStudioMode.editCustom, channel: original),
+    );
+    await tester.pumpAndSettle();
+    final oldRows = find.descendant(
+      of: find.byKey(const Key('studio-rundown')),
+      matching: find.byType(ListTile),
+    );
+    final occurrenceFocus = tester
+        .widget<Focus>(
+          find.ancestor(of: oldRows.at(1), matching: find.byType(Focus)).first,
+        )
+        .focusNode!;
+
+    await tester.enterText(
+      find.byKey(const Key('studio-name')),
+      'Refresh occurrences saved',
+    );
+    await tester.tap(find.text('Save changes'));
+    await tester.pumpAndSettle();
+    expect(
+      (controller.saved!.source as ManualSource).items.map(
+        (item) => item.title,
+      ),
+      ['Fresh title', 'Fresh title'],
+    );
+
+    controller.availableMedia = [];
+    controller.generation++;
+    controller.saved = null;
+    await tester.enterText(
+      find.byKey(const Key('studio-name')),
+      'Refresh occurrences saved again',
+    );
+    await _settleAirCheck(tester);
+    final newRows = find.descendant(
+      of: find.byKey(const Key('studio-rundown')),
+      matching: find.byType(ListTile),
+    );
+    expect(
+      tester
+          .widget<Focus>(
+            find
+                .ancestor(of: newRows.at(1), matching: find.byType(Focus))
+                .first,
+          )
+          .focusNode,
+      same(occurrenceFocus),
+    );
+    await tester.tap(find.text('Save changes'));
+    await tester.pumpAndSettle();
+    final savedAgain = (controller.saved!.source as ManualSource).items;
+    expect(savedAgain.map((item) => item.title), [
+      'Fresh title',
+      'Fresh title',
+    ]);
+    expect(savedAgain.map((item) => item.duration), [
+      const Duration(minutes: 45),
+      const Duration(minutes: 45),
+    ]);
+  });
+
+  testWidgets('conflict reload retires repeated occurrence focus ownership', (
+    tester,
+  ) async {
+    const oldItem = ChannelItem(
+      id: 'reload-repeat',
+      title: 'Old repeated title',
+      duration: Duration(minutes: 30),
+    );
+    const newItem = ChannelItem(
+      id: 'reload-repeat',
+      title: 'Reloaded repeated title',
+      duration: Duration(minutes: 40),
+    );
+    final original = _channel(
+      id: 'reload-occurrences',
+      number: 27,
+      name: 'Reload occurrences',
+      source: const ManualSource([oldItem, oldItem]),
+    );
+    final external = _channel(
+      id: original.id,
+      number: original.number,
+      name: 'External occurrences',
+      source: const ManualSource([newItem, newItem]),
+    );
+    final controller = _ExpectedBaseController()..channels = [original];
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      _studio(controller, ChannelStudioMode.editCustom, channel: original),
+    );
+    await tester.pumpAndSettle();
+    final oldRows = find.descendant(
+      of: find.byKey(const Key('studio-rundown')),
+      matching: find.byType(ListTile),
+    );
+    final oldFirst = tester
+        .widget<Focus>(
+          find.ancestor(of: oldRows.at(0), matching: find.byType(Focus)).first,
+        )
+        .focusNode!;
+    final oldSecond = tester
+        .widget<Focus>(
+          find.ancestor(of: oldRows.at(1), matching: find.byType(Focus)).first,
+        )
+        .focusNode!;
+
+    controller.channels = [external];
+    await tester.enterText(find.byKey(const Key('studio-name')), 'My conflict');
+    await _settleAirCheck(tester);
+    await tester.tap(find.text('Save changes'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Reload channel'));
+    await tester.tap(find.text('Reload channel'));
+    await tester.pump();
+    expect(() => oldFirst.addListener(() {}), throwsFlutterError);
+    expect(() => oldSecond.addListener(() {}), throwsFlutterError);
+
+    final newRows = find.descendant(
+      of: find.byKey(const Key('studio-rundown')),
+      matching: find.byType(ListTile),
+    );
+    expect(newRows, findsNWidgets(2));
+    final newFirst = tester
+        .widget<Focus>(
+          find.ancestor(of: newRows.at(0), matching: find.byType(Focus)).first,
+        )
+        .focusNode!;
+    final newSecond = tester
+        .widget<Focus>(
+          find.ancestor(of: newRows.at(1), matching: find.byType(Focus)).first,
+        )
+        .focusNode!;
+    expect(identical(newFirst, newSecond), isFalse);
+    newFirst.requestFocus();
+    await tester.pump();
+    expect(FocusManager.instance.primaryFocus, same(newFirst));
+    newSecond.requestFocus();
+    await tester.pump();
+    expect(FocusManager.instance.primaryFocus, same(newSecond));
+  });
+
   testWidgets('new preview anchor and seed persist exactly through reload', (
     tester,
   ) async {
@@ -3431,6 +3905,7 @@ Widget _studio(
   FixtureController controller,
   ChannelStudioMode mode, {
   Channel? channel,
+  Key? studioKey,
   DateTime Function()? clock,
   TextScaler? textScaler,
   ThemeData? theme,
@@ -3444,7 +3919,7 @@ Widget _studio(
   ),
   home: Scaffold(
     body: ChannelStudioView(
-      key: UniqueKey(),
+      key: studioKey ?? UniqueKey(),
       controller: controller,
       mode: mode,
       channel: channel,

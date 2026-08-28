@@ -20,6 +20,18 @@ enum ChannelStudioMode {
 
 enum _SourceChoice { library, playlist, filter, handPicked }
 
+class _ManualEntry {
+  _ManualEntry({
+    required this.id,
+    required this.item,
+    required this.occurrence,
+  });
+
+  final String id;
+  ChannelItem item;
+  final int occurrence;
+}
+
 const _facetKeys = [
   'collection',
   'genre',
@@ -93,8 +105,8 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
   late bool _generated;
   late bool _sourceReadOnly;
   _SourceChoice? _sourceChoice;
-  late List<String> _manualIds;
-  late Map<String, ChannelItem> _retainedManualItems;
+  late List<_ManualEntry> _manualEntries;
+  final _manualKeyCounts = <String, int>{};
   late String? _libraryId;
   late bool _includeWatched;
   late bool _filterIncludeWatched;
@@ -104,7 +116,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
   String? _manualLibraryId;
   String? _manualMediaType;
   final _manualFilters = <String, String>{};
-  final _rundownFocus = <String, FocusNode>{};
+  final _rundownFocus = <_ManualEntry, FocusNode>{};
   Timer? _countAnnouncementTimer;
   String _settledCountLabel = '';
   late Map<String, Object?> _baselineDraftSignature;
@@ -187,13 +199,19 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
       ManualSource() => _SourceChoice.handPicked,
       MixedSource() => null,
     };
-    _manualIds = switch (source) {
-      ManualSource(:final items) => items.map((item) => item.id).toList(),
-      _ => <String>[],
-    };
-    _retainedManualItems = switch (source) {
-      ManualSource(:final items) => {for (final item in items) item.id: item},
-      _ => <String, ChannelItem>{},
+    final replacedFocus = _rundownFocus.values.toList(growable: false);
+    _rundownFocus.clear();
+    if (replacedFocus.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        for (final focus in replacedFocus) {
+          focus.dispose();
+        }
+      });
+    }
+    _manualKeyCounts.clear();
+    _manualEntries = switch (source) {
+      ManualSource(:final items) => items.map(_newManualEntry).toList(),
+      _ => <_ManualEntry>[],
     };
     _libraryId = switch (source) {
       LibrarySource(:final libraryId) => libraryId,
@@ -300,12 +318,25 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
       'includeWatched': _filterIncludeWatched,
       'filters': Map<String, String>.of(_filters),
     },
-    _SourceChoice.handPicked => {
-      'type': 'manual',
-      'ids': List<String>.of(_manualIds),
-    },
+    _SourceChoice.handPicked => _manualDraftSignature,
     null => _source.toJson(),
   };
+
+  Map<String, Object?> get _manualDraftSignature {
+    final counts = <String, int>{};
+    for (final entry in _manualEntries) {
+      counts.update(entry.id, (count) => count + 1, ifAbsent: () => 1);
+    }
+    return {
+      'type': 'manual',
+      'items': [
+        for (final entry in _manualEntries)
+          counts[entry.id] == 1
+              ? entry.id
+              : {'id': entry.id, 'snapshot': entry.item.toJson()},
+      ],
+    };
+  }
 
   void _filterChanged([VoidCallback? change]) {
     _changed(change);
@@ -745,13 +776,9 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
       search: _search.text,
     );
     final shown = visible.take(_resultWindow).toList(growable: false);
-    final selectedIds = _manualIds.toSet();
-    final unavailable = _manualIds
-        .where((id) => !inventoryById.containsKey(id))
-        .toSet();
+    final selectedIds = _manualEntries.map((entry) => entry.id).toSet();
     final countLabel =
-        '${visible.length} matching, ${_manualIds.length} selected';
-    _pruneRundownFocus();
+        '${visible.length} matching, ${_manualEntries.length} selected';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -873,16 +900,16 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
           'Selected programming',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
-        if (_manualIds.isEmpty) const Text('No programs selected.'),
+        if (_manualEntries.isEmpty) const Text('No programs selected.'),
         SizedBox(
-          height: _manualIds.isEmpty ? 0 : 240,
+          height: _manualEntries.isEmpty ? 0 : 240,
           child: ListView.builder(
             key: const Key('studio-rundown'),
-            itemCount: _manualIds.length,
+            itemCount: _manualEntries.length,
             itemBuilder: (context, index) => _rundownRow(
-              _manualIds[index],
+              _manualEntries[index],
               index,
-              unavailable.contains(_manualIds[index]),
+              !inventoryById.containsKey(_manualEntries[index].id),
               inventoryById,
             ),
           ),
@@ -892,14 +919,12 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
   }
 
   void _toggleManual(String id, bool selected) => _changed(() {
-    if (selected && !_manualIds.contains(id)) {
-      _manualIds.add(id);
+    if (selected && !_manualEntries.any((entry) => entry.id == id)) {
       if (_inventoryById[id] case final item?) {
-        _retainedManualItems[id] = channelItemFor(item);
+        _manualEntries.add(_newManualEntry(channelItemFor(item)));
       }
     } else if (!selected) {
-      _manualIds.remove(id);
-      _retainedManualItems.remove(id);
+      _removeManualEntriesWhere((entry) => entry.id == id);
     }
     _settledCountLabel = '';
     _scheduleCountAnnouncement();
@@ -1120,16 +1145,15 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
   );
 
   String get _countLabel =>
-      '${_manualMatches.length} matching, ${_manualIds.length} selected';
+      '${_manualMatches.length} matching, ${_manualEntries.length} selected';
 
   List<PlexMediaItem> get _renderedManualMatches =>
       _manualMatches.take(_resultWindow).toList(growable: false);
 
   void _selectVisible() => _changed(() {
     for (final item in _renderedManualMatches) {
-      if (!_manualIds.contains(item.id)) {
-        _manualIds.add(item.id);
-        _retainedManualItems[item.id] = channelItemFor(item);
+      if (!_manualEntries.any((entry) => entry.id == item.id)) {
+        _manualEntries.add(_newManualEntry(channelItemFor(item)));
       }
     }
     _settledCountLabel = '';
@@ -1139,118 +1163,161 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
   void _clearVisible() {
     final visibleIds = _renderedManualMatches.map((item) => item.id).toSet();
     _changed(() {
-      _manualIds.removeWhere(visibleIds.contains);
-      _retainedManualItems.removeWhere((id, _) => visibleIds.contains(id));
+      _removeManualEntriesWhere((entry) => visibleIds.contains(entry.id));
       _settledCountLabel = '';
       _scheduleCountAnnouncement();
     });
   }
 
   Widget _rundownRow(
-    String id,
+    _ManualEntry entry,
     int index,
     bool unavailable,
     Map<String, PlexMediaItem> inventoryById,
   ) {
-    final current = inventoryById[id];
-    final retained = _retainedManualItems[id];
-    final title = current?.title ?? retained?.title ?? id;
+    final title = _manualEntryTitle(entry, inventoryById);
+    final repeatedTitle =
+        _manualEntries
+            .where(
+              (candidate) =>
+                  _manualEntryTitle(candidate, inventoryById) == title,
+            )
+            .length >
+        1;
+    final positionedTitle = repeatedTitle
+        ? '$title, item ${index + 1} of ${_manualEntries.length}'
+        : title;
     final focus = _rundownFocus.putIfAbsent(
-      id,
-      () => FocusNode(debugLabel: 'Selected program $title'),
+      entry,
+      () => FocusNode(debugLabel: 'Selected program $positionedTitle'),
+    );
+    focus.debugLabel = 'Selected program $positionedTitle';
+    final tile = ListTile(
+      key: entry.occurrence == 1
+          ? Key('studio-rundown-${entry.id}')
+          : ObjectKey(entry),
+      title: Text(title),
+      subtitle: unavailable
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Unavailable — retained until removed'),
+                Text('${index + 1} of ${_manualEntries.length}'),
+              ],
+            )
+          : Text('${index + 1} of ${_manualEntries.length}'),
+      trailing: Wrap(
+        spacing: 4,
+        children: [
+          IconButton(
+            tooltip: 'Move $positionedTitle earlier in $_draftChannelLabel',
+            onPressed: _saving || index == 0
+                ? null
+                : () => _moveManual(entry, -1),
+            icon: const Icon(Icons.arrow_upward),
+          ),
+          IconButton(
+            tooltip: 'Move $positionedTitle later in $_draftChannelLabel',
+            onPressed: _saving || index == _manualEntries.length - 1
+                ? null
+                : () => _moveManual(entry, 1),
+            icon: const Icon(Icons.arrow_downward),
+          ),
+          IconButton(
+            tooltip: 'Remove $positionedTitle from $_draftChannelLabel',
+            onPressed: _saving ? null : () => _removeManual(entry),
+            icon: const Icon(Icons.delete_outline),
+          ),
+        ],
+      ),
     );
     return CallbackShortcuts(
       bindings: {
         const SingleActivator(LogicalKeyboardKey.arrowUp, alt: true): () =>
-            _moveManual(id, -1),
+            _moveManual(entry, -1),
         const SingleActivator(LogicalKeyboardKey.arrowDown, alt: true): () =>
-            _moveManual(id, 1),
+            _moveManual(entry, 1),
         const SingleActivator(LogicalKeyboardKey.delete): () =>
-            _removeManual(id),
+            _removeManual(entry),
       },
       child: Focus(
         focusNode: focus,
-        child: ListTile(
-          key: Key('studio-rundown-$id'),
-          title: Text(title),
-          subtitle: unavailable
-              ? const Text('Unavailable — retained until removed')
-              : Text('${index + 1} of ${_manualIds.length}'),
-          trailing: Wrap(
-            spacing: 4,
-            children: [
-              IconButton(
-                tooltip: 'Move $title earlier in $_draftChannelLabel',
-                onPressed: _saving || index == 0
-                    ? null
-                    : () => _moveManual(id, -1),
-                icon: const Icon(Icons.arrow_upward),
-              ),
-              IconButton(
-                tooltip: 'Move $title later in $_draftChannelLabel',
-                onPressed: _saving || index == _manualIds.length - 1
-                    ? null
-                    : () => _moveManual(id, 1),
-                icon: const Icon(Icons.arrow_downward),
-              ),
-              IconButton(
-                tooltip: 'Remove $title from $_draftChannelLabel',
-                onPressed: _saving ? null : () => _removeManual(id),
-                icon: const Icon(Icons.delete_outline),
-              ),
-            ],
-          ),
-        ),
+        child: repeatedTitle
+            ? Semantics(
+                container: true,
+                label:
+                    '$positionedTitle${unavailable ? ', unavailable — retained until removed' : ''}',
+                child: tile,
+              )
+            : tile,
       ),
     );
   }
+
+  String _manualEntryTitle(
+    _ManualEntry entry,
+    Map<String, PlexMediaItem> inventoryById,
+  ) => inventoryById[entry.id]?.title ?? entry.item.title;
 
   String get _draftChannelLabel => _name.text.trim().isEmpty
       ? 'new channel'
       : 'channel ${_name.text.trim()}';
 
-  void _moveManual(String id, int delta) {
+  void _moveManual(_ManualEntry entry, int delta) {
     if (_saving) return;
-    final from = _manualIds.indexOf(id);
+    final from = _manualEntries.indexOf(entry);
     final to = from + delta;
-    if (from < 0 || to < 0 || to >= _manualIds.length) return;
+    if (from < 0 || to < 0 || to >= _manualEntries.length) return;
     _changed(() {
-      _manualIds.removeAt(from);
-      _manualIds.insert(to, id);
+      _manualEntries.removeAt(from);
+      _manualEntries.insert(to, entry);
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _rundownFocus[id]?.requestFocus();
+      if (mounted) _rundownFocus[entry]?.requestFocus();
     });
   }
 
-  void _removeManual(String id) {
+  void _removeManual(_ManualEntry entry) {
     if (_saving) return;
-    final index = _manualIds.indexOf(id);
+    final index = _manualEntries.indexOf(entry);
     if (index < 0) return;
     _changed(() {
-      _manualIds.removeAt(index);
-      _retainedManualItems.remove(id);
+      _manualEntries.removeAt(index);
     });
-    final nextId = _manualIds.isEmpty
+    final nextEntry = _manualEntries.isEmpty
         ? null
-        : _manualIds[index.clamp(0, _manualIds.length - 1)];
+        : _manualEntries[index.clamp(0, _manualEntries.length - 1)];
+    final removedFocus = _rundownFocus.remove(entry);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      if (nextId == null) {
-        _searchFocus.requestFocus();
-      } else {
-        _rundownFocus[nextId]?.requestFocus();
+      if (mounted) {
+        if (nextEntry == null) {
+          _searchFocus.requestFocus();
+        } else {
+          _rundownFocus[nextEntry]?.requestFocus();
+        }
       }
+      removedFocus?.dispose();
     });
   }
 
-  void _pruneRundownFocus() {
-    final removed = _rundownFocus.keys
-        .where((id) => !_manualIds.contains(id))
+  _ManualEntry _newManualEntry(ChannelItem item) {
+    final count = (_manualKeyCounts[item.id] ?? 0) + 1;
+    _manualKeyCounts[item.id] = count;
+    return _ManualEntry(id: item.id, item: item, occurrence: count);
+  }
+
+  void _removeManualEntriesWhere(bool Function(_ManualEntry) test) {
+    final removed = _manualEntries.where(test).toList(growable: false);
+    _manualEntries.removeWhere(test);
+    final removedFocus = removed
+        .map(_rundownFocus.remove)
+        .nonNulls
         .toList(growable: false);
-    for (final id in removed) {
-      _rundownFocus.remove(id)?.dispose();
-    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      for (final focus in removedFocus) {
+        focus.dispose();
+      }
+    });
   }
 
   Widget _stationCard() => LineupSection(
@@ -1428,12 +1495,11 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
 
   List<ChannelItem> _manualItems() {
     final available = _inventoryById;
-    return _manualIds
-        .map((id) {
-          final item = available[id];
-          return item == null ? _retainedManualItems[id] : channelItemFor(item);
+    return _manualEntries
+        .map((entry) {
+          final item = available[entry.id];
+          return item == null ? entry.item : channelItemFor(item);
         })
-        .nonNulls
         .toList(growable: false);
   }
 
@@ -1497,7 +1563,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
       case ManualSource(:final items):
         if (items.isEmpty) return 'Select at least one program.';
       case MixedSource():
-        if (resolved.isEmpty && !_hasRetainedContent(source)) {
+        if (resolved.isEmpty && !hasNonemptyRetainedManualContent(source)) {
           return 'This preserved mixed source has no currently playable programs. Choose a replacement source.';
         }
       case LibrarySource() || PlaylistSource():
@@ -1552,12 +1618,6 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     }
     return null;
   }
-
-  bool _hasRetainedContent(ContentSource source) => switch (source) {
-    ManualSource(:final items) => items.isNotEmpty,
-    MixedSource(:final sources) => sources.any(_hasRetainedContent),
-    LibrarySource() || PlaylistSource() => false,
-  };
 
   Channel _draft() => Channel(
     id: _id,
@@ -1667,6 +1727,12 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
       );
       if (!mounted) return;
       setState(() {
+        if (draft.source case ManualSource(:final items)
+            when items.length == _manualEntries.length) {
+          for (var index = 0; index < items.length; index++) {
+            _manualEntries[index].item = items[index];
+          }
+        }
         _expectedBase = draft;
         _source = draft.source;
         _dirty = false;

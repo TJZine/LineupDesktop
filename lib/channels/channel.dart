@@ -124,6 +124,12 @@ class MixedSource extends ContentSource {
   };
 }
 
+bool hasNonemptyRetainedManualContent(ContentSource source) => switch (source) {
+  ManualSource(:final items) => items.isNotEmpty,
+  MixedSource(:final sources) => sources.any(hasNonemptyRetainedManualContent),
+  LibrarySource() || PlaylistSource() => false,
+};
+
 class ChannelItem {
   const ChannelItem({
     required this.id,
