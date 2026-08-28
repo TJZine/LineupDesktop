@@ -67,6 +67,17 @@ List<ChannelItem> _manual(
   List<PlexMediaItem> media,
   List<PlexPlaylist> playlists,
 ) {
+  final current = playableMediaById(media, playlists);
+  return [
+    for (final item in stored)
+      if (current[item.id] case final available?) channelItemFor(available),
+  ];
+}
+
+Map<String, PlexMediaItem> playableMediaById(
+  List<PlexMediaItem> media, [
+  List<PlexPlaylist> playlists = const [],
+]) {
   final current = <String, PlexMediaItem>{};
   for (final item in media) {
     if (item.isPlayable) current.putIfAbsent(item.id, () => item);
@@ -76,10 +87,7 @@ List<ChannelItem> _manual(
       if (item.isPlayable) current.putIfAbsent(item.id, () => item);
     }
   }
-  return [
-    for (final item in stored)
-      if (current[item.id] case final available?) channelItemFor(available),
-  ];
+  return Map.unmodifiable(current);
 }
 
 ChannelItem channelItemFor(PlexMediaItem item) => ChannelItem(

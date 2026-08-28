@@ -153,6 +153,57 @@ void main() {
     expect(retained.toJson(), before);
   });
 
+  test('playable media IDs keep media-first then playlist item order', () {
+    final mediaWinner = media.first;
+    final firstPlaylistWinner = PlexMediaItem(
+      id: 'playlist-only',
+      title: 'First playlist winner',
+      type: 'movie',
+      duration: const Duration(minutes: 1),
+      parts: [PlexMediaPart(path: '/playlist-first')],
+    );
+    final projection = playableMediaById(media, [
+      PlexPlaylist(
+        id: 'first',
+        title: 'First',
+        items: [
+          PlexMediaItem(
+            id: mediaWinner.id,
+            title: 'Playlist duplicate',
+            type: 'movie',
+            duration: const Duration(minutes: 1),
+            parts: [PlexMediaPart(path: '/duplicate')],
+          ),
+          firstPlaylistWinner,
+        ],
+      ),
+      PlexPlaylist(
+        id: 'second',
+        title: 'Second',
+        items: [
+          PlexMediaItem(
+            id: firstPlaylistWinner.id,
+            title: 'Later playlist duplicate',
+            type: 'movie',
+            duration: const Duration(minutes: 1),
+            parts: [PlexMediaPart(path: '/playlist-later')],
+          ),
+          const PlexMediaItem(
+            id: 'unplayable',
+            title: 'Unplayable',
+            type: 'movie',
+            duration: Duration(minutes: 1),
+          ),
+        ],
+      ),
+    ]);
+
+    expect(projection.keys, ['a', 'b', 'c', 'playlist-only']);
+    expect(projection['a'], same(mediaWinner));
+    expect(projection['playlist-only'], same(firstPlaylistWinner));
+    expect(() => projection['new'] = mediaWinner, throwsUnsupportedError);
+  });
+
   test('mixed interleave is stable for uneven sources', () {
     final source = MixedSource(
       interleave: true,

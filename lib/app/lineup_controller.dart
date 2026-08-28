@@ -153,6 +153,7 @@ class LineupController extends ChangeNotifier {
   List<PlexPlaylist>? _playableSourcePlaylists;
   List<PlexMediaItem> _playableMedia = const [];
   List<PlexPlaylist> _playablePlaylists = const [];
+  Map<String, PlexMediaItem> _playableById = const {};
   final ScheduleWorkerFactory _scheduleWorkerFactory;
   Future<void> _credentialOperations = Future.value();
   Future<void> _stateOperations = Future.value();
@@ -164,10 +165,18 @@ class LineupController extends ChangeNotifier {
 
   int get contentGeneration => _contentGeneration;
 
-  ({List<PlexMediaItem> media, List<PlexPlaylist> playlists})
+  ({
+    List<PlexMediaItem> media,
+    List<PlexPlaylist> playlists,
+    Map<String, PlexMediaItem> byId,
+  })
   get playableInventory {
     _ensurePlayableInventory();
-    return (media: _playableMedia, playlists: _playablePlaylists);
+    return (
+      media: _playableMedia,
+      playlists: _playablePlaylists,
+      byId: _playableById,
+    );
   }
 
   Map<String, LibraryScanFact> get libraryScanFacts => _libraryScanFacts;
@@ -1194,15 +1203,7 @@ class LineupController extends ChangeNotifier {
 
   PlexMediaItem? _playbackItem(String itemId) {
     _ensurePlayableInventory();
-    for (final item in _playableMedia) {
-      if (item.id == itemId) return item;
-    }
-    for (final playlist in _playablePlaylists) {
-      for (final item in playlist.items) {
-        if (item.id == itemId) return item;
-      }
-    }
-    return null;
+    return _playableById[itemId];
   }
 
   void _ensurePlayableInventory() {
@@ -1217,6 +1218,7 @@ class LineupController extends ChangeNotifier {
       const nextPlaylists = <PlexPlaylist>[];
       _playableMedia = nextMedia;
       _playablePlaylists = nextPlaylists;
+      _playableById = const {};
       _playableSourceMedia = availableMedia;
       _playableSourcePlaylists = availablePlaylists;
       _playableEndpoint = endpoint;
@@ -1243,8 +1245,10 @@ class LineupController extends ChangeNotifier {
           items: List.unmodifiable(playlist.items.where(eligible)),
         ),
     ]);
+    final nextById = playableMediaById(nextMedia, nextPlaylists);
     _playableMedia = nextMedia;
     _playablePlaylists = nextPlaylists;
+    _playableById = nextById;
     _playableSourceMedia = availableMedia;
     _playableSourcePlaylists = availablePlaylists;
     _playableEndpoint = endpoint;

@@ -2337,6 +2337,99 @@ void main() {
     expect(item.title, 'Fresh title');
   });
 
+  testWidgets(
+    'rendered callbacks refresh inventory before selection and save',
+    (tester) async {
+      final selectionController = FixtureController()
+        ..availableMedia = [_media('candidate-a', title: 'Candidate A')];
+      addTearDown(selectionController.dispose);
+      await tester.pumpWidget(
+        _studio(selectionController, ChannelStudioMode.createCustom),
+      );
+      await tester.pumpAndSettle();
+      final renderedSelection = tester
+          .widget<CheckboxListTile>(
+            find.byKey(const Key('studio-result-candidate-a')),
+          )
+          .onChanged!;
+      final renderedSelectVisible = tester
+          .widget<TextButton>(find.widgetWithText(TextButton, 'Select visible'))
+          .onPressed!;
+
+      selectionController
+        ..connection = PlexConnection(
+          uri: Uri.parse('https://replacement.invalid'),
+          local: true,
+          relay: false,
+        )
+        ..availableMedia = [_media('candidate-b', title: 'Candidate B')]
+        ..notifyListeners();
+      renderedSelection(true);
+      renderedSelectVisible();
+      await tester.pump();
+
+      expect(find.text('1 matching, 0 selected'), findsOneWidget);
+      expect(find.byKey(const Key('studio-result-candidate-a')), findsNothing);
+      expect(
+        find.byKey(const Key('studio-result-candidate-b')),
+        findsOneWidget,
+      );
+
+      const retained = ChannelItem(
+        id: 'retained',
+        title: 'Retained snapshot',
+        duration: Duration(minutes: 30),
+      );
+      final original = _channel(
+        id: 'save-refresh',
+        number: 47,
+        name: 'Save refresh',
+        source: const ManualSource([retained]),
+      );
+      final saveController = _RealSaveController()
+        ..channels = [original]
+        ..availableMedia = [_media('retained', title: 'Stale projection')];
+      addTearDown(saveController.dispose);
+      await tester.pumpWidget(
+        _studio(
+          saveController,
+          ChannelStudioMode.editCustom,
+          channel: original,
+          studioKey: const ValueKey('save-refresh-studio'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const Key('studio-name')),
+        'Save refresh changed',
+      );
+      await _settleAirCheck(tester);
+      final renderedSave = tester
+          .widget<FilledButton>(
+            find.widgetWithText(FilledButton, 'Save changes'),
+          )
+          .onPressed!;
+
+      saveController
+        ..connection = PlexConnection(
+          uri: Uri.parse('https://empty.invalid'),
+          local: true,
+          relay: false,
+        )
+        ..availableMedia = const []
+        ..notifyListeners();
+      renderedSave();
+      await tester.pumpAndSettle();
+
+      final saved = saveController.channels.single;
+      expect(saved.name, 'Save refresh changed');
+      expect(
+        (saved.source as ManualSource).items.single.toJson(),
+        retained.toJson(),
+      );
+    },
+  );
+
   testWidgets('duplicate IDs render once and save media-first metadata', (
     tester,
   ) async {
@@ -3043,7 +3136,20 @@ void main() {
 
       expect(find.text('1199 matching, 1200 selected'), findsOneWidget);
       expect(find.text('Unavailable — retained until removed'), findsOneWidget);
-      expect(controller.playableInventoryReads, lessThan(30));
+      expect(controller.playableInventoryReads, lessThanOrEqualTo(4));
+
+      final readsBeforeSearch = controller.playableInventoryReads;
+      await tester.enterText(find.byKey(const Key('studio-search')), '1198');
+      await tester.pump();
+      expect(
+        controller.playableInventoryReads - readsBeforeSearch,
+        lessThanOrEqualTo(2),
+      );
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(
+        controller.playableInventoryReads - readsBeforeSearch,
+        lessThanOrEqualTo(3),
+      );
 
       await tester.ensureVisible(find.byKey(const Key('studio-rundown')));
       await tester.pump();
@@ -4073,11 +4179,21 @@ class _RecordingSaveController extends FixtureController {
   }
 }
 
+class _RealSaveController extends FixtureController {
+  @override
+  Future<ScheduleIndex> loadScheduleFor(Channel channel) async =>
+      _testSchedule(channel, this);
+}
+
 class _CountingInventoryController extends _RecordingSaveController {
   int playableInventoryReads = 0;
 
   @override
-  ({List<PlexMediaItem> media, List<PlexPlaylist> playlists})
+  ({
+    List<PlexMediaItem> media,
+    List<PlexPlaylist> playlists,
+    Map<String, PlexMediaItem> byId,
+  })
   get playableInventory {
     playableInventoryReads++;
     return super.playableInventory;

@@ -128,6 +128,12 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
   String? _success;
   ChannelAirCheckValidity _airCheckValidity = ChannelAirCheckValidity.unknown;
   bool _scheduleIdentityCommitted = false;
+  late ({
+    List<PlexMediaItem> media,
+    List<PlexPlaylist> playlists,
+    Map<String, PlexMediaItem> byId,
+  })
+  _playableInventory;
 
   bool get saving => _saving;
   bool get dirty => _dirty;
@@ -142,6 +148,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
   }
 
   void _loadInitial() {
+    _refreshPlayableInventory();
     final original = widget.channel;
     _expectedBase = switch (widget.mode) {
       ChannelStudioMode.editCustom ||
@@ -229,7 +236,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     };
     _playlistId = switch (source) {
       PlaylistSource(:final playlistId) => playlistId,
-      _ => widget.controller.playableInventory.playlists.firstOrNull?.id,
+      _ => _playableInventory.playlists.firstOrNull?.id,
     };
     _filterLibraryId = switch (source) {
       LibrarySource(:final libraryId, :final filters) when filters.isNotEmpty =>
@@ -361,6 +368,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
 
   @override
   Widget build(BuildContext context) {
+    _refreshPlayableInventory();
     final noNumber = _lowestFreeNumber() == null && _number.text.trim().isEmpty;
     final saved = !_dirty && _expectedBase != null;
     final number = int.tryParse(_number.text);
@@ -678,7 +686,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
   );
 
   Widget _playlistEditor() {
-    final available = widget.controller.playableInventory.playlists;
+    final available = _playableInventory.playlists;
     final selected = available.any((playlist) => playlist.id == _playlistId);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -768,8 +776,8 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
   }
 
   Widget _manualEditor() {
-    final inventory = _inventory;
-    final inventoryById = {for (final item in inventory) item.id: item};
+    final inventory = _playableInventory.byId.values;
+    final inventoryById = _playableInventory.byId;
     final facets = _facetOptions(_manualLibraryId, inventory: inventory);
     final visible = _filteredInventory(
       inventory: inventory,
@@ -861,14 +869,14 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                   _saving ||
                       !shown.any((item) => !selectedIds.contains(item.id))
                   ? null
-                  : _selectVisible,
+                  : () => _selectVisible(shown),
               child: const Text('Select visible'),
             ),
             TextButton(
               onPressed:
                   _saving || !shown.any((item) => selectedIds.contains(item.id))
                   ? null
-                  : _clearVisible,
+                  : () => _clearVisible(shown),
               child: const Text('Clear visible'),
             ),
           ],
@@ -921,35 +929,24 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     );
   }
 
-  void _toggleManual(String id, bool selected) => _changed(() {
-    if (selected && !_manualEntries.any((entry) => entry.id == id)) {
-      if (_inventoryById[id] case final item?) {
-        _manualEntries.add(_newManualEntry(channelItemFor(item)));
+  void _toggleManual(String id, bool selected) {
+    _refreshPlayableInventory();
+    _changed(() {
+      if (selected && !_manualEntries.any((entry) => entry.id == id)) {
+        if (_playableInventory.byId[id] case final item?) {
+          _manualEntries.add(_newManualEntry(channelItemFor(item)));
+        }
+      } else if (!selected) {
+        _removeManualEntriesWhere((entry) => entry.id == id);
       }
-    } else if (!selected) {
-      _removeManualEntriesWhere((entry) => entry.id == id);
-    }
-    _settledCountLabel = '';
-    _scheduleCountAnnouncement();
-  });
-
-  List<PlexMediaItem> get _inventory {
-    final playable = widget.controller.playableInventory;
-    final byId = <String, PlexMediaItem>{};
-    for (final item in playable.media) {
-      byId.putIfAbsent(item.id, () => item);
-    }
-    for (final playlist in playable.playlists) {
-      for (final item in playlist.items) {
-        byId.putIfAbsent(item.id, () => item);
-      }
-    }
-    return byId.values.toList(growable: false);
+      _settledCountLabel = '';
+      _scheduleCountAnnouncement();
+    });
   }
 
-  Map<String, PlexMediaItem> get _inventoryById => {
-    for (final item in _inventory) item.id: item,
-  };
+  void _refreshPlayableInventory() {
+    _playableInventory = widget.controller.playableInventory;
+  }
 
   List<PlexLibrary> get _selectedLibraries => widget.controller.libraries
       .where(
@@ -994,7 +991,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
         ],
       );
     }
-    if (!(hasInventory ?? _inventory.isNotEmpty)) {
+    if (!(hasInventory ?? _playableInventory.byId.isNotEmpty)) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1070,10 +1067,10 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
 
   Map<String, List<String>> _facetOptions(
     String? libraryId, {
-    List<PlexMediaItem>? inventory,
+    Iterable<PlexMediaItem>? inventory,
   }) {
     final values = {for (final key in _facetKeys) key: <String>{}};
-    for (final item in (inventory ?? _inventory).where(
+    for (final item in (inventory ?? _playableInventory.byId.values).where(
       (item) => libraryId == null || item.libraryId == libraryId,
     )) {
       values['collection']!.addAll(item.collections);
@@ -1094,7 +1091,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
   }
 
   List<PlexMediaItem> _filteredInventory({
-    List<PlexMediaItem>? inventory,
+    Iterable<PlexMediaItem>? inventory,
     String? libraryId,
     String? mediaType,
     Map<String, String> filters = const {},
@@ -1102,7 +1099,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     bool includeWatched = true,
   }) {
     final query = search.trim().toLowerCase();
-    var items = (inventory ?? _inventory).where(
+    var items = (inventory ?? _playableInventory.byId.values).where(
       (item) =>
           (libraryId == null || item.libraryId == libraryId) &&
           (includeWatched || !item.viewed) &&
@@ -1150,21 +1147,22 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
   String get _countLabel =>
       '${_manualMatches.length} matching, ${_manualEntries.length} selected';
 
-  List<PlexMediaItem> get _renderedManualMatches =>
-      _manualMatches.take(_resultWindow).toList(growable: false);
-
-  void _selectVisible() => _changed(() {
-    for (final item in _renderedManualMatches) {
-      if (!_manualEntries.any((entry) => entry.id == item.id)) {
-        _manualEntries.add(_newManualEntry(channelItemFor(item)));
+  void _selectVisible(List<PlexMediaItem> rendered) {
+    _refreshPlayableInventory();
+    _changed(() {
+      for (final renderedItem in rendered) {
+        if (_playableInventory.byId[renderedItem.id] case final current?
+            when !_manualEntries.any((entry) => entry.id == current.id)) {
+          _manualEntries.add(_newManualEntry(channelItemFor(current)));
+        }
       }
-    }
-    _settledCountLabel = '';
-    _scheduleCountAnnouncement();
-  });
+      _settledCountLabel = '';
+      _scheduleCountAnnouncement();
+    });
+  }
 
-  void _clearVisible() {
-    final visibleIds = _renderedManualMatches.map((item) => item.id).toSet();
+  void _clearVisible(List<PlexMediaItem> rendered) {
+    final visibleIds = rendered.map((item) => item.id).toSet();
     _changed(() {
       _removeManualEntriesWhere((entry) => visibleIds.contains(entry.id));
       _settledCountLabel = '';
@@ -1497,7 +1495,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
   }
 
   List<ChannelItem> _manualItems() {
-    final available = _inventoryById;
+    final available = _playableInventory.byId;
     return _manualEntries
         .map((entry) {
           final item = available[entry.id];
@@ -1528,8 +1526,8 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     try {
       return resolveContent(
         _editedSource(),
-        _inventory,
-        widget.controller.playableInventory.playlists,
+        _playableInventory.media,
+        _playableInventory.playlists,
       );
     } on FormatException {
       return const [];
@@ -1556,8 +1554,8 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     try {
       resolved = resolveContent(
         source,
-        _inventory,
-        widget.controller.playableInventory.playlists,
+        _playableInventory.media,
+        _playableInventory.playlists,
       );
     } on FormatException {
       return 'This source contains an unsupported filter and cannot be broadened. Choose a supported replacement.';
@@ -1572,7 +1570,12 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
       case LibrarySource() || PlaylistSource():
         break;
     }
-    if (_playbackMode == PlaybackMode.block && !_hasShowGrouping) {
+    if (_playbackMode == PlaybackMode.block &&
+        !resolved.any(
+          (item) =>
+              item.showTitle?.trim().isNotEmpty == true ||
+              item.showThumb?.trim().isNotEmpty == true,
+        )) {
       return 'Mini-marathons needs episodes grouped by show title or show artwork.';
     }
     if (_playbackMode == PlaybackMode.block &&
@@ -1591,8 +1594,8 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
         try {
           if (resolveContent(
             source,
-            _inventory,
-            widget.controller.playableInventory.playlists,
+            _playableInventory.media,
+            _playableInventory.playlists,
           ).isEmpty) {
             return 'This library and its filters match no playable programs. Choose a replacement source.';
           }
@@ -1600,15 +1603,15 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
           return 'This source contains an unsupported filter. Choose a supported replacement.';
         }
       case PlaylistSource(:final playlistId):
-        if (!widget.controller.playableInventory.playlists.any(
+        if (!_playableInventory.playlists.any(
           (playlist) => playlist.id == playlistId,
         )) {
           return 'The saved playlist is unavailable. Choose an available video playlist.';
         }
         if (resolveContent(
           source,
-          _inventory,
-          widget.controller.playableInventory.playlists,
+          _playableInventory.media,
+          _playableInventory.playlists,
         ).isEmpty) {
           return 'This playlist has no playable programs. Choose another playlist.';
         }
@@ -1696,6 +1699,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
   }
 
   Future<void> _save({Channel? rebasedExpected}) async {
+    _refreshPlayableInventory();
     final valid = _form.currentState?.validate() ?? false;
     if (!valid) {
       setState(

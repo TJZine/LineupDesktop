@@ -2201,8 +2201,12 @@ void main() {
           parts: [PlexMediaPart(path: '/library')],
         ),
       ];
+      final exposed = controller.playableInventory;
+      expect(exposed.byId['shared']!.title, 'Library item');
+      expect(identical(exposed.byId['shared'], exposed.media.single), isTrue);
       controller.playbackFor('shared');
       expect(plex.playbackItems.last.title, 'Library item');
+      expect(plex.playbackItems.last, same(exposed.byId['shared']));
     },
   );
 
@@ -2426,7 +2430,12 @@ void main() {
       final exposedAgain = controller.playableInventory;
       expect(identical(exposed.media, exposedAgain.media), isTrue);
       expect(identical(exposed.playlists, exposedAgain.playlists), isTrue);
+      expect(identical(exposed.byId, exposedAgain.byId), isTrue);
       expect(() => exposed.media.add(_playableMovie), throwsUnsupportedError);
+      expect(
+        () => exposed.byId['other'] = _playableMovie,
+        throwsUnsupportedError,
+      );
 
       await controller.loadScheduleFor(channel);
       await controller.loadScheduleFor(channel);
@@ -2438,6 +2447,7 @@ void main() {
       controller.availableMedia = List.of(controller.availableMedia);
       final rebuilt = controller.playableInventory;
       expect(identical(rebuilt.media, exposed.media), isFalse);
+      expect(identical(rebuilt.byId, exposed.byId), isFalse);
       await controller.loadScheduleFor(channel);
       expect(mediaInputs, hasLength(2));
       expect(identical(mediaInputs.last, firstMedia), isFalse);
