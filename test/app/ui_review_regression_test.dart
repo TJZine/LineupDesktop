@@ -227,10 +227,7 @@ void main() {
     expect(find.text('Include watched items'), findsNothing);
 
     final libraryChoice = find.descendant(
-      of: find.byWidgetPredicate(
-        (widget) =>
-            widget.runtimeType.toString().startsWith('SegmentedButton<'),
-      ),
+      of: find.byKey(const Key('studio-source-choices')),
       matching: find.text('Library'),
     );
     await tester.ensureVisible(libraryChoice);
@@ -530,10 +527,7 @@ void main() {
         find.text('Programming is read-only and will be preserved exactly.'),
         findsNothing,
       );
-      final sourceChoices = find.byWidgetPredicate(
-        (widget) =>
-            widget.runtimeType.toString().startsWith('SegmentedButton<'),
-      );
+      final sourceChoices = find.byKey(const Key('studio-source-choices'));
       expect(
         find.descendant(of: sourceChoices, matching: find.text('Library')),
         findsOneWidget,
@@ -571,7 +565,7 @@ void main() {
       shuffleSeed: 12,
       builderKey: 'playlist:playlist-1',
     );
-    final controller = FixtureController(store: _FailNextSaveStore())
+    final controller = _ReviewStudioController(store: _FailNextSaveStore())
       ..stage = SetupStage.ready
       ..connection = _studioConnection
       ..channels = [original]
@@ -592,10 +586,29 @@ void main() {
 
     await _openChannelEditor(tester, controller, original);
     await tester.enterText(find.byType(TextFormField).first, 'Failed');
+    await tester.pump(channelAirCheckDebounce);
+    await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Save identity'));
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.widgetWithText(FilledButton, 'Save identity'),
+          )
+          .onPressed,
+      isNotNull,
+    );
     await tester.tap(find.text('Save identity'));
     await tester.pumpAndSettle();
 
+    expect(
+      find.descendant(
+        of: find.byType(LineupNotice),
+        matching: find.textContaining(
+          'The channel could not be saved. No lineup changes were saved.',
+        ),
+      ),
+      findsOneWidget,
+    );
     expect(controller.channels.single.toJson(), original.toJson());
   });
 
@@ -935,6 +948,8 @@ class _CountingSetupController extends FixtureController {
 }
 
 class _ReviewStudioController extends FixtureController {
+  _ReviewStudioController({super.store});
+
   @override
   Future<ScheduleIndex> loadScheduleFor(Channel channel) async => buildSchedule(
     resolveContent(channel.source, availableMedia, availablePlaylists),

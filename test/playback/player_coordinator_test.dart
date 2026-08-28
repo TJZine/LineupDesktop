@@ -65,7 +65,7 @@ void main() {
       addTearDown(lineup.dispose);
       addTearDown(guide.dispose);
       addTearDown(coordinator.dispose);
-      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(await guide.ensureCurrentProgram(original.id), isNotNull);
 
       await coordinator.tune(original.id);
 

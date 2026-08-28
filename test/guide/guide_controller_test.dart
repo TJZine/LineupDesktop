@@ -648,7 +648,7 @@ void main() {
       addTearDown(lineup.dispose);
       addTearDown(guide.dispose);
 
-      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(await guide.ensureCurrentProgram(channel.id), isNotNull);
 
       expect(guide.row(channel.id).programs, isNotEmpty);
       expect(
