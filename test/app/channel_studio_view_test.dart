@@ -1621,6 +1621,59 @@ void main() {
     expect(find.textContaining('same-key'), findsNothing);
   });
 
+  testWidgets('changing filter library resets displayed and saved facets', (
+    tester,
+  ) async {
+    final controller = _RecordingSaveController()
+      ..libraries = const [
+        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
+        PlexLibrary(id: 'shows', title: 'Shows', type: PlexLibraryType.show),
+      ]
+      ..selectedLibraryIds = {'movies', 'shows'}
+      ..availableMedia = [
+        _media('comedy', libraryId: 'movies', genres: ['Comedy']),
+        _media('drama', libraryId: 'shows', genres: ['Drama']),
+      ];
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      _studio(controller, ChannelStudioMode.createCustom),
+    );
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Collection or filter'));
+    await tester.tap(find.text('Collection or filter'));
+    await tester.pumpAndSettle();
+    await _chooseDropdown(tester, 'studio-facet-genre', 'Comedy');
+
+    await _chooseDropdown(tester, 'studio-filter-library', 'Shows');
+
+    final genre = find.descendant(
+      of: find.byKey(const Key('studio-facet-genre')),
+      matching: find.byType(DropdownButtonFormField<String>),
+    );
+    expect(
+      tester.widget<DropdownButtonFormField<String>>(genre).initialValue,
+      '',
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('studio-facet-genre')),
+        matching: find.text('Any'),
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('1 matching programs'), findsOneWidget);
+    await tester.enterText(
+      find.byKey(const Key('studio-name')),
+      'Filtered shows',
+    );
+    await _settleAirCheck(tester);
+    await tester.tap(find.text('Save channel'));
+    await tester.pumpAndSettle();
+    final savedSource = controller.saved!.source as LibrarySource;
+    expect(savedSource.libraryId, 'shows');
+    expect(savedSource.filters, isEmpty);
+  });
+
   testWidgets(
     'manual search, bulk actions, unavailable retention, order, and focus agree',
     (tester) async {

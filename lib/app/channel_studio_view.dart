@@ -20,6 +20,12 @@ enum ChannelStudioMode {
 
 enum _SourceChoice { library, playlist, filter, handPicked }
 
+typedef _DraftResolution = ({
+  ContentSource? source,
+  List<ChannelItem>? content,
+  String? sourceError,
+});
+
 class _ManualEntry {
   _ManualEntry({
     required this.id,
@@ -374,7 +380,17 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     final number = int.tryParse(_number.text);
     final validNumber = _validateNumber(_number.text) == null;
     final identityLooksValid = _name.text.trim().isNotEmpty && validNumber;
-    final programmingError = _programmingError;
+    final draftResolution = _generated ? null : _resolveDraftContent();
+    final programmingError = draftResolution == null
+        ? null
+        : _programmingError(draftResolution);
+    final hasShowGrouping =
+        draftResolution?.content?.any(
+          (item) =>
+              item.showTitle?.trim().isNotEmpty == true ||
+              item.showThumb?.trim().isNotEmpty == true,
+        ) ??
+        false;
     _stageScheduleIdentity(programmingError);
     return LineupPage(
       traversalPolicy: OrderedTraversalPolicy(),
@@ -544,7 +560,9 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
               LayoutBuilder(
                 builder: (context, constraints) {
                   final programming = _programmingCard();
-                  final station = _stationCard();
+                  final station = _stationCard(
+                    hasShowGrouping: hasShowGrouping,
+                  );
                   return constraints.maxWidth < LineupLayout.compact
                       ? Column(
                           children: [
@@ -606,6 +624,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
         ],
         LayoutBuilder(
           builder: (context, constraints) => SegmentedButton<_SourceChoice>(
+            key: const Key('studio-source-choices'),
             direction:
                 MediaQuery.textScalerOf(context).scale(14) > 21 ||
                     constraints.maxWidth < 480
@@ -1045,25 +1064,31 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     required List<String> values,
     required String? selected,
     required ValueChanged<String?> onChanged,
-  }) => DropdownButtonFormField<String>(
-    key: Key('studio-facet-$key'),
-    isExpanded: true,
-    initialValue: selected,
-    decoration: InputDecoration(labelText: _facetLabel(key)),
-    items: [
-      const DropdownMenuItem(value: '', child: Text('Any')),
-      if (selected != null && !values.contains(selected))
-        DropdownMenuItem(
-          value: selected,
-          child: Text('$selected (unavailable — retained)'),
-        ),
-      for (final value in values)
-        DropdownMenuItem(value: value, child: Text(value)),
-    ],
-    onChanged: _saving
-        ? null
-        : (value) => onChanged(value?.isEmpty == true ? null : value),
-  );
+  }) {
+    final fieldValue = selected ?? '';
+    return SizedBox(
+      key: Key('studio-facet-$key'),
+      child: DropdownButtonFormField<String>(
+        key: ValueKey(fieldValue),
+        isExpanded: true,
+        initialValue: fieldValue,
+        decoration: InputDecoration(labelText: _facetLabel(key)),
+        items: [
+          const DropdownMenuItem(value: '', child: Text('Any')),
+          if (selected != null && !values.contains(selected))
+            DropdownMenuItem(
+              value: selected,
+              child: Text('$selected (unavailable — retained)'),
+            ),
+          for (final value in values)
+            DropdownMenuItem(value: value, child: Text(value)),
+        ],
+        onChanged: _saving
+            ? null
+            : (value) => onChanged(value?.isEmpty == true ? null : value),
+      ),
+    );
+  }
 
   Map<String, List<String>> _facetOptions(
     String? libraryId, {
@@ -1321,7 +1346,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     });
   }
 
-  Widget _stationCard() => LineupSection(
+  Widget _stationCard({required bool hasShowGrouping}) => LineupSection(
     key: const Key('studio-station'),
     title: 'Station',
     children: [
@@ -1423,7 +1448,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
               ? null
               : (value) => _changed(() => _blockSize = value),
         ),
-        if (!_hasShowGrouping)
+        if (!hasShowGrouping)
           const Text(
             'Mini-marathons needs episodes grouped by show title or show artwork. Choose another rhythm or add grouped episodes.',
           ),
@@ -1522,42 +1547,36 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     );
   }
 
-  List<ChannelItem> get _resolvedDraftContent {
-    try {
-      return resolveContent(
-        _editedSource(),
-        _playableInventory.media,
-        _playableInventory.playlists,
-      );
-    } on FormatException {
-      return const [];
-    }
-  }
-
-  bool get _hasShowGrouping => _resolvedDraftContent.any(
-    (item) =>
-        item.showTitle?.trim().isNotEmpty == true ||
-        item.showThumb?.trim().isNotEmpty == true,
-  );
-
-  String? get _programmingError {
-    if (_generated) return null;
-    ContentSource source;
+  _DraftResolution _resolveDraftContent() {
+    late final ContentSource source;
     try {
       source = _editedSource();
     } on FormatException catch (error) {
-      return error.message;
+      return (source: null, content: null, sourceError: error.message);
     }
-    final liveSourceError = _liveSourceError(source);
-    if (liveSourceError != null) return liveSourceError;
-    List<ChannelItem> resolved;
     try {
-      resolved = resolveContent(
-        source,
-        _playableInventory.media,
-        _playableInventory.playlists,
+      return (
+        source: source,
+        content: resolveContent(
+          source,
+          _playableInventory.media,
+          _playableInventory.playlists,
+        ),
+        sourceError: null,
       );
     } on FormatException {
+      return (source: source, content: null, sourceError: null);
+    }
+  }
+
+  String? _programmingError(_DraftResolution resolution) {
+    if (resolution.sourceError case final error?) return error;
+    final source = resolution.source;
+    if (source == null) return 'Choose a programming source.';
+    final liveSourceError = _liveSourceError(source, resolution.content);
+    if (liveSourceError != null) return liveSourceError;
+    final resolved = resolution.content;
+    if (resolved == null) {
       return 'This source contains an unsupported filter and cannot be broadened. Choose a supported replacement.';
     }
     switch (source) {
@@ -1585,22 +1604,17 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     return null;
   }
 
-  String? _liveSourceError(ContentSource source) {
+  String? _liveSourceError(ContentSource source, List<ChannelItem>? resolved) {
     switch (source) {
       case LibrarySource(:final libraryId):
         if (!_selectedLibraries.any((library) => library.id == libraryId)) {
           return 'The saved library is unavailable. Choose a selected Plex library.';
         }
-        try {
-          if (resolveContent(
-            source,
-            _playableInventory.media,
-            _playableInventory.playlists,
-          ).isEmpty) {
-            return 'This library and its filters match no playable programs. Choose a replacement source.';
-          }
-        } on FormatException {
+        if (resolved == null) {
           return 'This source contains an unsupported filter. Choose a supported replacement.';
+        }
+        if (resolved.isEmpty) {
+          return 'This library and its filters match no playable programs. Choose a replacement source.';
         }
       case PlaylistSource(:final playlistId):
         if (!_playableInventory.playlists.any(
@@ -1608,16 +1622,24 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
         )) {
           return 'The saved playlist is unavailable. Choose an available video playlist.';
         }
-        if (resolveContent(
-          source,
-          _playableInventory.media,
-          _playableInventory.playlists,
-        ).isEmpty) {
+        if (resolved?.isEmpty ?? false) {
           return 'This playlist has no playable programs. Choose another playlist.';
         }
       case MixedSource(:final sources):
         for (final child in sources) {
-          if (_liveSourceError(child) case final error?) return error;
+          List<ChannelItem>? childContent;
+          try {
+            childContent = resolveContent(
+              child,
+              _playableInventory.media,
+              _playableInventory.playlists,
+            );
+          } on FormatException {
+            childContent = null;
+          }
+          if (_liveSourceError(child, childContent) case final error?) {
+            return error;
+          }
         }
       case ManualSource():
         break;
@@ -1721,7 +1743,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
       }
       return;
     }
-    if (_programmingError != null) {
+    if (!_generated && _programmingError(_resolveDraftContent()) != null) {
       return;
     }
     if (!_airCheckCanSave || !_scheduleIdentityCommitted) {
