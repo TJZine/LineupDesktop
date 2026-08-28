@@ -13,6 +13,11 @@ const channelAirCheckDebounce = Duration(milliseconds: 80);
 
 enum ChannelAirCheckValidity { unknown, valid, retainedOffAir }
 
+typedef ChannelAirCheckStatus = ({
+  String snapshotKey,
+  ChannelAirCheckValidity validity,
+});
+
 class ChannelAirCheck extends StatefulWidget {
   const ChannelAirCheck({
     required this.controller,
@@ -23,7 +28,7 @@ class ChannelAirCheck extends StatefulWidget {
     required this.onValidityChanged,
     this.originalChannel,
     this.sourceIssue,
-    this.onFirstValid,
+    this.playableById,
     super.key,
   });
 
@@ -34,8 +39,8 @@ class ChannelAirCheck extends StatefulWidget {
   final bool compact;
   final String inclusionReason;
   final String? sourceIssue;
-  final ValueChanged<ChannelAirCheckValidity> onValidityChanged;
-  final VoidCallback? onFirstValid;
+  final Map<String, Object?>? playableById;
+  final ValueChanged<ChannelAirCheckStatus> onValidityChanged;
 
   @override
   State<ChannelAirCheck> createState() => ChannelAirCheckState();
@@ -60,9 +65,8 @@ class ChannelAirCheckState extends State<ChannelAirCheck> {
   String? _selectedId;
   bool _selectionFollowsNow = true;
   bool _disposed = false;
-  bool _firstValidSent = false;
   int _requestVersion = 0;
-  ChannelAirCheckValidity? _reportedValidity;
+  ChannelAirCheckStatus? _reportedStatus;
   late String _targetKey;
   String? _wantedOriginalKey;
 
@@ -206,12 +210,7 @@ class ChannelAirCheckState extends State<ChannelAirCheck> {
               final validity = _comparisonReady
                   ? ChannelAirCheckValidity.valid
                   : ChannelAirCheckValidity.unknown;
-              _reportValidity(validity);
-              if (validity == ChannelAirCheckValidity.valid &&
-                  !_firstValidSent) {
-                _firstValidSent = true;
-                widget.onFirstValid?.call();
-              }
+              _reportValidity(validity, snapshotKey: request.key);
             }
           },
           onError: (Object error) {
@@ -237,6 +236,7 @@ class ChannelAirCheckState extends State<ChannelAirCheck> {
               _canRetainOffAir(error)
                   ? ChannelAirCheckValidity.retainedOffAir
                   : ChannelAirCheckValidity.unknown,
+              snapshotKey: request.key,
             );
           },
         )
@@ -333,11 +333,15 @@ class ChannelAirCheckState extends State<ChannelAirCheck> {
       _originalScheduleError != null &&
       _originalScheduleErrorKey == _wantedOriginalKey;
 
-  void _reportValidity(ChannelAirCheckValidity value) {
-    if (_reportedValidity == value) return;
-    _reportedValidity = value;
+  void _reportValidity(
+    ChannelAirCheckValidity validity, {
+    String? snapshotKey,
+  }) {
+    final status = (snapshotKey: snapshotKey ?? _targetKey, validity: validity);
+    if (_reportedStatus == status) return;
+    _reportedStatus = status;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_disposed) widget.onValidityChanged(value);
+      if (!_disposed) widget.onValidityChanged(status);
     });
   }
 
@@ -411,7 +415,12 @@ class ChannelAirCheckState extends State<ChannelAirCheck> {
                   Text(
                     'Preview truncated at ${_time(context, preview.window.lastProjectedEnd!)}; this is the last projected program end.',
                   ),
-                if (_unavailableCount(preview) case final count when count > 0)
+                if (_unavailableCount(
+                      widget.channel.source,
+                      widget.playableById ??
+                          widget.controller.playableInventory.byId,
+                    )
+                    case final count when count > 0)
                   Text(
                     '$count unavailable hand-picked ${count == 1 ? 'item is' : 'items are'} retained but off air until available or removed.',
                   ),
@@ -689,12 +698,18 @@ class ChannelAirCheckState extends State<ChannelAirCheck> {
     ),
   );
 
-  int _unavailableCount(_AirCheckPreview preview) =>
-      switch (widget.channel.source) {
-        ManualSource(:final items) =>
-          (items.length - preview.schedule.items.length).clamp(0, items.length),
-        _ => 0,
-      };
+  int _unavailableCount(
+    ContentSource source,
+    Map<String, Object?> playableById,
+  ) => switch (source) {
+    ManualSource(:final items) =>
+      items.where((item) => !playableById.containsKey(item.id)).length,
+    MixedSource(:final sources) => sources.fold(
+      0,
+      (count, source) => count + _unavailableCount(source, playableById),
+    ),
+    LibrarySource() || PlaylistSource() => 0,
+  };
 
   bool _changesOnNow(_AirCheckPreview preview, DateTime now) {
     final original = widget.originalChannel;
@@ -769,12 +784,20 @@ bool _isNoContentError(Object error) =>
     (error.message == 'A channel needs content' ||
         error.message == 'FormatException: A channel needs content');
 
-String _snapshotKey(ChannelAirCheck widget) =>
-    '${_recipeKey(widget.channel)}|${widget.controller.contentGeneration}';
+String channelAirCheckSnapshotKey(Channel channel, int contentGeneration) =>
+    '${_recipeKey(channel)}|$contentGeneration';
+
+String _snapshotKey(ChannelAirCheck widget) => channelAirCheckSnapshotKey(
+  widget.channel,
+  widget.controller.contentGeneration,
+);
 
 String? _originalKey(ChannelAirCheck widget) => widget.originalChannel == null
     ? null
-    : '${_recipeKey(widget.originalChannel!)}|${widget.controller.contentGeneration}';
+    : channelAirCheckSnapshotKey(
+        widget.originalChannel!,
+        widget.controller.contentGeneration,
+      );
 
 String _recipeKey(Channel channel) => jsonEncode({
   'source': channel.source.toJson(),

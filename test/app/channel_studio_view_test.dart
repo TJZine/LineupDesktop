@@ -2338,7 +2338,7 @@ void main() {
   });
 
   testWidgets(
-    'rendered callbacks refresh inventory before selection and save',
+    'rendered callbacks refresh inventory before selection and save across inventory changes',
     (tester) async {
       final selectionController = FixtureController()
         ..availableMedia = [_media('candidate-a', title: 'Candidate A')];
@@ -2419,6 +2419,18 @@ void main() {
         ..availableMedia = const []
         ..notifyListeners();
       renderedSave();
+      await tester.pump();
+
+      expect(saveController.channels.single.name, 'Save refresh');
+      expect(
+        find.text(
+          'Air Check must verify this schedule before the channel can be saved.',
+        ),
+        findsOneWidget,
+      );
+
+      await _settleAirCheck(tester);
+      await tester.tap(find.text('Save changes'));
       await tester.pumpAndSettle();
 
       final saved = saveController.channels.single;
@@ -2427,6 +2439,63 @@ void main() {
         (saved.source as ManualSource).items.single.toJson(),
         retained.toJson(),
       );
+    },
+  );
+
+  testWidgets(
+    'rendered Save waits for Air Check after content generation changes',
+    (tester) async {
+      final original = _channel(
+        id: 'generation-save',
+        number: 48,
+        name: 'Generation save',
+        source: ManualSource([_itemForHealth(1)]),
+      );
+      final controller = _RecordingSaveController()
+        ..channels = [original]
+        ..availableMedia = [_media('program-1', title: 'First metadata')];
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(
+        _studio(controller, ChannelStudioMode.editCustom, channel: original),
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const Key('studio-name')),
+        'Generation save changed',
+      );
+      await _settleAirCheck(tester);
+      final renderedSave = tester
+          .widget<FilledButton>(
+            find.widgetWithText(FilledButton, 'Save changes'),
+          )
+          .onPressed!;
+
+      controller.availableMedia = [
+        _media(
+          'program-1',
+          title: 'Replacement metadata',
+          duration: const Duration(minutes: 45),
+        ),
+      ];
+      controller.generation++;
+      controller.notifyListeners();
+      renderedSave();
+
+      expect(controller.saved, isNull);
+      await tester.pump();
+      expect(
+        find.text(
+          'Air Check must verify this schedule before the channel can be saved.',
+        ),
+        findsOneWidget,
+      );
+      await _settleAirCheck(tester);
+      await tester.tap(find.text('Save changes'));
+      await tester.pumpAndSettle();
+
+      final saved = (controller.saved!.source as ManualSource).items.single;
+      expect(saved.title, 'Replacement metadata');
+      expect(saved.duration, const Duration(minutes: 45));
     },
   );
 
@@ -3100,6 +3169,135 @@ void main() {
       await tester.pumpAndSettle();
       expect(controller.saved!.anchor, validAt);
       expect(controller.saved!.shuffleSeed, saved.shuffleSeed);
+    },
+  );
+
+  testWidgets('stale valid Air Check cannot commit a changed draft identity', (
+    tester,
+  ) async {
+    final now = DateTime.utc(2026, 8, 27, 14);
+    final controller = _ControlledStudioController()
+      ..availableMedia = [_media('first'), _media('second')];
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      _studio(controller, ChannelStudioMode.createCustom, clock: () => now),
+    );
+    await tester.pumpAndSettle();
+    tester
+        .widget<CheckboxListTile>(find.byKey(const Key('studio-result-first')))
+        .onChanged!(true);
+    await tester.pump();
+    await tester.pump(channelAirCheckDebounce);
+    expect(controller.pending, hasLength(1));
+    final firstRequest = controller.pending.single.channel;
+    final addSecond = tester
+        .widget<CheckboxListTile>(find.byKey(const Key('studio-result-second')))
+        .onChanged!;
+
+    addSecond(true);
+    await tester.runAsync(() async {
+      controller.completeNext();
+      await Future<void>.delayed(Duration.zero);
+    });
+    await tester.pump();
+    await tester.enterText(
+      find.byKey(const Key('studio-name')),
+      'Current valid',
+    );
+    await tester.pump();
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.widgetWithText(FilledButton, 'Save channel'),
+          )
+          .onPressed,
+      isNull,
+    );
+    await tester.pump(channelAirCheckDebounce);
+
+    expect(controller.pending, hasLength(1));
+    final currentRequest = controller.pending.single.channel;
+    expect((firstRequest.source as ManualSource).items.map((item) => item.id), [
+      'first',
+    ]);
+    expect(
+      (currentRequest.source as ManualSource).items.map((item) => item.id),
+      ['first', 'second'],
+    );
+    await tester.runAsync(() async {
+      controller.completeNext();
+      await Future<void>.delayed(Duration.zero);
+    });
+    await tester.pump();
+    await tester.pump();
+    await tester.tap(find.text('Save channel'));
+    await tester.pumpAndSettle();
+
+    expect(controller.saved!.anchor, currentRequest.anchor);
+    expect(controller.saved!.shuffleSeed, currentRequest.shuffleSeed);
+  });
+
+  testWidgets(
+    'stale retained-off-air Air Check cannot commit a changed draft identity',
+    (tester) async {
+      final now = DateTime.utc(2026, 8, 27, 15);
+      final controller = _ControlledStudioController()
+        ..availableMedia = [_media('first'), _media('second')];
+      addTearDown(controller.dispose);
+
+      await tester.pumpWidget(
+        _studio(controller, ChannelStudioMode.createCustom, clock: () => now),
+      );
+      await tester.pumpAndSettle();
+      tester
+          .widget<CheckboxListTile>(
+            find.byKey(const Key('studio-result-first')),
+          )
+          .onChanged!(true);
+      await tester.pump();
+      await tester.pump(channelAirCheckDebounce);
+      expect(controller.pending, hasLength(1));
+      final addSecond = tester
+          .widget<CheckboxListTile>(
+            find.byKey(const Key('studio-result-second')),
+          )
+          .onChanged!;
+
+      addSecond(true);
+      await tester.runAsync(() async {
+        controller.completeNext(noContent: true);
+        await Future<void>.delayed(Duration.zero);
+      });
+      await tester.pump();
+      await tester.enterText(
+        find.byKey(const Key('studio-name')),
+        'Current after retained',
+      );
+      await tester.pump();
+      expect(
+        tester
+            .widget<FilledButton>(
+              find.widgetWithText(FilledButton, 'Save channel'),
+            )
+            .onPressed,
+        isNull,
+      );
+      await tester.pump(channelAirCheckDebounce);
+
+      expect(controller.pending, hasLength(1));
+      final currentRequest = controller.pending.single.channel;
+      await tester.runAsync(() async {
+        controller.completeNext();
+        await Future<void>.delayed(Duration.zero);
+      });
+      await tester.pump();
+      await tester.pump();
+      await tester.tap(find.text('Save channel'));
+      await tester.pumpAndSettle();
+
+      expect(controller.saved!.anchor, currentRequest.anchor);
+      expect(controller.saved!.shuffleSeed, currentRequest.shuffleSeed);
     },
   );
 
@@ -4179,6 +4377,51 @@ class _RecordingSaveController extends FixtureController {
   }
 }
 
+class _ControlledStudioController extends FixtureController {
+  final pending = <_StudioScheduleCall>[];
+  Channel? saved;
+
+  @override
+  Future<ScheduleIndex> loadScheduleFor(Channel channel) {
+    final completer = Completer<ScheduleIndex>();
+    pending.add(_StudioScheduleCall(channel, completer));
+    return completer.future;
+  }
+
+  void completeNext({bool noContent = false}) {
+    final call = pending.removeAt(0);
+    if (noContent) {
+      call.completer.completeError(
+        const FormatException('A channel needs content'),
+      );
+      return;
+    }
+    call.completer.complete(
+      buildSchedule(
+        (call.channel.source as ManualSource).items,
+        mode: call.channel.playbackMode,
+        seed: call.channel.shuffleSeed,
+        blockSize: call.channel.blockSize ?? 3,
+      ),
+    );
+  }
+
+  @override
+  Future<void> saveChannel(
+    Channel channel, {
+    required Channel? expectedBase,
+  }) async {
+    saved = channel;
+  }
+}
+
+class _StudioScheduleCall {
+  const _StudioScheduleCall(this.channel, this.completer);
+
+  final Channel channel;
+  final Completer<ScheduleIndex> completer;
+}
+
 class _RealSaveController extends FixtureController {
   @override
   Future<ScheduleIndex> loadScheduleFor(Channel channel) async =>
@@ -4269,7 +4512,7 @@ class _ExpectedBaseController extends FixtureController {
     final current = channels.where((item) => item.id == channel.id).firstOrNull;
     if (current == null ||
         expectedBase == null ||
-        current.toJson().toString() != expectedBase.toJson().toString()) {
+        !canonicalChannelValueEquals(current.toJson(), expectedBase.toJson())) {
       throw const FormatException('Channel has changed');
     }
     channels = [channel];

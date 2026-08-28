@@ -126,7 +126,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
   bool _baseDeleted = false;
   String? _error;
   String? _success;
-  ChannelAirCheckValidity _airCheckValidity = ChannelAirCheckValidity.unknown;
+  ChannelAirCheckStatus? _airCheckStatus;
   bool _scheduleIdentityCommitted = false;
   late ({
     List<PlexMediaItem> media,
@@ -529,11 +529,11 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                       widget.controller,
                     ),
                     sourceIssue: programmingError,
-                    onFirstValid: _commitScheduleIdentity,
-                    onValidityChanged: (validity) {
-                      if (!mounted || _airCheckValidity == validity) return;
-                      setState(() => _airCheckValidity = validity);
-                      if (validity == ChannelAirCheckValidity.retainedOffAir) {
+                    playableById: _playableInventory.byId,
+                    onValidityChanged: (status) {
+                      if (!mounted || _airCheckStatus == status) return;
+                      setState(() => _airCheckStatus = status);
+                      if (_isCurrentAirCheckStatus(status)) {
                         _commitScheduleIdentity();
                       }
                     },
@@ -1661,9 +1661,17 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     builderKey: _builderKey,
   );
 
-  bool get _airCheckCanSave =>
-      _airCheckValidity == ChannelAirCheckValidity.valid ||
-      _airCheckValidity == ChannelAirCheckValidity.retainedOffAir;
+  bool _isCurrentAirCheckStatus(ChannelAirCheckStatus? status) =>
+      status != null &&
+      status.snapshotKey ==
+          channelAirCheckSnapshotKey(
+            _previewDraft,
+            widget.controller.contentGeneration,
+          ) &&
+      (status.validity == ChannelAirCheckValidity.valid ||
+          status.validity == ChannelAirCheckValidity.retainedOffAir);
+
+  bool get _airCheckCanSave => _isCurrentAirCheckStatus(_airCheckStatus);
 
   void _stageScheduleIdentity(String? programmingError) {
     if (_scheduleIdentityCommitted ||

@@ -7,6 +7,7 @@ import 'package:lineup_desktop/app/channel_air_check.dart';
 import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/channels/scheduler.dart';
 import 'package:lineup_desktop/guide/guide_controller.dart';
+import 'package:lineup_desktop/plex/plex_models.dart';
 
 import '../support/ui_fixture.dart';
 
@@ -530,6 +531,39 @@ void main() {
     },
   );
 
+  testWidgets(
+    'partially playable mixed source reports every nested retained occurrence',
+    (tester) async {
+      final controller = _MixedAirController()
+        ..availableMedia = [_playableMedia('live')];
+      addTearDown(controller.dispose);
+      final channel = Channel.fromJson({
+        ..._channel(items: [_item('live')]).toJson(),
+        'source': MixedSource(
+          sources: [
+            ManualSource([_item('live'), _item('missing')]),
+            MixedSource(
+              sources: [
+                ManualSource([_item('missing'), _item('other')]),
+              ],
+            ),
+          ],
+        ).toJson(),
+      });
+
+      await tester.pumpWidget(_airCheck(controller, channel));
+      await tester.pumpAndSettle();
+
+      const explanation =
+          '3 unavailable hand-picked items are retained but off air until available or removed.';
+      expect(find.text(explanation), findsOneWidget);
+      expect(
+        find.bySemanticsLabel(RegExp('3 unavailable hand-picked items')),
+        findsOneWidget,
+      );
+    },
+  );
+
   testWidgets('on-now warning is exact and ignores identity-only edits', (
     tester,
   ) async {
@@ -829,7 +863,7 @@ Widget _airCheck(
       compact: compact,
       inclusionReason: 'Hand-picked programming',
       sourceIssue: sourceIssue,
-      onValidityChanged: onValidityChanged ?? (_) {},
+      onValidityChanged: (status) => onValidityChanged?.call(status.validity),
     ),
   ),
 );
@@ -905,3 +939,22 @@ class _AirController extends FixtureController {
     _pending.removeAt(0).$1.completeError(error);
   }
 }
+
+class _MixedAirController extends _AirController {
+  @override
+  Future<ScheduleIndex> loadScheduleFor(Channel channel) async => buildSchedule(
+    [_item('live')],
+    mode: channel.playbackMode,
+    seed: channel.shuffleSeed,
+    blockSize: channel.blockSize ?? 3,
+  );
+}
+
+PlexMediaItem _playableMedia(String id) => PlexMediaItem(
+  id: id,
+  title: 'Live',
+  type: 'movie',
+  duration: const Duration(minutes: 30),
+  libraryId: 'movies',
+  parts: [PlexMediaPart(path: '/$id')],
+);
