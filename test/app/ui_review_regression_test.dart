@@ -269,7 +269,6 @@ void main() {
     tester,
   ) async {
     final controller = _CountingSetupController()..stage = SetupStage.ready;
-    addTearDown(controller.dispose);
     await tester.pumpWidget(UiFixture(controller: controller).build());
     await tester.pump();
     await tester.pump();

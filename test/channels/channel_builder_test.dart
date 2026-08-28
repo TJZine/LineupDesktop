@@ -301,16 +301,20 @@ void main() {
     },
   );
 
-  test('all build modes reserve sparse custom channel numbers', () {
-    const proposal = ChannelProposal(
-      name: 'Drama',
-      source: LibrarySource(
-        libraryId: 'movies',
-        libraryType: PlexLibraryType.movie,
+  test('all build modes reserve sparse custom numbers through 1000', () {
+    final proposals = List.generate(
+      999,
+      (index) => ChannelProposal(
+        name: 'Drama $index',
+        source: LibrarySource(
+          libraryId: 'movies',
+          libraryType: PlexLibraryType.movie,
+          filters: {'genre': 'Drama $index'},
+        ),
+        mode: PlaybackMode.shuffle,
+        itemCount: 10,
+        strategy: BuilderStrategy.genres,
       ),
-      mode: PlaybackMode.shuffle,
-      itemCount: 10,
-      strategy: BuilderStrategy.genres,
     );
     final custom = [
       Channel(
@@ -341,14 +345,20 @@ void main() {
 
     for (final mode in ChannelBuildMode.values) {
       final result = materializeChannelPlan(
-        proposals: const [proposal],
+        proposals: proposals,
         existing: custom,
         mode: mode,
         anchor: DateTime.utc(2027),
       );
 
-      expect(result.channels.single.number, 2, reason: mode.name);
-      expect(result.truncated, isFalse, reason: mode.name);
+      expect(result.channels.first.number, 2, reason: mode.name);
+      expect(result.channels, hasLength(998), reason: mode.name);
+      expect(
+        result.channels.map((channel) => channel.number),
+        isNot(contains(1000)),
+        reason: mode.name,
+      );
+      expect(result.truncated, isTrue, reason: mode.name);
     }
   });
 
@@ -563,6 +573,7 @@ void main() {
       seriesBlockSize: 5,
       anchor: DateTime.utc(2026),
     ).channels.single;
+    final staleShuffleSeed = generated.shuffleSeed + 1;
     final stale = Channel(
       id: generated.id,
       number: 42,
@@ -570,7 +581,7 @@ void main() {
       source: const ManualSource([]),
       playbackMode: PlaybackMode.sequential,
       anchor: DateTime.utc(2025),
-      shuffleSeed: generated.shuffleSeed,
+      shuffleSeed: staleShuffleSeed,
       builderKey: generated.builderKey,
     );
     final changed = materializeChannelPlan(
@@ -590,7 +601,7 @@ void main() {
     expect(changed.playbackMode, PlaybackMode.block);
     expect(changed.blockSize, 5);
     expect(changed.anchor, DateTime.utc(2025));
-    expect(changed.shuffleSeed, stale.shuffleSeed);
+    expect(changed.shuffleSeed, staleShuffleSeed);
     expect(changed.builderKey, stale.builderKey);
   });
 }
