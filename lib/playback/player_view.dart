@@ -1561,9 +1561,11 @@ class _MiniGuide extends StatelessWidget {
   Widget build(BuildContext context) {
     final channels = controller.miniGuideChannels;
     final roles = LineupTheme.of(context);
-    final height = MediaQuery.sizeOf(context).height;
-    final rowHeight = height < 720 ? null : (height >= 900 ? 48.0 : 56.0);
-    final compressed = height >= 900;
+    final size = MediaQuery.sizeOf(context);
+    final horizontal =
+        size.height >= 720 && !LineupLayout.isCompactWidth(size.width);
+    final rowHeight = horizontal ? (size.height >= 900 ? 48.0 : 56.0) : null;
+    final compressed = size.height >= 900;
     return Align(
       alignment: Alignment.topCenter,
       child: SafeArea(
@@ -1571,9 +1573,7 @@ class _MiniGuide extends StatelessWidget {
         child: Container(
           key: const Key('mini-guide-shelf'),
           width: double.infinity,
-          constraints: BoxConstraints(
-            maxHeight: MediaQuery.sizeOf(context).height,
-          ),
+          constraints: BoxConstraints(maxHeight: size.height),
           padding: EdgeInsets.fromLTRB(
             roles.overlaySafeArea,
             compressed ? 8 : 12,

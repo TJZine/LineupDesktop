@@ -498,6 +498,7 @@ void main() {
     }
 
     for (final size in const [
+      Size(480, 900),
       Size(800, 600),
       Size(1280, 720),
       Size(1600, 900),
@@ -536,7 +537,9 @@ void main() {
         );
         expect(row.top, greaterThanOrEqualTo(shelf.top), reason: '$size');
         expect(row.bottom, lessThanOrEqualTo(shelf.bottom), reason: '$size');
-        if (size.height >= 900) {
+        if (LineupLayout.isCompactWidth(size.width) || size.height < 720) {
+          expect(row.height, greaterThan(48), reason: '$size');
+        } else if (size.height >= 900) {
           expect(row.height, 48, reason: '$size');
         }
         for (final fact in ['current', 'next']) {
@@ -547,7 +550,7 @@ void main() {
           expect(row.contains(factRect.bottomRight), isTrue, reason: '$size');
         }
       }
-      if (size.height >= 900) {
+      if (size.height >= 900 && !LineupLayout.isCompactWidth(size.width)) {
         expect(shelf.height / size.height, lessThan(0.34), reason: '$size');
       }
       expect(tester.takeException(), isNull, reason: '$size');
