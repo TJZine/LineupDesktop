@@ -1095,7 +1095,10 @@ class LineupController extends ChangeNotifier {
           throw const FormatException('Channel already exists');
         }
       } else if (current == null ||
-          !_canonicalEquals(current.toJson(), expectedBase.toJson())) {
+          !canonicalChannelValueEquals(
+            current.toJson(),
+            expectedBase.toJson(),
+          )) {
         throw const FormatException('Channel has changed');
       }
       channel.validate(channels);
@@ -1123,23 +1126,6 @@ class LineupController extends ChangeNotifier {
         rethrow;
       }
     });
-  }
-
-  static bool _canonicalEquals(Object? left, Object? right) {
-    if (left is Map && right is Map) {
-      return left.length == right.length &&
-          left.entries.every(
-            (entry) =>
-                right.containsKey(entry.key) &&
-                _canonicalEquals(entry.value, right[entry.key]),
-          );
-    }
-    if (left is List && right is List) {
-      return left.length == right.length &&
-          Iterable<int>.generate(left.length)
-              .every((index) => _canonicalEquals(left[index], right[index]));
-    }
-    return left == right;
   }
 
   void _validateResolvedSource(ContentSource source) {

@@ -283,7 +283,10 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
 
   void _changed([VoidCallback? change]) => setState(() {
     change?.call();
-    _dirty = !_canonicalEquals(_draftSignature, _baselineDraftSignature);
+    _dirty = !canonicalChannelValueEquals(
+      _draftSignature,
+      _baselineDraftSignature,
+    );
     _success = null;
   });
 
@@ -1685,7 +1688,10 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
         'anchor': anchor.toIso8601String(),
         'shuffleSeed': seed,
       };
-      _dirty = !_canonicalEquals(_draftSignature, _baselineDraftSignature);
+      _dirty = !canonicalChannelValueEquals(
+        _draftSignature,
+        _baselineDraftSignature,
+      );
     });
   }
 
@@ -1748,7 +1754,10 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
       final stale =
           _expectedBase != null &&
           (current == null ||
-              !_canonicalEquals(current.toJson(), _expectedBase!.toJson()));
+              !canonicalChannelValueEquals(
+                current.toJson(),
+                _expectedBase!.toJson(),
+              ));
       setState(() {
         _saving = false;
         _baseDeleted = stale && current == null;
@@ -1847,23 +1856,6 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
           'The saved channel could not be tuned. Your lineup is unchanged.',
     );
   }
-}
-
-bool _canonicalEquals(Object? left, Object? right) {
-  if (left is Map && right is Map) {
-    return left.length == right.length &&
-        left.entries.every(
-          (entry) =>
-              right.containsKey(entry.key) &&
-              _canonicalEquals(entry.value, right[entry.key]),
-        );
-  }
-  if (left is List && right is List) {
-    return left.length == right.length &&
-        Iterable<int>.generate(left.length)
-            .every((index) => _canonicalEquals(left[index], right[index]));
-  }
-  return left == right;
 }
 
 String channelSourceLabel(ContentSource source, LineupController controller) =>

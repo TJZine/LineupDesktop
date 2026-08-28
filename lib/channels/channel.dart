@@ -404,6 +404,24 @@ class Channel {
   }
 }
 
+bool canonicalChannelValueEquals(Object? left, Object? right) {
+  if (left is Map && right is Map) {
+    return left.length == right.length &&
+        left.entries.every(
+          (entry) =>
+              right.containsKey(entry.key) &&
+              canonicalChannelValueEquals(entry.value, right[entry.key]),
+        );
+  }
+  if (left is List && right is List) {
+    return left.length == right.length &&
+        Iterable<int>.generate(left.length).every(
+          (index) => canonicalChannelValueEquals(left[index], right[index]),
+        );
+  }
+  return left == right;
+}
+
 String createChannelId() {
   final random = Random.secure();
   final bytes = List<int>.generate(16, (_) => random.nextInt(256));
