@@ -530,7 +530,7 @@ class _ChannelsViewState extends State<ChannelsView> {
   bool _focusPruneScheduled = false;
   bool _focusPruneNeedsRestore = false;
   final LinkedHashMap<String, _ChannelHealth> _health = LinkedHashMap();
-  final Queue<Channel> _pendingHealth = Queue();
+  final Queue<({Channel channel, String signature})> _pendingHealth = Queue();
   final Map<String, String> _activeHealth = {};
   int _activeHealthLoads = 0;
   int _healthEpoch = 0;
@@ -790,16 +790,16 @@ class _ChannelsViewState extends State<ChannelsView> {
         _activeHealth[channel.id] == signature ||
         _pendingHealth.any(
           (pending) =>
-              pending.id == channel.id &&
-              _healthSignature(pending) == signature,
+              pending.channel.id == channel.id &&
+              pending.signature == signature,
         )) {
       return;
     }
-    _pendingHealth.removeWhere((pending) => pending.id == channel.id);
+    _pendingHealth.removeWhere((pending) => pending.channel.id == channel.id);
     if (_pendingHealth.length >= _maximumPendingHealth) {
       _pendingHealth.removeFirst();
     }
-    _pendingHealth.add(channel);
+    _pendingHealth.add((channel: channel, signature: signature));
     WidgetsBinding.instance.addPostFrameCallback((_) => _pumpHealth());
   }
 
@@ -808,16 +808,17 @@ class _ChannelsViewState extends State<ChannelsView> {
     var blocked = 0;
     while (_activeHealthLoads < _maximumHealthLoads &&
         _pendingHealth.isNotEmpty) {
-      final channel = _pendingHealth.removeFirst();
+      final pending = _pendingHealth.removeFirst();
+      final channel = pending.channel;
       if (_activeHealth.containsKey(channel.id)) {
-        _pendingHealth.add(channel);
+        _pendingHealth.add(pending);
         blocked++;
         if (blocked >= _pendingHealth.length) break;
         continue;
       }
       blocked = 0;
       final epoch = _healthEpoch;
-      final signature = _healthSignature(channel);
+      final signature = pending.signature;
       final current = widget.controller.channels
           .where((item) => item.id == channel.id)
           .firstOrNull;
