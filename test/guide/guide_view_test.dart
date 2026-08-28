@@ -79,6 +79,41 @@ void main() {
     lineup.dispose();
   });
 
+  testWidgets('Guide Media Play jumps to now with DVR controls disabled', (
+    tester,
+  ) async {
+    final now = DateTime.utc(2026, 1, 1, 12, 17);
+    final lineup = _Lineup(1)
+      ..settings = const LineupSettings(dvrControlsEnabled: false);
+    addTearDown(lineup.dispose);
+    final guide = GuideController(
+      lineup: lineup,
+      clock: () => now,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    addTearDown(guide.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: GuideView(
+          controller: guide,
+          onClose: () {},
+          onTune: (_) async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    guide.moveHorizontal(1);
+    expect(guide.windowStart, isNot(DateTime.utc(2026, 1, 1, 11, 30)));
+    await tester.sendKeyEvent(LogicalKeyboardKey.mediaPlay);
+    await tester.pumpAndSettle();
+
+    expect(guide.windowStart, DateTime.utc(2026, 1, 1, 11, 30));
+    expect(guide.focusTime, now);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('established viewport work is independent of lineup cardinality', (
     tester,
   ) async {

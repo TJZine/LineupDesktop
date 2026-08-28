@@ -879,6 +879,36 @@ void main() {
     }
   });
 
+  testWidgets('OSD clamps the seek slider when duration is unknown', (
+    tester,
+  ) async {
+    final fixture = _Fixture(
+      PlayerState.playing,
+      dvrControlsEnabled: true,
+      nativePosition: const Duration(seconds: 10),
+      nativeDuration: Duration.zero,
+    );
+    fixture.player.showOsd();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+    await tester.pump();
+
+    final slider = tester.widget<Slider>(find.byType(Slider));
+    expect(slider.value, inInclusiveRange(slider.min, slider.max));
+    expect(slider.value, 1);
+    expect(
+      tester.widget<Text>(find.byKey(const Key('player-osd-timing'))).data,
+      contains('00:10 / 00:00'),
+    );
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
   testWidgets('OSD uses official title artwork with a text fallback', (
     tester,
   ) async {

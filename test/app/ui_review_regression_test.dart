@@ -659,7 +659,7 @@ void main() {
   });
 
   testWidgets('Channel Setup footer uses its available width', (tester) async {
-    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    await tester.binding.setSurfaceSize(const Size(1100, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     final controller = FixtureController()
       ..stage = SetupStage.channelSetup

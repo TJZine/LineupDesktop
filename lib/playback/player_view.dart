@@ -500,6 +500,8 @@ class _Osd extends StatelessWidget {
         : rawPosition < 0
         ? 0
         : rawPosition;
+    final sliderMax = (duration > 0 ? duration : 1).toDouble();
+    final sliderPosition = position.toDouble().clamp(0.0, sliderMax);
     final displayedPosition = Duration(milliseconds: position.toInt());
     final audioAvailable = controller.tracks.any(
       (track) => track.type == PlayerTrackType.audio,
@@ -759,8 +761,8 @@ class _Osd extends StatelessWidget {
                     overlayShape: SliderComponentShape.noOverlay,
                   ),
                   child: Slider(
-                    value: position.toDouble(),
-                    max: (duration <= 0 ? 1 : duration).toDouble(),
+                    value: sliderPosition,
+                    max: sliderMax,
                     onChanged: duration <= 0 || unsupported
                         ? null
                         : (value) => controller.seekTo(
