@@ -101,7 +101,11 @@ class _LineupShellState extends State<LineupShell> {
   }
 
   Future<void> _select(int index) async {
-    if (index == _selectedIndex || _selectionPending) return;
+    if (_selectionPending) return;
+    if (index == _selectedIndex) {
+      if (_appMenuOpen) _closeAppMenu();
+      return;
+    }
     _selectionPending = true;
     try {
       if (_selectedIndex == 1 &&

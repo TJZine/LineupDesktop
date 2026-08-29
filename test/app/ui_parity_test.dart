@@ -42,6 +42,13 @@ void main() {
           .excluding,
       isTrue,
     );
+    await tester.tap(find.text('Guide').last);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('immersive-app-menu')), findsNothing);
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Guide');
+
+    await tester.tap(find.byKey(const Key('guide-app-menu')));
+    await tester.pumpAndSettle();
     for (var index = 0; index < 12; index++) {
       await tester.sendKeyEvent(LogicalKeyboardKey.tab);
       await tester.pump();
