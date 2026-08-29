@@ -813,9 +813,11 @@ String _temporal(GuideProgram program, DateTime now) => program.isCurrentAt(now)
     ? 'past'
     : 'future';
 
-String _time(BuildContext context, DateTime value) => MaterialLocalizations.of(
-  context,
-).formatTimeOfDay(TimeOfDay.fromDateTime(value), alwaysUse24HourFormat: false);
+String _time(BuildContext context, DateTime value) =>
+    MaterialLocalizations.of(context).formatTimeOfDay(
+      TimeOfDay.fromDateTime(value.toLocal()),
+      alwaysUse24HourFormat: false,
+    );
 
 String _duration(Duration value) {
   final hours = value.inHours;

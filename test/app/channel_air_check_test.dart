@@ -316,21 +316,28 @@ void main() {
     );
   });
 
-  testWidgets('time labels follow Guide twelve-hour formatting', (
+  testWidgets('time labels show and announce local twelve-hour wall time', (
     tester,
   ) async {
     final controller = _AirController();
     addTearDown(controller.dispose);
+    final now = DateTime.utc(2026, 1, 1, 13, 10);
+    expect(now.toLocal().hour, 8);
     await tester.pumpWidget(
       _airCheck(
         controller,
         _channel(items: [_item('one'), _item('two')]),
-        clock: () => DateTime.utc(2026, 1, 1, 13, 10),
+        clock: () => now,
         always24: true,
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.textContaining('1:00 PM'), findsWidgets);
+    expect(find.text('8:00 AM'), findsWidgets);
+    expect(
+      find.bySemanticsLabel(RegExp(r'One, 8:00 AM to 8:30 AM, current')),
+      findsOneWidget,
+    );
+    expect(find.textContaining('1:00 PM'), findsNothing);
     expect(find.textContaining('13:00'), findsNothing);
   });
 
@@ -891,7 +898,7 @@ ChannelItem _item(String id) => ChannelItem(
 
 String _formatted(DateTime value) =>
     const DefaultMaterialLocalizations().formatTimeOfDay(
-      TimeOfDay.fromDateTime(value),
+      TimeOfDay.fromDateTime(value.toLocal()),
       alwaysUse24HourFormat: false,
     );
 
