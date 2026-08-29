@@ -198,6 +198,85 @@ void main() {
     expect(player.disposed, isTrue);
   });
 
+  testWidgets('management sign out protects a dirty Studio draft', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 720));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final controller = _LogoutController()
+      ..stage = SetupStage.ready
+      ..channels = [_studioChannel];
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      LineupBootstrap(player: _FakePlayer(), controller: controller),
+    );
+    await tester.pumpAndSettle();
+    await openDestination(tester, 'Channels');
+    await tester.tap(find.byTooltip('Open Studio channel'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('studio-name')),
+      'Edited Studio channel',
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Sign out of Plex'));
+    await tester.pumpAndSettle();
+    expect(find.text('Discard changes?'), findsOneWidget);
+    await tester.tap(find.text('Keep editing'));
+    await tester.pumpAndSettle();
+
+    expect(controller.logoutCalls, 0);
+    expect(find.text('Edited Studio channel'), findsWidgets);
+
+    await tester.tap(find.byTooltip('Sign out of Plex'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Discard changes'));
+    await tester.pumpAndSettle();
+
+    expect(controller.logoutCalls, 1);
+    expect(controller.stage, SetupStage.welcome);
+    expect(find.byKey(const Key('studio-name')), findsNothing);
+  });
+
+  testWidgets('management sign out is blocked while Studio saves', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 720));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final controller = _LogoutController(blockSave: true)
+      ..stage = SetupStage.ready
+      ..channels = [_studioChannel];
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      LineupBootstrap(player: _FakePlayer(), controller: controller),
+    );
+    await tester.pumpAndSettle();
+    await openDestination(tester, 'Channels');
+    await tester.tap(find.byTooltip('Open Studio channel'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('studio-name')),
+      'Edited Studio channel',
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Save changes'));
+    await tester.pump();
+    expect(find.text('Saving channel…'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Sign out of Plex'));
+    await tester.pump();
+
+    expect(controller.logoutCalls, 0);
+    expect(find.text('Discard changes?'), findsNothing);
+    expect(find.text('Saving channel…'), findsOneWidget);
+
+    controller.releaseSave();
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('Guide and player routes transfer and restore focus explicitly', (
     tester,
   ) async {
@@ -1197,6 +1276,49 @@ class _FakeController extends LineupController {
     mode: channel.playbackMode,
     seed: channel.shuffleSeed,
   );
+}
+
+final _studioChannel = Channel(
+  id: 'studio',
+  number: 7,
+  name: 'Studio channel',
+  source: const ManualSource([
+    ChannelItem(
+      id: 'program',
+      title: 'Studio program',
+      duration: Duration(hours: 1),
+    ),
+  ]),
+  playbackMode: PlaybackMode.sequential,
+  anchor: DateTime.utc(2026),
+  shuffleSeed: 7,
+);
+
+class _LogoutController extends _FakeController {
+  _LogoutController({bool blockSave = false})
+    : _saveRelease = blockSave ? Completer<void>() : null;
+
+  final Completer<void>? _saveRelease;
+  int logoutCalls = 0;
+
+  @override
+  Future<bool> logout() async {
+    logoutCalls++;
+    stage = SetupStage.welcome;
+    notifyListeners();
+    return true;
+  }
+
+  @override
+  Future<void> saveChannel(
+    Channel channel, {
+    required Channel? expectedBase,
+  }) async {
+    final release = _saveRelease;
+    if (release != null) await release.future;
+  }
+
+  void releaseSave() => _saveRelease?.complete();
 }
 
 class _ChannelSetupController extends _FakeController {

@@ -219,6 +219,11 @@ class _LineupShellState extends State<LineupShell> {
   }
 
   Future<void> _logout() async {
+    if (_selectedIndex == 1 &&
+        !(await (_channelsKey.currentState?.requestLeave() ??
+            Future.value(true)))) {
+      return;
+    }
     if (await _player.logout() || !mounted) return;
     await showDialog<void>(
       context: context,
