@@ -1065,7 +1065,7 @@ class LineupController extends ChangeNotifier {
         channel.validate(next);
       }
       for (final channel in planned) {
-        _validateResolvedSource(channel.source);
+        _validateResolvedSource(channel.source, requirePlayableManual: true);
       }
       channels = List.unmodifiable(next);
       currentChannelId = channels.any((channel) => channel.id == oldCurrent)
@@ -1140,7 +1140,10 @@ class LineupController extends ChangeNotifier {
     });
   }
 
-  void _validateResolvedSource(ContentSource source) {
+  void _validateResolvedSource(
+    ContentSource source, {
+    bool requirePlayableManual = false,
+  }) {
     _ensurePlayableInventory();
     switch (source) {
       case LibrarySource():
@@ -1153,10 +1156,20 @@ class LineupController extends ChangeNotifier {
           throw const FormatException('Channel source has no playable content');
         }
       case ManualSource():
-        resolveContent(source, _playableMedia, _playablePlaylists);
+        if (requirePlayableManual &&
+            resolveContent(
+              source,
+              _playableMedia,
+              _playablePlaylists,
+            ).isEmpty) {
+          throw const FormatException('Channel source has no playable content');
+        }
       case MixedSource(:final sources):
         for (final child in sources) {
-          _validateResolvedSource(child);
+          _validateResolvedSource(
+            child,
+            requirePlayableManual: requirePlayableManual,
+          );
         }
     }
   }

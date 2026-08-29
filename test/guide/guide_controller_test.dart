@@ -30,9 +30,9 @@ void main() {
   test(
     'Channel Builder result becomes the authoritative 1000-channel lineup',
     () async {
-      final original = _channels(10);
+      final original = _channels(10, includeManualTail: false);
       final lineup = _TestLineup(original)..currentChannelId = original[5].id;
-      final replacement = _channels(1000);
+      final replacement = _channels(1000, includeManualTail: false);
 
       await lineup.applyChannelPlan(
         replacement,
@@ -43,7 +43,7 @@ void main() {
       expect(lineup.currentChannelId, original[5].id);
 
       await lineup.applyChannelPlan(
-        _channels(3, idPrefix: 'small'),
+        _channels(3, idPrefix: 'small', includeManualTail: false),
         mode: ChannelBuildMode.replace,
       );
       expect(lineup.channels, hasLength(3));
@@ -942,6 +942,7 @@ List<Channel> _channels(
   int count, {
   bool nonContiguous = false,
   String idPrefix = 'channel',
+  bool includeManualTail = true,
 }) => List.generate(count, (index) {
   final items = List.generate(
     8,
@@ -956,7 +957,7 @@ List<Channel> _channels(
     id: '$idPrefix-$index',
     number: nonContiguous ? index * 7 + 3 : index + 1,
     name: index == count - 1 ? 'Custom $index' : 'Channel $index',
-    source: index == count - 1
+    source: includeManualTail && index == count - 1
         ? ManualSource(items)
         : LibrarySource(
             libraryId: 'library-${index % 3}',
@@ -1003,17 +1004,27 @@ class _TestLineup extends LineupController {
       local: true,
       relay: false,
     );
-    availableMedia = List.generate(
-      3,
-      (index) => PlexMediaItem(
-        id: 'library-$index-item',
-        title: 'Library $index item',
-        type: 'movie',
-        duration: const Duration(minutes: 30),
-        libraryId: 'library-$index',
-        parts: [PlexMediaPart(path: '/library-$index-item')],
-      ),
-    );
+    availableMedia = [
+      for (var index = 0; index < 3; index++)
+        PlexMediaItem(
+          id: 'library-$index-item',
+          title: 'Library $index item',
+          type: 'movie',
+          duration: const Duration(minutes: 30),
+          libraryId: 'library-$index',
+          parts: [PlexMediaPart(path: '/library-$index-item')],
+        ),
+      for (final channel in value)
+        if (channel.source case ManualSource(:final items))
+          for (final item in items)
+            PlexMediaItem(
+              id: item.id,
+              title: item.title,
+              type: 'movie',
+              duration: item.duration,
+              parts: [PlexMediaPart(path: '/${item.id}')],
+            ),
+    ];
     channels = value;
     stage = SetupStage.ready;
     settings = const LineupSettings(guideHours: 4, pastMinutes: 30);

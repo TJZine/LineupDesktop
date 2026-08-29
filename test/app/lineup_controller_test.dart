@@ -841,6 +841,81 @@ void main() {
   );
 
   test(
+    'unavailable generated manual recipes preserve lineup in every build mode',
+    () async {
+      const unavailable = ChannelItem(
+        id: 'unavailable',
+        title: 'Unavailable',
+        duration: Duration(minutes: 30),
+      );
+      final recipes = <({String name, ContentSource source})>[
+        (name: 'manual', source: const ManualSource([unavailable])),
+        (
+          name: 'nested manual',
+          source: const MixedSource(
+            sources: [
+              MixedSource(
+                sources: [
+                  ManualSource([unavailable]),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ];
+      for (final recipe in recipes) {
+        for (final mode in ChannelBuildMode.values) {
+          final store = _CountingMemoryStore();
+          final custom = _channel('custom');
+          final generated = _generatedChannel('generated', 2);
+          final original = [custom, generated];
+          final controller = LineupController(
+            store: store,
+            credentials: _MemoryCredentials(),
+            plex: _FakePlex(),
+          );
+          addTearDown(controller.dispose);
+          await controller.initialize();
+          controller
+            ..connection = _server('server').connections.single
+            ..availableMedia = [_playableMovie]
+            ..channels = original
+            ..currentChannelId = generated.id;
+          final planned = Channel(
+            id: 'planned-${recipe.name}-${mode.name}',
+            number: 3,
+            name: 'Unavailable generated channel',
+            source: recipe.source,
+            playbackMode: PlaybackMode.sequential,
+            anchor: DateTime.utc(2026),
+            shuffleSeed: 3,
+            builderKey: 'unavailable-${recipe.name}-${mode.name}',
+          );
+
+          await expectLater(
+            controller.applyChannelPlan([planned], mode: mode),
+            throwsA(
+              isA<FormatException>().having(
+                (error) => error.message,
+                'message',
+                'Channel source has no playable content',
+              ),
+            ),
+          );
+
+          expect(controller.channels, same(original), reason: recipe.name);
+          expect(
+            controller.currentChannelId,
+            generated.id,
+            reason: recipe.name,
+          );
+          expect(store.saveCalls, 0, reason: recipe.name);
+        }
+      }
+    },
+  );
+
+  test(
     'failed generated plan persistence rolls back lineup and current channel',
     () async {
       final store = _MemoryStore()..failNextSave = true;
