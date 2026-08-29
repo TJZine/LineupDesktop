@@ -1064,6 +1064,9 @@ class LineupController extends ChangeNotifier {
       for (final channel in next) {
         channel.validate(next);
       }
+      for (final channel in planned) {
+        _validateResolvedSource(channel.source);
+      }
       channels = List.unmodifiable(next);
       currentChannelId = channels.any((channel) => channel.id == oldCurrent)
           ? oldCurrent

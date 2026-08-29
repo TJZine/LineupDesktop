@@ -615,7 +615,10 @@ void main() {
       addTearDown(controller.dispose);
 
       await controller.initialize();
-      controller.stage = SetupStage.channelSetup;
+      controller
+        ..stage = SetupStage.channelSetup
+        ..connection = _server('server').connections.single
+        ..availableMedia = [_playableMovie];
       final planned = List<Channel>.unmodifiable([
         _generatedChannel('planned', 1),
       ]);
@@ -647,6 +650,8 @@ void main() {
       addTearDown(controller.dispose);
       await controller.initialize();
       controller
+        ..connection = _server('server').connections.single
+        ..availableMedia = [_playableMovie]
         ..channels = [custom, _generatedChannel('old', 2)]
         ..currentChannelId = custom.id;
 
@@ -679,6 +684,8 @@ void main() {
     addTearDown(controller.dispose);
     await controller.initialize();
     controller
+      ..connection = _server('server').connections.single
+      ..availableMedia = [_playableMovie]
       ..channels = [custom, removed]
       ..currentChannelId = removed.id;
 
@@ -701,8 +708,8 @@ void main() {
         number: matched.number,
         name: matched.name,
         source: const LibrarySource(
-          libraryId: 'shows',
-          libraryType: PlexLibraryType.show,
+          libraryId: 'movies',
+          libraryType: PlexLibraryType.movie,
         ),
         playbackMode: PlaybackMode.shuffle,
         anchor: matched.anchor,
@@ -716,7 +723,10 @@ void main() {
       );
       addTearDown(controller.dispose);
       await controller.initialize();
-      controller.channels = [custom, matched, unmatched];
+      controller
+        ..connection = _server('server').connections.single
+        ..availableMedia = [_playableMovie]
+        ..channels = [custom, matched, unmatched];
 
       await controller.applyChannelPlan([
         replacement,
@@ -742,6 +752,8 @@ void main() {
     addTearDown(controller.dispose);
     await controller.initialize();
     controller
+      ..connection = _server('server').connections.single
+      ..availableMedia = [_playableMovie]
       ..channels = [custom, generated]
       ..currentChannelId = generated.id;
 
@@ -767,6 +779,68 @@ void main() {
   });
 
   test(
+    'descriptor-invalid generated plans preserve lineup in every build mode',
+    () async {
+      for (final mode in ChannelBuildMode.values) {
+        final store = _CountingMemoryStore();
+        final custom = _channel('custom');
+        final generated = _generatedChannel('generated', 2);
+        final original = [custom, generated];
+        final controller = LineupController(
+          store: store,
+          credentials: _MemoryCredentials(),
+          plex: _FakePlex(),
+        );
+        addTearDown(controller.dispose);
+        await controller.initialize();
+        controller
+          ..connection = _server('server').connections.single
+          ..availablePlaylists = const [
+            PlexPlaylist(
+              id: 'invalid',
+              title: 'Invalid',
+              items: [
+                PlexMediaItem(
+                  id: 'no-parts',
+                  title: 'No parts',
+                  type: 'movie',
+                  duration: Duration(minutes: 1),
+                ),
+              ],
+            ),
+          ]
+          ..channels = original
+          ..currentChannelId = generated.id;
+        final planned = Channel(
+          id: 'planned-${mode.name}',
+          number: 3,
+          name: 'Invalid generated channel',
+          source: const PlaylistSource('invalid'),
+          playbackMode: PlaybackMode.sequential,
+          anchor: DateTime.utc(2026),
+          shuffleSeed: 3,
+          builderKey: 'invalid-${mode.name}',
+        );
+
+        await expectLater(
+          controller.applyChannelPlan([planned], mode: mode),
+          throwsA(
+            isA<FormatException>().having(
+              (error) => error.message,
+              'message',
+              'Channel source has no playable content',
+            ),
+          ),
+        );
+
+        expect(controller.channels, same(original), reason: mode.name);
+        expect(controller.currentChannelId, generated.id, reason: mode.name);
+        expect(store.saveCalls, 0, reason: mode.name);
+      }
+    },
+  );
+
+  test(
     'failed generated plan persistence rolls back lineup and current channel',
     () async {
       final store = _MemoryStore()..failNextSave = true;
@@ -780,6 +854,8 @@ void main() {
       addTearDown(controller.dispose);
       await controller.initialize();
       controller
+        ..connection = _server('server').connections.single
+        ..availableMedia = [_playableMovie]
         ..channels = [custom, generated]
         ..currentChannelId = generated.id;
 

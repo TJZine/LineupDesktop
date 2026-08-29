@@ -998,6 +998,22 @@ class _TestLineup extends LineupController {
           clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
         ),
       ) {
+    connection = PlexConnection(
+      uri: Uri.parse('https://synthetic.invalid'),
+      local: true,
+      relay: false,
+    );
+    availableMedia = List.generate(
+      3,
+      (index) => PlexMediaItem(
+        id: 'library-$index-item',
+        title: 'Library $index item',
+        type: 'movie',
+        duration: const Duration(minutes: 30),
+        libraryId: 'library-$index',
+        parts: [PlexMediaPart(path: '/library-$index-item')],
+      ),
+    );
     channels = value;
     stage = SetupStage.ready;
     settings = const LineupSettings(guideHours: 4, pastMinutes: 30);

@@ -695,6 +695,33 @@ void main() {
     );
   });
 
+  testWidgets('Channel Setup excludes descriptor-invalid inventory', (
+    tester,
+  ) async {
+    final controller = _InvalidChannelSetupController()
+      ..stage = SetupStage.channelSetup
+      ..libraries = const [
+        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
+      ];
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      MaterialApp(home: UpstreamChannelSetupView(controller: controller)),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Configure channels'));
+    await tester.pumpAndSettle();
+
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.widgetWithText(FilledButton, 'Build Channels'),
+          )
+          .onPressed,
+      isNull,
+    );
+  });
+
   testWidgets('Channel Setup append review stays exact after apply failure', (
     tester,
   ) async {
@@ -999,6 +1026,7 @@ class _FailingChannelSetupController extends FixtureController {
           type: 'movie',
           duration: const Duration(minutes: 90),
           libraryId: 'movies',
+          parts: [PlexMediaPart(path: '/parts/movie-$index')],
           genres: const ['Drama'],
         ),
     ];
@@ -1023,6 +1051,26 @@ class _PendingChannelSetupController extends _FailingChannelSetupController {
   }) => _apply.future;
 
   void finishApply() => _apply.complete();
+}
+
+class _InvalidChannelSetupController extends FixtureController {
+  @override
+  Future<bool> setLibraries(Set<String> ids) async {
+    selectedLibraryIds = Set.unmodifiable(ids);
+    availableMedia = [
+      for (var index = 0; index < 6; index++)
+        PlexMediaItem(
+          id: 'invalid-$index',
+          title: 'Invalid $index',
+          type: 'movie',
+          duration: const Duration(minutes: 90),
+          libraryId: 'movies',
+          genres: const ['Drama'],
+        ),
+    ];
+    libraryScanStatus = LibraryScanStatus.complete;
+    return true;
+  }
 }
 
 final _channel = Channel(

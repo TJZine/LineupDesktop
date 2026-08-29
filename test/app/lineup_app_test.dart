@@ -1322,6 +1322,14 @@ class _LogoutController extends _FakeController {
 }
 
 class _ChannelSetupController extends _FakeController {
+  _ChannelSetupController() {
+    connection = PlexConnection(
+      uri: Uri.parse('https://synthetic.invalid'),
+      local: true,
+      relay: false,
+    );
+  }
+
   @override
   Future<bool> setLibraries(Set<String> ids) async {
     selectedLibraryIds = Set.unmodifiable(ids);

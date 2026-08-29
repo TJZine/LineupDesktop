@@ -95,16 +95,22 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
       .where((library) => _selectedLibraries.contains(library.id))
       .toList();
 
-  List<ChannelProposal> get _proposals => buildChannelProposals(
-    libraries: _libraries,
-    items: widget.controller.availableMedia,
-    playlists: widget.controller.availablePlaylists,
-    strategies: _strategies,
-    strategyOrder: _strategyOrder,
-    crossLibraryStrategies: _crossLibraryStrategies,
-    minimumItems: _minimumItems,
-    maximumChannels: _maximumChannels + 1,
-  );
+  ({List<ChannelProposal> proposals, int itemCount}) get _proposalSnapshot {
+    final inventory = widget.controller.playableInventory;
+    return (
+      proposals: buildChannelProposals(
+        libraries: _libraries,
+        items: inventory.media,
+        playlists: inventory.playlists,
+        strategies: _strategies,
+        strategyOrder: _strategyOrder,
+        crossLibraryStrategies: _crossLibraryStrategies,
+        minimumItems: _minimumItems,
+        maximumChannels: _maximumChannels + 1,
+      ),
+      itemCount: inventory.media.length,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -532,7 +538,11 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
     }
   }
 
-  Widget _strategyStep() => _SetupSurface(
+  Widget _strategyStep() => _strategyStepFor(_proposalSnapshot);
+
+  Widget _strategyStepFor(
+    ({List<ChannelProposal> proposals, int itemCount}) proposalSnapshot,
+  ) => _SetupSurface(
     title: 'Configure the lineup',
     subtitle: 'Choose source families, ordering and limits. Estimates update from loaded Plex metadata.',
     footer: _SetupFooter(
@@ -543,7 +553,7 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
         ),
       ],
       primary: FilledButton.icon(
-        onPressed: _proposals.isEmpty ? null : _prepareReview,
+        onPressed: proposalSnapshot.proposals.isEmpty ? null : _prepareReview,
         icon: const Icon(Icons.preview_outlined),
         label: Text(
           widget.controller.channels.isEmpty ? 'Build Channels' : 'Review',
@@ -565,7 +575,7 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
                 child: details,
               ),
               const SizedBox(height: 12),
-              _previewStrip(),
+              _previewStrip(proposalSnapshot),
             ],
           );
         }
@@ -582,7 +592,7 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
               ),
             ),
             const SizedBox(height: 12),
-            _previewStrip(),
+            _previewStrip(proposalSnapshot),
           ],
         );
       },
@@ -864,12 +874,14 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
     _strategyOrder.insert(index + delta, strategy);
   });
 
-  Widget _previewStrip() {
-    final proposals = _proposals;
+  Widget _previewStrip(
+    ({List<ChannelProposal> proposals, int itemCount}) proposalSnapshot,
+  ) {
+    final proposals = proposalSnapshot.proposals;
     final displayed = proposals.take(_maximumChannels).toList();
     final summary = displayed.isEmpty
         ? 'No channel ideas meet the current minimum. Adjust sources or limits.'
-        : '${displayed.length} channel ideas from ${widget.controller.availableMedia.length} loaded programs.';
+        : '${displayed.length} channel ideas from ${proposalSnapshot.itemCount} playable programs.';
     final statuses = [
       for (final strategy in _strategyOrder)
         '${builderStrategyLabels[strategy]}: ${_strategyStatus(strategy, displayed)}',
@@ -1061,9 +1073,10 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
   }
 
   void _prepareReview() {
+    final proposalSnapshot = _proposalSnapshot;
     setState(() {
       _planned = materializeChannelPlan(
-        proposals: _proposals,
+        proposals: proposalSnapshot.proposals,
         existing: widget.controller.channels,
         mode: _mode,
         seriesMode: _seriesOrdering,
