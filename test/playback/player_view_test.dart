@@ -915,8 +915,13 @@ void main() {
   testWidgets('OSD uses official title artwork with a text fallback', (
     tester,
   ) async {
+    final semantics = tester.ensureSemantics();
     final cases = [
-      (fixture: _Fixture(PlayerState.playing, richProgram: true), logo: true),
+      (
+        fixture: _Fixture(PlayerState.playing, richProgram: true),
+        logo: true,
+        description: 'loaded logo',
+      ),
       (
         fixture: _Fixture(
           PlayerState.playing,
@@ -924,6 +929,7 @@ void main() {
           preferClearLogos: false,
         ),
         logo: false,
+        description: 'disabled logos',
       ),
       (
         fixture: _Fixture(
@@ -932,6 +938,7 @@ void main() {
           failArtwork: true,
         ),
         logo: false,
+        description: 'failed artwork',
       ),
     ];
     for (final item in cases) {
@@ -943,27 +950,42 @@ void main() {
           home: PlayerView(controller: item.fixture.player, openGuide: () {}),
         ),
       );
+      if (item.logo) {
+        await tester.runAsync(
+          () => precacheImage(
+            MemoryImage(_fixtureArtwork),
+            tester.element(find.byType(PlayerView)),
+          ),
+        );
+      }
       await tester.pumpAndSettle();
       expect(
         find.byKey(const Key('player-osd-logo')),
         item.logo ? findsOneWidget : findsNothing,
+        reason: item.description,
+      );
+      final titleSemantics = find.bySemanticsLabel('Program');
+      expect(titleSemantics, findsOneWidget, reason: item.description);
+      final titleData = tester
+          .getSemantics(
+            find.byKey(Key(item.logo ? 'player-osd-logo' : 'player-osd-title')),
+          )
+          .getSemanticsData();
+      expect(titleData.label, 'Program', reason: item.description);
+      expect(
+        titleData.flagsCollection.isImage,
+        item.logo,
+        reason: item.description,
       );
       if (item.logo) {
-        expect(
-          tester
-              .widget<Semantics>(
-                find.byKey(const Key('player-osd-logo-semantics')),
-              )
-              .properties
-              .label,
-          'Program',
-        );
+        expect(find.byKey(const Key('player-osd-title')), findsNothing);
       } else {
         expect(find.byKey(const Key('player-osd-title')), findsOneWidget);
       }
       await tester.pumpWidget(const SizedBox.shrink());
       item.fixture.dispose();
     }
+    semantics.dispose();
   });
 
   testWidgets('OSD keeps its widescreen hierarchy at DPR2', (tester) async {

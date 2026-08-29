@@ -625,26 +625,22 @@ class _Osd extends StatelessWidget {
         if (controller.lineup.settings.preferClearLogos &&
             program != null &&
             logoPath != null)
-          Semantics(
-            key: const Key('player-osd-logo-semantics'),
-            label: title,
-            image: true,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 320, maxHeight: 68),
-              child: _PlayerArtwork(
-                key: ValueKey((
-                  program.id,
-                  controller.lineup.contentGeneration,
-                  logoPath,
-                )),
-                imageKey: const Key('player-osd-logo'),
-                future: controller.guide.artworkFor(
-                  program,
-                  GuideArtworkKind.clearLogo,
-                ),
-                fit: BoxFit.contain,
-                fallback: _OsdTitle(title: title),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 320, maxHeight: 68),
+            child: _PlayerArtwork(
+              key: ValueKey((
+                program.id,
+                controller.lineup.contentGeneration,
+                logoPath,
+              )),
+              imageKey: const Key('player-osd-logo'),
+              semanticLabel: title,
+              future: controller.guide.artworkFor(
+                program,
+                GuideArtworkKind.clearLogo,
               ),
+              fit: BoxFit.contain,
+              fallback: _OsdTitle(title: title),
             ),
           )
         else
@@ -865,7 +861,9 @@ class _OsdTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Semantics(
+    container: true,
     label: title,
+    excludeSemantics: true,
     child: Text(
       title,
       key: const Key('player-osd-title'),
@@ -1389,6 +1387,7 @@ class _PlayerArtwork extends StatelessWidget {
     required this.fit,
     this.fallback = const SizedBox.shrink(),
     this.imageKey,
+    this.semanticLabel,
     super.key,
   });
 
@@ -1396,6 +1395,7 @@ class _PlayerArtwork extends StatelessWidget {
   final BoxFit fit;
   final Widget fallback;
   final Key? imageKey;
+  final String? semanticLabel;
 
   @override
   Widget build(BuildContext context) => FutureBuilder<Uint8List?>(
@@ -1407,7 +1407,8 @@ class _PlayerArtwork extends StatelessWidget {
             key: imageKey,
             fit: fit,
             gaplessPlayback: false,
-            excludeFromSemantics: true,
+            semanticLabel: semanticLabel,
+            excludeFromSemantics: semanticLabel == null,
             frameBuilder: (context, child, frame, synchronous) =>
                 synchronous || frame != null ? child : fallback,
             errorBuilder: (_, _, _) => fallback,
