@@ -177,25 +177,7 @@ void main() {
       for (var index = 0; index < maxRichCastMembers + 5; index++)
         {'name': 'Actor $index', 'role': 'Role $index'},
     ];
-    final json = _canonicalJson()
-      ..['channelsByProfileServer'] = {
-        'profile': {
-          'server': [
-            _channelJson()
-              ..['source'] = {
-                'type': 'manual',
-                'items': [
-                  {
-                    'id': 'item',
-                    'title': 'Item',
-                    'durationMs': 60000,
-                    'cast': cast,
-                  },
-                ],
-              },
-          ],
-        },
-      };
+    final json = _stateJsonWithCast(cast);
 
     ChannelItem persistedItem(PersistedState state) =>
         (state.channelsByProfileServer['profile']!['server']!.single.source
@@ -215,6 +197,16 @@ void main() {
     );
     expect(roundTripped.cast, hasLength(maxRichCastMembers));
     expect(roundTripped.toJson(), item.toJson());
+
+    expect(
+      () => PersistedState.fromJson(
+        _stateJsonWithCast([
+          ...cast,
+          {'name': 'Malformed tail', 'future': true},
+        ]),
+      ),
+      throwsFormatException,
+    );
   });
 
   group('canonical persisted schema', () {
@@ -405,6 +397,13 @@ void main() {
           },
         },
     ),
+    'noncanonical oversized cast tail JSON': _encodedState(
+      _stateJsonWithCast([
+        for (var index = 0; index < maxRichCastMembers + 5; index++)
+          {'name': 'Actor $index'},
+        {'name': 'Malformed tail', 'future': true},
+      ]),
+    ),
   }.entries) {
     test('${corruptState.key} quarantines once and reports recovery', () async {
       final directory = await Directory.systemTemp.createTemp(
@@ -512,6 +511,26 @@ Map<String, Object?> _canonicalJson() => {
   ...const PersistedState().toJson(),
   'profileId': 'profile',
 };
+
+Map<String, Object?> _stateJsonWithCast(List<Object?> cast) => _canonicalJson()
+  ..['channelsByProfileServer'] = {
+    'profile': {
+      'server': [
+        _channelJson()
+          ..['source'] = {
+            'type': 'manual',
+            'items': [
+              {
+                'id': 'item',
+                'title': 'Item',
+                'durationMs': 60000,
+                'cast': cast,
+              },
+            ],
+          },
+      ],
+    },
+  };
 
 Map<String, Object?> _channelJson({
   String artworkKey = 'poster',

@@ -255,11 +255,7 @@ class ChannelItem {
         audioChannels: _optionalInteger(json, 'audioChannels'),
         dynamicRange: _optionalString(json, 'dynamicRange'),
         cast: json.containsKey('cast')
-            ? List<ChannelCastMember>.unmodifiable(
-                (_nonNull(json, 'cast') as List)
-                    .take(maxRichCastMembers)
-                    .map(ChannelCastMember.fromJson),
-              )
+            ? _persistedCastMembers(_nonNull(json, 'cast'))
             : const [],
       );
     } on FormatException {
@@ -268,6 +264,15 @@ class ChannelItem {
       throw FormatException('Invalid channel item', error);
     }
   }
+}
+
+List<ChannelCastMember> _persistedCastMembers(Object value) {
+  final retained = <ChannelCastMember>[];
+  for (final raw in value as List) {
+    final member = ChannelCastMember.fromJson(raw);
+    if (retained.length < maxRichCastMembers) retained.add(member);
+  }
+  return List.unmodifiable(retained);
 }
 
 class ChannelCastMember {
