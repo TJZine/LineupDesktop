@@ -1,6 +1,11 @@
 import '../plex/plex_models.dart';
 import 'channel.dart';
 
+String? channelDecadeForYear(int? year) {
+  if (year == null || year < 1000 || year > 9999) return null;
+  return '${year ~/ 10 * 10}s';
+}
+
 List<ChannelItem> resolveContent(
   ContentSource source,
   List<PlexMediaItem> media, [
@@ -46,8 +51,7 @@ List<ChannelItem> _library(LibrarySource source, List<PlexMediaItem> media) {
         (item) => item.directors.contains(filter.value),
       ),
       'decade' when RegExp(r'^\d{3}0s$').hasMatch(filter.value) => items.where(
-        (item) =>
-            item.year != null && '${item.year! ~/ 10 * 10}s' == filter.value,
+        (item) => channelDecadeForYear(item.year) == filter.value,
       ),
       'sort' when filter.value == 'added:desc' =>
         items.toList()..sort(

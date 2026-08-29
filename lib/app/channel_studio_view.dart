@@ -1105,8 +1105,8 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
       }
       values['actor']!.addAll(item.actors);
       values['director']!.addAll(item.directors);
-      if (item.year case final year?) {
-        values['decade']!.add('${year ~/ 10 * 10}s');
+      if (channelDecadeForYear(item.year) case final decade?) {
+        values['decade']!.add(decade);
       }
     }
     return {
@@ -1145,8 +1145,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
           (item) => item.directors.contains(filter.value),
         ),
         'decade' => items.where(
-          (item) =>
-              item.year != null && '${item.year! ~/ 10 * 10}s' == filter.value,
+          (item) => channelDecadeForYear(item.year) == filter.value,
         ),
         'sort' when filter.value == 'added:desc' =>
           items.toList()..sort(

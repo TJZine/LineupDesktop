@@ -4,6 +4,7 @@ import 'package:crypto/crypto.dart';
 
 import '../plex/plex_models.dart';
 import 'channel.dart';
+import 'content_resolver.dart';
 
 enum BuilderStrategy {
   playlists,
@@ -213,7 +214,7 @@ List<ChannelProposal> buildChannelProposals({
   addTags(BuilderStrategy.directors, (item) => item.directors, 'director');
   addTags(
     BuilderStrategy.decades,
-    (item) => [if (item.year != null) '${item.year! ~/ 10 * 10}s'],
+    (item) => [?channelDecadeForYear(item.year)],
     'decade',
   );
   final priority = {

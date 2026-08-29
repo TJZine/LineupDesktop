@@ -4,6 +4,15 @@ import 'package:lineup_desktop/channels/content_resolver.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
 
 void main() {
+  test('decades use one canonical four-digit representation', () {
+    expect(channelDecadeForYear(1981), '1980s');
+    expect(channelDecadeForYear(1000), '1000s');
+    expect(channelDecadeForYear(9999), '9990s');
+    for (final year in [null, -11, 999, 10000]) {
+      expect(channelDecadeForYear(year), isNull, reason: '$year');
+    }
+  });
+
   final media = [
     PlexMediaItem(
       id: 'a',
@@ -118,6 +127,9 @@ void main() {
       {'future': 'anything'},
       {'decade': '1995s'},
       {'decade': '90s'},
+      {'decade': '990s'},
+      {'decade': '-10s'},
+      {'decade': '10000s'},
       {'sort': 'title:asc'},
     ]) {
       expect(

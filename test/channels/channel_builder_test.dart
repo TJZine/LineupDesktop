@@ -65,6 +65,34 @@ void main() {
     expect(proposals, isEmpty);
   });
 
+  test('builder omits noncanonical years from decade proposals', () {
+    const library = PlexLibrary(
+      id: '1',
+      title: 'Movies',
+      type: PlexLibraryType.movie,
+    );
+    final proposals = buildChannelProposals(
+      libraries: const [library],
+      items: [
+        for (final year in [-11, 999, 1981, 10000])
+          PlexMediaItem(
+            id: '$year',
+            title: 'Movie $year',
+            type: 'movie',
+            duration: const Duration(minutes: 1),
+            libraryId: '1',
+            year: year,
+          ),
+      ],
+      strategies: const {BuilderStrategy.decades},
+      minimumItems: 1,
+    );
+
+    expect(proposals, hasLength(1));
+    expect(proposals.single.name, '1980s');
+    expect(proposals.single.itemCount, 1);
+  });
+
   test('builder keeps playlists and collections as real sources', () {
     const library = PlexLibrary(
       id: '1',
