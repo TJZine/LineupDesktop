@@ -321,8 +321,13 @@ void main() {
   ) async {
     final controller = _AirController();
     addTearDown(controller.dispose);
-    final now = DateTime.utc(2026, 1, 1, 13, 10);
-    expect(now.toLocal().hour, 8);
+    final start = DateTime.utc(2026, 1, 1, 13);
+    final end = start.add(const Duration(minutes: 30));
+    final now = start.add(const Duration(minutes: 10));
+    final twelveHourStart = _formatted(start);
+    final twelveHourEnd = _formatted(end);
+    final twentyFourHourStart = _formatted(start, always24: true);
+    expect(twelveHourStart, isNot(twentyFourHourStart));
     await tester.pumpWidget(
       _airCheck(
         controller,
@@ -332,13 +337,17 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('8:00 AM'), findsWidgets);
+    expect(find.text(twelveHourStart), findsWidgets);
     expect(
-      find.bySemanticsLabel(RegExp(r'One, 8:00 AM to 8:30 AM, current')),
+      find.bySemanticsLabel(
+        RegExp(
+          'One, ${RegExp.escape(twelveHourStart)} to '
+          '${RegExp.escape(twelveHourEnd)}, current',
+        ),
+      ),
       findsOneWidget,
     );
-    expect(find.textContaining('1:00 PM'), findsNothing);
-    expect(find.textContaining('13:00'), findsNothing);
+    expect(find.text(twentyFourHourStart), findsNothing);
   });
 
   testWidgets('before, at, and after anchor match authoritative boundaries', (
@@ -910,10 +919,10 @@ ChannelItem _item(String id) => ChannelItem(
   duration: const Duration(minutes: 30),
 );
 
-String _formatted(DateTime value) =>
+String _formatted(DateTime value, {bool always24 = false}) =>
     const DefaultMaterialLocalizations().formatTimeOfDay(
       TimeOfDay.fromDateTime(value.toLocal()),
-      alwaysUse24HourFormat: false,
+      alwaysUse24HourFormat: always24,
     );
 
 class _AirController extends FixtureController {
