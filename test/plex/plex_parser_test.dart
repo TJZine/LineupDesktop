@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/plex/plex_client.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
 
@@ -333,6 +334,31 @@ void main() {
         }),
       ),
     );
+  });
+
+  test('bounds rich cast without truncating actor names', () {
+    final roles = [
+      {'tag': 'Actor 0'},
+      {'tag': ' actor 0 ', 'role': 'Duplicate'},
+      for (var index = 1; index < maxRichCastMembers + 5; index++)
+        {'tag': 'Actor $index', 'role': 'Role $index'},
+    ];
+    final item = parseMediaItem({
+      'ratingKey': 'large-cast',
+      'title': 'Large cast',
+      'type': 'movie',
+      'duration': 1000,
+      'Role': roles,
+    });
+
+    expect(item.actors, [
+      for (var index = 0; index < maxRichCastMembers + 5; index++)
+        'Actor $index',
+    ]);
+    expect(item.cast, hasLength(maxRichCastMembers));
+    expect(item.cast.map((member) => member.name), [
+      for (var index = 0; index < maxRichCastMembers; index++) 'Actor $index',
+    ]);
   });
 
   test('rejects missing media identity', () {

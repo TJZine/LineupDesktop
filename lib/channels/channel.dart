@@ -5,6 +5,8 @@ enum PlexLibraryType { movie, show }
 
 enum PlaybackMode { sequential, shuffle, block }
 
+const maxRichCastMembers = 20;
+
 sealed class ContentSource {
   const ContentSource();
 
@@ -254,9 +256,9 @@ class ChannelItem {
         dynamicRange: _optionalString(json, 'dynamicRange'),
         cast: json.containsKey('cast')
             ? List<ChannelCastMember>.unmodifiable(
-                (_nonNull(json, 'cast') as List).map(
-                  ChannelCastMember.fromJson,
-                ),
+                (_nonNull(json, 'cast') as List)
+                    .take(maxRichCastMembers)
+                    .map(ChannelCastMember.fromJson),
               )
             : const [],
       );

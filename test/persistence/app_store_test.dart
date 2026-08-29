@@ -172,6 +172,51 @@ void main() {
     }
   });
 
+  test('bounds oversized persisted cast across round trips', () {
+    final cast = [
+      for (var index = 0; index < maxRichCastMembers + 5; index++)
+        {'name': 'Actor $index', 'role': 'Role $index'},
+    ];
+    final json = _canonicalJson()
+      ..['channelsByProfileServer'] = {
+        'profile': {
+          'server': [
+            _channelJson()
+              ..['source'] = {
+                'type': 'manual',
+                'items': [
+                  {
+                    'id': 'item',
+                    'title': 'Item',
+                    'durationMs': 60000,
+                    'cast': cast,
+                  },
+                ],
+              },
+          ],
+        },
+      };
+
+    ChannelItem persistedItem(PersistedState state) =>
+        (state.channelsByProfileServer['profile']!['server']!.single.source
+                as ManualSource)
+            .items
+            .single;
+
+    final restored = PersistedState.fromJson(json);
+    final item = persistedItem(restored);
+    expect(item.cast, hasLength(maxRichCastMembers));
+    expect(item.cast.map((member) => member.name), [
+      for (var index = 0; index < maxRichCastMembers; index++) 'Actor $index',
+    ]);
+
+    final roundTripped = persistedItem(
+      PersistedState.fromJson(restored.toJson()),
+    );
+    expect(roundTripped.cast, hasLength(maxRichCastMembers));
+    expect(roundTripped.toJson(), item.toJson());
+  });
+
   group('canonical persisted schema', () {
     test(
       'requires every structural field and permits only a nullable profile',

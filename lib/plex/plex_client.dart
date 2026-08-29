@@ -644,7 +644,7 @@ PlexMediaItem parseMediaItem(Object? raw, {String? libraryId}) {
     genres: _tagNames(json['Genre']),
     collections: _tagNames(json['Collection']),
     directors: _tagNames(json['Director']),
-    actors: cast.map((member) => member.name).toList(growable: false),
+    actors: _actorNames(json['Role']),
     cast: cast,
     studio: _optionalText(json['studio']),
     year: _optionalInteger(json['year']),
@@ -698,6 +698,15 @@ List<String> _tagNames(Object? raw) {
   return names;
 }
 
+List<String> _actorNames(Object? raw) {
+  final names = <String>[];
+  final seen = <String>{};
+  for (final name in _tagNames(raw)) {
+    if (seen.add(name.toLowerCase())) names.add(name);
+  }
+  return names;
+}
+
 List<PlexCastMember> _castMembers(Object? raw) {
   final members = <PlexCastMember>[];
   final names = <String>{};
@@ -714,6 +723,7 @@ List<PlexCastMember> _castMembers(Object? raw) {
         )?.toString(),
       ),
     );
+    if (members.length == maxRichCastMembers) break;
   }
   return List.unmodifiable(members);
 }
