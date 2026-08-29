@@ -190,7 +190,7 @@ timeline tier immediately above the edge-to-edge progress line shows
 `current / total • time left` on the left when duration is known and
 `Up next • scheduled start • title` on the right. Metadata and actions are
 restrained, and the progress line is anchored to the absolute bottom. By
-default, **DVR playback controls** is off: transport buttons are
+default, the **DVR playback controls** setting is off: transport buttons are
 hidden and Player-local pause/play, seek, stop, rewind, and fast-forward
 keyboard/media shortcuts are blocked. Page Up/Page Down channel surfing,
 number entry, Guide/Mini Guide tuning, tracks, sleep, menu, and fullscreen

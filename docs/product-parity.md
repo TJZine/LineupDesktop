@@ -816,7 +816,7 @@ horizontal navigation, jump-to-now, tuning, the shallow OSD, five-row Mini
 Guide, Rich Now Playing, audio/subtitle rails, Settings over and back to
 Player, and all five themes. Its black Player canvas is expected on the
 synthetic harness because `HarnessPlayer` provides no video surface.
-Profiles/PIN and Setup are unreachable from the harness ready state, and
+Profiles/PIN and Setup are unreachable from the harness-ready state, and
 resize/fullscreen/DPI plus timeout-retention were not fully rerun. Initial
 screen-capture failure and Flutter
 accessibility pending-tree warnings limited the automation; these observations
