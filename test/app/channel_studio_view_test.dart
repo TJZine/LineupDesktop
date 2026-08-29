@@ -928,7 +928,7 @@ void main() {
     expect(
       find.bySemanticsLabel(
         RegExp(
-          'Channel 7 Agreement, ${expected.item.title}, ${_testTime(expected.start)} to ${_testTime(expected.end)}, current',
+          'Channel 7 Agreement, ${expected.item.title}, ${_testTime(expected.start.toLocal())} to ${_testTime(expected.end.toLocal())}, current',
         ),
       ),
       findsOneWidget,
