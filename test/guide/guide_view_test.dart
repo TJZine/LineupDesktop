@@ -389,14 +389,20 @@ void main() {
     await tester.tap(find.text('Schedule unavailable — select to retry'));
     await tester.pumpAndSettle();
 
-    expect(find.text('7:30 AM–8:00 AM'), findsWidgets);
+    final current = guide.currentProgram('semantic-channel')!;
+    final startLabel = _testTime(current.scheduled.start.toLocal());
+    final endLabel = _testTime(current.scheduled.end.toLocal());
+    expect(find.text('$startLabel–$endLabel'), findsWidgets);
     expect(
       find.bySemanticsLabel(
-        RegExp(r'^Current Program, 7:30 AM to 8:00 AM, currently airing$'),
+        'Current Program, $startLabel to $endLabel, currently airing',
       ),
       findsOneWidget,
     );
-    expect(find.textContaining('12:30 PM'), findsNothing);
+    final rawStartLabel = _testTime(current.scheduled.start);
+    if (rawStartLabel != startLabel) {
+      expect(find.textContaining(rawStartLabel), findsNothing);
+    }
 
     final channelRail = find.bySemanticsLabel(
       RegExp(r'^Channel 1, Semantic Channel, now watching'),
@@ -409,7 +415,6 @@ void main() {
     expect(channelSemantics.hasAction(SemanticsAction.tap), isTrue);
     expect(find.bySemanticsLabel(RegExp(r'^Now watching$')), findsNothing);
 
-    final current = guide.currentProgram('semantic-channel')!;
     await tester.tap(find.bySemanticsLabel(RegExp('upcoming')));
     await tester.pump();
     expect(guide.focusedProgramId, isNot(current.id));
@@ -1117,6 +1122,12 @@ ScheduleIndex _schedule(Channel channel) => buildSchedule(
   mode: channel.playbackMode,
   seed: channel.shuffleSeed,
 );
+
+String _testTime(DateTime value) =>
+    const DefaultMaterialLocalizations().formatTimeOfDay(
+      TimeOfDay.fromDateTime(value),
+      alwaysUse24HourFormat: false,
+    );
 
 class _Lineup extends LineupController {
   _Lineup(int count, {this.artworkBytes})
