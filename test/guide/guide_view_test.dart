@@ -389,6 +389,15 @@ void main() {
     await tester.tap(find.text('Schedule unavailable — select to retry'));
     await tester.pumpAndSettle();
 
+    expect(find.text('7:30 AM–8:00 AM'), findsWidgets);
+    expect(
+      find.bySemanticsLabel(
+        RegExp(r'^Current Program, 7:30 AM to 8:00 AM, currently airing$'),
+      ),
+      findsOneWidget,
+    );
+    expect(find.textContaining('12:30 PM'), findsNothing);
+
     final channelRail = find.bySemanticsLabel(
       RegExp(r'^Channel 1, Semantic Channel, now watching'),
     );
