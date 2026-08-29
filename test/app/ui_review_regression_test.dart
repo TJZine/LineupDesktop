@@ -722,6 +722,31 @@ void main() {
     );
   });
 
+  testWidgets('Channel Setup counts unique playlist-only programs', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1600, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final controller = _PlaylistOnlyChannelSetupController()
+      ..stage = SetupStage.channelSetup
+      ..libraries = const [
+        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
+      ];
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      MaterialApp(home: UpstreamChannelSetupView(controller: controller)),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Configure channels'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('2 channel ideas from 6 playable programs.'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('Channel Setup append review stays exact after apply failure', (
     tester,
   ) async {
@@ -1067,6 +1092,33 @@ class _InvalidChannelSetupController extends FixtureController {
           libraryId: 'movies',
           genres: const ['Drama'],
         ),
+    ];
+    libraryScanStatus = LibraryScanStatus.complete;
+    return true;
+  }
+}
+
+class _PlaylistOnlyChannelSetupController extends FixtureController {
+  @override
+  Future<bool> setLibraries(Set<String> ids) async {
+    selectedLibraryIds = Set.unmodifiable(ids);
+    final items = [
+      for (var index = 0; index < 6; index++)
+        PlexMediaItem(
+          id: 'playlist-item-$index',
+          title: 'Playlist item $index',
+          type: 'movie',
+          duration: const Duration(minutes: 30),
+          parts: [PlexMediaPart(path: '/playlist-item-$index')],
+        ),
+    ];
+    availablePlaylists = [
+      PlexPlaylist(id: 'primary', title: 'Primary', items: items),
+      PlexPlaylist(
+        id: 'shared',
+        title: 'Shared',
+        items: items.take(5).toList(),
+      ),
     ];
     libraryScanStatus = LibraryScanStatus.complete;
     return true;

@@ -108,7 +108,7 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
         minimumItems: _minimumItems,
         maximumChannels: _maximumChannels + 1,
       ),
-      itemCount: inventory.media.length,
+      itemCount: inventory.byId.length,
     );
   }
 
