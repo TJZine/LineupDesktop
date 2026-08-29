@@ -459,8 +459,22 @@ void main() {
     expect(find.textContaining('no playable programs'), findsOneWidget);
     expect(validity, ChannelAirCheckValidity.unknown);
 
-    controller.nextFailure = const FormatException(
-      'FormatException: A channel needs content',
+    controller.nextFailure = const ScheduleBuildException(
+      ScheduleFailureReason.unsupportedSource,
+    );
+    await tester.pumpWidget(
+      _airCheck(
+        controller,
+        _channel(items: [_item('unsupported')]),
+        onValidityChanged: (value) => validity = value,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.textContaining('unsupported filter'), findsOneWidget);
+    expect(validity, ChannelAirCheckValidity.unknown);
+
+    controller.nextFailure = const ScheduleBuildException(
+      ScheduleFailureReason.noContent,
     );
     await tester.pumpWidget(
       _airCheck(
@@ -509,8 +523,8 @@ void main() {
         isFalse,
       );
 
-      controller.nextFailure = const FormatException(
-        'FormatException: A channel needs content',
+      controller.nextFailure = const ScheduleBuildException(
+        ScheduleFailureReason.noContent,
       );
       await tester.pumpWidget(
         _airCheck(
@@ -746,7 +760,7 @@ void main() {
       ),
     );
     controller.failNext(
-      const FormatException('FormatException: A channel needs content'),
+      const ScheduleBuildException(ScheduleFailureReason.noContent),
     );
     await tester.pump();
     controller.completeNext();
@@ -923,7 +937,9 @@ class _AirController extends FixtureController {
     }
     final source = channel.source as ManualSource;
     if (source.items.isEmpty) {
-      return Future.error(const FormatException('A channel needs content'));
+      return Future.error(
+        const ScheduleBuildException(ScheduleFailureReason.noContent),
+      );
     }
     final schedule = buildSchedule(
       source.items,

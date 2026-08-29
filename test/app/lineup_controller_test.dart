@@ -9,10 +9,19 @@ import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/channels/channel_builder.dart';
 import 'package:lineup_desktop/channels/content_resolver.dart';
 import 'package:lineup_desktop/channels/schedule_worker.dart';
+import 'package:lineup_desktop/channels/scheduler.dart';
 import 'package:lineup_desktop/persistence/app_store.dart';
 import 'package:lineup_desktop/plex/plex_client.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
+
+Matcher _throwsScheduleFailure(ScheduleFailureReason reason) => throwsA(
+  isA<ScheduleBuildException>().having(
+    (error) => error.reason,
+    'reason',
+    reason,
+  ),
+);
 
 void main() {
   test(
@@ -2454,10 +2463,13 @@ void main() {
 
       expect(controller.playableInventory.playlists.single.items, isEmpty);
 
-      expect(() => controller.scheduleFor(channel), throwsFormatException);
+      expect(
+        () => controller.scheduleFor(channel),
+        _throwsScheduleFailure(ScheduleFailureReason.noContent),
+      );
       await expectLater(
         controller.loadScheduleFor(channel),
-        throwsFormatException,
+        _throwsScheduleFailure(ScheduleFailureReason.noContent),
       );
       await expectLater(
         controller.saveChannel(channel, expectedBase: null),
@@ -2483,7 +2495,7 @@ void main() {
 
       expect(
         () => missingEndpoint.scheduleFor(_channel('missing')),
-        throwsFormatException,
+        _throwsScheduleFailure(ScheduleFailureReason.noContent),
       );
       expect(missingEndpoint.playableInventory.media, isEmpty);
       expect(missingEndpoint.playableInventory.playlists, isEmpty);
@@ -2632,7 +2644,7 @@ void main() {
       controller.connection = _server('other').connections.single;
       await expectLater(
         controller.loadScheduleFor(channel),
-        throwsFormatException,
+        _throwsScheduleFailure(ScheduleFailureReason.noContent),
       );
       expect(mediaInputs, hasLength(5));
     },

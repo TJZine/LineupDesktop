@@ -220,7 +220,7 @@ class ChannelAirCheckState extends State<ChannelAirCheck> {
             if (request.baseline && request.key == _wantedOriginalKey) {
               _originalSchedule = null;
               _originalScheduleKey = null;
-              if (_isNoContentError(error)) {
+              if (_isNoContentFailure(error)) {
                 _originalOffAirKey = request.key;
                 _originalScheduleError = null;
                 _originalScheduleErrorKey = null;
@@ -321,7 +321,7 @@ class ChannelAirCheckState extends State<ChannelAirCheck> {
 
   bool _canRetainOffAir(Object error) {
     if (!hasNonemptyRetainedManualContent(widget.channel.source)) return false;
-    return _isNoContentError(error);
+    return _isNoContentFailure(error);
   }
 
   bool get _comparisonReady =>
@@ -663,13 +663,8 @@ class ChannelAirCheckState extends State<ChannelAirCheck> {
     final message = switch (error) {
       _ when _canRetainOffAir(error) => 'No retained hand-picked programs are currently available. They remain saved and explicitly off air.',
       _AirCheckSourceIssue(:final message) => message,
-      _
-          when error.toString().contains('Unknown content filter') ||
-              error.toString().contains('Unsupported') =>
-        'This source uses an unsupported filter. Replace it with supported programming.',
-      _
-          when error.toString().contains('needs content') ||
-              error.toString().contains('no playable') =>
+      ScheduleBuildException(reason: ScheduleFailureReason.unsupportedSource) => 'This source uses an unsupported filter. Replace it with supported programming.',
+      ScheduleBuildException(reason: ScheduleFailureReason.noContent) =>
         'This source has no playable programs. Choose available programming.',
       _ => 'Air Check could not verify this schedule. Retry before saving.',
     };
@@ -779,10 +774,9 @@ class _AirCheckSourceIssue {
   final String message;
 }
 
-bool _isNoContentError(Object error) =>
-    error is FormatException &&
-    (error.message == 'A channel needs content' ||
-        error.message == 'FormatException: A channel needs content');
+bool _isNoContentFailure(Object error) =>
+    error is ScheduleBuildException &&
+    error.reason == ScheduleFailureReason.noContent;
 
 String channelAirCheckSnapshotKey(Channel channel, int contentGeneration) =>
     '${_recipeKey(channel)}|$contentGeneration';

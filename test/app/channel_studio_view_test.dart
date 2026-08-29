@@ -3815,8 +3815,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    controller.nextScheduleFailure = const FormatException(
-      'FormatException: A channel needs content',
+    controller.nextScheduleFailure = const ScheduleBuildException(
+      ScheduleFailureReason.noContent,
     );
     controller.generation++;
     controller.notifyListeners();
@@ -3854,8 +3854,8 @@ void main() {
       source: ManualSource([_itemForHealth(1)]),
     );
     final controller = _RecordingSaveController()
-      ..scheduleFailure = const FormatException(
-        'FormatException: A channel needs content',
+      ..scheduleFailure = const ScheduleBuildException(
+        ScheduleFailureReason.noContent,
       )
       ..channels = [original];
     addTearDown(controller.dispose);
@@ -4520,7 +4520,7 @@ class _ControlledStudioController extends FixtureController {
     final call = pending.removeAt(0);
     if (noContent) {
       call.completer.completeError(
-        const FormatException('A channel needs content'),
+        const ScheduleBuildException(ScheduleFailureReason.noContent),
       );
       return;
     }

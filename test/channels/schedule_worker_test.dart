@@ -3,6 +3,7 @@ import 'dart:isolate';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/channels/schedule_worker.dart';
+import 'package:lineup_desktop/channels/scheduler.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
 
 void main() {
@@ -47,6 +48,35 @@ void main() {
   });
 
   test(
+    'expected build failures retain typed reasons across the isolate',
+    () async {
+      final worker = ScheduleWorker([_mediaItem], const []);
+      addTearDown(worker.dispose);
+
+      await expectLater(
+        worker.build(_libraryChannel(libraryId: 'missing')),
+        throwsA(
+          isA<ScheduleBuildException>().having(
+            (error) => error.reason,
+            'reason',
+            ScheduleFailureReason.noContent,
+          ),
+        ),
+      );
+      await expectLater(
+        worker.build(_libraryChannel(filters: const {'future': 'anything'})),
+        throwsA(
+          isA<ScheduleBuildException>().having(
+            (error) => error.reason,
+            'reason',
+            ScheduleFailureReason.unsupportedSource,
+          ),
+        ),
+      );
+    },
+  );
+
+  test(
     'unexpected isolate exit fails pending work and permits restart',
     () async {
       final media = <PlexMediaItem>[const _ExitingMediaItem()];
@@ -65,13 +95,19 @@ void main() {
   );
 }
 
-final _channel = Channel(
+final _channel = _libraryChannel();
+
+Channel _libraryChannel({
+  String libraryId = 'library',
+  Map<String, String> filters = const {},
+}) => Channel(
   id: 'channel',
   number: 1,
   name: 'Channel',
-  source: const LibrarySource(
-    libraryId: 'library',
+  source: LibrarySource(
+    libraryId: libraryId,
     libraryType: PlexLibraryType.movie,
+    filters: filters,
   ),
   playbackMode: PlaybackMode.sequential,
   anchor: DateTime.utc(2026),

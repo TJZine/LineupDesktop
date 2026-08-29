@@ -9,6 +9,29 @@ void main() {
   ];
   final anchor = DateTime.utc(2026, 1, 1, 12);
 
+  test('invalid schedules report stable failure reasons', () {
+    Matcher failsWith(ScheduleFailureReason reason) => throwsA(
+      isA<ScheduleBuildException>().having(
+        (error) => error.reason,
+        'reason',
+        reason,
+      ),
+    );
+
+    expect(
+      () => buildSchedule(const [], mode: PlaybackMode.sequential, seed: 1),
+      failsWith(ScheduleFailureReason.noContent),
+    );
+    expect(
+      () => buildSchedule(
+        const [ChannelItem(id: 'zero', title: 'Zero', duration: Duration.zero)],
+        mode: PlaybackMode.sequential,
+        seed: 1,
+      ),
+      failsWith(ScheduleFailureReason.invalidProgramDuration),
+    );
+  });
+
   test('program lookup is exact at boundaries and before anchor', () {
     final schedule = buildSchedule(
       items,

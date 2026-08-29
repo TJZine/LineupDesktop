@@ -1,5 +1,17 @@
 import 'channel.dart';
 
+enum ScheduleFailureReason {
+  noContent,
+  invalidProgramDuration,
+  unsupportedSource,
+}
+
+final class ScheduleBuildException implements Exception {
+  const ScheduleBuildException(this.reason);
+
+  final ScheduleFailureReason reason;
+}
+
 class ScheduleIndex {
   const ScheduleIndex({
     required this.items,
@@ -48,9 +60,13 @@ ScheduleIndex buildSchedule(
   required int seed,
   int blockSize = 3,
 }) {
-  if (content.isEmpty) throw const FormatException('A channel needs content');
+  if (content.isEmpty) {
+    throw const ScheduleBuildException(ScheduleFailureReason.noContent);
+  }
   if (content.any((item) => item.duration <= Duration.zero)) {
-    throw const FormatException('Program durations must be positive');
+    throw const ScheduleBuildException(
+      ScheduleFailureReason.invalidProgramDuration,
+    );
   }
   final items = switch (mode) {
     PlaybackMode.sequential => List<ChannelItem>.of(content),
