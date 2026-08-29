@@ -1080,6 +1080,81 @@ void main() {
     },
   );
 
+  testWidgets('conflict reload refreshes visible recipe fields', (
+    tester,
+  ) async {
+    final original = _channel(
+      id: 'custom',
+      number: 3,
+      name: 'Original',
+      source: const PlaylistSource('original'),
+      mode: PlaybackMode.block,
+      blockSize: 2,
+    );
+    final external = _channel(
+      id: 'custom',
+      number: 3,
+      name: 'External',
+      source: const PlaylistSource('external'),
+      mode: PlaybackMode.block,
+      blockSize: 4,
+    );
+    final controller = _ExpectedBaseController()
+      ..channels = [original]
+      ..availablePlaylists = [
+        _playlist('original'),
+        _playlist('draft'),
+        _playlist('external'),
+      ];
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      _studio(controller, ChannelStudioMode.editCustom, channel: original),
+    );
+    await tester.pumpAndSettle();
+
+    await _chooseDropdown(tester, 'studio-playlist', 'Playlist draft');
+    await _chooseDropdown(tester, 'studio-block-size', '5');
+    controller.channels = [external];
+    await tester.ensureVisible(find.text('Save changes'));
+    await tester.tap(find.text('Save changes'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Reload channel'));
+    await tester.tap(find.text('Reload channel'));
+    await tester.pumpAndSettle();
+
+    expect(
+      tester
+          .widget<DropdownButton<String>>(
+            find.descendant(
+              of: find.byKey(const Key('studio-playlist')),
+              matching: find.byType(DropdownButton<String>),
+            ),
+          )
+          .value,
+      'external',
+    );
+    expect(
+      tester
+          .widget<DropdownButton<int>>(
+            find.descendant(
+              of: find.byKey(const Key('studio-block-size')),
+              matching: find.byType(DropdownButton<int>),
+            ),
+          )
+          .value,
+      4,
+    );
+
+    await tester.ensureVisible(find.text('Save changes'));
+    await tester.tap(find.text('Save changes'));
+    await tester.pumpAndSettle();
+    final saved = controller.channels.single;
+    expect(saved.source.toJson(), external.source.toJson());
+    expect(saved.blockSize, external.blockSize);
+    expect(find.text('Playlist: Playlist external'), findsOneWidget);
+    expect(find.text('Mini-marathons of 4'), findsOneWidget);
+  });
+
   testWidgets('offers exactly four source choices and retains draft values', (
     tester,
   ) async {

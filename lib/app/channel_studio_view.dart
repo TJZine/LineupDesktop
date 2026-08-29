@@ -88,7 +88,7 @@ class ChannelStudioView extends StatefulWidget {
 class ChannelStudioViewState extends State<ChannelStudioView> {
   static const _countAnnouncementDelay = Duration(milliseconds: 300);
   static const _resultWindow = 100;
-  final _form = GlobalKey<FormState>();
+  GlobalKey<FormState> _form = GlobalKey<FormState>();
   final _backFocus = FocusNode(debugLabel: 'Back to Channels');
   final _cancelFocus = FocusNode(debugLabel: 'Cancel Studio');
   final _nameFocus = FocusNode(debugLabel: 'Channel name');
@@ -1828,6 +1828,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     _name.text = current.name;
     _number.text = '${current.number}';
     setState(() {
+      _form = GlobalKey<FormState>();
       _source = current.source;
       _playbackMode = current.playbackMode;
       _anchor = current.anchor;
