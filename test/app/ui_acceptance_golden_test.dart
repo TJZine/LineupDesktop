@@ -754,6 +754,24 @@ void main() {
     await _match(tester, 'settings-slate-pine-1280x720.png');
   });
 
+  testWidgets('Appearance chooser at compact desktop size', (tester) async {
+    final fixture = _readyFixture();
+    await _pump(tester, fixture.build(), viewport: const Size(800, 600));
+    await _openDestination(tester, 'Settings');
+
+    expect(find.byKey(const Key('theme-option-ember-steel')), findsOneWidget);
+    await _match(tester, 'settings-appearance-ember-steel-800x600.png');
+  });
+
+  testWidgets('Appearance chooser at large desktop size', (tester) async {
+    final fixture = _readyFixture();
+    await _pump(tester, fixture.build(), viewport: const Size(1920, 1080));
+    await _openDestination(tester, 'Settings');
+
+    expect(find.byKey(const Key('theme-option-ember-steel')), findsOneWidget);
+    await _match(tester, 'settings-appearance-ember-steel-1920x1080.png');
+  });
+
   testWidgets('Settings over playback in Ember & Steel', (tester) async {
     final fixture = _readyFixture(
       playerState: const PlayerStatus(

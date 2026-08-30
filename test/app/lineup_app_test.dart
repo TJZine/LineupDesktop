@@ -189,7 +189,7 @@ void main() {
 
     await openDestination(tester, 'Settings');
 
-    expect(find.text('Theme'), findsOneWidget);
+    expect(find.byKey(const Key('theme-option-ember-steel')), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
@@ -349,14 +349,8 @@ void main() {
 
     await tester.sendKeyEvent(LogicalKeyboardKey.f3);
     await tester.pumpAndSettle();
-    expect(find.text('Theme'), findsOneWidget);
+    expect(find.byKey(const Key('theme-option-ember-steel')), findsOneWidget);
     expect(FocusManager.instance.primaryFocus?.debugLabel, 'Settings');
-
-    await tester.tap(find.byType(DropdownButton<LineupThemeName>));
-    await tester.pumpAndSettle();
-    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-    await tester.pumpAndSettle();
-    expect(find.text('Theme'), findsOneWidget);
 
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();
@@ -371,7 +365,7 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.f3);
     await tester.pumpAndSettle();
 
-    expect(find.text('Theme'), findsOneWidget);
+    expect(find.byKey(const Key('theme-option-ember-steel')), findsOneWidget);
     expect(FocusManager.instance.primaryFocus?.debugLabel, 'Settings');
 
     await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
@@ -526,7 +520,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(FocusManager.instance.primaryFocus?.debugLabel, 'Player');
-    expect(find.text('Theme'), findsNothing);
+    expect(find.byKey(const Key('theme-option-ember-steel')), findsNothing);
   });
 
   testWidgets('onboarding link action is keyboard reachable', (tester) async {

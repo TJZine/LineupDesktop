@@ -374,7 +374,7 @@ remain Prompt 4E visual-adjudication inputs rather than accepted visual claims.
 | Server discovery/selection/retry | Existing implementation retained after source inspection | No health, latency, or relay facts are fabricated; presentation remains subject to unlocked acceptance. |
 | Channel Setup stages | Source-aligned theme mechanics implemented | Existing staged header/content/footer and state owners remain; live spatial acceptance is deferred. |
 | Channels empty/populated/editor/delete/persistence error | Intentional Desktop structural adaptation | Management rail and readable-width workspace remain. Upstream has no equivalent implemented channel editor. |
-| Settings | Source-aligned structure implemented | Existing category/detail layout now exposes persisted theme and Guide presentation; live typography and spacing acceptance is deferred. |
+| Settings | Source-aligned structure implemented | The category/detail layout exposes the five themes as labeled palette rows with explicit selected and focus states; Guide presentation remains in the same settings owner. |
 | Diagnostics | Intentional Desktop structural adaptation | Credential-safe management destination retained; no upstream consumer-equivalent surface exists. |
 | Guide without playback | Source-aligned structure implemented | Immersive shell, branded header, information area, time geometry, semantic states, filters, and bounded rows are deterministic; requires unlocked visual acceptance. |
 | Guide with default PiP | Source-aligned structure implemented | Classic/PiP is default and the single 16:9 `PlayerSurface` geometry remains authoritative; video composition requires Windows-native validation. |
@@ -555,7 +555,7 @@ It does not mean the state is absent.
 | Channel Setup libraries, strategies/options, progress and completion | Structural parity with acceptable Flutter adaptation | Upstream rendered live through all stages including completion; Flutter stages and progress are exercised by tests. |
 | Channel Setup review | Visual parity | Inspected deterministic golden accepted. The staged header/workspace/footer and destructive replacement priority are preserved. |
 | Channels empty/populated, editor and destructive confirmation | Intentional Desktop adaptation | Responsive management layout and explicit confirmation are rendered/tested. Upstream has no equivalent implemented desktop channel editor. |
-| Settings | Structural parity with acceptable Flutter adaptation | Category/detail hierarchy rendered; alternate-theme golden accepted; immediate persistence and rollback tests passed. |
+| Settings | Structural parity with acceptable Flutter adaptation | Category/detail hierarchy and compact theme chooser render at 800×600, 1280×720, and 1920×1080; immediate persistence, all-theme selection, semantics, focus, and rollback are tested. |
 | Diagnostics | Intentional Desktop adaptation | Credential-safe support surface retained; upstream has no consumer-equivalent management page. |
 | Persistence failure | Structural parity with acceptable Flutter adaptation | Local error ownership and rollback rendered in widget tests; no destructive live disk failure was induced. |
 | Guide no channels, loading, loading row, error/retry row | Structural parity with acceptable Flutter adaptation | Empty/loading/error rows, retry focus and bounded geometry are rendered in deterministic tests. |

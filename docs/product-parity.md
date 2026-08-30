@@ -285,7 +285,7 @@ without placing credentials in public facts, durable state, URLs, or diagnostics
 | Guide Layout | Classic PiP/Overlay | Equivalent | PARITY | — | HIGH | settings/shell/tests | Settings |
 | Past Items | Auto/0/15/30 | Explicit 0–180-minute global choices | INTENTIONAL DESKTOP ADAPTATION | — | HIGH | settings/controller/tests | Settings |
 | Info Box Background | Bleed/artwork/theme | Equivalent with real consumers | PARITY | — | HIGH | settings/Guide tests | Settings |
-| Theme | Five named themes | Same five themes, immediate durable apply | PARITY | — | HIGH | theme/settings tests | Settings |
+| Theme | Five named themes | Same five themes in a compact labeled palette chooser with explicit selection, keyboard/remote focus, and immediate durable apply | PARITY | — | HIGH | theme/settings tests and 800×600, 1280×720, and 1920×1080 goldens | Settings |
 | Cinematic Now Playing | Enables rich player detail presentation | Desktop has one canonical rich Player details surface rather than a standard/cinematic mode or second setting | INTENTIONAL DESKTOP ADAPTATION | — | HIGH | `lib/playback/player_coordinator.dart`; `lib/playback/player_view.dart`; widget/golden evidence | Keep one surface until a second consumed mode is required |
 | Prefer official title artwork | Guide/Now Playing/OSD | Enabled by default; one durable preference reuses Plex clear logos across Guide and Player identity when available, with missing, failed, disabled, or compact fallbacks to text | PARITY | — | HIGH | settings/Guide/Player source; artwork currentness/fallback tests | Settings/Guide/Player |
 | Now Playing Auto-Hide | Controls distinct details overlay, including persistent | Desktop OSD auto-hide is a different control | MISSING | P2 | HIGH | upstream settings; Desktop settings/coordinator | Add only with rich details surface |
@@ -429,7 +429,7 @@ not introduce a management rail or second player owner.
 
 | Desktop preference/state | Default and choices | Persistence and runtime consumer |
 | --- | --- | --- |
-| Theme | Ember & Steel; five named themes | Durable; root `ThemeData` and semantic roles update immediately |
+| Theme | Ember & Steel; five labeled palette rows | Durable; root `ThemeData` and semantic roles update immediately |
 | Guide presentation | Classic PiP; PiP/Overlay | Durable; shell chooses native-video/Guide composition |
 | Visible time range | 2h; 2/3/4/6/8/12h | Durable; Guide window, ruler, schedule projection |
 | Past window | 30m; 0/15/30/60/120/180m | Durable; Guide request and browse bounds |

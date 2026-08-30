@@ -346,7 +346,7 @@ channel also warns that a later Generate lineup refresh may propose it again.
 
 | Category | Current controls |
 | --- | --- |
-| Appearance | Ember & Steel, Slate & Pine, Swiss Minimal, DirecTV Classic, and Glassmorphism themes |
+| Appearance | A labeled palette chooser for Ember & Steel, Slate & Pine, Swiss Minimal, DirecTV Classic, and Glassmorphism; the selected theme is identified in text and applies immediately |
 | Guide | Classic with PiP or Overlay presentation; detailed 2-hour, wide 3-hour, or desktop-extended 4/6/8/12-hour windows; 0-180 minute past window; comfortable or compact rows; color-bleed/theme/artwork information backgrounds; official title artwork preference; library filters; Now Playing context; 2-15 second OSD auto-hide; optional DVR playback controls |
 | Accessibility | Reduce motion across management, Guide, and Player transitions; larger keyboard/controller focus indicators |
 | Account | Switch Plex Home profile, switch or clear Plex server selection, and optionally show the profile picker at startup |
