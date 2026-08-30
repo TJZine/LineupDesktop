@@ -5,6 +5,8 @@ void main() {
   test('uses the upstream two-hour Guide default and desktop options', () {
     const settings = LineupSettings();
 
+    expect(settings.theme, LineupThemeName.emberSteel);
+    expect(settings.toJson()['theme'], 'ember-steel');
     expect(settings.guideHours, 2);
     expect(LineupSettings.guideHoursOptions, [2, 3, 4, 6, 8, 12]);
     expect(settings.guideDensity, GuideDensity.comfortable);
