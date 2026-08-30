@@ -305,8 +305,11 @@ then lets you replace generated channels, add generated channels, or refresh
 matching generated channels after review. All three modes preserve every custom
 channel. Refresh also preserves a matching generated channel's number, visible
 name, schedule anchor, and shuffle identity while updating its generated
-programming recipe. Completion offers **View lineup** or the separate **Add a
-custom channel** action.
+programming recipe. Before applying, Review shows the full proposed final
+roster. Search it by channel number or name, or filter for protected custom,
+added/updated, or removed entries. Replace keeps its protection confirmation
+visible while you inspect the roster. Completion offers **View lineup** or the
+separate **Add a custom channel** action.
 
 **New channel** opens the full-page Channel Studio for one custom channel.
 Studio also opens when you edit a custom channel, inspect a generated channel,
@@ -317,11 +320,14 @@ the lowest available channel number; it does not alter the generated source.
 
 Custom Studio programming can use one selected library, one Plex video
 playlist, a collection or supported metadata filter, or an explicitly ordered
-hand-picked list. Search, local facets, visible-result bulk selection, and Move
-earlier/Move later controls keep large hand-picked lists usable without a
-network request per edit. A previously saved hand-picked item that is not in
-the current playable inventory remains labeled **Unavailable — retained until
-removed**; it is not scheduled, but Studio does not silently delete it.
+hand-picked list. Hand-picked programming has separate **Browse** and
+**Rundown** stages; matching and selected counts stay visible, and search and
+filter state is preserved when you switch between them. Search, local facets,
+visible-result bulk selection, and Move earlier/Move later controls keep large
+lists usable without a network request per edit. A previously saved hand-picked
+item that is not in the current playable inventory remains labeled
+**Unavailable — retained until removed**; it is not scheduled, but Studio does
+not silently delete it.
 
 Playback rhythms are **In order**, **Mix it up**, and **Mini-marathons**.
 Mini-marathons uses blocks of 2 through 5 episodes and requires usable show
@@ -331,13 +337,16 @@ timing facts, why content was included, and actionable unavailable or invalid
 states. A new channel saves the same schedule anchor and shuffle identity that
 Air Check previewed.
 
-Saving and tuning are separate. A successful save leaves Studio in a clean
-saved state and enables **Tune in**. A tune failure does not undo the saved
-channel. A save failure preserves both the prior lineup and the complete draft;
-retry after correcting the reported source, schedule, number, or storage issue.
-If the underlying channel changed while Studio was open, reload it or
-deliberately reapply the draft rather than overwriting newer state. Leaving a
-dirty draft asks whether to discard changes or keep editing.
+Saving and tuning are separate. Save is enabled only for a dirty, valid draft.
+A successful save leaves Studio in a clean saved state and makes **Tune in**
+the primary action; editing again disables Tune until the new draft is saved. A
+tune failure does not undo the saved channel. A save failure preserves both the
+prior lineup and the complete draft; retry after correcting the reported
+source, schedule, number, or storage issue. If the underlying channel changed
+while Studio was open, choose **Use saved version…** or **Replace saved version
+with my draft…**. Both paths require an explicit confirmation, and a second
+intervening change is rejected again. Leaving a dirty draft asks whether to
+discard changes or keep editing.
 
 Deletion requires confirmation and cannot be undone. Deleting a generated
 channel also warns that a later Generate lineup refresh may propose it again.

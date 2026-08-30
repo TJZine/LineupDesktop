@@ -7,6 +7,24 @@ the handoff.
 
 Locked product contract: [Channel Studio Product and UX Specification](channel-studio-spec.md)
 
+## Approved interaction refinement (2026-08-29)
+
+The implemented refinement keeps every ownership, persistence, scheduling, and
+recovery invariant in this plan while changing presentation where the approved
+station-first workflow requires it:
+
+- Studio uses a station plate, broadcast-monitor Air Check ribbon, and staged
+  **Browse**/**Rundown** hand-picked programming with persistent counts and
+  filters.
+- Clean saved stations make **Tune in** primary; Save is a dirty-only commit,
+  and Tune is unavailable while edits are pending.
+- A stale expected base becomes an explicit interlock with confirmed **Use
+  saved version…** and **Replace saved version with my draft…** choices.
+- Generate Review shows the complete proposed roster with search, status
+  filters, protected-custom labeling, and a persistent replace confirmation.
+- The shared final-plan composition helper is the single owner used by both the
+  review and the serialized apply transaction.
+
 Source baseline inspected while authoring this plan:
 `65082bce82f005c1ff8842b887e1a27a39115203`
 
