@@ -111,9 +111,10 @@ each enabled source family and **Off** for disabled families. The review step
 separates **Create**, **Update**, **Unchanged**, **Remove**, and **Final** counts
 using the selected replace, append, or merge behavior. It presents the current
 lineup changing to the final lineup, a proportional composition bar, and sample
-channels. Replace mode requires an explicit confirmation before building. A
-limit warning appears only when ideas were actually omitted by the channel cap
-or available channel numbers.
+channels. When Replace mode will remove one or more generated channels, it
+requires an explicit confirmation before building; a zero-removal plan omits
+that inapplicable gate. A limit warning appears only when ideas were actually
+omitted by the channel cap or available channel numbers.
 
 ## Main destinations
 
