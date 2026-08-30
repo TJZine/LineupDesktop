@@ -281,7 +281,7 @@ void main() {
     await tester.ensureVisible(find.text('Open Generate lineup'));
     await tester.tap(find.text('Open Generate lineup'));
     await tester.pumpAndSettle();
-    expect(find.text('Discard changes?'), findsOneWidget);
+    expect(find.text('Open Generate lineup?'), findsOneWidget);
     await tester.tap(find.text('Keep editing'));
     await tester.pumpAndSettle();
     expect(controller.setupEntries, 0);
@@ -294,7 +294,7 @@ void main() {
     recovery.onPressed!();
     recovery.onPressed!();
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Discard changes'));
+    await tester.tap(find.text('Discard draft and continue'));
     await tester.pumpAndSettle();
     expect(controller.setupEntries, 1);
     expect(controller.stage, SetupStage.channelSetup);

@@ -622,7 +622,36 @@ class _ChannelsViewState extends State<ChannelsView> {
 
   Future<void> _enterGenerateLineupFromStudio() async {
     try {
-      if (await requestLeave()) await widget.controller.enterChannelSetup();
+      if (!_studioOpen) return;
+      final studio = _studio;
+      if (studio == null || studio.saving) return;
+      if (studio.dirty) {
+        final discard =
+            await showDialog<bool>(
+              context: context,
+              builder: (context) => AlertDialog(
+                title: const Text('Open Generate lineup?'),
+                content: const Text(
+                  'Your unsaved Studio draft cannot be carried into Generate lineup. Existing custom channels remain protected while you review the proposed roster.',
+                ),
+                actions: [
+                  TextButton(
+                    autofocus: true,
+                    onPressed: () => Navigator.pop(context, false),
+                    child: const Text('Keep editing'),
+                  ),
+                  FilledButton(
+                    onPressed: () => Navigator.pop(context, true),
+                    child: const Text('Discard draft and continue'),
+                  ),
+                ],
+              ),
+            ) ??
+            false;
+        if (!discard || !mounted) return;
+      }
+      _showList(_returnFocusId);
+      await widget.controller.enterChannelSetup();
     } finally {
       _generateLineupEntry = null;
     }

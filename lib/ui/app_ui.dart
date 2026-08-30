@@ -47,6 +47,7 @@ class LineupPage extends StatelessWidget {
     required this.title,
     required this.child,
     this.actions,
+    this.titleWidget,
     this.traversalPolicy,
     super.key,
   });
@@ -54,6 +55,7 @@ class LineupPage extends StatelessWidget {
   final String title;
   final Widget child;
   final Widget? actions;
+  final Widget? titleWidget;
   final FocusTraversalPolicy? traversalPolicy;
 
   @override
@@ -78,20 +80,29 @@ class LineupPage extends StatelessWidget {
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          _PageTitle(title),
-                          if (actions != null) ...[
-                            const SizedBox(height: 16),
+                          if (titleWidget != null && actions != null) ...[
                             Align(
                               alignment: Alignment.centerLeft,
                               child: actions,
                             ),
+                            const SizedBox(height: 16),
+                            titleWidget!,
+                          ] else ...[
+                            titleWidget ?? _PageTitle(title),
+                            if (actions != null) ...[
+                              const SizedBox(height: 16),
+                              Align(
+                                alignment: Alignment.centerLeft,
+                                child: actions,
+                              ),
+                            ],
                           ],
                         ],
                       )
                     else
                       Row(
                         children: [
-                          Expanded(child: _PageTitle(title)),
+                          Expanded(child: titleWidget ?? _PageTitle(title)),
                           ?actions,
                         ],
                       ),

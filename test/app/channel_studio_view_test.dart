@@ -188,7 +188,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Create custom channel'), findsOneWidget);
     expect(find.text('Air Check'), findsOneWidget);
-    expect(find.textContaining('New channel • Channel 1 •'), findsOneWidget);
+    expect(find.text('New channel'), findsWidgets);
+    expect(find.text('1'), findsWidgets);
     await tester.tap(find.text('Back to Channels'));
     await tester.pumpAndSettle();
 
@@ -214,7 +215,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Duplicate as custom'), findsWidgets);
     expect(find.text('Air Check'), findsOneWidget);
-    expect(find.text('Custom'), findsWidgets);
+    expect(find.text('Duplicate as custom'), findsWidgets);
     expect(
       tester
           .widget<TextFormField>(find.byKey(const Key('studio-name')))
@@ -260,6 +261,7 @@ void main() {
     await tester.tap(find.byTooltip('Open Custom'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const Key('studio-name')), 'Renamed');
+    await tester.pump();
     await tester.tap(find.text('Save changes'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Back to Channels'));
@@ -323,6 +325,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const Key('studio-name')), 'Edited');
+    await tester.pump();
     await tester.tap(find.text('Save changes'));
     await tester.pumpAndSettle();
     expect(controller.saved!.id, custom.id);
@@ -592,6 +595,7 @@ void main() {
       find.byKey(const Key('studio-name')),
       'Complete draft',
     );
+    await tester.pump();
     tester
         .widget<FilledButton>(find.widgetWithText(FilledButton, 'Save changes'))
         .onPressed!();
@@ -626,6 +630,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const Key('studio-name')), 'Draft');
+    await tester.pump();
     await tester.tap(find.text('Save changes'));
     await tester.pump();
 
@@ -691,6 +696,7 @@ void main() {
     await tester.tap(find.byTooltip('Open Original'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const Key('studio-name')), 'Draft');
+    await tester.pump();
     await tester.ensureVisible(find.byKey(const Key('studio-rundown-second')));
     await tester.tap(find.byKey(const Key('studio-rundown-second')));
     await tester.ensureVisible(find.text('Save changes'));
@@ -746,7 +752,7 @@ void main() {
     await tester.tap(find.byIcon(Icons.monitor_heart_outlined));
     await tester.binding.handlePopRoute();
     await tester.pump();
-    expect(find.textContaining('Draft • Channel 3 •'), findsOneWidget);
+    expect(find.text('Draft'), findsWidgets);
     expect(find.text('Discard changes?'), findsNothing);
 
     controller.release.complete();
@@ -787,6 +793,7 @@ void main() {
       find.byKey(const Key('studio-name')),
       'Saved station',
     );
+    await tester.pump();
     await tester.tap(find.text('Save channel'));
     await tester.pumpAndSettle();
 
@@ -794,6 +801,14 @@ void main() {
     expect(find.text('Saved'), findsOneWidget);
     expect(find.text('Tune in'), findsOneWidget);
     expect(find.text('Save changes'), findsOneWidget);
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.widgetWithText(FilledButton, 'Save changes'),
+          )
+          .onPressed,
+      isNull,
+    );
     final saved = controller.saved!;
     expect(saved.id, isNotEmpty);
     expect(saved.number, 1);
@@ -814,9 +829,31 @@ void main() {
     await tester.tap(find.text('Tune in'));
     await tester.pumpAndSettle();
     expect(tuneCalls, 1);
-    expect(find.textContaining('Saved station • Channel 1 •'), findsOneWidget);
+    expect(find.text('Saved station'), findsWidgets);
     expect(find.textContaining('could not be tuned'), findsOneWidget);
     expect(controller.saved?.name, 'Saved station');
+
+    await tester.enterText(
+      find.byKey(const Key('studio-name')),
+      'Unsaved station',
+    );
+    await tester.pump();
+    expect(
+      tester
+          .widget<OutlinedButton>(
+            find.widgetWithText(OutlinedButton, 'Tune in'),
+          )
+          .onPressed,
+      isNull,
+    );
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.widgetWithText(FilledButton, 'Save changes'),
+          )
+          .onPressed,
+      isNotNull,
+    );
   });
 
   testWidgets('empty manual save retains the draft and reports validation', (
@@ -937,6 +974,7 @@ void main() {
       find.byKey(const Key('studio-name')),
       'Saved agreement',
     );
+    await tester.pump();
     await tester.tap(find.text('Save changes'));
     await tester.pumpAndSettle();
     final saved = controller.channels.single;
@@ -1001,6 +1039,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       await tester.enterText(find.byKey(const Key('studio-name')), 'Mine');
+      await tester.pump();
       controller.channels = [changed];
       tester
           .widget<FilledButton>(
@@ -1008,15 +1047,29 @@ void main() {
           )
           .onPressed!();
       await tester.pumpAndSettle();
-      expect(find.text('Reload channel'), findsOneWidget);
-      expect(find.text('Reapply my changes'), findsOneWidget);
+      expect(find.text('Use saved version…'), findsOneWidget);
+      expect(find.text('Replace saved version with my draft…'), findsOneWidget);
       expect(controller.channels.single.name, 'External');
+      final useSavedButton = find.widgetWithText(
+        OutlinedButton,
+        'Use saved version…',
+      );
+      final useSaved = tester.widget<OutlinedButton>(useSavedButton);
+      expect(FocusManager.instance.primaryFocus, same(useSaved.focusNode));
+      expect(tester.getTopLeft(useSavedButton).dy, greaterThanOrEqualTo(0));
+      final roles = LineupTheme.of(tester.element(useSavedButton));
+      final focusedSide = useSaved.style!.side!.resolve({WidgetState.focused})!;
+      expect(focusedSide.color, roles.focusBorder);
+      expect(focusedSide.width, roles.focusBorderWidth);
 
-      await tester.ensureVisible(find.text('Reload channel'));
-      await tester.tap(find.text('Reload channel'));
+      await tester.ensureVisible(find.text('Use saved version…'));
+      await tester.tap(find.text('Use saved version…'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Use saved version'));
       await tester.pumpAndSettle();
       expect(_fieldText(tester, 'studio-name'), 'External');
       await tester.enterText(find.byKey(const Key('studio-name')), 'Mine');
+      await tester.pump();
       final changedAgain = _channel(
         id: 'custom',
         number: 3,
@@ -1027,11 +1080,10 @@ void main() {
       await tester.tap(find.text('Save changes'));
       await tester.pumpAndSettle();
 
-      tester
-          .widget<FilledButton>(
-            find.widgetWithText(FilledButton, 'Reapply my changes'),
-          )
-          .onPressed!();
+      await tester.ensureVisible(
+        find.text('Replace saved version with my draft…'),
+      );
+      await tester.tap(find.text('Replace saved version with my draft…'));
       await tester.pumpAndSettle();
       controller.channels = [
         _channel(
@@ -1041,22 +1093,22 @@ void main() {
           source: const PlaylistSource('playlist'),
         ),
       ];
-      await tester.tap(find.text('Reapply changes'));
+      await tester.tap(find.text('Replace saved version'));
       await tester.pumpAndSettle();
       expect(controller.channels.single.name, 'Intervening');
-      expect(find.text('Reapply my changes'), findsOneWidget);
+      expect(find.text('Replace saved version with my draft…'), findsOneWidget);
 
-      tester
-          .widget<FilledButton>(
-            find.widgetWithText(FilledButton, 'Reapply my changes'),
-          )
-          .onPressed!();
+      await tester.ensureVisible(
+        find.text('Replace saved version with my draft…'),
+      );
+      await tester.tap(find.text('Replace saved version with my draft…'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Reapply changes'));
+      await tester.tap(find.text('Replace saved version'));
       await tester.pumpAndSettle();
       expect(controller.channels.single.name, 'Mine');
 
       await tester.enterText(find.byKey(const Key('studio-name')), 'Again');
+      await tester.pump();
       controller.channels = const [];
       tester
           .widget<FilledButton>(
@@ -1064,15 +1116,12 @@ void main() {
           )
           .onPressed!();
       await tester.pumpAndSettle();
-      expect(
-        find.textContaining('deleted while you were editing'),
-        findsOneWidget,
-      );
-      expect(find.text('Reapply my changes'), findsNothing);
+      expect(find.text('This channel was deleted'), findsOneWidget);
+      expect(find.text('Replace saved version with my draft…'), findsNothing);
       expect(controller.channels, isEmpty);
       tester
           .widget<OutlinedButton>(
-            find.widgetWithText(OutlinedButton, 'Reload lineup'),
+            find.widgetWithText(OutlinedButton, 'Return to Channels'),
           )
           .onPressed!();
       await tester.pumpAndSettle();
@@ -1118,8 +1167,10 @@ void main() {
     await tester.ensureVisible(find.text('Save changes'));
     await tester.tap(find.text('Save changes'));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Reload channel'));
-    await tester.tap(find.text('Reload channel'));
+    await tester.ensureVisible(find.text('Use saved version…'));
+    await tester.tap(find.text('Use saved version…'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Use saved version'));
     await tester.pumpAndSettle();
 
     expect(
@@ -1145,9 +1196,14 @@ void main() {
       4,
     );
 
-    await tester.ensureVisible(find.text('Save changes'));
-    await tester.tap(find.text('Save changes'));
-    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.widgetWithText(FilledButton, 'Save changes'),
+          )
+          .onPressed,
+      isNull,
+    );
     final saved = controller.channels.single;
     expect(saved.source.toJson(), external.source.toJson());
     expect(saved.blockSize, external.blockSize);
@@ -1276,6 +1332,7 @@ void main() {
       find.byKey(const Key('studio-name')),
       'Mixed renamed',
     );
+    await tester.pump();
     await tester.tap(find.text('Save changes'));
     await tester.pumpAndSettle();
     expect(controller.saved!.source.toJson(), source.toJson());
@@ -1314,6 +1371,7 @@ void main() {
         find.byKey(const Key('studio-name')),
         'Mixed off air renamed',
       );
+      await tester.pump();
       final save = tester.widget<FilledButton>(
         find.widgetWithText(FilledButton, 'Save changes'),
       );
@@ -1482,6 +1540,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await _selectStudioStage(tester, 'studio-manual-browse-stage');
     tester
         .widget<CheckboxListTile>(find.byKey(const Key('studio-result-item')))
         .onChanged!(false);
@@ -1795,6 +1854,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Unavailable — retained until removed'), findsOneWidget);
 
+      await _selectStudioStage(tester, 'studio-manual-browse-stage');
       await tester.enterText(find.byKey(const Key('studio-search')), 'alpha');
       await tester.pump(const Duration(milliseconds: 350));
       expect(find.text('1 matching, 1 selected'), findsOneWidget);
@@ -1809,7 +1869,18 @@ void main() {
           .widget<TextButton>(find.widgetWithText(TextButton, 'Select visible'))
           .onPressed!();
       await tester.pump();
+      await _selectStudioStage(tester, 'studio-manual-rundown-stage');
       expect(find.byKey(const Key('studio-rundown-missing')), findsOneWidget);
+      expect(find.byKey(const Key('studio-search')), findsNothing);
+      await _selectStudioStage(tester, 'studio-manual-browse-stage');
+      expect(
+        tester
+            .widget<TextField>(find.byKey(const Key('studio-search')))
+            .controller!
+            .text,
+        'beta',
+      );
+      await _selectStudioStage(tester, 'studio-manual-rundown-stage');
 
       tester
           .widget<IconButton>(
@@ -1902,6 +1973,7 @@ void main() {
         .widget<TextButton>(find.widgetWithText(TextButton, 'Clear visible'))
         .onPressed!();
     await tester.pump();
+    await _selectStudioStage(tester, 'studio-manual-rundown-stage');
     expect(find.byKey(const Key('studio-rundown-alpha')), findsNothing);
     expect(find.byKey(const Key('studio-rundown-beta')), findsOneWidget);
   });
@@ -2362,6 +2434,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(key.currentState!.dirty, isFalse);
+    await _selectStudioStage(tester, 'studio-manual-browse-stage');
     await tester.enterText(find.byKey(const Key('studio-search')), 'alpha');
     await _chooseDropdown(tester, 'studio-manual-library', 'Shows');
     await _chooseDropdown(tester, 'studio-media-type', 'episode');
@@ -2404,6 +2477,7 @@ void main() {
       _studio(controller, ChannelStudioMode.editCustom, channel: original),
     );
     await tester.pumpAndSettle();
+    await _selectStudioStage(tester, 'studio-manual-browse-stage');
     expect(
       tester
           .widget<TextButton>(find.widgetWithText(TextButton, 'Clear visible'))
@@ -2427,6 +2501,11 @@ void main() {
     await tester.pump();
     expect(find.text('1200 matching, 1 selected'), findsOneWidget);
     expect(find.text('Saved'), findsOneWidget);
+    await tester.enterText(
+      find.byKey(const Key('studio-name')),
+      'Bounded kept',
+    );
+    await tester.pump();
     await tester.ensureVisible(find.text('Save changes'));
     await _settleAirCheck(tester);
     await tester.tap(find.text('Save changes'));
@@ -2770,6 +2849,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const Key('studio-name')), 'Retained');
+    await tester.pump();
     await tester.tap(find.text('Save changes'));
     await tester.pumpAndSettle();
     final source = controller.saved!.source as ManualSource;
@@ -2882,6 +2962,7 @@ void main() {
         find.byKey(const Key('studio-name')),
         'Repeated manual saved',
       );
+      await tester.pump();
       await tester.ensureVisible(find.text('Save changes'));
       await _settleAirCheck(tester);
       await tester.tap(find.text('Save changes'));
@@ -2904,6 +2985,7 @@ void main() {
         find.byKey(const Key('studio-name')),
         'Repeated manual reloaded',
       );
+      await tester.pump();
       await _settleAirCheck(tester);
       await tester.tap(find.text('Save changes'));
       await tester.pumpAndSettle();
@@ -3076,6 +3158,7 @@ void main() {
       find.byKey(const Key('studio-name')),
       'Refresh occurrences saved',
     );
+    await tester.pump();
     await tester.tap(find.text('Save changes'));
     await tester.pumpAndSettle();
     expect(
@@ -3092,6 +3175,7 @@ void main() {
       find.byKey(const Key('studio-name')),
       'Refresh occurrences saved again',
     );
+    await tester.pump();
     await _settleAirCheck(tester);
     final newRows = find.descendant(
       of: find.byKey(const Key('studio-rundown')),
@@ -3171,8 +3255,10 @@ void main() {
     await _settleAirCheck(tester);
     await tester.tap(find.text('Save changes'));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Reload channel'));
-    await tester.tap(find.text('Reload channel'));
+    await tester.ensureVisible(find.text('Use saved version…'));
+    await tester.tap(find.text('Use saved version…'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Use saved version'));
     await tester.pump();
     expect(() => oldFirst.addListener(() {}), throwsFlutterError);
     expect(() => oldSecond.addListener(() {}), throwsFlutterError);
@@ -3219,6 +3305,7 @@ void main() {
     await tester.pumpAndSettle();
     final previewed = controller.loaded!;
     await tester.enterText(find.byKey(const Key('studio-name')), 'Persisted');
+    await tester.pump();
     await tester.tap(find.text('Save channel'));
     await tester.pumpAndSettle();
     final first = controller.saved!;
@@ -3239,6 +3326,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const Key('studio-name')), 'Reloaded');
+    await tester.pump();
     await tester.tap(find.text('Save changes'));
     await tester.pumpAndSettle();
     expect(controller.saved!.anchor, first.anchor);
@@ -3273,6 +3361,7 @@ void main() {
         find.byKey(const Key('studio-name')),
         'Valid later',
       );
+      await tester.pump();
       await tester.tap(find.text('Save channel'));
       await tester.pumpAndSettle();
       final saved = controller.saved!;
@@ -3293,6 +3382,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       await tester.enterText(find.byKey(const Key('studio-name')), 'Reloaded');
+      await tester.pump();
       await tester.tap(find.text('Save changes'));
       await tester.pumpAndSettle();
       expect(controller.saved!.anchor, validAt);
@@ -3465,6 +3555,7 @@ void main() {
       expect(controller.playableInventoryReads, lessThanOrEqualTo(4));
 
       final readsBeforeSearch = controller.playableInventoryReads;
+      await _selectStudioStage(tester, 'studio-manual-browse-stage');
       await tester.enterText(find.byKey(const Key('studio-search')), '1198');
       await tester.pump();
       expect(
@@ -3477,6 +3568,7 @@ void main() {
         lessThanOrEqualTo(3),
       );
 
+      await _selectStudioStage(tester, 'studio-manual-rundown-stage');
       await tester.ensureVisible(find.byKey(const Key('studio-rundown')));
       await tester.pump();
       final readsBeforeScrolling = controller.playableInventoryReads;
@@ -3871,9 +3963,18 @@ void main() {
             find.widgetWithText(FilledButton, 'Save changes'),
           )
           .onPressed,
-      isNotNull,
+      isNull,
     );
     await tester.enterText(find.byKey(const Key('studio-name')), 'Retained');
+    await tester.pump();
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.widgetWithText(FilledButton, 'Save changes'),
+          )
+          .onPressed,
+      isNotNull,
+    );
     await tester.tap(find.text('Save changes'));
     await tester.pumpAndSettle();
     expect(controller.saved?.name, 'Retained');
@@ -4326,6 +4427,13 @@ Future<void> _chooseDropdown(
   await tester.pumpAndSettle();
   await tester.tap(find.text(value).last);
   await tester.pumpAndSettle();
+}
+
+Future<void> _selectStudioStage(WidgetTester tester, String key) async {
+  final stage = find.byKey(Key(key));
+  await tester.ensureVisible(stage);
+  await tester.tap(stage);
+  await tester.pump();
 }
 
 Future<void> _settleAirCheck(WidgetTester tester) async {
