@@ -549,11 +549,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('guide-focused-artwork')), findsOneWidget);
-    expect(
-      tester.getSize(find.byKey(const Key('guide-focused-artwork'))).width,
-      greaterThanOrEqualTo(168),
-    );
+    expect(find.byKey(const Key('guide-focused-artwork')), findsNothing);
     final overlayList = tester.widget<ListView>(
       find.byKey(const Key('guide-schedule-list')),
     );
@@ -663,6 +659,87 @@ void main() {
       ),
     );
   });
+
+  testWidgets(
+    'overlay reserves artwork only from synchronous source metadata',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1280, 720));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final lineup = _Lineup(2);
+      addTearDown(lineup.dispose);
+      lineup.channels = [
+        Channel(
+          id: 'without-artwork',
+          number: 1,
+          name: 'Home Video',
+          source: const ManualSource([
+            ChannelItem(
+              id: 'without-artwork-item',
+              title: 'Family Movie',
+              duration: Duration(hours: 24),
+            ),
+          ]),
+          playbackMode: PlaybackMode.sequential,
+          anchor: DateTime.now().subtract(const Duration(hours: 1)),
+          shuffleSeed: 1,
+        ),
+        Channel(
+          id: 'with-artwork',
+          number: 2,
+          name: 'Plex Movie',
+          source: ManualSource([
+            ChannelItem(
+              id: 'with-artwork-item',
+              title: 'Catalog Movie',
+              duration: const Duration(hours: 24),
+              poster: Uri.parse('/poster-that-fails'),
+            ),
+          ]),
+          playbackMode: PlaybackMode.sequential,
+          anchor: DateTime.now().subtract(const Duration(hours: 1)),
+          shuffleSeed: 2,
+        ),
+      ];
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => _schedule(channel),
+      );
+      addTearDown(guide.dispose);
+
+      for (final size in const [
+        Size(800, 600),
+        Size(1280, 720),
+        Size(1920, 1080),
+      ]) {
+        await tester.binding.setSurfaceSize(size);
+        await tester.pumpWidget(
+          MaterialApp(
+            home: GuideView(
+              controller: guide,
+              overlayMode: true,
+              onClose: () {},
+              onTune: (_) async {},
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(guide.focusedChannelId, 'without-artwork');
+        expect(find.byKey(const Key('guide-focused-artwork')), findsNothing);
+        expect(tester.takeException(), isNull, reason: '$size');
+      }
+      expect(lineup.artworkLoads, 0);
+
+      guide.moveVertical(1);
+      await tester.pump();
+
+      expect(guide.focusedChannelId, 'with-artwork');
+      expect(find.byKey(const Key('guide-focused-artwork')), findsOneWidget);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('guide-focused-artwork')), findsOneWidget);
+      expect(lineup.artworkLoads, 1);
+    },
+  );
 
   testWidgets('Guide omits incomplete episode coordinates', (tester) async {
     final lineup = _Lineup(1);

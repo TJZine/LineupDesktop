@@ -18,6 +18,7 @@ import 'package:lineup_desktop/playback/player_view.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 
+import '../support/golden_test_support.dart';
 import '../support/ui_fixture.dart';
 
 const _viewport = Size(1280, 720);
@@ -47,7 +48,7 @@ final _nowPlayingArtwork = <Uri, Uint8List>{
 };
 
 void main() {
-  setUpAll(_loadPinnedTestFont);
+  setUpAll(loadPinnedTestFonts);
 
   setUp(() {
     TestWidgetsFlutterBinding.ensureInitialized();
@@ -840,51 +841,6 @@ void main() {
   });
 }
 
-Future<void> _loadPinnedTestFont() async {
-  var flutterRoot = File(Platform.resolvedExecutable).parent;
-  while (flutterRoot.parent.path != flutterRoot.path &&
-      !File(
-        '${flutterRoot.path}/bin/cache/artifacts/material_fonts/Roboto-Regular.ttf',
-      ).existsSync()) {
-    flutterRoot = flutterRoot.parent;
-  }
-  final fontDirectory =
-      '${flutterRoot.path}/bin/cache/artifacts/material_fonts';
-  if (!Directory(fontDirectory).existsSync()) {
-    throw StateError(
-      'Pinned Flutter material-fonts directory is missing: $fontDirectory',
-    );
-  }
-  final requiredFonts = [
-    'Roboto-Regular.ttf',
-    'Roboto-Medium.ttf',
-    'Roboto-Bold.ttf',
-    'MaterialIcons-Regular.otf',
-  ];
-  for (final filename in requiredFonts) {
-    if (!File('$fontDirectory/$filename').existsSync()) {
-      throw StateError('Pinned Flutter test font is missing: $filename');
-    }
-  }
-  for (final family in ['Roboto', '.AppleSystemUIFont']) {
-    final loader = FontLoader(family);
-    for (final file in [
-      'Roboto-Regular.ttf',
-      'Roboto-Medium.ttf',
-      'Roboto-Bold.ttf',
-    ]) {
-      loader.addFont(
-        File('$fontDirectory/$file').readAsBytes().then(ByteData.sublistView),
-      );
-    }
-    await loader.load();
-  }
-  final icons = ByteData.sublistView(
-    await File('$fontDirectory/MaterialIcons-Regular.otf').readAsBytes(),
-  );
-  await (FontLoader('MaterialIcons')..addFont(Future.value(icons))).load();
-}
-
 Future<void> _pump(
   WidgetTester tester,
   Widget child, {
@@ -953,7 +909,10 @@ Future<void> _match(
   for (var index = 0; index < additionalPumps; index++) {
     await tester.pump(const Duration(milliseconds: 400));
   }
-  await expectLater(find.byKey(_goldenKey), matchesGoldenFile('goldens/$name'));
+  final boundary = find.byKey(_goldenKey);
+  markSubtreeNeedsPaint(tester.renderObject(boundary));
+  await tester.pump();
+  await expectLater(boundary, matchesGoldenFile('goldens/$name'));
 }
 
 Future<void> _expectClassicOpacity(

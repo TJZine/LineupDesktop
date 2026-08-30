@@ -68,6 +68,18 @@ added Studio/Channel Setup images were inspected. This is Flutter/Dart
 deterministic and macOS pixel evidence, not physical Windows, native-video,
 assistive-technology, package, or support evidence.
 
+**Bounded Desktop UX update:** 2026-08-30. Work from exact baseline
+`f57b2dd4a48cb6bb3ba30fc9c40ab10ccca180ae` removes three misleading or
+duplicated management actions, retires the explanation-only Audio Setup route,
+specifies audio passthrough as a deferred Settings feature, replaces the theme
+dropdown with a compact five-theme palette chooser, and collapses the Guide's
+poster slot only when source metadata synchronously proves that no poster or
+thumbnail reference exists. The canonical inventory is now 31 macOS goldens,
+including matched rich/reference-free Guide evidence at 1920×1080 and theme
+chooser evidence at 800×600 and 1920×1080. These remain deterministic Flutter
+composition claims; no physical Windows, native-video, assistive-technology,
+package, or support claim is added.
+
 This is the authoritative current product-parity record. The classifications
 in [Portable UI Parity](ui-parity.md) remain historical evidence for their
 named campaigns; they do not override this audit. Current source and observed
@@ -225,7 +237,7 @@ without placing credentials in public facts, durable state, URLs, or diagnostics
 | Past window | Auto/0/15/30 | Explicit 0/15/30/60/120/180 global window | INTENTIONAL DESKTOP ADAPTATION | — | HIGH | upstream settings; Desktop settings/controller | Guide |
 | Library filter | Persisted source-library tabs | Optional selector and safe hidden-filter clearing; selected library is not persisted across restart | PARTIAL | P2 | HIGH | `lib/guide/guide_view.dart`; `lib/guide/guide_controller.dart`; no persisted field | Guide: persist selection if restart continuity remains desired |
 | Now Watching context | Optional tuned-channel banner | Optional Now Playing context in header | PARITY | — | HIGH | `lib/guide/guide_view.dart`; tests | Guide |
-| Program details/artwork | Metadata, poster/backdrop/logo, badges, three backgrounds | Rich details, artwork/clear logo, badges, three backgrounds | PARITY | — | HIGH | `lib/guide/guide_view.dart`; artwork tests | Guide |
+| Program details/artwork | Metadata, poster/backdrop/logo, badges, three backgrounds | Rich details, artwork/clear logo, badges, and three backgrounds remain unchanged when Plex supplies a poster reference; a truly reference-free item omits only the unused poster slot, while loading or failed referenced artwork retains normal geometry | PARITY | — | HIGH | `lib/guide/guide_view.dart`; synchronous-reference tests; matched 1920×1080 rich/sparse goldens | Guide |
 | Vertical virtualization/cache bounds | DOM window and bounded caches | Lazy fixed-extent rows, overscan, bounded row/artwork caches and concurrency | DESKTOP-ENHANCED | — | HIGH | `lib/guide/guide_controller.dart`; 1,000-channel tests | Guide |
 | Dense horizontal program bounds | Upstream uses fixed slots/virtualization policy | One visible row may synchronously project/build up to `scheduleWindow`'s 1,000-program cap; a 480-program eight-hour row is deterministically tested | NEEDS EVIDENCE | P2 | MEDIUM | `lib/channels/scheduler.dart`; `lib/guide/guide_view.dart`; dense-row controller test | Profile 5–7 shortest-slot rows at 12h in release mode and measure frames/semantics |
 | Responsive Guide geometry | Fixed 1920×1080 TV reference | Tested logical 600/720/900/1080/4K regimes and DPR2 allocation | DESKTOP-ENHANCED | — | HIGH | `test/guide/guide_view_test.dart`; Guide goldens | Physical DPI/resize still Windows evidence |
@@ -515,15 +527,14 @@ worker could not re-access those supplied files, which limits that worker's
 independent reinspection without invalidating the earlier comparisons. No
 private fact or personal path is reproduced here.
 
-Current Desktop visual evidence consists of 27 committed macOS goldens. The 20
-1280×720 baselines cover terminal auth failure; profiles and protected-profile
-PIN and server setup; Channel Setup libraries, strategies, review,
-progress, and completion, with failure covered structurally; Guide without
-playback, Guide PiP, and Overlay Guide; OSD, rich Now Playing, mini Guide, audio
-rail, and long subtitle rail; plus Settings over playback in Ember & Steel and
-Slate & Pine. Five additional 1920×1080 baselines cover Mini Guide, OSD, Rich
-Now Playing, Profiles, and Channel Setup review. Two Channel Studio baselines
-cover expanded authoring at 1280×720 and compact authoring at 800×600.
+Current Desktop visual evidence consists of 31 committed macOS goldens. The
+inventory covers terminal auth failure; profiles and protected-profile PIN;
+server and Channel Setup states; Guide without playback, Guide PiP, Overlay
+Guide, and matched rich/reference-free Guide details; OSD, rich Now Playing,
+mini Guide, audio and subtitle rails; Settings over and without playback plus
+the compact and large theme chooser; and expanded/compact Channel Studio. The
+retired explanation-only Audio Setup image is no longer part of current
+evidence. Historical inventory statements below retain their dated scope.
 
 The 2026-08-26 campaign updated ten existing 1280×720 files:
 `mini-guide-1280x720.png`, `player-osd-1280x720.png`,

@@ -343,7 +343,10 @@ sources; and `src/modules/settings/EpgPreferencesStore.ts`.
   the same `PlayerSurface`. The branded header, Now Playing/showcase allocation,
   16:9 PiP, information area, channel rail, time ruler, duration-based grid,
   current-time line, library filter, and current/focused/selected/tuned roles
-  remain in one Flutter geometry model.
+  remain in one Flutter geometry model. Overlay details omit the poster slot
+  only when synchronous program metadata contains no poster reference; loading
+  and failed referenced artwork retain the normal geometry so the rare fallback
+  cannot flash during ordinary Plex selection changes.
 - OSD surfaces use semantic overlay/scrim roles; track selectors are a
   media-oriented right rail; mini Guide retains bounded shelf content; channel
   entry retains its two-second auto-commit digit buffer; unsupported macOS,
@@ -826,3 +829,23 @@ macOS test harness. No physical Windows campaign was run, so they do not
 establish Windows DPI, keyboard/remote delivery, screen-reader behavior, native
 video layering during **Tune in**, media compatibility, packaging, platform
 validation, or support.
+
+## 2026-08-30 bounded Desktop UX corrections
+
+This bounded pass starts from exact Desktop baseline
+`f57b2dd4a48cb6bb3ba30fc9c40ab10ccca180ae`. It removes the zero-removal
+Channel Setup confirmation, the duplicated Channel Studio cancel action, and
+the selected-navigation label distortion; omits the explanation-only Audio
+Setup stage; presents all five existing themes as one compact labeled palette
+chooser; and omits the Guide poster slot only when synchronous source metadata
+contains neither a show thumbnail nor poster reference. A referenced poster
+retains normal geometry during loading and after byte-load failure, preventing
+a fallback flash or post-load layout shift.
+
+The current macOS inventory is 31 goldens. The pass removes the obsolete Audio
+Setup image, adds a Channel Setup removal review, adds compact and large theme
+chooser images, and adds matched 1920×1080 rich/reference-free Guide images.
+Affected images use deterministic synthetic facts and were inspected at their
+original pixels. This evidence proves Flutter composition only; physical
+Windows input, assistive technology, native video layering, media behavior,
+packaging, platform validation, and support remain outside this pass.

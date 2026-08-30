@@ -167,7 +167,10 @@ Focused program cells reveal long titles with a slow ticker; unfocused cells
 remain stable and ellipsized. Reduce Motion disables the ticker. The program
 information area can use artwork-derived color bleed, the current theme, or a
 Plex backdrop, and can prefer Plex clear title logos when available. Missing
-logos and artwork fall back to text and themed surfaces.
+logos fall back to text. When a program has a Plex poster reference, the normal
+artwork geometry remains stable while it loads or if loading fails. Only a
+program with no poster reference at all omits that slot so the existing details
+can use the available width without decorative placeholder art.
 
 ## Player
 
@@ -241,11 +244,12 @@ focus the selected track (or **Off** when no subtitle is selected). These
 behaviors are deterministically tested in Flutter; physical Windows
 screen-reader and assistive-technology validation remains pending.
 
-The committed 1280×720 macOS goldens cover Flutter composition, including the
-rich Now Playing surface and its synthetic artwork. They do not prove Windows
-native video layering, DPI/fullscreen behavior, keyboard or screen-reader
-support, media compatibility, or package readiness; those remain physical
-Windows acceptance work at the exact tested commit.
+The committed macOS goldens cover Flutter composition at compact, 1280×720,
+and 1920×1080 sizes, including the rich Now Playing surface, the theme chooser,
+and matched rich/reference-free Guide details with synthetic artwork. They do
+not prove Windows native video layering, DPI/fullscreen behavior, keyboard or
+screen-reader support, media compatibility, or package readiness; those remain
+physical Windows acceptance work at the exact tested commit.
 
 ## Keyboard and remote controls
 
