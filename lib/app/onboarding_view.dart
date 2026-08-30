@@ -456,12 +456,10 @@ class _HeroContent extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.child,
-    this.step,
     this.compact = false,
   });
   final String title;
   final String subtitle;
-  final String? step;
   final bool compact;
   final Widget child;
 
@@ -477,13 +475,6 @@ class _HeroContent extends StatelessWidget {
               ?.copyWith(fontWeight: FontWeight.w800),
         ),
       ),
-      if (step != null) ...[
-        const SizedBox(height: 8),
-        Text(
-          step!,
-          style: TextStyle(color: LineupTheme.of(context).progressFill),
-        ),
-      ],
       const SizedBox(height: 10),
       Text(
         subtitle,
