@@ -38,10 +38,16 @@ a rebuilt archive under the existing provenance identity.
 | Khronos Vulkan loader | `vulkan-1.dll` supplied by the installed GPU driver or Vulkan Runtime | System prerequisite. The selected libmpv DLL imports the loader even though Lineup selects D3D11. The portable package records this requirement instead of copying a machine-specific display-driver file. |
 | Universal C Runtime and Windows SDK | Windows 10/11 system components | Do not bundle for the supported Windows baseline. |
 
-`tool/windows/package.ps1` creates a distributable portable package and accepts
-only a clean Git source tree. It verifies the source commit and tracked,
-staged, and untracked state before creating package output; `BUILD-INFO.txt`
-records the verified commit and `source-dirty=false` attestation.
+`tool/windows/build-release.ps1` creates the packaging-eligible Windows build.
+It accepts only a clean Git source tree, validates the exact patched Flutter
+source, refreshes and selects the configured `host_release` engine, and writes
+an artifact-bound marker
+containing the source and engine identities plus hashes for every build input
+copied into the package. `tool/windows/package.ps1` requires that marker,
+rechecks it against the clean current commit and pinned metadata, and rejects
+stale identities or modified build artifacts before creating output.
+`BUILD-INFO.txt` and `BUILD-PROVENANCE.json` preserve that verified identity in
+the portable package.
 
 ## Vulkan-loader release gate
 

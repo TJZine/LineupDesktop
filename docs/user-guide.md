@@ -26,7 +26,8 @@ development, but media playback is intentionally reported as unsupported.
 1. Obtain the package and its SHA-256 hash directly from the maintainer.
 2. Verify the archive hash before extracting it.
 3. Extract the entire archive to a normal user-writable directory.
-4. Read `SYSTEM-REQUIREMENTS.txt` and `BUILD-INFO.txt` in the package.
+4. Read `SYSTEM-REQUIREMENTS.txt`, `BUILD-INFO.txt`, and
+   `BUILD-PROVENANCE.json` in the package.
 5. Launch `lineup_desktop.exe`.
 
 Do not move only `lineup_desktop.exe`; the adjacent DLLs and `data` directory

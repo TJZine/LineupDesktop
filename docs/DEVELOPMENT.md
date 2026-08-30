@@ -81,15 +81,14 @@ flutter analyze
 TZ=America/New_York flutter test # canonical timezone for macOS goldens
 flutter run -d macos
 flutter build macos
-flutter build windows # run on Windows
 ```
 
 ## Windows native player
 
-The Windows player requires PowerShell 7.4 or newer (`pwsh`), Visual Studio
-Build Tools 2022 with Desktop C++, ATL, Windows SDK `10.0.22621.0`, Debugging
-Tools for Windows, and 7-Zip with `7z.exe` on PATH. The pinned Flutter SDK is
-also the source checkout for the owned engine patch:
+The Windows player requires Git, Python 3, PowerShell 7.4 or newer (`pwsh`),
+Visual Studio Build Tools 2022 with Desktop C++, ATL, Windows SDK
+`10.0.22621.0`, Debugging Tools for Windows, and 7-Zip with `7z.exe` on PATH.
+The pinned Flutter SDK is also the source checkout for the owned engine patch:
 
 ```powershell
 $metadata = Import-PowerShellDataFile C:\path\to\LineupDesktop\tool\windows\build-metadata.psd1
@@ -135,6 +134,11 @@ $mpvRoot = 'C:\local\lineup-mpv'
 $env:LINEUP_MPV_ROOT = $mpvRoot
 ```
 
+At this point, bare `flutter build windows` is useful only as a compile/link
+integration check against Flutter's stock cached engine. It is not a runnable
+Lineup player or a packageable release because the native player deliberately
+requires the repository-patched DirectComposition engine at runtime.
+
 Then select the resulting engine explicitly—do not replace Flutter's SDK
 cache:
 
@@ -146,11 +150,17 @@ flutter run -d windows `
   --local-engine-src-path=$engineSource `
   --dart-entrypoint-args='--media=C:\path\to\sdr-sample.mp4'
 
-flutter build windows `
-  --local-engine=host_release `
-  --local-engine-host=host_release `
-  --local-engine-src-path=$engineSource
+& .\tool\windows\build-release.ps1 -EngineSource $engineSource
 ```
+
+The release wrapper validates the clean Lineup checkout, exact framework and
+engine revisions, and exact patched manager source, refreshes the configured
+`host_release` engine with Ninja, and selects that output for Flutter. After
+Flutter succeeds, it writes
+`LINEUP-BUILD-PROVENANCE.json` beside the executable with hashes for every
+build input copied into the portable package. `tool/windows/package.ps1`
+requires that marker, rechecks it against the clean current commit and pinned
+engine metadata, and rejects stale markers or modified build artifacts.
 
 The preparation script verifies the archive SHA-256, generates an MSVC import
 library from the DLL exports, and writes the runtime provenance record CMake
@@ -173,6 +183,7 @@ Runtime that provides `vulkan-1.dll`.
 CI runs on Windows Server 2022, bootstraps gclient from the pinned Flutter
 checkout's official `engine/scripts/standard.gclient`, verifies that config's
 blob plus the exact framework, engine, and patched source revisions, builds
-`host_release`, and compiles the Windows application against that local engine.
-It does not execute the application, so the runtime marker and DirectComposition
-presentation still need Windows acceptance evidence.
+`host_release`, compiles the Windows application against that local engine,
+and exercises release-marker, artifact, runtime-license, and package policy
+failures. It does not execute the application, so the runtime marker and
+DirectComposition presentation still need Windows acceptance evidence.

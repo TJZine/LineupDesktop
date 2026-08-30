@@ -4,6 +4,8 @@
   FlutterEngineRevision = '5f77625673248ee5846fbcaf5d3e1a3878386fd7'
   FlutterManagerPath = 'engine/src/flutter/shell/platform/windows/egl/manager.cc'
   FlutterManagerBlob = '64fb765bf546190fa610a9bdff007fc881c3cc7e'
+  # SHA-256 after applying the owned patch, with text normalized to LF.
+  FlutterPatchedManagerSha256 = 'E6D67644C3EB5FB428A5874E003088D206F47122148213082DB42F7DD2C101FD'
   FlutterStandardGclientBlob = 'a05a39e336335389321b8a6d855b13bd3fc7892c'
   FlutterEnginePatchPath = 'tool/flutter_engine/0001-windows-direct-composition.patch'
   FlutterEnginePatchSha256 = 'B648F18715357B272B68B51AA27DB39D79C3CBF619D06E3991EC78613EF443C4'

@@ -283,16 +283,13 @@ to the pinned runtime and exact representative evidence.
 
 ## 8. Portable package acceptance
 
-From a clean worktree and successful release local-engine build:
+From a clean worktree and configured `host_release` engine build directory:
 
 ```powershell
 Set-Location $Repo
 $env:LINEUP_MPV_ROOT = $MpvRoot
 
-flutter build windows `
-  --local-engine=host_release `
-  --local-engine-host=host_release `
-  --local-engine-src-path=$EngineSource
+& .\tool\windows\build-release.ps1 -EngineSource $EngineSource
 
 $PackageDestination = "build\package\LineupDesktop-$($Head.Substring(0, 12))-windows-x64"
 $PackageDirectory = Join-Path $Repo $PackageDestination
@@ -313,9 +310,11 @@ Confirm:
 - package creation reports no dirty-tree, runtime-hash, provenance, license, or
   forbidden-file failure;
 - the archive contains the executable, required adjacent DLLs, `data`, licenses,
-  `BUILD-INFO.txt`, `SYSTEM-REQUIREMENTS.txt`, and
-  `PACKAGE-MANIFEST.sha256`;
+  `BUILD-INFO.txt`, `BUILD-PROVENANCE.json`, `SYSTEM-REQUIREMENTS.txt`,
+  and `PACKAGE-MANIFEST.sha256`;
 - `BUILD-INFO.txt` records `$Head` and `source-dirty=false`;
+- `BUILD-PROVENANCE.json` records the same source commit, pinned framework,
+  engine, patch, and hashes for the packaged build inputs;
 - no debug/import artifacts, `dartjni.dll`, tokens, credentials, or private
   media are present;
 - archive/package hashes are recorded;

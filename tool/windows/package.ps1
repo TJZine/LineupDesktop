@@ -1,3 +1,5 @@
+#Requires -Version 7.4
+
 [CmdletBinding()]
 param(
   [string] $BuildDirectory = 'build/windows/x64/runner/Release',
@@ -59,6 +61,113 @@ $sourceDirty = & {
 }
 if ($sourceDirty) {
   Throw-PackageFailure 'dirty-source' 'Refusing to create a release package from a dirty source tree. Commit or stash all tracked and untracked changes first.'
+}
+
+function Get-BuildInputs {
+  param([Parameter(Mandatory)] [string] $Root)
+
+  $required = @(
+    'lineup_desktop.exe',
+    'flutter_windows.dll',
+    'flutter_secure_storage_windows_plugin.dll',
+    'libmpv-2.dll'
+  )
+  $paths = [System.Collections.Generic.List[string]]::new()
+  foreach ($relative in $required) {
+    $path = Join-Path $Root $relative
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+      Throw-PackageFailure 'build-artifact-mismatch' "Release build is missing $relative."
+    }
+    $paths.Add($relative)
+  }
+
+  $data = Join-Path $Root 'data'
+  if (-not (Test-Path -LiteralPath $data -PathType Container)) {
+    Throw-PackageFailure 'build-artifact-mismatch' 'Release build is missing the data directory.'
+  }
+  foreach ($file in Get-ChildItem -LiteralPath $data -Recurse -File) {
+    $paths.Add($file.FullName.Substring($Root.Length + 1).Replace('\', '/'))
+  }
+
+  $nativeAssets = Join-Path $Root 'native_assets.json'
+  if (Test-Path -LiteralPath $nativeAssets -PathType Leaf) {
+    $paths.Add('native_assets.json')
+  }
+  @($paths | Sort-Object -Unique)
+}
+
+$buildMarkerPath = Join-Path $BuildDirectory 'LINEUP-BUILD-PROVENANCE.json'
+if (-not (Test-Path -LiteralPath $buildMarkerPath -PathType Leaf)) {
+  Throw-PackageFailure 'build-provenance-missing' 'Release build provenance is missing. Create the build with tool/windows/build-release.ps1.'
+}
+try {
+  $buildMarker = Get-Content -Raw -LiteralPath $buildMarkerPath | ConvertFrom-Json
+} catch {
+  Throw-PackageFailure 'build-provenance-mismatch' 'Release build provenance is not valid JSON.'
+}
+if ($buildMarker.schemaVersion -ne 1) {
+  Throw-PackageFailure 'build-provenance-mismatch' 'Release build provenance has an unsupported schema.'
+}
+function Get-BuildMarkerValue {
+  param([Parameter(Mandatory)] [string] $Name)
+
+  $property = $buildMarker.PSObject.Properties[$Name]
+  if (-not $property -or -not ($property.Value -is [string]) -or
+    [string]::IsNullOrWhiteSpace($property.Value)) {
+    Throw-PackageFailure 'build-provenance-mismatch' "Release build provenance is missing $Name."
+  }
+  $property.Value
+}
+$buildSourceCommit = Get-BuildMarkerValue 'sourceCommit'
+$buildFlutterFramework = Get-BuildMarkerValue 'flutterFramework'
+$buildFlutterEngine = Get-BuildMarkerValue 'flutterEngine'
+$buildFlutterPatch = Get-BuildMarkerValue 'flutterEnginePatch'
+$buildFlutterPatchSha256 = Get-BuildMarkerValue 'flutterEnginePatchSha256'
+$buildPatchedManagerSha256 = Get-BuildMarkerValue 'flutterPatchedManagerSha256'
+$expectedBuildProvenance = @{
+  sourceCommit = $sourceCommit
+  flutterFramework = $metadata.FlutterFrameworkRevision
+  flutterEngine = $metadata.FlutterEngineRevision
+  flutterEnginePatch = $metadata.FlutterEnginePatchPath
+  flutterEnginePatchSha256 = $metadata.FlutterEnginePatchSha256
+  flutterPatchedManagerSha256 = $metadata.FlutterPatchedManagerSha256
+}
+foreach ($entry in $expectedBuildProvenance.GetEnumerator()) {
+  if ((Get-BuildMarkerValue $entry.Key) -ne $entry.Value) {
+    Throw-PackageFailure 'build-provenance-mismatch' "Release build provenance does not match $($entry.Key)."
+  }
+}
+
+$markedArtifacts = [System.Collections.Generic.Dictionary[string, string]]::new(
+  [System.StringComparer]::OrdinalIgnoreCase
+)
+foreach ($artifact in @($buildMarker.artifacts)) {
+  if (-not $artifact -or -not ($artifact.path -is [string]) -or
+    [string]::IsNullOrWhiteSpace($artifact.path) -or
+    -not ($artifact.sha256 -is [string]) -or
+    $artifact.sha256 -notmatch '^[A-Fa-f0-9]{64}$' -or
+    [IO.Path]::IsPathRooted($artifact.path) -or
+    $artifact.path.Contains('\') -or
+    ($artifact.path -split '/') -contains '..' -or
+    ($artifact.path -split '/') -contains '.') {
+    Throw-PackageFailure 'build-provenance-mismatch' 'Release build provenance contains an invalid artifact entry.'
+  }
+  if (-not $markedArtifacts.TryAdd($artifact.path, $artifact.sha256.ToUpperInvariant())) {
+    Throw-PackageFailure 'build-provenance-mismatch' "Release build provenance repeats $($artifact.path)."
+  }
+}
+$buildInputs = @(Get-BuildInputs $BuildDirectory)
+if ($markedArtifacts.Count -ne $buildInputs.Count) {
+  Throw-PackageFailure 'build-artifact-mismatch' 'Release build contents do not match the artifact-bound provenance marker.'
+}
+foreach ($relative in $buildInputs) {
+  if (-not $markedArtifacts.ContainsKey($relative)) {
+    Throw-PackageFailure 'build-artifact-mismatch' "Release build provenance does not include $relative."
+  }
+  $actualHash = (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $BuildDirectory $relative)).Hash.ToUpperInvariant()
+  if ($actualHash -ne $markedArtifacts[$relative]) {
+    Throw-PackageFailure 'build-artifact-mismatch' "Release build artifact changed after provenance was recorded: $relative."
+  }
 }
 
 $runtime = Join-Path $BuildDirectory 'libmpv-2.dll'
@@ -150,6 +259,7 @@ if (Test-Path -LiteralPath $nativeAssets -PathType Leaf) {
   Copy-Item -LiteralPath $nativeAssets -Destination $Destination
 }
 Copy-Item -LiteralPath (Join-Path $BuildDirectory 'data') -Destination $Destination -Recurse
+Copy-Item -LiteralPath $buildMarkerPath -Destination (Join-Path $Destination 'BUILD-PROVENANCE.json')
 
 $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
 if (-not (Test-Path -LiteralPath $vswhere)) {
@@ -190,11 +300,13 @@ $vcVersions = @('msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll') | ForE
 }
 @(
   "Lineup Desktop $pubspecVersion Windows x64",
-  "source-commit=$sourceCommit",
+  "source-commit=$buildSourceCommit",
   "source-dirty=$($sourceDirty.ToString().ToLowerInvariant())",
-  "flutter-framework=$($metadata.FlutterFrameworkRevision)",
-  "flutter-engine=$($metadata.FlutterEngineRevision)",
-  "flutter-engine-patch=$($metadata.FlutterEnginePatchPath)",
+  "flutter-framework=$buildFlutterFramework",
+  "flutter-engine=$buildFlutterEngine",
+  "flutter-engine-patch=$buildFlutterPatch",
+  "flutter-engine-patch-sha256=$buildFlutterPatchSha256",
+  "flutter-patched-manager-sha256=$buildPatchedManagerSha256",
   "mpv=$($metadata.MpvVersion)",
   "ffmpeg=$($metadata.FfmpegVersion)",
   "libplacebo=$($metadata.LibplaceboVersion)",
