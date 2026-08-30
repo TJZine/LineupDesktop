@@ -78,7 +78,10 @@ thumbnail reference exists. The canonical inventory is now 31 macOS goldens,
 including matched rich/reference-free Guide evidence at 1920×1080 and theme
 chooser evidence at 800×600 and 1920×1080. These remain deterministic Flutter
 composition claims; no physical Windows, native-video, assistive-technology,
-package, or support claim is added.
+package, or support claim is added. At resulting product HEAD, formatting
+checked 65 files with zero changes, analysis was clean, the named cross-surface
+gate passed 212 tests sequentially, the full canonical-timezone suite passed
+654 tests sequentially, and the macOS release build succeeded at 51.2 MB.
 
 This is the authoritative current product-parity record. The classifications
 in [Portable UI Parity](ui-parity.md) remain historical evidence for their

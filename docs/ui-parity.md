@@ -849,3 +849,10 @@ Affected images use deterministic synthetic facts and were inspected at their
 original pixels. This evidence proves Flutter composition only; physical
 Windows input, assistive technology, native video layering, media behavior,
 packaging, platform validation, and support remain outside this pass.
+
+Using pinned Flutter 3.47.0 framework revision
+`4cf24164269a5ebf0c16a028a00727d0e77bbb05` and Dart 3.13.0, formatting
+checked 65 files with zero changes, analysis reported no issues, the focused
+cross-surface gate passed 212 tests with concurrency one, and the complete
+canonical `America/New_York` suite passed 654 tests with concurrency one. The
+macOS release build succeeded at 51.2 MB. No physical Windows campaign was run.
