@@ -68,39 +68,38 @@ List<ChannelProposal> buildChannelProposals({
   ) {
     if (!strategies.contains(strategy)) return;
     final countsByLibrary = <PlexLibrary, Map<String, int>>{};
+    final seriesByLibrary = <PlexLibrary, Map<String, Set<String>>>{};
+    final requiresSeriesBreadth = {
+      BuilderStrategy.actors,
+      BuilderStrategy.directors,
+    }.contains(strategy);
     for (final library in sourceLibraries) {
       final counts = <String, int>{};
+      final seriesByTag = <String, Set<String>>{};
       for (final item in items.where((item) => item.libraryId == library.id)) {
-        for (final tag
-            in select(item)
-                .map((value) => value.trim())
-                .where((value) => value.isNotEmpty)
-                .toSet()) {
+        final selectedTags = select(item)
+            .map((value) => value.trim())
+            .where((value) => value.isNotEmpty)
+            .toSet();
+        for (final tag in selectedTags) {
           counts[tag] = (counts[tag] ?? 0) + 1;
+          if (requiresSeriesBreadth &&
+              library.type == PlexLibraryType.show &&
+              item.grandparentTitle != null) {
+            (seriesByTag[tag] ??= {}).add(item.grandparentTitle!);
+          }
         }
       }
       countsByLibrary[library] = counts;
+      seriesByLibrary[library] = seriesByTag;
     }
     bool eligible(PlexLibrary library, String tag, {bool minimum = true}) {
       final count = countsByLibrary[library]![tag] ?? 0;
       if (count == 0 || (minimum && count < minimumItems)) return false;
-      if (library.type != PlexLibraryType.show ||
-          !{
-            BuilderStrategy.actors,
-            BuilderStrategy.directors,
-          }.contains(strategy)) {
+      if (library.type != PlexLibraryType.show || !requiresSeriesBreadth) {
         return true;
       }
-      final series = items
-          .where(
-            (item) =>
-                item.libraryId == library.id &&
-                select(item).contains(tag) &&
-                item.grandparentTitle != null,
-          )
-          .map((item) => item.grandparentTitle)
-          .toSet();
-      return series.length >= 3;
+      return (seriesByLibrary[library]![tag]?.length ?? 0) >= 3;
     }
 
     if (crossLibraryStrategies.contains(strategy) &&
@@ -343,8 +342,10 @@ List<ChannelProposal> buildChannelProposals({
       break;
     }
     if (matched != null &&
-        jsonEncode(matched.source.toJson()) ==
-            jsonEncode(entry.proposal.source.toJson()) &&
+        canonicalChannelValueEquals(
+          matched.source.toJson(),
+          entry.proposal.source.toJson(),
+        ) &&
         matched.playbackMode == entry.mode &&
         matched.blockSize == entry.blockSize) {
       output.add(matched);
