@@ -14,6 +14,7 @@ audience and purpose.
 | Application or UI work | [Architecture](architecture.md) | [Product Parity](product-parity.md) and [Portable UI Parity](ui-parity.md) |
 | Channel Studio implementation or investigation | [Channel Studio Specification](channel-studio-spec.md) | [Channel Studio Implementation Plan](channel-studio-implementation-plan.md), [Product Parity](product-parity.md), and [Architecture](architecture.md) |
 | Windows media, runner, or packaging work | [Windows Native Acceptance](windows-native-validation.md) | [Development](DEVELOPMENT.md) and [Windows Runtime Provenance](windows-runtime.md) |
+| Planned audio passthrough work | [Audio Passthrough Specification](audio-passthrough-spec.md) | [Windows Native Acceptance](windows-native-validation.md), [Architecture](architecture.md), and the current source |
 | Guide/PiP implementation or investigation | [Guide PiP Specification](guide-pip-composition-spec.md) | [Architecture](architecture.md) and the current source |
 | Security report | [Security Policy](../SECURITY.md) | Use the private reporting route; never open a public issue containing secrets |
 
@@ -62,6 +63,10 @@ audience and purpose.
 - [Windows Runtime Provenance](windows-runtime.md) records exact native runtime
   sources, hashes, licenses, package policy, and unresolved redistribution
   gates.
+- [Audio Passthrough Specification](audio-passthrough-spec.md) records the
+  deferred default-off Settings feature, native ownership boundary, discovery
+  gate, implementation checklist, and physical Windows evidence required before
+  compressed bitstream output can be claimed.
 
 ## Documentation authority
 
