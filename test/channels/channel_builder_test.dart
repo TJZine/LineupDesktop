@@ -632,4 +632,47 @@ void main() {
     expect(changed.shuffleSeed, staleShuffleSeed);
     expect(changed.builderKey, stale.builderKey);
   });
+
+  test('plan composition preserves custom channels across every mode', () {
+    Channel channel(String id, int number, {String? builderKey}) => Channel(
+      id: id,
+      number: number,
+      name: id,
+      source: const ManualSource([]),
+      playbackMode: PlaybackMode.sequential,
+      anchor: DateTime.utc(2026),
+      shuffleSeed: number,
+      builderKey: builderKey,
+    );
+
+    final custom = channel('custom', 30);
+    final staleMatch = channel('stale-match', 20, builderKey: 'genre:drama');
+    final staleOther = channel('stale-other', 10, builderKey: 'genre:comedy');
+    final planned = channel('planned', 20, builderKey: 'genre:drama');
+
+    expect(
+      composeChannelPlan(
+        existing: [custom, staleMatch, staleOther],
+        planned: [planned],
+        mode: ChannelBuildMode.replace,
+      ).map((channel) => channel.id),
+      ['planned', 'custom'],
+    );
+    expect(
+      composeChannelPlan(
+        existing: [custom, staleMatch, staleOther],
+        planned: [planned],
+        mode: ChannelBuildMode.append,
+      ).map((channel) => channel.id),
+      ['stale-other', 'stale-match', 'planned', 'custom'],
+    );
+    expect(
+      composeChannelPlan(
+        existing: [custom, staleMatch, staleOther],
+        planned: [planned],
+        mode: ChannelBuildMode.merge,
+      ).map((channel) => channel.id),
+      ['stale-other', 'planned', 'custom'],
+    );
+  });
 }

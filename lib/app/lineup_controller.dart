@@ -1044,23 +1044,11 @@ class LineupController extends ChangeNotifier {
           'Generated channel plans require builder ownership',
         );
       }
-      final next = switch (mode) {
-        ChannelBuildMode.replace => [
-          ...channels.where((channel) => channel.builderKey == null),
-          ...planned,
-        ],
-        ChannelBuildMode.append => [...channels, ...planned],
-        ChannelBuildMode.merge => [
-          ...channels.where(
-            (existing) =>
-                existing.builderKey == null ||
-                !planned.any(
-                  (candidate) => candidate.builderKey == existing.builderKey,
-                ),
-          ),
-          ...planned,
-        ],
-      }..sort((a, b) => a.number.compareTo(b.number));
+      final next = composeChannelPlan(
+        existing: channels,
+        planned: planned,
+        mode: mode,
+      );
       for (final channel in next) {
         channel.validate(next);
       }

@@ -371,6 +371,31 @@ List<ChannelProposal> buildChannelProposals({
   return (channels: List.unmodifiable(output), truncated: truncated);
 }
 
+List<Channel> composeChannelPlan({
+  required List<Channel> existing,
+  required List<Channel> planned,
+  required ChannelBuildMode mode,
+}) {
+  final channels = switch (mode) {
+    ChannelBuildMode.replace => [
+      ...existing.where((channel) => channel.builderKey == null),
+      ...planned,
+    ],
+    ChannelBuildMode.append => [...existing, ...planned],
+    ChannelBuildMode.merge => [
+      ...existing.where(
+        (channel) =>
+            channel.builderKey == null ||
+            !planned.any(
+              (candidate) => candidate.builderKey == channel.builderKey,
+            ),
+      ),
+      ...planned,
+    ],
+  }..sort((a, b) => a.number.compareTo(b.number));
+  return List.unmodifiable(channels);
+}
+
 bool _containsShows(ContentSource source) => switch (source) {
   LibrarySource(:final libraryType) => libraryType == PlexLibraryType.show,
   MixedSource(:final sources) => sources.any(_containsShows),

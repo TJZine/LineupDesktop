@@ -669,12 +669,15 @@ void main() {
     tester,
   ) async {
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    for (final size in const [
-      Size(800, 600),
-      Size(800, 1200),
-      Size(1280, 720),
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    for (final (:size, :textScale) in const [
+      (size: Size(800, 600), textScale: 1.0),
+      (size: Size(800, 1200), textScale: 1.0),
+      (size: Size(1280, 720), textScale: 1.0),
+      (size: Size(800, 1200), textScale: 2.0),
     ]) {
       await tester.binding.setSurfaceSize(size);
+      tester.platformDispatcher.textScaleFactorTestValue = 1;
       final controller = _SetupFixtureController()
         ..stage = SetupStage.channelSetup
         ..libraries = const [
@@ -688,7 +691,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: UpstreamChannelSetupView(
-            key: ValueKey(size),
+            key: ValueKey((size, textScale)),
             controller: controller,
           ),
         ),
@@ -697,6 +700,8 @@ void main() {
       await tester.tap(find.text('Configure channels'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Build Channels'));
+      await tester.pumpAndSettle();
+      tester.platformDispatcher.textScaleFactorTestValue = textScale;
       await tester.pumpAndSettle();
 
       final header = find.text('Channel Setup');
@@ -767,9 +772,14 @@ void main() {
     );
     expect(find.text('Remove 0 generated channels'), findsOneWidget);
     expect(
-      find.text('1 custom channel will remain unchanged.'),
+      find.text('1 custom channel is protected and will remain unchanged.'),
       findsOneWidget,
     );
+    final firstPlanned = tester.getTopLeft(find.text('Movies Recently Added'));
+    final secondPlanned = tester.getTopLeft(find.text('Drama'));
+    final protectedCustom = tester.getTopLeft(find.text('Newsroom'));
+    expect(firstPlanned.dy, lessThan(secondPlanned.dy));
+    expect(secondPlanned.dy, lessThan(protectedCustom.dy));
   });
 
   testWidgets('Channel Setup merge review matches the applied channel sets', (
@@ -834,14 +844,8 @@ void main() {
     expect(find.bySemanticsLabel('Generated removed: 0'), findsOneWidget);
     expect(find.bySemanticsLabel('Custom kept: 1'), findsOneWidget);
     expect(find.bySemanticsLabel('Final: 3'), findsOneWidget);
-    final updateSegment = tester.getRect(
-      find.byKey(const ValueKey('channel-setup-impact-update')),
-    );
-    final unchangedSegment = tester.getRect(
-      find.byKey(const ValueKey('channel-setup-impact-unchanged')),
-    );
-    expect(updateSegment.width, greaterThan(0));
-    expect(unchangedSegment.width, greaterThan(updateSegment.width));
+    expect(find.textContaining('UPDATED'), findsOneWidget);
+    expect(find.textContaining('RETAINED'), findsOneWidget);
     expect(
       find.bySemanticsLabel(RegExp('Channel composition.*Update: 1')),
       findsOneWidget,
