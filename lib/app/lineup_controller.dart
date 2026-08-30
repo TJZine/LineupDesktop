@@ -13,15 +13,7 @@ import '../plex/plex_client.dart';
 import '../plex/plex_models.dart';
 import '../settings/lineup_settings.dart';
 
-enum SetupStage {
-  welcome,
-  linking,
-  profiles,
-  servers,
-  audio,
-  channelSetup,
-  ready,
-}
+enum SetupStage { welcome, linking, profiles, servers, channelSetup, ready }
 
 enum LibraryScanStatus {
   idle,
@@ -651,8 +643,6 @@ class LineupController extends ChangeNotifier {
           stage = libraryScanStatus == LibraryScanStatus.complete
               ? SetupStage.ready
               : SetupStage.channelSetup;
-        } else if (!settings.audioSetupComplete) {
-          stage = SetupStage.audio;
         }
         serverSelectionCanCancel = false;
       },
@@ -919,22 +909,6 @@ class LineupController extends ChangeNotifier {
         'playlist-unavailable',
         'A playlist used by this lineup could not be loaded. Retry setup.',
       );
-    }
-  }
-
-  Future<void> completeAudioSetup() async {
-    try {
-      await updateSettings(settings.copyWith(audioSetupComplete: true));
-      if (_disposed) return;
-      stage = SetupStage.channelSetup;
-      notifyListeners();
-    } catch (exception) {
-      error =
-          'Could not save audio settings. Check device storage and try again.';
-      diagnostics.add('application', 'Audio setup persistence failed', {
-        'code': exception is PlexException ? exception.code : 'unexpected',
-      });
-      notifyListeners();
     }
   }
 

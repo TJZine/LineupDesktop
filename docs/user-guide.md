@@ -84,16 +84,7 @@ When no server appears:
 - switch profiles when the expected server belongs to another profile; or
 - clear the saved server when a previous selection is no longer valid.
 
-### 4. Confirm audio behavior
-
-The current Desktop audio step confirms that Lineup uses the
-system-selected output. On Windows, libmpv/FFmpeg decodes supported audio tracks,
-including TrueHD and DTS-family formats, to that output, normally as PCM;
-bitstream passthrough is not required for playback. Device selection and
-passthrough controls remain hidden because the application does not yet own a
-truthful native device/bitstream contract.
-
-### 5. Build the initial lineup
+### 4. Build the initial lineup
 
 Channel Setup has three stages:
 

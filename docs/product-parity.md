@@ -444,7 +444,6 @@ not introduce a management rail or second player owner.
 | Large focus indicators | Off; Boolean | Durable; app-wide semantic focus-border width |
 | Profile picker on startup | Off; Boolean | Durable; authenticated startup routing |
 | Record redacted diagnostics | Off; Boolean | Durable; bounded session diagnostic recorder |
-| First-run audio completion | Incomplete; Boolean, onboarding-owned | Durable; first-run routing suppresses completed audio explanation |
 
 ### Themes
 
@@ -518,7 +517,7 @@ private fact or personal path is reproduced here.
 
 Current Desktop visual evidence consists of 27 committed macOS goldens. The 20
 1280×720 baselines cover terminal auth failure; profiles and protected-profile
-PIN; server and audio setup; Channel Setup libraries, strategies, review,
+PIN and server setup; Channel Setup libraries, strategies, review,
 progress, and completion, with failure covered structurally; Guide without
 playback, Guide PiP, and Overlay Guide; OSD, rich Now Playing, mini Guide, audio
 rail, and long subtitle rail; plus Settings over playback in Ember & Steel and

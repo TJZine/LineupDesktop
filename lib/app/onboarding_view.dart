@@ -141,7 +141,6 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
       SetupStage.linking => _linking(),
       SetupStage.profiles => _profiles(),
       SetupStage.servers => _servers(),
-      SetupStage.audio => _audio(),
       SetupStage.channelSetup || SetupStage.ready => const SizedBox.shrink(),
     };
     return _OnboardingPanel(
@@ -390,42 +389,6 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
                 child: const Text('Cancel'),
               ),
           ],
-        ),
-      ],
-    ),
-  );
-
-  Widget _audio() => _HeroContent(
-    title: 'Audio Setup',
-    step: 'Step 2 of 3',
-    subtitle: 'Lineup uses the system-selected audio output on Desktop.',
-    child: Column(
-      children: [
-        Container(
-          width: 112,
-          height: 112,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: LineupTheme.of(context).elevatedSurface,
-            border: Border.all(color: LineupTheme.of(context).defaultBorder),
-          ),
-          child: const Icon(Icons.volume_up_outlined, size: 54),
-        ),
-        const SizedBox(height: 20),
-        ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 640),
-          child: const Text(
-            'Output devices, passthrough, and native capability controls remain hidden until the Windows player can report and consume them accurately.',
-            textAlign: TextAlign.center,
-          ),
-        ),
-        const SizedBox(height: 28),
-        FilledButton(
-          autofocus: true,
-          onPressed: widget.controller.busy
-              ? null
-              : widget.controller.completeAudioSetup,
-          child: const Text('Continue'),
         ),
       ],
     ),

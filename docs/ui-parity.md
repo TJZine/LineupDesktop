@@ -372,7 +372,7 @@ remain Prompt 4E visual-adjudication inputs rather than accepted visual claims.
 | Startup, auth welcome, QR/PIN, waiting, retry | Source-aligned theme mechanics implemented | Semantic theme roles reach the existing branded hierarchy; unlocked comparison remains required. |
 | Profiles and protected PIN | Existing implementation retained after source inspection | Card/keypad ownership and semantics remain; proportions, focus-ring appearance, and all themes require unlocked acceptance. |
 | Server discovery/selection/retry | Existing implementation retained after source inspection | No health, latency, or relay facts are fabricated; presentation remains subject to unlocked acceptance. |
-| Audio Setup and all Channel Setup stages | Source-aligned theme mechanics implemented | Existing staged header/content/footer and state owners remain; live spatial acceptance is deferred. |
+| Channel Setup stages | Source-aligned theme mechanics implemented | Existing staged header/content/footer and state owners remain; live spatial acceptance is deferred. |
 | Channels empty/populated/editor/delete/persistence error | Intentional Desktop structural adaptation | Management rail and readable-width workspace remain. Upstream has no equivalent implemented channel editor. |
 | Settings | Source-aligned structure implemented | Existing category/detail layout now exposes persisted theme and Guide presentation; live typography and spacing acceptance is deferred. |
 | Diagnostics | Intentional Desktop structural adaptation | Credential-safe management destination retained; no upstream consumer-equivalent surface exists. |
@@ -417,12 +417,12 @@ native video/presentation acceptance.
 | Splash/startup and blocking startup failure | Behavior implemented and tested | Startup has one semantic progress surface and one sanitized blocking failure. The known engine-marker failure uses fixed safe copy; arbitrary exception text is not presented. Appearance remains Prompt 4E. |
 | Authentication failure and expired PIN | Behavior implemented and tested | The onboarding owner keeps retry/new-code/cancel actions, non-overlapping polling, epoch rejection, and safe Plex messages. Secure credential writes are serialized with cancel/logout; failed secure cancellation stays visibly retryable until the queued token is cleared. |
 | Blocking, recoverable, warning, transient, and validation ownership | Intentional Desktop adaptation | Startup alone is blocking. Onboarding owns auth/server recovery, player owns playback retry/close, settings/channels/Channel Setup own write or validation failures, and ordinary success is reflected by authoritative state. No event bus, universal modal, or unused toast service was added. |
-| Persistence failures and corrupt-state recovery | Behavior implemented and tested | File state is atomically replaced and corrupt input is quarantined. Settings, channels, Channel Setup, current-channel, audio setup, selected-server clearing, and logout retain or restore prior safe state on failed writes. There is no browser quota lifecycle consumer on Desktop. |
+| Persistence failures and corrupt-state recovery | Behavior implemented and tested | File state is atomically replaced and corrupt input is quarantined. Settings, channels, Channel Setup, current-channel, selected-server clearing, and logout retain or restore prior safe state on failed writes. There is no browser quota lifecycle consumer on Desktop. |
 | Network/offline and reconnect | Behavior implemented and tested | Bounded Plex requests return actionable safe errors. Discovery and playback expose explicit retry; a failed discovery does not silently change profile scope, and a later refresh reconnects through the saved selection. Continuous connectivity polling was omitted because there is no current consumer. |
 | Profile switching | Behavior implemented and tested | Settings exposes the current Plex Home profile and enters the existing protected-PIN picker. Cancel returns to the prior route only while that recovery remains current; selecting a new profile invalidates the old action. |
 | Server switching, saved-server clearing, and disappearance | Behavior implemented and tested | Settings enters the existing server selector with reconnect, cancel, clear-saved-server, retry discovery, and switch-profile actions. Clearing removes only the profile-scoped selection and retains saved per-server lineups. A disappeared selected server clears live libraries/media/lineup instead of reusing another profile or stale endpoint. |
 | Direct/local/relay and latency facts | Behavior implemented and tested | Only a successfully selected connection is labeled. The label uses its real direct-local, direct-remote, or Plex Relay flags and its measured probe duration. Priority is applied before an eight-endpoint bound, each tier is probed concurrently with per-request timeout, and no background health claim or fabricated status is shown. |
-| Audio Setup | Intentional Desktop adaptation | The first-run step confirms system-selected audio without inventing devices or passthrough support. Output, passthrough, and capability controls remain hidden until a Windows implementation reports and consumes them accurately. |
+| Audio Setup | Intentionally omitted | Desktop uses the system-selected output without asking the user to dismiss an explanation-only onboarding step. Optional passthrough is separately specified and deferred until Windows can report and consume it accurately. |
 | Direct-play audio fallback | Behavior omitted because it has no current consumer | The legacy persisted field and nonfunctional toggle were removed. Current Dart stream selection cannot safely promise alternate-track fallback without native selected-track coordination. |
 | Channel Setup cancellation and progress | Behavior intentionally adapted for Desktop | Proposal/review remains user-cancellable before commit; applying the accepted 1,000-channel plan is one atomic local save. Cancellation/failure preserves the old lineup. Timing output is diagnostic only and does not establish a perceived-performance or foreground acceptance claim. |
 | Channel reorder, copy, import/export, bulk administration | Behavior omitted because it has no current consumer | Channel number editing provides ordering, provenance is visible, and deletion is confirmed. Upstream import/export internals do not establish a current Desktop workflow, so no administration suite was invented. |
@@ -453,7 +453,7 @@ credential, native handle, or private media URL.
 
 The scenario covers first launch, PIN creation/polling, authentication, Plex
 Home profile and protected PIN, discovery, server selection and measured
-connection facts, Audio Setup, libraries, Channel Setup, Guide scheduling,
+connection facts, libraries, Channel Setup, Guide scheduling,
 tune/loading/playing coordinator state, OSD, mini Guide,
 track selection, settings writes, redacted playback failure, retry, network
 failure/reconnect, a 1,000-channel atomic rebuild, process-style
@@ -551,7 +551,7 @@ It does not mean the state is absent.
 | Protected-profile PIN | Structural parity with acceptable Flutter adaptation | Focus containment, autofocus, semantics, cancel and completion are tested; the complete keypad was not accepted as a separate golden. |
 | Server discovery/selection | Structural parity with acceptable Flutter adaptation | Upstream server selection rendered live; Flutter fixture/tests retain measured connection facts without private server data. |
 | Server error/retry | Insufficient evidence | Safe retry behavior is deterministic, but a live private-account failure was not manufactured. |
-| Audio Setup | Structural parity with acceptable Flutter adaptation | Upstream rendered live. Flutter intentionally offers truthful system-selected audio rather than unsupported device/passthrough controls. |
+| Audio Setup | Intentionally omitted | The former explanation-only Flutter step was retired. No device, status, or passthrough behavior is fabricated. |
 | Channel Setup libraries, strategies/options, progress and completion | Structural parity with acceptable Flutter adaptation | Upstream rendered live through all stages including completion; Flutter stages and progress are exercised by tests. |
 | Channel Setup review | Visual parity | Inspected deterministic golden accepted. The staged header/workspace/footer and destructive replacement priority are preserved. |
 | Channels empty/populated, editor and destructive confirmation | Intentional Desktop adaptation | Responsive management layout and explicit confirmation are rendered/tested. Upstream has no equivalent implemented desktop channel editor. |
@@ -590,8 +590,8 @@ owner was introduced.
 
 Management navigation remains a Desktop adaptation. Guide and Player remain
 immersive and do not inherit the management rail. PiP is a Flutter allocation
-only, diagnostics remains Desktop-specific, and audio setup continues to omit
-unimplemented platform claims.
+only, diagnostics remains Desktop-specific, and audio controls remain deferred
+rather than presenting unimplemented platform claims.
 
 ### Interaction and profile observations
 
@@ -657,7 +657,7 @@ or added no PNGs.
 | --- | --- | --- |
 | Welcome and terminal authorization failure | Structural parity with acceptable Flutter adaptation | Deterministic routing, semantics, recovery, and accepted synthetic-fact pixels. |
 | Profiles and protected-profile PIN | Visual parity | Accepted profile/PIN pixels preserve the remote-first card and keypad hierarchy. |
-| Server selection and audio setup | Structural parity with acceptable Flutter adaptation | Accepted pixels preserve the staged hierarchy without claiming unimplemented platform audio behavior. |
+| Server selection | Structural parity with acceptable Flutter adaptation | Accepted pixels preserve the staged hierarchy and measured connection facts. The former explanation-only audio step is intentionally omitted. |
 | Channel Setup libraries, strategies, review, progress, failure, and completion | Visual parity with structural failure coverage | Accepted pixels cover libraries, strategies, review, progress, and completion; widget tests cover the failed state and complete staged flow. Step 3 owns an indeterminate noncancelable apply plus failed/complete outcomes. |
 | Guide without playback, Classic PiP, and Overlay | Visual parity for Flutter composition | Three accepted goldens plus row, aperture, focus, density, and viewport tests; native video visibility is excluded. |
 | Rich Now Playing | Visual parity | Accepted lower-left shelf leaves the playback canvas visible and remains mutually exclusive with other overlays. |

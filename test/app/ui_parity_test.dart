@@ -385,9 +385,7 @@ void main() {
     expect(controller.pin, '1345');
   });
 
-  testWidgets('PIN and Audio Setup scale from 800x600 through 4K', (
-    tester,
-  ) async {
+  testWidgets('PIN setup scales from 800x600 through 4K', (tester) async {
     const profile = PlexHomeUser(id: 'child', name: 'Child', protected: true);
     final controller = _ProfileFixtureController()
       ..stage = SetupStage.profiles
@@ -446,13 +444,6 @@ void main() {
       expect(tester.takeException(), isNull, reason: 'PIN viewport $size');
       await tester.tap(find.byTooltip('Cancel'));
       await tester.pumpAndSettle();
-
-      controller.stage = SetupStage.audio;
-      await tester.pumpWidget(fixture.build());
-      await tester.pumpAndSettle();
-      expect(find.text('Continue'), findsOneWidget);
-      expect(tester.takeException(), isNull, reason: 'Audio viewport $size');
-      controller.stage = SetupStage.profiles;
     }
   });
 

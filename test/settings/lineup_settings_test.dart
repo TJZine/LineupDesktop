@@ -21,7 +21,6 @@ void main() {
       guideLayoutMode: GuideLayoutMode.overlay,
       guideInfoBackgroundMode: GuideInfoBackgroundMode.artwork,
       preferClearLogos: false,
-      audioSetupComplete: true,
       reduceMotion: true,
       libraryTabsEnabled: false,
       nowWatchingBanner: false,
@@ -41,6 +40,15 @@ void main() {
 
     expect(restored.dvrControlsEnabled, isFalse);
     expect(restored.toJson()['dvrControlsEnabled'], isFalse);
+  });
+
+  test('accepts and retires the legacy audio onboarding flag', () {
+    final legacy = const LineupSettings().toJson()
+      ..['audioSetupComplete'] = false;
+
+    final restored = LineupSettings.fromJson(legacy);
+
+    expect(restored.toJson()['audioSetupComplete'], isTrue);
   });
 
   test('rejects missing, unknown, and wrong-type fields', () {

@@ -165,18 +165,6 @@ void main() {
     );
   });
 
-  testWidgets('Audio Setup', (tester) async {
-    final fixture = UiFixture()..controller.stage = SetupStage.audio;
-
-    await _pump(tester, fixture.build());
-    await _match(
-      tester,
-      'audio-setup-1280x720.png',
-      precacheLogo: true,
-      additionalPumps: 1,
-    );
-  });
-
   testWidgets('Channel Setup strategies', (tester) async {
     final controller = _VisualController()
       ..stage = SetupStage.channelSetup

@@ -27,9 +27,10 @@ gate. Turning it off must always preserve today's decode-to-PCM behavior.
 
 ## Current evidence and constraints
 
-- `LineupSettings.audioSetupComplete` records only whether the explanatory
-  onboarding screen was dismissed. It is not a passthrough preference and must
-  never be repurposed as one.
+- Audio Setup has been removed from onboarding. The legacy serialized
+  `audioSetupComplete` key is accepted and ignored only so existing canonical
+  settings continue to load; it is not a passthrough preference and must never
+  be repurposed as one.
 - `SettingsView` has no Audio category or native audio-status model.
 - `NativePlayer` exposes playback, tracks, video bounds, fullscreen, and
   volume, but no audio configuration or output-capability contract.
@@ -158,9 +159,9 @@ storage tokens above.
 - Logout/profile/server changes: retain the application-level audio preference
   unless a later product decision deliberately makes settings profile-scoped.
 
-Removing the obsolete onboarding completion field and adding this preference
-are separate migrations. The latter must not restore Audio Setup or interpret a
-previous `audioSetupComplete: true` value as consent to passthrough.
+Retiring the obsolete onboarding completion behavior and adding this preference
+are separate migrations. The latter must not restore Audio Setup or interpret
+any legacy `audioSetupComplete` value as consent to passthrough.
 
 ## Ownership and native contract
 

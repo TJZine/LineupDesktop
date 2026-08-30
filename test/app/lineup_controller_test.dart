@@ -1867,33 +1867,6 @@ void main() {
     },
   );
 
-  test('audio persistence failure stays retryable and visible', () async {
-    final controller =
-        LineupController(
-            store: _MemoryStore()
-              ..failNextSave = true
-              ..failureMessage = 'opaque-secret-sentinel',
-            credentials: _MemoryCredentials(),
-            plex: _FakePlex(),
-          )
-          ..stage = SetupStage.audio
-          ..diagnostics.enabled = true;
-    addTearDown(controller.dispose);
-
-    await controller.completeAudioSetup();
-
-    expect(controller.stage, SetupStage.audio);
-    expect(controller.settings.audioSetupComplete, isFalse);
-    expect(controller.error, contains('Could not save audio settings'));
-    final entry = controller.diagnostics.entries.single;
-    expect(entry.message, 'Audio setup persistence failed');
-    expect(entry.context, {'code': 'unexpected'});
-    expect(
-      '${entry.message}${entry.context}',
-      isNot(contains('opaque-secret-sentinel')),
-    );
-  });
-
   test(
     'profile picker preference is honored before saved profile restore',
     () async {
@@ -3523,7 +3496,7 @@ void main() {
       final channel = _channel('saved-channel');
       final store = _MemoryStore(
         PersistedState(
-          settings: const LineupSettings(audioSetupComplete: true),
+          settings: const LineupSettings(),
           profileId: 'owner',
           selectedServerByProfile: const {'owner': 'server-a'},
           channelsByProfileServer: {
@@ -3714,7 +3687,7 @@ void main() {
     final controller = LineupController(
       store: _MemoryStore(
         const PersistedState(
-          settings: LineupSettings(audioSetupComplete: true),
+          settings: LineupSettings(),
           profileId: 'owner',
           selectedServerByProfile: {'owner': 'server-a'},
         ),
