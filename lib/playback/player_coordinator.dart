@@ -330,7 +330,7 @@ class PlayerCoordinator extends ChangeNotifier {
     if (!_disposed) notifyListeners();
   }
 
-  Future<void> tune(String channelId) {
+  Future<bool> tune(String channelId) {
     final generation = ++_tuneGeneration;
     _invalidateAuthorizationRecovery();
     final nativeStop = _beginNativeStop();
@@ -344,7 +344,7 @@ class PlayerCoordinator extends ChangeNotifier {
     final operation = _tuneOperations.then(
       (_) => _performTune(channelId, generation, nativeStop),
     );
-    _tuneOperations = operation.catchError((_) {});
+    _tuneOperations = operation.then<void>((_) {}).catchError((_) {});
     return operation;
   }
 
@@ -364,12 +364,12 @@ class PlayerCoordinator extends ChangeNotifier {
     }
   }
 
-  Future<void> _performTune(
+  Future<bool> _performTune(
     String channelId,
     int generation,
     Future<void>? nativeStop,
   ) async {
-    if (generation != _tuneGeneration) return;
+    if (generation != _tuneGeneration) return false;
     if (nativeStop != null) {
       try {
         await nativeStop;
@@ -378,29 +378,29 @@ class PlayerCoordinator extends ChangeNotifier {
           message: 'Stopped',
         );
       } catch (error) {
-        if (generation != _tuneGeneration) return;
+        if (generation != _tuneGeneration) return false;
         _tuning = false;
         _canRetry = true;
         _recordPlaybackFailure(error);
         _error = _safePlaybackError(error);
         _setOverlay(PlayerOverlay.error, timed: false);
-        return;
+        return false;
       }
     }
-    if (generation != _tuneGeneration) return;
+    if (generation != _tuneGeneration) return false;
     GuideProgram? program;
     try {
       program = await guide.ensureCurrentProgram(channelId);
     } on TimeoutException {
       program = null;
     }
-    if (generation != _tuneGeneration) return;
+    if (generation != _tuneGeneration) return false;
     if (program == null) {
       _tuning = false;
       _canRetry = true;
       _error = 'The current program could not be loaded.';
       _setOverlay(PlayerOverlay.error, timed: false);
-      return;
+      return false;
     }
     LineupPlaybackRequest? request;
     LineupPlaybackRequest? replaced;
@@ -421,7 +421,7 @@ class PlayerCoordinator extends ChangeNotifier {
       }
       if (generation != _tuneGeneration) {
         if (_tuning || _disposed) await _stopQuietly();
-        return;
+        return false;
       }
       _activePlayback = request;
       _provisionalPlayback = null;
@@ -434,11 +434,11 @@ class PlayerCoordinator extends ChangeNotifier {
           _activeChannel = null;
         }
         if (_tuning || _disposed) await _stopQuietly();
-        return;
+        return false;
       }
       if (!identical(_activePlayback, request)) {
         await _stopQuietly();
-        return;
+        return false;
       }
       await lineup.setCurrentChannel(channelId);
       if (generation != _tuneGeneration) {
@@ -448,7 +448,7 @@ class PlayerCoordinator extends ChangeNotifier {
           await lineup.setCurrentChannel(previousChannelId);
         }
         if (_tuning || _disposed) await _stopQuietly();
-        return;
+        return false;
       }
       if (!identical(_activePlayback, request)) {
         if (lineup.currentChannelId == channelId &&
@@ -456,12 +456,19 @@ class PlayerCoordinator extends ChangeNotifier {
           await lineup.setCurrentChannel(previousChannelId);
         }
         await _stopQuietly();
-        return;
+        return false;
       }
       _tuning = false;
       _canRetry = false;
       _error = null;
       showOsd();
+      return !_disposed &&
+          generation == _tuneGeneration &&
+          identical(_activePlayback, request) &&
+          _activeChannel?.id == channelId &&
+          lineup.currentChannelId == channelId &&
+          !_tuning &&
+          _error == null;
     } catch (error) {
       _provisionalPlayback = null;
       _invalidateAuthorizationRecovery();
@@ -474,12 +481,13 @@ class PlayerCoordinator extends ChangeNotifier {
         _activeChannel = null;
       }
       if (request != null) await _stopQuietly();
-      if (generation != _tuneGeneration) return;
+      if (generation != _tuneGeneration) return false;
       _tuning = false;
       _canRetry = true;
       _recordPlaybackFailure(error);
       _error = _safePlaybackError(error);
       _setOverlay(PlayerOverlay.error, timed: false);
+      return false;
     }
   }
 

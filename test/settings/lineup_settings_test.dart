@@ -27,9 +27,18 @@ void main() {
       largeFocusIndicators: true,
       profilePickerOnStartup: true,
       diagnosticsEnabled: true,
+      dvrControlsEnabled: true,
     );
     final restored = LineupSettings.fromJson(original.toJson());
     expect(restored.toJson(), original.toJson());
+  });
+
+  test('migrates old persisted settings with DVR controls disabled', () {
+    final old = const LineupSettings().toJson()..remove('dvrControlsEnabled');
+    final restored = LineupSettings.fromJson(old);
+
+    expect(restored.dvrControlsEnabled, isFalse);
+    expect(restored.toJson()['dvrControlsEnabled'], isFalse);
   });
 
   test('rejects missing, unknown, and wrong-type fields', () {
@@ -39,6 +48,7 @@ void main() {
       {...canonical, 'future': true},
       {...canonical, 'reduceMotion': 1},
       {...canonical, 'guideHours': 2.0},
+      {...canonical, 'dvrControlsEnabled': 'false'},
     ]) {
       expect(() => LineupSettings.fromJson(invalid), throwsFormatException);
     }

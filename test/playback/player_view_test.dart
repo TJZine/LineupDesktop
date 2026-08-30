@@ -102,6 +102,7 @@ void main() {
   ) async {
     final fixture = _Fixture(
       PlayerState.playing,
+      dvrControlsEnabled: true,
       tracks: const [
         PlayerTrack(id: 1, type: PlayerTrackType.audio, selected: true),
         PlayerTrack(id: 2, type: PlayerTrackType.subtitle, selected: false),
@@ -137,10 +138,78 @@ void main() {
     fixture.dispose();
   });
 
+  testWidgets('classic TV mode hides and ignores DVR transport controls', (
+    tester,
+  ) async {
+    final fixture = _Fixture(PlayerState.playing);
+    fixture.player.showOsd();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byTooltip('Previous channel'), findsNothing);
+    expect(find.byTooltip('Play'), findsNothing);
+    expect(find.byTooltip('Next channel'), findsNothing);
+    for (final key in [
+      LogicalKeyboardKey.space,
+      LogicalKeyboardKey.keyJ,
+      LogicalKeyboardKey.keyK,
+      LogicalKeyboardKey.keyL,
+      LogicalKeyboardKey.arrowLeft,
+      LogicalKeyboardKey.arrowRight,
+      LogicalKeyboardKey.mediaPlay,
+      LogicalKeyboardKey.mediaPause,
+      LogicalKeyboardKey.mediaPlayPause,
+      LogicalKeyboardKey.mediaStop,
+      LogicalKeyboardKey.mediaRewind,
+      LogicalKeyboardKey.mediaFastForward,
+    ]) {
+      await tester.sendKeyEvent(key);
+    }
+    expect(fixture.native.transportCommands, 0);
+    expect(fixture.player.overlay, PlayerOverlay.osd);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
+  testWidgets('classic TV mode keeps PageUp and PageDown channel surfing', (
+    tester,
+  ) async {
+    final fixture = _Fixture(PlayerState.playing, channelCount: 2);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.pageDown);
+    await tester.pump();
+    await tester.pump();
+    expect(fixture.lineup.currentChannelId, 'channel-1');
+    await tester.sendKeyEvent(LogicalKeyboardKey.pageUp);
+    await tester.pump();
+    await tester.pump();
+    expect(fixture.lineup.currentChannelId, 'channel');
+    final afterSurfing = fixture.native.transportCommands;
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    expect(fixture.native.transportCommands, afterSurfing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
   testWidgets('media Stop reports failures without an unhandled error', (
     tester,
   ) async {
-    final fixture = _Fixture(PlayerState.playing, failStop: true);
+    final fixture = _Fixture(
+      PlayerState.playing,
+      dvrControlsEnabled: true,
+      failStop: true,
+    );
     await tester.pumpWidget(
       MaterialApp(
         home: PlayerView(controller: fixture.player, openGuide: () {}),
@@ -357,7 +426,7 @@ void main() {
   testWidgets('core player keyboard controls work while the OSD is visible', (
     tester,
   ) async {
-    final fixture = _Fixture(PlayerState.playing);
+    final fixture = _Fixture(PlayerState.playing, dvrControlsEnabled: true);
     fixture.player.showOsd();
     await tester.pumpWidget(
       MaterialApp(
@@ -419,17 +488,34 @@ void main() {
         tester.getSize(find.byKey(const Key('player-osd-surface'))).width,
         size.width,
       );
+      final progressLine = tester.getRect(
+        find.byKey(const Key('player-osd-progress-line')),
+      );
+      expect(progressLine.left, 0, reason: '$size');
+      expect(progressLine.width, size.width, reason: '$size');
+      expect(progressLine.bottom, size.height, reason: '$size');
       expect(tester.takeException(), isNull, reason: '$size');
     }
 
     for (final size in const [
+      Size(480, 900),
       Size(800, 600),
       Size(1280, 720),
+      Size(1600, 900),
       Size(1920, 1080),
+      Size(3840, 2160),
     ]) {
       await tester.binding.setSurfaceSize(size);
       fixture.player.showMiniGuide();
-      await tester.pump();
+      await tester.pumpWidget(
+        MaterialApp(
+          key: ValueKey(size),
+          home: MediaQuery(
+            data: MediaQueryData(size: size),
+            child: PlayerView(controller: fixture.player, openGuide: () {}),
+          ),
+        ),
+      );
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.bySemanticsLabel(RegExp('Mini Guide')), findsOneWidget);
       expect(
@@ -438,6 +524,35 @@ void main() {
       );
       expect(fixture.player.miniGuideChannels, hasLength(5));
       expect(find.textContaining('UP/DOWN Browse'), findsOneWidget);
+      final shelf = tester.getRect(find.byKey(const Key('mini-guide-shelf')));
+      expect(
+        MediaQuery.sizeOf(
+          tester.element(find.byKey(const Key('mini-guide-shelf'))),
+        ),
+        size,
+      );
+      for (final channel in fixture.player.miniGuideChannels) {
+        final row = tester.getRect(
+          find.byKey(Key('mini-guide-row-${channel.id}')),
+        );
+        expect(row.top, greaterThanOrEqualTo(shelf.top), reason: '$size');
+        expect(row.bottom, lessThanOrEqualTo(shelf.bottom), reason: '$size');
+        if (LineupLayout.isCompactWidth(size.width) || size.height < 720) {
+          expect(row.height, greaterThan(48), reason: '$size');
+        } else if (size.height >= 900) {
+          expect(row.height, 48, reason: '$size');
+        }
+        for (final fact in ['current', 'next']) {
+          final factRect = tester.getRect(
+            find.byKey(Key('mini-guide-$fact-${channel.id}')),
+          );
+          expect(row.contains(factRect.topLeft), isTrue, reason: '$size');
+          expect(row.contains(factRect.bottomRight), isTrue, reason: '$size');
+        }
+      }
+      if (size.height >= 900 && !LineupLayout.isCompactWidth(size.width)) {
+        expect(shelf.height / size.height, lessThan(0.34), reason: '$size');
+      }
       expect(tester.takeException(), isNull, reason: '$size');
       fixture.player.closeOverlay();
       await tester.pump();
@@ -446,6 +561,502 @@ void main() {
 
     await tester.pumpWidget(const SizedBox.shrink());
     fixture.dispose();
+  });
+
+  testWidgets('OSD uses a shallow horizontal widescreen hierarchy', (
+    tester,
+  ) async {
+    final fixture = _Fixture(
+      PlayerState.playing,
+      shortPrograms: true,
+      longNextTitle: true,
+      guideClock: () => DateTime(2026, 1, 15, 12),
+    );
+    expect(await fixture.guide.ensureCurrentProgram('channel'), isNotNull);
+    expect(fixture.player.nextProgram, isNotNull);
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    for (final size in const [
+      Size(800, 600),
+      Size(1280, 720),
+      Size(1600, 900),
+      Size(1920, 1080),
+      Size(3840, 2160),
+    ]) {
+      await tester.binding.setSurfaceSize(size);
+      fixture.player.showOsd();
+      await tester.pumpWidget(
+        MaterialApp(
+          key: ValueKey(size),
+          home: MediaQuery(
+            data: MediaQueryData(size: size),
+            child: PlayerView(controller: fixture.player, openGuide: () {}),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(fixture.player.nextProgram, isNotNull, reason: '$size');
+
+      final surface = tester.getRect(
+        find.byKey(const Key('player-osd-surface')),
+      );
+      expect(surface.width, size.width, reason: '$size');
+      if (size.width >= 1200 && size.height >= 640) {
+        expect(
+          find.byKey(const Key('player-osd-horizontal-layout')),
+          findsOneWidget,
+        );
+        expect(
+          surface.height / size.height,
+          lessThan(size.height < 900 ? 0.30 : 0.26),
+          reason: '$size',
+        );
+        final timeline = tester.getRect(
+          find.byKey(const Key('player-osd-progress-block')),
+        );
+        final controls = tester.getRect(
+          find.byKey(const Key('player-osd-horizontal-layout')),
+        );
+        final identity = tester.getRect(
+          find.byKey(const Key('player-osd-identity')),
+        );
+        final actions = tester.getRect(
+          find.byKey(const Key('player-osd-action-groups')),
+        );
+        expect(identity.left, lessThan(actions.left), reason: '$size');
+        expect(
+          actions.right,
+          lessThanOrEqualTo(surface.right),
+          reason: '$size',
+        );
+        expect(timeline.bottom, closeTo(surface.bottom, 24));
+        expect(timeline.top, greaterThan(controls.bottom));
+      } else {
+        expect(
+          find.byKey(const Key('player-osd-stacked-controls')),
+          findsOneWidget,
+        );
+      }
+      expect(
+        find.byKey(const Key('player-osd-next')),
+        findsOneWidget,
+        reason: '$size',
+      );
+      {
+        final timing = tester.widget<Text>(
+          find.byKey(const Key('player-osd-timing')),
+        );
+        expect(timing.data, contains('50m left'));
+        final next = tester.widget<Text>(
+          find.byKey(const Key('player-osd-next')),
+        );
+        expect(next.data, contains('deliberately long synthetic next program'));
+        final localizedStart =
+            MaterialLocalizations.of(
+              tester.element(find.byKey(const Key('player-osd-surface'))),
+            ).formatTimeOfDay(
+              TimeOfDay.fromDateTime(
+                fixture.player.nextProgram!.scheduled.start.toLocal(),
+              ),
+            );
+        expect(next.data, contains('Up next • $localizedStart •'));
+        expect(next.maxLines, 1);
+        expect(next.overflow, TextOverflow.ellipsis);
+        final timeline = tester.getRect(
+          find.byKey(const Key('player-osd-progress-block')),
+        );
+        final nextRect = tester.getRect(
+          find.byKey(const Key('player-osd-next')),
+        );
+        expect(
+          timeline.inflate(0.1).contains(nextRect.topLeft),
+          isTrue,
+          reason: '$size',
+        );
+        expect(
+          timeline.inflate(0.1).contains(nextRect.bottomRight),
+          isTrue,
+          reason: '$size',
+        );
+      }
+      expect(tester.takeException(), isNull, reason: '$size');
+    }
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
+  testWidgets('OSD keeps status facts and unsupported actions disabled', (
+    tester,
+  ) async {
+    for (final state in [
+      PlayerState.loading,
+      PlayerState.buffering,
+      PlayerState.unsupported,
+    ]) {
+      final fixture = _Fixture(state, dvrControlsEnabled: true);
+      fixture.player.showOsd();
+      await tester.pumpWidget(
+        MaterialApp(
+          key: ValueKey(state),
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      final status = tester.widget<Text>(
+        find.byKey(const Key('player-osd-status')),
+      );
+      expect(status.data, isNot(contains('Channel')));
+      expect(status.data, contains(_statusLabelForTest(state)));
+      if (state == PlayerState.unsupported) {
+        for (final icon in [
+          Icons.skip_previous,
+          Icons.play_arrow,
+          Icons.skip_next,
+          Icons.fullscreen,
+        ]) {
+          expect(
+            tester
+                .widget<IconButton>(find.widgetWithIcon(IconButton, icon))
+                .onPressed,
+            isNull,
+          );
+        }
+      }
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    }
+  });
+
+  testWidgets('OSD uses stateful labeled track and sleep actions', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 720));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final fixture = _Fixture(
+      PlayerState.playing,
+      tracks: const [
+        PlayerTrack(
+          id: 1,
+          type: PlayerTrackType.audio,
+          selected: true,
+          title: 'English stereo',
+        ),
+        PlayerTrack(
+          id: 2,
+          type: PlayerTrackType.subtitle,
+          selected: false,
+          language: 'English',
+        ),
+      ],
+    );
+    fixture.player.showOsd();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(size: Size(1280, 720)),
+          child: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('Subtitles • Off'), findsOneWidget);
+    expect(find.text('Audio • English stereo'), findsOneWidget);
+    expect(find.text('Sleep • Off'), findsOneWidget);
+    expect(find.byKey(const Key('player-osd-subtitles')), findsOneWidget);
+    expect(find.byKey(const Key('player-osd-audio')), findsOneWidget);
+    expect(find.byKey(const Key('player-osd-sleep')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
+  testWidgets('OSD omits normal-state status and quality telemetry', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 720));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final fixture = _Fixture(
+      PlayerState.playing,
+      richProgram: true,
+      nativeTelemetry: const PlayerTelemetry(
+        width: 1920,
+        height: 1080,
+        videoCodec: 'h264',
+      ),
+    );
+    fixture.player.showOsd();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(size: Size(1280, 720)),
+          child: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final status = tester.widget<Text>(
+      find.byKey(const Key('player-osd-status')),
+    );
+    expect(status.data, 'Lineup Stories');
+    expect(status.data, isNot(contains('Playing')));
+    expect(find.text('1080p'), findsNothing);
+    expect(find.text('1920×1080'), findsNothing);
+    expect(find.text('h264'), findsNothing);
+
+    fixture.player.showNowPlaying();
+    await tester.pumpAndSettle();
+    final nowPlayingSemantics = tester.widget<Semantics>(
+      find
+          .ancestor(
+            of: find.byKey(const Key('player-now-playing-shelf')),
+            matching: find.byType(Semantics),
+          )
+          .first,
+    );
+    expect(
+      nowPlayingSemantics.properties.label,
+      allOf(contains('H264'), isNot(contains('1920×1080'))),
+    );
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
+  testWidgets('OSD rounds positive remaining minutes up', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 720));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    for (final (position, duration, expected) in [
+      (const Duration(seconds: 1), const Duration(minutes: 1), '1m left'),
+      (
+        const Duration(milliseconds: 59999),
+        const Duration(minutes: 2),
+        '2m left',
+      ),
+      (const Duration(minutes: 1), const Duration(minutes: 1), '0m left'),
+      (
+        const Duration(minutes: 2),
+        const Duration(minutes: 1),
+        '01:00 / 01:00 • 0m left',
+      ),
+      (
+        const Duration(seconds: -1),
+        const Duration(minutes: 1),
+        '00:00 / 01:00 • 1m left',
+      ),
+      (const Duration(seconds: 10), Duration.zero, '00:10 / 00:00'),
+    ]) {
+      final fixture = _Fixture(
+        PlayerState.playing,
+        nativePosition: position,
+        nativeDuration: duration,
+      );
+      fixture.player.showOsd();
+      await tester.pumpWidget(
+        MaterialApp(
+          key: ValueKey(position),
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      );
+      await tester.pump();
+
+      expect(
+        tester.widget<Text>(find.byKey(const Key('player-osd-timing'))).data,
+        contains(expected),
+      );
+      if (duration == Duration.zero) {
+        expect(
+          tester.widget<Text>(find.byKey(const Key('player-osd-timing'))).data,
+          isNot(contains('left')),
+        );
+      }
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    }
+  });
+
+  testWidgets('OSD clamps the seek slider when duration is unknown', (
+    tester,
+  ) async {
+    final fixture = _Fixture(
+      PlayerState.playing,
+      dvrControlsEnabled: true,
+      nativePosition: const Duration(seconds: 10),
+      nativeDuration: Duration.zero,
+    );
+    fixture.player.showOsd();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+    await tester.pump();
+
+    final slider = tester.widget<Slider>(find.byType(Slider));
+    expect(slider.value, inInclusiveRange(slider.min, slider.max));
+    expect(slider.value, 1);
+    expect(
+      tester.widget<Text>(find.byKey(const Key('player-osd-timing'))).data,
+      contains('00:10 / 00:00'),
+    );
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
+  testWidgets('OSD uses official title artwork with a text fallback', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    final cases = [
+      (
+        fixture: _Fixture(PlayerState.playing, richProgram: true),
+        logo: true,
+        description: 'loaded logo',
+      ),
+      (
+        fixture: _Fixture(
+          PlayerState.playing,
+          richProgram: true,
+          preferClearLogos: false,
+        ),
+        logo: false,
+        description: 'disabled logos',
+      ),
+      (
+        fixture: _Fixture(
+          PlayerState.playing,
+          richProgram: true,
+          failArtwork: true,
+        ),
+        logo: false,
+        description: 'failed artwork',
+      ),
+    ];
+    for (final item in cases) {
+      await item.fixture.guide.ensureCurrentProgram('channel');
+      item.fixture.player.showOsd();
+      await tester.pumpWidget(
+        MaterialApp(
+          key: ValueKey(item.logo),
+          home: PlayerView(controller: item.fixture.player, openGuide: () {}),
+        ),
+      );
+      if (item.logo) {
+        await tester.runAsync(
+          () => precacheImage(
+            MemoryImage(_fixtureArtwork),
+            tester.element(find.byType(PlayerView)),
+          ),
+        );
+      }
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('player-osd-logo')),
+        item.logo ? findsOneWidget : findsNothing,
+        reason: item.description,
+      );
+      final titleSemantics = find.bySemanticsLabel('Program');
+      expect(titleSemantics, findsOneWidget, reason: item.description);
+      final titleData = tester
+          .getSemantics(
+            find.byKey(Key(item.logo ? 'player-osd-logo' : 'player-osd-title')),
+          )
+          .getSemanticsData();
+      expect(titleData.label, 'Program', reason: item.description);
+      expect(
+        titleData.flagsCollection.isImage,
+        item.logo,
+        reason: item.description,
+      );
+      if (item.logo) {
+        expect(find.byKey(const Key('player-osd-title')), findsNothing);
+      } else {
+        expect(find.byKey(const Key('player-osd-title')), findsOneWidget);
+      }
+      await tester.pumpWidget(const SizedBox.shrink());
+      item.fixture.dispose();
+    }
+    semantics.dispose();
+  });
+
+  testWidgets('OSD keeps its widescreen hierarchy at DPR2', (tester) async {
+    final fixture = _Fixture(PlayerState.playing);
+    tester.view
+      ..devicePixelRatio = 2
+      ..physicalSize = const Size(3840, 2160);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    fixture.player.showOsd();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final surface = tester.getSize(find.byKey(const Key('player-osd-surface')));
+    expect(surface.width, 1920);
+    expect(surface.height / 1080, lessThan(0.20));
+    final progressLine = tester.getRect(
+      find.byKey(const Key('player-osd-progress-line')),
+    );
+    expect(progressLine.left, 0);
+    expect(progressLine.width, 1920);
+    expect(progressLine.bottom, 1080);
+    expect(
+      find.byKey(const Key('player-osd-horizontal-layout')),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
+  testWidgets('DVR seek target stays clear of OSD action buttons', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    final fixture = _Fixture(PlayerState.playing, dvrControlsEnabled: true);
+    for (final size in const [Size(1280, 720), Size(1920, 1080)]) {
+      await tester.binding.setSurfaceSize(size);
+      fixture.player.showOsd();
+      await tester.pumpWidget(
+        MaterialApp(
+          key: ValueKey(size),
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      );
+      await tester.pump();
+      final seekTarget = tester.getRect(
+        find.byKey(const Key('player-osd-progress-line')),
+      );
+      final actions = tester.getRect(
+        find.byKey(const Key('player-osd-action-groups')),
+      );
+      expect(seekTarget.overlaps(actions), isFalse, reason: '$size');
+      expect(
+        find.bySemanticsLabel('Playback progress'),
+        findsOneWidget,
+        reason: '$size',
+      );
+      expect(tester.takeException(), isNull, reason: '$size');
+    }
+    await tester.binding.setSurfaceSize(null);
+    fixture.player.closeOverlay();
+    await tester.pump();
+    fixture.dispose();
+    semantics.dispose();
   });
 
   testWidgets('player overlays retain 1280x720 layout at DPR2', (tester) async {
@@ -476,6 +1087,24 @@ void main() {
       tester.getSize(find.byKey(const Key('mini-guide-shelf'))).width,
       1280,
     );
+    expect(tester.takeException(), isNull);
+
+    tester.view.physicalSize = const Size(3840, 2160);
+    await tester.pump();
+    expect(
+      tester.getSize(find.byKey(const Key('mini-guide-shelf'))).width,
+      1920,
+    );
+    expect(
+      tester.getSize(find.byKey(const Key('mini-guide-shelf'))).height / 1080,
+      lessThan(0.34),
+    );
+    for (final channel in fixture.player.miniGuideChannels) {
+      expect(
+        tester.getSize(find.byKey(Key('mini-guide-row-${channel.id}'))).height,
+        48,
+      );
+    }
     expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(const SizedBox.shrink());
@@ -1195,6 +1824,11 @@ void main() {
 
     expect(find.byKey(const Key('player-now-playing-surface')), findsOneWidget);
     expect(
+      find.byKey(const Key('player-now-playing-channel-bug')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('player-now-playing-channel')), findsNothing);
+    expect(
       tester.getSize(find.byKey(const Key('player-now-playing-shelf'))),
       const Size(1180, 380),
     );
@@ -1214,13 +1848,18 @@ void main() {
     );
     expect(find.text('TV-14'), findsOneWidget);
     expect(
-      find.bySemanticsLabel(
-        RegExp(r'^Now playing\. Channel 7, Channel\..*Program'),
-      ),
+      find.byKey(const Key('player-now-playing-channel-bug')),
+      findsOneWidget,
+    );
+    expect(find.bySemanticsLabel('Channel 7, Channel'), findsOneWidget);
+    expect(find.bySemanticsLabel('7 • Channel'), findsNothing);
+    expect(find.text('Source • H264'), findsOneWidget);
+    expect(
+      find.bySemanticsLabel(RegExp(r'^Now playing\..*Program')),
       findsOneWidget,
     );
     expect(
-      find.bySemanticsLabel(RegExp(r'\b\d+ percent complete\b')),
+      find.bySemanticsLabel(RegExp(r'10:00 / 1:00:00 playback')),
       findsOneWidget,
     );
 
@@ -1235,11 +1874,196 @@ void main() {
     fixture.dispose();
   });
 
+  testWidgets(
+    'Now Playing renders bounded cast portraits, fallbacks, names, and semantics',
+    (tester) async {
+      final fixture = _Fixture(
+        PlayerState.playing,
+        richItemOverride: _fixtureItem(
+          0,
+          rich: true,
+          duration: const Duration(hours: 1),
+          cast: _fixtureCast,
+        ),
+      );
+      await tester.binding.setSurfaceSize(const Size(1280, 720));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final semantics = tester.ensureSemantics();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MediaQuery(
+            data: const MediaQueryData(size: Size(1280, 720)),
+            child: PlayerView(controller: fixture.player, openGuide: () {}),
+          ),
+        ),
+      );
+      await tester.pump();
+      fixture.player.showNowPlaying();
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('player-now-playing-cast')), findsOneWidget);
+      expect(
+        find.byKey(const Key('player-now-playing-cast-portrait-0')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('player-now-playing-cast-fallback-4')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('player-now-playing-cast-more')),
+        findsOneWidget,
+      );
+      expect(find.text('+2'), findsOneWidget);
+      expect(
+        find.text(
+          'Avery Vale • Mina Park • Solomon Reed • Clara Wynn • Noa Bell • Theo March • Imani Cross',
+        ),
+        findsOneWidget,
+      );
+      expect(fixture.lineup.artworkRequests, hasLength(6));
+      expect(
+        find.bySemanticsLabel(
+          RegExp(
+            r'Cast: Avery Vale as Detective Rowan.*Mina Park as Dr\. Lena Quill',
+          ),
+        ),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+
+      semantics.dispose();
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    },
+  );
+
+  testWidgets('failed cast portrait uses the neutral person fallback', (
+    tester,
+  ) async {
+    final fixture = _Fixture(
+      PlayerState.playing,
+      failArtwork: true,
+      richItemOverride: _fixtureItem(
+        0,
+        rich: true,
+        duration: const Duration(hours: 1),
+        cast: [
+          ChannelCastMember(
+            name: 'Avery Vale',
+            portrait: Uri.parse('/library/metadata/test/cast-avery'),
+          ),
+        ],
+      ),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+    await tester.pump();
+    fixture.player.showNowPlaying();
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('player-now-playing-cast-fallback-0')),
+      findsOneWidget,
+    );
+    expect(find.byIcon(Icons.person), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
+  testWidgets('Now Playing omits cast without cast facts', (tester) async {
+    final fixture = _Fixture(PlayerState.playing, richProgram: true);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+    await tester.pump();
+    fixture.player.showNowPlaying();
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('player-now-playing-cast')), findsNothing);
+    expect(
+      find.byKey(const Key('player-now-playing-cast-names')),
+      findsNothing,
+    );
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
+  testWidgets(
+    'Now Playing falls back to schedule timing without native duration',
+    (tester) async {
+      final now = DateTime.utc(2026, 1, 15, 3);
+      final fixture = _Fixture(
+        PlayerState.playing,
+        richProgram: true,
+        shortPrograms: true,
+        nativeDuration: Duration.zero,
+        guideClock: () => now,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      );
+      await tester.pump();
+      fixture.player.showNowPlaying();
+      await tester.pumpAndSettle();
+
+      expect(find.text('30:00 / 1:00:00'), findsOneWidget);
+      expect(
+        tester
+            .widget<LinearProgressIndicator>(
+              find.byKey(const Key('player-now-playing-progress')),
+            )
+            .value,
+        0.5,
+      );
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    },
+  );
+
+  testWidgets('runtime HDR overrides stale catalog SDR', (tester) async {
+    final fixture = _Fixture(
+      PlayerState.playing,
+      richItemOverride: _fixtureItem(
+        0,
+        rich: true,
+        duration: const Duration(hours: 1),
+        dynamicRange: 'SDR',
+      ),
+      nativeTelemetry: const PlayerTelemetry(gamma: 'pq'),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+    await tester.pump();
+    fixture.player.showNowPlaying();
+    await tester.pumpAndSettle();
+
+    expect(find.bySemanticsLabel(RegExp(r'\. HDR\.')), findsOneWidget);
+    expect(find.bySemanticsLabel(RegExp(r'\. SDR\.')), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
   testWidgets('Now Playing input replaces the surface and still executes', (
     tester,
   ) async {
     final fixture = _Fixture(
       PlayerState.playing,
+      dvrControlsEnabled: true,
       richProgram: true,
       tracks: const [
         PlayerTrack(id: 1, type: PlayerTrackType.audio, selected: true),
@@ -1332,6 +2156,37 @@ void main() {
       disabled.dispose();
     },
   );
+
+  testWidgets('compact Now Playing with cast does not overflow', (
+    tester,
+  ) async {
+    final fixture = _Fixture(
+      PlayerState.playing,
+      richItemOverride: _fixtureItem(
+        0,
+        rich: true,
+        duration: const Duration(hours: 1),
+        cast: _fixtureCast.take(5).toList(growable: false),
+      ),
+    );
+    await tester.binding.setSurfaceSize(const Size(800, 600));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+    await tester.pump();
+    fixture.player.showNowPlaying();
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('player-now-playing-cast')), findsOneWidget);
+    expect(find.text('+1'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
 
   testWidgets('Guide clock replacement updates the visible current program', (
     tester,
@@ -1484,39 +2339,225 @@ void main() {
     },
   );
 
-  testWidgets('Now Playing reflows from 800x600 through 4K', (tester) async {
-    final fixture = _Fixture(PlayerState.playing, richProgram: true);
-    tester.view.devicePixelRatio = 1;
+  testWidgets('Now Playing reflows with and without cast through 4K', (
+    tester,
+  ) async {
     addTearDown(tester.view.resetDevicePixelRatio);
     addTearDown(tester.view.resetPhysicalSize);
 
-    for (final layout in const [
-      (viewport: Size(800, 600), shelf: Size(760, 336)),
-      (viewport: Size(1280, 720), shelf: Size(1180, 380)),
-      (viewport: Size(1920, 1080), shelf: Size(1180, 540)),
-      (viewport: Size(3840, 2160), shelf: Size(1500, 560)),
+    for (final variant in const [
+      (
+        castPresent: false,
+        shelves: [
+          Size(760, 336),
+          Size(1180, 380),
+          Size(1180, 450),
+          Size(1180, 540),
+          Size(1500, 560),
+        ],
+        dpr2Shelf: Size(1180, 540),
+      ),
+      (
+        castPresent: true,
+        shelves: [
+          Size(760, 378),
+          Size(1180, 432),
+          Size(1180, 486),
+          Size(1180, 580),
+          Size(1500, 580),
+        ],
+        dpr2Shelf: Size(1180, 580),
+      ),
     ]) {
-      tester.view.physicalSize = layout.viewport;
+      final fixture = variant.castPresent
+          ? _Fixture(
+              PlayerState.playing,
+              richItemOverride: _fixtureItem(
+                0,
+                rich: true,
+                duration: const Duration(hours: 1),
+                cast: _fixtureCast.take(5).toList(growable: false),
+              ),
+            )
+          : _Fixture(PlayerState.playing, richProgram: true);
+      tester.view.devicePixelRatio = 1;
+
+      for (final (index, viewport) in const [
+        Size(800, 600),
+        Size(1280, 720),
+        Size(1600, 900),
+        Size(1920, 1080),
+        Size(3840, 2160),
+      ].indexed) {
+        final expectedShelf = variant.shelves[index];
+        tester.view.physicalSize = viewport;
+        await tester.pumpWidget(
+          MaterialApp(
+            home: PlayerView(controller: fixture.player, openGuide: () {}),
+          ),
+        );
+        await tester.pump();
+        fixture.player.showNowPlaying();
+        await tester.pumpAndSettle();
+
+        final shelfSize = tester.getSize(
+          find.byKey(const Key('player-now-playing-shelf')),
+        );
+        expect(shelfSize.width, closeTo(expectedShelf.width, 0.01));
+        expect(shelfSize.height, closeTo(expectedShelf.height, 0.01));
+        expect(
+          tester
+              .getSize(find.byKey(const Key('player-now-playing-poster')))
+              .width,
+          closeTo((expectedShelf.height * 2 / 3).clamp(190, 374), 0.01),
+        );
+        expect(
+          tester
+              .getSize(find.byKey(const Key('player-now-playing-poster')))
+              .height,
+          closeTo(expectedShelf.height, 1.01),
+        );
+        expect(
+          tester
+              .getRect(find.byKey(const Key('player-now-playing-title')).last)
+              .top,
+          greaterThan(
+            tester
+                .getRect(find.byKey(const Key('player-now-playing-logo')))
+                .top,
+          ),
+        );
+        expect(
+          find.byKey(const Key('player-now-playing-cast')),
+          variant.castPresent ? findsOneWidget : findsNothing,
+        );
+        expect(tester.takeException(), isNull, reason: '$viewport');
+      }
+
+      tester.view
+        ..devicePixelRatio = 2
+        ..physicalSize = const Size(3840, 2160);
       await tester.pumpWidget(
         MaterialApp(
           home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
       );
-      await tester.pump();
-      fixture.player.showNowPlaying();
       await tester.pumpAndSettle();
-
-      final shelfSize = tester.getSize(
-        find.byKey(const Key('player-now-playing-shelf')),
+      expect(
+        tester.getSize(find.byKey(const Key('player-now-playing-shelf'))),
+        variant.dpr2Shelf,
       );
-      expect(shelfSize.width, closeTo(layout.shelf.width, 0.01));
-      expect(shelfSize.height, closeTo(layout.shelf.height, 0.01));
-      expect(tester.takeException(), isNull, reason: '${layout.viewport}');
-    }
+      expect(
+        find.byKey(const Key('player-now-playing-cast')),
+        variant.castPresent ? findsOneWidget : findsNothing,
+      );
+      expect(tester.takeException(), isNull, reason: 'DPR2');
 
-    await tester.pumpWidget(const SizedBox.shrink());
-    fixture.dispose();
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    }
   });
+
+  testWidgets(
+    'Now Playing keeps essential hierarchy with missing, long, and sparse metadata',
+    (tester) async {
+      final cases = [
+        (
+          viewport: const Size(1920, 1080),
+          item: _fixtureItem(
+            0,
+            rich: true,
+            includeClearLogo: false,
+            title: 'Missing Logo Program',
+            duration: const Duration(hours: 2),
+          ),
+          logo: false,
+          summary: true,
+          badges: true,
+        ),
+        (
+          viewport: const Size(1600, 900),
+          item: _fixtureItem(
+            0,
+            rich: true,
+            title: 'A deliberately long synthetic episode title that must stay inside the text column',
+            duration: const Duration(hours: 2),
+            summary:
+                'A deliberately long synthetic synopsis that repeats enough detail to exercise the bounded summary allocation without introducing private media facts. '
+                'The remaining text verifies that progress stays reachable below the description.',
+          ),
+          logo: true,
+          summary: true,
+          badges: true,
+        ),
+        (
+          viewport: const Size(800, 600),
+          item: _fixtureItem(
+            0,
+            rich: false,
+            title: 'Sparse Program',
+            duration: const Duration(hours: 2),
+          ),
+          logo: false,
+          summary: false,
+          badges: false,
+        ),
+      ];
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetPhysicalSize);
+
+      for (final testCase in cases) {
+        final fixture = _Fixture(
+          PlayerState.playing,
+          richItemOverride: testCase.item,
+        );
+        tester.view.physicalSize = testCase.viewport;
+        await tester.pumpWidget(
+          MaterialApp(
+            home: PlayerView(controller: fixture.player, openGuide: () {}),
+          ),
+        );
+        fixture.player.showNowPlaying();
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const Key('player-now-playing-title')),
+          findsOneWidget,
+        );
+        expect(find.text(testCase.item.title), findsOneWidget);
+        expect(
+          MediaQuery.sizeOf(
+            tester.element(find.byKey(const Key('player-now-playing-surface'))),
+          ),
+          testCase.viewport,
+        );
+        expect(
+          find.byKey(const Key('player-now-playing-logo')),
+          testCase.logo ? findsOneWidget : findsNothing,
+        );
+        expect(
+          find.byKey(const Key('player-now-playing-progress')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const Key('player-now-playing-summary')),
+          testCase.summary ? findsOneWidget : findsNothing,
+        );
+        expect(
+          find.byKey(const Key('player-now-playing-badges')),
+          testCase.badges && testCase.viewport.height >= 650
+              ? findsOneWidget
+              : findsNothing,
+          reason: testCase.item.id,
+        );
+        expect(tester.takeException(), isNull, reason: testCase.item.id);
+
+        await tester.pumpWidget(const SizedBox.shrink());
+        fixture.dispose();
+      }
+    },
+  );
 
   testWidgets('Reduce Motion settles Now Playing in one pump', (tester) async {
     final fixture = _Fixture(PlayerState.playing, richProgram: true);
@@ -1609,18 +2650,27 @@ class _Fixture {
     Duration? overlayTimeout,
     bool richProgram = false,
     bool preferClearLogos = true,
+    bool dvrControlsEnabled = false,
     bool failArtwork = false,
     bool blockArtwork = false,
     bool shortPrograms = false,
+    bool longNextTitle = false,
+    ChannelItem? richItemOverride,
     DateTime Function()? guideClock,
+    Duration nativePosition = const Duration(minutes: 10),
+    Duration nativeDuration = const Duration(hours: 1),
+    PlayerTelemetry nativeTelemetry = const PlayerTelemetry(),
   }) {
     lineup = _Lineup(
       channelCount,
       richProgram: richProgram,
       preferClearLogos: preferClearLogos,
+      dvrControlsEnabled: dvrControlsEnabled,
       failArtwork: failArtwork,
       blockArtwork: blockArtwork,
       shortPrograms: shortPrograms,
+      longNextTitle: longNextTitle,
+      richItemOverride: richItemOverride,
       anchorNow: guideClock?.call(),
     );
     guide = GuideController(
@@ -1638,6 +2688,9 @@ class _Fixture {
       failStop: failStop,
       blockLoad: blockLoad,
       tracks: tracks,
+      positionValue: nativePosition,
+      durationValue: nativeDuration,
+      telemetryValue: nativeTelemetry,
     );
     player = PlayerCoordinator(
       player: native,
@@ -1664,9 +2717,12 @@ class _Lineup extends LineupController {
     int channelCount, {
     bool richProgram = false,
     bool preferClearLogos = true,
+    bool dvrControlsEnabled = false,
     this.failArtwork = false,
     this.blockArtwork = false,
     bool shortPrograms = false,
+    bool longNextTitle = false,
+    ChannelItem? richItemOverride,
     DateTime? anchorNow,
   }) : super(
          store: _Store(),
@@ -1682,18 +2738,24 @@ class _Lineup extends LineupController {
         number: 7 + index,
         name: index == 0 ? 'Channel' : 'Channel $index',
         source: ManualSource([
-          _fixtureItem(
-            index,
-            rich: richProgram,
-            duration: shortPrograms
-                ? const Duration(hours: 1)
-                : const Duration(hours: 24),
-          ),
+          if (index == 0 && richItemOverride != null)
+            richItemOverride
+          else
+            _fixtureItem(
+              index,
+              rich: richProgram,
+              duration: shortPrograms
+                  ? const Duration(hours: 1)
+                  : const Duration(hours: 24),
+            ),
           if (shortPrograms)
             _fixtureItem(
               index,
               rich: richProgram,
               suffix: '-next',
+              title: longNextTitle
+                  ? 'A deliberately long synthetic next program title that must remain ellipsized'
+                  : null,
               duration: const Duration(hours: 1),
             ),
         ]),
@@ -1708,7 +2770,10 @@ class _Lineup extends LineupController {
       growable: false,
     );
     currentChannelId = 'channel';
-    settings = LineupSettings(preferClearLogos: preferClearLogos);
+    settings = LineupSettings(
+      preferClearLogos: preferClearLogos,
+      dvrControlsEnabled: dvrControlsEnabled,
+    );
     stage = SetupStage.ready;
   }
 
@@ -1772,26 +2837,72 @@ ChannelItem _fixtureItem(
   required bool rich,
   String suffix = '',
   String artworkTag = '',
+  String? title,
+  String? summary,
+  bool includeClearLogo = true,
+  String? dynamicRange,
   required Duration duration,
+  List<ChannelCastMember> cast = const [],
 }) => ChannelItem(
   id: '${index == 0 ? 'program' : 'program-$index'}$suffix',
-  title: suffix.isEmpty
-      ? (index == 0 ? 'Program' : 'Program $index')
-      : 'Replacement Program',
+  title:
+      title ??
+      (suffix.isEmpty
+          ? (index == 0 ? 'Program' : 'Program $index')
+          : 'Replacement Program'),
   duration: duration,
   showTitle: rich ? 'Lineup Stories' : null,
   poster: rich ? Uri.parse('test://poster$artworkTag') : null,
   backdrop: rich ? Uri.parse('test://backdrop$artworkTag') : null,
-  clearLogo: rich ? Uri.parse('test://logo$artworkTag') : null,
-  summary: rich ? 'A synthetic synopsis for deterministic tests.' : null,
+  clearLogo: rich && includeClearLogo
+      ? Uri.parse('test://logo$artworkTag')
+      : null,
+  summary: rich
+      ? summary ?? 'A synthetic synopsis for deterministic tests.'
+      : null,
   contentRating: rich ? 'TV-14' : null,
   genres: rich ? const ['Drama', 'Adventure'] : const [],
   year: rich ? 2026 : null,
   seasonNumber: rich ? 2 : null,
   episodeNumber: rich ? 6 : null,
   resolution: rich ? '1080p' : null,
+  dynamicRange: dynamicRange,
   videoCodec: rich ? 'h264' : null,
+  cast: cast,
 );
+
+final _fixtureCast = [
+  ChannelCastMember(
+    name: 'Avery Vale',
+    role: 'Detective Rowan',
+    portrait: Uri.parse('/library/metadata/test/cast-avery'),
+  ),
+  ChannelCastMember(
+    name: 'Mina Park',
+    role: 'Dr. Lena Quill',
+    portrait: Uri.parse('/library/metadata/test/cast-mina'),
+  ),
+  ChannelCastMember(
+    name: 'Solomon Reed',
+    role: 'Arthur Bell',
+    portrait: Uri.parse('/library/metadata/test/cast-solomon'),
+  ),
+  ChannelCastMember(
+    name: 'Clara Wynn',
+    role: 'June Mercer',
+    portrait: Uri.parse('/library/metadata/test/cast-clara'),
+  ),
+  ChannelCastMember(name: 'Noa Bell', role: 'Evelyn Shaw'),
+  ChannelCastMember(name: 'Theo March', role: 'Deputy Ames'),
+  ChannelCastMember(name: 'Imani Cross', role: 'Nora Venn'),
+];
+
+String _statusLabelForTest(PlayerState state) => switch (state) {
+  PlayerState.loading => 'Loading',
+  PlayerState.buffering => 'Buffering',
+  PlayerState.unsupported => 'Unsupported',
+  _ => throw ArgumentError.value(state),
+};
 
 class _Native implements NativePlayer {
   _Native(
@@ -1800,6 +2911,9 @@ class _Native implements NativePlayer {
     this.failStop = false,
     this.blockLoad = false,
     this.tracks = const [],
+    this.positionValue = const Duration(minutes: 10),
+    this.durationValue = const Duration(hours: 1),
+    this.telemetryValue = const PlayerTelemetry(),
   }) : status = PlayerStatus(
          state: state,
          message: state == PlayerState.unsupported
@@ -1810,6 +2924,9 @@ class _Native implements NativePlayer {
   final bool failLoad;
   final bool failStop;
   final bool blockLoad;
+  final Duration positionValue;
+  final Duration durationValue;
+  final PlayerTelemetry telemetryValue;
   final loadStarted = Completer<void>();
   final _loadCompletion = Completer<void>();
   int transportCommands = 0;
@@ -1818,11 +2935,11 @@ class _Native implements NativePlayer {
   @override
   final PlayerStatus status;
   @override
-  Duration get position => const Duration(minutes: 10);
+  Duration get position => positionValue;
   @override
-  Duration get duration => const Duration(hours: 1);
+  Duration get duration => durationValue;
   @override
-  PlayerTelemetry get telemetry => const PlayerTelemetry();
+  PlayerTelemetry get telemetry => telemetryValue;
   @override
   final List<PlayerTrack> tracks;
   @override

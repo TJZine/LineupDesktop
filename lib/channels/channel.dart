@@ -5,6 +5,8 @@ enum PlexLibraryType { movie, show }
 
 enum PlaybackMode { sequential, shuffle, block }
 
+const maxRichCastMembers = 20;
+
 sealed class ContentSource {
   const ContentSource();
 
@@ -124,6 +126,12 @@ class MixedSource extends ContentSource {
   };
 }
 
+bool hasNonemptyRetainedManualContent(ContentSource source) => switch (source) {
+  ManualSource(:final items) => items.isNotEmpty,
+  MixedSource(:final sources) => sources.any(hasNonemptyRetainedManualContent),
+  LibrarySource() || PlaylistSource() => false,
+};
+
 class ChannelItem {
   const ChannelItem({
     required this.id,
@@ -145,6 +153,7 @@ class ChannelItem {
     this.audioCodec,
     this.audioChannels,
     this.dynamicRange,
+    this.cast = const [],
   });
 
   final String id;
@@ -167,6 +176,7 @@ class ChannelItem {
   final String? audioCodec;
   final int? audioChannels;
   final String? dynamicRange;
+  final List<ChannelCastMember> cast;
 
   Map<String, Object?> toJson() => {
     'id': id,
@@ -188,6 +198,8 @@ class ChannelItem {
     if (audioCodec != null) 'audioCodec': audioCodec,
     if (audioChannels != null) 'audioChannels': audioChannels,
     if (dynamicRange != null) 'dynamicRange': dynamicRange,
+    if (cast.isNotEmpty)
+      'cast': cast.map((member) => member.toJson()).toList(growable: false),
   };
 
   factory ChannelItem.fromJson(Object? value) {
@@ -213,6 +225,7 @@ class ChannelItem {
           'audioCodec',
           'audioChannels',
           'dynamicRange',
+          'cast',
         },
       );
       final duration = Duration(milliseconds: _integer(json['durationMs']));
@@ -241,6 +254,9 @@ class ChannelItem {
         audioCodec: _optionalString(json, 'audioCodec'),
         audioChannels: _optionalInteger(json, 'audioChannels'),
         dynamicRange: _optionalString(json, 'dynamicRange'),
+        cast: json.containsKey('cast')
+            ? _persistedCastMembers(_nonNull(json, 'cast'))
+            : const [],
       );
     } on FormatException {
       rethrow;
@@ -248,6 +264,62 @@ class ChannelItem {
       throw FormatException('Invalid channel item', error);
     }
   }
+}
+
+List<ChannelCastMember> _persistedCastMembers(Object value) {
+  final retained = <ChannelCastMember>[];
+  for (final raw in value as List) {
+    final member = ChannelCastMember.fromJson(raw);
+    if (retained.length < maxRichCastMembers) retained.add(member);
+  }
+  return List.unmodifiable(retained);
+}
+
+class ChannelCastMember {
+  ChannelCastMember({required this.name, this.role, Uri? portrait})
+    : portrait = canonicalCastPortrait(portrait);
+
+  final String name;
+  final String? role;
+  final Uri? portrait;
+
+  Map<String, Object?> toJson() => {
+    'name': name,
+    if (role != null) 'role': role,
+    if (portrait != null) 'portrait': portrait.toString(),
+  };
+
+  factory ChannelCastMember.fromJson(Object? value) {
+    final json = _object(value, 'cast member');
+    _requireFields(json, const {'name'}, const {'role', 'portrait'});
+    return ChannelCastMember(
+      name: _string(json['name']),
+      role: _optionalString(json, 'role'),
+      portrait: _optionalUri(json, 'portrait'),
+    );
+  }
+}
+
+Uri? canonicalCastPortrait(Uri? value) {
+  if (value == null ||
+      value.scheme.isNotEmpty ||
+      value.hasAuthority ||
+      value.hasQuery ||
+      value.hasFragment ||
+      !value.path.startsWith('/library/metadata/')) {
+    return null;
+  }
+  final suffix = value.path.substring('/library/metadata/'.length);
+  if (suffix.isEmpty ||
+      suffix
+          .split('/')
+          .any(
+            (segment) => segment.isEmpty || segment == '.' || segment == '..',
+          ) ||
+      value.pathSegments.any((segment) => segment == '.' || segment == '..')) {
+    return null;
+  }
+  return value.toString() == value.path ? value : null;
 }
 
 class Channel {
@@ -337,6 +409,24 @@ class Channel {
       throw FormatException('Invalid channel', error);
     }
   }
+}
+
+bool canonicalChannelValueEquals(Object? left, Object? right) {
+  if (left is Map && right is Map) {
+    return left.length == right.length &&
+        left.entries.every(
+          (entry) =>
+              right.containsKey(entry.key) &&
+              canonicalChannelValueEquals(entry.value, right[entry.key]),
+        );
+  }
+  if (left is List && right is List) {
+    return left.length == right.length &&
+        Iterable<int>.generate(left.length).every(
+          (index) => canonicalChannelValueEquals(left[index], right[index]),
+        );
+  }
+  return left == right;
 }
 
 String createChannelId() {

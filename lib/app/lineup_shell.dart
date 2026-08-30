@@ -1,11 +1,11 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../channels/channel.dart';
-import '../channels/content_resolver.dart';
 import '../guide/guide_controller.dart';
 import '../guide/guide_view.dart';
 import '../playback/native_player.dart';
@@ -16,7 +16,7 @@ import '../settings/lineup_settings.dart';
 import '../ui/app_ui.dart';
 import '../ui/app_theme.dart';
 import 'channel_setup_view.dart';
-import 'form_error.dart';
+import 'channel_studio_view.dart';
 import 'lineup_controller.dart';
 import 'onboarding_view.dart';
 
@@ -42,11 +42,13 @@ class _LineupShellState extends State<LineupShell> {
   late final GuideController _guide;
   late final PlayerCoordinator _player;
   final _playerKey = GlobalKey();
+  final _channelsKey = GlobalKey<_ChannelsViewState>();
   final _guideFocus = FocusNode(debugLabel: 'Guide');
   final _channelsFocus = FocusNode(debugLabel: 'Channels');
   final _settingsFocus = FocusNode(debugLabel: 'Settings');
   final _diagnosticsFocus = FocusNode(debugLabel: 'Diagnostics');
   final _playerFocus = FocusNode(debugLabel: 'Player');
+  bool _selectionPending = false;
   bool _appMenuOpen = false;
   bool _guideOpenedFromPlayer = false;
   late SetupStage _lastStage = widget.controller.stage;
@@ -98,25 +100,41 @@ class _LineupShellState extends State<LineupShell> {
     super.dispose();
   }
 
-  void _select(int index) {
-    if (widget.controller.stage == SetupStage.ready) {
-      if (index == 2 && _selectedIndex != 2) {
-        _settingsReturnIndex = _selectedIndex;
-      } else if (index != 2 && _selectedIndex == 2) {
-        _settingsReturnIndex = null;
+  Future<void> _select(int index) async {
+    if (_selectionPending) return;
+    if (index == _selectedIndex) {
+      if (_appMenuOpen) _closeAppMenu();
+      return;
+    }
+    _selectionPending = true;
+    try {
+      if (_selectedIndex == 1 &&
+          !(await (_channelsKey.currentState?.requestLeave() ??
+              Future.value(true)))) {
+        return;
       }
+      if (!mounted) return;
+      if (widget.controller.stage == SetupStage.ready) {
+        if (index == 2 && _selectedIndex != 2) {
+          _settingsReturnIndex = _selectedIndex;
+        } else if (index != 2 && _selectedIndex == 2) {
+          _settingsReturnIndex = null;
+        }
+      }
+      if (index == 0) {
+        _guideOpenedFromPlayer = _selectedIndex == 4;
+        _player.showFullGuide();
+      } else if (_player.overlay == PlayerOverlay.fullGuide) {
+        _player.closeOverlay();
+      }
+      setState(() {
+        _selectedIndex = index;
+        _appMenuOpen = false;
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) => _restoreRouteFocus());
+    } finally {
+      _selectionPending = false;
     }
-    if (index == 0) {
-      _guideOpenedFromPlayer = _selectedIndex == 4;
-      _player.showFullGuide();
-    } else if (_player.overlay == PlayerOverlay.fullGuide) {
-      _player.closeOverlay();
-    }
-    setState(() {
-      _selectedIndex = index;
-      _appMenuOpen = false;
-    });
-    WidgetsBinding.instance.addPostFrameCallback((_) => _restoreRouteFocus());
   }
 
   void _restoreRouteFocus() {
@@ -137,11 +155,11 @@ class _LineupShellState extends State<LineupShell> {
   void _closeGuide(bool hasPlaybackSurface) {
     final returnToPlayer = hasPlaybackSurface || _guideOpenedFromPlayer;
     _guideOpenedFromPlayer = false;
-    returnToPlayer ? _select(4) : _openAppMenu();
+    returnToPlayer ? unawaited(_select(4)) : _openAppMenu();
   }
 
   Future<void> _tuneFromGuide(String channelId) async {
-    _select(4);
+    await _select(4);
     await _player.tune(channelId);
   }
 
@@ -161,7 +179,7 @@ class _LineupShellState extends State<LineupShell> {
             event.logicalKey == LogicalKeyboardKey.goBack)) {
       final returnIndex = _settingsReturnIndex!;
       _settingsReturnIndex = null;
-      _select(returnIndex);
+      unawaited(_select(returnIndex));
       return KeyEventResult.handled;
     }
     if (event.logicalKey == LogicalKeyboardKey.f3 &&
@@ -169,7 +187,7 @@ class _LineupShellState extends State<LineupShell> {
         !keyboard.isMetaPressed &&
         !keyboard.isAltPressed &&
         !keyboard.isShiftPressed) {
-      _select(2);
+      unawaited(_select(2));
       return KeyEventResult.handled;
     }
     if (!keyboard.isControlPressed) {
@@ -184,14 +202,32 @@ class _LineupShellState extends State<LineupShell> {
       _ => null,
     };
     if (index == null) return KeyEventResult.ignored;
-    _select(index);
+    unawaited(_select(index));
     return KeyEventResult.handled;
   }
 
   Widget _withGlobalKeys(Widget child) =>
       Focus(canRequestFocus: false, onKeyEvent: _globalKey, child: child);
 
+  Future<void> _completeSetup() async {
+    widget.controller.completeChannelSetup();
+    await _select(1);
+  }
+
+  Future<void> _completeSetupAndAdd() async {
+    widget.controller.completeChannelSetup();
+    await _select(1);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _channelsKey.currentState?.openNew();
+    });
+  }
+
   Future<void> _logout() async {
+    if (_selectedIndex == 1 &&
+        !(await (_channelsKey.currentState?.requestLeave() ??
+            Future.value(true)))) {
+      return;
+    }
     if (await _player.logout() || !mounted) return;
     await showDialog<void>(
       context: context,
@@ -266,7 +302,7 @@ class _LineupShellState extends State<LineupShell> {
                                   ? LineupTheme.of(context).selectedSurface
                                   : null,
                             ),
-                            onPressed: () => _select(destination.$1),
+                            onPressed: () => unawaited(_select(destination.$1)),
                             icon: Icon(destination.$2),
                             label: Text(destination.$3),
                           ),
@@ -287,14 +323,18 @@ class _LineupShellState extends State<LineupShell> {
     final controller = widget.controller;
     if (controller.stage != SetupStage.ready) {
       return controller.stage == SetupStage.channelSetup
-          ? UpstreamChannelSetupView(controller: controller)
+          ? UpstreamChannelSetupView(
+              controller: controller,
+              onViewLineup: _completeSetup,
+              onAddCustomChannel: _completeSetupAndAdd,
+            )
           : UpstreamOnboardingView(controller: controller, onLogout: _logout);
     }
     final playerView = PlayerView(
       key: _playerKey,
       controller: _player,
       focusNode: _playerFocus,
-      openGuide: () => _select(0),
+      openGuide: () => unawaited(_select(0)),
       openMenu: _openAppMenu,
     );
     final hasPlaybackSurface =
@@ -314,7 +354,7 @@ class _LineupShellState extends State<LineupShell> {
       playbackMessage: _player.tuning
           ? 'Preparing playback…'
           : _player.error ?? _player.status.message,
-      onOpenPlayer: () => _select(4),
+      onOpenPlayer: () => unawaited(_select(4)),
       onTune: _tuneFromGuide,
     );
     final settingsView = SettingsView(
@@ -332,7 +372,14 @@ class _LineupShellState extends State<LineupShell> {
               ],
             )
           : guideView,
-      ChannelsView(controller: controller, focusNode: _channelsFocus),
+      ChannelsView(
+        key: _channelsKey,
+        controller: controller,
+        player: _player,
+        clock: widget.guideClock,
+        focusNode: _channelsFocus,
+        onOpenPlayer: () => unawaited(_select(4)),
+      ),
       settingsView,
       DiagnosticsView(
         controller: controller,
@@ -381,7 +428,7 @@ class _LineupShellState extends State<LineupShell> {
                 color: Theme.of(context).scaffoldBackgroundColor,
                 child: NavigationRail(
                   selectedIndex: _selectedIndex,
-                  onDestinationSelected: _select,
+                  onDestinationSelected: (index) => unawaited(_select(index)),
                   extended:
                       MediaQuery.sizeOf(context).width >=
                       LineupLayout.expandedNavigation,
@@ -458,33 +505,144 @@ Uri _mediaUri(String value) {
 }
 
 class ChannelsView extends StatefulWidget {
-  const ChannelsView({required this.controller, this.focusNode, super.key});
+  const ChannelsView({
+    required this.controller,
+    required this.player,
+    required this.onOpenPlayer,
+    this.focusNode,
+    this.clock,
+    super.key,
+  });
+
   final LineupController controller;
+  final PlayerCoordinator player;
+  final VoidCallback onOpenPlayer;
   final FocusNode? focusNode;
+  final DateTime Function()? clock;
 
   @override
   State<ChannelsView> createState() => _ChannelsViewState();
 }
 
 class _ChannelsViewState extends State<ChannelsView> {
+  static const _maximumHealthLoads = 2;
+  static const _maximumPendingHealth = 12;
+  static const _maximumCachedHealth = 1000;
+  Future<void>? _generateLineupEntry;
   String? _error;
+  ChannelStudioMode? _studioMode;
+  Channel? _studioChannel;
+  String? _returnFocusId;
+  final _openFocus = <String, FocusNode>{};
   final _deleteFocus = <String, FocusNode>{};
-  bool _deleteFocusPruneScheduled = false;
+  Future<bool>? _leaveRequest;
+  bool _focusPruneScheduled = false;
+  bool _focusPruneNeedsRestore = false;
+  final LinkedHashMap<String, _ChannelHealth> _health = LinkedHashMap();
+  final Queue<({Channel channel, String signature})> _pendingHealth = Queue();
+  final Map<String, String> _activeHealth = {};
+  int _activeHealthLoads = 0;
+  int _healthEpoch = 0;
+  int? _healthContentGeneration;
+  GlobalKey<ChannelStudioViewState> _studioKey =
+      GlobalKey<ChannelStudioViewState>();
 
-  void _pruneDeleteFocus() {
-    _deleteFocusPruneScheduled = false;
-    final channelIds = widget.controller.channels
-        .map((channel) => channel.id)
-        .toSet();
-    for (final id
-        in _deleteFocus.keys.where((id) => !channelIds.contains(id)).toList()) {
-      _deleteFocus.remove(id)?.dispose();
+  bool get _studioOpen => _studioMode != null;
+  ChannelStudioViewState? get _studio => _studioKey.currentState;
+
+  void openNew() => setState(() {
+    _studioKey = GlobalKey<ChannelStudioViewState>();
+    _studioMode = ChannelStudioMode.createCustom;
+    _studioChannel = null;
+    _returnFocusId = null;
+    _error = null;
+  });
+
+  void _open(Channel channel) => setState(() {
+    _studioKey = GlobalKey<ChannelStudioViewState>();
+    _studioMode = channel.builderKey == null
+        ? ChannelStudioMode.editCustom
+        : ChannelStudioMode.inspectGenerated;
+    _studioChannel = channel;
+    _returnFocusId = channel.id;
+    _error = null;
+  });
+
+  void _openDuplicate(Channel source) => setState(() {
+    _studioKey = GlobalKey<ChannelStudioViewState>();
+    _studioMode = ChannelStudioMode.duplicateCustom;
+    _studioChannel = source;
+    _returnFocusId = source.id;
+    _error = null;
+  });
+
+  Future<bool> requestLeave([String? focusId]) =>
+      _leaveRequest ??= _requestLeave(focusId)
+          .whenComplete(() => _leaveRequest = null);
+
+  Future<bool> _requestLeave(String? focusId) async {
+    if (!_studioOpen) return true;
+    final studio = _studio;
+    if (studio == null || studio.saving) return false;
+    if (studio.dirty) {
+      final discard =
+          await showDialog<bool>(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Discard changes?'),
+              content: const Text(
+                'Your unsaved Channel Studio changes will be lost.',
+              ),
+              actions: [
+                TextButton(
+                  autofocus: true,
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Keep editing'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  child: const Text('Discard changes'),
+                ),
+              ],
+            ),
+          ) ??
+          false;
+      if (!discard || !mounted) return false;
     }
+    _showList(focusId ?? _returnFocusId);
+    return true;
+  }
+
+  Future<void> closeStudio([String? focusId]) async {
+    await requestLeave(focusId);
+  }
+
+  Future<void> _openGenerateLineupFromStudio() =>
+      _generateLineupEntry ??= _enterGenerateLineupFromStudio();
+
+  Future<void> _enterGenerateLineupFromStudio() async {
+    try {
+      if (await requestLeave()) await widget.controller.enterChannelSetup();
+    } finally {
+      _generateLineupEntry = null;
+    }
+  }
+
+  void _showList(String? focusId) {
+    setState(() {
+      _studioMode = null;
+      _studioChannel = null;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      (_openFocus[focusId] ?? widget.focusNode)?.requestFocus();
+    });
   }
 
   @override
   void dispose() {
-    for (final node in _deleteFocus.values) {
+    _healthEpoch++;
+    for (final node in {..._openFocus.values, ..._deleteFocus.values}) {
       node.dispose();
     }
     super.dispose();
@@ -492,18 +650,40 @@ class _ChannelsViewState extends State<ChannelsView> {
 
   @override
   Widget build(BuildContext context) {
-    final channelIds = widget.controller.channels
-        .map((channel) => channel.id)
-        .toSet();
-    if (!_deleteFocusPruneScheduled &&
-        _deleteFocus.keys.any((id) => !channelIds.contains(id))) {
-      _deleteFocusPruneScheduled = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          _pruneDeleteFocus();
-        }
-      });
+    if (_studioMode case final mode?) {
+      return PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop) unawaited(closeStudio());
+        },
+        child: ChannelStudioView(
+          key: _studioKey,
+          controller: widget.controller,
+          mode: mode,
+          channel: _studioChannel,
+          onBack: closeStudio,
+          onSaved: (id) => _returnFocusId = id,
+          onDuplicate: _openDuplicate,
+          onOpenGenerateLineup: _openGenerateLineupFromStudio,
+          clock: widget.clock,
+          onTune: (id) async {
+            final success = await widget.player.tune(id);
+            if (success) widget.onOpenPlayer();
+            return success;
+          },
+        ),
+      );
     }
+
+    final channels = [...widget.controller.channels]
+      ..sort((left, right) => left.number.compareTo(right.number));
+    if (_healthContentGeneration != widget.controller.contentGeneration) {
+      _healthContentGeneration = widget.controller.contentGeneration;
+      _healthEpoch++;
+      _health.clear();
+      _pendingHealth.clear();
+    }
+    _scheduleFocusPrune(channels.map((channel) => channel.id).toSet());
     return LineupPage(
       title: 'Channels',
       actions: Wrap(
@@ -514,12 +694,12 @@ class _ChannelsViewState extends State<ChannelsView> {
             focusNode: widget.focusNode,
             onPressed: widget.controller.enterChannelSetup,
             icon: const Icon(Icons.auto_awesome_outlined),
-            label: const Text('Channel builder'),
+            label: const Text('Generate lineup'),
           ),
           FilledButton.icon(
-            onPressed: _showEditor,
+            onPressed: openNew,
             icon: const Icon(Icons.add),
-            label: const Text('Create channel'),
+            label: const Text('New channel'),
           ),
         ],
       ),
@@ -530,37 +710,64 @@ class _ChannelsViewState extends State<ChannelsView> {
             const SizedBox(height: 12),
           ],
           Expanded(
-            child: widget.controller.channels.isEmpty
+            child: channels.isEmpty
                 ? LineupEmptyState(
                     icon: Icons.view_list,
                     title: 'Build your first channel',
-                    message: 'Choose library content, ordering, and a stable channel number.',
-                    action: FilledButton.icon(
-                      onPressed: widget.controller.enterChannelSetup,
-                      icon: const Icon(Icons.auto_awesome_outlined),
-                      label: const Text('Open Channel builder'),
+                    message: 'Generate a lineup from Plex or create one custom channel.',
+                    action: Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      alignment: WrapAlignment.center,
+                      children: [
+                        FilledButton.icon(
+                          onPressed: widget.controller.enterChannelSetup,
+                          icon: const Icon(Icons.auto_awesome_outlined),
+                          label: const Text('Generate lineup'),
+                        ),
+                        OutlinedButton.icon(
+                          onPressed: openNew,
+                          icon: const Icon(Icons.add),
+                          label: const Text('Create a custom channel'),
+                        ),
+                      ],
                     ),
                   )
                 : ListView.separated(
-                    itemCount: widget.controller.channels.length,
+                    itemCount: channels.length,
                     separatorBuilder: (_, _) => const SizedBox(height: 8),
                     itemBuilder: (context, index) {
-                      final channel = widget.controller.channels[index];
+                      final channel = channels[index];
+                      _requestHealth(channel);
+                      final ownership = channel.builderKey == null
+                          ? 'Custom'
+                          : 'Generated';
                       return Card(
+                        key: ValueKey('channel-row-${channel.id}'),
                         child: ListTile(
                           leading: CircleAvatar(
                             child: Text('${channel.number}'),
                           ),
                           title: Text(channel.name),
                           subtitle: Text(
-                            '${channel.playbackMode.name} • ${_sourceLabel(channel.source)}',
+                            [
+                              '$ownership • ${channelSourceLabel(channel.source, widget.controller)} • ${channelRhythmLabel(channel.playbackMode, channel.blockSize)}',
+                              if (_health[channel.id]?.issue == true)
+                                'Schedule issue — open this channel to recover',
+                            ].join('\n'),
                           ),
                           trailing: Wrap(
                             children: [
                               IconButton(
-                                tooltip: 'Edit ${channel.name}',
-                                onPressed: () => _showEditor(channel),
-                                icon: const Icon(Icons.edit_outlined),
+                                tooltip: 'Open ${channel.name}',
+                                focusNode: _openFocus.putIfAbsent(
+                                  channel.id,
+                                  () => FocusNode(
+                                    debugLabel: 'Open ${channel.name}',
+                                  ),
+                                ),
+                                onPressed: () => _open(channel),
+                                icon: const Icon(Icons.open_in_new),
                               ),
                               IconButton(
                                 tooltip: 'Delete ${channel.name}',
@@ -585,18 +792,133 @@ class _ChannelsViewState extends State<ChannelsView> {
     );
   }
 
-  Future<void> _showEditor([Channel? channel]) => showDialog<void>(
-    context: context,
-    builder: (_) =>
-        ChannelEditor(controller: widget.controller, channel: channel),
-  );
+  void _requestHealth(Channel channel) {
+    final signature = _healthSignature(channel);
+    final cached = _health[channel.id];
+    if (cached?.signature == signature ||
+        _activeHealth[channel.id] == signature ||
+        _pendingHealth.any(
+          (pending) =>
+              pending.channel.id == channel.id &&
+              pending.signature == signature,
+        )) {
+      return;
+    }
+    _pendingHealth.removeWhere((pending) => pending.channel.id == channel.id);
+    if (_pendingHealth.length >= _maximumPendingHealth) {
+      _pendingHealth.removeFirst();
+    }
+    _pendingHealth.add((channel: channel, signature: signature));
+    WidgetsBinding.instance.addPostFrameCallback((_) => _pumpHealth());
+  }
+
+  void _pumpHealth() {
+    if (!mounted) return;
+    var blocked = 0;
+    while (_activeHealthLoads < _maximumHealthLoads &&
+        _pendingHealth.isNotEmpty) {
+      final pending = _pendingHealth.removeFirst();
+      final channel = pending.channel;
+      if (_activeHealth.containsKey(channel.id)) {
+        _pendingHealth.add(pending);
+        blocked++;
+        if (blocked >= _pendingHealth.length) break;
+        continue;
+      }
+      blocked = 0;
+      final epoch = _healthEpoch;
+      final signature = pending.signature;
+      final current = widget.controller.channels
+          .where((item) => item.id == channel.id)
+          .firstOrNull;
+      if (current == null || _healthSignature(current) != signature) {
+        if (current != null) _requestHealth(current);
+        continue;
+      }
+      _activeHealthLoads++;
+      _activeHealth[channel.id] = signature;
+      widget.controller
+          .loadScheduleFor(channel)
+          .then(
+            (_) => _finishHealth(channel.id, signature, false, epoch),
+            onError: (_) => _finishHealth(channel.id, signature, true, epoch),
+          );
+    }
+  }
+
+  void _finishHealth(String id, String signature, bool issue, int epoch) {
+    _activeHealthLoads--;
+    if (_activeHealth[id] == signature) _activeHealth.remove(id);
+    if (!mounted) return;
+    final current = widget.controller.channels
+        .where((channel) => channel.id == id)
+        .firstOrNull;
+    if (epoch == _healthEpoch &&
+        current != null &&
+        _healthSignature(current) == signature) {
+      _health.remove(id);
+      _health[id] = _ChannelHealth(signature, issue);
+      while (_health.length > _maximumCachedHealth) {
+        _health.remove(_health.keys.first);
+      }
+      setState(() {});
+    } else if (current != null) {
+      _requestHealth(current);
+    }
+    _pumpHealth();
+  }
+
+  String _healthSignature(Channel channel) =>
+      '${widget.controller.contentGeneration}|${channel.toJson()}';
+
+  void _scheduleFocusPrune(Set<String> liveIds) {
+    final staleIds = {
+      ..._openFocus.keys,
+      ..._deleteFocus.keys,
+    }.where((id) => !liveIds.contains(id)).toList();
+    if (staleIds.isEmpty) return;
+    _focusPruneNeedsRestore |= staleIds.any(
+      (id) =>
+          (_openFocus[id]?.hasFocus ?? false) ||
+          (_deleteFocus[id]?.hasFocus ?? false),
+    );
+    if (_focusPruneScheduled) return;
+    _focusPruneScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _focusPruneScheduled = false;
+      if (!mounted) return;
+      final currentIds = widget.controller.channels
+          .map((channel) => channel.id)
+          .toSet();
+      final staleIds = {
+        ..._openFocus.keys,
+        ..._deleteFocus.keys,
+      }.where((id) => !currentIds.contains(id)).toList();
+      final restoreFocus = _focusPruneNeedsRestore;
+      _focusPruneNeedsRestore = false;
+      if (restoreFocus) {
+        final survivingId = widget.controller.channels
+            .map((channel) => channel.id)
+            .where((id) => !staleIds.contains(id))
+            .firstOrNull;
+        (_openFocus[survivingId] ?? widget.focusNode)?.requestFocus();
+        FocusManager.instance.applyFocusChangesIfNeeded();
+      }
+      for (final id in staleIds) {
+        _openFocus.remove(id)?.dispose();
+        _deleteFocus.remove(id)?.dispose();
+      }
+    });
+  }
 
   Future<void> _delete(Channel channel) async {
+    final generated = channel.builderKey != null;
     final confirmed = await confirmDestructiveAction(
       context,
       title: 'Delete ${channel.name}?',
-      message:
-          'This removes channel ${channel.number} from the lineup. This action cannot be undone.',
+      message: generated
+          ? 'This removes channel ${channel.number}. A future Generate lineup refresh may propose it again.'
+          : 'This removes channel ${channel.number} from the lineup. This action cannot be undone.',
       confirmLabel: 'Delete channel',
     );
     if (!mounted) return;
@@ -607,376 +929,30 @@ class _ChannelsViewState extends State<ChannelsView> {
     try {
       await widget.controller.deleteChannel(channel.id);
     } catch (_) {
-      if (mounted) {
-        setState(
-          () => _error =
-              'The channel could not be deleted. No lineup changes were saved.',
-        );
-        _deleteFocus[channel.id]?.requestFocus();
-      }
+      if (!mounted) return;
+      setState(
+        () => _error =
+            'The channel could not be deleted. No lineup changes were saved.',
+      );
+      _deleteFocus[channel.id]?.requestFocus();
       return;
     }
     if (!mounted) return;
     final deletedFocus = _deleteFocus.remove(channel.id);
+    _openFocus.remove(channel.id)?.dispose();
     setState(() => _error = null);
-    if (deletedFocus != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        deletedFocus.dispose();
-      });
-    }
-    widget.focusNode?.requestFocus();
-  }
-}
-
-class ChannelEditor extends StatefulWidget {
-  const ChannelEditor({required this.controller, this.channel, super.key});
-  final LineupController controller;
-  final Channel? channel;
-  @override
-  State<ChannelEditor> createState() => _ChannelEditorState();
-}
-
-class _ChannelEditorState extends State<ChannelEditor> {
-  final _form = GlobalKey<FormState>();
-  late final _name = TextEditingController(text: widget.channel?.name ?? '');
-  late final _number = TextEditingController(
-    text: '${widget.channel?.number ?? _nextNumber()}',
-  );
-  late PlaybackMode _mode =
-      widget.channel?.playbackMode ?? PlaybackMode.shuffle;
-  late bool _manual = widget.channel?.source is ManualSource;
-  late final Set<String> _manualItemIds = switch (widget.channel?.source) {
-    ManualSource(:final items) => items.map((item) => item.id).toSet(),
-    _ => <String>{},
-  };
-  late final Map<String, ChannelItem> _originalManualItems =
-      switch (widget.channel?.source) {
-        ManualSource(:final items) => {for (final item in items) item.id: item},
-        _ => const {},
-      };
-  late String? _libraryId = switch (widget.channel?.source) {
-    LibrarySource(:final libraryId) => libraryId,
-    _ => widget.controller.selectedLibraryIds.firstOrNull,
-  };
-  late bool _includeWatched = switch (widget.channel?.source) {
-    LibrarySource(:final includeWatched) => includeWatched,
-    _ => true,
-  };
-  late final bool _sourceReadOnly = switch (widget.channel) {
-    Channel(builderKey: != null) => true,
-    Channel(source: LibrarySource(:final filters)) => filters.isNotEmpty,
-    Channel(source: PlaylistSource() || MixedSource()) => true,
-    _ => false,
-  };
-  bool _saving = false;
-  String? _error;
-  int _nextNumber() {
-    for (var value = 1; value <= 1000; value++) {
-      if (!widget.controller.channels.any(
-        (channel) => channel.number == value,
-      )) {
-        return value;
-      }
-    }
-    return 1;
-  }
-
-  int? _editedBlockSize() {
-    if (_mode != PlaybackMode.block) return null;
-    final existing = widget.channel?.blockSize;
-    return existing != null && existing > 0 ? existing : 3;
-  }
-
-  @override
-  void dispose() {
-    _name.dispose();
-    _number.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => AlertDialog(
-    title: Text(
-      widget.channel == null ? 'Create custom channel' : 'Edit channel',
-    ),
-    content: SizedBox(
-      width: 560,
-      child: Form(
-        key: _form,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (_error != null) ...[
-                LineupNotice(message: _error!),
-                const SizedBox(height: 12),
-              ],
-              TextFormField(
-                controller: _name,
-                autofocus: true,
-                decoration: const InputDecoration(
-                  labelText: 'Channel name',
-                  hintText: 'Required',
-                ),
-                validator: (value) => value == null || value.trim().isEmpty
-                    ? 'Enter a channel name.'
-                    : null,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _number,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Channel number (1–1000)',
-                ),
-                validator: (value) {
-                  final number = int.tryParse(value ?? '');
-                  if (number == null || number < 1 || number > 1000) {
-                    return 'Enter a number from 1 to 1000.';
-                  }
-                  if (widget.controller.channels.any(
-                    (channel) =>
-                        channel.id != widget.channel?.id &&
-                        channel.number == number,
-                  )) {
-                    return 'That channel number is already in use.';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 12),
-              if (_sourceReadOnly)
-                InputDecorator(
-                  decoration: const InputDecoration(
-                    labelText: 'Channel source (read-only)',
-                  ),
-                  child: Text(_sourceLabel(widget.channel!.source)),
-                ),
-              if (!_sourceReadOnly)
-                SegmentedButton<bool>(
-                  segments: const [
-                    ButtonSegment(value: false, label: Text('Entire library')),
-                    ButtonSegment(value: true, label: Text('Hand-picked')),
-                  ],
-                  selected: {_manual},
-                  onSelectionChanged: (value) =>
-                      setState(() => _manual = value.single),
-                ),
-              if (!_sourceReadOnly) const SizedBox(height: 12),
-              if (!_sourceReadOnly)
-                DropdownButtonFormField<String>(
-                  initialValue:
-                      widget.controller.libraries.any(
-                        (library) =>
-                            library.id == _libraryId &&
-                            widget.controller.selectedLibraryIds.contains(
-                              library.id,
-                            ),
-                      )
-                      ? _libraryId
-                      : null,
-                  decoration: const InputDecoration(
-                    labelText: 'Content library',
-                  ),
-                  items: [
-                    for (final library in widget.controller.libraries.where(
-                      (library) => widget.controller.selectedLibraryIds
-                          .contains(library.id),
-                    ))
-                      DropdownMenuItem(
-                        value: library.id,
-                        child: Text(library.title),
-                      ),
-                  ],
-                  onChanged: _manual
-                      ? null
-                      : (value) => setState(() => _libraryId = value),
-                ),
-              if (!_sourceReadOnly && _manual) ...[
-                const SizedBox(height: 12),
-                SizedBox(
-                  height: 240,
-                  child: Builder(
-                    builder: (context) {
-                      final available = widget.controller.availableMedia;
-                      final availableIds = available
-                          .map((item) => item.id)
-                          .toSet();
-                      final unavailable = _originalManualItems.values
-                          .where(
-                            (item) =>
-                                _manualItemIds.contains(item.id) &&
-                                !availableIds.contains(item.id),
-                          )
-                          .toList();
-                      return ListView.builder(
-                        itemCount: unavailable.length + available.length,
-                        itemBuilder: (context, index) {
-                          if (index < unavailable.length) {
-                            final item = unavailable[index];
-                            return CheckboxListTile(
-                              dense: true,
-                              value: true,
-                              title: Text(item.title),
-                              subtitle: const Text(
-                                'Unavailable • retained until removed',
-                              ),
-                              onChanged: (_) => setState(
-                                () => _manualItemIds.remove(item.id),
-                              ),
-                            );
-                          }
-                          final item = available[index - unavailable.length];
-                          return CheckboxListTile(
-                            dense: true,
-                            value: _manualItemIds.contains(item.id),
-                            title: Text(item.title),
-                            subtitle: item.grandparentTitle == null
-                                ? null
-                                : Text(item.grandparentTitle!),
-                            onChanged: (selected) => setState(
-                              () => selected == true
-                                  ? _manualItemIds.add(item.id)
-                                  : _manualItemIds.remove(item.id),
-                            ),
-                          );
-                        },
-                      );
-                    },
-                  ),
-                ),
-              ],
-              const SizedBox(height: 12),
-              SegmentedButton<PlaybackMode>(
-                segments: const [
-                  ButtonSegment(
-                    value: PlaybackMode.sequential,
-                    label: Text('Sequential'),
-                  ),
-                  ButtonSegment(
-                    value: PlaybackMode.shuffle,
-                    label: Text('Shuffle'),
-                  ),
-                  ButtonSegment(
-                    value: PlaybackMode.block,
-                    label: Text('Blocks'),
-                  ),
-                ],
-                selected: {_mode},
-                onSelectionChanged: (value) =>
-                    setState(() => _mode = value.single),
-              ),
-              if (!_sourceReadOnly && !_manual)
-                SwitchListTile(
-                  value: _includeWatched,
-                  title: const Text('Include watched items'),
-                  onChanged: (value) => setState(() => _includeWatched = value),
-                ),
-              if (!_sourceReadOnly)
-                Text(
-                  '${widget.controller.availableMedia.length} loaded items are available.',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-            ],
-          ),
-        ),
-      ),
-    ),
-    actions: [
-      TextButton(
-        onPressed: _saving ? null : () => Navigator.pop(context),
-        child: const Text('Cancel'),
-      ),
-      FilledButton(
-        onPressed: _saving ? null : _save,
-        child: Text(_saving ? 'Saving…' : 'Save channel'),
-      ),
-    ],
-  );
-  Future<void> _save() async {
-    if (!(_form.currentState?.validate() ?? false)) return;
-    setState(() {
-      _saving = true;
-      _error = null;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      deletedFocus?.dispose();
+      widget.focusNode?.requestFocus();
     });
-    try {
-      final original = widget.channel;
-      if (_sourceReadOnly) {
-        await widget.controller.saveChannel(
-          Channel(
-            id: original!.id,
-            number: int.parse(_number.text),
-            name: _name.text.trim(),
-            source: original.source,
-            playbackMode: _mode,
-            anchor: original.anchor,
-            shuffleSeed: original.shuffleSeed,
-            blockSize: _editedBlockSize(),
-            builderKey: original.builderKey,
-          ),
-        );
-        if (mounted) Navigator.pop(context);
-        return;
-      }
-      final id = _libraryId;
-      if (!_manual && id == null) {
-        throw const FormatException('Select a library');
-      }
-      final library = _manual
-          ? null
-          : widget.controller.libraries
-                .where(
-                  (library) =>
-                      library.id == id &&
-                      widget.controller.selectedLibraryIds.contains(library.id),
-                )
-                .firstOrNull;
-      if (!_manual && library == null) {
-        throw const FormatException(
-          'The selected library is no longer available. Choose another library.',
-        );
-      }
-      final availableManualItems = {
-        for (final item in widget.controller.availableMedia)
-          if (_manualItemIds.contains(item.id)) item.id: channelItemFor(item),
-      };
-      final manualItems = [
-        for (final id in _manualItemIds)
-          ?(availableManualItems[id] ?? _originalManualItems[id]),
-      ];
-      if (_manual && manualItems.isEmpty) {
-        throw const FormatException('Select at least one program');
-      }
-      final channelId = widget.channel?.id ?? createChannelId();
-      await widget.controller.saveChannel(
-        Channel(
-          id: channelId,
-          number: int.parse(_number.text),
-          name: _name.text.trim(),
-          source: _manual
-              ? ManualSource(manualItems)
-              : LibrarySource(
-                  libraryId: id!,
-                  libraryType: library!.type,
-                  includeWatched: _includeWatched,
-                ),
-          playbackMode: _mode,
-          anchor: widget.channel?.anchor ?? DateTime.now().toUtc(),
-          shuffleSeed: widget.channel?.shuffleSeed ?? channelId.hashCode,
-          blockSize: _editedBlockSize(),
-          builderKey: widget.channel?.builderKey,
-        ),
-      );
-      if (mounted) Navigator.pop(context);
-    } catch (error) {
-      if (mounted) {
-        setState(() {
-          _saving = false;
-          _error = safeFormError(error, 'The channel could not be saved.');
-        });
-      }
-    }
   }
+}
+
+class _ChannelHealth {
+  const _ChannelHealth(this.signature, this.issue);
+
+  final String signature;
+  final bool issue;
 }
 
 enum _SettingsCategory { appearance, guide, accessibility, account, support }
@@ -1294,9 +1270,9 @@ class _SettingsViewState extends State<SettingsView> {
                       ),
               ),
               SwitchListTile(
-                title: const Text('Prefer clear logos'),
+                title: const Text('Prefer official title artwork'),
                 subtitle: const Text(
-                  'Use Plex title logos in Guide details when available.',
+                  'Use official Plex title artwork in Guide and Player surfaces when available.',
                 ),
                 value: value.preferClearLogos,
                 onChanged: _saving
@@ -1346,6 +1322,20 @@ class _SettingsViewState extends State<SettingsView> {
                     : (item) => _update(
                         widget.controller.settings.copyWith(
                           osdAutoHideSeconds: item,
+                        ),
+                      ),
+              ),
+              SwitchListTile(
+                title: const Text('DVR playback controls'),
+                subtitle: const Text(
+                  'Show transport controls and enable pause, seek, stop, and media-key shortcuts in Player.',
+                ),
+                value: value.dvrControlsEnabled,
+                onChanged: _saving
+                    ? null
+                    : (item) => _update(
+                        widget.controller.settings.copyWith(
+                          dvrControlsEnabled: item,
                         ),
                       ),
               ),
@@ -1664,10 +1654,3 @@ class _Brand extends StatelessWidget {
     ),
   );
 }
-
-String _sourceLabel(ContentSource source) => switch (source) {
-  LibrarySource() => 'library',
-  ManualSource() => 'manual',
-  PlaylistSource() => 'playlist',
-  MixedSource() => 'mixed',
-};

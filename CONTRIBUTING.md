@@ -55,12 +55,13 @@ Common checks:
 flutter pub get
 dart format --output=none --set-exit-if-changed .
 flutter analyze
-flutter test
+TZ=America/New_York flutter test # canonical full suite on macOS/Linux
 ```
 
-Run focused tests while developing, then run the full relevant suite before
-requesting review. A compiling Windows build does not prove native video,
-DirectComposition, HDR, hardware decode, focus, or packaged runtime behavior.
+Run focused tests while developing, then run the platform-specific relevant
+suite from [Development](docs/DEVELOPMENT.md) before requesting review. A
+compiling Windows build does not prove native video, DirectComposition, HDR,
+hardware decode, focus, or packaged runtime behavior.
 
 ## Change design
 

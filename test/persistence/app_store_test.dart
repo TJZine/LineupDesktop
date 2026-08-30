@@ -33,6 +33,40 @@ void main() {
               title: 'Poster item',
               duration: Duration(minutes: 1),
               poster: Uri(path: '/poster'),
+              cast: [
+                ChannelCastMember(
+                  name: 'Safe Actor',
+                  role: 'Lead',
+                  portrait: Uri.parse('/library/metadata/1/thumb'),
+                ),
+                ChannelCastMember(
+                  name: 'Unsafe Absolute',
+                  role: 'Reporter',
+                  portrait: Uri.parse(
+                    'https://plex.invalid/library/metadata/2/thumb',
+                  ),
+                ),
+                ChannelCastMember(
+                  name: 'Unsafe Token',
+                  role: 'Dispatcher',
+                  portrait: Uri.parse(
+                    '/library/metadata/3/thumb?X-Plex-Token=secret',
+                  ),
+                ),
+                ChannelCastMember(
+                  name: 'Unsafe Fragment',
+                  role: 'Archivist',
+                  portrait: Uri.parse('/library/metadata/4/thumb#private'),
+                ),
+                ChannelCastMember(
+                  name: 'Unsafe Transcode',
+                  portrait: Uri.parse('/photo/:/transcode?url=private'),
+                ),
+                ChannelCastMember(
+                  name: 'Unsafe File',
+                  portrait: Uri.parse('/Users/private/cast.png'),
+                ),
+              ],
             ),
           ]),
         ],
@@ -80,8 +114,26 @@ void main() {
     expect(item.poster, Uri(path: '/poster'));
     expect(item.toJson(), containsPair('poster', '/poster'));
     expect(item.toJson(), isNot(contains('artwork')));
+    expect(item.cast.first.portrait, Uri.parse('/library/metadata/1/thumb'));
+    expect(
+      item.cast.skip(1).map((member) => member.portrait),
+      everyElement(isNull),
+    );
+    final fragment = item.cast.singleWhere(
+      (member) => member.name == 'Unsafe Fragment',
+    );
+    expect(fragment.role, 'Archivist');
+    expect(fragment.portrait, isNull);
     final savedJson = await File('${directory.path}/state.json').readAsString();
     expect(savedJson, contains('"poster":"/poster"'));
+    expect(savedJson, contains('/library/metadata/1/thumb'));
+    expect(savedJson, isNot(contains('plex.invalid')));
+    expect(savedJson, isNot(contains('X-Plex-Token')));
+    expect(savedJson, contains('Unsafe Fragment'));
+    expect(savedJson, contains('Archivist'));
+    expect(savedJson, isNot(contains('#private')));
+    expect(savedJson, isNot(contains('/photo/:/transcode')));
+    expect(savedJson, isNot(contains('/Users/private')));
     expect(savedJson, isNot(contains('"artwork"')));
     expect(
       restored.state.currentChannelByProfileServer['profile']?['server'],
@@ -93,6 +145,67 @@ void main() {
           .where((entry) => entry.path.endsWith('.tmp'))
           .isEmpty,
       isTrue,
+    );
+  });
+
+  test('unsafe persisted cast portraits cannot be revived', () {
+    for (final unsafe in [
+      'https://plex.invalid/library/metadata/2/thumb',
+      '/library/metadata/3/thumb?X-Plex-Token=secret',
+      '/library/metadata/4/thumb#private',
+      '/photo/:/transcode?url=private',
+      '/Users/private/cast.png',
+    ]) {
+      final item = ChannelItem.fromJson({
+        'id': 'item',
+        'title': 'Item',
+        'durationMs': 60000,
+        'cast': [
+          {'name': 'Actor', 'role': 'Lead', 'portrait': unsafe},
+        ],
+      });
+
+      expect(item.cast.single.name, 'Actor');
+      expect(item.cast.single.role, 'Lead');
+      expect(item.cast.single.portrait, isNull);
+      expect(item.toJson().toString(), isNot(contains(unsafe)));
+    }
+  });
+
+  test('bounds oversized persisted cast across round trips', () {
+    final cast = [
+      for (var index = 0; index < maxRichCastMembers + 5; index++)
+        {'name': 'Actor $index', 'role': 'Role $index'},
+    ];
+    final json = _stateJsonWithCast(cast);
+
+    ChannelItem persistedItem(PersistedState state) =>
+        (state.channelsByProfileServer['profile']!['server']!.single.source
+                as ManualSource)
+            .items
+            .single;
+
+    final restored = PersistedState.fromJson(json);
+    final item = persistedItem(restored);
+    expect(item.cast, hasLength(maxRichCastMembers));
+    expect(item.cast.map((member) => member.name), [
+      for (var index = 0; index < maxRichCastMembers; index++) 'Actor $index',
+    ]);
+
+    final roundTripped = persistedItem(
+      PersistedState.fromJson(restored.toJson()),
+    );
+    expect(roundTripped.cast, hasLength(maxRichCastMembers));
+    expect(roundTripped.toJson(), item.toJson());
+
+    expect(
+      () => PersistedState.fromJson(
+        _stateJsonWithCast([
+          ...cast,
+          {'name': 'Malformed tail', 'future': true},
+        ]),
+      ),
+      throwsFormatException,
     );
   });
 
@@ -284,6 +397,13 @@ void main() {
           },
         },
     ),
+    'noncanonical oversized cast tail JSON': _encodedState(
+      _stateJsonWithCast([
+        for (var index = 0; index < maxRichCastMembers + 5; index++)
+          {'name': 'Actor $index'},
+        {'name': 'Malformed tail', 'future': true},
+      ]),
+    ),
   }.entries) {
     test('${corruptState.key} quarantines once and reports recovery', () async {
       final directory = await Directory.systemTemp.createTemp(
@@ -391,6 +511,26 @@ Map<String, Object?> _canonicalJson() => {
   ...const PersistedState().toJson(),
   'profileId': 'profile',
 };
+
+Map<String, Object?> _stateJsonWithCast(List<Object?> cast) => _canonicalJson()
+  ..['channelsByProfileServer'] = {
+    'profile': {
+      'server': [
+        _channelJson()
+          ..['source'] = {
+            'type': 'manual',
+            'items': [
+              {
+                'id': 'item',
+                'title': 'Item',
+                'durationMs': 60000,
+                'cast': cast,
+              },
+            ],
+          },
+      ],
+    },
+  };
 
 Map<String, Object?> _channelJson({
   String artworkKey = 'poster',

@@ -115,8 +115,8 @@ navigation do not enter C++.
   restoration. Rich Now Playing is one mutually exclusive Flutter overlay, not
   a route or second playback owner. It reads the current scheduled program and
   reuses `GuideController`'s bounded artwork futures/cache for poster, backdrop,
-  and optional clear-logo bytes; artwork identity includes the current content
-  generation so replaced content cannot retain stale imagery.
+  optional clear-logo, and cast-portrait bytes; artwork identity includes the
+  current content generation so replaced content cannot retain stale imagery.
   Ordered Plex parts remain one Flutter-owned playback lifetime: the
   coordinator gives every native load its own generation, advances natural
   completion once, and maps only known part boundaries. Native events remain
@@ -125,6 +125,18 @@ navigation do not enter C++.
   presentation generations reject stale focus callbacks. Player transitions
   use Flutter's effective Reduce Motion setting, and track rails initially
   focus the selected track. Product state does not move into the native player.
+- The Player OSD defaults to classic-TV behavior: transport buttons and
+  Player-local pause/play/seek/stop/rewind/fast-forward keyboard/media
+  shortcuts are suppressed, while channel surfing, number entry,
+  Guide/Mini Guide tuning, tracks, sleep, menu, and fullscreen remain owned by
+  Flutter. The persisted **DVR playback controls** preference restores the
+  transport UI and those shortcuts without changing native/libmpv behavior;
+  omitted legacy values migrate to false.
+- The OSD keeps channel identity in a top-right channel bug, restrained
+  metadata in the lower-left/lower band, secondary actions in the lower-right,
+  and an edge-to-edge absolute-bottom progress line. **Prefer official title
+  artwork** is enabled by default and reuses Plex clear logos across Guide and
+  Player, with text fallback when unavailable.
 - A Dart product engine for Plex PIN authentication, Plex Home profiles,
   server discovery/probing, library and media parsing, privileged playback
   descriptors, deterministic channels/schedules, channel suggestions,

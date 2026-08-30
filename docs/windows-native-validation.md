@@ -246,7 +246,7 @@ Classify every row as **Pass**, **Fail — blocker**, **Fail — non-blocking**,
 | Overlay Guide | Real video remains beneath legible, interactive Flutter artwork, text, focus, and schedule | |
 | Continuity | Player -> Guide -> Player preserves one session and restores focus | |
 | Replacement tune | Guide and mini-Guide replacement leave no stale audio/frame/event, duplicate player, or retained lease | |
-| OSD/transport | Reveal and auto-hide; play/pause; -10/+30 seek; previous/next; channel digits; sleep timer; media keys | |
+| OSD/transport | Verify default classic-TV OSD (transport hidden and Player-local pause/play/seek/stop/media shortcuts blocked), retained channel/tuning/tracks/sleep/menu/fullscreen input, then enable DVR playback controls and verify transport UI plus those shortcuts; include reveal/auto-hide | |
 | Tracks | Audio selection matches output; subtitles select, render, and disable without hiding Flutter controls | |
 | Input | Keyboard contracts pass; available remote/gamepad maps predictably and leaves every core control reachable | |
 | Fullscreen/window | Enter/exit, continuous resize, minimize/restore, maximize/restore, route changes, and repeated stop/relaunch preserve geometry, focus, stacking, and lifetime | |

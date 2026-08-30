@@ -59,7 +59,7 @@ void main() {
     expect(controller.stage, SetupStage.servers);
   });
 
-  testWidgets('successful Channel Setup opens the Guide only after Done', (
+  testWidgets('successful Channel Setup opens Channels after durable apply', (
     tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(1280, 720));
@@ -79,7 +79,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Build Channels'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('This will replace your current lineup'));
+    await tester.tap(find.text('Remove 0 generated channels'));
     await tester.pump();
     await tester.tap(find.text('Confirm & Replace'));
     await tester.pumpAndSettle();
@@ -87,15 +87,72 @@ void main() {
     expect(controller.stage, SetupStage.channelSetup);
     expect(find.text('Your lineup is ready'), findsOneWidget);
     expect(find.bySemanticsLabel('Channel update complete'), findsOneWidget);
-    expect(find.bySemanticsLabel('Remove: 0'), findsOneWidget);
+    expect(find.bySemanticsLabel('Generated removed: 0'), findsOneWidget);
     expect(find.bySemanticsLabel('Final: 2'), findsOneWidget);
-    expect(find.text('Done'), findsOneWidget);
+    expect(find.text('View lineup'), findsOneWidget);
+    expect(find.text('Add a custom channel'), findsOneWidget);
 
-    await tester.tap(find.text('Done'));
+    await tester.tap(find.text('View lineup'));
     await tester.pumpAndSettle();
 
     expect(controller.stage, SetupStage.ready);
-    expect(find.byTooltip('Open Lineup menu'), findsOneWidget);
+    expect(find.text('Channels'), findsWidgets);
+  });
+
+  testWidgets('Channel Setup Add custom opens a fresh exhausted draft', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 720));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final controller = _ChannelSetupController()
+      ..stage = SetupStage.channelSetup
+      ..libraries = const [
+        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
+      ];
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      LineupBootstrap(player: _FakePlayer(), controller: controller),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Configure channels'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Build Channels'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Remove 0 generated channels'));
+    await tester.pump();
+    await tester.tap(find.text('Confirm & Replace'));
+    await tester.pumpAndSettle();
+
+    controller.channels = [
+      for (var number = 1; number <= 1000; number++)
+        Channel(
+          id: 'occupied-$number',
+          number: number,
+          name: 'Occupied $number',
+          source: const ManualSource([]),
+          playbackMode: PlaybackMode.sequential,
+          anchor: DateTime.utc(2026),
+          shuffleSeed: number,
+        ),
+    ];
+    controller.notifyListeners();
+    await tester.pump();
+    await tester.tap(find.text('Add a custom channel'));
+    await tester.pumpAndSettle();
+
+    expect(controller.stage, SetupStage.ready);
+    expect(find.text('Create custom channel'), findsOneWidget);
+    expect(
+      find.textContaining('No channel numbers are available'),
+      findsOneWidget,
+    );
+    expect(
+      tester
+          .widget<TextFormField>(find.byKey(const Key('studio-number')))
+          .controller!
+          .text,
+      isEmpty,
+    );
   });
 
   testWidgets('startup announcement is a labeled live region', (tester) async {
@@ -139,6 +196,85 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
     expect(player.disposed, isTrue);
+  });
+
+  testWidgets('management sign out protects a dirty Studio draft', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 720));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final controller = _LogoutController()
+      ..stage = SetupStage.ready
+      ..channels = [_studioChannel];
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      LineupBootstrap(player: _FakePlayer(), controller: controller),
+    );
+    await tester.pumpAndSettle();
+    await openDestination(tester, 'Channels');
+    await tester.tap(find.byTooltip('Open Studio channel'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('studio-name')),
+      'Edited Studio channel',
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Sign out of Plex'));
+    await tester.pumpAndSettle();
+    expect(find.text('Discard changes?'), findsOneWidget);
+    await tester.tap(find.text('Keep editing'));
+    await tester.pumpAndSettle();
+
+    expect(controller.logoutCalls, 0);
+    expect(find.text('Edited Studio channel'), findsWidgets);
+
+    await tester.tap(find.byTooltip('Sign out of Plex'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Discard changes'));
+    await tester.pumpAndSettle();
+
+    expect(controller.logoutCalls, 1);
+    expect(controller.stage, SetupStage.welcome);
+    expect(find.byKey(const Key('studio-name')), findsNothing);
+  });
+
+  testWidgets('management sign out is blocked while Studio saves', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 720));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final controller = _LogoutController(blockSave: true)
+      ..stage = SetupStage.ready
+      ..channels = [_studioChannel];
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      LineupBootstrap(player: _FakePlayer(), controller: controller),
+    );
+    await tester.pumpAndSettle();
+    await openDestination(tester, 'Channels');
+    await tester.tap(find.byTooltip('Open Studio channel'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('studio-name')),
+      'Edited Studio channel',
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Save changes'));
+    await tester.pump();
+    expect(find.text('Saving channel…'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Sign out of Plex'));
+    await tester.pump();
+
+    expect(controller.logoutCalls, 0);
+    expect(find.text('Discard changes?'), findsNothing);
+    expect(find.text('Saving channel…'), findsOneWidget);
+
+    controller.releaseSave();
+    await tester.pumpAndSettle();
   });
 
   testWidgets('Guide and player routes transfer and restore focus explicitly', (
@@ -1142,7 +1278,58 @@ class _FakeController extends LineupController {
   );
 }
 
+final _studioChannel = Channel(
+  id: 'studio',
+  number: 7,
+  name: 'Studio channel',
+  source: const ManualSource([
+    ChannelItem(
+      id: 'program',
+      title: 'Studio program',
+      duration: Duration(hours: 1),
+    ),
+  ]),
+  playbackMode: PlaybackMode.sequential,
+  anchor: DateTime.utc(2026),
+  shuffleSeed: 7,
+);
+
+class _LogoutController extends _FakeController {
+  _LogoutController({bool blockSave = false})
+    : _saveRelease = blockSave ? Completer<void>() : null;
+
+  final Completer<void>? _saveRelease;
+  int logoutCalls = 0;
+
+  @override
+  Future<bool> logout() async {
+    logoutCalls++;
+    stage = SetupStage.welcome;
+    notifyListeners();
+    return true;
+  }
+
+  @override
+  Future<void> saveChannel(
+    Channel channel, {
+    required Channel? expectedBase,
+  }) async {
+    final release = _saveRelease;
+    if (release != null) await release.future;
+  }
+
+  void releaseSave() => _saveRelease?.complete();
+}
+
 class _ChannelSetupController extends _FakeController {
+  _ChannelSetupController() {
+    connection = PlexConnection(
+      uri: Uri.parse('https://synthetic.invalid'),
+      local: true,
+      relay: false,
+    );
+  }
+
   @override
   Future<bool> setLibraries(Set<String> ids) async {
     selectedLibraryIds = Set.unmodifiable(ids);

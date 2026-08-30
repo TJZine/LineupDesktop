@@ -82,8 +82,12 @@ native player on Windows. Start with [Development](docs/DEVELOPMENT.md).
 flutter pub get
 dart format --output=none --set-exit-if-changed .
 flutter analyze
-flutter test
+TZ=America/New_York flutter test # canonical full suite on macOS/Linux
 ```
+
+Windows contributors should run the focused Windows commands in
+[Development](docs/DEVELOPMENT.md); canonical golden verification runs on
+macOS with the timezone above.
 
 Windows playback additionally requires the pinned LGPL libmpv runtime and the
 repository-owned Flutter DirectComposition engine patch. Do not substitute

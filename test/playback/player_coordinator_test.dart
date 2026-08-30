@@ -9,9 +9,74 @@ import 'package:lineup_desktop/persistence/app_store.dart';
 import 'package:lineup_desktop/playback/native_player.dart';
 import 'package:lineup_desktop/playback/player_coordinator.dart';
 import 'package:lineup_desktop/plex/plex_client.dart';
+import 'package:lineup_desktop/plex/plex_models.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 
 void main() {
+  test(
+    'Player tunes the current projection of retained manual content',
+    () async {
+      final lineup = _TestLineup(count: 1);
+      final original = lineup.channels.single;
+      lineup
+        ..channels = [
+          Channel(
+            id: original.id,
+            number: original.number,
+            name: original.name,
+            source: const ManualSource([
+              ChannelItem(
+                id: 'current',
+                title: 'Stored title',
+                duration: Duration(hours: 24),
+              ),
+              ChannelItem(
+                id: 'missing',
+                title: 'Missing',
+                duration: Duration(hours: 24),
+              ),
+            ]),
+            playbackMode: PlaybackMode.sequential,
+            anchor: DateTime.now().subtract(const Duration(hours: 1)),
+            shuffleSeed: 1,
+          ),
+        ]
+        ..connection = PlexConnection(
+          uri: Uri.parse('https://player.example:32400'),
+          local: true,
+          relay: false,
+        )
+        ..availableMedia = [
+          PlexMediaItem(
+            id: 'current',
+            title: 'Current title',
+            type: 'movie',
+            duration: const Duration(hours: 24),
+            parts: [PlexMediaPart(path: '/current')],
+          ),
+        ];
+      final guide = GuideController(lineup: lineup)..requestViewport(0, 1);
+      final player = _Player();
+      final coordinator = PlayerCoordinator(
+        player: player,
+        lineup: lineup,
+        guide: guide,
+      );
+      addTearDown(lineup.dispose);
+      addTearDown(guide.dispose);
+      addTearDown(coordinator.dispose);
+      expect(await guide.ensureCurrentProgram(original.id), isNotNull);
+
+      await coordinator.tune(original.id);
+
+      expect(lineup.lastPlaybackItemId, 'current');
+      expect(
+        guide.currentProgram(original.id)?.scheduled.item.title,
+        'Current title',
+      );
+    },
+  );
+
   test(
     'tune dispatches load, wall-clock seek, and stable current identity',
     () async {
@@ -32,7 +97,7 @@ void main() {
       addTearDown(guide.dispose);
       addTearDown(coordinator.dispose);
 
-      await coordinator.tune('channel-b');
+      final tuned = await coordinator.tune('channel-b');
 
       expect(
         player.loads.single,
@@ -42,9 +107,72 @@ void main() {
       expect(player.seeks.single, greaterThanOrEqualTo(Duration.zero));
       expect(lineup.currentChannelId, 'channel-b');
       expect(coordinator.overlay, PlayerOverlay.osd);
+      expect(tuned, isTrue);
       await coordinator.stop();
     },
   );
+
+  test('missing Guide program reports tune failure', () async {
+    final lineup = _TestLineup();
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (_) async => throw TimeoutException('missing'),
+    );
+    final coordinator = PlayerCoordinator(
+      player: _Player(),
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
+
+    expect(await coordinator.tune('channel-b'), isFalse);
+    expect(coordinator.error, 'The current program could not be loaded.');
+  });
+
+  test('native stop failure reports replacement tune failure', () async {
+    final lineup = _TestLineup();
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    )..requestViewport(0, 2);
+    await Future<void>.delayed(Duration.zero);
+    final player = _FailingStopPlayer();
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
+
+    expect(await coordinator.tune('channel-b'), isTrue);
+    expect(await coordinator.tune('channel-0'), isFalse);
+    expect(lineup.currentChannelId, 'channel-b');
+  });
+
+  test('current-channel persistence failure reports tune failure', () async {
+    final lineup = _FailingPersistenceLineup();
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    )..requestViewport(0, 2);
+    await Future<void>.delayed(Duration.zero);
+    final coordinator = PlayerCoordinator(
+      player: _Player(),
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
+
+    expect(await coordinator.tune('channel-b'), isFalse);
+    expect(lineup.currentChannelId, 'channel-0');
+    expect(coordinator.overlay, PlayerOverlay.error);
+  });
 
   test('scope change stops playback and clears its intent', () async {
     final lineup = _TestLineup();
@@ -863,11 +991,12 @@ void main() {
     await player.firstLoadStarted.future;
     final second = coordinator.tune('channel-b');
     player.releaseFirstLoad.complete();
-    await Future.wait([first, second]);
+    final results = await Future.wait([first, second]);
 
     expect(lineup.currentChannelId, 'channel-b');
     expect(player.loads, hasLength(2));
     expect(player.seeks, hasLength(1));
+    expect(results, [isFalse, isTrue]);
     await coordinator.stop();
     expect(player.stops, 2);
   });
@@ -1072,10 +1201,11 @@ void main() {
 
     expect(player.loadSettled, isTrue);
     player.releaseStop.complete();
-    await tune;
+    final tuned = await tune;
     await Future<void>.delayed(Duration.zero);
     expect(player.stops, 1);
     expect(coordinator.hasPlaybackIntent, isFalse);
+    expect(tuned, isFalse);
   });
 
   test(
@@ -1741,12 +1871,13 @@ void main() {
     addTearDown(guide.dispose);
     addTearDown(coordinator.dispose);
 
-    await coordinator.tune('channel-b');
+    final tuned = await coordinator.tune('channel-b');
 
     expect(player.loads, hasLength(1));
     expect(player.stops, 1);
     expect(lineup.currentChannelId, 'channel-0');
     expect(coordinator.overlay, PlayerOverlay.error);
+    expect(tuned, isFalse);
   });
 
   test('initial media is loaded once and exposes failures', () async {
@@ -1863,10 +1994,11 @@ void main() {
     player.emitError(generation: player.loadGenerations.single);
     await Future<void>.delayed(Duration.zero);
     player.releaseSeek.complete();
-    await tune;
+    final tuned = await tune;
 
     expect(lineup.currentChannelId, 'channel-0');
     expect(coordinator.overlay, PlayerOverlay.error);
+    expect(tuned, isFalse);
   });
 
   test(
@@ -1894,10 +2026,11 @@ void main() {
       player.emitError(generation: player.loadGenerations.single);
       await Future<void>.delayed(Duration.zero);
       lineup.releasePersistence.complete();
-      await tune;
+      final tuned = await tune;
 
       expect(lineup.currentChannelId, 'channel-0');
       expect(coordinator.overlay, PlayerOverlay.error);
+      expect(tuned, isFalse);
     },
   );
 
@@ -2854,8 +2987,8 @@ void main() {
     addTearDown(guide.dispose);
     addTearDown(coordinator.dispose);
 
-    await coordinator.tune('channel-0');
-    await coordinator.tune('channel-b');
+    expect(await coordinator.tune('channel-0'), isTrue);
+    expect(await coordinator.tune('channel-b'), isFalse);
 
     expect(player.loads, hasLength(2));
     expect(player.stops, 2);
@@ -2996,6 +3129,7 @@ class _TestLineup extends LineupController {
   final bool failAuthorizationRecovery;
   final List<LineupPlaybackPart>? playbackParts;
   int playbackRequests = 0;
+  String? lastPlaybackItemId;
   int recoveryCalls = 0;
   final recoveryStarted = Completer<void>();
   final finishRecovery = Completer<void>();
@@ -3027,6 +3161,7 @@ class _TestLineup extends LineupController {
   @override
   LineupPlaybackRequest playbackFor(String itemId) {
     playbackRequests++;
+    lastPlaybackItemId = itemId;
     if (failSecondPlaybackRequest && playbackRequests == 2) {
       throw StateError('Replacement playback request is unavailable.');
     }
@@ -3088,6 +3223,14 @@ class _LogoutLineup extends _TestLineup {
     if (logoutCalls == 1) return false;
     changeContentScope();
     return true;
+  }
+}
+
+class _FailingPersistenceLineup extends _TestLineup {
+  @override
+  Future<void> setCurrentChannel(String? id) async {
+    if (id == 'channel-b') throw StateError('persistence failed');
+    await super.setCurrentChannel(id);
   }
 }
 
@@ -3162,6 +3305,11 @@ class _Player implements NativePlayer {
 
   @override
   Future<void> dispose() async {}
+}
+
+class _FailingStopPlayer extends _Player {
+  @override
+  Future<void> stop() async => throw StateError('native stop failed');
 }
 
 mixin _BlocksFirstLoad on _Player {

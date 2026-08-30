@@ -25,6 +25,26 @@ const _goldenKey = Key('visual-acceptance-boundary');
 final _fixedNow = DateTime.utc(2026, 1, 15, 3, 17);
 final _syntheticArtwork = File('assets/branding/lineup-logo-mark.png')
     .readAsBytesSync();
+final _nowPlayingArtwork = <Uri, Uint8List>{
+  Uri.parse('test://now-playing/poster'): File(
+    'test/support/now_playing/signal-after-midnight-poster.png',
+  ).readAsBytesSync(),
+  Uri.parse('test://now-playing/title'): File(
+    'test/support/now_playing/signal-after-midnight-title.png',
+  ).readAsBytesSync(),
+  Uri.parse('/library/metadata/test/now-playing/cast-elias'): File(
+    'test/support/now_playing/cast-elias-vale.png',
+  ).readAsBytesSync(),
+  Uri.parse('/library/metadata/test/now-playing/cast-mina'): File(
+    'test/support/now_playing/cast-mina-park.png',
+  ).readAsBytesSync(),
+  Uri.parse('/library/metadata/test/now-playing/cast-solomon'): File(
+    'test/support/now_playing/cast-solomon-reed.png',
+  ).readAsBytesSync(),
+  Uri.parse('/library/metadata/test/now-playing/cast-clara'): File(
+    'test/support/now_playing/cast-clara-wynn.png',
+  ).readAsBytesSync(),
+};
 
 void main() {
   setUpAll(_loadPinnedTestFont);
@@ -34,50 +54,24 @@ void main() {
   });
 
   testWidgets('profile selection', (tester) async {
-    final fixture = UiFixture()
-      ..controller.stage = SetupStage.profiles
-      ..controller.profile = const PlexHomeUser(
-        id: 'adult',
-        name: 'Alex',
-        protected: false,
-        admin: true,
-      )
-      ..controller.profiles = const [
-        PlexHomeUser(id: 'adult', name: 'Alex', protected: false, admin: true),
-        PlexHomeUser(
-          id: 'child',
-          name: 'Family',
-          protected: true,
-          restricted: true,
-        ),
-        PlexHomeUser(id: 'guest', name: 'Guest', protected: false),
-        PlexHomeUser(
-          id: 'movies',
-          name: 'Movie Night',
-          protected: false,
-          restricted: true,
-        ),
-        PlexHomeUser(
-          id: 'kids',
-          name: 'Kids',
-          protected: false,
-          restricted: true,
-        ),
-        PlexHomeUser(id: 'sports', name: 'Sports', protected: false),
-        PlexHomeUser(id: 'parents', name: 'Parents', protected: true),
-        PlexHomeUser(id: 'weekend', name: 'Weekend', protected: false),
-        PlexHomeUser(
-          id: 'visitor',
-          name: 'Visitor',
-          protected: false,
-          restricted: true,
-        ),
-      ];
+    final fixture = _profileSelectionFixture();
 
     await _pump(tester, fixture.build());
     await _match(
       tester,
       'profiles-1280x720.png',
+      precacheLogo: true,
+      additionalPumps: 1,
+    );
+  });
+
+  testWidgets('profile selection at 1920x1080', (tester) async {
+    final fixture = _profileSelectionFixture();
+
+    await _pump(tester, fixture.build(), viewport: const Size(1920, 1080));
+    await _match(
+      tester,
+      'profiles-1920x1080.png',
       precacheLogo: true,
       additionalPumps: 1,
     );
@@ -197,6 +191,29 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Configure the lineup'), findsOneWidget);
+    final viewport = Offset.zero & _viewport;
+    final shell = tester.getRect(
+      find.byKey(const ValueKey('channel-setup-shell')),
+    );
+    final header = tester.getRect(
+      find.byKey(const ValueKey('channel-setup-header')),
+    );
+    expect(header.bottom, lessThan(shell.top));
+    expect(
+      tester.getRect(find.widgetWithText(Chip, 'Step 2 of 3')).bottom,
+      lessThan(shell.top),
+    );
+    final regions = [
+      tester.getRect(find.byKey(const ValueKey('channel-setup-strategy-rail'))),
+      tester.getRect(
+        find.byKey(const ValueKey('channel-setup-strategy-details')),
+      ),
+      tester.getRect(find.widgetWithText(FilledButton, 'Build Channels')),
+    ];
+    for (final region in regions) {
+      expect(viewport.intersect(region), region);
+      expect(shell.intersect(region), region);
+    }
     await _match(
       tester,
       'channel-setup-strategies-1280x720.png',
@@ -238,6 +255,42 @@ void main() {
     await _match(
       tester,
       'channel-setup-review-1280x720.png',
+      precacheLogo: true,
+      additionalPumps: 2,
+    );
+  });
+
+  testWidgets('Channel Setup review at 1920x1080', (tester) async {
+    final controller = _VisualController()
+      ..stage = SetupStage.channelSetup
+      ..libraries = const [
+        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
+      ];
+    await _pump(
+      tester,
+      TickerMode(
+        enabled: false,
+        child: UiFixture(
+          controller: controller,
+          guideClock: () => _fixedNow,
+        ).build(),
+      ),
+      viewport: const Size(1920, 1080),
+    );
+    await tester.tap(find.text('Configure channels'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Build Channels'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Review expected changes'), findsOneWidget);
+    expect(find.bySemanticsLabel('Final: 2'), findsOneWidget);
+    expect(
+      tester.getBottomRight(find.text('Confirm & Replace')).dy,
+      lessThanOrEqualTo(1080),
+    );
+    await _match(
+      tester,
+      'channel-setup-review-1920x1080.png',
       precacheLogo: true,
       additionalPumps: 2,
     );
@@ -309,7 +362,7 @@ void main() {
       lessThan(tester.getTopLeft(find.text('Your lineup is ready')).dy),
     );
     expect(
-      tester.getBottomRight(find.text('Done')).dy,
+      tester.getBottomRight(find.text('View lineup')).dy,
       lessThanOrEqualTo(_viewport.height),
     );
     await _match(
@@ -470,30 +523,85 @@ void main() {
     await _match(tester, 'player-osd-1280x720.png', additionalPumps: 2);
   });
 
+  testWidgets('player OSD at 1920x1080', (tester) async {
+    final fixture = _readyFixture(
+      playerState: const PlayerStatus(
+        state: PlayerState.paused,
+        message: 'Paused',
+      ),
+    );
+    await _pump(tester, fixture.build(), viewport: const Size(1920, 1080));
+    await _openDestination(tester, 'Player');
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump();
+
+    expect(find.byKey(const Key('player-osd-surface')), findsOneWidget);
+    await _match(tester, 'player-osd-1920x1080.png', additionalPumps: 2);
+  });
+
   testWidgets('player Now Playing', (tester) async {
     final fixture =
         _readyFixture(
+            useWordmarkArtwork: true,
             playerState: const PlayerStatus(
               state: PlayerState.playing,
               message: 'Playing',
             ),
           )
           ..controller.channels = _richPlayerChannels
-          ..controller.settings = const LineupSettings(reduceMotion: true);
+          ..controller.settings = const LineupSettings(
+            guideHours: 4,
+            reduceMotion: true,
+          );
     await _pump(tester, fixture.build());
     await _openDestination(tester, 'Player');
+    final context = tester.element(find.byKey(_goldenKey));
+    await tester.runAsync(() async {
+      for (final bytes in _nowPlayingArtwork.values) {
+        await precacheImage(MemoryImage(bytes), context);
+      }
+    });
     await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
     await tester.pump();
 
     expect(find.byKey(const Key('player-now-playing-surface')), findsOneWidget);
-    final context = tester.element(find.byKey(_goldenKey));
-    await tester.runAsync(
-      () => precacheImage(MemoryImage(_syntheticArtwork), context),
-    );
-    await tester.pump();
     await _match(
       tester,
       'player-now-playing-1280x720.png',
+      precacheLogo: true,
+      additionalPumps: 2,
+    );
+  });
+
+  testWidgets('player Now Playing at 1920x1080', (tester) async {
+    final fixture =
+        _readyFixture(
+            useWordmarkArtwork: true,
+            playerState: const PlayerStatus(
+              state: PlayerState.playing,
+              message: 'Playing',
+            ),
+          )
+          ..controller.channels = _richPlayerChannels
+          ..controller.settings = const LineupSettings(
+            guideHours: 4,
+            reduceMotion: true,
+          );
+    await _pump(tester, fixture.build(), viewport: const Size(1920, 1080));
+    await _openDestination(tester, 'Player');
+    final context = tester.element(find.byKey(_goldenKey));
+    await tester.runAsync(() async {
+      for (final bytes in _nowPlayingArtwork.values) {
+        await precacheImage(MemoryImage(bytes), context);
+      }
+    });
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
+    await tester.pump();
+
+    expect(find.byKey(const Key('player-now-playing-surface')), findsOneWidget);
+    await _match(
+      tester,
+      'player-now-playing-1920x1080.png',
       precacheLogo: true,
       additionalPumps: 2,
     );
@@ -579,6 +687,22 @@ void main() {
     await _match(tester, 'mini-guide-1280x720.png', additionalPumps: 2);
   });
 
+  testWidgets('Mini Guide at 1920x1080', (tester) async {
+    final fixture = _readyFixture(
+      playerState: const PlayerStatus(
+        state: PlayerState.playing,
+        message: 'Playing',
+      ),
+    );
+    await _pump(tester, fixture.build(), viewport: const Size(1920, 1080));
+    await _openDestination(tester, 'Player');
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pump();
+
+    expect(find.byKey(const Key('mini-guide-shelf')), findsOneWidget);
+    await _match(tester, 'mini-guide-1920x1080.png', additionalPumps: 2);
+  });
+
   testWidgets('Settings in alternate theme', (tester) async {
     final fixture = _readyFixture()
       ..controller.settings = const LineupSettings(
@@ -603,6 +727,57 @@ void main() {
     expect(find.byType(PlayerView), findsNothing);
     expect(find.byType(NavigationRail), findsNothing);
     await _match(tester, 'settings-playback-ember-steel-1280x720.png');
+  });
+
+  testWidgets('Channel Studio expanded custom authoring with Air Check', (
+    tester,
+  ) async {
+    final fixture = _studioFixture();
+    await _pump(tester, fixture.build());
+    await _openDestination(tester, 'Channels');
+    await tester.tap(find.byTooltip('Open Saturday Cartoons'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.pumpAndSettle();
+    await _match(tester, 'channel-studio-expanded-1280x720.png');
+  });
+
+  testWidgets('Channel Studio compact custom authoring with Air Check', (
+    tester,
+  ) async {
+    final fixture = _studioFixture();
+    await _pump(tester, fixture.build(), viewport: const Size(800, 600));
+    await _openDestination(tester, 'Channels');
+    await tester.tap(find.byTooltip('Open Saturday Cartoons'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .state<ScrollableState>(
+            find
+                .descendant(
+                  of: find.byKey(const Key('studio-scroll')),
+                  matching: find.byType(Scrollable),
+                )
+                .first,
+          )
+          .position
+          .pixels,
+      0,
+    );
+    for (final finder in [
+      find.text('Saved'),
+      find.byKey(const Key('channel-air-check')),
+      find.text('Programming'),
+      find.text('Save changes'),
+    ]) {
+      expect(
+        (Offset.zero & const Size(800, 600)).overlaps(tester.getRect(finder)),
+        isTrue,
+      );
+    }
+    await _match(tester, 'channel-studio-compact-800x600.png');
   });
 }
 
@@ -651,16 +826,55 @@ Future<void> _loadPinnedTestFont() async {
   await (FontLoader('MaterialIcons')..addFont(Future.value(icons))).load();
 }
 
-Future<void> _pump(WidgetTester tester, Widget child) async {
+Future<void> _pump(
+  WidgetTester tester,
+  Widget child, {
+  Size viewport = _viewport,
+}) async {
   tester.view
     ..devicePixelRatio = 1
-    ..physicalSize = _viewport;
+    ..physicalSize = viewport;
   addTearDown(tester.view.resetDevicePixelRatio);
   addTearDown(tester.view.resetPhysicalSize);
   await tester.pumpWidget(RepaintBoundary(key: _goldenKey, child: child));
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 250));
 }
+
+UiFixture _profileSelectionFixture() => UiFixture()
+  ..controller.stage = SetupStage.profiles
+  ..controller.profile = const PlexHomeUser(
+    id: 'adult',
+    name: 'Alex',
+    protected: false,
+    admin: true,
+  )
+  ..controller.profiles = const [
+    PlexHomeUser(id: 'adult', name: 'Alex', protected: false, admin: true),
+    PlexHomeUser(
+      id: 'child',
+      name: 'Family',
+      protected: true,
+      restricted: true,
+    ),
+    PlexHomeUser(id: 'guest', name: 'Guest', protected: false),
+    PlexHomeUser(
+      id: 'movies',
+      name: 'A deliberately long synthetic profile name',
+      protected: false,
+      restricted: true,
+    ),
+    PlexHomeUser(id: 'kids', name: 'Kids', protected: false, restricted: true),
+    PlexHomeUser(id: 'sports', name: 'Sports', protected: false),
+    PlexHomeUser(id: 'parents', name: 'Parents', protected: true),
+    PlexHomeUser(id: 'weekend', name: 'Weekend', protected: false),
+    PlexHomeUser(
+      id: 'visitor',
+      name: 'Visitor',
+      protected: false,
+      restricted: true,
+    ),
+  ];
 
 Future<void> _match(
   WidgetTester tester,
@@ -742,6 +956,7 @@ Future<void> _openDestination(WidgetTester tester, String destination) async {
 UiFixture _readyFixture({
   PlayerStatus? playerState,
   List<PlayerTrack>? tracks,
+  bool useWordmarkArtwork = false,
 }) {
   final player = FixturePlayer();
   if (playerState != null) {
@@ -749,11 +964,18 @@ UiFixture _readyFixture({
       playerState,
       position: const Duration(minutes: 18),
       duration: const Duration(minutes: 48),
-      telemetry: const PlayerTelemetry(
-        width: 1920,
-        height: 1080,
-        videoCodec: 'h264',
-      ),
+      telemetry: useWordmarkArtwork
+          ? const PlayerTelemetry(
+              width: 3840,
+              height: 2160,
+              videoCodec: 'hevc',
+              gamma: 'pq',
+            )
+          : const PlayerTelemetry(
+              width: 1920,
+              height: 1080,
+              videoCodec: 'h264',
+            ),
       tracks:
           tracks ??
           const [
@@ -773,6 +995,7 @@ UiFixture _readyFixture({
     );
   }
   final controller = _VisualController()
+    ..useWordmarkArtwork = useWordmarkArtwork
     ..stage = SetupStage.ready
     ..channels = _channels
     ..currentChannelId = _channels[1].id;
@@ -783,14 +1006,69 @@ UiFixture _readyFixture({
   );
 }
 
+UiFixture _studioFixture() {
+  const programs = [
+    ChannelItem(
+      id: 'cartoon-one',
+      title: 'Moonbase Mystery',
+      showTitle: 'Saturday Signals',
+      duration: Duration(minutes: 30),
+    ),
+    ChannelItem(
+      id: 'cartoon-two',
+      title: 'The Clockwork Cove',
+      showTitle: 'Saturday Signals',
+      duration: Duration(minutes: 30),
+    ),
+    ChannelItem(
+      id: 'cartoon-three',
+      title: 'Rocket Club Rescue',
+      showTitle: 'Junior Orbit',
+      duration: Duration(minutes: 30),
+    ),
+    ChannelItem(
+      id: 'cartoon-four',
+      title: 'Cloud City Picnic',
+      showTitle: 'Junior Orbit',
+      duration: Duration(minutes: 30),
+    ),
+  ];
+  final channel = Channel(
+    id: 'studio-custom',
+    number: 42,
+    name: 'Saturday Cartoons',
+    source: const ManualSource(programs),
+    playbackMode: PlaybackMode.sequential,
+    anchor: DateTime.utc(2026, 1, 15, 3),
+    shuffleSeed: 42,
+  );
+  final controller = _VisualController()
+    ..stage = SetupStage.ready
+    ..channels = [channel]
+    ..availableMedia = [
+      for (final program in programs)
+        PlexMediaItem(
+          id: program.id,
+          title: program.title,
+          type: 'episode',
+          duration: program.duration,
+          grandparentTitle: program.showTitle,
+          parts: [PlexMediaPart(path: '/synthetic/${program.id}')],
+        ),
+    ];
+  return UiFixture(controller: controller, guideClock: () => _fixedNow);
+}
+
 class _VisualController extends FixtureController {
   Map<String, LibraryScanFact> scanFacts = const {};
+  bool useWordmarkArtwork = false;
 
   @override
   Map<String, LibraryScanFact> get libraryScanFacts => scanFacts;
 
   @override
-  Future<Uint8List?> artworkForPath(Uri path) async => _syntheticArtwork;
+  Future<Uint8List?> artworkForPath(Uri path) async =>
+      useWordmarkArtwork ? _nowPlayingArtwork[path] : _syntheticArtwork;
 
   @override
   Future<ScheduleIndex> loadScheduleFor(Channel channel) async => buildSchedule(
@@ -840,7 +1118,12 @@ Future<void> _openChannelSetupApply(WidgetTester tester) async {
   await tester.pumpAndSettle();
   await tester.tap(find.text('Build Channels'));
   await tester.pumpAndSettle();
-  await tester.tap(find.text('This will replace your current lineup'));
+  await tester.tap(
+    find.descendant(
+      of: find.byType(CheckboxListTile),
+      matching: find.textContaining('generated channels'),
+    ),
+  );
   await tester.pump();
   await tester.tap(find.text('Confirm & Replace'));
   await tester.pump();
@@ -886,33 +1169,64 @@ final _richPlayerChannels = [
       Channel(
         id: channel.id,
         number: channel.number,
-        name: channel.name,
+        name: 'Midnight Mysteries',
         source: ManualSource([
           for (var program = 0; program < 8; program++)
             ChannelItem(
               id: 'program-1-$program',
               title: const [
-                'City Stories',
-                'After Midnight',
-                'World in Focus',
-                'The Long Way Home',
+                'The Last Frequency',
+                'Voices in the Static',
+                'A Light Below',
+                'The Silent Relay',
               ][program % 4],
-              showTitle: program.isEven ? 'Lineup Originals' : null,
-              duration: Duration(minutes: 24 + program * 4),
-              poster: Uri.parse('test://poster-$program'),
-              backdrop: Uri.parse('test://backdrop-$program'),
-              clearLogo: Uri.parse('test://logo-$program'),
-              summary: 'A small-town radio host follows a mysterious signal across the night.',
+              showTitle: 'Signal After Midnight',
+              duration: const Duration(minutes: 48),
+              poster: Uri.parse('test://now-playing/poster'),
+              backdrop: Uri.parse('test://now-playing/poster'),
+              clearLogo: Uri.parse('test://now-playing/title'),
+              summary: 'When a vanished emergency broadcast returns after twenty years, a night-shift radio engineer and a skeptical detective trace its coded warnings through a city that insists the original case never happened.',
               contentRating: 'TV-14',
-              genres: const ['Drama', 'Mystery'],
+              genres: const ['Mystery', 'Drama', 'Thriller'],
               year: 2026,
-              seasonNumber: program.isEven ? 1 : null,
-              episodeNumber: program.isEven ? program + 1 : null,
-              resolution: '1080p',
-              videoCodec: 'h264',
-              audioCodec: 'aac',
+              seasonNumber: 1,
+              episodeNumber: program + 1,
+              resolution: '4K',
+              videoCodec: 'hevc',
+              audioCodec: 'eac3',
               audioChannels: 6,
-              dynamicRange: 'SDR',
+              dynamicRange: 'HDR10',
+              cast: [
+                ChannelCastMember(
+                  name: 'Elias Vale',
+                  role: 'Jonah Mercer',
+                  portrait: Uri.parse(
+                    '/library/metadata/test/now-playing/cast-elias',
+                  ),
+                ),
+                ChannelCastMember(
+                  name: 'Mina Park',
+                  role: 'Detective Hana Voss',
+                  portrait: Uri.parse(
+                    '/library/metadata/test/now-playing/cast-mina',
+                  ),
+                ),
+                ChannelCastMember(
+                  name: 'Solomon Reed',
+                  role: 'Arthur Bell',
+                  portrait: Uri.parse(
+                    '/library/metadata/test/now-playing/cast-solomon',
+                  ),
+                ),
+                ChannelCastMember(
+                  name: 'Clara Wynn',
+                  role: 'June Mercer',
+                  portrait: Uri.parse(
+                    '/library/metadata/test/now-playing/cast-clara',
+                  ),
+                ),
+                ChannelCastMember(name: 'Noa Bell', role: 'Evelyn Shaw'),
+              ],
             ),
         ]),
         playbackMode: channel.playbackMode,

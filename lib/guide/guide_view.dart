@@ -1981,9 +1981,11 @@ class _EmptyGuide extends StatelessWidget {
   );
 }
 
-String _time(BuildContext context, DateTime value) => MaterialLocalizations.of(
-  context,
-).formatTimeOfDay(TimeOfDay.fromDateTime(value), alwaysUse24HourFormat: false);
+String _time(BuildContext context, DateTime value) =>
+    MaterialLocalizations.of(context).formatTimeOfDay(
+      TimeOfDay.fromDateTime(value.toLocal()),
+      alwaysUse24HourFormat: false,
+    );
 
 String _libraryName(GuideController controller, String id) =>
     controller.lineup.libraries

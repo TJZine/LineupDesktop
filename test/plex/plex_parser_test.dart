@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/plex/plex_client.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
 
@@ -273,6 +274,91 @@ void main() {
     expect(item.grandparentThumbPath, '/library/metadata/show-1/thumb');
     expect(item.artPath, '/library/metadata/show-1/art');
     expect(item.clearLogoPath, '/library/metadata/show-1/clearlogo');
+  });
+
+  test('parses trimmed, deduplicated cast facts and actor names', () {
+    final item = parseMediaItem({
+      'ratingKey': 'cast-1',
+      'title': 'Episode',
+      'type': 'episode',
+      'duration': 1000,
+      'Role': [
+        {
+          'tag': '  Avery Vale  ',
+          'role': '  Detective Rowan  ',
+          'thumb': ' /library/metadata/avery/thumb ',
+        },
+        {'tag': 'avery vale', 'role': 'Duplicate'},
+        {'tag': '   ', 'role': 'Blank'},
+        {'role': 'Missing name'},
+        'malformed',
+        {'tag': 'Mina Park'},
+        {
+          'tag': 'Unsafe Absolute',
+          'role': 'Reporter',
+          'thumb': 'https://plex.invalid/library/metadata/2/thumb',
+        },
+        {
+          'tag': 'Unsafe Token',
+          'role': 'Dispatcher',
+          'thumb': '/library/metadata/3/thumb?X-Plex-Token=secret',
+        },
+        {
+          'tag': 'Unsafe Fragment',
+          'role': 'Archivist',
+          'thumb': '/library/metadata/4/thumb#private',
+        },
+      ],
+    });
+
+    expect(item.actors, [
+      'Avery Vale',
+      'Mina Park',
+      'Unsafe Absolute',
+      'Unsafe Token',
+      'Unsafe Fragment',
+    ]);
+    expect(item.cast, hasLength(5));
+    expect(item.cast.first.name, 'Avery Vale');
+    expect(item.cast.first.role, 'Detective Rowan');
+    expect(item.cast.first.thumbPath, '/library/metadata/avery/thumb');
+    expect(item.cast[1].role, isNull);
+    expect(item.cast[2].role, 'Reporter');
+    expect(item.cast[3].role, 'Dispatcher');
+    expect(item.cast[4].role, 'Archivist');
+    expect(
+      item.cast.skip(1),
+      everyElement(
+        predicate<PlexCastMember>((member) {
+          return member.thumbPath == null;
+        }),
+      ),
+    );
+  });
+
+  test('bounds rich cast without truncating actor names', () {
+    final roles = [
+      {'tag': 'Actor 0'},
+      {'tag': ' actor 0 ', 'role': 'Duplicate'},
+      for (var index = 1; index < maxRichCastMembers + 5; index++)
+        {'tag': 'Actor $index', 'role': 'Role $index'},
+    ];
+    final item = parseMediaItem({
+      'ratingKey': 'large-cast',
+      'title': 'Large cast',
+      'type': 'movie',
+      'duration': 1000,
+      'Role': roles,
+    });
+
+    expect(item.actors, [
+      for (var index = 0; index < maxRichCastMembers + 5; index++)
+        'Actor $index',
+    ]);
+    expect(item.cast, hasLength(maxRichCastMembers));
+    expect(item.cast.map((member) => member.name), [
+      for (var index = 0; index < maxRichCastMembers; index++) 'Actor $index',
+    ]);
   });
 
   test('rejects missing media identity', () {

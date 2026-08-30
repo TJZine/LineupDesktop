@@ -9,6 +9,29 @@ void main() {
   ];
   final anchor = DateTime.utc(2026, 1, 1, 12);
 
+  test('invalid schedules report stable failure reasons', () {
+    Matcher failsWith(ScheduleFailureReason reason) => throwsA(
+      isA<ScheduleBuildException>().having(
+        (error) => error.reason,
+        'reason',
+        reason,
+      ),
+    );
+
+    expect(
+      () => buildSchedule(const [], mode: PlaybackMode.sequential, seed: 1),
+      failsWith(ScheduleFailureReason.noContent),
+    );
+    expect(
+      () => buildSchedule(
+        const [ChannelItem(id: 'zero', title: 'Zero', duration: Duration.zero)],
+        mode: PlaybackMode.sequential,
+        seed: 1,
+      ),
+      failsWith(ScheduleFailureReason.invalidProgramDuration),
+    );
+  });
+
   test('program lookup is exact at boundaries and before anchor', () {
     final schedule = buildSchedule(
       items,
@@ -131,6 +154,51 @@ void main() {
     expect(
       ordered.indexWhere((item) => item.id == 'b1'),
       lessThan(ordered.indexWhere((item) => item.id == 'b2')),
+    );
+  });
+
+  test('window result reports exact completion and bounded truncation', () {
+    final minute = buildSchedule(
+      const [
+        ChannelItem(
+          id: 'minute',
+          title: 'Minute',
+          duration: Duration(minutes: 1),
+        ),
+      ],
+      mode: PlaybackMode.sequential,
+      seed: 1,
+    );
+    final exact = scheduleWindowResult(
+      anchor,
+      anchor.add(const Duration(minutes: 1000)),
+      anchor,
+      minute,
+    );
+    final truncated = scheduleWindowResult(
+      anchor,
+      anchor.add(const Duration(minutes: 1001)),
+      anchor,
+      minute,
+    );
+
+    expect(exact.programs.length, 1000);
+    expect(exact.truncated, isFalse);
+    expect(exact.lastProjectedEnd, anchor.add(const Duration(minutes: 1000)));
+    expect(truncated.programs.length, 1000);
+    expect(truncated.truncated, isTrue);
+    expect(
+      truncated.lastProjectedEnd,
+      anchor.add(const Duration(minutes: 1000)),
+    );
+    expect(
+      scheduleWindow(
+        anchor,
+        anchor.add(const Duration(minutes: 2)),
+        anchor,
+        minute,
+      ),
+      hasLength(2),
     );
   });
 }

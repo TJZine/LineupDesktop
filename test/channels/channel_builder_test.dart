@@ -65,6 +65,34 @@ void main() {
     expect(proposals, isEmpty);
   });
 
+  test('builder omits noncanonical years from decade proposals', () {
+    const library = PlexLibrary(
+      id: '1',
+      title: 'Movies',
+      type: PlexLibraryType.movie,
+    );
+    final proposals = buildChannelProposals(
+      libraries: const [library],
+      items: [
+        for (final year in [-11, 999, 1981, 10000])
+          PlexMediaItem(
+            id: '$year',
+            title: 'Movie $year',
+            type: 'movie',
+            duration: const Duration(minutes: 1),
+            libraryId: '1',
+            year: year,
+          ),
+      ],
+      strategies: const {BuilderStrategy.decades},
+      minimumItems: 1,
+    );
+
+    expect(proposals, hasLength(1));
+    expect(proposals.single.name, '1980s');
+    expect(proposals.single.itemCount, 1);
+  });
+
   test('builder keeps playlists and collections as real sources', () {
     const library = PlexLibrary(
       id: '1',
@@ -301,6 +329,67 @@ void main() {
     },
   );
 
+  test('all build modes reserve sparse custom numbers through 1000', () {
+    final proposals = List.generate(
+      999,
+      (index) => ChannelProposal(
+        name: 'Drama $index',
+        source: LibrarySource(
+          libraryId: 'movies',
+          libraryType: PlexLibraryType.movie,
+          filters: {'genre': 'Drama $index'},
+        ),
+        mode: PlaybackMode.shuffle,
+        itemCount: 10,
+        strategy: BuilderStrategy.genres,
+      ),
+    );
+    final custom = [
+      Channel(
+        id: 'custom-1',
+        number: 1,
+        name: 'Custom 1',
+        source: const LibrarySource(
+          libraryId: 'movies',
+          libraryType: PlexLibraryType.movie,
+        ),
+        playbackMode: PlaybackMode.sequential,
+        anchor: DateTime.utc(2026),
+        shuffleSeed: 1,
+      ),
+      Channel(
+        id: 'custom-1000',
+        number: 1000,
+        name: 'Custom 1000',
+        source: const LibrarySource(
+          libraryId: 'movies',
+          libraryType: PlexLibraryType.movie,
+        ),
+        playbackMode: PlaybackMode.sequential,
+        anchor: DateTime.utc(2026),
+        shuffleSeed: 1000,
+      ),
+    ];
+
+    for (final mode in ChannelBuildMode.values) {
+      final result = materializeChannelPlan(
+        proposals: proposals,
+        existing: custom,
+        mode: mode,
+        anchor: DateTime.utc(2027),
+      );
+
+      expect(result.channels.first.number, 2, reason: mode.name);
+      expect(result.channels, hasLength(998), reason: mode.name);
+      expect(
+        result.channels.map((channel) => channel.number),
+        isNot(contains(1000)),
+        reason: mode.name,
+      );
+      expect(result.truncated, isTrue, reason: mode.name);
+    }
+  });
+
   test('maximum channels applies after series expansion', () {
     const proposal = ChannelProposal(
       name: 'Series',
@@ -512,6 +601,7 @@ void main() {
       seriesBlockSize: 5,
       anchor: DateTime.utc(2026),
     ).channels.single;
+    final staleShuffleSeed = generated.shuffleSeed + 1;
     final stale = Channel(
       id: generated.id,
       number: 42,
@@ -519,7 +609,7 @@ void main() {
       source: const ManualSource([]),
       playbackMode: PlaybackMode.sequential,
       anchor: DateTime.utc(2025),
-      shuffleSeed: generated.shuffleSeed,
+      shuffleSeed: staleShuffleSeed,
       builderKey: generated.builderKey,
     );
     final changed = materializeChannelPlan(
@@ -534,11 +624,12 @@ void main() {
     expect(changed, isNot(same(stale)));
     expect(changed.id, stale.id);
     expect(changed.number, 42);
-    expect(changed.name, 'Series');
+    expect(changed.name, 'Old name');
     expect(changed.source.toJson(), proposal.source.toJson());
     expect(changed.playbackMode, PlaybackMode.block);
     expect(changed.blockSize, 5);
-    expect(changed.anchor, DateTime.utc(2027));
+    expect(changed.anchor, DateTime.utc(2025));
+    expect(changed.shuffleSeed, staleShuffleSeed);
     expect(changed.builderKey, stale.builderKey);
   });
 }

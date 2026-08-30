@@ -94,7 +94,12 @@ class ScheduleWorker {
       if (completer == null) return;
       final schedule = values[1] as ScheduleIndex?;
       if (schedule == null) {
-        completer.completeError(FormatException(values[2] as String));
+        final reason = values[2] as ScheduleFailureReason?;
+        completer.completeError(
+          reason == null
+              ? StateError('Schedule worker could not build the schedule')
+              : ScheduleBuildException(reason),
+        );
       } else {
         completer.complete(schedule);
       }
@@ -153,8 +158,12 @@ class ScheduleWorker {
           ),
           null,
         ]);
-      } catch (error) {
-        output.send([id, null, error.toString()]);
+      } on ScheduleBuildException catch (error) {
+        output.send([id, null, error.reason]);
+      } on FormatException {
+        output.send([id, null, ScheduleFailureReason.unsupportedSource]);
+      } catch (_) {
+        output.send([id, null, null]);
       }
     });
   }

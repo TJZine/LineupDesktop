@@ -25,14 +25,22 @@ typedef _PlanImpact = ({
   int unchanged,
   int remove,
   int finalCount,
+  int customKept,
 });
 
 class UpstreamChannelSetupView extends StatefulWidget {
-  const UpstreamChannelSetupView({required this.controller, super.key});
+  const UpstreamChannelSetupView({
+    required this.controller,
+    this.onViewLineup,
+    this.onAddCustomChannel,
+    super.key,
+  });
 
   static const maxContentWidth = 1440.0;
 
   final LineupController controller;
+  final VoidCallback? onViewLineup;
+  final VoidCallback? onAddCustomChannel;
 
   @override
   State<UpstreamChannelSetupView> createState() =>
@@ -87,57 +95,95 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
       .where((library) => _selectedLibraries.contains(library.id))
       .toList();
 
-  List<ChannelProposal> get _proposals => buildChannelProposals(
-    libraries: _libraries,
-    items: widget.controller.availableMedia,
-    playlists: widget.controller.availablePlaylists,
-    strategies: _strategies,
-    strategyOrder: _strategyOrder,
-    crossLibraryStrategies: _crossLibraryStrategies,
-    minimumItems: _minimumItems,
-    maximumChannels: _maximumChannels + 1,
-  );
+  ({List<ChannelProposal> proposals, int itemCount}) get _proposalSnapshot {
+    final inventory = widget.controller.playableInventory;
+    return (
+      proposals: buildChannelProposals(
+        libraries: _libraries,
+        items: inventory.media,
+        playlists: inventory.playlists,
+        strategies: _strategies,
+        strategyOrder: _strategyOrder,
+        crossLibraryStrategies: _crossLibraryStrategies,
+        minimumItems: _minimumItems,
+        maximumChannels: _maximumChannels + 1,
+      ),
+      itemCount: inventory.byId.length,
+    );
+  }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    body: DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: RadialGradient(
-          center: Alignment(-0.65, -0.75),
-          radius: 1.35,
-          colors: [
-            LineupTheme.of(context).progressFill.withValues(alpha: 0.07),
-            LineupTheme.of(context).deepBackground,
-          ],
+  Widget build(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    final compact = size.width < 900 || size.height < 700;
+    return Scaffold(
+      body: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: RadialGradient(
+            center: Alignment(-0.65, -0.75),
+            radius: 1.35,
+            colors: [
+              LineupTheme.of(context).progressFill.withValues(alpha: 0.07),
+              LineupTheme.of(context).deepBackground,
+            ],
+          ),
         ),
-      ),
-      child: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            key: const ValueKey('channel-setup-content'),
-            constraints: const BoxConstraints(
-              maxWidth: UpstreamChannelSetupView.maxContentWidth,
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(28),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _header(),
-                  if (_error != null && _buildPhase != _BuildPhase.failed)
-                    _errorBanner(),
-                  const SizedBox(height: 16),
-                  Expanded(child: _body()),
-                ],
+        child: SafeArea(
+          child: Center(
+            child: ConstrainedBox(
+              key: const ValueKey('channel-setup-content'),
+              constraints: const BoxConstraints(
+                maxWidth: UpstreamChannelSetupView.maxContentWidth,
+              ),
+              child: Padding(
+                padding: EdgeInsets.all(compact ? 16 : 28),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _header(),
+                    const SizedBox(height: 18),
+                    Expanded(
+                      child: Material(
+                        key: const ValueKey('channel-setup-shell'),
+                        color: LineupTheme.of(context).primarySurface,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(
+                            LineupTheme.of(context).panelRadius,
+                          ),
+                          side: BorderSide(
+                            color: LineupTheme.of(context).defaultBorder,
+                          ),
+                        ),
+                        child: Padding(
+                          key: const ValueKey('channel-setup-stage'),
+                          padding: EdgeInsets.all(compact ? 18 : 26),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              if (_error != null &&
+                                  _buildPhase != _BuildPhase.failed)
+                                _errorBanner(),
+                              if (_error != null &&
+                                  _buildPhase != _BuildPhase.failed)
+                                const SizedBox(height: 18),
+                              Expanded(child: _body()),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
         ),
       ),
-    ),
-  );
+    );
+  }
 
   Widget _header() => LayoutBuilder(
+    key: const ValueKey('channel-setup-header'),
     builder: (context, constraints) {
       final title = Row(
         children: [
@@ -246,10 +292,12 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
       ),
     ),
     child: widget.controller.libraries.isEmpty
-        ? const LineupEmptyState(
-            icon: Icons.video_library_outlined,
-            title: 'No movie or show libraries found',
-            message: 'Choose another Plex server with accessible movie or show libraries.',
+        ? const SingleChildScrollView(
+            child: LineupEmptyState(
+              icon: Icons.video_library_outlined,
+              title: 'No movie or show libraries found',
+              message: 'Choose another Plex server with accessible movie or show libraries.',
+            ),
           )
         : LayoutBuilder(
             builder: (context, constraints) => CustomScrollView(
@@ -490,7 +538,11 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
     }
   }
 
-  Widget _strategyStep() => _SetupSurface(
+  Widget _strategyStep() => _strategyStepFor(_proposalSnapshot);
+
+  Widget _strategyStepFor(
+    ({List<ChannelProposal> proposals, int itemCount}) proposalSnapshot,
+  ) => _SetupSurface(
     title: 'Configure the lineup',
     subtitle: 'Choose source families, ordering and limits. Estimates update from loaded Plex metadata.',
     footer: _SetupFooter(
@@ -501,7 +553,7 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
         ),
       ],
       primary: FilledButton.icon(
-        onPressed: _proposals.isEmpty ? null : _prepareReview,
+        onPressed: proposalSnapshot.proposals.isEmpty ? null : _prepareReview,
         icon: const Icon(Icons.preview_outlined),
         label: Text(
           widget.controller.channels.isEmpty ? 'Build Channels' : 'Review',
@@ -523,7 +575,7 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
                 child: details,
               ),
               const SizedBox(height: 12),
-              _previewStrip(),
+              _previewStrip(proposalSnapshot),
             ],
           );
         }
@@ -540,7 +592,7 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
               ),
             ),
             const SizedBox(height: 12),
-            _previewStrip(),
+            _previewStrip(proposalSnapshot),
           ],
         );
       },
@@ -560,15 +612,19 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
           ),
         ),
     ];
-    return compact
-        ? SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(children: children),
-          )
-        : ListView(children: children);
+    return KeyedSubtree(
+      key: const ValueKey('channel-setup-strategy-rail'),
+      child: compact
+          ? SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(children: children),
+            )
+          : ListView(children: children),
+    );
   }
 
   Widget _categoryDetails() => Card(
+    key: const ValueKey('channel-setup-strategy-details'),
     child: Padding(
       padding: const EdgeInsets.all(22),
       child: ListView(children: _detailControls()),
@@ -818,12 +874,14 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
     _strategyOrder.insert(index + delta, strategy);
   });
 
-  Widget _previewStrip() {
-    final proposals = _proposals;
+  Widget _previewStrip(
+    ({List<ChannelProposal> proposals, int itemCount}) proposalSnapshot,
+  ) {
+    final proposals = proposalSnapshot.proposals;
     final displayed = proposals.take(_maximumChannels).toList();
     final summary = displayed.isEmpty
         ? 'No channel ideas meet the current minimum. Adjust sources or limits.'
-        : '${displayed.length} channel ideas from ${widget.controller.availableMedia.length} loaded programs.';
+        : '${displayed.length} channel ideas from ${proposalSnapshot.itemCount} playable programs.';
     final statuses = [
       for (final strategy in _strategyOrder)
         '${builderStrategyLabels[strategy]}: ${_strategyStatus(strategy, displayed)}',
@@ -929,12 +987,21 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
           primary: const SizedBox.shrink(),
         ),
         _BuildPhase.complete => _SetupFooter(
-          secondary: const [],
+          secondary: [
+            OutlinedButton.icon(
+              onPressed:
+                  widget.onAddCustomChannel ??
+                  widget.controller.completeChannelSetup,
+              icon: const Icon(Icons.add),
+              label: const Text('Add a custom channel'),
+            ),
+          ],
           primary: FilledButton.icon(
             focusNode: _phaseActionFocus,
-            onPressed: widget.controller.completeChannelSetup,
+            onPressed:
+                widget.onViewLineup ?? widget.controller.completeChannelSetup,
             icon: const Icon(Icons.arrow_forward),
-            label: const Text('Done'),
+            label: const Text('View lineup'),
           ),
         ),
         _BuildPhase.review => _SetupFooter(
@@ -969,63 +1036,17 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
                   ),
                   const SizedBox(height: 14),
                 ],
-                Row(
-                  children: [
-                    Text(
-                      '${widget.controller.channels.length}',
-                      style: Theme.of(context).textTheme.headlineMedium
-                          ?.copyWith(fontWeight: FontWeight.w800),
-                    ),
-                    const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 10),
-                      child: Icon(Icons.arrow_forward),
-                    ),
-                    Text(
-                      '${impact.finalCount} channels',
-                      style: Theme.of(context).textTheme.headlineMedium
-                          ?.copyWith(fontWeight: FontWeight.w800),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 14),
-                Wrap(
-                  spacing: 14,
-                  runSpacing: 14,
-                  children: [
-                    _ImpactCard(
-                      label: 'Create',
-                      value: impact.create,
-                      icon: Icons.add_circle_outline,
-                    ),
-                    _ImpactCard(
-                      label: 'Update',
-                      value: impact.update,
-                      icon: Icons.edit_outlined,
-                    ),
-                    _ImpactCard(
-                      label: 'Unchanged',
-                      value: impact.unchanged,
-                      icon: Icons.check_circle_outline,
-                    ),
-                    _ImpactCard(
-                      label: 'Remove',
-                      value: impact.remove,
-                      icon: Icons.remove_circle_outline,
-                    ),
-                    _ImpactCard(
-                      label: 'Final',
-                      value: impact.finalCount,
-                      icon: Icons.live_tv_outlined,
-                    ),
-                  ],
+                _ImpactHero(
+                  currentCount: widget.controller.channels.length,
+                  impact: impact,
                 ),
                 const SizedBox(height: 22),
                 if (_mode == ChannelBuildMode.replace)
                   CheckboxListTile(
                     value: _replaceConfirmed,
-                    title: const Text('This will replace your current lineup'),
-                    subtitle: const Text(
-                      'Existing channels are removed only after this confirmation.',
+                    title: Text('Remove ${impact.remove} generated channels'),
+                    subtitle: Text(
+                      '${impact.customKept} custom ${impact.customKept == 1 ? 'channel' : 'channels'} will remain unchanged.',
                     ),
                     onChanged: (value) =>
                         setState(() => _replaceConfirmed = value == true),
@@ -1052,9 +1073,10 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
   }
 
   void _prepareReview() {
+    final proposalSnapshot = _proposalSnapshot;
     setState(() {
       _planned = materializeChannelPlan(
-        proposals: _proposals,
+        proposals: proposalSnapshot.proposals,
         existing: widget.controller.channels,
         mode: _mode,
         seriesMode: _seriesOrdering,
@@ -1074,13 +1096,17 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
 
   _PlanImpact _planImpact(List<Channel> planned) {
     final existing = widget.controller.channels;
+    final customCount = existing
+        .where((channel) => channel.builderKey == null)
+        .length;
     return switch (_mode) {
       ChannelBuildMode.replace => (
         create: planned.length,
         update: 0,
-        unchanged: 0,
-        remove: existing.length,
-        finalCount: planned.length,
+        unchanged: customCount,
+        remove: existing.length - customCount,
+        finalCount: customCount + planned.length,
+        customKept: customCount,
       ),
       ChannelBuildMode.append => (
         create: planned.length,
@@ -1088,6 +1114,7 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
         unchanged: existing.length,
         remove: 0,
         finalCount: existing.length + planned.length,
+        customKept: customCount,
       ),
       ChannelBuildMode.merge => () {
         var create = 0;
@@ -1124,6 +1151,7 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
           unchanged: unchanged,
           remove: 0,
           finalCount: existing.length + create,
+          customKept: customCount,
         );
       }(),
     };
@@ -1170,16 +1198,18 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
   };
 
   static String _modeLabel(ChannelBuildMode mode) => switch (mode) {
-    ChannelBuildMode.replace => 'Replace lineup',
-    ChannelBuildMode.append => 'Append channels',
-    ChannelBuildMode.merge => 'Merge with lineup',
+    ChannelBuildMode.replace => 'Replace generated channels',
+    ChannelBuildMode.append => 'Add generated channels',
+    ChannelBuildMode.merge => 'Refresh generated channels',
   };
 
   static String _modeDescription(ChannelBuildMode mode) => switch (mode) {
-    ChannelBuildMode.replace => 'Build only the newly planned channels.',
-    ChannelBuildMode.append => 'Keep existing channels and use free numbers.',
+    ChannelBuildMode.replace =>
+      'Keep custom channels and replace only generated channels.',
+    ChannelBuildMode.append =>
+      'Keep all channels and add generated channels at free numbers.',
     ChannelBuildMode.merge =>
-      'Update matching generated channels and keep the rest.',
+      'Refresh matching generated channels and keep all others.',
   };
 }
 
@@ -1195,30 +1225,20 @@ class _SetupSurface extends StatelessWidget {
   final Widget child;
   final Widget footer;
   @override
-  Widget build(BuildContext context) => Material(
-    color: LineupTheme.of(context).primarySurface,
-    shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(LineupTheme.of(context).panelRadius),
-      side: BorderSide(color: LineupTheme.of(context).defaultBorder),
-    ),
-    child: Padding(
-      padding: const EdgeInsets.all(26),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(title, style: Theme.of(context).textTheme.headlineSmall),
-          const SizedBox(height: 5),
-          Text(
-            subtitle,
-            style: TextStyle(color: LineupTheme.of(context).secondaryText),
-          ),
-          const SizedBox(height: 20),
-          Expanded(child: child),
-          const SizedBox(height: 18),
-          footer,
-        ],
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Text(title, style: Theme.of(context).textTheme.headlineSmall),
+      const SizedBox(height: 5),
+      Text(
+        subtitle,
+        style: TextStyle(color: LineupTheme.of(context).secondaryText),
       ),
-    ),
+      const SizedBox(height: 18),
+      Expanded(child: child),
+      const SizedBox(height: 14),
+      footer,
+    ],
   );
 }
 
@@ -1228,31 +1248,41 @@ class _SetupFooter extends StatelessWidget {
   final Widget primary;
 
   @override
-  Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, constraints) {
-      final secondaryActions = Wrap(
-        spacing: 10,
-        runSpacing: 10,
-        children: secondary,
-      );
-      if (LineupLayout.isCompactWidth(constraints.maxWidth)) {
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            secondaryActions,
-            const SizedBox(height: 10),
-            Align(alignment: Alignment.centerRight, child: primary),
-          ],
-        );
-      }
-      return Row(
-        children: [
-          Expanded(child: secondaryActions),
-          const SizedBox(width: 16),
-          primary,
-        ],
-      );
-    },
+  Widget build(BuildContext context) => DecoratedBox(
+    decoration: BoxDecoration(
+      border: Border(
+        top: BorderSide(color: LineupTheme.of(context).subtleBorder),
+      ),
+    ),
+    child: Padding(
+      padding: const EdgeInsets.only(top: 14),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final secondaryActions = Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: secondary,
+          );
+          if (LineupLayout.isCompactWidth(constraints.maxWidth)) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                secondaryActions,
+                const SizedBox(height: 10),
+                Align(alignment: Alignment.centerRight, child: primary),
+              ],
+            );
+          }
+          return Row(
+            children: [
+              Expanded(child: secondaryActions),
+              const SizedBox(width: 16),
+              primary,
+            ],
+          );
+        },
+      ),
+    ),
   );
 }
 
@@ -1299,52 +1329,325 @@ class _RailButton extends StatelessWidget {
   );
 }
 
+class _ImpactCount extends StatelessWidget {
+  const _ImpactCount({
+    required this.value,
+    required this.label,
+    this.emphasized = false,
+  });
+
+  final int value;
+  final String label;
+  final bool emphasized;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min,
+    crossAxisAlignment: CrossAxisAlignment.end,
+    children: [
+      Text(
+        '$value',
+        style: Theme.of(context).textTheme.displaySmall?.copyWith(
+          color: emphasized ? LineupTheme.of(context).progressFill : null,
+          fontWeight: FontWeight.w800,
+          fontFeatures: const [FontFeature.tabularFigures()],
+          height: 1,
+        ),
+      ),
+      const SizedBox(width: 8),
+      Padding(
+        padding: const EdgeInsets.only(bottom: 3),
+        child: Text(
+          label,
+          style: TextStyle(color: LineupTheme.of(context).secondaryText),
+        ),
+      ),
+    ],
+  );
+}
+
+class _ImpactHero extends StatelessWidget {
+  const _ImpactHero({required this.currentCount, required this.impact});
+
+  final int currentCount;
+  final _PlanImpact impact;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = LineupTheme.of(context);
+    return Container(
+      key: const ValueKey('channel-setup-impact-hero'),
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+      decoration: BoxDecoration(
+        color: palette.selectedSurface.withValues(alpha: 0.28),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: palette.defaultBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'LINEUP TRANSFORMATION',
+            style: TextStyle(
+              color: palette.secondaryText,
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1.1,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: Semantics(
+                  container: true,
+                  label: 'Current: $currentCount',
+                  child: ExcludeSemantics(
+                    child: _ImpactCount(value: currentCount, label: 'current'),
+                  ),
+                ),
+              ),
+              Icon(Icons.arrow_forward, color: palette.mutedText),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Semantics(
+                  container: true,
+                  label: 'Final: ${impact.finalCount}',
+                  child: ExcludeSemantics(
+                    child: _ImpactCount(
+                      value: impact.finalCount,
+                      label: 'final channels',
+                      emphasized: true,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Channel composition',
+            style: Theme.of(context).textTheme.titleSmall
+                ?.copyWith(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 8),
+          _ImpactCompositionBar(impact: impact),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _ImpactLegendItem(
+                label: 'Create',
+                value: impact.create,
+                icon: Icons.add_circle_outline,
+                color: palette.progressFill,
+              ),
+              _ImpactLegendItem(
+                label: 'Update',
+                value: impact.update,
+                icon: Icons.edit_outlined,
+                color: palette.focusBorder,
+              ),
+              _ImpactLegendItem(
+                label: 'Unchanged',
+                value: impact.unchanged,
+                icon: Icons.check_circle_outline,
+                color: palette.tunedSurface,
+              ),
+              _ImpactLegendItem(
+                label: 'Generated removed',
+                value: impact.remove,
+                icon: Icons.remove_circle_outline,
+                color: Theme.of(context).colorScheme.error,
+              ),
+              _ImpactLegendItem(
+                label: 'Custom kept',
+                value: impact.customKept,
+                icon: Icons.lock_outline,
+                color: palette.secondaryText,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ImpactCompositionBar extends StatelessWidget {
+  const _ImpactCompositionBar({required this.impact});
+
+  final _PlanImpact impact;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = LineupTheme.of(context);
+    final segments = [
+      (label: 'Create', value: impact.create, color: palette.progressFill),
+      (label: 'Update', value: impact.update, color: palette.focusBorder),
+      (
+        label: 'Unchanged',
+        value: impact.unchanged,
+        color: palette.tunedSurface,
+      ),
+      (
+        label: 'Generated removed',
+        value: impact.remove,
+        color: Theme.of(context).colorScheme.error,
+      ),
+    ];
+    final total = segments.fold<int>(0, (sum, segment) => sum + segment.value);
+    return Semantics(
+      container: true,
+      label:
+          'Channel composition. ${segments.map((segment) => '${segment.label}: ${segment.value}').join(', ')}.',
+      child: ExcludeSemantics(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            if (total == 0 || constraints.maxWidth <= 0) {
+              return Container(
+                key: const ValueKey('channel-setup-impact-bar'),
+                height: 26,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: palette.progressTrack,
+                  borderRadius: BorderRadius.circular(7),
+                ),
+                child: Text(
+                  'No planned changes',
+                  style: TextStyle(
+                    color: palette.mutedText,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              );
+            }
+            final positive = segments
+                .where((segment) => segment.value > 0)
+                .length;
+            // Keep a nonzero segment visible without letting the floor exceed
+            // the available strip at narrow widths.
+            final minimum = (constraints.maxWidth / positive).clamp(0.0, 18.0);
+            final remainder = constraints.maxWidth - minimum * positive;
+            return ClipRRect(
+              key: const ValueKey('channel-setup-impact-bar'),
+              borderRadius: BorderRadius.circular(7),
+              child: ColoredBox(
+                color: palette.progressTrack,
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 26,
+                  child: Row(
+                    children: [
+                      for (final segment in segments)
+                        SizedBox(
+                          key: ValueKey(
+                            'channel-setup-impact-${segment.label.toLowerCase()}',
+                          ),
+                          width: segment.value == 0
+                              ? 0
+                              : minimum + remainder * segment.value / total,
+                          child: Container(color: segment.color),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class _ImpactLegendItem extends StatelessWidget {
+  const _ImpactLegendItem({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.color,
+  });
+
+  final String label;
+  final int value;
+  final IconData icon;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    container: true,
+    label: '$label: $value',
+    child: ExcludeSemantics(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        decoration: BoxDecoration(
+          color: LineupTheme.of(context).elevatedSurface,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: LineupTheme.of(context).subtleBorder),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 16, color: color),
+            const SizedBox(width: 6),
+            Text(
+              '$label: $value',
+              style: const TextStyle(
+                fontWeight: FontWeight.w700,
+                fontFeatures: [FontFeature.tabularFigures()],
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
 class _ImpactCard extends StatelessWidget {
   const _ImpactCard({
     required this.label,
     required this.value,
     required this.icon,
   });
+
   final String label;
   final int value;
   final IconData icon;
+
   @override
   Widget build(BuildContext context) => Semantics(
     container: true,
     label: '$label: $value',
     child: ExcludeSemantics(
-      child: SizedBox(
-        width: 190,
-        child: Card(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Row(
-              children: [
-                Icon(icon, size: 32),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '$value',
-                        style: Theme.of(context).textTheme.headlineMedium
-                            ?.copyWith(fontWeight: FontWeight.w800),
-                      ),
-                      Text(
-                        label,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: LineupTheme.of(context).secondaryText,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: LineupTheme.of(context).selectedSurface.withValues(alpha: 0.3),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: LineupTheme.of(context).subtleBorder),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 17, color: LineupTheme.of(context).secondaryText),
+            const SizedBox(width: 7),
+            Text(
+              '$value',
+              style: const TextStyle(
+                fontWeight: FontWeight.w800,
+                fontFeatures: [FontFeature.tabularFigures()],
+              ),
             ),
-          ),
+            const SizedBox(width: 5),
+            Text(
+              label,
+              style: TextStyle(color: LineupTheme.of(context).secondaryText),
+            ),
+          ],
         ),
       ),
     ),
@@ -1371,85 +1674,122 @@ class _BuildProgress extends StatelessWidget {
       _BuildPhase.complete => 'Channel update complete',
       _BuildPhase.review => null,
     },
-    child: ListView(
-      children: [
-        Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 620),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                LinearProgressIndicator(
-                  value: switch (phase) {
-                    _BuildPhase.applying => null,
-                    _BuildPhase.failed => 0,
-                    _BuildPhase.complete => 1,
-                    _BuildPhase.review => 0,
-                  },
-                ),
-                const SizedBox(height: 24),
-                Text(
-                  switch (phase) {
-                    _BuildPhase.applying => 'Applying channels…',
-                    _BuildPhase.failed => 'No changes were saved',
-                    _BuildPhase.complete => 'Channel setup complete',
-                    _BuildPhase.review => '',
-                  },
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w700,
+    child: LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: constraints.maxHeight),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 640),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    switch (phase) {
+                      _BuildPhase.applying => Icons.auto_awesome,
+                      _BuildPhase.failed => Icons.error_outline,
+                      _BuildPhase.complete => Icons.check_circle_outline,
+                      _BuildPhase.review => Icons.live_tv_outlined,
+                    },
+                    size: 42,
+                    color: phase == _BuildPhase.failed
+                        ? Theme.of(context).colorScheme.error
+                        : LineupTheme.of(context).progressFill,
                   ),
-                ),
-                const SizedBox(height: 8),
-                Text(switch (phase) {
-                  _BuildPhase.applying => 'The lineup is being committed atomically. This step cannot be cancelled.',
-                  _BuildPhase.failed =>
-                    error ?? 'The channel plan could not be applied.',
-                  _BuildPhase.complete =>
-                    'The atomic lineup update completed successfully.',
-                  _BuildPhase.review => '',
-                }, textAlign: TextAlign.center),
-              ],
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: 420,
+                    child: LinearProgressIndicator(
+                      value: switch (phase) {
+                        _BuildPhase.applying => null,
+                        _BuildPhase.failed => 0,
+                        _BuildPhase.complete => 1,
+                        _BuildPhase.review => 0,
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  Text(
+                    switch (phase) {
+                      _BuildPhase.applying => 'Applying channels…',
+                      _BuildPhase.failed => 'No changes were saved',
+                      _BuildPhase.complete => 'Channel setup complete',
+                      _BuildPhase.review => '',
+                    },
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 7),
+                  Text(
+                    switch (phase) {
+                      _BuildPhase.applying => 'The lineup is being committed atomically. This step cannot be cancelled.',
+                      _BuildPhase.failed =>
+                        error ?? 'The channel plan could not be applied.',
+                      _BuildPhase.complete =>
+                        'The atomic lineup update completed successfully.',
+                      _BuildPhase.review => '',
+                    },
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: LineupTheme.of(context).secondaryText,
+                    ),
+                  ),
+                  if (phase == _BuildPhase.complete) ...[
+                    const SizedBox(height: 18),
+                    Semantics(
+                      container: true,
+                      label: 'Final: ${impact.finalCount}',
+                      child: ExcludeSemantics(
+                        child: _ImpactCount(
+                          value: impact.finalCount,
+                          label: 'channels ready',
+                          emphasized: true,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    Wrap(
+                      alignment: WrapAlignment.center,
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: [
+                        _ImpactCard(
+                          label: 'Create',
+                          value: impact.create,
+                          icon: Icons.add_circle_outline,
+                        ),
+                        _ImpactCard(
+                          label: 'Update',
+                          value: impact.update,
+                          icon: Icons.edit_outlined,
+                        ),
+                        _ImpactCard(
+                          label: 'Unchanged',
+                          value: impact.unchanged,
+                          icon: Icons.check_circle_outline,
+                        ),
+                        _ImpactCard(
+                          label: 'Generated removed',
+                          value: impact.remove,
+                          icon: Icons.remove_circle_outline,
+                        ),
+                        _ImpactCard(
+                          label: 'Custom kept',
+                          value: impact.customKept,
+                          icon: Icons.lock_outline,
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
             ),
           ),
         ),
-        if (phase == _BuildPhase.complete) ...[
-          const SizedBox(height: 28),
-          Wrap(
-            alignment: WrapAlignment.center,
-            spacing: 14,
-            runSpacing: 14,
-            children: [
-              _ImpactCard(
-                label: 'Create',
-                value: impact.create,
-                icon: Icons.add_circle_outline,
-              ),
-              _ImpactCard(
-                label: 'Update',
-                value: impact.update,
-                icon: Icons.edit_outlined,
-              ),
-              _ImpactCard(
-                label: 'Unchanged',
-                value: impact.unchanged,
-                icon: Icons.check_circle_outline,
-              ),
-              _ImpactCard(
-                label: 'Remove',
-                value: impact.remove,
-                icon: Icons.remove_circle_outline,
-              ),
-              _ImpactCard(
-                label: 'Final',
-                value: impact.finalCount,
-                icon: Icons.live_tv_outlined,
-              ),
-            ],
-          ),
-        ],
-      ],
+      ),
     ),
   );
 }

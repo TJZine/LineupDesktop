@@ -42,6 +42,13 @@ void main() {
           .excluding,
       isTrue,
     );
+    await tester.tap(find.text('Guide').last);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('immersive-app-menu')), findsNothing);
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Guide');
+
+    await tester.tap(find.byKey(const Key('guide-app-menu')));
+    await tester.pumpAndSettle();
     for (var index = 0; index < 12; index++) {
       await tester.sendKeyEvent(LogicalKeyboardKey.tab);
       await tester.pump();
@@ -82,7 +89,7 @@ void main() {
         expect(
           tester
               .widget<OutlinedButton>(
-                find.widgetWithText(OutlinedButton, 'Channel builder'),
+                find.widgetWithText(OutlinedButton, 'Generate lineup'),
               )
               .focusNode
               ?.hasFocus,
@@ -123,7 +130,7 @@ void main() {
       await tester.pumpAndSettle();
 
       await openDestination(tester, 'Channels');
-      expect(find.text('Open Channel builder'), findsOneWidget);
+      expect(find.text('Generate lineup'), findsWidgets);
       expect(tester.takeException(), isNull, reason: 'Channels at $size');
       if (size.width >= 2560) {
         expect(
@@ -203,6 +210,35 @@ void main() {
     expect(
       tester.getSize(find.byKey(const ValueKey('channel-setup-content'))).width,
       UpstreamChannelSetupView.maxContentWidth,
+    );
+    final setupContent = tester.getRect(
+      find.byKey(const ValueKey('channel-setup-content')),
+    );
+    final setupShell = tester.getRect(
+      find.byKey(const ValueKey('channel-setup-shell')),
+    );
+    expect(setupShell.width, setupContent.width - 56);
+    expect(setupShell.center.dx, setupContent.center.dx);
+    expect(setupShell.left, greaterThan(0));
+    expect(tester.takeException(), isNull);
+
+    tester.view
+      ..devicePixelRatio = 2
+      ..physicalSize = const Size(3840, 2160);
+    await tester.pumpWidget(
+      MaterialApp(home: UpstreamChannelSetupView(controller: controller)),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      MediaQuery.sizeOf(tester.element(find.text('Channel Setup'))),
+      const Size(1920, 1080),
+    );
+    expect(
+      tester
+          .getRect(find.byKey(const ValueKey('channel-setup-shell')))
+          .center
+          .dx,
+      960,
     );
     expect(tester.takeException(), isNull);
   });
@@ -303,7 +339,7 @@ void main() {
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
     await openDestination(tester, 'Channels');
-    await tester.tap(find.text('Create channel'));
+    await tester.tap(find.text('New channel'));
     await tester.pumpAndSettle();
 
     await tester.enterText(find.byType(TextFormField).first, '');
@@ -329,9 +365,9 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.digit1);
     await tester.sendKeyEvent(LogicalKeyboardKey.digit2);
     await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
-    await tester.sendKeyEvent(LogicalKeyboardKey.digit3);
-    await tester.sendKeyEvent(LogicalKeyboardKey.digit4);
-    await tester.sendKeyEvent(LogicalKeyboardKey.digit5);
+    await tester.sendKeyEvent(LogicalKeyboardKey.numpad3);
+    await tester.sendKeyEvent(LogicalKeyboardKey.numpad4);
+    await tester.sendKeyEvent(LogicalKeyboardKey.numpad5);
     await tester.pumpAndSettle();
     expect(controller.pin, '1345');
   });
@@ -348,6 +384,8 @@ void main() {
 
     for (final size in [
       const Size(800, 600),
+      const Size(1280, 720),
+      const Size(1600, 900),
       const Size(1920, 1080),
       const Size(3840, 2160),
     ]) {
@@ -362,6 +400,36 @@ void main() {
       );
       expect(sheet.width, lessThanOrEqualTo(520));
       expect(sheet.bottom, size.height);
+      final digitButton = tester.widget<FilledButton>(
+        find
+            .descendant(
+              of: find.byKey(const Key('profile-pin-surface')),
+              matching: find.byType(FilledButton),
+            )
+            .first,
+      );
+      final background = digitButton.style?.backgroundColor;
+      expect(
+        background?.resolve(const {}),
+        isNot(background?.resolve(const {WidgetState.pressed})),
+      );
+      expect(
+        tester
+            .getSize(
+              find
+                  .descendant(
+                    of: find.byKey(const Key('profile-pin-surface')),
+                    matching: find.byType(FilledButton),
+                  )
+                  .first,
+            )
+            .shortestSide,
+        greaterThanOrEqualTo(72),
+      );
+      expect(find.byTooltip('Backspace'), findsOneWidget);
+      expect(find.byTooltip('Cancel'), findsOneWidget);
+      expect(find.bySemanticsLabel('Backspace'), findsOneWidget);
+      expect(find.bySemanticsLabel('Cancel'), findsOneWidget);
       expect(tester.takeException(), isNull, reason: 'PIN viewport $size');
       await tester.tap(find.byTooltip('Cancel'));
       await tester.pumpAndSettle();
@@ -408,16 +476,59 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
     for (final size in [
       const Size(800, 600),
+      const Size(1280, 720),
+      const Size(1600, 900),
       const Size(1920, 1080),
       const Size(3840, 2160),
     ]) {
       await tester.binding.setSurfaceSize(size);
       await tester.pumpWidget(fixture.build());
       await tester.pumpAndSettle();
+      final cards = find.byType(LineupSelectionCard);
+      expect(cards, findsNWidgets(9));
+      final cardElements = cards.evaluate();
+      expect(
+        cardElements.map(
+          (element) => (element.renderObject! as RenderBox).size.width,
+        ),
+        everyElement(140),
+      );
+      final tops = cardElements
+          .map(
+            (element) => (element.renderObject! as RenderBox)
+                .localToGlobal(Offset.zero)
+                .dy,
+          )
+          .toList();
+      expect(
+        tops.where((top) => (top - tops.first).abs() < 1),
+        hasLength(size.width == 800 ? 4 : 7),
+      );
       expect(find.text('Active'), findsOneWidget);
       expect(find.text('Parents'), findsOneWidget);
       expect(tester.takeException(), isNull, reason: 'viewport $size');
     }
+
+    await tester.binding.setSurfaceSize(null);
+    tester.view
+      ..devicePixelRatio = 2
+      ..physicalSize = const Size(3840, 2160);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    await tester.pumpWidget(fixture.build());
+    await tester.pumpAndSettle();
+    expect(
+      MediaQuery.sizeOf(tester.element(find.text("Who's watching?"))),
+      const Size(1920, 1080),
+    );
+    expect(find.byType(LineupSelectionCard), findsNWidgets(9));
+    expect(tester.takeException(), isNull, reason: 'physical 4K at DPR2');
+
+    controller.profiles = controller.profiles.take(8).toList();
+    await tester.pumpWidget(fixture.build());
+    await tester.pumpAndSettle();
+    expect(find.byType(LineupSelectionCard), findsNWidgets(8));
+    expect(tester.takeException(), isNull, reason: 'eight-profile population');
   });
 
   testWidgets('server hierarchy stays reachable across desktop sizes', (
@@ -515,7 +626,14 @@ void main() {
       MaterialApp(home: UpstreamChannelSetupView(controller: controller)),
     );
     await tester.pumpAndSettle();
+    final shell = tester.getRect(
+      find.byKey(const ValueKey('channel-setup-shell')),
+    );
     expect(find.text('Configure channels'), findsOneWidget);
+    expect(shell.left, greaterThan(0));
+    expect(shell.right, lessThan(800));
+    expect(shell.top, greaterThan(0));
+    expect(shell.bottom, lessThan(600));
     expect(tester.takeException(), isNull);
   });
 
@@ -537,7 +655,12 @@ void main() {
     await tester.pumpAndSettle();
 
     final action = find.widgetWithText(FilledButton, 'Configure channels');
+    final shell = tester.getRect(
+      find.byKey(const ValueKey('channel-setup-shell')),
+    );
     expect(action, findsOneWidget);
+    expect(shell.width, lessThan(1920));
+    expect(shell.center.dx, 960);
     expect(tester.getBottomRight(action).dy, lessThanOrEqualTo(1080));
     expect(tester.takeException(), isNull);
   });
@@ -600,7 +723,8 @@ void main() {
       ..stage = SetupStage.channelSetup
       ..libraries = const [
         PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
-      ];
+      ]
+      ..channels = [_channel()];
     addTearDown(controller.dispose);
     await tester.pumpWidget(
       MaterialApp(home: UpstreamChannelSetupView(controller: controller)),
@@ -625,15 +749,27 @@ void main() {
       findsOneWidget,
     );
 
-    await tester.tap(find.text('Build Channels'));
+    await tester.tap(find.text('Review'));
     await tester.pumpAndSettle();
     expect(find.text('Review expected changes'), findsOneWidget);
     expect(find.text('Confirm & Replace'), findsOneWidget);
     expect(find.bySemanticsLabel('Create: 2'), findsOneWidget);
     expect(find.bySemanticsLabel('Update: 0'), findsOneWidget);
-    expect(find.bySemanticsLabel('Unchanged: 0'), findsOneWidget);
-    expect(find.bySemanticsLabel('Remove: 0'), findsOneWidget);
-    expect(find.bySemanticsLabel('Final: 2'), findsOneWidget);
+    expect(find.bySemanticsLabel('Unchanged: 1'), findsOneWidget);
+    expect(find.bySemanticsLabel('Generated removed: 0'), findsOneWidget);
+    expect(find.bySemanticsLabel('Custom kept: 1'), findsOneWidget);
+    expect(find.bySemanticsLabel('Final: 3'), findsOneWidget);
+    expect(
+      find.bySemanticsLabel(
+        'Channel composition. Create: 2, Update: 0, Unchanged: 1, Generated removed: 0.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Remove 0 generated channels'), findsOneWidget);
+    expect(
+      find.text('1 custom channel will remain unchanged.'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('Channel Setup merge review matches the applied channel sets', (
@@ -687,7 +823,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Build Options'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Merge with lineup'));
+    await tester.tap(find.text('Refresh generated channels'));
     await tester.pump();
     await tester.tap(find.text('Review'));
     await tester.pumpAndSettle();
@@ -695,8 +831,21 @@ void main() {
     expect(find.bySemanticsLabel('Create: 0'), findsOneWidget);
     expect(find.bySemanticsLabel('Update: 1'), findsOneWidget);
     expect(find.bySemanticsLabel('Unchanged: 2'), findsOneWidget);
-    expect(find.bySemanticsLabel('Remove: 0'), findsOneWidget);
+    expect(find.bySemanticsLabel('Generated removed: 0'), findsOneWidget);
+    expect(find.bySemanticsLabel('Custom kept: 1'), findsOneWidget);
     expect(find.bySemanticsLabel('Final: 3'), findsOneWidget);
+    final updateSegment = tester.getRect(
+      find.byKey(const ValueKey('channel-setup-impact-update')),
+    );
+    final unchangedSegment = tester.getRect(
+      find.byKey(const ValueKey('channel-setup-impact-unchanged')),
+    );
+    expect(updateSegment.width, greaterThan(0));
+    expect(unchangedSegment.width, greaterThan(updateSegment.width));
+    expect(
+      find.bySemanticsLabel(RegExp('Channel composition.*Update: 1')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('Channel Setup exposes distinct scan states and actions', (

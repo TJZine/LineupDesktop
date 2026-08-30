@@ -78,7 +78,7 @@ the repository commands. The application currently targets macOS 12.0.
 dart format .
 dart format --output=none --set-exit-if-changed .
 flutter analyze
-flutter test
+TZ=America/New_York flutter test # canonical timezone for macOS goldens
 flutter run -d macos
 flutter build macos
 flutter build windows # run on Windows

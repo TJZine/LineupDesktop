@@ -148,6 +148,12 @@ class LineupController extends ChangeNotifier {
   List<PlexMediaItem>? _scheduleWorkerMedia;
   List<PlexPlaylist>? _scheduleWorkerPlaylists;
   ScheduleWorker? _scheduleWorker;
+  Uri? _playableEndpoint;
+  List<PlexMediaItem>? _playableSourceMedia;
+  List<PlexPlaylist>? _playableSourcePlaylists;
+  List<PlexMediaItem> _playableMedia = const [];
+  List<PlexPlaylist> _playablePlaylists = const [];
+  Map<String, PlexMediaItem> _playableById = const {};
   final ScheduleWorkerFactory _scheduleWorkerFactory;
   Future<void> _credentialOperations = Future.value();
   Future<void> _stateOperations = Future.value();
@@ -158,6 +164,21 @@ class LineupController extends ChangeNotifier {
   String? startupRecoveryNotice;
 
   int get contentGeneration => _contentGeneration;
+
+  ({
+    List<PlexMediaItem> media,
+    List<PlexPlaylist> playlists,
+    Map<String, PlexMediaItem> byId,
+  })
+  get playableInventory {
+    _ensurePlayableInventory();
+    return (
+      media: _playableMedia,
+      playlists: _playablePlaylists,
+      byId: _playableById,
+    );
+  }
+
   Map<String, LibraryScanFact> get libraryScanFacts => _libraryScanFacts;
 
   Future<void> initialize() async {
@@ -1018,22 +1039,33 @@ class LineupController extends ChangeNotifier {
       final oldCurrentIndex = oldChannels.indexWhere(
         (channel) => channel.id == oldCurrent,
       );
+      if (planned.any((channel) => channel.builderKey == null)) {
+        throw const FormatException(
+          'Generated channel plans require builder ownership',
+        );
+      }
       final next = switch (mode) {
-        ChannelBuildMode.replace => [...planned],
+        ChannelBuildMode.replace => [
+          ...channels.where((channel) => channel.builderKey == null),
+          ...planned,
+        ],
         ChannelBuildMode.append => [...channels, ...planned],
         ChannelBuildMode.merge => [
           ...channels.where(
-            (existing) => !planned.any(
-              (candidate) =>
-                  candidate.builderKey != null &&
-                  candidate.builderKey == existing.builderKey,
-            ),
+            (existing) =>
+                existing.builderKey == null ||
+                !planned.any(
+                  (candidate) => candidate.builderKey == existing.builderKey,
+                ),
           ),
           ...planned,
         ],
       }..sort((a, b) => a.number.compareTo(b.number));
       for (final channel in next) {
         channel.validate(next);
+      }
+      for (final channel in planned) {
+        _validateResolvedSource(channel.source, requirePlayableManual: true);
       }
       channels = List.unmodifiable(next);
       currentChannelId = channels.any((channel) => channel.id == oldCurrent)
@@ -1061,10 +1093,28 @@ class LineupController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> saveChannel(Channel channel) async {
+  Future<void> saveChannel(
+    Channel channel, {
+    required Channel? expectedBase,
+  }) async {
     final operation = _epoch;
     await _queueStateOperation(operation, () async {
+      final current = channels
+          .where((candidate) => candidate.id == channel.id)
+          .firstOrNull;
+      if (expectedBase == null) {
+        if (current != null) {
+          throw const FormatException('Channel already exists');
+        }
+      } else if (current == null ||
+          !canonicalChannelValueEquals(
+            current.toJson(),
+            expectedBase.toJson(),
+          )) {
+        throw const FormatException('Channel has changed');
+      }
       channel.validate(channels);
+      _validateResolvedSource(channel.source);
       final next = [...channels];
       final index = next.indexWhere((candidate) => candidate.id == channel.id);
       if (index < 0) {
@@ -1090,27 +1140,65 @@ class LineupController extends ChangeNotifier {
     });
   }
 
-  ScheduleIndex scheduleFor(Channel channel) => buildSchedule(
-    resolveContent(channel.source, availableMedia, availablePlaylists),
-    mode: channel.playbackMode,
-    seed: channel.shuffleSeed,
-    blockSize: channel.blockSize ?? 3,
-  );
+  void _validateResolvedSource(
+    ContentSource source, {
+    bool requirePlayableManual = false,
+  }) {
+    _ensurePlayableInventory();
+    switch (source) {
+      case LibrarySource():
+      case PlaylistSource():
+        if (resolveContent(
+          source,
+          _playableMedia,
+          _playablePlaylists,
+        ).isEmpty) {
+          throw const FormatException('Channel source has no playable content');
+        }
+      case ManualSource():
+        if (requirePlayableManual &&
+            resolveContent(
+              source,
+              _playableMedia,
+              _playablePlaylists,
+            ).isEmpty) {
+          throw const FormatException('Channel source has no playable content');
+        }
+      case MixedSource(:final sources):
+        for (final child in sources) {
+          _validateResolvedSource(
+            child,
+            requirePlayableManual: requirePlayableManual,
+          );
+        }
+    }
+  }
+
+  ScheduleIndex scheduleFor(Channel channel) {
+    _ensurePlayableInventory();
+    return buildSchedule(
+      resolveContent(channel.source, _playableMedia, _playablePlaylists),
+      mode: channel.playbackMode,
+      seed: channel.shuffleSeed,
+      blockSize: channel.blockSize ?? 3,
+    );
+  }
 
   Future<ScheduleIndex> loadScheduleFor(Channel channel) {
     if (_disposed) {
       return Future.error(StateError('Schedule worker is disposed'));
     }
-    if (!identical(_scheduleWorkerMedia, availableMedia) ||
-        !identical(_scheduleWorkerPlaylists, availablePlaylists)) {
+    _ensurePlayableInventory();
+    if (!identical(_scheduleWorkerMedia, _playableMedia) ||
+        !identical(_scheduleWorkerPlaylists, _playablePlaylists)) {
       _scheduleWorker?.dispose();
-      _scheduleWorkerMedia = availableMedia;
-      _scheduleWorkerPlaylists = availablePlaylists;
+      _scheduleWorkerMedia = _playableMedia;
+      _scheduleWorkerPlaylists = _playablePlaylists;
       _scheduleWorker = null;
     }
     final worker = _scheduleWorker ??= _scheduleWorkerFactory(
-      availableMedia,
-      availablePlaylists,
+      _playableMedia,
+      _playablePlaylists,
     );
     return worker.build(channel);
   }
@@ -1119,9 +1207,7 @@ class LineupController extends ChangeNotifier {
     final endpoint = connection?.uri;
     final token = _pmsToken;
     final serverId = server?.id;
-    final item = availableMedia
-        .where((value) => value.id == itemId)
-        .firstOrNull;
+    final item = _playbackItem(itemId);
     if (endpoint == null || token == null || serverId == null || item == null) {
       throw const PlexException(
         'playback-unavailable',
@@ -1129,6 +1215,59 @@ class LineupController extends ChangeNotifier {
       );
     }
     return _playbackRequest(item, endpoint, token, serverId, _epoch);
+  }
+
+  PlexMediaItem? _playbackItem(String itemId) {
+    _ensurePlayableInventory();
+    return _playableById[itemId];
+  }
+
+  void _ensurePlayableInventory() {
+    final endpoint = connection?.uri;
+    if (_playableEndpoint == endpoint &&
+        identical(_playableSourceMedia, availableMedia) &&
+        identical(_playableSourcePlaylists, availablePlaylists)) {
+      return;
+    }
+    if (endpoint == null) {
+      const nextMedia = <PlexMediaItem>[];
+      const nextPlaylists = <PlexPlaylist>[];
+      _playableMedia = nextMedia;
+      _playablePlaylists = nextPlaylists;
+      _playableById = const {};
+      _playableSourceMedia = availableMedia;
+      _playableSourcePlaylists = availablePlaylists;
+      _playableEndpoint = endpoint;
+      return;
+    }
+    bool eligible(PlexMediaItem item) {
+      if (!item.isPlayable) return false;
+      try {
+        plex.playbackDescriptor(server: endpoint, item: item);
+        return true;
+      } on PlexException {
+        return false;
+      }
+    }
+
+    final nextMedia = List<PlexMediaItem>.unmodifiable(
+      availableMedia.where(eligible),
+    );
+    final nextPlaylists = List<PlexPlaylist>.unmodifiable([
+      for (final playlist in availablePlaylists)
+        PlexPlaylist(
+          id: playlist.id,
+          title: playlist.title,
+          items: List.unmodifiable(playlist.items.where(eligible)),
+        ),
+    ]);
+    final nextById = playableMediaById(nextMedia, nextPlaylists);
+    _playableMedia = nextMedia;
+    _playablePlaylists = nextPlaylists;
+    _playableById = nextById;
+    _playableSourceMedia = availableMedia;
+    _playableSourcePlaylists = availablePlaylists;
+    _playableEndpoint = endpoint;
   }
 
   LineupPlaybackRequest _playbackRequest(

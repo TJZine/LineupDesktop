@@ -1,6 +1,11 @@
 import '../plex/plex_models.dart';
 import 'channel.dart';
 
+String? channelDecadeForYear(int? year) {
+  if (year == null || year < 1000 || year > 9999) return null;
+  return '${year ~/ 10 * 10}s';
+}
+
 List<ChannelItem> resolveContent(
   ContentSource source,
   List<PlexMediaItem> media, [
@@ -8,7 +13,7 @@ List<ChannelItem> resolveContent(
 ]) {
   final resolved = switch (source) {
     LibrarySource source => _library(source, media),
-    ManualSource(:final items) => List<ChannelItem>.of(items),
+    ManualSource(:final items) => _manual(items, media, playlists),
     PlaylistSource(:final playlistId) =>
       playlists
           .where((playlist) => playlist.id == playlistId)
@@ -45,19 +50,48 @@ List<ChannelItem> _library(LibrarySource source, List<PlexMediaItem> media) {
       'director' => items.where(
         (item) => item.directors.contains(filter.value),
       ),
-      'decade' => items.where(
-        (item) =>
-            item.year != null && '${item.year! ~/ 10 * 10}s' == filter.value,
+      'decade' when RegExp(r'^\d{3}0s$').hasMatch(filter.value) => items.where(
+        (item) => channelDecadeForYear(item.year) == filter.value,
       ),
       'sort' when filter.value == 'added:desc' =>
         items.toList()..sort(
           (a, b) => (b.addedAt ?? DateTime.fromMillisecondsSinceEpoch(0))
               .compareTo(a.addedAt ?? DateTime.fromMillisecondsSinceEpoch(0)),
         ),
-      _ => items,
+      'decade' => throw const FormatException('Unsupported content filter'),
+      'sort' => throw const FormatException('Unsupported content filter'),
+      _ => throw const FormatException('Unsupported content filter'),
     };
   }
   return items.where((item) => item.isPlayable).map(channelItemFor).toList();
+}
+
+List<ChannelItem> _manual(
+  List<ChannelItem> stored,
+  List<PlexMediaItem> media,
+  List<PlexPlaylist> playlists,
+) {
+  final current = playableMediaById(media, playlists);
+  return [
+    for (final item in stored)
+      if (current[item.id] case final available?) channelItemFor(available),
+  ];
+}
+
+Map<String, PlexMediaItem> playableMediaById(
+  List<PlexMediaItem> media, [
+  List<PlexPlaylist> playlists = const [],
+]) {
+  final current = <String, PlexMediaItem>{};
+  for (final item in media) {
+    if (item.isPlayable) current.putIfAbsent(item.id, () => item);
+  }
+  for (final playlist in playlists) {
+    for (final item in playlist.items) {
+      if (item.isPlayable) current.putIfAbsent(item.id, () => item);
+    }
+  }
+  return Map.unmodifiable(current);
 }
 
 ChannelItem channelItemFor(PlexMediaItem item) => ChannelItem(
@@ -80,6 +114,15 @@ ChannelItem channelItemFor(PlexMediaItem item) => ChannelItem(
   audioCodec: item.audioCodec,
   audioChannels: item.audioChannels,
   dynamicRange: item.dynamicRange.name,
+  cast: List.unmodifiable(
+    item.cast.map(
+      (member) => ChannelCastMember(
+        name: member.name,
+        role: member.role,
+        portrait: _uriPath(member.thumbPath),
+      ),
+    ),
+  ),
 );
 
 Uri? _uriPath(String? path) =>

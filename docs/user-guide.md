@@ -118,16 +118,18 @@ scan. Playable media requires both a positive duration and a usable media part.
 The strategy step reports the accepted proposal count or **No matches** for
 each enabled source family and **Off** for disabled families. The review step
 separates **Create**, **Update**, **Unchanged**, **Remove**, and **Final** counts
-using the selected replace, append, or merge behavior. A limit warning appears
-only when ideas were actually omitted by the channel cap or available channel
-numbers.
+using the selected replace, append, or merge behavior. It presents the current
+lineup changing to the final lineup, a proportional composition bar, and sample
+channels. Replace mode requires an explicit confirmation before building. A
+limit warning appears only when ideas were actually omitted by the channel cap
+or available channel numbers.
 
 ## Main destinations
 
 | Destination | Purpose |
 | --- | --- |
 | Guide | Browse the schedule, inspect focused programs, filter by library, jump to now, tune current programs, and open the Player |
-| Channels | Re-run Channel Builder or create, edit, and delete custom channels |
+| Channels | Generate a lineup or create, inspect, duplicate, edit, and delete individual channels |
 | Settings | Configure themes, Guide behavior, accessibility, Plex profile/server selection, and diagnostics |
 | Diagnostics | Review bounded, redacted support events from the current session |
 | Player | Watch the tuned channel and use playback, track, channel, sleep, and fullscreen controls |
@@ -179,37 +181,67 @@ logos and artwork fall back to text and themed surfaces.
 ## Player
 
 Move the pointer or click/tap the Player to show the on-screen controls. The OSD
-provides:
+uses a responsive shallow broadcast layout at 1280×720 and 1920×1080. The
+channel bug is in the top-right. When **Prefer official title artwork** is
+enabled, the lower-left/lower band uses official Plex title artwork when
+available. When the preference is disabled, or the artwork is missing or fails
+to load, it falls back to text. Secondary actions sit in the lower-right. The
+timeline tier immediately above the edge-to-edge progress line shows
+`current / total • time left` on the left when duration is known and
+`Up next • scheduled start • title` on the right. Metadata and actions are
+restrained, and the progress line is anchored to the absolute bottom. By
+default, the **DVR playback controls** setting is off: transport buttons are
+hidden and Player-local pause/play, seek, stop, rewind, and fast-forward
+keyboard/media shortcuts are blocked. Page Up/Page Down channel surfing,
+number entry, Guide/Mini Guide tuning, tracks, sleep, menu, and fullscreen
+remain available. Enabling **DVR playback controls** restores the transport UI
+and those shortcuts; it changes Flutter presentation/input policy only, not
+native or libmpv behavior. It provides:
 
 - current channel and program information;
-- playback position and seeking;
-- previous channel, play/pause, and next channel;
+- playback position; seeking when DVR playback controls are enabled;
+- previous channel, play/pause, and next channel when DVR playback controls are enabled;
 - available audio and subtitle tracks;
 - sleep timer state;
-- native quality/decoder/output facts when the Windows player reports them; and
 - fullscreen entry and exit.
 
 Unavailable tracks or unsupported native actions remain disabled rather than
-showing controls that cannot work.
+showing controls that cannot work. The Guide retains the catalog media facts it
+displays, including resolution, dynamic range, and audio facts. Rich Now
+Playing retains detailed source/runtime resolution, video codec, HDR, and
+hardware-decoder facts when available rather than repeating those facts in the
+default OSD.
 
 Press `I` for persistent rich Now Playing details without leaving playback.
-The details surface uses the current scheduled program for channel and episode
-identity, synopsis, schedule progress, available metadata badges, poster, and
-backdrop. When **Use clear logos** is enabled, an available clear logo replaces
-the text identity; a missing or failed logo falls back to the title. Pointer
-movement leaves this reading surface open. Press `I` or Back to close it;
-`Down`, `Enter`, click/tap, or a successful transport action replaces it with
-the OSD, while a failed action retains the safe error surface. `A` or `C` opens
-the requested track list directly when that track type is available.
+The details surface keeps the shared top-right channel bug, then uses the
+current scheduled program for title/episode identity, synopsis, year and
+genres, concise rating/resolution/dynamic-range/audio badges, poster, and
+official title artwork. When **Prefer official title artwork** is enabled, an
+available Plex
+clear logo leads the identity and text remains the fallback when the logo is
+missing, disabled, or fails. Its playback line is shown only for facts that are
+available: source/runtime details are separate, and actual native playback
+position/duration are preferred, with schedule timing used when native duration
+is unavailable. When Plex supplies cast facts, actor portraits appear between
+the synopsis and progress, with names and roles available to accessibility.
+Missing or failed headshots use a neutral person silhouette, never fabricated
+initials, and no cast space is reserved when cast facts are absent. Up Next and
+secondary actions remain owned by the OSD. Pointer movement leaves this reading
+surface open. Press `I` or Back
+to close it; `Down`, `Enter`, click/tap, or a successful enabled transport
+action replaces it with the OSD, while a failed action retains the safe error
+surface. `A` or `C` opens the requested track list directly when that track type
+is available.
 
 The mini Guide displays a bounded group of nearby channels without leaving
 playback. Selecting a row replaces the current tune through the same Player
 owner.
 
 When one Plex item contains sequential media parts, Lineup continues through
-them under the same tune. Progress and cross-part seeking use aggregate timing
-only when the required part durations are known; otherwise the Player shows
-the current part's timing rather than estimating missing boundaries.
+them under the same tune. When DVR playback controls are enabled, progress and
+cross-part seeking use aggregate timing only when the required part durations
+are known; otherwise the Player shows the current part's timing rather than
+estimating missing boundaries.
 
 The timed OSD and mini Guide remain open while keyboard focus is inside their
 controls. Leaving the active overlay restarts its full timeout. Reduce Motion
@@ -245,8 +277,8 @@ report to Flutter.
 | Player | Open full Guide | `G` or `F2` |
 | Player | Show mini Guide | `Up` |
 | Player | Show OSD / rich Now Playing | `Down` or `Enter` shows OSD; `I` toggles rich Now Playing details |
-| Player | Seek backward/forward | `Left` or `J` = 10 seconds back; `Right` or `L` = 30 seconds forward |
-| Player | Play or pause | `Space`, `K`, or Media Play/Pause |
+| Player | Seek backward/forward | `Left` or `J` = 10 seconds back; `Right` or `L` = 30 seconds forward (DVR playback controls on) |
+| Player | Play or pause | `Space`, `K`, or Media Play/Pause (DVR playback controls on) |
 | Player | Previous/next channel | `Page Up` / `Page Down` |
 | Player | Enter a channel number | Number keys; confirm with `Enter` while the entry overlay is open |
 | Player | Audio / subtitle tracks | `A` / `C` |
@@ -259,44 +291,63 @@ report to Flutter.
 | Mini Guide | Open full Guide | `Right` |
 | Mini Guide | Close | `Esc`, `Backspace`, or Back |
 
-Dedicated Media Play, Pause, Stop, Rewind, and Fast Forward keys are also
-handled when available. Core playback keys continue to work while the OSD is
-visible, and the OSD follows the configured auto-hide duration.
+Dedicated media transport keys are context-sensitive. In the Player, Media
+Play, Pause, Stop, Rewind, and Fast Forward are handled when available only with
+**DVR playback controls** enabled. In the Guide, Media Play jumps to the current
+time regardless of that setting. Page Up/Page Down, number entry, Guide/Mini
+Guide tuning, tracks, sleep, menu, and fullscreen also do not depend on the
+setting. The timed OSD follows the configured 2–15 second auto-hide duration.
 
 ## Channels
 
-### Channel Builder
+**Generate lineup** is the bulk workflow. It proposes generator-owned channels,
+then lets you replace generated channels, add generated channels, or refresh
+matching generated channels after review. All three modes preserve every custom
+channel. Refresh also preserves a matching generated channel's number, visible
+name, schedule anchor, and shuffle identity while updating its generated
+programming recipe. Completion offers **View lineup** or the separate **Add a
+custom channel** action.
 
-Use **Channel builder** for a generated lineup. The builder can replace, append
-to, or merge with the current lineup after review. Limits are bounded, and the
-accepted plan is written as one lineup change.
+**New channel** opens the full-page Channel Studio for one custom channel.
+Studio also opens when you edit a custom channel, inspect a generated channel,
+or choose **Duplicate as custom** from generated inspection. Generated
+programming remains read-only, but its name and number can be saved with **Save
+identity**. Duplication creates a separate custom draft with a new identity and
+the lowest available channel number; it does not alter the generated source.
 
-### Custom channels
+Custom Studio programming can use one selected library, one Plex video
+playlist, a collection or supported metadata filter, or an explicitly ordered
+hand-picked list. Search, local facets, visible-result bulk selection, and Move
+earlier/Move later controls keep large hand-picked lists usable without a
+network request per edit. A previously saved hand-picked item that is not in
+the current playable inventory remains labeled **Unavailable — retained until
+removed**; it is not scheduled, but Studio does not silently delete it.
 
-Select **Create channel** or edit an existing channel. A custom channel
-supports:
+Playback rhythms are **In order**, **Mix it up**, and **Mini-marathons**.
+Mini-marathons uses blocks of 2 through 5 episodes and requires usable show
+grouping. **Air Check** uses the same content resolver and deterministic
+scheduler as Guide and Player to show what is on now, what follows, cycle and
+timing facts, why content was included, and actionable unavailable or invalid
+states. A new channel saves the same schedule anchor and shuffle identity that
+Air Check previewed.
 
-- a unique channel number from 1 through 1000;
-- an entire selected library or hand-picked media;
-- sequential, shuffle, or block playback;
-- optional inclusion of watched items for library-backed channels; and
-- retention of previously selected hand-picked items that are temporarily
-  unavailable, until explicitly removed.
+Saving and tuning are separate. A successful save leaves Studio in a clean
+saved state and enables **Tune in**. A tune failure does not undo the saved
+channel. A save failure preserves both the prior lineup and the complete draft;
+retry after correcting the reported source, schedule, number, or storage issue.
+If the underlying channel changed while Studio was open, reload it or
+deliberately reapply the draft rather than overwriting newer state. Leaving a
+dirty draft asks whether to discard changes or keep editing.
 
-Deletion requires confirmation and cannot be undone.
-
-Generated channels and channels backed by filtered libraries, playlists, or
-mixed sources keep their source read-only in the editor. You can change their
-name, number, and playback mode without changing their source or generated
-identity. Plain manual and unfiltered-library custom channels retain full source
-editing. There is no implicit generated-to-custom conversion.
+Deletion requires confirmation and cannot be undone. Deleting a generated
+channel also warns that a later Generate lineup refresh may propose it again.
 
 ## Settings
 
 | Category | Current controls |
 | --- | --- |
 | Appearance | Ember & Steel, Slate & Pine, Swiss Minimal, DirecTV Classic, and Glassmorphism themes |
-| Guide | Classic with PiP or Overlay presentation; detailed 2-hour, wide 3-hour, or desktop-extended 4/6/8/12-hour windows; 0-180 minute past window; comfortable or compact rows; color-bleed/theme/artwork information backgrounds; clear-logo preference; library filters; Now Playing context; 2-15 second OSD auto-hide |
+| Guide | Classic with PiP or Overlay presentation; detailed 2-hour, wide 3-hour, or desktop-extended 4/6/8/12-hour windows; 0-180 minute past window; comfortable or compact rows; color-bleed/theme/artwork information backgrounds; official title artwork preference; library filters; Now Playing context; 2-15 second OSD auto-hide; optional DVR playback controls |
 | Accessibility | Reduce motion across management, Guide, and Player transitions; larger keyboard/controller focus indicators |
 | Account | Switch Plex Home profile, switch or clear Plex server selection, and optionally show the profile picker at startup |
 | Support | Enable or disable bounded redacted diagnostic recording |

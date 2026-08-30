@@ -30,9 +30,9 @@ void main() {
   test(
     'Channel Builder result becomes the authoritative 1000-channel lineup',
     () async {
-      final original = _channels(10);
+      final original = _channels(10, includeManualTail: false);
       final lineup = _TestLineup(original)..currentChannelId = original[5].id;
-      final replacement = _channels(1000);
+      final replacement = _channels(1000, includeManualTail: false);
 
       await lineup.applyChannelPlan(
         replacement,
@@ -43,7 +43,7 @@ void main() {
       expect(lineup.currentChannelId, original[5].id);
 
       await lineup.applyChannelPlan(
-        _channels(3, idPrefix: 'small'),
+        _channels(3, idPrefix: 'small', includeManualTail: false),
         mode: ChannelBuildMode.replace,
       );
       expect(lineup.channels, hasLength(3));
@@ -159,6 +159,48 @@ void main() {
     await _settle();
     expect(loads, 2);
 
+    guide.dispose();
+    lineup.dispose();
+  });
+
+  test('cast changes make Guide channel content non-current', () async {
+    Channel channel(List<ChannelCastMember> cast) => Channel(
+      id: 'cast-channel',
+      number: 1,
+      name: 'Cast',
+      source: ManualSource([
+        ChannelItem(
+          id: 'episode',
+          title: 'Episode',
+          duration: const Duration(hours: 1),
+          cast: cast,
+        ),
+      ]),
+      playbackMode: PlaybackMode.sequential,
+      anchor: DateTime(2026, 8, 13),
+      shuffleSeed: 1,
+    );
+
+    final lineup = _TestLineup([
+      channel([ChannelCastMember(name: 'Avery Vale')]),
+    ]);
+    var loads = 0;
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (value) async {
+        loads++;
+        return _schedule(value);
+      },
+    )..requestViewport(0, 1);
+    await _settle();
+
+    lineup.setChannels([
+      channel([ChannelCastMember(name: 'Avery Vale', role: 'Detective Rowan')]),
+    ]);
+    guide.requestViewport(0, 1);
+    await _settle();
+
+    expect(loads, 2);
     guide.dispose();
     lineup.dispose();
   });
@@ -493,6 +535,23 @@ void main() {
     expect(await Future.wait(loads), everyElement(isNotNull));
   });
 
+  test('generic artwork paths share the bounded Guide cache', () async {
+    final lineup = _ArtworkLineup(_channels(1));
+    addTearDown(lineup.dispose);
+    final guide = GuideController(lineup: lineup);
+    addTearDown(guide.dispose);
+    final path = Uri.parse('/cast/avery');
+
+    final first = guide.artworkForPath(path);
+    final cached = guide.artworkForPath(path);
+    await _settle();
+
+    expect(identical(first, cached), isTrue);
+    expect(lineup.artworkPaths, [path]);
+    lineup.completeArtwork();
+    expect(await first, isNotNull);
+  });
+
   test('production schedules use the persistent catalog worker', () async {
     final channel = Channel(
       id: 'library-channel',
@@ -527,6 +586,11 @@ void main() {
                 parts: [PlexMediaPart(path: '/library/parts/item-$index')],
               ),
             ),
+          )
+          ..connection = PlexConnection(
+            uri: Uri.parse('https://guide.example:32400'),
+            local: true,
+            relay: false,
           );
     addTearDown(lineup.dispose);
 
@@ -538,6 +602,64 @@ void main() {
     expect(second.items, hasLength(2000));
     expect(workerCreations, 1);
   });
+
+  test(
+    'Guide projects current manual media and omits unavailable records',
+    () async {
+      final channel = Channel(
+        id: 'manual',
+        number: 1,
+        name: 'Manual',
+        source: const ManualSource([
+          ChannelItem(
+            id: 'current',
+            title: 'Stored title',
+            duration: Duration(hours: 1),
+          ),
+          ChannelItem(
+            id: 'missing',
+            title: 'Missing',
+            duration: Duration(hours: 1),
+          ),
+        ]),
+        playbackMode: PlaybackMode.sequential,
+        anchor: DateTime.utc(2026, 8, 13, 12),
+        shuffleSeed: 1,
+      );
+      final lineup = _TestLineup([channel])
+        ..connection = PlexConnection(
+          uri: Uri.parse('https://guide.example:32400'),
+          local: true,
+          relay: false,
+        )
+        ..availableMedia = [
+          PlexMediaItem(
+            id: 'current',
+            title: 'Current title',
+            type: 'movie',
+            duration: const Duration(hours: 1),
+            parts: [PlexMediaPart(path: '/current')],
+          ),
+        ];
+      final guide = GuideController(
+        lineup: lineup,
+        clock: () => DateTime.utc(2026, 8, 13, 12, 15),
+      )..requestViewport(0, 1);
+      addTearDown(lineup.dispose);
+      addTearDown(guide.dispose);
+
+      expect(await guide.ensureCurrentProgram(channel.id), isNotNull);
+
+      expect(guide.row(channel.id).programs, isNotEmpty);
+      expect(
+        guide
+            .row(channel.id)
+            .programs
+            .map((program) => program.scheduled.item.title),
+        everyElement('Current title'),
+      );
+    },
+  );
 
   test(
     'disposed lineup rejects schedule loads without creating a worker',
@@ -820,6 +942,7 @@ List<Channel> _channels(
   int count, {
   bool nonContiguous = false,
   String idPrefix = 'channel',
+  bool includeManualTail = true,
 }) => List.generate(count, (index) {
   final items = List.generate(
     8,
@@ -834,7 +957,7 @@ List<Channel> _channels(
     id: '$idPrefix-$index',
     number: nonContiguous ? index * 7 + 3 : index + 1,
     name: index == count - 1 ? 'Custom $index' : 'Channel $index',
-    source: index == count - 1
+    source: includeManualTail && index == count - 1
         ? ManualSource(items)
         : LibrarySource(
             libraryId: 'library-${index % 3}',
@@ -843,6 +966,7 @@ List<Channel> _channels(
     playbackMode: PlaybackMode.sequential,
     anchor: DateTime(2026, 8, 13),
     shuffleSeed: index,
+    builderKey: 'generated-$idPrefix-$index',
   );
 });
 
@@ -875,6 +999,32 @@ class _TestLineup extends LineupController {
           clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
         ),
       ) {
+    connection = PlexConnection(
+      uri: Uri.parse('https://synthetic.invalid'),
+      local: true,
+      relay: false,
+    );
+    availableMedia = [
+      for (var index = 0; index < 3; index++)
+        PlexMediaItem(
+          id: 'library-$index-item',
+          title: 'Library $index item',
+          type: 'movie',
+          duration: const Duration(minutes: 30),
+          libraryId: 'library-$index',
+          parts: [PlexMediaPart(path: '/library-$index-item')],
+        ),
+      for (final channel in value)
+        if (channel.source case ManualSource(:final items))
+          for (final item in items)
+            PlexMediaItem(
+              id: item.id,
+              title: item.title,
+              type: 'movie',
+              duration: item.duration,
+              parts: [PlexMediaPart(path: '/${item.id}')],
+            ),
+    ];
     channels = value;
     stage = SetupStage.ready;
     settings = const LineupSettings(guideHours: 4, pastMinutes: 30);

@@ -31,6 +31,8 @@ jobs:
       - run: dart format --output=none --set-exit-if-changed .
       - run: flutter analyze
       - run: flutter test
+        env:
+          TZ: America/New_York
 
   build-macos:
     name: Verify golden UI and build macOS
@@ -46,6 +48,9 @@ jobs:
           channel: stable
           cache: true
       - id: golden
+        env:
+          # Golden baselines include localized schedule times.
+          TZ: America/New_York
         run: flutter test test/app/ui_acceptance_golden_test.dart
       - name: Upload golden failure images
         if: ${{ failure() && steps.golden.outcome == 'failure' }}

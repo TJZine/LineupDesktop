@@ -79,6 +79,41 @@ void main() {
     lineup.dispose();
   });
 
+  testWidgets('Guide Media Play jumps to now with DVR controls disabled', (
+    tester,
+  ) async {
+    final now = DateTime.utc(2026, 1, 1, 12, 17);
+    final lineup = _Lineup(1)
+      ..settings = const LineupSettings(dvrControlsEnabled: false);
+    addTearDown(lineup.dispose);
+    final guide = GuideController(
+      lineup: lineup,
+      clock: () => now,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    addTearDown(guide.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: GuideView(
+          controller: guide,
+          onClose: () {},
+          onTune: (_) async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    guide.moveHorizontal(1);
+    expect(guide.windowStart, isNot(DateTime.utc(2026, 1, 1, 11, 30)));
+    await tester.sendKeyEvent(LogicalKeyboardKey.mediaPlay);
+    await tester.pumpAndSettle();
+
+    expect(guide.windowStart, DateTime.utc(2026, 1, 1, 11, 30));
+    expect(guide.focusTime, now);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('established viewport work is independent of lineup cardinality', (
     tester,
   ) async {
@@ -354,6 +389,21 @@ void main() {
     await tester.tap(find.text('Schedule unavailable — select to retry'));
     await tester.pumpAndSettle();
 
+    final current = guide.currentProgram('semantic-channel')!;
+    final startLabel = _testTime(current.scheduled.start.toLocal());
+    final endLabel = _testTime(current.scheduled.end.toLocal());
+    expect(find.text('$startLabel–$endLabel'), findsWidgets);
+    expect(
+      find.bySemanticsLabel(
+        'Current Program, $startLabel to $endLabel, currently airing',
+      ),
+      findsOneWidget,
+    );
+    final rawStartLabel = _testTime(current.scheduled.start);
+    if (rawStartLabel != startLabel) {
+      expect(find.textContaining(rawStartLabel), findsNothing);
+    }
+
     final channelRail = find.bySemanticsLabel(
       RegExp(r'^Channel 1, Semantic Channel, now watching'),
     );
@@ -365,7 +415,6 @@ void main() {
     expect(channelSemantics.hasAction(SemanticsAction.tap), isTrue);
     expect(find.bySemanticsLabel(RegExp(r'^Now watching$')), findsNothing);
 
-    final current = guide.currentProgram('semantic-channel')!;
     await tester.tap(find.bySemanticsLabel(RegExp('upcoming')));
     await tester.pump();
     expect(guide.focusedProgramId, isNot(current.id));
@@ -1073,6 +1122,12 @@ ScheduleIndex _schedule(Channel channel) => buildSchedule(
   mode: channel.playbackMode,
   seed: channel.shuffleSeed,
 );
+
+String _testTime(DateTime value) =>
+    const DefaultMaterialLocalizations().formatTimeOfDay(
+      TimeOfDay.fromDateTime(value),
+      alwaysUse24HourFormat: false,
+    );
 
 class _Lineup extends LineupController {
   _Lineup(int count, {this.artworkBytes})

@@ -2,11 +2,15 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lineup_desktop/app/channel_air_check.dart';
 import 'package:lineup_desktop/app/channel_setup_view.dart';
+import 'package:lineup_desktop/app/channel_studio_view.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/app/lineup_shell.dart';
 import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/channels/channel_builder.dart';
+import 'package:lineup_desktop/channels/content_resolver.dart';
+import 'package:lineup_desktop/channels/scheduler.dart';
 import 'package:lineup_desktop/persistence/app_store.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
@@ -210,17 +214,24 @@ void main() {
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
     await openDestination(tester, 'Channels');
-    await tester.tap(find.text('Create channel'));
+    await tester.tap(find.text('New channel'));
     await tester.pumpAndSettle();
 
     expect(find.text('Include watched items'), findsOneWidget);
+    await tester.ensureVisible(find.byType(SwitchListTile));
     await tester.tap(find.byType(SwitchListTile));
     await tester.pump();
+    await tester.ensureVisible(find.text('Hand-picked'));
     await tester.tap(find.text('Hand-picked'));
     await tester.pumpAndSettle();
     expect(find.text('Include watched items'), findsNothing);
 
-    await tester.tap(find.text('Entire library'));
+    final libraryChoice = find.descendant(
+      of: find.byKey(const Key('studio-source-choices')),
+      matching: find.text('Library'),
+    );
+    await tester.ensureVisible(libraryChoice);
+    await tester.tap(libraryChoice);
     await tester.pumpAndSettle();
     expect(find.text('Include watched items'), findsOneWidget);
     expect(
@@ -241,7 +252,7 @@ void main() {
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
     await openDestination(tester, 'Channels');
-    await tester.tap(find.text('Create channel'));
+    await tester.tap(find.text('New channel'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextFormField).first, 'Movies');
 
@@ -251,12 +262,43 @@ void main() {
     await tester.tap(find.text('Save channel'));
     await tester.pumpAndSettle();
 
-    expect(
-      find.text(
-        'The selected library is no longer available. Choose another library.',
-      ),
-      findsOneWidget,
+    expect(find.text('Select a library.'), findsOneWidget);
+  });
+
+  testWidgets('Studio recovery honors keep editing and confirmed discard', (
+    tester,
+  ) async {
+    final controller = _CountingSetupController()..stage = SetupStage.ready;
+    await tester.pumpWidget(UiFixture(controller: controller).build());
+    await tester.pump();
+    await tester.pump();
+    await openDestination(tester, 'Channels');
+    await tester.tap(find.text('New channel'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('studio-name')), 'Unsaved');
+    await tester.pump();
+
+    await tester.ensureVisible(find.text('Open Generate lineup'));
+    await tester.tap(find.text('Open Generate lineup'));
+    await tester.pumpAndSettle();
+    expect(find.text('Discard changes?'), findsOneWidget);
+    await tester.tap(find.text('Keep editing'));
+    await tester.pumpAndSettle();
+    expect(controller.setupEntries, 0);
+    expect(find.text('Create custom channel'), findsOneWidget);
+
+    await tester.ensureVisible(find.text('Open Generate lineup'));
+    final recovery = tester.widget<TextButton>(
+      find.widgetWithText(TextButton, 'Open Generate lineup'),
     );
+    recovery.onPressed!();
+    recovery.onPressed!();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Discard changes'));
+    await tester.pumpAndSettle();
+    expect(controller.setupEntries, 1);
+    expect(controller.stage, SetupStage.channelSetup);
+    expect(find.text('Create custom channel'), findsNothing);
   });
 
   testWidgets('manual channel edits retain unavailable selected items', (
@@ -303,8 +345,7 @@ void main() {
           builder: (context) => TextButton(
             onPressed: () => showDialog<void>(
               context: context,
-              builder: (_) =>
-                  ChannelEditor(controller: controller, channel: channel),
+              builder: (_) => _studio(controller, channel),
             ),
             child: const Text('Open editor'),
           ),
@@ -314,8 +355,8 @@ void main() {
     await tester.tap(find.text('Open editor'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Unavailable • retained until removed'), findsOneWidget);
-    await tester.tap(find.text('Save channel'));
+    expect(find.text('Unavailable — retained until removed'), findsOneWidget);
+    await tester.tap(find.text('Save changes'));
     await tester.pumpAndSettle();
 
     final source = controller.channels.single.source as ManualSource;
@@ -362,7 +403,7 @@ void main() {
               LibrarySource(
                 libraryId: 'shows',
                 libraryType: PlexLibraryType.show,
-                filters: {'year': '2026'},
+                filters: {'decade': '2020s'},
               ),
               PlaylistSource('playlist-2'),
             ],
@@ -387,22 +428,44 @@ void main() {
         blockSize: testCase.initialBlockSize,
         builderKey: 'builder:${testCase.name}',
       );
-      final controller = FixtureController()
+      final controller = _ReviewStudioController()
         ..stage = SetupStage.ready
-        ..channels = [original];
+        ..connection = _studioConnection
+        ..channels = [original]
+        ..availableMedia = [_studioMovie, _studioEpisode]
+        ..availablePlaylists = [
+          PlexPlaylist(
+            id: 'playlist-1',
+            title: 'Playlist 1',
+            items: [_studioMovie],
+          ),
+          PlexPlaylist(
+            id: 'playlist-2',
+            title: 'Playlist 2',
+            items: [_studioEpisode],
+          ),
+        ];
       addTearDown(controller.dispose);
 
       await _openChannelEditor(tester, controller, original);
 
-      expect(find.text('Channel source (read-only)'), findsOneWidget);
+      expect(
+        find.text('Programming is read-only and will be preserved exactly.'),
+        findsOneWidget,
+      );
       expect(find.text('Entire library'), findsNothing);
       expect(find.text('Hand-picked'), findsNothing);
       expect(find.textContaining('Convert'), findsNothing);
       await tester.enterText(find.byType(TextFormField).first, 'Renamed');
       await tester.enterText(find.byType(TextFormField).at(1), '42');
-      await tester.tap(find.text(_modeLabel(testCase.savedMode)));
-      await tester.pump();
-      await tester.tap(find.text('Save channel'));
+      await tester.pump(channelAirCheckDebounce + const Duration(seconds: 1));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Save identity'));
+      tester
+          .widget<FilledButton>(
+            find.widgetWithText(FilledButton, 'Save identity'),
+          )
+          .onPressed!();
       await tester.pumpAndSettle();
 
       final saved = controller.channels.single;
@@ -412,12 +475,12 @@ void main() {
       expect(saved.builderKey, original.builderKey);
       expect(saved.anchor, original.anchor);
       expect(saved.shuffleSeed, original.shuffleSeed);
-      expect(saved.playbackMode, testCase.savedMode);
-      expect(saved.blockSize, testCase.savedBlockSize);
+      expect(saved.playbackMode, testCase.initialMode);
+      expect(saved.blockSize, testCase.initialBlockSize);
     });
   }
 
-  testWidgets('channel source editability follows the lossless source matrix', (
+  testWidgets('custom sources expose authoring or lossless replacement', (
     tester,
   ) async {
     const item = ChannelItem(
@@ -425,25 +488,19 @@ void main() {
       title: 'Program',
       duration: Duration(minutes: 30),
     );
-    final cases = <(ContentSource, bool)>[
-      (
-        const LibrarySource(
-          libraryId: 'movies',
-          libraryType: PlexLibraryType.movie,
-          filters: {'genre': 'Comedy'},
-        ),
-        true,
+    final cases = <ContentSource>[
+      const LibrarySource(
+        libraryId: 'movies',
+        libraryType: PlexLibraryType.movie,
+        filters: {'genre': 'Comedy'},
       ),
-      (const PlaylistSource('playlist-1'), true),
-      (const MixedSource(sources: [PlaylistSource('playlist-1')]), true),
-      (
-        const LibrarySource(
-          libraryId: 'movies',
-          libraryType: PlexLibraryType.movie,
-        ),
-        false,
+      const PlaylistSource('playlist-1'),
+      const MixedSource(sources: [PlaylistSource('playlist-1')]),
+      const LibrarySource(
+        libraryId: 'movies',
+        libraryType: PlexLibraryType.movie,
       ),
-      (const ManualSource([item]), false),
+      const ManualSource([item]),
     ];
     final controller = FixtureController()
       ..stage = SetupStage.ready
@@ -454,7 +511,7 @@ void main() {
     addTearDown(controller.dispose);
 
     for (var index = 0; index < cases.length; index++) {
-      final (source, readOnly) = cases[index];
+      final source = cases[index];
       final channel = Channel(
         id: 'channel-$index',
         number: index + 1,
@@ -466,12 +523,28 @@ void main() {
       );
       await _openChannelEditor(tester, controller, channel);
       expect(
-        find.text('Channel source (read-only)'),
-        readOnly ? findsOneWidget : findsNothing,
+        find.text('Programming is read-only and will be preserved exactly.'),
+        findsNothing,
+      );
+      final sourceChoices = find.byKey(const Key('studio-source-choices'));
+      expect(
+        find.descendant(of: sourceChoices, matching: find.text('Library')),
+        findsOneWidget,
       );
       expect(
-        find.text('Entire library'),
-        readOnly ? findsNothing : findsOneWidget,
+        find.descendant(of: sourceChoices, matching: find.text('Playlist')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: sourceChoices,
+          matching: find.text('Collection or filter'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: sourceChoices, matching: find.text('Hand-picked')),
+        findsOneWidget,
       );
       await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();
@@ -491,24 +564,51 @@ void main() {
       shuffleSeed: 12,
       builderKey: 'playlist:playlist-1',
     );
-    final controller = FixtureController(store: _FailNextSaveStore())
+    final controller = _ReviewStudioController(store: _FailNextSaveStore())
       ..stage = SetupStage.ready
-      ..channels = [original];
+      ..connection = _studioConnection
+      ..channels = [original]
+      ..availablePlaylists = [
+        PlexPlaylist(
+          id: 'playlist-1',
+          title: 'Playlist 1',
+          items: [_studioMovie],
+        ),
+      ];
     addTearDown(controller.dispose);
 
     await _openChannelEditor(tester, controller, original);
     await tester.enterText(find.byType(TextFormField).first, 'Cancelled');
-    await tester.tap(find.text('Cancel'));
+    await tester.tap(find.text('Back to Channels'));
     await tester.pumpAndSettle();
     expect(controller.channels.single.toJson(), original.toJson());
 
     await _openChannelEditor(tester, controller, original);
     await tester.enterText(find.byType(TextFormField).first, 'Failed');
-    await tester.tap(find.text('Save channel'));
+    await tester.pump(channelAirCheckDebounce);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Save identity'));
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.widgetWithText(FilledButton, 'Save identity'),
+          )
+          .onPressed,
+      isNotNull,
+    );
+    await tester.tap(find.text('Save identity'));
     await tester.pumpAndSettle();
 
+    expect(
+      find.descendant(
+        of: find.byType(LineupNotice),
+        matching: find.textContaining(
+          'The channel could not be saved. No lineup changes were saved.',
+        ),
+      ),
+      findsOneWidget,
+    );
     expect(controller.channels.single.toJson(), original.toJson());
-    expect(find.text('The channel could not be saved.'), findsOneWidget);
   });
 
   testWidgets('settings dropdowns stay disabled until persistence completes', (
@@ -571,7 +671,7 @@ void main() {
   });
 
   testWidgets('Channel Setup footer uses its available width', (tester) async {
-    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    await tester.binding.setSurfaceSize(const Size(1100, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     final controller = FixtureController()
       ..stage = SetupStage.channelSetup
@@ -587,7 +687,63 @@ void main() {
 
     expect(
       tester.getTopLeft(find.text('Configure channels')).dy,
-      greaterThan(tester.getTopLeft(find.text('Select All')).dy),
+      tester.getTopLeft(find.text('Select All')).dy,
+    );
+    expect(
+      tester.getTopLeft(find.text('Configure channels')).dx,
+      greaterThan(tester.getTopRight(find.text('Clear All')).dx),
+    );
+  });
+
+  testWidgets('Channel Setup excludes descriptor-invalid inventory', (
+    tester,
+  ) async {
+    final controller = _InvalidChannelSetupController()
+      ..stage = SetupStage.channelSetup
+      ..libraries = const [
+        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
+      ];
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      MaterialApp(home: UpstreamChannelSetupView(controller: controller)),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Configure channels'));
+    await tester.pumpAndSettle();
+
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.widgetWithText(FilledButton, 'Build Channels'),
+          )
+          .onPressed,
+      isNull,
+    );
+  });
+
+  testWidgets('Channel Setup counts unique playlist-only programs', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1600, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final controller = _PlaylistOnlyChannelSetupController()
+      ..stage = SetupStage.channelSetup
+      ..libraries = const [
+        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
+      ];
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      MaterialApp(home: UpstreamChannelSetupView(controller: controller)),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Configure channels'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('2 channel ideas from 6 playable programs.'),
+      findsOneWidget,
     );
   });
 
@@ -612,7 +768,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Build Options'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Append channels'));
+    await tester.tap(find.text('Add generated channels'));
     await tester.pump();
     await tester.tap(find.text('Review'));
     await tester.pumpAndSettle();
@@ -620,7 +776,7 @@ void main() {
     expect(find.bySemanticsLabel('Create: 2'), findsOneWidget);
     expect(find.bySemanticsLabel('Update: 0'), findsOneWidget);
     expect(find.bySemanticsLabel('Unchanged: 1'), findsOneWidget);
-    expect(find.bySemanticsLabel('Remove: 0'), findsOneWidget);
+    expect(find.bySemanticsLabel('Generated removed: 0'), findsOneWidget);
     expect(find.bySemanticsLabel('Final: 3'), findsOneWidget);
 
     await tester.tap(find.text('Confirm & Build'));
@@ -662,7 +818,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Build Channels'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('This will replace your current lineup'));
+    await tester.tap(find.text('Remove 0 generated channels'));
     await tester.pump();
     await tester.tap(find.text('Confirm & Replace'));
     await tester.pump();
@@ -670,7 +826,7 @@ void main() {
     expect(find.bySemanticsLabel('Applying channels'), findsOneWidget);
     expect(find.text('Back'), findsNothing);
     expect(find.text('Cancel'), findsNothing);
-    expect(find.text('Done'), findsNothing);
+    expect(find.text('View lineup'), findsNothing);
     expect(controller.stage, SetupStage.channelSetup);
 
     controller.finishApply();
@@ -684,8 +840,8 @@ void main() {
       1,
     );
     expect(controller.stage, SetupStage.channelSetup);
-    expect(Focus.of(tester.element(find.text('Done'))).hasFocus, isTrue);
-    await tester.tap(find.text('Done'));
+    expect(Focus.of(tester.element(find.text('View lineup'))).hasFocus, isTrue);
+    await tester.tap(find.text('View lineup'));
     await tester.pumpAndSettle();
     expect(controller.stage, SetupStage.ready);
   });
@@ -777,8 +933,7 @@ Future<void> _openChannelEditor(
         builder: (context) => TextButton(
           onPressed: () => showDialog<void>(
             context: context,
-            builder: (_) =>
-                ChannelEditor(controller: controller, channel: channel),
+            builder: (_) => _studio(controller, channel),
           ),
           child: const Text('Open editor'),
         ),
@@ -789,11 +944,71 @@ Future<void> _openChannelEditor(
   await tester.pumpAndSettle();
 }
 
-String _modeLabel(PlaybackMode mode) => switch (mode) {
-  PlaybackMode.sequential => 'Sequential',
-  PlaybackMode.shuffle => 'Shuffle',
-  PlaybackMode.block => 'Blocks',
-};
+Widget _studio(FixtureController controller, Channel channel) => Scaffold(
+  body: Builder(
+    builder: (context) => ChannelStudioView(
+      controller: controller,
+      mode: channel.builderKey == null
+          ? ChannelStudioMode.editCustom
+          : ChannelStudioMode.inspectGenerated,
+      channel: channel,
+      onBack: (_) async => Navigator.of(context).maybePop(),
+      onSaved: (_) {},
+      onDuplicate: (_) {},
+      onOpenGenerateLineup: () async {},
+      onTune: (_) async => false,
+    ),
+  ),
+);
+
+final _studioMovie = PlexMediaItem(
+  id: 'studio-movie',
+  title: 'Studio movie',
+  type: 'movie',
+  duration: const Duration(minutes: 90),
+  libraryId: 'movies',
+  parts: [PlexMediaPart(path: '/studio-movie')],
+  genres: const ['Comedy'],
+  year: 2026,
+);
+
+final _studioConnection = PlexConnection(
+  uri: Uri.parse('https://studio.example:32400'),
+  local: true,
+  relay: false,
+);
+
+final _studioEpisode = PlexMediaItem(
+  id: 'studio-episode',
+  title: 'Studio episode',
+  type: 'episode',
+  duration: const Duration(minutes: 30),
+  libraryId: 'shows',
+  parts: [PlexMediaPart(path: '/studio-episode')],
+  year: 2026,
+);
+
+class _CountingSetupController extends FixtureController {
+  var setupEntries = 0;
+
+  @override
+  Future<void> enterChannelSetup() async {
+    setupEntries++;
+    await super.enterChannelSetup();
+  }
+}
+
+class _ReviewStudioController extends FixtureController {
+  _ReviewStudioController({super.store});
+
+  @override
+  Future<ScheduleIndex> loadScheduleFor(Channel channel) async => buildSchedule(
+    resolveContent(channel.source, availableMedia, availablePlaylists),
+    mode: channel.playbackMode,
+    seed: channel.shuffleSeed,
+    blockSize: channel.blockSize ?? 3,
+  );
+}
 
 class _FailNextSaveStore extends FixtureStore {
   bool _failNextSave = true;
@@ -836,6 +1051,7 @@ class _FailingChannelSetupController extends FixtureController {
           type: 'movie',
           duration: const Duration(minutes: 90),
           libraryId: 'movies',
+          parts: [PlexMediaPart(path: '/parts/movie-$index')],
           genres: const ['Drama'],
         ),
     ];
@@ -860,6 +1076,53 @@ class _PendingChannelSetupController extends _FailingChannelSetupController {
   }) => _apply.future;
 
   void finishApply() => _apply.complete();
+}
+
+class _InvalidChannelSetupController extends FixtureController {
+  @override
+  Future<bool> setLibraries(Set<String> ids) async {
+    selectedLibraryIds = Set.unmodifiable(ids);
+    availableMedia = [
+      for (var index = 0; index < 6; index++)
+        PlexMediaItem(
+          id: 'invalid-$index',
+          title: 'Invalid $index',
+          type: 'movie',
+          duration: const Duration(minutes: 90),
+          libraryId: 'movies',
+          genres: const ['Drama'],
+        ),
+    ];
+    libraryScanStatus = LibraryScanStatus.complete;
+    return true;
+  }
+}
+
+class _PlaylistOnlyChannelSetupController extends FixtureController {
+  @override
+  Future<bool> setLibraries(Set<String> ids) async {
+    selectedLibraryIds = Set.unmodifiable(ids);
+    final items = [
+      for (var index = 0; index < 6; index++)
+        PlexMediaItem(
+          id: 'playlist-item-$index',
+          title: 'Playlist item $index',
+          type: 'movie',
+          duration: const Duration(minutes: 30),
+          parts: [PlexMediaPart(path: '/playlist-item-$index')],
+        ),
+    ];
+    availablePlaylists = [
+      PlexPlaylist(id: 'primary', title: 'Primary', items: items),
+      PlexPlaylist(
+        id: 'shared',
+        title: 'Shared',
+        items: items.take(5).toList(),
+      ),
+    ];
+    libraryScanStatus = LibraryScanStatus.complete;
+    return true;
+  }
 }
 
 final _channel = Channel(

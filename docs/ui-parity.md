@@ -230,7 +230,7 @@ Relevant upstream paths included:
 | Guide with PiP allocation | Parity | `PlayerSurface` is the single Flutter/native presentation geometry used by both PiP and full player. Tuning remains in Guide; PiP can then open the full shell. The macOS unsupported surface never fabricates video. |
 | Tune, replacement tune, loading, retry, stopped/ended and stale work | Parity | The retained coordinator serializes tune operations, uses separate tune and native-load generations, rejects stale events, and projects recoverable versus terminal failures without adding widget playback state. |
 | Ready, playing, paused, buffering, seeking, track and output metadata projection | Parity | The public seam accepts these contract-valid states. The OSD exposes only available tracks/telemetry, disables unsupported actions honestly, and does not add native handles. Production Windows still rejects stale load IDs before Dart. |
-| OSD structure and status-sensitive auto-hide | Parity | One coordinator timer uses an epoch, resets on interaction, stays visible for paused/buffering/seeking, suspends while controls have accessibility focus, and cannot hide a reopened overlay. Error and track surfaces are untimed. |
+| OSD structure and status-sensitive auto-hide | Parity | One coordinator timer uses an epoch, resets on interaction, stays visible for paused/buffering/seeking, suspends while controls have accessibility focus, and cannot hide a reopened overlay. The classic-TV default hides transport UI and blocks Player-local transport shortcuts; DVR playback controls restores them without changing native/libmpv behavior. Error and track surfaces are untimed. |
 | Mini Guide | Parity | Five bounded nearby rows match upstream structure and expose channel identity, current title/progress, next title, tuned state, logical focus, paging, replacement tune, full-Guide entry and exact input guidance. |
 | Responsive Guide/player layout | Intentional Desktop adaptation | Central Guide policy controls padding, rail width, showcase/PiP allocation and compact details. OSD and mini Guide use capped safe-area surfaces. Widget coverage includes 800×600, 1280×720, 1360×840, 1600×900, 1920×1080 and 3840×2160 logical sizes. |
 | Accessibility | Parity | Only lazy visible rows/cells enter the tree; channel, program, time range, airing/ended/upcoming, selected/focused/tuned, progress, loading/buffering, modal labels, action names and disabled availability are exposed. |
@@ -693,3 +693,136 @@ These Flutter goldens prove composition only. Physical Windows validation of
 native video layering, DirectComposition, hardware media behavior, input,
 accessibility, fullscreen, and packaging remains pending at the exact resulting
 UI-8 commit with the pinned engine recorded in that evidence.
+
+## 2026-08-26 visual-parity polish campaign
+
+### Provenance and scope
+
+This campaign used implementation baseline
+`30003ddddcc611ea4920bad3d6f591a8e5bf2afa`, the locked plan SHA-256
+`23e10f7ef660b8eec061321a6ea658fec779013c6e5c8fedd1b560293e1e2a52`, and
+ended its product work at
+`6714eed8b25b6305934ac90a1a84b9eb3604cee7`. The sequential package commits
+were:
+
+- Mini Guide: `05b7aecc70d56b46f7c62f0f815b8ac748c0ba95`;
+- Player OSD: `dfdc82956d933a624c07414cc458f6b2da555422`;
+- Rich Now Playing: `fdefb61fd7586330d9173d66819c86d7103ea78e`;
+- Profiles and protected PIN: `b64d101847f4991653e3a82377232323d4cd5e55`;
+- Channel Setup: `6714eed8b25b6305934ac90a1a84b9eb3604cee7`.
+
+The comparison retained immutable upstream source
+`b30e27c0025d254b7c3c8fb7a9335070542362bd`. The supplied Player OSD/Mini
+Guide/Now Playing, Profiles/PIN, and Channel Setup screenshot groups were
+reviewed at original pixels during the locked review gate and owning packages.
+The final deterministic-acceptance worker could not re-access those supplied
+files, which limits that worker's independent reinspection but does not erase
+the earlier comparisons. No private screenshot fact, artwork, or personal path
+is reproduced here.
+
+The implementation changed only Flutter presentation owners and their direct
+tests/goldens. It added no dependency and changed no native, engine, runner,
+controller, model, persistence, transport, scheduling, design-system,
+browser/Electron, release, signing, or package owner.
+
+### Resulting Flutter composition
+
+| Surface | Current classification | Accepted result |
+| --- | --- | --- |
+| Mini Guide | Visual parity for Flutter composition | Five shallow broadcast rows retain channel/current/next/progress facts, tuned/focus distinction, paging, tuning, and timeout behavior from compact through widescreen layouts. |
+| Player OSD | Visual parity for Flutter composition | The bottom-rising control plane keeps restrained metadata in the lower-left/lower band, secondary actions in the lower-right, a top-right channel bug, and an edge-to-edge absolute-bottom progress line. Transport UI is hidden by default and restored by DVR playback controls; no native/libmpv behavior changes. |
+| Rich Now Playing | Visual parity for Flutter composition | The source-informed lower-left shelf width remains bounded while the shared top-right channel bug, poster/text, clear-logo/title fallback, year/genres, concise rating/resolution/dynamic-range/audio badges, synopsis, and conditional cast row have a stronger internal hierarchy. Plex cast facts render bounded actor portraits plus a names line; missing or failed headshots use a neutral person silhouette rather than initials, and absent cast reserves no space. The playback line shows source/runtime facts only when available and prefers native position/duration, falling back to schedule timing when native duration is unavailable. Up Next and secondary actions remain OSD-owned. |
+| Profiles and protected PIN | Visual parity for Flutter composition | Smaller remote-first profile cards and quieter idle keypad keys preserve response-backed badges, four-digit submit/retry, focus containment, keyboard/numpad input, and safe errors. |
+| Channel Setup | Visual parity with structural failure coverage | One centered inset composition spans libraries, strategies, review, applying, failure, and completion; review emphasizes current-to-final impact while final apply remains atomic, indeterminate, and noncancelable. |
+
+Exactly five 1920x1080 macOS goldens were added:
+`mini-guide-1920x1080.png`, `player-osd-1920x1080.png`,
+`player-now-playing-1920x1080.png`, `profiles-1920x1080.png`, and
+`channel-setup-review-1920x1080.png`. Ten existing 1280x720 goldens changed:
+Mini Guide, OSD, Now Playing, Profiles, protected-profile PIN, and Channel
+Setup libraries, strategies, review, progress, and completion. The current
+inventory is therefore 25 goldens: the historical 13-golden 2026-08-24 set was
+expanded to 20 by the 2026-08-25 campaign and to 25 by this campaign. Those
+historical counts retain their original date and scope.
+
+### Verification and runtime evidence
+
+Using pinned Flutter 3.47.0 framework revision
+`4cf24164269a5ebf0c16a028a00727d0e77bbb05` and Dart 3.13.0, formatting
+checked 59 files with zero changes, analysis was clean, and the focused
+`player_view`, `guide_view`, `lineup_app`, `ui_parity`,
+`ui_review_regression`, `theme_shell`, and `ui_acceptance_golden` suites passed
+162 tests. The full suite passed 486 tests, the macOS release build succeeded
+at 50.6 MB, `git diff --check` passed, and the post-VPP-6 worktree was clean.
+All 25 golden comparisons passed, and all 15 affected PNGs were individually
+inspected at original pixels and accepted.
+
+The macOS synthetic harness built and launched, and Guide/Classic PiP plus the
+Player were observed. A bounded follow-up run observed Guide vertical paging,
+horizontal navigation, jump-to-now, tuning, the shallow OSD, five-row Mini
+Guide, Rich Now Playing shelf, audio and subtitle rails, Settings over and back
+to Player, and all five themes. The synthetic black Player canvas is expected
+because `HarnessPlayer` provides no video surface. Profiles/PIN and Channel
+Setup were not reachable from the harness ready state; the
+resize/fullscreen/DPI matrix and timeout-retention scenarios were not completely
+rerun. An initial macOS screen-capture failure and Flutter accessibility
+pending-tree warnings limited automation; these are tooling observations, not
+product or physical assistive-technology failures.
+
+### Physical Windows result
+
+VPP-7 was **Blocked/not run** at exact product HEAD
+`6714eed8b25b6305934ac90a1a84b9eb3604cee7`. The local object and pinned
+toolchain were verified, but the available host was Darwin arm64 and no
+authorized physical Windows 10/11 x64 machine, operator, or transport route was
+available. Consequently every physical Windows row remained blocked: there is
+no machine/display/scaling/runtime/build/media identity, evidence directory,
+or new platform-validation/support claim. Native video layering,
+DirectComposition, fullscreen/DPI, physical focus/input, and real-video
+translucency remain pending under
+[Windows Native Acceptance](windows-native-validation.md).
+
+## 2026-08-27 Channel Studio deterministic acceptance
+
+### Scope and evidence boundary
+
+Channel Studio implementation started from
+`c8d782e880f29b0b7b56565096a42b475faa1b1d`, reached Slice 6 baseline
+`a99695425b216b59102e1dea893933708bfe0962`, and includes the reviewed current
+Slice 7 Studio correction, its direct tests, and six closeout documents. It
+changes Flutter/Dart channel ownership policy, persistence seams, management
+UI, and deterministic schedule projection. It does not change native C++,
+libmpv, DirectComposition, the Flutter engine patch, packaging, or WebViews.
+
+The implemented UI keeps one Channels destination and one number-ordered list.
+**Generate lineup** remains the bulk generator; **New channel** opens the
+full-page Studio. Create, edit custom, inspect generated, and duplicate-as-
+custom modes use explicit textual ownership. Every mode retains Air Check;
+compact layouts show now/next while expanded layouts show bounded surrounding
+schedule context. Source choice, playback rhythm, unavailable retention,
+validation, stale/failure recovery, and save-versus-tune behavior are covered
+by focused widget/controller/scheduler tests.
+
+### Visual and deterministic result
+
+The canonical macOS inventory is now 27 goldens. Two new Studio images cover
+expanded `1280x720` and compact `800x600` authoring. The accepted Slice 1 and
+Slice 3 copy also refreshed the existing Channel Setup review images at
+`1280x720` and `1920x1080` plus completion at `1280x720`. All five images were
+inspected and contain deterministic synthetic facts only. The complete golden
+suite passed 27 of 27 comparisons, and the corrected focused
+Studio/parity/review suite passed 97 tests. The Slice 4 and Slice 5 owning
+matrices passed 197 and 203 tests respectively. Viewport, 200 percent text
+scale, focus, semantics, live
+regions, Reduce Motion, large focus, keyboard reorder, bounded large-library
+filtering, and stale-safe preview behavior are deterministic evidence.
+
+The sequential closeout gate checked 63 formatted files with zero changes,
+reported no analysis issues, passed all 613 repository tests under
+`America/New_York`, and built the 51.0 MB macOS release application.
+
+These results establish Flutter composition and interaction contracts on the
+macOS test harness. No physical Windows campaign was run, so they do not
+establish Windows DPI, keyboard/remote delivery, screen-reader behavior, native
+video layering during **Tune in**, media compatibility, packaging, platform
+validation, or support.
