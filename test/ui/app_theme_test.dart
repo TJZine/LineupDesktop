@@ -93,6 +93,17 @@ void main() {
     expect(large.focusBorderWidth, greaterThan(normal.focusBorderWidth));
   });
 
+  test('navigation selection preserves the application label typography', () {
+    for (final name in LineupThemeName.values) {
+      final theme = LineupTheme.forName(name);
+      final selected = theme.navigationRailTheme.selectedLabelTextStyle!;
+
+      expect(selected.fontFamily, theme.textTheme.labelMedium!.fontFamily);
+      expect(selected.color, theme.extension<LineupThemeRoles>()!.progressFill);
+      expect(selected.fontWeight, FontWeight.w700);
+    }
+  });
+
   test('equivalent semantic role extensions use value equality', () {
     final first = LineupTheme.forName(LineupThemeName.emberSteel)
         .extension<LineupThemeRoles>()!;

@@ -546,7 +546,7 @@ void main() {
         find.descendant(of: sourceChoices, matching: find.text('Hand-picked')),
         findsOneWidget,
       );
-      await tester.tap(find.text('Cancel'));
+      await tester.tap(find.text('Back to Channels'));
       await tester.pumpAndSettle();
     }
   });
@@ -818,8 +818,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Build Channels'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Remove 0 generated channels'));
-    await tester.pump();
+    expect(find.text('Remove 0 generated channels'), findsNothing);
     await tester.tap(find.text('Confirm & Replace'));
     await tester.pump();
 

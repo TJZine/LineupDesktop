@@ -1022,7 +1022,9 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
           primary: FilledButton.icon(
             onPressed:
                 planned.isEmpty ||
-                    (_mode == ChannelBuildMode.replace && !_replaceConfirmed)
+                    (_mode == ChannelBuildMode.replace &&
+                        impact.remove > 0 &&
+                        !_replaceConfirmed)
                 ? null
                 : () => _build(planned, impact),
             icon: const Icon(Icons.auto_awesome),
@@ -1121,7 +1123,7 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
             ],
           ),
         ),
-        if (_mode == ChannelBuildMode.replace) ...[
+        if (_mode == ChannelBuildMode.replace && impact.remove > 0) ...[
           const SizedBox(height: 10),
           Material(
             color: Theme.of(context).colorScheme.error.withValues(alpha: 0.06),
@@ -1138,7 +1140,9 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
             child: CheckboxListTile(
               key: const Key('channel-setup-replace-confirmation'),
               value: _replaceConfirmed,
-              title: Text('Remove ${impact.remove} generated channels'),
+              title: Text(
+                'Remove ${impact.remove} generated ${impact.remove == 1 ? 'channel' : 'channels'}',
+              ),
               subtitle: Text(
                 '${impact.customKept} custom ${impact.customKept == 1 ? 'channel is' : 'channels are'} protected and will remain unchanged.',
               ),
@@ -1371,6 +1375,7 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
         maximumChannels: _maximumChannels,
         anchor: DateTime.now().toUtc(),
       );
+      _replaceConfirmed = false;
       _step = 3;
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {

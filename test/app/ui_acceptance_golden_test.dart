@@ -296,6 +296,59 @@ void main() {
     );
   });
 
+  testWidgets('Channel Setup review with generated removals', (tester) async {
+    final controller = _VisualController()
+      ..stage = SetupStage.channelSetup
+      ..libraries = const [
+        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
+      ]
+      ..channels = [
+        Channel(
+          id: 'retro-detectives',
+          number: 42,
+          name: 'Retro Detectives',
+          source: const LibrarySource(
+            libraryId: 'movies',
+            libraryType: PlexLibraryType.movie,
+          ),
+          playbackMode: PlaybackMode.shuffle,
+          anchor: DateTime.utc(2026, 1, 15),
+          shuffleSeed: 42,
+          builderKey: 'synthetic:retro-detectives',
+        ),
+      ];
+    await _pump(
+      tester,
+      TickerMode(
+        enabled: false,
+        child: UiFixture(
+          controller: controller,
+          guideClock: () => _fixedNow,
+        ).build(),
+      ),
+    );
+    await tester.tap(find.text('Configure channels'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Review'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Remove 1 generated channel'), findsOneWidget);
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.widgetWithText(FilledButton, 'Confirm & Replace'),
+          )
+          .onPressed,
+      isNull,
+    );
+    await _match(
+      tester,
+      'channel-setup-review-removals-1280x720.png',
+      precacheLogo: true,
+      additionalPumps: 2,
+    );
+  });
+
   testWidgets('Channel Setup progress', (tester) async {
     final controller = _PendingVisualController()
       ..stage = SetupStage.channelSetup
@@ -1118,13 +1171,6 @@ Future<void> _openChannelSetupApply(WidgetTester tester) async {
   await tester.pumpAndSettle();
   await tester.tap(find.text('Build Channels'));
   await tester.pumpAndSettle();
-  await tester.tap(
-    find.descendant(
-      of: find.byType(CheckboxListTile),
-      matching: find.textContaining('generated channels'),
-    ),
-  );
-  await tester.pump();
   await tester.tap(find.text('Confirm & Replace'));
   await tester.pump();
 }

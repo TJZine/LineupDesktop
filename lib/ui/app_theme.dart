@@ -238,7 +238,7 @@ abstract final class LineupTheme {
         backgroundColor: palette.deepBackground,
         indicatorColor: palette.selectedSurface,
         selectedIconTheme: IconThemeData(color: palette.progressFill),
-        selectedLabelTextStyle: TextStyle(
+        selectedLabelTextStyle: textTheme.labelMedium!.copyWith(
           color: palette.progressFill,
           fontWeight: FontWeight.w700,
         ),

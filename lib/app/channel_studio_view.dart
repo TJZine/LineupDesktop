@@ -91,7 +91,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
   static const _resultWindow = 100;
   GlobalKey<FormState> _form = GlobalKey<FormState>();
   final _backFocus = FocusNode(debugLabel: 'Back to Channels');
-  final _cancelFocus = FocusNode(debugLabel: 'Cancel Studio');
+  final _recoveryFocus = FocusNode(debugLabel: 'Use saved Studio version');
   final _nameFocus = FocusNode(debugLabel: 'Channel name');
   final _numberFocus = FocusNode(debugLabel: 'Channel number');
   final _saveFocus = FocusNode(debugLabel: 'Save channel');
@@ -282,7 +282,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
   @override
   void dispose() {
     _backFocus.dispose();
-    _cancelFocus.dispose();
+    _recoveryFocus.dispose();
     _name.dispose();
     _number.dispose();
     _search.dispose();
@@ -623,15 +623,6 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
             label: const Text('Back to Channels'),
           ),
         ),
-        if (!_generated && !recovering)
-          FocusTraversalOrder(
-            order: const NumericFocusOrder(4),
-            child: TextButton(
-              focusNode: _cancelFocus,
-              onPressed: _saving ? null : () => unawaited(_leave()),
-              child: const Text('Cancel'),
-            ),
-          ),
         if (_generated && !recovering)
           FocusTraversalOrder(
             order: const NumericFocusOrder(4),
@@ -763,7 +754,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                   )
                 else ...[
                   OutlinedButton(
-                    focusNode: _cancelFocus,
+                    focusNode: _recoveryFocus,
                     style: recoveryButtonStyle,
                     onPressed: _saving ? null : _confirmUseSaved,
                     child: const Text('Use saved version…'),
@@ -2157,7 +2148,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                 'The channel could not be saved. No lineup changes were saved.',
               );
       });
-      _focusAndReveal(_conflict ? _cancelFocus : _saveFocus);
+      _focusAndReveal(_conflict ? _recoveryFocus : _saveFocus);
     }
   }
 

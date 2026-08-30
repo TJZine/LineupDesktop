@@ -566,7 +566,8 @@ void main() {
     expect(find.text('Discard changes?'), findsOneWidget);
     await tester.tap(find.text('Keep editing'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Cancel'));
+    expect(find.text('Cancel'), findsNothing);
+    await tester.tap(find.text('Back to Channels'));
     await tester.pumpAndSettle();
     expect(find.text('Discard changes?'), findsOneWidget);
     await tester.tap(find.text('Discard changes'));
@@ -4130,7 +4131,6 @@ void main() {
     expect(find.byKey(const Key('channel-air-check')), findsOneWidget);
     for (final finder in [
       find.text('Back to Channels'),
-      find.text('Cancel'),
       find.text('Save channel'),
     ]) {
       _expectFitsHorizontally(tester, finder, const Size(800, 600));
@@ -4319,7 +4319,13 @@ void main() {
         )) {
           break;
         }
-        expect(_focusNodeIsInside(focus, find.text('Cancel')), isFalse);
+        expect(
+          _focusNodeIsInside(
+            focus,
+            find.widgetWithText(FilledButton, 'Tune in'),
+          ),
+          isFalse,
+        );
         focus.nextFocus();
         await tester.pump();
       }
@@ -4330,16 +4336,17 @@ void main() {
         ),
         isTrue,
       );
-      final cancelFocus = tester
-          .widget<TextButton>(find.widgetWithText(TextButton, 'Cancel'))
-          .focusNode!;
+      final tune = find.widgetWithText(FilledButton, 'Tune in');
       for (var step = 0; step < 40; step++) {
         final focus = FocusManager.instance.primaryFocus!;
-        if (identical(focus, cancelFocus)) break;
+        if (_focusNodeIsInside(focus, tune)) break;
         focus.nextFocus();
         await tester.pump();
       }
-      expect(FocusManager.instance.primaryFocus, same(cancelFocus));
+      expect(
+        _focusNodeIsInside(FocusManager.instance.primaryFocus!, tune),
+        isTrue,
+      );
     },
   );
 

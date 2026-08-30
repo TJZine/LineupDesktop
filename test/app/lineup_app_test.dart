@@ -79,8 +79,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Build Channels'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Remove 0 generated channels'));
-    await tester.pump();
+    expect(find.text('Remove 0 generated channels'), findsNothing);
     await tester.tap(find.text('Confirm & Replace'));
     await tester.pumpAndSettle();
 
@@ -118,8 +117,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Build Channels'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Remove 0 generated channels'));
-    await tester.pump();
+    expect(find.text('Remove 0 generated channels'), findsNothing);
     await tester.tap(find.text('Confirm & Replace'));
     await tester.pumpAndSettle();
 
