@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -80,6 +81,136 @@ void main() {
       'lineup-desktop-test-abcdefghijklmnopqrst',
     );
     expect(request.headers, isNot(contains('X-Plex-Token')));
+  });
+
+  test(
+    'control requests reject redirects without forwarding headers',
+    () async {
+      late http.BaseRequest request;
+      final canceled = Completer<void>();
+      final stream = StreamController<List<int>>(onCancel: canceled.complete);
+      final client = PlexClient(
+        clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+        httpClient: MockClient.streaming((value, _) async {
+          request = value;
+          return http.StreamedResponse(
+            stream.stream,
+            302,
+            headers: const {'location': 'https://attacker.invalid/collect'},
+          );
+        }),
+      );
+
+      await expectLater(
+        client.account('private-token'),
+        throwsA(
+          isA<PlexException>().having(
+            (exception) => exception.code,
+            'code',
+            'server-unreachable',
+          ),
+        ),
+      );
+      await canceled.future.timeout(const Duration(seconds: 1));
+      expect(request.followRedirects, isFalse);
+    },
+  );
+
+  test('control requests reject declared oversized bodies', () async {
+    final canceled = Completer<void>();
+    final stream = StreamController<List<int>>(onCancel: canceled.complete);
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      httpClient: MockClient.streaming(
+        (_, _) async => http.StreamedResponse(
+          stream.stream,
+          200,
+          contentLength: PlexClient.maximumControlResponseBytes + 1,
+        ),
+      ),
+    );
+
+    await expectLater(
+      client.createPin(),
+      throwsA(
+        isA<PlexException>().having(
+          (exception) => exception.code,
+          'code',
+          'response-too-large',
+        ),
+      ),
+    );
+    await canceled.future.timeout(const Duration(seconds: 1));
+  });
+
+  test('control requests reject actual streamed overflow', () async {
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      httpClient: MockClient.streaming(
+        (_, _) async => http.StreamedResponse(
+          Stream.fromIterable([
+            Uint8List(PlexClient.maximumControlResponseBytes),
+            Uint8List(1),
+          ]),
+          200,
+        ),
+      ),
+    );
+
+    await expectLater(
+      client.createPin(),
+      throwsA(
+        isA<PlexException>().having(
+          (exception) => exception.code,
+          'code',
+          'response-too-large',
+        ),
+      ),
+    );
+  });
+
+  test('control response deadline includes body streaming', () async {
+    final canceled = Completer<void>();
+    final stream = StreamController<List<int>>(onCancel: canceled.complete);
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      requestTimeout: const Duration(milliseconds: 5),
+      httpClient: MockClient.streaming(
+        (_, _) async => http.StreamedResponse(stream.stream, 200),
+      ),
+    );
+
+    await expectLater(
+      client.createPin(),
+      throwsA(
+        isA<PlexException>().having(
+          (exception) => exception.code,
+          'code',
+          'network-timeout',
+        ),
+      ),
+    );
+    await canceled.future.timeout(const Duration(seconds: 1));
+  });
+
+  test('cancel PIN propagates a normalized HTTP failure', () async {
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      httpClient: MockClient((_) async => http.Response('', 503)),
+    );
+
+    await expectLater(
+      client.cancelPin(
+        PlexPin(id: 7, code: 'ABCD', expiresAt: DateTime.utc(2026)),
+      ),
+      throwsA(
+        isA<PlexException>().having(
+          (exception) => exception.code,
+          'code',
+          'server-unreachable',
+        ),
+      ),
+    );
   });
 
   test(
@@ -607,7 +738,7 @@ void main() {
       final bytes = await plex.artwork(
         Uri.parse('https://plex.example:32400'),
         'secret',
-        Uri.parse('/library/art/1'),
+        Uri.parse('/library/metadata/1/art'),
         maximumBytes: 4,
       );
 
@@ -653,7 +784,7 @@ void main() {
         plex.artwork(
           Uri.parse('https://plex.example:32400'),
           'secret',
-          Uri.parse('/redirect'),
+          Uri.parse('/library/metadata/1/redirect'),
         ),
         plexError('artwork-unavailable'),
       );
@@ -674,7 +805,7 @@ void main() {
           plex.artwork(
             Uri.parse('https://plex.example:32400'),
             'resource-token',
-            Uri.parse('/art'),
+            Uri.parse('/library/metadata/1/art'),
           ),
           plexError(failure.value),
         );
@@ -693,7 +824,7 @@ void main() {
         plex.artwork(
           Uri.parse('https://plex.example:32400'),
           'secret',
-          Uri.parse('/library/art/1'),
+          Uri.parse('/library/metadata/1/art'),
           maximumBytes: 3,
         ),
         plexError('artwork-too-large'),
@@ -712,7 +843,7 @@ void main() {
         plex.artwork(
           Uri.parse('https://plex.example:32400'),
           'secret',
-          Uri.parse('/library/art/1'),
+          Uri.parse('/library/metadata/1/art'),
           maximumBytes: 3,
         ),
         plexError('artwork-too-large'),
@@ -913,6 +1044,48 @@ void main() {
       ),
     );
     expect(requests, 1);
+  });
+
+  test('library pagination rejects a page larger than requested', () async {
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      httpClient: MockClient(
+        (_) async => http.Response(
+          jsonEncode({
+            'MediaContainer': {
+              'Metadata': [
+                for (var index = 0; index < 101; index++)
+                  {
+                    'ratingKey': '$index',
+                    'title': 'Item $index',
+                    'type': 'movie',
+                    'duration': 1000,
+                  },
+              ],
+            },
+          }),
+          200,
+        ),
+      ),
+    );
+
+    await expectLater(
+      client.libraryItems(
+        Uri.parse('https://plex.example:32400'),
+        'secret',
+        '7',
+        PlexLibraryType.movie,
+        isCurrent: () => true,
+        onProgress: (_) {},
+      ),
+      throwsA(
+        isA<PlexException>().having(
+          (error) => error.code,
+          'code',
+          'library-page-too-large',
+        ),
+      ),
+    );
   });
 
   test(

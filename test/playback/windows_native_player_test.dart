@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -101,6 +102,155 @@ void main() {
       expect(calls.where((call) => call.method == 'initialize'), hasLength(2));
     },
   );
+
+  test('dispatches the complete bounded outgoing command contract', () async {
+    final calls = <MethodCall>[];
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      calls.add(call);
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+    final player = WindowsNativePlayer();
+    addTearDown(player.dispose);
+    await player.initialize();
+    await player.play();
+    await player.pause();
+    await player.seek(const Duration(milliseconds: 1250));
+    await player.setVideoRect(
+      const PlayerVideoRect(
+        left: 12,
+        top: 34,
+        width: 640,
+        height: 360,
+        scale: 2,
+      ),
+    );
+    await player.setFullscreen(true);
+    await player.selectTrack(PlayerTrackType.audio, 7);
+    await player.selectTrack(PlayerTrackType.subtitle, null);
+    await player.setVolume(42.5);
+    await player.stop();
+
+    expect(calls.map((call) => call.method), [
+      'initialize',
+      'play',
+      'pause',
+      'seek',
+      'setVideoRect',
+      'setFullscreen',
+      'selectTrack',
+      'selectTrack',
+      'setVolume',
+      'stop',
+    ]);
+    expect(calls[3].arguments, {'seconds': 1.25});
+    expect(calls[4].arguments, {
+      'left': 12.0,
+      'top': 34.0,
+      'width': 640.0,
+      'height': 360.0,
+      'scale': 2.0,
+    });
+    expect(calls[5].arguments, {'fullscreen': true});
+    expect(calls[6].arguments, {'type': 'audio', 'id': 7});
+    expect(calls[7].arguments, {'type': 'subtitle', 'id': null});
+    expect(calls[8].arguments, {'volume': 42.5});
+  });
+
+  test(
+    'normalizes allowlisted native command failures without raw prose',
+    () async {
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        if (call.method == 'play') {
+          throw PlatformException(
+            code: 'command_queue_full',
+            message: 'opaque native queue detail',
+          );
+        }
+        return null;
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+      final player = WindowsNativePlayer();
+      addTearDown(player.dispose);
+      await player.initialize();
+
+      await expectLater(
+        player.play(),
+        throwsA(
+          isA<PlayerUnavailable>()
+              .having(
+                (error) => error.failureCode,
+                'failureCode',
+                'command_queue_full',
+              )
+              .having(
+                (error) => error.message,
+                'message',
+                'The native player is busy. Try again.',
+              ),
+        ),
+      );
+    },
+  );
+
+  test('authenticated loads require an HTTPS authority in Dart', () async {
+    final calls = <MethodCall>[];
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      calls.add(call);
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+    final player = WindowsNativePlayer();
+    addTearDown(player.dispose);
+    await player.initialize();
+
+    for (final insecure in [
+      Uri.parse('http://dev-media.test/video.mp4'),
+      Uri.parse('https:opaque-media-path'),
+    ]) {
+      await expectLater(
+        player.load(insecure, plexToken: 'secret-token'),
+        throwsA(
+          isA<PlayerUnavailable>().having(
+            (error) => error.failureCode,
+            'failureCode',
+            'insecure_media_uri',
+          ),
+        ),
+      );
+    }
+    expect(calls.where((call) => call.method == 'load'), isEmpty);
+
+    final load = player.load(Uri.parse('http://dev-media.test/video.mp4'));
+    await Future<void>.delayed(Duration.zero);
+    final loadCall = calls.singleWhere((call) => call.method == 'load');
+    final loadId = loadCall.arguments!['loadId']! as int;
+    expect(loadCall.arguments!['plexToken'], isNull);
+    await _sendNativeEvent(messenger, {
+      'type': 'state',
+      'loadId': loadId,
+      'state': 'playing',
+    });
+    await load;
+  });
+
+  test('Windows source explicitly verifies TLS before sending Plex tokens', () {
+    final source = File('windows/runner/native_player.cpp').readAsStringSync();
+
+    expect(source, contains('{"tls-verify", "yes"}'));
+    expect(source, contains('if (plex_token && !IsHttpsUri(*uri))'));
+    expect(source, contains('result->Error("insecure_media_uri"'));
+    for (final failureCode in [
+      'correlation_error',
+      'command_error',
+      'event_queue_overflow',
+    ]) {
+      expect(source, contains('"$failureCode"'));
+    }
+  });
 
   test(
     'native load errors preserve retry and coordinator generation',
@@ -223,6 +373,46 @@ void main() {
     expect(player.status.message, 'loading failed');
     expect(player.status.failureCode, 'mpv_error');
     expect(player.status.httpStatus, isNull);
+  });
+
+  test('normalizes unknown native failure codes before projection', () async {
+    final calls = <MethodCall>[];
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      calls.add(call);
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+    final player = WindowsNativePlayer();
+    addTearDown(player.dispose);
+    await player.initialize();
+    final load = player.load(Uri.parse('file:///broken.mp4'));
+    await Future<void>.delayed(Duration.zero);
+    final loadId = calls.last.arguments!['loadId']! as int;
+    final expectation = expectLater(
+      load,
+      throwsA(
+        isA<PlayerUnavailable>()
+            .having((error) => error.failureCode, 'failureCode', 'native_error')
+            .having(
+              (error) => error.message,
+              'message',
+              'Media playback failed',
+            ),
+      ),
+    );
+
+    await _sendNativeEvent(messenger, {
+      'type': 'state',
+      'loadId': loadId,
+      'state': 'error',
+      'message': 'opaque native detail',
+      'failureCode': 'unbounded_native_extension',
+    });
+
+    await expectation;
+    expect(player.status.failureCode, 'native_error');
+    expect(player.status.message, 'Media playback failed');
   });
 
   test(
@@ -530,7 +720,19 @@ void main() {
     await player.initialize();
     await expectLater(
       player.load(Uri.parse('file:///broken.mp4')),
-      throwsA(isA<PlatformException>()),
+      throwsA(
+        isA<PlayerUnavailable>()
+            .having(
+              (error) => error.failureCode,
+              'failureCode',
+              'native_command_error',
+            )
+            .having(
+              (error) => error.message,
+              'message',
+              'The native player command failed.',
+            ),
+      ),
     );
     await _sendNativeEvent(messenger, {
       'type': 'state',

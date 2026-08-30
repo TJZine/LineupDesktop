@@ -21,8 +21,9 @@ abstract interface class NativePlayer {
   /// events so callers can reject stale work.
   ///
   /// [plexToken] is sensitive authentication material. Implementations that
-  /// perform HTTP media loads must send it only as an `X-Plex-Token` request
-  /// header. They must never log it or append it to [media].
+  /// perform network media loads must require HTTPS and send it only as an
+  /// `X-Plex-Token` request header. They must never log it or append it to
+  /// [media].
   Future<void> load(Uri media, {String? plexToken, int? generation});
   Future<void> play();
   Future<void> pause();
@@ -177,9 +178,13 @@ class PlayerTelemetry {
 }
 
 class PlayerUnavailable implements Exception {
-  const PlayerUnavailable(this.message);
+  const PlayerUnavailable(
+    this.message, {
+    this.failureCode = 'player_unavailable',
+  });
 
   final String message;
+  final String failureCode;
 
   @override
   String toString() => message;

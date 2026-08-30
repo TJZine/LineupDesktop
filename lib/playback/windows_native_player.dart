@@ -6,6 +6,30 @@ import 'native_player.dart';
 
 class WindowsNativePlayer implements NativePlayer {
   static const _channel = MethodChannel('lineup/native_player');
+  static const _nativePlaybackFailureCodes = {
+    'http_error',
+    'network_error',
+    'audio_decode_error',
+    'video_decode_error',
+    'audio_output_error',
+    'video_output_error',
+    'source_open_error',
+    'container_error',
+    'correlation_error',
+    'command_error',
+    'event_queue_overflow',
+    'mpv_error',
+  };
+  static const _nativeCommandFailureCodes = {
+    'required_engine_unavailable',
+    'initialize_failed',
+    'dispose_in_progress',
+    'not_initialized',
+    'invalid_argument',
+    'insecure_media_uri',
+    'command_queue_full',
+    'window_error',
+  };
   static WindowsNativePlayer? _handlerOwner;
 
   WindowsNativePlayer({Duration? loadTimeout})
@@ -57,7 +81,7 @@ class WindowsNativePlayer implements NativePlayer {
     _handlerOwner = this;
     _channel.setMethodCallHandler(_handleNativeCall);
     try {
-      await _channel.invokeMethod<Object?>('initialize');
+      await _invokeNative<Object?>('initialize');
     } catch (_) {
       if (identical(_handlerOwner, this)) {
         _channel.setMethodCallHandler(null);
@@ -71,6 +95,15 @@ class WindowsNativePlayer implements NativePlayer {
 
   @override
   Future<void> load(Uri media, {String? plexToken, int? generation}) async {
+    if (plexToken != null &&
+        (media.scheme.toLowerCase() != 'https' ||
+            !media.hasAuthority ||
+            media.host.isEmpty)) {
+      throw const PlayerUnavailable(
+        'Authenticated Plex media requires HTTPS.',
+        failureCode: 'insecure_media_uri',
+      );
+    }
     await _lifecycle;
     _requireInitialized();
     final loadId = ++_nextLoadId;
@@ -91,7 +124,7 @@ class WindowsNativePlayer implements NativePlayer {
             onError: (Object error, StackTrace stackTrace) =>
                 (error, stackTrace),
           );
-      await _channel.invokeMethod<void>('load', {
+      await _invokeNative<void>('load', {
         'uri': media.toString(),
         'plexToken': plexToken,
         'loadId': loadId,
@@ -111,7 +144,11 @@ class WindowsNativePlayer implements NativePlayer {
               ? error.message
               : 'Media load failed',
           recoverable: true,
-          failureCode: _status.failureCode,
+          failureCode: switch (error) {
+            PlayerUnavailable(:final failureCode) => failureCode,
+            TimeoutException() => 'load_timeout',
+            _ => _status.failureCode,
+          },
           httpStatus: _status.httpStatus,
         );
         _activeGeneration = null;
@@ -182,7 +219,7 @@ class WindowsNativePlayer implements NativePlayer {
     if (!_initialized) return;
     _initialized = false;
     try {
-      await _channel.invokeMethod<void>('dispose');
+      await _invokeNative<void>('dispose');
     } finally {
       if (identical(_handlerOwner, this)) {
         _channel.setMethodCallHandler(null);
@@ -202,7 +239,24 @@ class WindowsNativePlayer implements NativePlayer {
   Future<void> _invoke(String method, [Map<String, Object?>? arguments]) async {
     await _lifecycle;
     _requireInitialized();
-    await _channel.invokeMethod<void>(method, arguments);
+    await _invokeNative<void>(method, arguments);
+  }
+
+  Future<T?> _invokeNative<T>(
+    String method, [
+    Map<String, Object?>? arguments,
+  ]) async {
+    try {
+      return await _channel.invokeMethod<T>(method, arguments);
+    } on PlatformException catch (error) {
+      final code = _nativeCommandFailureCodes.contains(error.code)
+          ? error.code
+          : 'native_command_error';
+      throw PlayerUnavailable(
+        _nativeCommandFailureMessage(code),
+        failureCode: code,
+      );
+    }
   }
 
   void _requireInitialized() {
@@ -238,16 +292,17 @@ class WindowsNativePlayer implements NativePlayer {
       'error' => PlayerState.error,
       _ => PlayerState.idle,
     };
-    final message = event['failureCode'] is String
-        ? _nativeFailureMessage(event)
+    final failureCode = event['failureCode'] is String
+        ? _normalizedPlaybackFailureCode(event['failureCode'] as String)
+        : null;
+    final message = failureCode != null
+        ? _nativeFailureMessage(event, failureCode)
         : event['message'] as String? ?? state.name;
     _setStatus(
       state,
       message,
       recoverable: state == PlayerState.error,
-      failureCode: event['failureCode'] is String
-          ? event['failureCode'] as String
-          : null,
+      failureCode: failureCode,
       httpStatus: event['httpStatus'] is int
           ? event['httpStatus'] as int
           : null,
@@ -256,26 +311,51 @@ class WindowsNativePlayer implements NativePlayer {
       final pending = _pendingLoad;
       if (pending != null && !pending.isCompleted) pending.complete();
     } else if (state == PlayerState.error) {
-      _completePendingLoadError(PlayerUnavailable(message));
+      _completePendingLoadError(
+        PlayerUnavailable(
+          message,
+          failureCode: failureCode ?? 'native_playback_error',
+        ),
+      );
     }
   }
 
-  String _nativeFailureMessage(Map<Object?, Object?> event) =>
-      switch (event['failureCode']) {
-        'http_error' when event['httpStatus'] is int =>
-          'Media server returned HTTP ${event['httpStatus']}',
-        'http_error' => 'Media server rejected the request',
-        'network_error' => 'Media server connection failed',
-        'audio_decode_error' => 'Audio decoding failed',
-        'video_decode_error' => 'Video decoding failed',
-        'audio_output_error' => 'Audio output could not start',
-        'video_output_error' => 'Video output could not start',
-        'source_open_error' => 'Media source could not be opened',
-        'container_error' => 'Media container could not be read',
-        'mpv_error' when event['message'] is String =>
-          event['message'] as String,
-        _ => 'Media playback failed',
-      };
+  static String _normalizedPlaybackFailureCode(String code) =>
+      _nativePlaybackFailureCodes.contains(code) ? code : 'native_error';
+
+  String _nativeFailureMessage(
+    Map<Object?, Object?> event,
+    String failureCode,
+  ) => switch (failureCode) {
+    'http_error' when event['httpStatus'] is int =>
+      'Media server returned HTTP ${event['httpStatus']}',
+    'http_error' => 'Media server rejected the request',
+    'network_error' => 'Media server connection failed',
+    'audio_decode_error' => 'Audio decoding failed',
+    'video_decode_error' => 'Video decoding failed',
+    'audio_output_error' => 'Audio output could not start',
+    'video_output_error' => 'Video output could not start',
+    'source_open_error' => 'Media source could not be opened',
+    'container_error' => 'Media container could not be read',
+    'correlation_error' => 'Media load tracking failed',
+    'command_error' => 'Media player command failed',
+    'event_queue_overflow' => 'Media player event queue overflowed',
+    'mpv_error' when event['message'] is String => event['message'] as String,
+    _ => 'Media playback failed',
+  };
+
+  static String _nativeCommandFailureMessage(String code) => switch (code) {
+    'required_engine_unavailable' =>
+      'The required Windows video engine is unavailable.',
+    'initialize_failed' => 'The native player could not initialize.',
+    'dispose_in_progress' => 'The native player is shutting down.',
+    'not_initialized' => 'The native player is not initialized.',
+    'invalid_argument' => 'The native player rejected a command.',
+    'insecure_media_uri' => 'Authenticated Plex media requires HTTPS.',
+    'command_queue_full' => 'The native player is busy. Try again.',
+    'window_error' => 'The playback window could not be updated.',
+    _ => 'The native player command failed.',
+  };
 
   void _handleProperty(String? name, Object? value) {
     switch (name) {

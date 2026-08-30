@@ -2014,7 +2014,11 @@ void main() {
     controller.availableMedia = [
       for (final show in ['a', 'b'])
         for (var episode = 1; episode <= 5; episode++)
-          _media('$show$episode', type: 'episode', showThumb: '/show/$show'),
+          _media(
+            '$show$episode',
+            type: 'episode',
+            showThumb: '/library/metadata/$show/thumb',
+          ),
     ];
     const expectedOrders = {
       2: ['a1', 'a2', 'b1', 'b2', 'a3', 'a4', 'b3', 'b4', 'a5', 'b5'],

@@ -359,17 +359,17 @@ void main() {
         type: 'episode',
         duration: Duration(minutes: 1),
         grandparentTitle: 'Show',
-        thumbPath: '/episode/thumb',
-        grandparentThumbPath: '/show/thumb',
-        artPath: '/show/art',
-        clearLogoPath: '/show/clearlogo',
+        thumbPath: '/library/metadata/episode/thumb',
+        grandparentThumbPath: '/library/metadata/show/thumb',
+        artPath: '/library/metadata/show/art',
+        clearLogoPath: '/library/metadata/show/clearlogo',
       ),
     );
 
-    expect(item.poster, Uri.parse('/episode/thumb'));
-    expect(item.showThumb, '/show/thumb');
-    expect(item.backdrop, Uri.parse('/show/art'));
-    expect(item.clearLogo, Uri.parse('/show/clearlogo'));
+    expect(item.poster, Uri.parse('/library/metadata/episode/thumb'));
+    expect(item.showThumb, '/library/metadata/show/thumb');
+    expect(item.backdrop, Uri.parse('/library/metadata/show/art'));
+    expect(item.clearLogo, Uri.parse('/library/metadata/show/clearlogo'));
   });
 
   test('maps Plex cast facts without changing the actor-name projection', () {
@@ -432,16 +432,60 @@ void main() {
     );
   });
 
+  test('drops noncanonical artwork from manually supplied Plex models', () {
+    const unsafe = '/library/metadata/1/thumb?X-Plex-Token=secret';
+    final item = channelItemFor(
+      const PlexMediaItem(
+        id: 'unsafe',
+        title: 'Unsafe artwork',
+        type: 'movie',
+        duration: Duration(minutes: 1),
+        thumbPath: unsafe,
+        grandparentThumbPath: unsafe,
+        artPath: unsafe,
+        clearLogoPath: unsafe,
+        cast: [PlexCastMember(name: 'Actor', thumbPath: unsafe)],
+      ),
+    );
+
+    expect(item.showThumb, isNull);
+    expect(item.poster, isNull);
+    expect(item.backdrop, isNull);
+    expect(item.clearLogo, isNull);
+    expect(item.cast.single.portrait, isNull);
+  });
+
+  test('unsafe persisted artwork is removed on revival and serialization', () {
+    for (final field in ['showThumb', 'poster', 'backdrop', 'clearLogo']) {
+      for (final unsafe in [
+        'https://plex.invalid/library/metadata/1/thumb',
+        '/library/metadata/1/thumb?X-Plex-Token=secret',
+        '/library/metadata/1/thumb#private',
+        '/Users/private/poster.png',
+      ]) {
+        final item = ChannelItem.fromJson({
+          'id': 'item',
+          'title': 'Item',
+          'durationMs': 60000,
+          field: unsafe,
+        });
+
+        expect(item.toJson(), isNot(contains(field)), reason: '$field $unsafe');
+        expect(item.toJson().toString(), isNot(contains(unsafe)));
+      }
+    }
+  });
+
   test('channel item poster, backdrop, and logo round-trip canonically', () {
     final item = ChannelItem(
       id: 'new',
       title: 'New item',
       duration: Duration(minutes: 1),
       showTitle: 'Show',
-      showThumb: '/show-thumb',
-      poster: Uri(path: '/poster'),
-      backdrop: Uri(path: '/backdrop'),
-      clearLogo: Uri(path: '/logo'),
+      showThumb: '/library/metadata/show/thumb',
+      poster: Uri(path: '/library/metadata/item/thumb'),
+      backdrop: Uri(path: '/library/metadata/item/art'),
+      clearLogo: Uri(path: '/library/metadata/show/clearlogo'),
       summary: 'Summary',
       contentRating: 'TV-14',
       genres: const ['Drama'],
@@ -463,7 +507,10 @@ void main() {
       ],
     );
     expect(ChannelItem.fromJson(item.toJson()).toJson(), item.toJson());
-    expect(item.toJson(), containsPair('poster', '/poster'));
+    expect(
+      item.toJson(),
+      containsPair('poster', '/library/metadata/item/thumb'),
+    );
     expect(item.toJson(), isNot(contains('artwork')));
   });
 
@@ -582,5 +629,34 @@ void main() {
     ]) {
       expect(() => Channel.fromJson(invalid), throwsFormatException);
     }
+  });
+
+  test('bulk channel validation preserves identity semantics', () {
+    Channel channel(String id, int number) => Channel(
+      id: id,
+      number: number,
+      name: 'Channel $number',
+      source: const PlaylistSource('playlist'),
+      playbackMode: PlaybackMode.sequential,
+      anchor: DateTime.utc(2026),
+      shuffleSeed: number,
+    );
+
+    final channels = [
+      for (var number = 1; number <= 1000; number++) channel('$number', number),
+    ];
+    expect(() => validateChannels(channels), returnsNormally);
+    expect(
+      () => validateChannels([channel('same', 7), channel('same', 7)]),
+      throwsFormatException,
+    );
+    expect(
+      () => validateChannels([channel('same', 7), channel('same', 8)]),
+      throwsFormatException,
+    );
+    expect(
+      () => validateChannels([channel('first', 7), channel('second', 7)]),
+      throwsFormatException,
+    );
   });
 }

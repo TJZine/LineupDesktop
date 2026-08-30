@@ -10,6 +10,46 @@ import 'lineup_shell.dart';
 const _requiredEngineFailureMessage =
     'The required Lineup DirectComposition Flutter engine is not active.';
 
+class LineupStartup extends StatefulWidget {
+  const LineupStartup({required this.createBootstrap, super.key});
+
+  final Future<LineupBootstrap> Function() createBootstrap;
+
+  @override
+  State<LineupStartup> createState() => _LineupStartupState();
+}
+
+class _LineupStartupState extends State<LineupStartup> {
+  late final Future<LineupBootstrap> _composition;
+
+  @override
+  void initState() {
+    super.initState();
+    _composition = Future.sync(widget.createBootstrap);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<LineupBootstrap>(
+      future: _composition,
+      builder: (context, snapshot) {
+        if (snapshot.hasData) return snapshot.requireData;
+        return MaterialApp(
+          title: 'Lineup Desktop',
+          debugShowCheckedModeBanner: false,
+          theme: LineupTheme.forName(
+            LineupThemeName.emberSteel,
+            largeFocusIndicators: false,
+          ),
+          home: snapshot.hasError
+              ? const _StartupFailureBody(requiredEngineFailure: false)
+              : const _StartupProgress(),
+        );
+      },
+    );
+  }
+}
+
 class LineupBootstrap extends StatefulWidget {
   const LineupBootstrap({
     required this.player,
@@ -123,8 +163,10 @@ class _LineupBootstrapState extends State<LineupBootstrap> {
             final error = snapshot.error;
             return _StartupFailureBody(
               requiredEngineFailure:
-                  error is PlatformException &&
-                  error.code == 'required_engine_unavailable',
+                  (error is PlatformException &&
+                      error.code == 'required_engine_unavailable') ||
+                  (error is PlayerUnavailable &&
+                      error.failureCode == 'required_engine_unavailable'),
             );
           }
           if (snapshot.connectionState != ConnectionState.done) {
@@ -243,8 +285,8 @@ class _StartupFailureBody extends StatelessWidget {
                   Text(
                     requiredEngineFailure
                         ? _requiredEngineFailureMessage
-                        : 'Restart the app, and check diagnostics if the '
-                              'problem continues.',
+                        : 'Restart the app. If the problem continues, report '
+                              'the startup failure.',
                     textAlign: TextAlign.center,
                   ),
                 ],

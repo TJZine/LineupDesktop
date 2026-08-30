@@ -76,16 +76,27 @@ std::optional<int64_t> AsInt(const flutter::EncodableValue* value) {
   return std::nullopt;
 }
 
-bool IsHttpUri(std::string_view uri) {
+std::string UriScheme(std::string_view uri) {
   const size_t separator = uri.find(':');
   if (separator == std::string_view::npos || separator == 0) {
-    return false;
+    return {};
   }
   std::string scheme(uri.substr(0, separator));
   std::transform(scheme.begin(), scheme.end(), scheme.begin(), [](char byte) {
     return static_cast<char>(std::tolower(static_cast<unsigned char>(byte)));
   });
-  return scheme == "http" || scheme == "https";
+  return scheme;
+}
+
+bool IsHttpsUri(std::string_view uri) {
+  const size_t separator = uri.find(':');
+  if (UriScheme(uri) != "https" || separator == std::string_view::npos ||
+      uri.substr(separator, 3) != "://") {
+    return false;
+  }
+  const size_t authority_start = separator + 3;
+  const size_t authority_end = uri.find_first_of("/?#", authority_start);
+  return authority_start < uri.size() && authority_end != authority_start;
 }
 
 bool IsValidPlexToken(std::string_view value) {
@@ -469,9 +480,9 @@ void WindowsNativePlayer::HandleMethodCall(
       result->Error("invalid_argument", "The Plex token is invalid.");
       return;
     }
-    if (plex_token && !IsHttpUri(*uri)) {
-      result->Error("invalid_argument",
-                    "Plex authentication requires an HTTP or HTTPS media URI.");
+    if (plex_token && !IsHttpsUri(*uri)) {
+      result->Error("insecure_media_uri",
+                    "Plex authentication requires an HTTPS media URI.");
       return;
     }
     QueuedCommand command{CommandType::load, *load_id, *uri};
@@ -609,6 +620,7 @@ bool WindowsNativePlayer::Initialize(std::string& error,
       {"input-media-keys", "no"},
       {"osc", "no"},
       {"ytdl", "no"},
+      {"tls-verify", "yes"},
       {"idle", "yes"},
       {"keep-open", "no"},
       {"vo", "gpu-next"},
@@ -922,9 +934,9 @@ void WindowsNativePlayer::RunCommand(QueuedCommand& command,
             } else {
               QueueEvent(
                   generation,
-                  StateEvent("error",
-                             "Playback correlation exceeded native limits",
-                             command.load_id));
+                  FailureStateEvent(
+                      "correlation_error", std::nullopt, command.load_id,
+                      "Playback correlation exceeded native limits"));
             }
           } else {
             if (pending_load_ids_.size() <
@@ -933,9 +945,9 @@ void WindowsNativePlayer::RunCommand(QueuedCommand& command,
             } else {
               QueueEvent(
                   generation,
-                  StateEvent("error",
-                             "Playback correlation exceeded native limits",
-                             command.load_id));
+                  FailureStateEvent(
+                      "correlation_error", std::nullopt, command.load_id,
+                      "Playback correlation exceeded native limits"));
             }
           }
         }
@@ -985,7 +997,8 @@ void WindowsNativePlayer::RunCommand(QueuedCommand& command,
             ? std::optional<int64_t>(command.load_id)
             : active_load_id_;
     QueueEvent(generation,
-               StateEvent("error", mpv_error_string(status), error_load_id));
+               FailureStateEvent("command_error", std::nullopt,
+                                 error_load_id, mpv_error_string(status)));
   }
 }
 
@@ -1049,10 +1062,11 @@ void WindowsNativePlayer::HandleMpvEvent(const mpv_event& event,
           event_load_id_ = pending_load_ids_.front();
           pending_load_ids_.pop_front();
           if (playlist_load_ids_.size() >= kMaxCorrelatedPlaylistEntries) {
-            QueueEvent(generation,
-                       StateEvent("error",
-                                  "Playback correlation exceeded native limits",
-                                  event_load_id_));
+            QueueEvent(
+                generation,
+                FailureStateEvent(
+                    "correlation_error", std::nullopt, event_load_id_,
+                    "Playback correlation exceeded native limits"));
             event_load_id_.reset();
           } else {
             playlist_load_ids_[start->playlist_entry_id] = *event_load_id_;
@@ -1103,10 +1117,11 @@ void WindowsNativePlayer::HandleMpvEvent(const mpv_event& event,
             playlist_load_ids_.size() > kMaxCorrelatedPlaylistEntries ||
             new_entries >
                 kMaxCorrelatedPlaylistEntries - playlist_load_ids_.size()) {
-          QueueEvent(generation,
-                     StateEvent("error",
-                                "Redirect correlation exceeded native limits",
-                                load_id));
+          QueueEvent(
+              generation,
+              FailureStateEvent(
+                  "correlation_error", std::nullopt, load_id,
+                  "Redirect correlation exceeded native limits"));
           break;
         }
         for (int64_t offset = 0; offset < count; ++offset) {
@@ -1178,8 +1193,9 @@ void WindowsNativePlayer::HandleMpvEvent(const mpv_event& event,
       break;
     case MPV_EVENT_QUEUE_OVERFLOW:
       QueueEvent(generation,
-                 StateEvent("error", "The libmpv event queue overflowed",
-                            event_load_id_));
+                 FailureStateEvent("event_queue_overflow", std::nullopt,
+                                   event_load_id_,
+                                   "The libmpv event queue overflowed"));
       break;
     case MPV_EVENT_PROPERTY_CHANGE: {
       const auto* property = static_cast<mpv_event_property*>(event.data);

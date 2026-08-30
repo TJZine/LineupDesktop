@@ -106,9 +106,7 @@ Map<String, Map<String, List<Channel>>> _channelSelections(Object? value) {
   }
   for (final profile in selections.values) {
     for (final channels in profile.values) {
-      for (final channel in channels) {
-        channel.validate(channels);
-      }
+      validateChannels(channels);
     }
   }
   return selections;
@@ -178,7 +176,10 @@ class FileAppStore implements AppStore {
       return const AppStoreLoadResult(PersistedState());
     }
     try {
-      return AppStoreLoadResult(PersistedState.fromJson(jsonDecode(contents)));
+      final decoded = jsonDecode(contents);
+      final state = PersistedState.fromJson(decoded);
+      if (_hasNoncanonicalArtwork(decoded)) await save(state);
+      return AppStoreLoadResult(state);
     } on FormatException {
       await _quarantineState();
       return const AppStoreLoadResult(
@@ -233,6 +234,59 @@ class FileAppStore implements AppStore {
       if (await temporary.exists()) await temporary.delete();
     }
   }
+}
+
+bool _hasNoncanonicalArtwork(Object? decoded) {
+  if (decoded is! Map) return false;
+  final profiles = decoded['channelsByProfileServer'];
+  if (profiles is! Map) return false;
+  for (final servers in profiles.values) {
+    if (servers is! Map) continue;
+    for (final channels in servers.values) {
+      if (channels is! List) continue;
+      for (final channel in channels) {
+        if (channel is Map &&
+            _sourceHasNoncanonicalArtwork(channel['source'])) {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
+bool _sourceHasNoncanonicalArtwork(Object? raw) {
+  if (raw is! Map) return false;
+  switch (raw['type']) {
+    case 'manual':
+      final items = raw['items'];
+      return items is List && items.any(_itemHasNoncanonicalArtwork);
+    case 'mixed':
+      final sources = raw['sources'];
+      return sources is List && sources.any(_sourceHasNoncanonicalArtwork);
+    default:
+      return false;
+  }
+}
+
+bool _itemHasNoncanonicalArtwork(Object? raw) {
+  if (raw is! Map) return false;
+  for (final field in const ['showThumb', 'poster', 'backdrop', 'clearLogo']) {
+    if (raw[field] case final String value) {
+      if (canonicalPlexArtworkPathText(value) != value) return true;
+    }
+  }
+  final cast = raw['cast'];
+  if (cast is List) {
+    for (final member in cast) {
+      if (member is Map) {
+        if (member['portrait'] case final String value) {
+          if (canonicalPlexArtworkPathText(value) != value) return true;
+        }
+      }
+    }
+  }
+  return false;
 }
 
 abstract interface class CredentialStore {

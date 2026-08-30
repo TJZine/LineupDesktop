@@ -19,6 +19,71 @@ import 'package:lineup_desktop/settings/lineup_settings.dart';
 import '../support/ui_fixture.dart';
 
 void main() {
+  testWidgets(
+    'startup mounts a progress surface while composition is pending',
+    (tester) async {
+      final composition = Completer<LineupBootstrap>();
+      final controller = _FakeController()..stage = SetupStage.ready;
+      addTearDown(controller.dispose);
+
+      await tester.pumpWidget(
+        LineupStartup(createBootstrap: () => composition.future),
+      );
+      await tester.pump();
+
+      expect(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is Semantics &&
+              widget.properties.label == 'Starting Lineup Desktop',
+        ),
+        findsOneWidget,
+      );
+
+      composition.complete(
+        LineupBootstrap(player: _FakePlayer(), controller: controller),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Create a channel to build your Guide'), findsOneWidget);
+    },
+  );
+
+  testWidgets('startup reports synchronous composition failures safely', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      LineupStartup(
+        createBootstrap: () {
+          throw StateError('/private/startup/secret-sentinel');
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Lineup Desktop could not start'), findsOneWidget);
+    expect(find.textContaining('Restart the app'), findsOneWidget);
+    expect(find.textContaining('secret-sentinel'), findsNothing);
+  });
+
+  testWidgets('startup reports asynchronous composition failures safely', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      LineupStartup(
+        createBootstrap: () async {
+          await Future<void>.delayed(Duration.zero);
+          throw StateError('/private/startup/secret-sentinel');
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Lineup Desktop could not start'), findsOneWidget);
+    expect(find.textContaining('Restart the app'), findsOneWidget);
+    expect(find.textContaining('secret-sentinel'), findsNothing);
+  });
+
   testWidgets('root Reduce Motion setting disables descendant animations', (
     tester,
   ) async {
@@ -1195,6 +1260,26 @@ void main() {
     );
     expect(find.text(_requiredEngineNativeFailureMessage), findsNothing);
   });
+
+  testWidgets('retains required-engine guidance through player errors', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      LineupBootstrap(
+        player: _TypedRequiredEngineFailingPlayer(),
+        controller: _FakeController(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text(
+        'The required Lineup DirectComposition Flutter engine is not active.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text(_requiredEngineNativeFailureMessage), findsNothing);
+  });
 }
 
 class _FakeController extends LineupController {
@@ -1512,6 +1597,16 @@ class _RequiredEngineFailingPlayer extends _FakePlayer {
     throw PlatformException(
       code: 'required_engine_unavailable',
       message: _requiredEngineNativeFailureMessage,
+    );
+  }
+}
+
+class _TypedRequiredEngineFailingPlayer extends _FakePlayer {
+  @override
+  Future<void> initialize() async {
+    throw const PlayerUnavailable(
+      _requiredEngineNativeFailureMessage,
+      failureCode: 'required_engine_unavailable',
     );
   }
 }

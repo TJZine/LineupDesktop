@@ -118,7 +118,7 @@ void main() {
     )..requestViewport(0, 1);
     await _settle();
 
-    Channel copy(ContentSource source) => Channel(
+    Channel copy(ContentSource source, {String? builderKey}) => Channel(
       id: channel.id,
       number: channel.number,
       name: channel.name,
@@ -127,9 +127,12 @@ void main() {
       anchor: channel.anchor,
       shuffleSeed: channel.shuffleSeed,
       blockSize: channel.blockSize,
+      builderKey: builderKey,
     );
 
-    lineup.setChannels([copy(channel.source)]);
+    lineup.setChannels([
+      copy(channel.source, builderKey: 'replacement-provenance'),
+    ]);
     guide.requestViewport(0, 1);
     await _settle();
     expect(loads, 1);
@@ -400,6 +403,82 @@ void main() {
 
     expect(await guide.ensureCurrentProgram(lineup.channels.single.id), isNull);
     expect(loads, 0);
+    lineup.dispose();
+  });
+
+  test(
+    'schedule loader timeout returns null and records a diagnostic',
+    () async {
+      final lineup = _TestLineup(_channels(1));
+      lineup.diagnostics.enabled = true;
+      final load = Completer<ScheduleIndex>();
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (_) => load.future,
+        scheduleLoadTimeout: Duration.zero,
+      );
+
+      expect(
+        await guide.ensureCurrentProgram(lineup.channels.single.id),
+        isNull,
+      );
+      final diagnostic = lineup.diagnostics.entries.single;
+      expect(diagnostic.area, 'guide');
+      expect(diagnostic.message, contains('timed out'));
+      expect(diagnostic.context, {'code': 'timeout'});
+
+      guide.dispose();
+      load.complete(_schedule(lineup.channels.single));
+      await _settle();
+      lineup.dispose();
+    },
+  );
+
+  test('current program wait is bounded before queue admission', () async {
+    final lineup = _TestLineup(_channels(10));
+    lineup.diagnostics.enabled = true;
+    final active = Completer<ScheduleIndex>();
+    final started = <String>[];
+    final guide = GuideController(
+      lineup: lineup,
+      maximumConcurrentLoads: 1,
+      currentProgramWaitTimeout: Duration.zero,
+      loadSchedule: (channel) {
+        started.add(channel.id);
+        return active.future;
+      },
+    );
+    guide.requestViewport(0, 1);
+
+    expect(await guide.ensureCurrentProgram('channel-9'), isNull);
+    expect(started, ['channel-0']);
+    expect(lineup.diagnostics.entries.single.context, {'code': 'wait_timeout'});
+
+    guide.dispose();
+    active.complete(_schedule(lineup.channels.first));
+    await _settle();
+    lineup.dispose();
+  });
+
+  test('same-ID content invalidation cannot strand a program wait', () async {
+    final lineup = _TestLineup(_channels(1));
+    lineup.diagnostics.enabled = true;
+    final stale = Completer<ScheduleIndex>();
+    final guide = GuideController(
+      lineup: lineup,
+      currentProgramWaitTimeout: Duration.zero,
+      loadSchedule: (_) => stale.future,
+    );
+
+    final current = guide.ensureCurrentProgram(lineup.channels.single.id);
+    lineup.changeContentScope();
+
+    expect(await current, isNull);
+    expect(lineup.diagnostics.entries.single.context, {'code': 'wait_timeout'});
+
+    stale.complete(_schedule(lineup.channels.single));
+    await _settle();
+    guide.dispose();
     lineup.dispose();
   });
 
@@ -713,6 +792,168 @@ void main() {
     expect(loads, hasLength(guide.maximumConcurrentLoads));
     lineup.dispose();
   });
+
+  test('synchronous loader failure releases schedule capacity', () async {
+    final lineup = _TestLineup(_channels(2));
+    final second = Completer<ScheduleIndex>();
+    final started = <String>[];
+    final guide = GuideController(
+      lineup: lineup,
+      maximumConcurrentLoads: 1,
+      loadSchedule: (channel) {
+        started.add(channel.id);
+        if (channel.id == 'channel-0') {
+          throw StateError('Synthetic synchronous failure');
+        }
+        return second.future;
+      },
+    );
+
+    guide.requestViewport(0, 1);
+    await _settle();
+
+    expect(started, ['channel-0', 'channel-1']);
+    expect(guide.row('channel-0').state, GuideLoadState.error);
+    expect(guide.activeLoadCount, 1);
+
+    second.complete(_schedule(lineup.channels[1]));
+    await _settle();
+    expect(guide.row('channel-1').state, GuideLoadState.ready);
+    expect(guide.activeLoadCount, 0);
+
+    guide.dispose();
+    lineup.dispose();
+  });
+
+  test('hung loader deadline releases capacity for queued work', () async {
+    final lineup = _TestLineup(_channels(2));
+    final hung = Completer<ScheduleIndex>();
+    final started = <String>[];
+    final guide = GuideController(
+      lineup: lineup,
+      maximumConcurrentLoads: 1,
+      scheduleLoadTimeout: Duration.zero,
+      loadSchedule: (channel) {
+        started.add(channel.id);
+        return channel.id == 'channel-0'
+            ? hung.future
+            : Future.value(_schedule(channel));
+      },
+    );
+
+    guide.requestViewport(0, 1);
+    await _settle();
+
+    expect(started, ['channel-0', 'channel-1']);
+    expect(guide.row('channel-0').state, GuideLoadState.error);
+    expect(guide.row('channel-0').error, isA<TimeoutException>());
+    expect(guide.row('channel-1').state, GuideLoadState.ready);
+    expect(guide.activeLoadCount, 0);
+
+    guide.dispose();
+    lineup.dispose();
+  });
+
+  test('disposal settles an active hung loader', () async {
+    final lineup = _TestLineup(_channels(1));
+    final hung = Completer<ScheduleIndex>();
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (_) => hung.future,
+    );
+
+    guide.requestViewport(0, 1);
+    await _settle();
+    expect(guide.activeLoadCount, 1);
+
+    guide.dispose();
+    await _settle();
+    expect(guide.activeLoadCount, 0);
+
+    lineup.dispose();
+  });
+
+  test('tuning runs before queued viewport prefetch', () async {
+    final lineup = _TestLineup(_channels(10));
+    final loads = <String, Completer<ScheduleIndex>>{};
+    final started = <String>[];
+    final guide = GuideController(
+      lineup: lineup,
+      maximumConcurrentLoads: 1,
+      loadSchedule: (channel) {
+        started.add(channel.id);
+        return (loads[channel.id] = Completer<ScheduleIndex>()).future;
+      },
+      clock: () => DateTime(2026, 8, 13, 12),
+    );
+    guide.requestViewport(0, 1);
+    expect(started, ['channel-0']);
+
+    final tuning = guide.ensureCurrentProgram('channel-9');
+    loads['channel-0']!.complete(_schedule(lineup.channels[0]));
+    await _settle();
+
+    expect(started, ['channel-0', 'channel-9']);
+    loads['channel-9']!.complete(_schedule(lineup.channels[9]));
+    expect(await tuning, isNotNull);
+
+    guide.dispose();
+    lineup.dispose();
+  });
+
+  test(
+    'latest viewport prunes stale prefetch but preserves explicit demand',
+    () async {
+      final lineup = _TestLineup(_channels(12));
+      final loads = <String, Completer<ScheduleIndex>>{};
+      final started = <String>[];
+      final guide = GuideController(
+        lineup: lineup,
+        maximumConcurrentLoads: 1,
+        loadSchedule: (channel) {
+          started.add(channel.id);
+          return (loads[channel.id] = Completer<ScheduleIndex>()).future;
+        },
+      );
+      guide.requestViewport(0, 1);
+      expect(started, ['channel-0']);
+
+      guide.requestChannels([lineup.channels[6]]);
+      await guide.retry('channel-5');
+      guide.requestViewport(10, 1);
+
+      for (final id in [
+        'channel-0',
+        'channel-5',
+        'channel-6',
+        'channel-10',
+        'channel-11',
+        'channel-9',
+        'channel-8',
+        'channel-7',
+      ]) {
+        expect(started.last, id);
+        loads[id]!.complete(
+          _schedule(lineup.channels.firstWhere((channel) => channel.id == id)),
+        );
+        await _settle();
+      }
+
+      expect(started, [
+        'channel-0',
+        'channel-5',
+        'channel-6',
+        'channel-10',
+        'channel-11',
+        'channel-9',
+        'channel-8',
+        'channel-7',
+      ]);
+
+      guide.dispose();
+      lineup.dispose();
+    },
+  );
 
   test('clock transitions and Guide settings preserve logical focus', () async {
     var now = DateTime(2026, 8, 13, 12, 10);

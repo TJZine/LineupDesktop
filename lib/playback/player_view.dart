@@ -246,10 +246,10 @@ class _PlayerViewState extends State<PlayerView> {
     } else if (key == LogicalKeyboardKey.keyC) {
       controller.showTracks(PlayerTrackType.subtitle);
     } else if (key == LogicalKeyboardKey.mediaPlay) {
-      unawaited(controller.player.play());
+      unawaited(controller.play());
       if (showingNowPlaying) controller.showOsd();
     } else if (key == LogicalKeyboardKey.mediaPause) {
-      unawaited(controller.player.pause());
+      unawaited(controller.pause());
       if (showingNowPlaying) controller.showOsd();
     } else if (key == LogicalKeyboardKey.mediaStop) {
       unawaited(controller.requestStop());
