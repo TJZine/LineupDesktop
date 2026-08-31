@@ -476,10 +476,10 @@ contrast, and responsive coverage rather than separate per-screen goldens.
 
 Management, Guide, OSD, mini Guide, and track lists have meaningful structural
 coverage from 800×600 through logical 4K, with Guide breakpoint/DPR2 tests.
-Current visual evidence comprises 21 accepted 1280×720 macOS baselines, five
-focused 1920×1080 baselines for Mini Guide, OSD, Rich Now Playing, Profiles,
-and Channel Setup review, and one compact 800×600 Channel Studio baseline. The
-principal remaining responsive risk is not clipping but dense 12-hour
+Current visual evidence comprises 31 accepted macOS baselines: 21 at 1280×720,
+eight at 1920×1080, and two at 800×600. Theme-chooser evidence spans 800×600,
+1280×720, and 1920×1080. The principal remaining responsive risk is not
+clipping but dense 12-hour
 horizontal Guide/semantics work and physical Windows video alignment during
 DPI/resize changes.
 
