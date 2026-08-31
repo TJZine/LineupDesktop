@@ -225,6 +225,7 @@ class GuideController extends ChangeNotifier {
     if (_schedules.containsKey(channelId)) return currentProgram(channelId);
     final existing = _rows[channelId];
     if (existing?.state == GuideLoadState.error) _rows.remove(channelId);
+    final generation = _generation;
     _request(channel, prioritize: true);
     final completer = Completer<void>();
     _rowWaiters.add(completer);
@@ -232,7 +233,8 @@ class GuideController extends ChangeNotifier {
       final value = _rows[channelId];
       if (value != null && value.state != GuideLoadState.loading) {
         if (!completer.isCompleted) completer.complete();
-      } else if (!_channelById.containsKey(channelId)) {
+      } else if (generation != _generation ||
+          !_channelById.containsKey(channelId)) {
         if (!completer.isCompleted) completer.complete();
       }
     }

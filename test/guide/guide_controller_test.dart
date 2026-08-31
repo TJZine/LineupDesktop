@@ -466,15 +466,15 @@ void main() {
     final stale = Completer<ScheduleIndex>();
     final guide = GuideController(
       lineup: lineup,
-      currentProgramWaitTimeout: Duration.zero,
+      currentProgramWaitTimeout: const Duration(seconds: 1),
       loadSchedule: (_) => stale.future,
     );
 
     final current = guide.ensureCurrentProgram(lineup.channels.single.id);
     lineup.changeContentScope();
 
-    expect(await current, isNull);
-    expect(lineup.diagnostics.entries.single.context, {'code': 'wait_timeout'});
+    expect(await current.timeout(const Duration(milliseconds: 500)), isNull);
+    expect(lineup.diagnostics.entries, isEmpty);
 
     stale.complete(_schedule(lineup.channels.single));
     await _settle();
