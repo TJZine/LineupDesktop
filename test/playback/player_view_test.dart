@@ -693,6 +693,7 @@ void main() {
               TimeOfDay.fromDateTime(
                 fixture.player.nextProgram!.scheduled.start.toLocal(),
               ),
+              alwaysUse24HourFormat: false,
             );
         expect(next.data, contains('Up next • $localizedStart •'));
         expect(next.maxLines, 1);

@@ -685,7 +685,7 @@ class _Osd extends StatelessWidget {
             child: Align(
               alignment: Alignment.centerRight,
               child: Text(
-                'Up next • ${_time(context, next.scheduled.start.toLocal())} • '
+                'Up next • ${_time(context, next.scheduled.start)} • '
                 '${next.scheduled.item.title}',
                 key: const Key('player-osd-next'),
                 maxLines: 1,
@@ -2259,8 +2259,10 @@ String _humanDuration(Duration value) {
 }
 
 String _time(BuildContext context, DateTime value) =>
-    MaterialLocalizations.of(context)
-        .formatTimeOfDay(TimeOfDay.fromDateTime(value));
+    MaterialLocalizations.of(context).formatTimeOfDay(
+      TimeOfDay.fromDateTime(value.toLocal()),
+      alwaysUse24HourFormat: false,
+    );
 
 String? _statusLabel(PlayerState state) => switch (state) {
   PlayerState.idle => null,
