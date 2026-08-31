@@ -539,8 +539,9 @@ class _ChannelsViewState extends State<ChannelsView> {
   bool _focusPruneScheduled = false;
   bool _focusPruneNeedsRestore = false;
   final LinkedHashMap<String, _ChannelHealth> _health = LinkedHashMap();
-  final Queue<({Channel channel, String signature})> _pendingHealth = Queue();
-  final Map<String, String> _activeHealth = {};
+  final Queue<({Channel channel, _ChannelHealthSignature signature})>
+  _pendingHealth = Queue();
+  final Map<String, _ChannelHealthSignature> _activeHealth = {};
   int _activeHealthLoads = 0;
   int _healthEpoch = 0;
   int? _healthContentGeneration;
@@ -875,7 +876,12 @@ class _ChannelsViewState extends State<ChannelsView> {
     }
   }
 
-  void _finishHealth(String id, String signature, bool issue, int epoch) {
+  void _finishHealth(
+    String id,
+    _ChannelHealthSignature signature,
+    bool issue,
+    int epoch,
+  ) {
     _activeHealthLoads--;
     if (_activeHealth[id] == signature) _activeHealth.remove(id);
     if (!mounted) return;
@@ -897,8 +903,10 @@ class _ChannelsViewState extends State<ChannelsView> {
     _pumpHealth();
   }
 
-  String _healthSignature(Channel channel) =>
-      '${widget.controller.contentGeneration}|${channel.toJson()}';
+  _ChannelHealthSignature _healthSignature(Channel channel) => (
+    contentGeneration: widget.controller.contentGeneration,
+    channel: channel,
+  );
 
   void _scheduleFocusPrune(Set<String> liveIds) {
     final staleIds = {
@@ -977,10 +985,12 @@ class _ChannelsViewState extends State<ChannelsView> {
   }
 }
 
+typedef _ChannelHealthSignature = ({int contentGeneration, Channel channel});
+
 class _ChannelHealth {
   const _ChannelHealth(this.signature, this.issue);
 
-  final String signature;
+  final _ChannelHealthSignature signature;
   final bool issue;
 }
 

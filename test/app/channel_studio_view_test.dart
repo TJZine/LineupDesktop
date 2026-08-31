@@ -3618,6 +3618,27 @@ void main() {
     expect(find.byKey(const ValueKey('channel-row-health-1000')), findsNothing);
   });
 
+  testWidgets('Channels health rebuilds do not serialize channel recipes', (
+    tester,
+  ) async {
+    final channel = _CountingHealthChannel();
+    final controller = _HealthController()
+      ..stage = SetupStage.ready
+      ..channels = [channel];
+    final fixture = UiFixture(controller: controller);
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(fixture.build());
+    await tester.pump();
+    await openDestination(tester, 'Channels');
+    await tester.pumpAndSettle();
+
+    channel.serializations = 0;
+    controller.notifyListeners();
+    await tester.pump();
+
+    expect(channel.serializations, 0);
+  });
+
   testWidgets('large Channels viewport reaches a quiescent bounded cache', (
     tester,
   ) async {
@@ -4779,6 +4800,27 @@ class _HealthController extends FixtureController {
       seed: channel.shuffleSeed,
       blockSize: channel.blockSize ?? 3,
     );
+  }
+}
+
+class _CountingHealthChannel extends Channel {
+  _CountingHealthChannel()
+    : super(
+        id: 'counting-health',
+        number: 1,
+        name: 'Counting Health',
+        source: ManualSource([_itemForHealth(1)]),
+        playbackMode: PlaybackMode.sequential,
+        anchor: DateTime.utc(2026),
+        shuffleSeed: 1,
+      );
+
+  int serializations = 0;
+
+  @override
+  Map<String, Object?> toJson() {
+    serializations++;
+    return super.toJson();
   }
 }
 
