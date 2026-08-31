@@ -22,8 +22,9 @@ abstract interface class NativePlayer {
   ///
   /// [plexToken] is sensitive authentication material. Implementations that
   /// perform network media loads must require HTTPS and send it only as an
-  /// `X-Plex-Token` request header. They must never log it or append it to
-  /// [media].
+  /// `X-Plex-Token` request header. They must not follow redirects while the
+  /// header is attached unless every target is proven to retain the original
+  /// HTTPS origin. They must never log it or append it to [media].
   Future<void> load(Uri media, {String? plexToken, int? generation});
   Future<void> play();
   Future<void> pause();

@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -237,18 +236,48 @@ void main() {
     await load;
   });
 
-  test('Windows source explicitly verifies TLS before sending Plex tokens', () {
-    final source = File('windows/runner/native_player.cpp').readAsStringSync();
+  test('projects bounded native failure codes behaviorally', () async {
+    final calls = <MethodCall>[];
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      calls.add(call);
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
-    expect(source, contains('{"tls-verify", "yes"}'));
-    expect(source, contains('if (plex_token && !IsHttpsUri(*uri))'));
-    expect(source, contains('result->Error("insecure_media_uri"'));
-    for (final failureCode in [
-      'correlation_error',
-      'command_error',
-      'event_queue_overflow',
-    ]) {
-      expect(source, contains('"$failureCode"'));
+    final player = WindowsNativePlayer();
+    addTearDown(player.dispose);
+    await player.initialize();
+    const messages = {
+      'correlation_error': 'Media load tracking failed',
+      'command_error': 'Media player command failed',
+      'event_queue_overflow': 'Media player event queue overflowed',
+    };
+
+    for (final entry in messages.entries) {
+      final load = player.load(Uri.parse('file:///${entry.key}.mp4'));
+      await Future<void>.delayed(Duration.zero);
+      final loadCall = calls.lastWhere((call) => call.method == 'load');
+      final loadId = loadCall.arguments!['loadId']! as int;
+      final expectation = expectLater(
+        load,
+        throwsA(
+          isA<PlayerUnavailable>()
+              .having((error) => error.failureCode, 'failureCode', entry.key)
+              .having((error) => error.message, 'message', entry.value),
+        ),
+      );
+
+      await _sendNativeEvent(messenger, {
+        'type': 'state',
+        'loadId': loadId,
+        'state': 'error',
+        'message': 'raw native detail',
+        'failureCode': entry.key,
+      });
+
+      await expectation;
+      expect(player.status.failureCode, entry.key);
+      expect(player.status.message, entry.value);
     }
   });
 

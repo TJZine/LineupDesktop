@@ -908,11 +908,18 @@ void WindowsNativePlayer::RunCommand(QueuedCommand& command,
           values[3].format = MPV_FORMAT_INT64;
           values[3].u.int64 = -1;
           values[4].format = MPV_FORMAT_NODE_MAP;
-          mpv_node option_value{};
-          option_value.format = MPV_FORMAT_STRING;
-          option_value.u.string = command.plex_header.data();
-          char* option_key = const_cast<char*>("http-header-fields");
-          mpv_node_list option_list{1, &option_value, &option_key};
+          // mpv reuses custom headers on redirects, so authenticated loads
+          // must remain on their original HTTPS request.
+          mpv_node option_values[2]{};
+          option_values[0].format = MPV_FORMAT_STRING;
+          option_values[0].u.string = command.plex_header.data();
+          option_values[1].format = MPV_FORMAT_STRING;
+          option_values[1].u.string = const_cast<char*>("0");
+          char* option_keys[2] = {
+              const_cast<char*>("http-header-fields"),
+              const_cast<char*>("curl-max-redirects"),
+          };
+          mpv_node_list option_list{2, option_values, option_keys};
           values[4].u.list = &option_list;
           mpv_node_list command_list{5, values, nullptr};
           mpv_node command_node{};
