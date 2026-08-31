@@ -110,6 +110,14 @@ if (-not (Test-Path -LiteralPath (Join-Path $flutterRoot 'bin/flutter.bat') -Pat
   throw 'EngineSource must be the engine/src directory below the pinned Flutter checkout.'
 }
 Assert-PinnedFlutterCheckout $flutterRoot
+$flutter = Join-Path $flutterRoot 'bin/flutter.bat'
+Set-Location $flutterRoot
+& {
+  $PSNativeCommandUseErrorActionPreference = $false
+  & $flutter precache --windows
+  if ($LASTEXITCODE) { throw 'Pinned Flutter SDK cache preparation failed.' }
+}
+Assert-PinnedFlutterCheckout $flutterRoot
 
 $engineOutput = Join-Path $EngineSource 'out/host_release'
 if (-not (Test-Path -LiteralPath (Join-Path $engineOutput 'build.ninja') -PathType Leaf)) {
@@ -127,7 +135,6 @@ if (-not (Test-Path -LiteralPath $engineLibrary -PathType Leaf)) {
   throw 'Pinned host_release engine did not produce flutter_windows.dll.'
 }
 
-$flutter = Join-Path $flutterRoot 'bin/flutter.bat'
 $BuildDirectory = [IO.Path]::GetFullPath(
   (Join-Path $repository 'build/windows/x64/runner/Release')
 )
