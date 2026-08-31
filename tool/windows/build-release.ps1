@@ -9,6 +9,7 @@ $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $true
 $repository = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $metadata = Import-PowerShellDataFile -LiteralPath (Join-Path $repository 'tool/windows/build-metadata.psd1')
+. (Join-Path $PSScriptRoot 'build-inputs.ps1')
 $patchRelativePath = $metadata.FlutterEnginePatchPath
 if ($patchRelativePath -notmatch '^[A-Za-z0-9._/-]+$' -or
   [IO.Path]::IsPathRooted($patchRelativePath) -or
@@ -27,6 +28,7 @@ function Get-GitValue {
     [Parameter(Mandatory)] [string[]] $Arguments
   )
 
+  $PSNativeCommandUseErrorActionPreference = $false
   $output = @(& git -C $Repository @Arguments)
   if ($LASTEXITCODE -or $output.Count -ne 1 -or
     [string]::IsNullOrWhiteSpace($output[0])) {
@@ -66,42 +68,10 @@ function Get-NormalizedTextSha256 {
   [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes))
 }
 
-function Get-BuildInputs {
-  param([Parameter(Mandatory)] [string] $Root)
-
-  $required = @(
-    'lineup_desktop.exe',
-    'flutter_windows.dll',
-    'flutter_secure_storage_windows_plugin.dll',
-    'libmpv-2.dll'
-  )
-  $paths = [System.Collections.Generic.List[string]]::new()
-  foreach ($relative in $required) {
-    $path = Join-Path $Root $relative
-    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
-      throw "Release build is missing $relative."
-    }
-    $paths.Add($relative)
-  }
-
-  $data = Join-Path $Root 'data'
-  if (-not (Test-Path -LiteralPath $data -PathType Container)) {
-    throw 'Release build is missing the data directory.'
-  }
-  foreach ($file in Get-ChildItem -LiteralPath $data -Recurse -File) {
-    $paths.Add($file.FullName.Substring($Root.Length + 1).Replace('\', '/'))
-  }
-
-  $nativeAssets = Join-Path $Root 'native_assets.json'
-  if (Test-Path -LiteralPath $nativeAssets -PathType Leaf) {
-    $paths.Add('native_assets.json')
-  }
-  @($paths | Sort-Object -Unique)
-}
-
 function Assert-PinnedFlutterCheckout {
   param([Parameter(Mandatory)] [string] $Root)
 
+  $PSNativeCommandUseErrorActionPreference = $false
   if ((Get-GitValue $Root @('rev-parse', '--verify', 'HEAD')) -ne
     $metadata.FlutterFrameworkRevision) {
     throw 'Flutter checkout does not match the pinned framework revision.'
@@ -146,8 +116,11 @@ if (-not (Test-Path -LiteralPath (Join-Path $engineOutput 'build.ninja') -PathTy
   throw 'Configure the pinned host_release engine before the application release build.'
 }
 Set-Location $EngineSource
-& ninja -C $engineOutput
-if ($LASTEXITCODE) { throw 'Pinned host_release engine build failed.' }
+& {
+  $PSNativeCommandUseErrorActionPreference = $false
+  & ninja -C $engineOutput
+  if ($LASTEXITCODE) { throw 'Pinned host_release engine build failed.' }
+}
 Assert-PinnedFlutterCheckout $flutterRoot
 $engineLibrary = Join-Path $engineOutput 'flutter_windows.dll'
 if (-not (Test-Path -LiteralPath $engineLibrary -PathType Leaf)) {
@@ -163,11 +136,14 @@ if (Test-Path -LiteralPath $buildMarkerPath -PathType Leaf) {
   Remove-Item -LiteralPath $buildMarkerPath
 }
 Set-Location $repository
-& $flutter build windows `
-  --local-engine=host_release `
-  --local-engine-host=host_release `
-  --local-engine-src-path=$EngineSource
-if ($LASTEXITCODE) { throw 'Flutter Windows release build failed.' }
+& {
+  $PSNativeCommandUseErrorActionPreference = $false
+  & $flutter build windows `
+    --local-engine=host_release `
+    --local-engine-host=host_release `
+    --local-engine-src-path=$EngineSource
+  if ($LASTEXITCODE) { throw 'Flutter Windows release build failed.' }
+}
 
 if ((Test-SourceDirty $repository) -or
   (Get-GitValue $repository @('rev-parse', '--verify', 'HEAD')) -ne $sourceCommit) {

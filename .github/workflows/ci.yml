@@ -167,7 +167,7 @@ jobs:
             engine_required=false
           fi
           if [[ "$engine_required" == "true" ]] ||
-             grep -Eq '^(\.github/workflows/ci\.yml|LICENSE|pubspec\.(lock|yaml)|docs/windows-runtime\.md|tool/flutter_engine/NOTICE|tool/windows/(build-release|package|prepare-mpv|verify-release-policy)\.ps1)$|^third_party/libmpv/' <<<"$changed_files"; then
+             grep -Eq '^(\.github/workflows/ci\.yml|LICENSE|pubspec\.(lock|yaml)|docs/windows-runtime\.md|tool/flutter_engine/NOTICE|tool/windows/(build-inputs|build-release|package|prepare-mpv|verify-release-policy)\.ps1)$|^third_party/libmpv/' <<<"$changed_files"; then
             package_required=true
           else
             package_required=false
@@ -293,6 +293,21 @@ jobs:
             }
           } finally {
             [IO.File]::WriteAllBytes($engineArtifact, $engineBytes)
+          }
+          $runtimeArtifact = Join-Path $env:GITHUB_WORKSPACE 'build\windows\x64\runner\Release\libmpv-2.dll'
+          $runtimeProbe = Join-Path $env:RUNNER_TEMP 'lineup-libmpv-2.dll'
+          try {
+            Move-Item -LiteralPath $runtimeArtifact -Destination $runtimeProbe
+            try {
+              & .\tool\windows\package.ps1 -Destination 'build/package/missing-artifact-check'
+              throw 'Packaging accepted a build with a required artifact missing.'
+            } catch {
+              if ($_.Exception.Data['LineupPackageFailure'] -ne 'build-artifact-mismatch') { throw }
+            }
+          } finally {
+            if (Test-Path -LiteralPath $runtimeProbe) {
+              Move-Item -LiteralPath $runtimeProbe -Destination $runtimeArtifact
+            }
           }
           foreach ($licenseName in @(
             'mpv-LICENSE.LGPL',

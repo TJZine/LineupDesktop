@@ -18,6 +18,7 @@ function Throw-PackageFailure {
   $exception.Data['LineupPackageFailure'] = $Id
   throw $exception
 }
+. (Join-Path $PSScriptRoot 'build-inputs.ps1')
 
 $versionMatch = Select-String -LiteralPath (Join-Path $repository 'pubspec.yaml') -Pattern '^version:\s*(\S+)\s*$'
 if (-not $versionMatch) { throw 'pubspec.yaml does not contain a version.' }
@@ -61,39 +62,6 @@ $sourceDirty = & {
 }
 if ($sourceDirty) {
   Throw-PackageFailure 'dirty-source' 'Refusing to create a release package from a dirty source tree. Commit or stash all tracked and untracked changes first.'
-}
-
-function Get-BuildInputs {
-  param([Parameter(Mandatory)] [string] $Root)
-
-  $required = @(
-    'lineup_desktop.exe',
-    'flutter_windows.dll',
-    'flutter_secure_storage_windows_plugin.dll',
-    'libmpv-2.dll'
-  )
-  $paths = [System.Collections.Generic.List[string]]::new()
-  foreach ($relative in $required) {
-    $path = Join-Path $Root $relative
-    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
-      Throw-PackageFailure 'build-artifact-mismatch' "Release build is missing $relative."
-    }
-    $paths.Add($relative)
-  }
-
-  $data = Join-Path $Root 'data'
-  if (-not (Test-Path -LiteralPath $data -PathType Container)) {
-    Throw-PackageFailure 'build-artifact-mismatch' 'Release build is missing the data directory.'
-  }
-  foreach ($file in Get-ChildItem -LiteralPath $data -Recurse -File) {
-    $paths.Add($file.FullName.Substring($Root.Length + 1).Replace('\', '/'))
-  }
-
-  $nativeAssets = Join-Path $Root 'native_assets.json'
-  if (Test-Path -LiteralPath $nativeAssets -PathType Leaf) {
-    $paths.Add('native_assets.json')
-  }
-  @($paths | Sort-Object -Unique)
 }
 
 $buildMarkerPath = Join-Path $BuildDirectory 'LINEUP-BUILD-PROVENANCE.json'
@@ -156,7 +124,10 @@ foreach ($artifact in @($buildMarker.artifacts)) {
     Throw-PackageFailure 'build-provenance-mismatch' "Release build provenance repeats $($artifact.path)."
   }
 }
-$buildInputs = @(Get-BuildInputs $BuildDirectory)
+$buildInputs = @(Get-BuildInputs $BuildDirectory -FailureReporter {
+    param([string] $Message)
+    Throw-PackageFailure 'build-artifact-mismatch' $Message
+  })
 if ($markedArtifacts.Count -ne $buildInputs.Count) {
   Throw-PackageFailure 'build-artifact-mismatch' 'Release build contents do not match the artifact-bound provenance marker.'
 }
