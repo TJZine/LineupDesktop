@@ -49,11 +49,12 @@ this update.
 packages from baseline `30003ddddcc611ea4920bad3d6f591a8e5bf2afa` ended at
 product commit `6714eed8b25b6305934ac90a1a84b9eb3604cee7` under locked plan
 SHA-256 `23e10f7ef660b8eec061321a6ea658fec779013c6e5c8fedd1b560293e1e2a52`.
-The current inventory is 25 macOS goldens: the prior 20 at 1280×720 plus five
-focused 1920×1080 baselines. Deterministic acceptance passed; a bounded macOS
-synthetic-runtime smoke observed its reachable surfaces with the limitations
-recorded below. Exact-commit physical Windows acceptance was blocked/not run
-because no authorized Windows machine/operator/transport route was available;
+At the close of this campaign, the inventory was 25 macOS goldens: the prior
+20 at 1280×720 plus five focused 1920×1080 baselines. Deterministic acceptance
+passed; a bounded macOS synthetic-runtime smoke observed its reachable surfaces
+with the limitations recorded below. Exact-commit physical Windows acceptance
+was blocked/not run because no authorized Windows machine/operator/transport
+route was available;
 this update makes no new Windows platform-validation or support claim.
 
 **Channel Studio update:** 2026-08-27. Six reviewed implementation slices from
