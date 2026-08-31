@@ -3626,7 +3626,6 @@ void main() {
       ..stage = SetupStage.ready
       ..channels = [channel];
     final fixture = UiFixture(controller: controller);
-    addTearDown(controller.dispose);
     await tester.pumpWidget(fixture.build());
     await tester.pump();
     await openDestination(tester, 'Channels');
@@ -3637,6 +3636,46 @@ void main() {
     await tester.pump();
 
     expect(channel.serializations, 0);
+  });
+
+  testWidgets('Channels health follows stable channel revisions', (
+    tester,
+  ) async {
+    final original = _channel(
+      id: 'stable-health',
+      number: 1,
+      name: 'Stable Health',
+      source: ManualSource([_itemForHealth(1)]),
+    );
+    final controller = _HealthController()
+      ..stage = SetupStage.ready
+      ..channels = [original];
+    final fixture = UiFixture(controller: controller);
+    await tester.pumpWidget(fixture.build());
+    await tester.pump();
+    await openDestination(tester, 'Channels');
+    await tester.pumpAndSettle();
+    final initialRequests = controller.requests;
+
+    final equivalent = _channel(
+      id: 'stable-health',
+      number: 1,
+      name: 'Stable Health',
+      source: ManualSource([_itemForHealth(1)]),
+    );
+    await controller.saveChannel(equivalent, expectedBase: original);
+    await tester.pumpAndSettle();
+    expect(controller.requests, initialRequests);
+
+    final changed = _channel(
+      id: 'stable-health',
+      number: 1,
+      name: 'Stable Health',
+      source: ManualSource([_itemForHealth(2)]),
+    );
+    await controller.saveChannel(changed, expectedBase: equivalent);
+    await tester.pumpAndSettle();
+    expect(controller.requests, initialRequests + 1);
   });
 
   testWidgets('large Channels viewport reaches a quiescent bounded cache', (
@@ -3721,14 +3760,11 @@ void main() {
     expect(controller.pending, hasLength(2));
     expect(controller.maximumActive, lessThanOrEqualTo(2));
 
-    controller.channels = [
-      Channel.fromJson({
-        ...controller.channels[0].toJson(),
-        'name': 'Controlled 1 latest',
-      }),
-      controller.channels[1],
-    ];
-    controller.notifyListeners();
+    final original = controller.channels[0];
+    await controller.saveChannel(
+      Channel.fromJson({...original.toJson(), 'name': 'Controlled 1 latest'}),
+      expectedBase: original,
+    );
     await tester.pump();
     expect(
       controller.pending.where((call) => call.channel.id == 'controlled-1'),
@@ -3765,27 +3801,17 @@ void main() {
     await tester.pump();
     expect(controller.pending, hasLength(2));
 
-    controller.channels = [
-      controller.channels[0],
-      controller.channels[1],
-      controller.channels[2],
-      Channel.fromJson({
-        ...controller.channels[3].toJson(),
-        'name': 'Controlled 4 middle',
-      }),
-    ];
-    controller.notifyListeners();
+    var current = controller.channels[3];
+    await controller.saveChannel(
+      Channel.fromJson({...current.toJson(), 'name': 'Controlled 4 middle'}),
+      expectedBase: current,
+    );
     await tester.pump();
-    controller.channels = [
-      controller.channels[0],
-      controller.channels[1],
-      controller.channels[2],
-      Channel.fromJson({
-        ...controller.channels[3].toJson(),
-        'name': 'Controlled 4 latest',
-      }),
-    ];
-    controller.notifyListeners();
+    current = controller.channels[3];
+    await controller.saveChannel(
+      Channel.fromJson({...current.toJson(), 'name': 'Controlled 4 latest'}),
+      expectedBase: current,
+    );
     await tester.pump();
     controller.complete('controlled-1');
     await tester.pump();

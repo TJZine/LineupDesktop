@@ -713,7 +713,9 @@ class _ChannelsViewState extends State<ChannelsView> {
       _health.clear();
       _pendingHealth.clear();
     }
-    _scheduleFocusPrune(channels.map((channel) => channel.id).toSet());
+    final liveIds = channels.map((channel) => channel.id).toSet();
+    _pruneHealth(liveIds);
+    _scheduleFocusPrune(liveIds);
     return LineupPage(
       title: 'Channels',
       actions: Wrap(
@@ -905,8 +907,15 @@ class _ChannelsViewState extends State<ChannelsView> {
 
   _ChannelHealthSignature _healthSignature(Channel channel) => (
     contentGeneration: widget.controller.contentGeneration,
-    channel: channel,
+    channelRevision: widget.controller.channelRevision(channel.id),
   );
+
+  void _pruneHealth(Set<String> liveIds) {
+    _health.removeWhere((id, _) => !liveIds.contains(id));
+    _pendingHealth.removeWhere(
+      (pending) => !liveIds.contains(pending.channel.id),
+    );
+  }
 
   void _scheduleFocusPrune(Set<String> liveIds) {
     final staleIds = {
@@ -985,7 +994,10 @@ class _ChannelsViewState extends State<ChannelsView> {
   }
 }
 
-typedef _ChannelHealthSignature = ({int contentGeneration, Channel channel});
+typedef _ChannelHealthSignature = ({
+  int contentGeneration,
+  int channelRevision,
+});
 
 class _ChannelHealth {
   const _ChannelHealth(this.signature, this.issue);

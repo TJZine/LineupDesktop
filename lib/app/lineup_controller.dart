@@ -162,11 +162,15 @@ class LineupController extends ChangeNotifier {
   Future<void> _stateOperations = Future.value();
   Future<bool>? _logoutFuture;
   int _contentGeneration = 0;
+  int _nextChannelRevision = 0;
+  final Map<String, int> _channelRevisions = {};
   bool _disposed = false;
 
   String? startupRecoveryNotice;
 
   int get contentGeneration => _contentGeneration;
+
+  int channelRevision(String id) => _channelRevisions[id] ?? 0;
 
   ({
     List<PlexMediaItem> media,
@@ -1057,6 +1061,7 @@ class LineupController extends ChangeNotifier {
       try {
         await _save();
         if (_disposed) return;
+        _recordChannelChanges(oldChannels);
         notifyListeners();
       } catch (_) {
         channels = oldChannels;
@@ -1112,6 +1117,7 @@ class LineupController extends ChangeNotifier {
       try {
         await _save();
         if (_disposed) return;
+        _recordChannelChanges(old);
         notifyListeners();
       } catch (_) {
         channels = old;
@@ -1353,6 +1359,7 @@ class LineupController extends ChangeNotifier {
       try {
         await _save();
         if (_disposed) return;
+        _recordChannelChanges(old);
         notifyListeners();
       } catch (_) {
         channels = old;
@@ -1377,6 +1384,20 @@ class LineupController extends ChangeNotifier {
         rethrow;
       }
     });
+  }
+
+  void _recordChannelChanges(List<Channel> previous) {
+    final previousById = {for (final channel in previous) channel.id: channel};
+    final liveIds = channels.map((channel) => channel.id).toSet();
+    _channelRevisions.removeWhere((id, _) => !liveIds.contains(id));
+    for (final channel in channels) {
+      final old = previousById[channel.id];
+      if (!identical(old, channel) &&
+          (old == null ||
+              !canonicalChannelValueEquals(old.toJson(), channel.toJson()))) {
+        _channelRevisions[channel.id] = ++_nextChannelRevision;
+      }
+    }
   }
 
   Future<bool> logout() {
