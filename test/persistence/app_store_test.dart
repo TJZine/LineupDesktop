@@ -257,6 +257,34 @@ void main() {
     expect(await stateFile.readAsString(), contents);
   });
 
+  test(
+    'failed unsafe-artwork migration does not report a successful load',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'lineup-store-test',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      const unsafe = '/library/metadata/1/thumb?X-Plex-Token=secret';
+      final stateFile = File('${directory.path}/state.json');
+      final contents = _encodedState(
+        _canonicalJson()
+          ..['channelsByProfileServer'] = {
+            'profile': {
+              'server': [_channelJson(artworkValue: unsafe)],
+            },
+          },
+      );
+      await stateFile.writeAsString(contents);
+
+      await expectLater(
+        _FailingMigrationStore(directory).load(),
+        throwsA(isA<FileSystemException>()),
+      );
+
+      expect(await stateFile.readAsString(), contents);
+    },
+  );
+
   test('bounds oversized persisted cast across round trips', () {
     final cast = [
       for (var index = 0; index < maxRichCastMembers + 5; index++)
@@ -641,3 +669,12 @@ Map<String, Object?> _channelJson({
 };
 
 String _encodedState(Map<String, Object?> state) => jsonEncode(state);
+
+class _FailingMigrationStore extends FileAppStore {
+  _FailingMigrationStore(super.directory);
+
+  @override
+  Future<void> save(PersistedState state) => Future.error(
+    const FileSystemException('Synthetic migration rewrite failure'),
+  );
+}

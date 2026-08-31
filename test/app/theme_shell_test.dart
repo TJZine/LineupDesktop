@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
@@ -67,6 +68,7 @@ void main() {
   testWidgets('theme chooser exposes selection and remote-style traversal', (
     tester,
   ) async {
+    final semantics = tester.ensureSemantics();
     final fixture = UiFixture()..controller.stage = SetupStage.ready;
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
@@ -81,6 +83,15 @@ void main() {
     expect(emberSemantics.properties.button, isTrue);
     expect(emberSemantics.properties.selected, isTrue);
     expect(slateSemantics.properties.selected, isFalse);
+    expect(
+      tester
+          .getSemantics(
+            find.byKey(const Key('theme-option-semantics-ember-steel')),
+          )
+          .getSemanticsData()
+          .hasAction(SemanticsAction.tap),
+      isTrue,
+    );
 
     await tester.tap(find.byKey(const Key('theme-option-ember-steel')));
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
@@ -93,6 +104,7 @@ void main() {
           .hasFocus,
       isTrue,
     );
+    semantics.dispose();
   });
 
   testWidgets('theme chooser applies every approved palette', (tester) async {
