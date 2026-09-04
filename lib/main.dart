@@ -10,7 +10,7 @@ import 'playback/unsupported_native_player.dart';
 import 'playback/windows_native_player.dart';
 import 'plex/plex_client.dart';
 
-Future<void> main(List<String> arguments) async {
+void main(List<String> arguments) {
   WidgetsFlutterBinding.ensureInitialized();
 
   FlutterError.onError = (details) {
@@ -36,19 +36,23 @@ Future<void> main(List<String> arguments) async {
       break;
     }
   }
-  final store = await FileAppStore.create();
-  final controller = LineupController(
-    store: store,
-    credentials: const KeychainCredentialStore(),
-    plex: PlexClient(clientIdentifier: await store.clientIdentifier()),
-  );
   runApp(
-    LineupBootstrap(
-      controller: controller,
-      player: Platform.isWindows
-          ? WindowsNativePlayer()
-          : UnsupportedNativePlayer.macos(),
-      initialMediaPath: mediaArgument,
+    LineupStartup(
+      createBootstrap: () async {
+        final store = await FileAppStore.create();
+        final clientIdentifier = await store.clientIdentifier();
+        return LineupBootstrap(
+          controller: LineupController(
+            store: store,
+            credentials: const KeychainCredentialStore(),
+            plex: PlexClient(clientIdentifier: clientIdentifier),
+          ),
+          player: Platform.isWindows
+              ? WindowsNativePlayer()
+              : UnsupportedNativePlayer.macos(),
+          initialMediaPath: mediaArgument,
+        );
+      },
     ),
   );
 }

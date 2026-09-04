@@ -276,6 +276,38 @@ void main() {
     expect(item.clearLogoPath, '/library/metadata/show-1/clearlogo');
   });
 
+  test('drops noncanonical primary artwork during Plex projection', () {
+    final unsafeValues = [
+      'https://plex.invalid/library/metadata/1/thumb',
+      '//plex.invalid/library/metadata/1/thumb',
+      '/library/metadata/1/thumb?X-Plex-Token=secret',
+      '/library/metadata/1/thumb#private',
+      '/library/metadata/../private/thumb',
+      '/photo/:/transcode?url=private',
+      '/Users/private/poster.png',
+    ];
+
+    for (final unsafe in unsafeValues) {
+      final item = parseMediaItem({
+        'ratingKey': 'unsafe',
+        'title': 'Unsafe artwork',
+        'type': 'movie',
+        'duration': 1000,
+        'thumb': unsafe,
+        'grandparentThumb': unsafe,
+        'art': unsafe,
+        'Image': [
+          {'type': 'clearLogo', 'url': unsafe},
+        ],
+      });
+
+      expect(item.thumbPath, isNull, reason: unsafe);
+      expect(item.grandparentThumbPath, isNull, reason: unsafe);
+      expect(item.artPath, isNull, reason: unsafe);
+      expect(item.clearLogoPath, isNull, reason: unsafe);
+    }
+  });
+
   test('parses trimmed, deduplicated cast facts and actor names', () {
     final item = parseMediaItem({
       'ratingKey': 'cast-1',

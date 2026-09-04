@@ -19,6 +19,71 @@ import 'package:lineup_desktop/settings/lineup_settings.dart';
 import '../support/ui_fixture.dart';
 
 void main() {
+  testWidgets(
+    'startup mounts a progress surface while composition is pending',
+    (tester) async {
+      final composition = Completer<LineupBootstrap>();
+      final controller = _FakeController()..stage = SetupStage.ready;
+      addTearDown(controller.dispose);
+
+      await tester.pumpWidget(
+        LineupStartup(createBootstrap: () => composition.future),
+      );
+      await tester.pump();
+
+      expect(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is Semantics &&
+              widget.properties.label == 'Starting Lineup Desktop',
+        ),
+        findsOneWidget,
+      );
+
+      composition.complete(
+        LineupBootstrap(player: _FakePlayer(), controller: controller),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Create a channel to build your Guide'), findsOneWidget);
+    },
+  );
+
+  testWidgets('startup reports synchronous composition failures safely', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      LineupStartup(
+        createBootstrap: () {
+          throw StateError('/private/startup/secret-sentinel');
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Lineup Desktop could not start'), findsOneWidget);
+    expect(find.textContaining('Restart the app'), findsOneWidget);
+    expect(find.textContaining('secret-sentinel'), findsNothing);
+  });
+
+  testWidgets('startup reports asynchronous composition failures safely', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      LineupStartup(
+        createBootstrap: () async {
+          await Future<void>.delayed(Duration.zero);
+          throw StateError('/private/startup/secret-sentinel');
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Lineup Desktop could not start'), findsOneWidget);
+    expect(find.textContaining('Restart the app'), findsOneWidget);
+    expect(find.textContaining('secret-sentinel'), findsNothing);
+  });
+
   testWidgets('root Reduce Motion setting disables descendant animations', (
     tester,
   ) async {
@@ -79,8 +144,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Build Channels'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Remove 0 generated channels'));
-    await tester.pump();
+    expect(find.text('Remove 0 generated channels'), findsNothing);
     await tester.tap(find.text('Confirm & Replace'));
     await tester.pumpAndSettle();
 
@@ -118,8 +182,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Build Channels'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Remove 0 generated channels'));
-    await tester.pump();
+    expect(find.text('Remove 0 generated channels'), findsNothing);
     await tester.tap(find.text('Confirm & Replace'));
     await tester.pumpAndSettle();
 
@@ -191,7 +254,7 @@ void main() {
 
     await openDestination(tester, 'Settings');
 
-    expect(find.text('Theme'), findsOneWidget);
+    expect(find.byKey(const Key('theme-option-ember-steel')), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
@@ -351,14 +414,8 @@ void main() {
 
     await tester.sendKeyEvent(LogicalKeyboardKey.f3);
     await tester.pumpAndSettle();
-    expect(find.text('Theme'), findsOneWidget);
+    expect(find.byKey(const Key('theme-option-ember-steel')), findsOneWidget);
     expect(FocusManager.instance.primaryFocus?.debugLabel, 'Settings');
-
-    await tester.tap(find.byType(DropdownButton<LineupThemeName>));
-    await tester.pumpAndSettle();
-    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-    await tester.pumpAndSettle();
-    expect(find.text('Theme'), findsOneWidget);
 
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();
@@ -373,7 +430,7 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.f3);
     await tester.pumpAndSettle();
 
-    expect(find.text('Theme'), findsOneWidget);
+    expect(find.byKey(const Key('theme-option-ember-steel')), findsOneWidget);
     expect(FocusManager.instance.primaryFocus?.debugLabel, 'Settings');
 
     await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
@@ -528,7 +585,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(FocusManager.instance.primaryFocus?.debugLabel, 'Player');
-    expect(find.text('Theme'), findsNothing);
+    expect(find.byKey(const Key('theme-option-ember-steel')), findsNothing);
   });
 
   testWidgets('onboarding link action is keyboard reachable', (tester) async {
@@ -1203,6 +1260,26 @@ void main() {
     );
     expect(find.text(_requiredEngineNativeFailureMessage), findsNothing);
   });
+
+  testWidgets('retains required-engine guidance through player errors', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      LineupBootstrap(
+        player: _TypedRequiredEngineFailingPlayer(),
+        controller: _FakeController(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text(
+        'The required Lineup DirectComposition Flutter engine is not active.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text(_requiredEngineNativeFailureMessage), findsNothing);
+  });
 }
 
 class _FakeController extends LineupController {
@@ -1520,6 +1597,16 @@ class _RequiredEngineFailingPlayer extends _FakePlayer {
     throw PlatformException(
       code: 'required_engine_unavailable',
       message: _requiredEngineNativeFailureMessage,
+    );
+  }
+}
+
+class _TypedRequiredEngineFailingPlayer extends _FakePlayer {
+  @override
+  Future<void> initialize() async {
+    throw const PlayerUnavailable(
+      _requiredEngineNativeFailureMessage,
+      failureCode: 'required_engine_unavailable',
     );
   }
 }

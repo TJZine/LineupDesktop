@@ -34,7 +34,6 @@ class LineupSettings {
     this.libraryTabsEnabled = true,
     this.nowWatchingBanner = true,
     this.osdAutoHideSeconds = 4,
-    this.audioSetupComplete = false,
     this.reduceMotion = false,
     this.largeFocusIndicators = false,
     this.profilePickerOnStartup = false,
@@ -52,7 +51,6 @@ class LineupSettings {
   final bool libraryTabsEnabled;
   final bool nowWatchingBanner;
   final int osdAutoHideSeconds;
-  final bool audioSetupComplete;
   final bool reduceMotion;
   final bool largeFocusIndicators;
   final bool profilePickerOnStartup;
@@ -70,7 +68,6 @@ class LineupSettings {
     bool? libraryTabsEnabled,
     bool? nowWatchingBanner,
     int? osdAutoHideSeconds,
-    bool? audioSetupComplete,
     bool? reduceMotion,
     bool? largeFocusIndicators,
     bool? profilePickerOnStartup,
@@ -88,7 +85,6 @@ class LineupSettings {
     libraryTabsEnabled: libraryTabsEnabled ?? this.libraryTabsEnabled,
     nowWatchingBanner: nowWatchingBanner ?? this.nowWatchingBanner,
     osdAutoHideSeconds: osdAutoHideSeconds ?? this.osdAutoHideSeconds,
-    audioSetupComplete: audioSetupComplete ?? this.audioSetupComplete,
     reduceMotion: reduceMotion ?? this.reduceMotion,
     largeFocusIndicators: largeFocusIndicators ?? this.largeFocusIndicators,
     profilePickerOnStartup:
@@ -108,7 +104,9 @@ class LineupSettings {
     'libraryTabsEnabled': libraryTabsEnabled,
     'nowWatchingBanner': nowWatchingBanner,
     'osdAutoHideSeconds': osdAutoHideSeconds,
-    'audioSetupComplete': audioSetupComplete,
+    // Retain the legacy canonical key so existing settings continue to load.
+    // It no longer gates onboarding and must not seed future passthrough state.
+    'audioSetupComplete': true,
     'reduceMotion': reduceMotion,
     'largeFocusIndicators': largeFocusIndicators,
     'profilePickerOnStartup': profilePickerOnStartup,
@@ -174,6 +172,8 @@ class LineupSettings {
       return boolean(key);
     }
 
+    // Validate and discard the retired onboarding flag.
+    boolean('audioSetupComplete');
     return LineupSettings(
       theme: enumValue(
         LineupThemeName.values,
@@ -208,7 +208,6 @@ class LineupSettings {
         'osdAutoHideSeconds',
         osdAutoHideSecondsOptions,
       ),
-      audioSetupComplete: boolean('audioSetupComplete'),
       reduceMotion: boolean('reduceMotion'),
       largeFocusIndicators: boolean('largeFocusIndicators'),
       profilePickerOnStartup: boolean('profilePickerOnStartup'),

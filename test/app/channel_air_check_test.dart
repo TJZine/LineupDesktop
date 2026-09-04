@@ -33,6 +33,14 @@ void main() {
       expect(find.text('Cycle 1h'), findsOneWidget);
       expect(find.text('In order'), findsOneWidget);
       expect(find.text('ON NOW'), findsOneWidget);
+      final heading = tester.widget<Semantics>(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is Semantics &&
+              widget.properties.label == 'ON AIR, Air Check',
+        ),
+      );
+      expect(heading.properties.header, isTrue);
       expect(find.byKey(const Key('air-check-now-line')), findsOneWidget);
       expect(find.textContaining('One •'), findsOneWidget);
 

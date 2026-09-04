@@ -23,6 +23,18 @@ Matcher _throwsScheduleFailure(ScheduleFailureReason reason) => throwsA(
   ),
 );
 
+Future<void> _waitForTestState(
+  bool Function() condition, {
+  required String description,
+}) async {
+  final elapsed = Stopwatch()..start();
+  while (elapsed.elapsed < const Duration(seconds: 5)) {
+    if (condition()) return;
+    await Future<void>.delayed(const Duration(milliseconds: 1));
+  }
+  fail('Timed out waiting for $description.');
+}
+
 void main() {
   test(
     'artworkForPath uses the active authenticated server transport',
@@ -1782,7 +1794,17 @@ void main() {
                     id: 'saved',
                     number: 1,
                     name: 'Saved channel',
-                    source: const PlaylistSource('missing-playlist'),
+                    source: const MixedSource(
+                      sources: [
+                        LibrarySource(
+                          libraryId: 'movies',
+                          libraryType: PlexLibraryType.movie,
+                        ),
+                        MixedSource(
+                          sources: [PlaylistSource('missing-playlist')],
+                        ),
+                      ],
+                    ),
                     playbackMode: PlaybackMode.sequential,
                     anchor: DateTime.utc(2026),
                     shuffleSeed: 1,
@@ -1805,6 +1827,82 @@ void main() {
         controller.error,
         'A playlist used by this lineup could not be loaded. Retry setup.',
       );
+    },
+  );
+
+  test(
+    'whole playlist failure preserves inventory required by a nested source',
+    () async {
+      final selected = _server('server');
+      final plex = _FakePlex()
+        ..serversResult = [selected]
+        ..connectionResult = selected.connections.single
+        ..librariesResult = const [
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+        ]
+        ..libraryItemsHandler = (_, _, _, _) async {
+          return [_playableMovie];
+        }
+        ..playlistsHandler = (_, _) async => throw const PlexException(
+          'playlist-failed',
+          'opaque-secret-sentinel',
+        );
+      final controller = LineupController(
+        store: _MemoryStore(
+          const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+        ),
+        credentials: _MemoryCredentials(accountToken: 'token'),
+        plex: plex,
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+      final previousMedia = [_playableMovie];
+      const previousPlaylists = [
+        PlexPlaylist(id: 'playlist', title: 'Playlist', items: []),
+      ];
+      controller
+        ..selectedLibraryIds = const {'movies'}
+        ..availableMedia = previousMedia
+        ..availablePlaylists = previousPlaylists
+        ..channels = [
+          Channel(
+            id: 'saved',
+            number: 1,
+            name: 'Saved channel',
+            source: const MixedSource(
+              sources: [
+                LibrarySource(
+                  libraryId: 'movies',
+                  libraryType: PlexLibraryType.movie,
+                ),
+                MixedSource(sources: [PlaylistSource('playlist')]),
+              ],
+            ),
+            playbackMode: PlaybackMode.sequential,
+            anchor: DateTime.utc(2026),
+            shuffleSeed: 1,
+          ),
+        ]
+        ..diagnostics.enabled = true;
+
+      expect(await controller.setLibraries({'movies'}), isFalse);
+
+      expect(controller.availableMedia, same(previousMedia));
+      expect(controller.availablePlaylists, same(previousPlaylists));
+      expect(controller.selectedLibraryIds, {'movies'});
+      expect(controller.libraryScanStatus, LibraryScanStatus.transientFailure);
+      expect(
+        controller.error,
+        'A playlist used by this lineup could not be loaded. Retry setup.',
+      );
+      final playlistDiagnostic = controller.diagnostics.entries
+          .where((entry) => entry.message == 'Playlist discovery unavailable')
+          .single;
+      expect(playlistDiagnostic.context, {'code': 'playlist-failed'});
     },
   );
 
@@ -1866,33 +1964,6 @@ void main() {
       expect(entry.context, {'count': 2});
     },
   );
-
-  test('audio persistence failure stays retryable and visible', () async {
-    final controller =
-        LineupController(
-            store: _MemoryStore()
-              ..failNextSave = true
-              ..failureMessage = 'opaque-secret-sentinel',
-            credentials: _MemoryCredentials(),
-            plex: _FakePlex(),
-          )
-          ..stage = SetupStage.audio
-          ..diagnostics.enabled = true;
-    addTearDown(controller.dispose);
-
-    await controller.completeAudioSetup();
-
-    expect(controller.stage, SetupStage.audio);
-    expect(controller.settings.audioSetupComplete, isFalse);
-    expect(controller.error, contains('Could not save audio settings'));
-    final entry = controller.diagnostics.entries.single;
-    expect(entry.message, 'Audio setup persistence failed');
-    expect(entry.context, {'code': 'unexpected'});
-    expect(
-      '${entry.message}${entry.context}',
-      isNot(contains('opaque-secret-sentinel')),
-    );
-  });
 
   test(
     'profile picker preference is honored before saved profile restore',
@@ -1990,9 +2061,10 @@ void main() {
       addTearDown(controller.dispose);
 
       await controller.startLinking();
-      while (controller.activePin != null) {
-        await Future<void>.delayed(const Duration(milliseconds: 1));
-      }
+      await _waitForTestState(
+        () => controller.activePin == null,
+        description: 'PIN poll failure',
+      );
       await Future<void>.delayed(const Duration(milliseconds: 10));
 
       expect(plex.pollCalls, 1);
@@ -2047,9 +2119,10 @@ void main() {
         addTearDown(controller.dispose);
 
         await controller.startLinking();
-        while (controller.activePin != null) {
-          await Future<void>.delayed(const Duration(milliseconds: 1));
-        }
+        await _waitForTestState(
+          () => controller.activePin == null,
+          description: '$failurePoint authentication failure',
+        );
         await Future<void>.delayed(const Duration(milliseconds: 5));
 
         expect(plex.pollCalls, 1);
@@ -2092,9 +2165,10 @@ void main() {
     addTearDown(controller.dispose);
 
     await controller.startLinking();
-    while (controller.stage != SetupStage.servers || controller.busy) {
-      await Future<void>.delayed(const Duration(milliseconds: 1));
-    }
+    await _waitForTestState(
+      () => controller.stage == SetupStage.servers && !controller.busy,
+      description: 'post-authentication server discovery failure',
+    );
 
     expect(credentials.accountToken, 'cloud-token-sentinel');
     expect(controller.account, plex.accountResult);
@@ -2130,9 +2204,10 @@ void main() {
     addTearDown(controller.dispose);
 
     await controller.startLinking();
-    while (plex.pollCalls == 0) {
-      await Future<void>.delayed(const Duration(milliseconds: 1));
-    }
+    await _waitForTestState(
+      () => plex.pollCalls > 0,
+      description: 'first PIN poll',
+    );
     await controller.cancelLinking();
     poll.completeError(const PlexException('auth-invalid', 'old failure'));
     await Future<void>.delayed(Duration.zero);
@@ -2164,9 +2239,10 @@ void main() {
       addTearDown(controller.dispose);
 
       await controller.startLinking();
-      while (!controller.secureCancellationRequired) {
-        await Future<void>.delayed(const Duration(milliseconds: 1));
-      }
+      await _waitForTestState(
+        () => controller.secureCancellationRequired,
+        description: 'ambiguous credential cleanup requirement',
+      );
 
       expect(controller.activePin?.id, 63);
       expect(controller.account, isNull);
@@ -2189,9 +2265,11 @@ void main() {
   );
 
   test(
-    'failed settings persistence does not leak into the next save',
+    'failed settings persistence records safely and does not leak',
     () async {
-      final store = _MemoryStore()..failNextSave = true;
+      final store = _MemoryStore()
+        ..failNextSave = true
+        ..failureMessage = '/private/path/opaque-secret-sentinel';
       final controller = LineupController(
         store: store,
         credentials: _MemoryCredentials(),
@@ -2201,13 +2279,27 @@ void main() {
       await controller.initialize();
       controller
         ..connection = _server('server').connections.single
-        ..availableMedia = [_playableMovie];
+        ..availableMedia = [_playableMovie]
+        ..diagnostics.enabled = true;
 
       await expectLater(
         controller.updateSettings(
           const LineupSettings(diagnosticsEnabled: true),
         ),
         throwsStateError,
+      );
+      expect(controller.settings.diagnosticsEnabled, isFalse);
+      expect(
+        controller.diagnostics.entries.single.message,
+        'State save failed',
+      );
+      expect(controller.diagnostics.entries.single.context, {
+        'code': 'write-failed',
+      });
+      expect(
+        '${controller.diagnostics.entries.single.message}'
+        '${controller.diagnostics.entries.single.context}',
+        isNot(contains('opaque-secret-sentinel')),
       );
       await controller.saveChannel(
         Channel(
@@ -3523,7 +3615,7 @@ void main() {
       final channel = _channel('saved-channel');
       final store = _MemoryStore(
         PersistedState(
-          settings: const LineupSettings(audioSetupComplete: true),
+          settings: const LineupSettings(),
           profileId: 'owner',
           selectedServerByProfile: const {'owner': 'server-a'},
           channelsByProfileServer: {
@@ -3714,7 +3806,7 @@ void main() {
     final controller = LineupController(
       store: _MemoryStore(
         const PersistedState(
-          settings: LineupSettings(audioSetupComplete: true),
+          settings: LineupSettings(),
           profileId: 'owner',
           selectedServerByProfile: {'owner': 'server-a'},
         ),

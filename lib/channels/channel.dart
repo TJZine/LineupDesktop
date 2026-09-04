@@ -183,10 +183,10 @@ class ChannelItem {
     'title': title,
     'durationMs': duration.inMilliseconds,
     if (showTitle != null) 'showTitle': showTitle,
-    if (showThumb != null) 'showThumb': showThumb,
-    if (poster != null) 'poster': poster.toString(),
-    if (backdrop != null) 'backdrop': backdrop.toString(),
-    if (clearLogo != null) 'clearLogo': clearLogo.toString(),
+    'showThumb': ?canonicalPlexArtworkPathText(showThumb),
+    'poster': ?canonicalPlexArtworkPath(poster)?.toString(),
+    'backdrop': ?canonicalPlexArtworkPath(backdrop)?.toString(),
+    'clearLogo': ?canonicalPlexArtworkPath(clearLogo)?.toString(),
     if (summary != null) 'summary': summary,
     if (contentRating != null) 'contentRating': contentRating,
     if (genres.isNotEmpty) 'genres': genres,
@@ -237,10 +237,10 @@ class ChannelItem {
         title: _string(json['title']),
         duration: duration,
         showTitle: _optionalString(json, 'showTitle'),
-        showThumb: _optionalString(json, 'showThumb'),
-        poster: _optionalUri(json, 'poster'),
-        backdrop: _optionalUri(json, 'backdrop'),
-        clearLogo: _optionalUri(json, 'clearLogo'),
+        showThumb: _optionalArtworkPath(json, 'showThumb'),
+        poster: _optionalArtworkUri(json, 'poster'),
+        backdrop: _optionalArtworkUri(json, 'backdrop'),
+        clearLogo: _optionalArtworkUri(json, 'clearLogo'),
         summary: _optionalString(json, 'summary'),
         contentRating: _optionalString(json, 'contentRating'),
         genres: json.containsKey('genres')
@@ -277,7 +277,7 @@ List<ChannelCastMember> _persistedCastMembers(Object value) {
 
 class ChannelCastMember {
   ChannelCastMember({required this.name, this.role, Uri? portrait})
-    : portrait = canonicalCastPortrait(portrait);
+    : portrait = canonicalPlexArtworkPath(portrait);
 
   final String name;
   final String? role;
@@ -295,12 +295,14 @@ class ChannelCastMember {
     return ChannelCastMember(
       name: _string(json['name']),
       role: _optionalString(json, 'role'),
-      portrait: _optionalUri(json, 'portrait'),
+      portrait: _optionalArtworkUri(json, 'portrait'),
     );
   }
 }
 
-Uri? canonicalCastPortrait(Uri? value) {
+/// Returns the only artwork-reference shape that may enter durable channel
+/// state: a queryless Plex metadata path with no URI authority or traversal.
+Uri? canonicalPlexArtworkPath(Uri? value) {
   if (value == null ||
       value.scheme.isNotEmpty ||
       value.hasAuthority ||
@@ -320,6 +322,11 @@ Uri? canonicalCastPortrait(Uri? value) {
     return null;
   }
   return value.toString() == value.path ? value : null;
+}
+
+String? canonicalPlexArtworkPathText(String? value) {
+  if (value == null) return null;
+  return canonicalPlexArtworkPath(Uri.tryParse(value))?.toString();
 }
 
 class Channel {
@@ -346,16 +353,20 @@ class Channel {
   final String? builderKey;
 
   void validate(Iterable<Channel> existing) {
+    _validateStructure();
+    if (existing.any(
+      (channel) => channel.id != id && channel.number == number,
+    )) {
+      throw const FormatException('Channel number is already in use');
+    }
+  }
+
+  void _validateStructure() {
     if (id.trim().isEmpty || name.trim().isEmpty) {
       throw const FormatException('Channel name is required');
     }
     if (number < 1 || number > 1000) {
       throw const FormatException('Channel number must be between 1 and 1000');
-    }
-    if (existing.any(
-      (channel) => channel.id != id && channel.number == number,
-    )) {
-      throw const FormatException('Channel number is already in use');
     }
     if (playbackMode == PlaybackMode.block &&
         (blockSize == null || blockSize! < 1)) {
@@ -408,6 +419,23 @@ class Channel {
     } catch (error) {
       throw FormatException('Invalid channel', error);
     }
+  }
+}
+
+/// Validates a complete channel collection in one pass.
+void validateChannels(Iterable<Channel> channels) {
+  final channelIds = <String>{};
+  final channelIdByNumber = <int, String>{};
+  for (final channel in channels) {
+    channel._validateStructure();
+    if (!channelIds.add(channel.id)) {
+      throw const FormatException('Channel ID is already in use');
+    }
+    final existingId = channelIdByNumber[channel.number];
+    if (existingId != null && existingId != channel.id) {
+      throw const FormatException('Channel number is already in use');
+    }
+    channelIdByNumber.putIfAbsent(channel.number, () => channel.id);
   }
 }
 
@@ -492,11 +520,20 @@ T _enumValue<T extends Enum>(List<T> values, Object? value) {
       (throw const FormatException('Invalid enum'));
 }
 
-Uri? _optionalUri(Map<String, Object?> json, String key) {
+Uri? _optionalArtworkUri(Map<String, Object?> json, String key) {
   if (!json.containsKey(key)) return null;
   final value = _nonNull(json, key);
   if (value is! String) throw FormatException('Invalid $key');
-  return Uri.tryParse(value) ?? (throw FormatException('Invalid $key'));
+  final uri = Uri.tryParse(value) ?? (throw FormatException('Invalid $key'));
+  return canonicalPlexArtworkPath(uri);
+}
+
+String? _optionalArtworkPath(Map<String, Object?> json, String key) {
+  if (!json.containsKey(key)) return null;
+  final value = _nonNull(json, key);
+  if (value is! String) throw FormatException('Invalid $key');
+  final uri = Uri.tryParse(value) ?? (throw FormatException('Invalid $key'));
+  return canonicalPlexArtworkPath(uri)?.toString();
 }
 
 void _validateSource(ContentSource source, int depth) {

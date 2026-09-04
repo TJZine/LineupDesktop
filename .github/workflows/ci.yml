@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, flutter-mvp]
   pull_request:
   workflow_dispatch:
 
@@ -51,7 +51,9 @@ jobs:
         env:
           # Golden baselines include localized schedule times.
           TZ: America/New_York
-        run: flutter test test/app/ui_acceptance_golden_test.dart
+        run: |
+          flutter test test/app/ui_acceptance_golden_test.dart
+          flutter test test/app/guide_sparse_golden_test.dart
       - name: Upload golden failure images
         if: ${{ failure() && steps.golden.outcome == 'failure' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -61,6 +63,18 @@ jobs:
           if-no-files-found: error
           retention-days: 7
       - run: flutter build macos
+
+  windows-release-policy:
+    name: Verify Windows release policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - name: Validate package scripts and pinned provenance inputs
+        shell: pwsh
+        run: ./tool/windows/verify-release-policy.ps1
 
   build-windows:
     name: Verify and build Windows player
@@ -89,12 +103,13 @@ jobs:
           $env:LINEUP_MPV_ROOT = $mpvRoot
           flutter build windows
 
-  engine-inputs:
-    name: Detect Windows engine inputs
+  release-inputs:
+    name: Detect Windows release inputs
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:
-      required: ${{ steps.detect.outputs.required }}
+      engine-required: ${{ steps.detect.outputs.engine-required }}
+      package-required: ${{ steps.detect.outputs.package-required }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
@@ -113,7 +128,7 @@ jobs:
           }
           "patch-path=$path" >> $env:GITHUB_OUTPUT
       - id: detect
-        name: Detect engine changes
+        name: Detect engine and package changes
         shell: bash
         env:
           EVENT_NAME: ${{ github.event_name }}
@@ -124,7 +139,8 @@ jobs:
           ENGINE_PATCH_PATH: ${{ steps.metadata.outputs.patch-path }}
         run: |
           if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
-            echo "required=true" >> "$GITHUB_OUTPUT"
+            echo "engine-required=true" >> "$GITHUB_OUTPUT"
+            echo "package-required=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -138,22 +154,33 @@ jobs:
 
           if [[ -z "$base" || "$base" =~ ^0+$ ]] ||
              ! git cat-file -e "$base^{commit}" 2>/dev/null; then
-            echo "required=true" >> "$GITHUB_OUTPUT"
+            echo "engine-required=true" >> "$GITHUB_OUTPUT"
+            echo "package-required=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
           changed_files="$(git diff --name-only "$base" "$head")"
           if grep -Eq '^(\.gitattributes|\.metadata|tool/windows/build-metadata\.psd1|tool/flutter_engine/apply\.ps1)$' <<<"$changed_files" ||
              grep -Fxq "$ENGINE_PATCH_PATH" <<<"$changed_files"; then
-            echo "required=true" >> "$GITHUB_OUTPUT"
+            engine_required=true
           else
-            echo "required=false" >> "$GITHUB_OUTPUT"
+            engine_required=false
           fi
+          if [[ "$engine_required" == "true" ]] ||
+             grep -Eq '^(\.github/workflows/ci\.yml|LICENSE|pubspec\.(lock|yaml)|docs/windows-runtime\.md|tool/flutter_engine/NOTICE|tool/windows/(build-inputs|build-release|package|prepare-mpv|verify-release-policy)\.ps1)$|^third_party/libmpv/' <<<"$changed_files"; then
+            package_required=true
+          else
+            package_required=false
+          fi
+          echo "engine-required=$engine_required" >> "$GITHUB_OUTPUT"
+          echo "package-required=$package_required" >> "$GITHUB_OUTPUT"
 
   build-windows-engine:
-    name: Build patched Flutter engine
-    needs: engine-inputs
-    if: needs.engine-inputs.outputs.required == 'true'
+    name: Build patched Flutter engine and package
+    needs: [release-inputs, windows-release-policy]
+    if: >-
+      needs.release-inputs.outputs.engine-required == 'true' ||
+      needs.release-inputs.outputs.package-required == 'true'
     runs-on: windows-2022
     timeout-minutes: 180
     steps:
@@ -209,10 +236,7 @@ jobs:
           & .\tool\windows\prepare-mpv.ps1 -Destination $mpvRoot
           $env:LINEUP_MPV_ROOT = $mpvRoot
           $engineSource = Join-Path $env:RUNNER_TEMP 'lineup-flutter-source\engine\src'
-          flutter build windows `
-            --local-engine=host_release `
-            --local-engine-host=host_release `
-            --local-engine-src-path=$engineSource
+          & .\tool\windows\build-release.ps1 -EngineSource $engineSource
           $dirtyProbe = Join-Path $env:GITHUB_WORKSPACE 'PACKAGE-DIRTY-PROBE'
           $dirtyDestination = 'build/package/dirty-source-check'
           Set-Content -LiteralPath $dirtyProbe -Value 'dirty'
@@ -228,6 +252,62 @@ jobs:
             }
           } finally {
             Remove-Item -LiteralPath $dirtyProbe
+          }
+          $buildMarker = Join-Path $env:GITHUB_WORKSPACE 'build\windows\x64\runner\Release\LINEUP-BUILD-PROVENANCE.json'
+          $markerBytes = [IO.File]::ReadAllBytes($buildMarker)
+          foreach ($probe in @(
+            @{
+              Name = 'stale-source-marker'
+              Property = 'sourceCommit'
+              Value = '0000000000000000000000000000000000000000'
+            },
+            @{
+              Name = 'engine-identity-marker'
+              Property = 'flutterEngine'
+              Value = '0000000000000000000000000000000000000000'
+            }
+          )) {
+            try {
+              $marker = Get-Content -Raw -LiteralPath $buildMarker | ConvertFrom-Json
+              $marker.($probe.Property) = $probe.Value
+              $marker | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $buildMarker -Encoding ascii
+              try {
+                & .\tool\windows\package.ps1 -Destination "build/package/$($probe.Name)"
+                throw "Packaging unexpectedly accepted $($probe.Name)."
+              } catch {
+                if ($_.Exception.Data['LineupPackageFailure'] -ne 'build-provenance-mismatch') { throw }
+              }
+            } finally {
+              [IO.File]::WriteAllBytes($buildMarker, $markerBytes)
+            }
+          }
+          $engineArtifact = Join-Path $env:GITHUB_WORKSPACE 'build\windows\x64\runner\Release\flutter_windows.dll'
+          $engineBytes = [IO.File]::ReadAllBytes($engineArtifact)
+          try {
+            Add-Content -LiteralPath $engineArtifact -Value 'tampered'
+            try {
+              & .\tool\windows\package.ps1 -Destination 'build/package/build-artifact-tamper-check'
+              throw 'Packaging accepted a build artifact modified after provenance was recorded.'
+            } catch {
+              if ($_.Exception.Data['LineupPackageFailure'] -ne 'build-artifact-mismatch') { throw }
+            }
+          } finally {
+            [IO.File]::WriteAllBytes($engineArtifact, $engineBytes)
+          }
+          $runtimeArtifact = Join-Path $env:GITHUB_WORKSPACE 'build\windows\x64\runner\Release\libmpv-2.dll'
+          $runtimeProbe = Join-Path $env:RUNNER_TEMP 'lineup-libmpv-2.dll'
+          try {
+            Move-Item -LiteralPath $runtimeArtifact -Destination $runtimeProbe
+            try {
+              & .\tool\windows\package.ps1 -Destination 'build/package/missing-artifact-check'
+              throw 'Packaging accepted a build with a required artifact missing.'
+            } catch {
+              if ($_.Exception.Data['LineupPackageFailure'] -ne 'build-artifact-mismatch') { throw }
+            }
+          } finally {
+            if (Test-Path -LiteralPath $runtimeProbe) {
+              Move-Item -LiteralPath $runtimeProbe -Destination $runtimeArtifact
+            }
           }
           foreach ($licenseName in @(
             'mpv-LICENSE.LGPL',

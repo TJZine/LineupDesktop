@@ -22,6 +22,7 @@ void main() {
     diagnostics.add('playback', 'Playback facts', {
       'code': 'offline',
       'failureCode': 'http_error',
+      'operation': 'seek',
       'httpStatus': 401,
       'count': 12,
       'container': 'mpeg-ts',
@@ -36,6 +37,7 @@ void main() {
     expect(diagnostics.entries.single.context, {
       'code': 'offline',
       'failureCode': 'http_error',
+      'operation': 'seek',
       'httpStatus': 401,
       'count': 12,
       'container': 'mpeg-ts',
@@ -45,6 +47,10 @@ void main() {
       'videoOutput': 'gpu-next',
       'hardwareDecoder': 'd3d11va',
     });
+    expect(
+      () => diagnostics.entries.single.context['code'] = 'mutated',
+      throwsUnsupportedError,
+    );
   });
 
   test(

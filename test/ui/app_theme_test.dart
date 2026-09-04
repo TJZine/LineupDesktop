@@ -4,18 +4,36 @@ import 'package:lineup_desktop/ui/app_theme.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 
 void main() {
-  test(
-    'theme inventory and default match the implemented upstream product',
-    () {
-      expect(LineupThemeName.values.map((theme) => theme.label), [
-        'Ember & Steel',
-        'Slate & Pine',
-        'Swiss Minimal',
-        'DirecTV Classic',
-        'Glassmorphism',
-      ]);
-    },
-  );
+  test('theme inventory starts with the approved Lineup identity', () {
+    expect(LineupThemeName.values.map((theme) => theme.label), [
+      'Ember & Steel',
+      'Slate & Pine',
+      'Swiss Minimal',
+      'DirecTV Classic',
+      'Glassmorphism',
+    ]);
+  });
+
+  test('Ember & Steel exposes the approved semantic palette', () {
+    final roles = LineupTheme.forName(LineupThemeName.emberSteel)
+        .extension<LineupThemeRoles>()!;
+
+    expect(roles.deepBackground, const Color(0xFF090806));
+    expect(roles.primarySurface, const Color(0xFF12100D));
+    expect(roles.elevatedSurface, const Color(0xFF1A1712));
+    expect(roles.overlaySurface, const Color(0xF20A0907));
+    expect(roles.selectedSurface, const Color(0xFF2B2419));
+    expect(roles.tunedSurface, const Color(0xFF3B3020));
+    expect(roles.progressFill, const Color(0xFFCC9F5B));
+    expect(roles.focusBorder, const Color(0xFFF0D39A));
+    expect(roles.liveAccent, const Color(0xFFFF7768));
+    expect(roles.primaryText, const Color(0xFFF3E8D2));
+    expect(roles.secondaryText, const Color(0xFFC7B99F));
+    expect(roles.mutedText, const Color(0xFF978B76));
+    expect(roles.subtleBorder, const Color(0xFF2B261E));
+    expect(roles.defaultBorder, const Color(0xFF494031));
+    expect(roles.panelRadius, 8);
+  });
 
   test('every theme supplies usable semantic text and focus contrast', () {
     for (final name in LineupThemeName.values) {
@@ -73,6 +91,17 @@ void main() {
       largeFocusIndicators: true,
     ).extension<LineupThemeRoles>()!;
     expect(large.focusBorderWidth, greaterThan(normal.focusBorderWidth));
+  });
+
+  test('navigation selection preserves the application label typography', () {
+    for (final name in LineupThemeName.values) {
+      final theme = LineupTheme.forName(name);
+      final selected = theme.navigationRailTheme.selectedLabelTextStyle!;
+
+      expect(selected.fontFamily, theme.textTheme.labelMedium!.fontFamily);
+      expect(selected.color, theme.extension<LineupThemeRoles>()!.progressFill);
+      expect(selected.fontWeight, FontWeight.w700);
+    }
   });
 
   test('equivalent semantic role extensions use value equality', () {

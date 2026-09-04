@@ -364,91 +364,170 @@ class ChannelAirCheckState extends State<ChannelAirCheck> {
       container: true,
       label:
           'Air Check for channel ${widget.channel.number} ${widget.channel.name}',
-      child: DecoratedBox(
+      child: Container(
         decoration: BoxDecoration(
-          color: LineupTheme.of(context).elevatedSurface,
+          color: LineupTheme.of(context).primarySurface,
           border: Border.all(color: LineupTheme.of(context).defaultBorder),
           borderRadius: BorderRadius.circular(
             LineupTheme.of(context).panelRadius,
           ),
         ),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Wrap(
-                alignment: WrapAlignment.spaceBetween,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                spacing: 12,
-                runSpacing: 4,
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(height: 4, color: LineupTheme.of(context).liveAccent),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Semantics(
-                    header: true,
-                    child: Text(
-                      'Air Check',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                  ),
-                  if (_stale) const Text('Updating — preview is stale'),
+                  _monitorHeader(now),
+                  const SizedBox(height: 10),
+                  if (preview == null && error == null)
+                    _emptyRibbon(
+                      Semantics(
+                        liveRegion: true,
+                        label: 'Calculating schedule',
+                        child: const Text(
+                          'Calculating schedule…',
+                          key: Key('air-check-loading'),
+                        ),
+                      ),
+                    )
+                  else if (preview == null)
+                    _emptyRibbon(_errorView(error!))
+                  else ...[
+                    _facts(preview),
+                    const SizedBox(height: 8),
+                    _ribbon(preview, now),
+                    const SizedBox(height: 8),
+                    _selection(preview, now),
+                    if (preview.window.truncated)
+                      Text(
+                        'Preview truncated at ${_time(context, preview.window.lastProjectedEnd!)}; this is the last projected program end.',
+                      ),
+                    if (_unavailableCount(
+                          widget.channel.source,
+                          widget.playableById ??
+                              widget.controller.playableInventory.byId,
+                        )
+                        case final count when count > 0)
+                      Text(
+                        '$count unavailable hand-picked ${count == 1 ? 'item is' : 'items are'} retained but off air until available or removed.',
+                      ),
+                    if (_changesOnNow(preview, now))
+                      const Text(
+                        'Saving these programming changes may change what is on now',
+                        key: Key('air-check-on-now-warning'),
+                      ),
+                    if (_comparisonFailed) ...[
+                      const SizedBox(height: 8),
+                      _comparisonErrorView(),
+                    ],
+                    if (error != null) ...[
+                      const SizedBox(height: 8),
+                      _errorView(error),
+                    ],
+                  ],
                 ],
               ),
-              const SizedBox(height: 8),
-              if (preview == null && error == null)
-                Semantics(
-                  liveRegion: true,
-                  label: 'Calculating schedule',
-                  child: const Text(
-                    'Calculating schedule…',
-                    key: Key('air-check-loading'),
-                  ),
-                )
-              else if (preview == null)
-                _errorView(error!)
-              else ...[
-                _facts(preview),
-                const SizedBox(height: 8),
-                _ribbon(preview, now),
-                const SizedBox(height: 8),
-                _selection(preview, now),
-                if (preview.window.truncated)
-                  Text(
-                    'Preview truncated at ${_time(context, preview.window.lastProjectedEnd!)}; this is the last projected program end.',
-                  ),
-                if (_unavailableCount(
-                      widget.channel.source,
-                      widget.playableById ??
-                          widget.controller.playableInventory.byId,
-                    )
-                    case final count when count > 0)
-                  Text(
-                    '$count unavailable hand-picked ${count == 1 ? 'item is' : 'items are'} retained but off air until available or removed.',
-                  ),
-                if (_changesOnNow(preview, now))
-                  const Text(
-                    'Saving these programming changes may change what is on now',
-                    key: Key('air-check-on-now-warning'),
-                  ),
-                if (_comparisonFailed) ...[
-                  const SizedBox(height: 8),
-                  _comparisonErrorView(),
-                ],
-                if (error != null) ...[
-                  const SizedBox(height: 8),
-                  _errorView(error),
-                ],
-              ],
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
   }
 
+  Widget _monitorHeader(DateTime now) {
+    final roles = LineupTheme.of(context);
+    return Wrap(
+      alignment: WrapAlignment.spaceBetween,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      spacing: 12,
+      runSpacing: 4,
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Semantics(
+              header: true,
+              label: 'ON AIR, Air Check',
+              child: ExcludeSemantics(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.circle, size: 9, color: roles.liveAccent),
+                    const SizedBox(width: 7),
+                    const Text(
+                      'ON AIR',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 1,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Air Check',
+                      style: TextStyle(
+                        color: roles.secondaryText,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            if (_stale) ...[
+              const SizedBox(width: 10),
+              Text(
+                'Updating — preview is stale',
+                style: TextStyle(
+                  color: roles.secondaryText,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ],
+        ),
+        Text(
+          '${_weekday(now.toLocal().weekday)} · ${_time(context, now)}',
+          style: TextStyle(
+            color: roles.secondaryText,
+            fontWeight: FontWeight.w700,
+            fontFeatures: const [FontFeature.tabularFigures()],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _emptyRibbon(Widget child) => Container(
+    constraints: BoxConstraints(minHeight: widget.compact ? 76 : 104),
+    alignment: Alignment.centerLeft,
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      color: LineupTheme.of(context).elevatedSurface,
+      border: Border.all(color: LineupTheme.of(context).subtleBorder),
+      borderRadius: BorderRadius.circular(LineupTheme.of(context).panelRadius),
+    ),
+    child: child,
+  );
+
   Widget _facts(_AirCheckPreview preview) => Wrap(
-    spacing: 16,
+    spacing: 10,
     runSpacing: 4,
+    crossAxisAlignment: WrapCrossAlignment.center,
     children: [
+      Text(
+        'CH ${preview.channel.number} · ${preview.channel.name.toUpperCase()}',
+        style: TextStyle(
+          color: LineupTheme.of(context).progressFill,
+          fontSize: 12,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
       Text('${preview.schedule.items.length} playable'),
       Text('Cycle ${_duration(preview.schedule.loopDuration)}'),
       Text(_rhythm(preview.channel.playbackMode, preview.channel.blockSize)),
@@ -812,6 +891,9 @@ String _time(BuildContext context, DateTime value) =>
       TimeOfDay.fromDateTime(value.toLocal()),
       alwaysUse24HourFormat: false,
     );
+
+String _weekday(int weekday) =>
+    const ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'][weekday - 1];
 
 String _duration(Duration value) {
   final hours = value.inHours;

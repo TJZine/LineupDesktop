@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
@@ -13,15 +14,7 @@ import '../plex/plex_client.dart';
 import '../plex/plex_models.dart';
 import '../settings/lineup_settings.dart';
 
-enum SetupStage {
-  welcome,
-  linking,
-  profiles,
-  servers,
-  audio,
-  channelSetup,
-  ready,
-}
+enum SetupStage { welcome, linking, profiles, servers, channelSetup, ready }
 
 enum LibraryScanStatus {
   idle,
@@ -31,6 +24,16 @@ enum LibraryScanStatus {
   unsupported,
   transientFailure,
   cancelled,
+}
+
+Iterable<String> _playlistIds(ContentSource source) sync* {
+  if (source case PlaylistSource(:final playlistId)) {
+    yield playlistId;
+  } else if (source case MixedSource(:final sources)) {
+    for (final nested in sources) {
+      yield* _playlistIds(nested);
+    }
+  }
 }
 
 @immutable
@@ -159,11 +162,15 @@ class LineupController extends ChangeNotifier {
   Future<void> _stateOperations = Future.value();
   Future<bool>? _logoutFuture;
   int _contentGeneration = 0;
+  int _nextChannelRevision = 0;
+  final Map<String, int> _channelRevisions = {};
   bool _disposed = false;
 
   String? startupRecoveryNotice;
 
   int get contentGeneration => _contentGeneration;
+
+  int channelRevision(String id) => _channelRevisions[id] ?? 0;
 
   ({
     List<PlexMediaItem> media,
@@ -651,8 +658,6 @@ class LineupController extends ChangeNotifier {
           stage = libraryScanStatus == LibraryScanStatus.complete
               ? SetupStage.ready
               : SetupStage.channelSetup;
-        } else if (!settings.audioSetupComplete) {
-          stage = SetupStage.audio;
         }
         serverSelectionCanCancel = false;
       },
@@ -850,6 +855,12 @@ class LineupController extends ChangeNotifier {
         diagnostics.add('plex-library', 'Playlist discovery unavailable', {
           'code': exception.code,
         });
+        if (_requiredPlaylistIds().isNotEmpty) {
+          throw const PlexException(
+            'playlist-unavailable',
+            'A playlist used by this lineup could not be loaded. Retry setup.',
+          );
+        }
         catalog = const PlexPlaylistCatalog(playlists: [], failedIds: {});
       }
       if (operation != _epoch) {
@@ -909,11 +920,7 @@ class LineupController extends ChangeNotifier {
   }
 
   void _requireAvailablePlaylists(Set<String> failedIds) {
-    final required = channels
-        .map((channel) => channel.source)
-        .whereType<PlaylistSource>()
-        .map((source) => source.playlistId)
-        .toSet();
+    final required = _requiredPlaylistIds();
     if (failedIds.any(required.contains)) {
       throw const PlexException(
         'playlist-unavailable',
@@ -922,21 +929,8 @@ class LineupController extends ChangeNotifier {
     }
   }
 
-  Future<void> completeAudioSetup() async {
-    try {
-      await updateSettings(settings.copyWith(audioSetupComplete: true));
-      if (_disposed) return;
-      stage = SetupStage.channelSetup;
-      notifyListeners();
-    } catch (exception) {
-      error =
-          'Could not save audio settings. Check device storage and try again.';
-      diagnostics.add('application', 'Audio setup persistence failed', {
-        'code': exception is PlexException ? exception.code : 'unexpected',
-      });
-      notifyListeners();
-    }
-  }
+  Set<String> _requiredPlaylistIds() =>
+      channels.expand((channel) => _playlistIds(channel.source)).toSet();
 
   Future<void> enterChannelSetup() async {
     channelSetupCanCancel = stage == SetupStage.ready;
@@ -1017,7 +1011,7 @@ class LineupController extends ChangeNotifier {
           currentChannelByProfileServer:
               _persisted.currentChannelByProfileServer,
         );
-        await store.save(next);
+        await _persistState(next);
         _persisted = next;
         _clearServerRuntime();
         serverSelectionCanCancel = false;
@@ -1044,28 +1038,19 @@ class LineupController extends ChangeNotifier {
           'Generated channel plans require builder ownership',
         );
       }
-      final next = switch (mode) {
-        ChannelBuildMode.replace => [
-          ...channels.where((channel) => channel.builderKey == null),
-          ...planned,
-        ],
-        ChannelBuildMode.append => [...channels, ...planned],
-        ChannelBuildMode.merge => [
-          ...channels.where(
-            (existing) =>
-                existing.builderKey == null ||
-                !planned.any(
-                  (candidate) => candidate.builderKey == existing.builderKey,
-                ),
-          ),
-          ...planned,
-        ],
-      }..sort((a, b) => a.number.compareTo(b.number));
-      for (final channel in next) {
-        channel.validate(next);
-      }
+      final next = composeChannelPlan(
+        existing: channels,
+        planned: planned,
+        mode: mode,
+      );
+      validateChannels(next);
+      final validatedSources = <String>{};
       for (final channel in planned) {
-        _validateResolvedSource(channel.source, requirePlayableManual: true);
+        _validateResolvedSource(
+          channel.source,
+          requirePlayableManual: true,
+          validatedSources: validatedSources,
+        );
       }
       channels = List.unmodifiable(next);
       currentChannelId = channels.any((channel) => channel.id == oldCurrent)
@@ -1076,6 +1061,7 @@ class LineupController extends ChangeNotifier {
       try {
         await _save();
         if (_disposed) return;
+        _recordChannelChanges(oldChannels);
         notifyListeners();
       } catch (_) {
         channels = oldChannels;
@@ -1131,6 +1117,7 @@ class LineupController extends ChangeNotifier {
       try {
         await _save();
         if (_disposed) return;
+        _recordChannelChanges(old);
         notifyListeners();
       } catch (_) {
         channels = old;
@@ -1143,7 +1130,10 @@ class LineupController extends ChangeNotifier {
   void _validateResolvedSource(
     ContentSource source, {
     bool requirePlayableManual = false,
+    Set<String>? validatedSources,
   }) {
+    final sourceKey = jsonEncode(source.toJson());
+    if (validatedSources?.contains(sourceKey) ?? false) return;
     _ensurePlayableInventory();
     switch (source) {
       case LibrarySource():
@@ -1169,9 +1159,11 @@ class LineupController extends ChangeNotifier {
           _validateResolvedSource(
             child,
             requirePlayableManual: requirePlayableManual,
+            validatedSources: validatedSources,
           );
         }
     }
+    validatedSources?.add(sourceKey);
   }
 
   ScheduleIndex scheduleFor(Channel channel) {
@@ -1317,11 +1309,6 @@ class LineupController extends ChangeNotifier {
     );
   }
 
-  Future<Uint8List?> artworkFor(ChannelItem item) async {
-    final poster = item.poster;
-    return poster == null ? null : artworkForPath(poster);
-  }
-
   Future<Uint8List?> artworkForPath(Uri path) async {
     final serverId = server?.id;
     if (serverId == null || connection == null || path.toString().isEmpty) {
@@ -1372,6 +1359,7 @@ class LineupController extends ChangeNotifier {
       try {
         await _save();
         if (_disposed) return;
+        _recordChannelChanges(old);
         notifyListeners();
       } catch (_) {
         channels = old;
@@ -1396,6 +1384,20 @@ class LineupController extends ChangeNotifier {
         rethrow;
       }
     });
+  }
+
+  void _recordChannelChanges(List<Channel> previous) {
+    final previousById = {for (final channel in previous) channel.id: channel};
+    final liveIds = channels.map((channel) => channel.id).toSet();
+    _channelRevisions.removeWhere((id, _) => !liveIds.contains(id));
+    for (final channel in channels) {
+      final old = previousById[channel.id];
+      if (!identical(old, channel) &&
+          (old == null ||
+              !canonicalChannelValueEquals(old.toJson(), channel.toJson()))) {
+        _channelRevisions[channel.id] = ++_nextChannelRevision;
+      }
+    }
   }
 
   Future<bool> logout() {
@@ -1523,8 +1525,19 @@ class LineupController extends ChangeNotifier {
       channelsByProfileServer: channelSelections,
       currentChannelByProfileServer: currentSelections,
     );
-    await store.save(next);
+    await _persistState(next);
     if (!_disposed) _persisted = next;
+  }
+
+  Future<void> _persistState(PersistedState state) async {
+    try {
+      await store.save(state);
+    } catch (_) {
+      diagnostics.add('application', 'State save failed', {
+        'code': 'write-failed',
+      });
+      rethrow;
+    }
   }
 
   Future<void> _queueStateOperation(

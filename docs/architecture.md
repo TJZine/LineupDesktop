@@ -158,8 +158,8 @@ navigation do not enter C++.
   only the selected direct/local/relay type and its actually measured latency
   are retained.
 - Upstream-shaped, remote-first onboarding for Plex QR/PIN linking, Home
-  profile/PIN selection, secure server recovery, first-run audio intent, and
-  Channel Setup. Channel Setup owns library selection, all eight source
+  profile/PIN selection, secure server recovery, and Channel Setup. Channel
+  Setup owns library selection, all eight source
   strategies, priority and cross-library scope, series variants, build mode,
   preview/review/confirmation, and atomic application for up to 1,000
   channels. Custom channel editing, Settings, and diagnostics remain separate

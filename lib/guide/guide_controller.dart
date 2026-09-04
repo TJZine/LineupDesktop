@@ -96,6 +96,8 @@ class GuideController extends ChangeNotifier {
     DateTime Function()? clock,
     this.maximumCachedRows = 64,
     this.maximumConcurrentLoads = 4,
+    this.scheduleLoadTimeout = const Duration(seconds: 15),
+    this.currentProgramWaitTimeout = const Duration(seconds: 15),
   }) : _loadSchedule = loadSchedule ?? lineup.loadScheduleFor,
        _clock = clock ?? DateTime.now {
     _channels = lineup.channels;
@@ -113,13 +115,18 @@ class GuideController extends ChangeNotifier {
   final DateTime Function() _clock;
   final int maximumCachedRows;
   final int maximumConcurrentLoads;
+  final Duration scheduleLoadTimeout;
+  final Duration currentProgramWaitTimeout;
   final LinkedHashMap<String, GuideRowData> _rows = LinkedHashMap();
   final LinkedHashMap<String, ScheduleIndex> _schedules = LinkedHashMap();
   final LinkedHashMap<String, Future<Uint8List?>> _artwork = LinkedHashMap();
-  final Queue<Channel> _pending = Queue();
-  final Set<String> _queuedIds = {};
+  final Queue<Channel> _pendingExplicit = Queue();
+  final Set<String> _explicitQueuedIds = {};
+  final Queue<Channel> _pendingViewport = Queue();
+  final Set<String> _viewportQueuedIds = {};
   final Queue<_ArtworkRequest> _pendingArtwork = Queue();
   final Set<Completer<void>> _rowWaiters = {};
+  final Set<_GuideLoadDeadline> _loadDeadlines = {};
   List<Channel> _channels = const [];
   Map<String, Channel> _channelById = const {};
   List<Channel> _visibleChannels = const [];
@@ -218,14 +225,16 @@ class GuideController extends ChangeNotifier {
     if (_schedules.containsKey(channelId)) return currentProgram(channelId);
     final existing = _rows[channelId];
     if (existing?.state == GuideLoadState.error) _rows.remove(channelId);
-    _request(channel);
+    final generation = _generation;
+    _request(channel, prioritize: true);
     final completer = Completer<void>();
     _rowWaiters.add(completer);
     void changed() {
       final value = _rows[channelId];
       if (value != null && value.state != GuideLoadState.loading) {
         if (!completer.isCompleted) completer.complete();
-      } else if (!_channelById.containsKey(channelId)) {
+      } else if (generation != _generation ||
+          !_channelById.containsKey(channelId)) {
         if (!completer.isCompleted) completer.complete();
       }
     }
@@ -233,7 +242,12 @@ class GuideController extends ChangeNotifier {
     addListener(changed);
     changed();
     try {
-      await completer.future.timeout(const Duration(seconds: 15));
+      await completer.future.timeout(currentProgramWaitTimeout);
+    } on TimeoutException {
+      lineup.diagnostics.add('guide', 'Guide current program wait timed out', {
+        'code': 'wait_timeout',
+      });
+      return null;
     } finally {
       _rowWaiters.remove(completer);
       removeListener(changed);
@@ -322,12 +336,23 @@ class GuideController extends ChangeNotifier {
 
   void requestViewport(int firstIndex, int visibleCount) {
     final visible = channels;
+    _pendingViewport.clear();
+    _viewportQueuedIds.clear();
     if (visible.isEmpty) return;
-    final start = (firstIndex - 3).clamp(0, visible.length);
-    final end = (firstIndex + visibleCount + 6).clamp(0, visible.length);
-    for (var index = start; index < end; index++) {
-      _request(visible[index]);
+    final first = firstIndex.clamp(0, visible.length);
+    final last = (firstIndex + visibleCount).clamp(first, visible.length);
+    final start = (first - 3).clamp(0, visible.length);
+    final end = (last + 6).clamp(0, visible.length);
+    for (var index = first; index < last; index++) {
+      _request(visible[index], viewport: true, pump: false);
     }
+    for (var index = last; index < end; index++) {
+      _request(visible[index], viewport: true, pump: false);
+    }
+    for (var index = first - 1; index >= start; index--) {
+      _request(visible[index], viewport: true, pump: false);
+    }
+    _pump();
   }
 
   void requestChannels(Iterable<Channel> channels) {
@@ -339,7 +364,7 @@ class GuideController extends ChangeNotifier {
   Future<void> retry(String channelId) async {
     _rows.remove(channelId);
     final channel = _channelById[channelId];
-    if (channel != null) _request(channel);
+    if (channel != null) _request(channel, prioritize: true);
   }
 
   void focusProgram(GuideProgram program) {
@@ -490,7 +515,12 @@ class GuideController extends ChangeNotifier {
     );
   }
 
-  void _request(Channel channel) {
+  void _request(
+    Channel channel, {
+    bool viewport = false,
+    bool prioritize = false,
+    bool pump = true,
+  }) {
     if (_disposed) return;
     if (_rows.containsKey(channel.id)) return;
     final cachedSchedule = _schedules[channel.id];
@@ -500,22 +530,51 @@ class GuideController extends ChangeNotifier {
       notifyListeners();
       return;
     }
-    if (!_queuedIds.add(channel.id)) return;
-    _pending.add(channel);
-    _pump();
+    if (viewport) {
+      if (_explicitQueuedIds.contains(channel.id) ||
+          !_viewportQueuedIds.add(channel.id)) {
+        return;
+      }
+      _pendingViewport.add(channel);
+    } else {
+      if (_viewportQueuedIds.remove(channel.id)) {
+        _pendingViewport.removeWhere((queued) => queued.id == channel.id);
+      }
+      if (!_explicitQueuedIds.add(channel.id)) {
+        if (prioritize) {
+          _pendingExplicit.removeWhere((queued) => queued.id == channel.id);
+          _pendingExplicit.addFirst(channel);
+        }
+        return;
+      }
+      if (prioritize) {
+        _pendingExplicit.addFirst(channel);
+      } else {
+        _pendingExplicit.add(channel);
+      }
+    }
+    if (pump) _pump();
   }
 
   void _pump() {
     if (_disposed) return;
-    while (_activeLoads < maximumConcurrentLoads && _pending.isNotEmpty) {
-      final channel = _pending.removeFirst();
-      _queuedIds.remove(channel.id);
+    while (_activeLoads < maximumConcurrentLoads &&
+        (_pendingExplicit.isNotEmpty || _pendingViewport.isNotEmpty)) {
+      final explicit = _pendingExplicit.isNotEmpty;
+      final channel = explicit
+          ? _pendingExplicit.removeFirst()
+          : _pendingViewport.removeFirst();
+      if (explicit) {
+        _explicitQueuedIds.remove(channel.id);
+      } else {
+        _viewportQueuedIds.remove(channel.id);
+      }
       final generation = _generation;
       _activeLoads++;
       _rows[channel.id] = const GuideRowData(state: GuideLoadState.loading);
       final cachedSchedule = _schedules.remove(channel.id);
       final loading = cachedSchedule == null
-          ? _loadSchedule(channel)
+          ? _loadScheduleWithTimeout(channel)
           : Future<ScheduleIndex>.value(cachedSchedule);
       if (cachedSchedule != null) _schedules[channel.id] = cachedSchedule;
       loading
@@ -533,6 +592,13 @@ class GuideController extends ChangeNotifier {
             },
             onError: (Object error) {
               if (_disposed || generation != _generation) return;
+              if (error is TimeoutException) {
+                lineup.diagnostics.add(
+                  'guide',
+                  'Guide schedule load timed out',
+                  {'code': 'timeout'},
+                );
+              }
               _putRow(
                 channel.id,
                 GuideRowData(state: GuideLoadState.error, error: error),
@@ -545,6 +611,37 @@ class GuideController extends ChangeNotifier {
             if (!_disposed) _pump();
           });
     }
+  }
+
+  Future<ScheduleIndex> _loadScheduleWithTimeout(Channel channel) {
+    final result = Completer<ScheduleIndex>();
+    late final _GuideLoadDeadline deadline;
+    final timeout = Timer(scheduleLoadTimeout, () {
+      _loadDeadlines.remove(deadline);
+      if (!result.isCompleted) {
+        result.completeError(TimeoutException('Guide schedule load timed out'));
+      }
+    });
+    deadline = _GuideLoadDeadline(timeout, result);
+    _loadDeadlines.add(deadline);
+    void releaseDeadline() {
+      timeout.cancel();
+      _loadDeadlines.remove(deadline);
+    }
+
+    result.future.then<void>(
+      (_) => releaseDeadline(),
+      onError: (Object _, StackTrace _) => releaseDeadline(),
+    );
+    Future<ScheduleIndex>.sync(() => _loadSchedule(channel)).then(
+      (schedule) {
+        if (!result.isCompleted) result.complete(schedule);
+      },
+      onError: (Object error, StackTrace stackTrace) {
+        if (!result.isCompleted) result.completeError(error, stackTrace);
+      },
+    );
+    return result.future;
   }
 
   void _putRow(String id, GuideRowData value) {
@@ -617,10 +714,12 @@ class GuideController extends ChangeNotifier {
   }
 
   void _reloadRows({bool clearSchedules = false}) {
-    if (clearSchedules) _generation++;
-    _pending.clear();
-    _queuedIds.clear();
     if (clearSchedules) {
+      _generation++;
+      _pendingExplicit.clear();
+      _explicitQueuedIds.clear();
+      _pendingViewport.clear();
+      _viewportQueuedIds.clear();
       _rows.clear();
       _schedules.clear();
     } else {
@@ -721,8 +820,17 @@ class GuideController extends ChangeNotifier {
     _disposed = true;
     lineup.removeListener(_reconcileLineup);
     _generation++;
-    _pending.clear();
-    _queuedIds.clear();
+    _pendingExplicit.clear();
+    _explicitQueuedIds.clear();
+    _pendingViewport.clear();
+    _viewportQueuedIds.clear();
+    for (final deadline in _loadDeadlines) {
+      deadline.timer.cancel();
+      if (!deadline.result.isCompleted) {
+        deadline.result.completeError(StateError('Guide disposed'));
+      }
+    }
+    _loadDeadlines.clear();
     for (final request in _pendingArtwork) {
       if (!request.completer.isCompleted) request.completer.complete(null);
     }
@@ -734,6 +842,13 @@ class GuideController extends ChangeNotifier {
     _rowWaiters.clear();
     super.dispose();
   }
+}
+
+class _GuideLoadDeadline {
+  const _GuideLoadDeadline(this.timer, this.result);
+
+  final Timer timer;
+  final Completer<ScheduleIndex> result;
 }
 
 class _ArtworkRequest {

@@ -19,6 +19,10 @@ enum _SetupCategory {
 
 enum _BuildPhase { review, applying, failed, complete }
 
+enum _ReviewKind { protected, added, updated, retained, removed }
+
+enum _ReviewFilter { all, protected, changed, removed }
+
 typedef _PlanImpact = ({
   int create,
   int update,
@@ -68,6 +72,8 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
   bool _libraryFocusPlaced = false;
   bool _strategyFocusPlaced = false;
   final _phaseActionFocus = FocusNode(debugLabel: 'Channel Setup phase action');
+  final _reviewSearch = TextEditingController();
+  _ReviewFilter _reviewFilter = _ReviewFilter.all;
   String? _error;
   ({List<Channel> channels, bool truncated})? _planned;
   _PlanImpact? _appliedImpact;
@@ -88,6 +94,7 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
   @override
   void dispose() {
     _phaseActionFocus.dispose();
+    _reviewSearch.dispose();
     super.dispose();
   }
 
@@ -964,7 +971,7 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
           'Lineup is committing the accepted plan as one atomic update.',
         _BuildPhase.failed =>
           'The previous lineup is unchanged. Return to Review to try again.',
-        _BuildPhase.complete => 'The accepted plan was saved. Continue when you are ready to open the Guide.',
+        _BuildPhase.complete => 'The accepted plan was saved. Continue when you are ready to review Channels.',
       },
       footer: switch (phase) {
         _BuildPhase.applying => const SizedBox.shrink(),
@@ -1015,7 +1022,9 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
           primary: FilledButton.icon(
             onPressed:
                 planned.isEmpty ||
-                    (_mode == ChannelBuildMode.replace && !_replaceConfirmed)
+                    (_mode == ChannelBuildMode.replace &&
+                        impact.remove > 0 &&
+                        !_replaceConfirmed)
                 ? null
                 : () => _build(planned, impact),
             icon: const Icon(Icons.auto_awesome),
@@ -1028,47 +1037,326 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
         ),
       },
       child: phase == _BuildPhase.review
-          ? ListView(
-              children: [
-                if (result?.truncated ?? false) ...[
-                  const LineupNotice(
-                    message: 'The channel limit or available channel numbers omitted some ideas.',
-                  ),
-                  const SizedBox(height: 14),
-                ],
-                _ImpactHero(
-                  currentCount: widget.controller.channels.length,
-                  impact: impact,
-                ),
-                const SizedBox(height: 22),
-                if (_mode == ChannelBuildMode.replace)
-                  CheckboxListTile(
-                    value: _replaceConfirmed,
-                    title: Text('Remove ${impact.remove} generated channels'),
-                    subtitle: Text(
-                      '${impact.customKept} custom ${impact.customKept == 1 ? 'channel' : 'channels'} will remain unchanged.',
-                    ),
-                    onChanged: (value) =>
-                        setState(() => _replaceConfirmed = value == true),
-                  ),
-                const SizedBox(height: 14),
-                Text(
-                  'Sample channels',
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-                for (final channel in planned.take(12))
-                  ListTile(
-                    leading: CircleAvatar(child: Text('${channel.number}')),
-                    title: Text(channel.name),
-                    subtitle: Text(channel.playbackMode.name),
-                  ),
-              ],
+          ? _reviewRoster(
+              planned,
+              impact,
+              truncated: result?.truncated ?? false,
             )
           : _BuildProgress(
               phase: phase,
               error: _error,
               impact: _appliedImpact ?? impact,
             ),
+    );
+  }
+
+  Widget _reviewRoster(
+    List<Channel> planned,
+    _PlanImpact impact, {
+    required bool truncated,
+  }) {
+    final allEntries = _reviewEntries(planned);
+    final query = _reviewSearch.text.trim().toLowerCase();
+    final entries = allEntries
+        .where((entry) {
+          final matchesQuery =
+              query.isEmpty ||
+              entry.channel.name.toLowerCase().contains(query) ||
+              '${entry.channel.number}'.contains(query);
+          final matchesFilter = switch (_reviewFilter) {
+            _ReviewFilter.all => true,
+            _ReviewFilter.protected => entry.kind == _ReviewKind.protected,
+            _ReviewFilter.changed =>
+              entry.kind == _ReviewKind.added ||
+                  entry.kind == _ReviewKind.updated,
+            _ReviewFilter.removed => entry.kind == _ReviewKind.removed,
+          };
+          return matchesQuery && matchesFilter;
+        })
+        .toList(growable: false);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(
+          child: CustomScrollView(
+            key: const Key('channel-setup-review-roster'),
+            slivers: [
+              SliverToBoxAdapter(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (truncated) ...[
+                      const LineupNotice(
+                        message: 'The channel limit or available channel numbers omitted some ideas.',
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                    _reviewSummary(impact),
+                    const SizedBox(height: 12),
+                    LayoutBuilder(
+                      builder: (context, constraints) =>
+                          _reviewSearchAndFilter(constraints),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      '${entries.length} of ${allEntries.length} review entries',
+                      style: TextStyle(
+                        color: LineupTheme.of(context).secondaryText,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                  ],
+                ),
+              ),
+              if (entries.isEmpty)
+                const SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Center(child: Text('No channels match this review.')),
+                )
+              else
+                SliverList.builder(
+                  itemCount: entries.length,
+                  itemBuilder: (context, index) => Column(
+                    children: [_reviewRow(entries[index]), const Divider()],
+                  ),
+                ),
+            ],
+          ),
+        ),
+        if (_mode == ChannelBuildMode.replace && impact.remove > 0) ...[
+          const SizedBox(height: 10),
+          Material(
+            color: Theme.of(context).colorScheme.error.withValues(alpha: 0.06),
+            shape: RoundedRectangleBorder(
+              side: BorderSide(
+                color: Theme.of(context).colorScheme.error
+                    .withValues(alpha: 0.35),
+              ),
+              borderRadius: BorderRadius.circular(
+                LineupTheme.of(context).panelRadius,
+              ),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: CheckboxListTile(
+              key: const Key('channel-setup-replace-confirmation'),
+              value: _replaceConfirmed,
+              title: Text(
+                'Remove ${impact.remove} generated ${impact.remove == 1 ? 'channel' : 'channels'}',
+              ),
+              subtitle: Text(
+                '${impact.customKept} custom ${impact.customKept == 1 ? 'channel is' : 'channels are'} protected and will remain unchanged.',
+              ),
+              onChanged: (value) =>
+                  setState(() => _replaceConfirmed = value == true),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _reviewSearchAndFilter(BoxConstraints constraints) {
+    final search = TextField(
+      key: const Key('channel-setup-review-search'),
+      controller: _reviewSearch,
+      decoration: const InputDecoration(
+        labelText: 'Search proposed lineup',
+        prefixIcon: Icon(Icons.search),
+      ),
+      onChanged: (_) => setState(() {}),
+    );
+    final filter = DropdownButtonFormField<_ReviewFilter>(
+      key: const Key('channel-setup-review-filter'),
+      isExpanded: true,
+      initialValue: _reviewFilter,
+      decoration: const InputDecoration(labelText: 'Show'),
+      items: const [
+        DropdownMenuItem(
+          value: _ReviewFilter.all,
+          child: Text('Entire review'),
+        ),
+        DropdownMenuItem(
+          value: _ReviewFilter.protected,
+          child: Text('Protected custom'),
+        ),
+        DropdownMenuItem(
+          value: _ReviewFilter.changed,
+          child: Text('Added or updated'),
+        ),
+        DropdownMenuItem(value: _ReviewFilter.removed, child: Text('Removed')),
+      ],
+      onChanged: (value) => setState(() => _reviewFilter = value!),
+    );
+    if (constraints.maxWidth < 680 ||
+        MediaQuery.textScalerOf(context).scale(14) > 21) {
+      return Column(children: [search, const SizedBox(height: 8), filter]);
+    }
+    return Row(
+      children: [
+        Expanded(child: search),
+        const SizedBox(width: 10),
+        SizedBox(width: 210, child: filter),
+      ],
+    );
+  }
+
+  List<({Channel channel, _ReviewKind kind})> _reviewEntries(
+    List<Channel> planned,
+  ) {
+    final existing = widget.controller.channels;
+    final existingById = {for (final channel in existing) channel.id: channel};
+    final plannedIds = planned.map((channel) => channel.id).toSet();
+    final finalChannels = composeChannelPlan(
+      existing: existing,
+      planned: planned,
+      mode: _mode,
+    );
+    final entries = <({Channel channel, _ReviewKind kind})>[
+      for (final channel in finalChannels)
+        (
+          channel: channel,
+          kind: channel.builderKey == null
+              ? _ReviewKind.protected
+              : plannedIds.contains(channel.id)
+              ? existingById[channel.id] == null
+                    ? _ReviewKind.added
+                    : identical(existingById[channel.id], channel)
+                    ? _ReviewKind.retained
+                    : _ReviewKind.updated
+              : _ReviewKind.retained,
+        ),
+      for (final channel in existing.where(
+        (channel) => !finalChannels.any((next) => next.id == channel.id),
+      ))
+        (channel: channel, kind: _ReviewKind.removed),
+    ];
+    entries.sort((left, right) {
+      final byNumber = left.channel.number.compareTo(right.channel.number);
+      return byNumber != 0
+          ? byNumber
+          : left.kind.index.compareTo(right.kind.index);
+    });
+    return entries;
+  }
+
+  Widget _reviewSummary(_PlanImpact impact) {
+    final roles = LineupTheme.of(context);
+    return Semantics(
+      container: true,
+      explicitChildNodes: true,
+      label:
+          'Channel composition. Create: ${impact.create}, Update: ${impact.update}, Unchanged: ${impact.unchanged}, Generated removed: ${impact.remove}.',
+      child: Container(
+        key: const ValueKey('channel-setup-impact-hero'),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: roles.selectedSurface.withValues(alpha: 0.28),
+          border: Border.all(color: roles.defaultBorder),
+          borderRadius: BorderRadius.circular(roles.panelRadius),
+        ),
+        child: Wrap(
+          spacing: 16,
+          runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Semantics(
+              label: 'Final: ${impact.finalCount}',
+              child: ExcludeSemantics(
+                child: Text(
+                  '${widget.controller.channels.length} CURRENT  ·  ${impact.finalCount} FINAL',
+                  style: const TextStyle(fontWeight: FontWeight.w900),
+                ),
+              ),
+            ),
+            _summaryFact('Create', impact.create, '${impact.create} added'),
+            _summaryFact('Update', impact.update, '${impact.update} updated'),
+            _summaryFact(
+              'Unchanged',
+              impact.unchanged,
+              '${impact.unchanged} retained',
+            ),
+            _summaryFact(
+              'Generated removed',
+              impact.remove,
+              '${impact.remove} removed',
+            ),
+            _summaryFact(
+              'Custom kept',
+              impact.customKept,
+              '${impact.customKept} protected',
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _summaryFact(String label, int value, String text) => Semantics(
+    label: '$label: $value',
+    child: ExcludeSemantics(child: Text(text)),
+  );
+
+  Widget _reviewRow(({Channel channel, _ReviewKind kind}) entry) {
+    final roles = LineupTheme.of(context);
+    final (label, icon, color) = switch (entry.kind) {
+      _ReviewKind.protected => (
+        'PROTECTED CUSTOM',
+        Icons.lock_outline,
+        roles.secondaryText,
+      ),
+      _ReviewKind.added => (
+        'ADDED',
+        Icons.add_circle_outline,
+        roles.progressFill,
+      ),
+      _ReviewKind.updated => (
+        'UPDATED',
+        Icons.edit_outlined,
+        roles.focusBorder,
+      ),
+      _ReviewKind.retained => (
+        'RETAINED',
+        Icons.check_circle_outline,
+        roles.tunedSurface,
+      ),
+      _ReviewKind.removed => (
+        'REMOVED',
+        Icons.remove_circle_outline,
+        Theme.of(context).colorScheme.error,
+      ),
+    };
+    return Semantics(
+      container: true,
+      label:
+          '$label, channel ${entry.channel.number}, ${entry.channel.name}, ${_reviewRhythm(entry.channel)}',
+      child: ExcludeSemantics(
+        child: ListTile(
+          leading: Container(
+            width: 46,
+            height: 46,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: roles.elevatedSurface,
+              border: Border.all(color: roles.subtleBorder),
+              borderRadius: BorderRadius.circular(roles.panelRadius),
+            ),
+            child: Text(
+              '${entry.channel.number}',
+              style: const TextStyle(fontWeight: FontWeight.w900),
+            ),
+          ),
+          title: Text(
+            entry.channel.name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          subtitle: Text(
+            '$label · ${_reviewRhythm(entry.channel)}',
+            style: TextStyle(color: color, fontWeight: FontWeight.w700),
+          ),
+          trailing: Icon(icon, color: color),
+        ),
+      ),
     );
   }
 
@@ -1087,6 +1375,7 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
         maximumChannels: _maximumChannels,
         anchor: DateTime.now().toUtc(),
       );
+      _replaceConfirmed = false;
       _step = 3;
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1211,6 +1500,13 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
     ChannelBuildMode.merge =>
       'Refresh matching generated channels and keep all others.',
   };
+
+  static String _reviewRhythm(Channel channel) =>
+      switch (channel.playbackMode) {
+        PlaybackMode.sequential => 'In order',
+        PlaybackMode.shuffle => 'Mix it up',
+        PlaybackMode.block => 'Mini-marathons of ${channel.blockSize ?? 3}',
+      };
 }
 
 class _SetupSurface extends StatelessWidget {
@@ -1363,247 +1659,6 @@ class _ImpactCount extends StatelessWidget {
         ),
       ),
     ],
-  );
-}
-
-class _ImpactHero extends StatelessWidget {
-  const _ImpactHero({required this.currentCount, required this.impact});
-
-  final int currentCount;
-  final _PlanImpact impact;
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = LineupTheme.of(context);
-    return Container(
-      key: const ValueKey('channel-setup-impact-hero'),
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-      decoration: BoxDecoration(
-        color: palette.selectedSurface.withValues(alpha: 0.28),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: palette.defaultBorder),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            'LINEUP TRANSFORMATION',
-            style: TextStyle(
-              color: palette.secondaryText,
-              fontSize: 12,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 1.1,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: Semantics(
-                  container: true,
-                  label: 'Current: $currentCount',
-                  child: ExcludeSemantics(
-                    child: _ImpactCount(value: currentCount, label: 'current'),
-                  ),
-                ),
-              ),
-              Icon(Icons.arrow_forward, color: palette.mutedText),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Semantics(
-                  container: true,
-                  label: 'Final: ${impact.finalCount}',
-                  child: ExcludeSemantics(
-                    child: _ImpactCount(
-                      value: impact.finalCount,
-                      label: 'final channels',
-                      emphasized: true,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Channel composition',
-            style: Theme.of(context).textTheme.titleSmall
-                ?.copyWith(fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 8),
-          _ImpactCompositionBar(impact: impact),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _ImpactLegendItem(
-                label: 'Create',
-                value: impact.create,
-                icon: Icons.add_circle_outline,
-                color: palette.progressFill,
-              ),
-              _ImpactLegendItem(
-                label: 'Update',
-                value: impact.update,
-                icon: Icons.edit_outlined,
-                color: palette.focusBorder,
-              ),
-              _ImpactLegendItem(
-                label: 'Unchanged',
-                value: impact.unchanged,
-                icon: Icons.check_circle_outline,
-                color: palette.tunedSurface,
-              ),
-              _ImpactLegendItem(
-                label: 'Generated removed',
-                value: impact.remove,
-                icon: Icons.remove_circle_outline,
-                color: Theme.of(context).colorScheme.error,
-              ),
-              _ImpactLegendItem(
-                label: 'Custom kept',
-                value: impact.customKept,
-                icon: Icons.lock_outline,
-                color: palette.secondaryText,
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ImpactCompositionBar extends StatelessWidget {
-  const _ImpactCompositionBar({required this.impact});
-
-  final _PlanImpact impact;
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = LineupTheme.of(context);
-    final segments = [
-      (label: 'Create', value: impact.create, color: palette.progressFill),
-      (label: 'Update', value: impact.update, color: palette.focusBorder),
-      (
-        label: 'Unchanged',
-        value: impact.unchanged,
-        color: palette.tunedSurface,
-      ),
-      (
-        label: 'Generated removed',
-        value: impact.remove,
-        color: Theme.of(context).colorScheme.error,
-      ),
-    ];
-    final total = segments.fold<int>(0, (sum, segment) => sum + segment.value);
-    return Semantics(
-      container: true,
-      label:
-          'Channel composition. ${segments.map((segment) => '${segment.label}: ${segment.value}').join(', ')}.',
-      child: ExcludeSemantics(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            if (total == 0 || constraints.maxWidth <= 0) {
-              return Container(
-                key: const ValueKey('channel-setup-impact-bar'),
-                height: 26,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: palette.progressTrack,
-                  borderRadius: BorderRadius.circular(7),
-                ),
-                child: Text(
-                  'No planned changes',
-                  style: TextStyle(
-                    color: palette.mutedText,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              );
-            }
-            final positive = segments
-                .where((segment) => segment.value > 0)
-                .length;
-            // Keep a nonzero segment visible without letting the floor exceed
-            // the available strip at narrow widths.
-            final minimum = (constraints.maxWidth / positive).clamp(0.0, 18.0);
-            final remainder = constraints.maxWidth - minimum * positive;
-            return ClipRRect(
-              key: const ValueKey('channel-setup-impact-bar'),
-              borderRadius: BorderRadius.circular(7),
-              child: ColoredBox(
-                color: palette.progressTrack,
-                child: SizedBox(
-                  width: double.infinity,
-                  height: 26,
-                  child: Row(
-                    children: [
-                      for (final segment in segments)
-                        SizedBox(
-                          key: ValueKey(
-                            'channel-setup-impact-${segment.label.toLowerCase()}',
-                          ),
-                          width: segment.value == 0
-                              ? 0
-                              : minimum + remainder * segment.value / total,
-                          child: Container(color: segment.color),
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-            );
-          },
-        ),
-      ),
-    );
-  }
-}
-
-class _ImpactLegendItem extends StatelessWidget {
-  const _ImpactLegendItem({
-    required this.label,
-    required this.value,
-    required this.icon,
-    required this.color,
-  });
-
-  final String label;
-  final int value;
-  final IconData icon;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) => Semantics(
-    container: true,
-    label: '$label: $value',
-    child: ExcludeSemantics(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-        decoration: BoxDecoration(
-          color: LineupTheme.of(context).elevatedSurface,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: LineupTheme.of(context).subtleBorder),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 16, color: color),
-            const SizedBox(width: 6),
-            Text(
-              '$label: $value',
-              style: const TextStyle(
-                fontWeight: FontWeight.w700,
-                fontFeatures: [FontFeature.tabularFigures()],
-              ),
-            ),
-          ],
-        ),
-      ),
-    ),
   );
 }
 

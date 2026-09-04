@@ -32,7 +32,10 @@ void main() {
               id: 'poster-item',
               title: 'Poster item',
               duration: Duration(minutes: 1),
-              poster: Uri(path: '/poster'),
+              showThumb: '/library/metadata/show/thumb',
+              poster: Uri(path: '/library/metadata/item/thumb'),
+              backdrop: Uri(path: '/library/metadata/item/art'),
+              clearLogo: Uri(path: '/library/metadata/show/clearlogo'),
               cast: [
                 ChannelCastMember(
                   name: 'Safe Actor',
@@ -111,8 +114,14 @@ void main() {
         ((restoredChannel!.source as MixedSource).sources.last as ManualSource)
             .items
             .single;
-    expect(item.poster, Uri(path: '/poster'));
-    expect(item.toJson(), containsPair('poster', '/poster'));
+    expect(item.showThumb, '/library/metadata/show/thumb');
+    expect(item.poster, Uri(path: '/library/metadata/item/thumb'));
+    expect(item.backdrop, Uri(path: '/library/metadata/item/art'));
+    expect(item.clearLogo, Uri(path: '/library/metadata/show/clearlogo'));
+    expect(
+      item.toJson(),
+      containsPair('poster', '/library/metadata/item/thumb'),
+    );
     expect(item.toJson(), isNot(contains('artwork')));
     expect(item.cast.first.portrait, Uri.parse('/library/metadata/1/thumb'));
     expect(
@@ -125,7 +134,7 @@ void main() {
     expect(fragment.role, 'Archivist');
     expect(fragment.portrait, isNull);
     final savedJson = await File('${directory.path}/state.json').readAsString();
-    expect(savedJson, contains('"poster":"/poster"'));
+    expect(savedJson, contains('"poster":"/library/metadata/item/thumb"'));
     expect(savedJson, contains('/library/metadata/1/thumb'));
     expect(savedJson, isNot(contains('plex.invalid')));
     expect(savedJson, isNot(contains('X-Plex-Token')));
@@ -171,6 +180,110 @@ void main() {
       expect(item.toJson().toString(), isNot(contains(unsafe)));
     }
   });
+
+  test(
+    'load atomically removes preexisting unsafe artwork from state',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'lineup-store-test',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      const unsafe = '/library/metadata/1/thumb?X-Plex-Token=secret';
+      final stateFile = File('${directory.path}/state.json');
+      await stateFile.writeAsString(
+        _encodedState(
+          _canonicalJson()
+            ..['channelsByProfileServer'] = {
+              'profile': {
+                'server': [
+                  _channelJson()
+                    ..['source'] = {
+                      'type': 'manual',
+                      'items': [
+                        {
+                          'id': 'item',
+                          'title': 'Item',
+                          'durationMs': 60000,
+                          'showThumb': unsafe,
+                          'poster': unsafe,
+                          'backdrop': unsafe,
+                          'clearLogo': unsafe,
+                          'cast': [
+                            {'name': 'Actor', 'portrait': unsafe},
+                          ],
+                        },
+                      ],
+                    },
+                ],
+              },
+            },
+        ),
+      );
+      final store = FileAppStore(directory);
+
+      final restored = await store.load();
+      expect(restored.recoveredCorruptState, isFalse);
+      final item =
+          (restored
+                      .state
+                      .channelsByProfileServer['profile']!['server']!
+                      .single
+                      .source
+                  as ManualSource)
+              .items
+              .single;
+      expect(item.showThumb, isNull);
+      expect(item.poster, isNull);
+      expect(item.backdrop, isNull);
+      expect(item.clearLogo, isNull);
+      expect(item.cast.single.portrait, isNull);
+
+      expect(await stateFile.readAsString(), isNot(contains('X-Plex-Token')));
+    },
+  );
+
+  test('load does not rewrite a healthy canonical state file', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'lineup-store-test',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+    final stateFile = File('${directory.path}/state.json');
+    final contents = _encodedState(_canonicalJson());
+    await stateFile.writeAsString(contents);
+
+    final restored = await FileAppStore(directory).load();
+
+    expect(restored.recoveredCorruptState, isFalse);
+    expect(await stateFile.readAsString(), contents);
+  });
+
+  test(
+    'failed unsafe-artwork migration does not report a successful load',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'lineup-store-test',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      const unsafe = '/library/metadata/1/thumb?X-Plex-Token=secret';
+      final stateFile = File('${directory.path}/state.json');
+      final contents = _encodedState(
+        _canonicalJson()
+          ..['channelsByProfileServer'] = {
+            'profile': {
+              'server': [_channelJson(artworkValue: unsafe)],
+            },
+          },
+      );
+      await stateFile.writeAsString(contents);
+
+      await expectLater(
+        _FailingMigrationStore(directory).load(),
+        throwsA(isA<FileSystemException>()),
+      );
+
+      expect(await stateFile.readAsString(), contents);
+    },
+  );
 
   test('bounds oversized persisted cast across round trips', () {
     final cast = [
@@ -534,7 +647,7 @@ Map<String, Object?> _stateJsonWithCast(List<Object?> cast) => _canonicalJson()
 
 Map<String, Object?> _channelJson({
   String artworkKey = 'poster',
-  Object? artworkValue = '/poster',
+  Object? artworkValue = '/library/metadata/item/thumb',
 }) => {
   'id': 'channel',
   'number': 1,
@@ -556,3 +669,12 @@ Map<String, Object?> _channelJson({
 };
 
 String _encodedState(Map<String, Object?> state) => jsonEncode(state);
+
+class _FailingMigrationStore extends FileAppStore {
+  _FailingMigrationStore(super.directory);
+
+  @override
+  Future<void> save(PersistedState state) => Future.error(
+    const FileSystemException('Synthetic migration rewrite failure'),
+  );
+}

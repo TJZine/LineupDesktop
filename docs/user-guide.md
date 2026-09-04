@@ -26,7 +26,8 @@ development, but media playback is intentionally reported as unsupported.
 1. Obtain the package and its SHA-256 hash directly from the maintainer.
 2. Verify the archive hash before extracting it.
 3. Extract the entire archive to a normal user-writable directory.
-4. Read `SYSTEM-REQUIREMENTS.txt` and `BUILD-INFO.txt` in the package.
+4. Read `SYSTEM-REQUIREMENTS.txt`, `BUILD-INFO.txt`, and
+   `BUILD-PROVENANCE.json` in the package.
 5. Launch `lineup_desktop.exe`.
 
 Do not move only `lineup_desktop.exe`; the adjacent DLLs and `data` directory
@@ -84,16 +85,7 @@ When no server appears:
 - switch profiles when the expected server belongs to another profile; or
 - clear the saved server when a previous selection is no longer valid.
 
-### 4. Confirm audio behavior
-
-The current Desktop audio step confirms that Lineup uses the
-system-selected output. On Windows, libmpv/FFmpeg decodes supported audio tracks,
-including TrueHD and DTS-family formats, to that output, normally as PCM;
-bitstream passthrough is not required for playback. Device selection and
-passthrough controls remain hidden because the application does not yet own a
-truthful native device/bitstream contract.
-
-### 5. Build the initial lineup
+### 4. Build the initial lineup
 
 Channel Setup has three stages:
 
@@ -120,9 +112,10 @@ each enabled source family and **Off** for disabled families. The review step
 separates **Create**, **Update**, **Unchanged**, **Remove**, and **Final** counts
 using the selected replace, append, or merge behavior. It presents the current
 lineup changing to the final lineup, a proportional composition bar, and sample
-channels. Replace mode requires an explicit confirmation before building. A
-limit warning appears only when ideas were actually omitted by the channel cap
-or available channel numbers.
+channels. When Replace mode will remove one or more generated channels, it
+requires an explicit confirmation before building; a zero-removal plan omits
+that inapplicable gate. A limit warning appears only when ideas were actually
+omitted by the channel cap or available channel numbers.
 
 ## Main destinations
 
@@ -176,7 +169,10 @@ Focused program cells reveal long titles with a slow ticker; unfocused cells
 remain stable and ellipsized. Reduce Motion disables the ticker. The program
 information area can use artwork-derived color bleed, the current theme, or a
 Plex backdrop, and can prefer Plex clear title logos when available. Missing
-logos and artwork fall back to text and themed surfaces.
+logos fall back to text. When a program has a Plex poster reference, the normal
+artwork geometry remains stable while it loads or if loading fails. Only a
+program with no poster reference at all omits that slot so the existing details
+can use the available width without decorative placeholder art.
 
 ## Player
 
@@ -250,11 +246,12 @@ focus the selected track (or **Off** when no subtitle is selected). These
 behaviors are deterministically tested in Flutter; physical Windows
 screen-reader and assistive-technology validation remains pending.
 
-The committed 1280×720 macOS goldens cover Flutter composition, including the
-rich Now Playing surface and its synthetic artwork. They do not prove Windows
-native video layering, DPI/fullscreen behavior, keyboard or screen-reader
-support, media compatibility, or package readiness; those remain physical
-Windows acceptance work at the exact tested commit.
+The committed macOS goldens cover Flutter composition at compact, 1280×720,
+and 1920×1080 sizes, including the rich Now Playing surface, the theme chooser,
+and matched rich/reference-free Guide details with synthetic artwork. They do
+not prove Windows native video layering, DPI/fullscreen behavior, keyboard or
+screen-reader support, media compatibility, or package readiness; those remain
+physical Windows acceptance work at the exact tested commit.
 
 ## Keyboard and remote controls
 
@@ -305,8 +302,11 @@ then lets you replace generated channels, add generated channels, or refresh
 matching generated channels after review. All three modes preserve every custom
 channel. Refresh also preserves a matching generated channel's number, visible
 name, schedule anchor, and shuffle identity while updating its generated
-programming recipe. Completion offers **View lineup** or the separate **Add a
-custom channel** action.
+programming recipe. Before applying, Review shows the full proposed final
+roster. Search it by channel number or name, or filter for protected custom,
+added/updated, or removed entries. Replace keeps its protection confirmation
+visible while you inspect the roster. Completion offers **View lineup** or the
+separate **Add a custom channel** action.
 
 **New channel** opens the full-page Channel Studio for one custom channel.
 Studio also opens when you edit a custom channel, inspect a generated channel,
@@ -317,11 +317,14 @@ the lowest available channel number; it does not alter the generated source.
 
 Custom Studio programming can use one selected library, one Plex video
 playlist, a collection or supported metadata filter, or an explicitly ordered
-hand-picked list. Search, local facets, visible-result bulk selection, and Move
-earlier/Move later controls keep large hand-picked lists usable without a
-network request per edit. A previously saved hand-picked item that is not in
-the current playable inventory remains labeled **Unavailable — retained until
-removed**; it is not scheduled, but Studio does not silently delete it.
+hand-picked list. Hand-picked programming has separate **Browse** and
+**Rundown** stages; matching and selected counts stay visible, and search and
+filter state is preserved when you switch between them. Search, local facets,
+visible-result bulk selection, and Move earlier/Move later controls keep large
+lists usable without a network request per edit. A previously saved hand-picked
+item that is not in the current playable inventory remains labeled
+**Unavailable — retained until removed**; it is not scheduled, but Studio does
+not silently delete it.
 
 Playback rhythms are **In order**, **Mix it up**, and **Mini-marathons**.
 Mini-marathons uses blocks of 2 through 5 episodes and requires usable show
@@ -331,13 +334,16 @@ timing facts, why content was included, and actionable unavailable or invalid
 states. A new channel saves the same schedule anchor and shuffle identity that
 Air Check previewed.
 
-Saving and tuning are separate. A successful save leaves Studio in a clean
-saved state and enables **Tune in**. A tune failure does not undo the saved
-channel. A save failure preserves both the prior lineup and the complete draft;
-retry after correcting the reported source, schedule, number, or storage issue.
-If the underlying channel changed while Studio was open, reload it or
-deliberately reapply the draft rather than overwriting newer state. Leaving a
-dirty draft asks whether to discard changes or keep editing.
+Saving and tuning are separate. Save is enabled only for a dirty, valid draft.
+A successful save leaves Studio in a clean saved state and makes **Tune in**
+the primary action; editing again disables Tune until the new draft is saved. A
+tune failure does not undo the saved channel. A save failure preserves both the
+prior lineup and the complete draft; retry after correcting the reported
+source, schedule, number, or storage issue. If the underlying channel changed
+while Studio was open, choose **Use saved version…** or **Replace saved version
+with my draft…**. Both paths require an explicit confirmation, and a second
+intervening change is rejected again. Leaving a dirty draft asks whether to
+discard changes or keep editing.
 
 Deletion requires confirmation and cannot be undone. Deleting a generated
 channel also warns that a later Generate lineup refresh may propose it again.
@@ -346,7 +352,7 @@ channel also warns that a later Generate lineup refresh may propose it again.
 
 | Category | Current controls |
 | --- | --- |
-| Appearance | Ember & Steel, Slate & Pine, Swiss Minimal, DirecTV Classic, and Glassmorphism themes |
+| Appearance | A labeled palette chooser for Ember & Steel, Slate & Pine, Swiss Minimal, DirecTV Classic, and Glassmorphism; the selected theme is identified in text and applies immediately |
 | Guide | Classic with PiP or Overlay presentation; detailed 2-hour, wide 3-hour, or desktop-extended 4/6/8/12-hour windows; 0-180 minute past window; comfortable or compact rows; color-bleed/theme/artwork information backgrounds; official title artwork preference; library filters; Now Playing context; 2-15 second OSD auto-hide; optional DVR playback controls |
 | Accessibility | Reduce motion across management, Guide, and Player transitions; larger keyboard/controller focus indicators |
 | Account | Switch Plex Home profile, switch or clear Plex server selection, and optionally show the profile picker at startup |

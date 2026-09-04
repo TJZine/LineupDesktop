@@ -49,11 +49,12 @@ this update.
 packages from baseline `30003ddddcc611ea4920bad3d6f591a8e5bf2afa` ended at
 product commit `6714eed8b25b6305934ac90a1a84b9eb3604cee7` under locked plan
 SHA-256 `23e10f7ef660b8eec061321a6ea658fec779013c6e5c8fedd1b560293e1e2a52`.
-The current inventory is 25 macOS goldens: the prior 20 at 1280×720 plus five
-focused 1920×1080 baselines. Deterministic acceptance passed; a bounded macOS
-synthetic-runtime smoke observed its reachable surfaces with the limitations
-recorded below. Exact-commit physical Windows acceptance was blocked/not run
-because no authorized Windows machine/operator/transport route was available;
+At the close of this campaign, the inventory was 25 macOS goldens: the prior
+20 at 1280×720 plus five focused 1920×1080 baselines. Deterministic acceptance
+passed; a bounded macOS synthetic-runtime smoke observed its reachable surfaces
+with the limitations recorded below. Exact-commit physical Windows acceptance
+was blocked/not run because no authorized Windows machine/operator/transport
+route was available;
 this update makes no new Windows platform-validation or support claim.
 
 **Channel Studio update:** 2026-08-27. Six reviewed implementation slices from
@@ -67,6 +68,21 @@ the canonical golden suite passed all 27 comparisons and the five changed or
 added Studio/Channel Setup images were inspected. This is Flutter/Dart
 deterministic and macOS pixel evidence, not physical Windows, native-video,
 assistive-technology, package, or support evidence.
+
+**Bounded Desktop UX update:** 2026-08-30. Work from exact baseline
+`f57b2dd4a48cb6bb3ba30fc9c40ab10ccca180ae` removes three misleading or
+duplicated management actions, retires the explanation-only Audio Setup route,
+specifies audio passthrough as a deferred Settings feature, replaces the theme
+dropdown with a compact five-theme palette chooser, and collapses the Guide's
+poster slot only when source metadata synchronously proves that no poster or
+thumbnail reference exists. The canonical inventory is now 31 macOS goldens,
+including matched rich/reference-free Guide evidence at 1920×1080 and theme
+chooser evidence at 800×600 and 1920×1080. These remain deterministic Flutter
+composition claims; no physical Windows, native-video, assistive-technology,
+package, or support claim is added. At resulting product HEAD, formatting
+checked 65 files with zero changes, analysis was clean, the named cross-surface
+gate passed 212 tests sequentially, the full canonical-timezone suite passed
+654 tests sequentially, and the macOS release build succeeded at 51.2 MB.
 
 This is the authoritative current product-parity record. The classifications
 in [Portable UI Parity](ui-parity.md) remain historical evidence for their
@@ -168,7 +184,7 @@ independent root blockers.
 | Per-server PMS credential | `/resources` supplies a distinct private `accessToken` for each PMS and all PMS requests use it | The separate PMS-issued credential remains in private runtime server scope and is used for probes, libraries, artwork, playback, and one bounded same-server authorization refresh; Plex.tv/Home credentials remain cloud-only | PARITY | — | HIGH | `lib/plex/plex_client.dart`; `lib/app/lineup_controller.dart`; distinct-token transport/controller/coordinator tests | Live disposable managed/shared smoke remains P2 evidence |
 | Local HTTP server reachability | Allows local HTTP only where platform policy permits it; otherwise prefers HTTPS/relay | A secure-only policy rejects every non-HTTPS resource connection, including HTTP-only LAN servers | BLOCKED BY DECISION | P2 | HIGH | Upstream mixed-content/discovery policy; `lib/plex/plex_client.dart` | Decide whether local-HTTP compatibility belongs in supported scope |
 | Connection facts and warnings | Auth/access/unreachable, relay/local HTTP, slow/very slow | Cards separate owned/shared and available secure direct-local/direct-remote/relay types; only the selected server shows its measured path, 100/500 ms warning boundaries, and relay limitation | PARITY | — | HIGH | `lib/plex/plex_models.dart`; `lib/app/onboarding_view.dart`; parser/widget tests; server golden | HTTP-only policy remains the separate decision row |
-| Audio onboarding | Receiver/TV choice, DTS intent, direct-play fallback | Truthfully confirms OS-selected output; libmpv decodes supported tracks to the system output without making passthrough a playback prerequisite | INTENTIONAL DESKTOP ADAPTATION | — | HIGH | Upstream `AudioSetupScreen.ts`; native options; `docs/architecture.md`; `docs/user-guide.md` | Preserve decode-to-PCM default; expose output/passthrough only for a proven user need |
+| Audio onboarding | Receiver/TV choice, DTS intent, direct-play fallback | Intentionally omitted: Desktop uses libmpv decode-to-PCM with the OS-selected output and does not ask the user to dismiss an explanation-only step | INTENTIONALLY OMITTED | — | HIGH | Upstream `AudioSetupScreen.ts`; native options; [deferred passthrough specification](audio-passthrough-spec.md); `docs/user-guide.md` | Preserve decode-to-PCM default; implement optional passthrough only through the deferred Settings/native capability contract |
 
 **PMS credential ownership:** linking and Plex Home selection produce a Plex.tv
 account/profile credential used only with Plex.tv. Resource discovery returns a
@@ -197,7 +213,7 @@ without placing credentials in public facts, durable state, URLs, or diagnostics
 | Channel limits | Normalized 1–500, default 200 | Explicit 50–1,000 options and fair round-robin allocation | DESKTOP-ENHANCED | — | HIGH | Upstream setup constants; Desktop setup/builder tests | Builder |
 | Strategy preview | Per-strategy estimate, blocked/slow/error/warning states | The synchronous post-scan planner reports accepted count/No matches/Off per strategy and proves omission with one bounded extra proposal; scan and apply failures remain at their owning stages | PARITY | — | HIGH | `lib/channels/channel_builder.dart`; `lib/app/channel_setup_view.dart`; builder/widget tests; strategy golden | Channel Setup |
 | Review diff | Stay/leave/new counts and samples | A centered review makes the current→final hero and proportional composition bar primary, followed by sample channels; exact Create/Update/Unchanged/Remove/Final counts still follow replace, append, and merge semantics, and exact merge matches reuse the existing channel without resetting its schedule | PARITY | — | HIGH | `lib/channels/channel_builder.dart`; `lib/app/channel_setup_view.dart`; builder/review tests; 1280×720 and 1920×1080 review goldens | Channel Setup |
-| Replace confirmation | Explicit destructive acknowledgement | Checkbox gate and disabled confirm until acknowledged | DESKTOP-ENHANCED | — | HIGH | `lib/app/channel_setup_view.dart`; review golden | Channel Setup |
+| Replace confirmation | Explicit destructive acknowledgement | When the plan removes at least one generated channel, a checkbox gate keeps confirm disabled until acknowledged; zero-removal plans omit the inapplicable gate | DESKTOP-ENHANCED | — | HIGH | `lib/app/channel_setup_view.dart`; review and removal goldens | Channel Setup |
 | Final build progress/cancellation | Stage-specific progress and active cancellation through planning/build | Step 3 owns applying, failed, and complete states. The final local lineup commit is atomic and normally fast, so applying is indeterminate and noncancelable; completion offers **View lineup** and the separate **Add a custom channel** path. Library inventory is the separate long-running gap above. | INTENTIONAL DESKTOP ADAPTATION | — | MEDIUM | Upstream progress controller; `lib/app/channel_setup_view.dart`; setup progress/completion goldens and widget tests | Measure a 1,000-channel final commit; add cancellation only if materially long |
 | Atomic lineup apply/rollback | Scratch build then atomic commit | Validates full next lineup, one state save, in-memory rollback on failure | PARITY | — | MEDIUM | `lib/app/lineup_controller.dart`; `lib/persistence/app_store.dart` | Add focused delayed/failing apply persistence test |
 | Saved setup configuration | Normalized setup record; explicit rerun resets it | Libraries persist, but strategy/mode/limits reset with view construction | BLOCKED BY DECISION | P2 | HIGH | Upstream setup record/rerun; `lib/app/channel_setup_view.dart` | Define “edit setup” versus “start over” contract |
@@ -225,7 +241,7 @@ without placing credentials in public facts, durable state, URLs, or diagnostics
 | Past window | Auto/0/15/30 | Explicit 0/15/30/60/120/180 global window | INTENTIONAL DESKTOP ADAPTATION | — | HIGH | upstream settings; Desktop settings/controller | Guide |
 | Library filter | Persisted source-library tabs | Optional selector and safe hidden-filter clearing; selected library is not persisted across restart | PARTIAL | P2 | HIGH | `lib/guide/guide_view.dart`; `lib/guide/guide_controller.dart`; no persisted field | Guide: persist selection if restart continuity remains desired |
 | Now Watching context | Optional tuned-channel banner | Optional Now Playing context in header | PARITY | — | HIGH | `lib/guide/guide_view.dart`; tests | Guide |
-| Program details/artwork | Metadata, poster/backdrop/logo, badges, three backgrounds | Rich details, artwork/clear logo, badges, three backgrounds | PARITY | — | HIGH | `lib/guide/guide_view.dart`; artwork tests | Guide |
+| Program details/artwork | Metadata, poster/backdrop/logo, badges, three backgrounds | Rich details, artwork/clear logo, badges, and three backgrounds remain unchanged when Plex supplies a poster reference; a truly reference-free item omits only the unused poster slot, while loading or failed referenced artwork retains normal geometry | PARITY | — | HIGH | `lib/guide/guide_view.dart`; synchronous-reference tests; matched 1920×1080 rich/sparse goldens | Guide |
 | Vertical virtualization/cache bounds | DOM window and bounded caches | Lazy fixed-extent rows, overscan, bounded row/artwork caches and concurrency | DESKTOP-ENHANCED | — | HIGH | `lib/guide/guide_controller.dart`; 1,000-channel tests | Guide |
 | Dense horizontal program bounds | Upstream uses fixed slots/virtualization policy | One visible row may synchronously project/build up to `scheduleWindow`'s 1,000-program cap; a 480-program eight-hour row is deterministically tested | NEEDS EVIDENCE | P2 | MEDIUM | `lib/channels/scheduler.dart`; `lib/guide/guide_view.dart`; dense-row controller test | Profile 5–7 shortest-slot rows at 12h in release mode and measure frames/semantics |
 | Responsive Guide geometry | Fixed 1920×1080 TV reference | Tested logical 600/720/900/1080/4K regimes and DPR2 allocation | DESKTOP-ENHANCED | — | HIGH | `test/guide/guide_view_test.dart`; Guide goldens | Physical DPI/resize still Windows evidence |
@@ -254,7 +270,7 @@ without placing credentials in public facts, durable state, URLs, or diagnostics
 | Track selector initial focus | Selected entry is the highlighted primary row | Audio and subtitle rails initially focus the selected track; subtitle Off receives focus only when none is selected | PARITY | — | HIGH | `lib/playback/player_view.dart`; widget focus tests | Player UI |
 | Native subtitle format/delivery breadth | Off/Direct/Standard/Full, browser extraction/burn-in and recovery | libmpv-visible embedded tracks are selected natively and require no browser burn-in mode; Plex-managed external sidecars and representative text/image subtitle breadth are not yet explicitly proved | NEEDS EVIDENCE | P2 | MEDIUM | `lib/plex/plex_client.dart`; native `track-list`/`sid`; Player tests; owner broad-compatibility feedback | Validate SRT/ASS/PGS/VobSub and Plex external sidecars; implement explicit sidecar loading only if the evidence exposes a gap |
 | Preferred/forced subtitle autoselection | Stored language and forced policy affect selection | Native tracks expose current runtime state only; Desktop does not parse or retain preferred/forced Plex facts and has no autoselection consumer | MISSING | P2 | HIGH | upstream settings; native track model | Define the required native facts, then add epoch-safe selection |
-| Lossless/surround audio decode | Settings drive passthrough or alternate browser-compatible track | Native playback does not gate decode on passthrough; pinned libmpv/FFmpeg decodes supported DTS-family, TrueHD, and other tracks and sends the result through the system-selected output, normally as PCM | INTENTIONAL DESKTOP ADAPTATION | — | HIGH | native libmpv options; `docs/windows-runtime.md`; `docs/architecture.md` | Validate representative TrueHD/DTS/DTS-HD tracks; add passthrough only as a separate optional feature |
+| Lossless/surround audio decode | Settings drive passthrough or alternate browser-compatible track | Native playback does not gate decode on passthrough; pinned libmpv/FFmpeg decodes supported DTS-family, TrueHD, and other tracks and sends the result through the system-selected output, normally as PCM | INTENTIONAL DESKTOP ADAPTATION | — | HIGH | native libmpv options; `docs/windows-runtime.md`; `docs/architecture.md`; `docs/audio-passthrough-spec.md` | Validate representative TrueHD/DTS/DTS-HD tracks; implement the separately specified optional passthrough feature only after its Windows discovery gate |
 | Sleep timer | Off/15/30/60/120 and one-minute warning | Off/30/60/90 cycle; stop failure surfaces safely | INTENTIONAL DESKTOP ADAPTATION | — | HIGH | `lib/playback/player_coordinator.dart`; tests | Optional duration/warning parity P3 |
 | Rich Now Playing details | Standard/cinematic details, synopsis, art, cast, badges | One persistent mutually exclusive lower-left shelf preserves its source-informed width while strengthening poster/text and clear-logo/title hierarchy; it keeps the shared top-right channel bug and shows current scheduled identity, synopsis, year/genres, concise rating/resolution/dynamic-range/audio badges, artwork, and cast when Plex supplies those facts while leaving the playback canvas visible. Actor headshots use the Guide's bounded authenticated artwork cache; missing or failed portraits use a neutral person silhouette rather than initials, overflow is counted, and absent cast reserves no space. Its source/runtime playback line appears only when those facts exist, and native position/duration are preferred with schedule timing as fallback when native duration is unavailable. Up Next and secondary actions remain OSD-owned. The two deterministic Now Playing goldens use fictional, privacy-safe series art and cast portraits; they do not establish physical Windows behavior. | PARITY | — | HIGH | `lib/playback/player_coordinator.dart`; `lib/playback/player_view.dart`; coordinator/widget tests; 1280×720 and 1920×1080 Now Playing goldens | Physical video/AT remains separate evidence |
 | Fullscreen | Player toggle and platform placement | F/F11/button and native window-placement snapshot/rollback/restore; owner reports surface behavior working | NEEDS EVIDENCE | P2 | MEDIUM | Owner report 2026-08-23; Dart/C++ source and tests; no durable exact-commit report | Later DPI/move/minimize/repetition campaign |
@@ -267,7 +283,7 @@ without placing credentials in public facts, durable state, URLs, or diagnostics
 
 | Capability | Upstream behavior/reference | Current Desktop behavior | Classification | Priority | Confidence | Evidence | Owner / next action |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| DTS Passthrough setting | Consumed by capability/audio policy | Hidden because native decode-to-system-output works without passthrough; passthrough is not a compatibility prerequisite | INTENTIONALLY OMITTED | — | HIGH | upstream settings/resolver; Desktop native options and architecture | Optional only after a concrete bitstream-output requirement and native device contract |
+| DTS Passthrough setting | Consumed by capability/audio policy | Intentionally omitted from the current product because native decode-to-system-output works without passthrough; a default-off, per-format Settings feature is specified but deliberately deferred | INTENTIONALLY OMITTED | — | HIGH | upstream settings/resolver; Desktop native options and architecture; [deferred passthrough specification](audio-passthrough-spec.md) | Complete the physical Windows discovery gate and lock failure recovery before implementing the bounded typed setting and native contract |
 | Direct Play Audio Fallback setting | Consumed by browser-compatible resolver | Hidden because libmpv native decode is the default compatibility path; no demonstrated input requires automatic alternate-track selection | INTENTIONALLY OMITTED | — | HIGH | upstream resolver; Desktop playback wiring/native architecture | Revisit only for a reproducible decode/output failure class |
 | Subtitle Mode setting | Controls browser/server extraction, burn-in, and transcode | Hidden because native libmpv track selection is the default Desktop model | INTENTIONALLY OMITTED | — | HIGH | upstream settings; Desktop track rail/native seam | Add a narrower fallback control only for a demonstrated sidecar/rendering failure |
 | Preferred Subtitle Language | Applied automatically | Manual track selection only | MISSING | P2 | HIGH | upstream settings; Desktop native track projection | Add with autoselection owner |
@@ -285,7 +301,7 @@ without placing credentials in public facts, durable state, URLs, or diagnostics
 | Guide Layout | Classic PiP/Overlay | Equivalent | PARITY | — | HIGH | settings/shell/tests | Settings |
 | Past Items | Auto/0/15/30 | Explicit 0–180-minute global choices | INTENTIONAL DESKTOP ADAPTATION | — | HIGH | settings/controller/tests | Settings |
 | Info Box Background | Bleed/artwork/theme | Equivalent with real consumers | PARITY | — | HIGH | settings/Guide tests | Settings |
-| Theme | Five named themes | Same five themes, immediate durable apply | PARITY | — | HIGH | theme/settings tests | Settings |
+| Theme | Five named themes | Same five themes in a compact labeled palette chooser with explicit selection, keyboard/remote focus, and immediate durable apply | PARITY | — | HIGH | theme/settings tests and 800×600, 1280×720, and 1920×1080 goldens | Settings |
 | Cinematic Now Playing | Enables rich player detail presentation | Desktop has one canonical rich Player details surface rather than a standard/cinematic mode or second setting | INTENTIONAL DESKTOP ADAPTATION | — | HIGH | `lib/playback/player_coordinator.dart`; `lib/playback/player_view.dart`; widget/golden evidence | Keep one surface until a second consumed mode is required |
 | Prefer official title artwork | Guide/Now Playing/OSD | Enabled by default; one durable preference reuses Plex clear logos across Guide and Player identity when available, with missing, failed, disabled, or compact fallbacks to text | PARITY | — | HIGH | settings/Guide/Player source; artwork currentness/fallback tests | Settings/Guide/Player |
 | Now Playing Auto-Hide | Controls distinct details overlay, including persistent | Desktop OSD auto-hide is a different control | MISSING | P2 | HIGH | upstream settings; Desktop settings/coordinator | Add only with rich details surface |
@@ -314,8 +330,8 @@ without placing credentials in public facts, durable state, URLs, or diagnostics
 | Native rectangle contract | Browser owns video element | Flutter calculates global bounds/DPR and zeroes on dispose; owner-observed PiP/Overlay works, while fakes still do not assert exact values | NEEDS EVIDENCE | P2 | MEDIUM | Owner report 2026-08-23; `lib/playback/native_video_surface.dart`; no recording fake | Add cheap Dart geometry-contract regression; defer broad physical geometry matrix |
 | Exact-HEAD CI | Upstream webOS CI is comprehensive for its platform | Platform-adapted exact source checks passed Dart, macOS build/goldens, Windows UI and stock-engine compile | INTENTIONAL DESKTOP ADAPTATION | — | HIGH | GitHub run `32589006254`; local 278-test pass; patched job skipped | CI |
 | Patched-engine CI artifact | Not applicable upstream | Exact-HEAD expensive engine job skipped and run produced zero artifacts | NEEDS EVIDENCE | P3 | HIGH | `.github/workflows/ci.yml`; run/job/artifact metadata | Deferred release engineering: force a manual exact-commit engine/package build when packaging becomes the active phase |
-| Package engine provenance | Not applicable upstream | Package validates source/libmpv but unconditionally attests patched engine without verifying built `flutter_windows.dll` | PARTIAL | P3 | HIGH | `tool/windows/package.ps1`; native marker enforcement | Deferred packaging: bind attestation to the actual engine artifact |
-| Package CI ownership | Not applicable upstream | Package tests/upload run only under narrow engine-input detector; package-only changes can stay green without package proof | PARTIAL | P3 | HIGH | `.github/workflows/ci.yml` | Deferred packaging: split cheap package verification from engine rebuild |
+| Package engine provenance | Not applicable upstream | Release wrapper validates the exact patched source and selected engine, then binds source/engine identity to hashes of every packaged build input; packaging rejects stale markers and changed artifacts | NEEDS EVIDENCE | P3 | HIGH | `tool/windows/build-release.ps1`; `tool/windows/package.ps1`; CI negative probes | Run the full patched-engine/package job and physical package acceptance at the exact release commit |
+| Package CI ownership | Not applicable upstream | Cheap package-policy/provenance validation always runs; direct package-input changes also select the conditional patched-engine/package proof | NEEDS EVIDENCE | P3 | HIGH | `.github/workflows/ci.yml`; `tool/windows/verify-release-policy.ps1` | Observe both package-only and unrelated-change CI paths before release |
 | Portable runtime provenance | No comparable webOS product capability | Windows distribution pins Flutter/engine/depot_tools/libmpv inputs and hashes and checks source/runtime facts | INTENTIONAL DESKTOP ADAPTATION | — | HIGH | development/runtime docs; build metadata; scripts | Desktop release engineering strength |
 | Native notice completeness | Not applicable upstream | Package verifies four media-runtime license inputs and includes app/engine provenance texts, but lacks a complete transitive dependency/source-notice manifest for monolithic libmpv | BLOCKED BY DECISION | P3 | HIGH | `docs/windows-runtime.md`; `tool/windows/package.ps1`; `third_party/libmpv` | Deferred legal/release phase: complete manifest and independent review |
 | Runtime mirror | Not applicable upstream | Third-party binary source is hash-pinned, but project-controlled immutable mirror is required by current release policy | BLOCKED BY DECISION | P3 | HIGH | `docs/windows-runtime.md`; build metadata | Deferred release owner |
@@ -429,7 +445,7 @@ not introduce a management rail or second player owner.
 
 | Desktop preference/state | Default and choices | Persistence and runtime consumer |
 | --- | --- | --- |
-| Theme | Ember & Steel; five named themes | Durable; root `ThemeData` and semantic roles update immediately |
+| Theme | Ember & Steel; five labeled palette rows | Durable; root `ThemeData` and semantic roles update immediately |
 | Guide presentation | Classic PiP; PiP/Overlay | Durable; shell chooses native-video/Guide composition |
 | Visible time range | 2h; 2/3/4/6/8/12h | Durable; Guide window, ruler, schedule projection |
 | Past window | 30m; 0/15/30/60/120/180m | Durable; Guide request and browse bounds |
@@ -444,7 +460,6 @@ not introduce a management rail or second player owner.
 | Large focus indicators | Off; Boolean | Durable; app-wide semantic focus-border width |
 | Profile picker on startup | Off; Boolean | Durable; authenticated startup routing |
 | Record redacted diagnostics | Off; Boolean | Durable; bounded session diagnostic recorder |
-| First-run audio completion | Incomplete; Boolean, onboarding-owned | Durable; first-run routing suppresses completed audio explanation |
 
 ### Themes
 
@@ -461,10 +476,10 @@ contrast, and responsive coverage rather than separate per-screen goldens.
 
 Management, Guide, OSD, mini Guide, and track lists have meaningful structural
 coverage from 800×600 through logical 4K, with Guide breakpoint/DPR2 tests.
-Current visual evidence comprises 21 accepted 1280×720 macOS baselines, five
-focused 1920×1080 baselines for Mini Guide, OSD, Rich Now Playing, Profiles,
-and Channel Setup review, and one compact 800×600 Channel Studio baseline. The
-principal remaining responsive risk is not clipping but dense 12-hour
+Current visual evidence comprises 31 accepted macOS baselines: 21 at 1280×720,
+eight at 1920×1080, and two at 800×600. Theme-chooser evidence spans 800×600,
+1280×720, and 1920×1080. The principal remaining responsive risk is not
+clipping but dense 12-hour
 horizontal Guide/semantics work and physical Windows video alignment during
 DPI/resize changes.
 
@@ -516,15 +531,14 @@ worker could not re-access those supplied files, which limits that worker's
 independent reinspection without invalidating the earlier comparisons. No
 private fact or personal path is reproduced here.
 
-Current Desktop visual evidence consists of 27 committed macOS goldens. The 20
-1280×720 baselines cover terminal auth failure; profiles and protected-profile
-PIN; server and audio setup; Channel Setup libraries, strategies, review,
-progress, and completion, with failure covered structurally; Guide without
-playback, Guide PiP, and Overlay Guide; OSD, rich Now Playing, mini Guide, audio
-rail, and long subtitle rail; plus Settings over playback in Ember & Steel and
-Slate & Pine. Five additional 1920×1080 baselines cover Mini Guide, OSD, Rich
-Now Playing, Profiles, and Channel Setup review. Two Channel Studio baselines
-cover expanded authoring at 1280×720 and compact authoring at 800×600.
+Current Desktop visual evidence consists of 31 committed macOS goldens. The
+inventory covers terminal auth failure; profiles and protected-profile PIN;
+server and Channel Setup states; Guide without playback, Guide PiP, Overlay
+Guide, and matched rich/reference-free Guide details; OSD, rich Now Playing,
+mini Guide, audio and subtitle rails; Settings over and without playback plus
+the compact and large theme chooser; and expanded/compact Channel Studio. The
+retired explanation-only Audio Setup image is no longer part of current
+evidence. Historical inventory statements below retain their dated scope.
 
 The 2026-08-26 campaign updated ten existing 1280×720 files:
 `mini-guide-1280x720.png`, `player-osd-1280x720.png`,
@@ -546,10 +560,10 @@ The matrix contains **148 capabilities**:
 
 - 54 **PARITY**;
 - 29 **DESKTOP-ENHANCED**;
-- 15 **INTENTIONAL DESKTOP ADAPTATION**;
+- 14 **INTENTIONAL DESKTOP ADAPTATION**;
 - 9 **PARTIAL**;
 - 11 **MISSING**;
-- 9 **INTENTIONALLY OMITTED**;
+- 10 **INTENTIONALLY OMITTED**;
 - 6 **NOT APPLICABLE**;
 - 8 **NEEDS EVIDENCE**; and
 - 7 **BLOCKED BY DECISION**.

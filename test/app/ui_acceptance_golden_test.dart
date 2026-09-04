@@ -18,6 +18,7 @@ import 'package:lineup_desktop/playback/player_view.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 
+import '../support/golden_test_support.dart';
 import '../support/ui_fixture.dart';
 
 const _viewport = Size(1280, 720);
@@ -47,7 +48,7 @@ final _nowPlayingArtwork = <Uri, Uint8List>{
 };
 
 void main() {
-  setUpAll(_loadPinnedTestFont);
+  setUpAll(loadPinnedTestFonts);
 
   setUp(() {
     TestWidgetsFlutterBinding.ensureInitialized();
@@ -160,18 +161,6 @@ void main() {
     await _match(
       tester,
       'server-selection-1280x720.png',
-      precacheLogo: true,
-      additionalPumps: 1,
-    );
-  });
-
-  testWidgets('Audio Setup', (tester) async {
-    final fixture = UiFixture()..controller.stage = SetupStage.audio;
-
-    await _pump(tester, fixture.build());
-    await _match(
-      tester,
-      'audio-setup-1280x720.png',
       precacheLogo: true,
       additionalPumps: 1,
     );
@@ -291,6 +280,59 @@ void main() {
     await _match(
       tester,
       'channel-setup-review-1920x1080.png',
+      precacheLogo: true,
+      additionalPumps: 2,
+    );
+  });
+
+  testWidgets('Channel Setup review with generated removals', (tester) async {
+    final controller = _VisualController()
+      ..stage = SetupStage.channelSetup
+      ..libraries = const [
+        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
+      ]
+      ..channels = [
+        Channel(
+          id: 'retro-detectives',
+          number: 42,
+          name: 'Retro Detectives',
+          source: const LibrarySource(
+            libraryId: 'movies',
+            libraryType: PlexLibraryType.movie,
+          ),
+          playbackMode: PlaybackMode.shuffle,
+          anchor: DateTime.utc(2026, 1, 15),
+          shuffleSeed: 42,
+          builderKey: 'synthetic:retro-detectives',
+        ),
+      ];
+    await _pump(
+      tester,
+      TickerMode(
+        enabled: false,
+        child: UiFixture(
+          controller: controller,
+          guideClock: () => _fixedNow,
+        ).build(),
+      ),
+    );
+    await tester.tap(find.text('Configure channels'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Review'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Remove 1 generated channel'), findsOneWidget);
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.widgetWithText(FilledButton, 'Confirm & Replace'),
+          )
+          .onPressed,
+      isNull,
+    );
+    await _match(
+      tester,
+      'channel-setup-review-removals-1280x720.png',
       precacheLogo: true,
       additionalPumps: 2,
     );
@@ -713,6 +755,24 @@ void main() {
     await _match(tester, 'settings-slate-pine-1280x720.png');
   });
 
+  testWidgets('Appearance chooser at compact desktop size', (tester) async {
+    final fixture = _readyFixture();
+    await _pump(tester, fixture.build(), viewport: const Size(800, 600));
+    await _openDestination(tester, 'Settings');
+
+    expect(find.byKey(const Key('theme-option-ember-steel')), findsOneWidget);
+    await _match(tester, 'settings-appearance-ember-steel-800x600.png');
+  });
+
+  testWidgets('Appearance chooser at large desktop size', (tester) async {
+    final fixture = _readyFixture();
+    await _pump(tester, fixture.build(), viewport: const Size(1920, 1080));
+    await _openDestination(tester, 'Settings');
+
+    expect(find.byKey(const Key('theme-option-ember-steel')), findsOneWidget);
+    await _match(tester, 'settings-appearance-ember-steel-1920x1080.png');
+  });
+
   testWidgets('Settings over playback in Ember & Steel', (tester) async {
     final fixture = _readyFixture(
       playerState: const PlayerStatus(
@@ -779,51 +839,6 @@ void main() {
     }
     await _match(tester, 'channel-studio-compact-800x600.png');
   });
-}
-
-Future<void> _loadPinnedTestFont() async {
-  var flutterRoot = File(Platform.resolvedExecutable).parent;
-  while (flutterRoot.parent.path != flutterRoot.path &&
-      !File(
-        '${flutterRoot.path}/bin/cache/artifacts/material_fonts/Roboto-Regular.ttf',
-      ).existsSync()) {
-    flutterRoot = flutterRoot.parent;
-  }
-  final fontDirectory =
-      '${flutterRoot.path}/bin/cache/artifacts/material_fonts';
-  if (!Directory(fontDirectory).existsSync()) {
-    throw StateError(
-      'Pinned Flutter material-fonts directory is missing: $fontDirectory',
-    );
-  }
-  final requiredFonts = [
-    'Roboto-Regular.ttf',
-    'Roboto-Medium.ttf',
-    'Roboto-Bold.ttf',
-    'MaterialIcons-Regular.otf',
-  ];
-  for (final filename in requiredFonts) {
-    if (!File('$fontDirectory/$filename').existsSync()) {
-      throw StateError('Pinned Flutter test font is missing: $filename');
-    }
-  }
-  for (final family in ['Roboto', '.AppleSystemUIFont']) {
-    final loader = FontLoader(family);
-    for (final file in [
-      'Roboto-Regular.ttf',
-      'Roboto-Medium.ttf',
-      'Roboto-Bold.ttf',
-    ]) {
-      loader.addFont(
-        File('$fontDirectory/$file').readAsBytes().then(ByteData.sublistView),
-      );
-    }
-    await loader.load();
-  }
-  final icons = ByteData.sublistView(
-    await File('$fontDirectory/MaterialIcons-Regular.otf').readAsBytes(),
-  );
-  await (FontLoader('MaterialIcons')..addFont(Future.value(icons))).load();
 }
 
 Future<void> _pump(
@@ -894,7 +909,10 @@ Future<void> _match(
   for (var index = 0; index < additionalPumps; index++) {
     await tester.pump(const Duration(milliseconds: 400));
   }
-  await expectLater(find.byKey(_goldenKey), matchesGoldenFile('goldens/$name'));
+  final boundary = find.byKey(_goldenKey);
+  markSubtreeNeedsPaint(tester.renderObject(boundary));
+  await tester.pump();
+  await expectLater(boundary, matchesGoldenFile('goldens/$name'));
 }
 
 Future<void> _expectClassicOpacity(
@@ -1118,13 +1136,6 @@ Future<void> _openChannelSetupApply(WidgetTester tester) async {
   await tester.pumpAndSettle();
   await tester.tap(find.text('Build Channels'));
   await tester.pumpAndSettle();
-  await tester.tap(
-    find.descendant(
-      of: find.byType(CheckboxListTile),
-      matching: find.textContaining('generated channels'),
-    ),
-  );
-  await tester.pump();
   await tester.tap(find.text('Confirm & Replace'));
   await tester.pump();
 }

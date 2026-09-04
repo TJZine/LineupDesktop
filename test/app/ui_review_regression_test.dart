@@ -281,7 +281,7 @@ void main() {
     await tester.ensureVisible(find.text('Open Generate lineup'));
     await tester.tap(find.text('Open Generate lineup'));
     await tester.pumpAndSettle();
-    expect(find.text('Discard changes?'), findsOneWidget);
+    expect(find.text('Open Generate lineup?'), findsOneWidget);
     await tester.tap(find.text('Keep editing'));
     await tester.pumpAndSettle();
     expect(controller.setupEntries, 0);
@@ -294,7 +294,7 @@ void main() {
     recovery.onPressed!();
     recovery.onPressed!();
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Discard changes'));
+    await tester.tap(find.text('Discard draft and continue'));
     await tester.pumpAndSettle();
     expect(controller.setupEntries, 1);
     expect(controller.stage, SetupStage.channelSetup);
@@ -546,7 +546,7 @@ void main() {
         find.descendant(of: sourceChoices, matching: find.text('Hand-picked')),
         findsOneWidget,
       );
-      await tester.tap(find.text('Cancel'));
+      await tester.tap(find.text('Back to Channels'));
       await tester.pumpAndSettle();
     }
   });
@@ -818,8 +818,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Build Channels'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Remove 0 generated channels'));
-    await tester.pump();
+    expect(find.text('Remove 0 generated channels'), findsNothing);
     await tester.tap(find.text('Confirm & Replace'));
     await tester.pump();
 

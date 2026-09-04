@@ -241,6 +241,7 @@ Classify every row as **Pass**, **Fail — blocker**, **Fail — non-blocking**,
 | Startup | Branded startup; no stock-engine fallback or native-init error | |
 | Plex auth | PIN/QR success, expiration replacement, cancellation, protected-profile rejection/retry | |
 | Server/state | Direct/relay description is truthful; retry/switch/clear works; relaunch is profile-scoped; logout stops playback and clears scope | |
+| Authenticated redirects | Using a dedicated test credential and controlled endpoints, an authenticated HTTPS response redirects first to a different HTTPS origin and then, in a separate run, to HTTP; neither redirect target receives a request or token, and no credential appears in output | |
 | Channels | Initial Builder review/apply is atomic; custom create/edit/delete validates and confirms destructive action; representative large lineup remains responsive | |
 | Classic Guide | Focused/selected/tuned/airing identities remain distinct; time/paging/filter/now behavior works; real video occupies only the PiP aperture | |
 | Overlay Guide | Real video remains beneath legible, interactive Flutter artwork, text, focus, and schedule | |
@@ -254,6 +255,15 @@ Classify every row as **Pass**, **Fail — blocker**, **Fail — non-blocking**,
 
 Test at minimum `800x600`, `1280x720`, `1360x840`, `1600x900`, and
 `1920x1080`, plus a 4K/high-DPI regime and 200% scaling when available.
+
+For the authenticated-redirect row, use a dedicated Plex-compatible test
+server or reverse proxy and credential. Configure the selected media response
+to return, in separate runs, a redirect to a distinct HTTPS origin and a
+redirect to an HTTP origin. Confirm the authenticated source endpoint was
+reached but each redirect target's request count remains zero. Do not enable
+header logging or place the credential in a command line, environment variable,
+report, or screenshot. Repeat the scenarios from the portable package in
+section 8.
 
 ## 7. Media acceptance matrix
 
@@ -283,16 +293,13 @@ to the pinned runtime and exact representative evidence.
 
 ## 8. Portable package acceptance
 
-From a clean worktree and successful release local-engine build:
+From a clean worktree and configured `host_release` engine build directory:
 
 ```powershell
 Set-Location $Repo
 $env:LINEUP_MPV_ROOT = $MpvRoot
 
-flutter build windows `
-  --local-engine=host_release `
-  --local-engine-host=host_release `
-  --local-engine-src-path=$EngineSource
+& .\tool\windows\build-release.ps1 -EngineSource $EngineSource
 
 $PackageDestination = "build\package\LineupDesktop-$($Head.Substring(0, 12))-windows-x64"
 $PackageDirectory = Join-Path $Repo $PackageDestination
@@ -313,12 +320,17 @@ Confirm:
 - package creation reports no dirty-tree, runtime-hash, provenance, license, or
   forbidden-file failure;
 - the archive contains the executable, required adjacent DLLs, `data`, licenses,
-  `BUILD-INFO.txt`, `SYSTEM-REQUIREMENTS.txt`, and
-  `PACKAGE-MANIFEST.sha256`;
+  `BUILD-INFO.txt`, `BUILD-PROVENANCE.json`, `SYSTEM-REQUIREMENTS.txt`,
+  and `PACKAGE-MANIFEST.sha256`;
 - `BUILD-INFO.txt` records `$Head` and `source-dirty=false`;
+- `BUILD-PROVENANCE.json` records the same source commit, pinned framework,
+  engine, patch, and hashes for the packaged build inputs;
 - no debug/import artifacts, `dartjni.dll`, tokens, credentials, or private
   media are present;
 - archive/package hashes are recorded;
+- the authenticated cross-origin and HTTPS-to-HTTP redirect scenarios pass
+  against this exact package without either redirect target receiving a request
+  or token;
 - mandatory SDR/Plex/Guide scenarios pass outside the developer tree; and
 - the same package works in a clean Windows user profile or disposable system.
 
@@ -395,6 +407,7 @@ copy only the safe summary into the repository or pull request.
 | Input / focus | | |
 | Media / HDR / tracks | | |
 | Portable package | | |
+| Authenticated redirect rejection | | |
 
 ## Blockers and remaining limitations
 

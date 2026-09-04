@@ -539,8 +539,9 @@ class _ChannelsViewState extends State<ChannelsView> {
   bool _focusPruneScheduled = false;
   bool _focusPruneNeedsRestore = false;
   final LinkedHashMap<String, _ChannelHealth> _health = LinkedHashMap();
-  final Queue<({Channel channel, String signature})> _pendingHealth = Queue();
-  final Map<String, String> _activeHealth = {};
+  final Queue<({Channel channel, _ChannelHealthSignature signature})>
+  _pendingHealth = Queue();
+  final Map<String, _ChannelHealthSignature> _activeHealth = {};
   int _activeHealthLoads = 0;
   int _healthEpoch = 0;
   int? _healthContentGeneration;
@@ -622,7 +623,36 @@ class _ChannelsViewState extends State<ChannelsView> {
 
   Future<void> _enterGenerateLineupFromStudio() async {
     try {
-      if (await requestLeave()) await widget.controller.enterChannelSetup();
+      if (!_studioOpen) return;
+      final studio = _studio;
+      if (studio == null || studio.saving) return;
+      if (studio.dirty) {
+        final discard =
+            await showDialog<bool>(
+              context: context,
+              builder: (context) => AlertDialog(
+                title: const Text('Open Generate lineup?'),
+                content: const Text(
+                  'Your unsaved Studio draft cannot be carried into Generate lineup. Existing custom channels remain protected while you review the proposed roster.',
+                ),
+                actions: [
+                  TextButton(
+                    autofocus: true,
+                    onPressed: () => Navigator.pop(context, false),
+                    child: const Text('Keep editing'),
+                  ),
+                  FilledButton(
+                    onPressed: () => Navigator.pop(context, true),
+                    child: const Text('Discard draft and continue'),
+                  ),
+                ],
+              ),
+            ) ??
+            false;
+        if (!discard || !mounted) return;
+      }
+      _showList(_returnFocusId);
+      await widget.controller.enterChannelSetup();
     } finally {
       _generateLineupEntry = null;
     }
@@ -683,7 +713,9 @@ class _ChannelsViewState extends State<ChannelsView> {
       _health.clear();
       _pendingHealth.clear();
     }
-    _scheduleFocusPrune(channels.map((channel) => channel.id).toSet());
+    final liveIds = channels.map((channel) => channel.id).toSet();
+    _pruneHealth(liveIds);
+    _scheduleFocusPrune(liveIds);
     return LineupPage(
       title: 'Channels',
       actions: Wrap(
@@ -846,7 +878,12 @@ class _ChannelsViewState extends State<ChannelsView> {
     }
   }
 
-  void _finishHealth(String id, String signature, bool issue, int epoch) {
+  void _finishHealth(
+    String id,
+    _ChannelHealthSignature signature,
+    bool issue,
+    int epoch,
+  ) {
     _activeHealthLoads--;
     if (_activeHealth[id] == signature) _activeHealth.remove(id);
     if (!mounted) return;
@@ -868,8 +905,17 @@ class _ChannelsViewState extends State<ChannelsView> {
     _pumpHealth();
   }
 
-  String _healthSignature(Channel channel) =>
-      '${widget.controller.contentGeneration}|${channel.toJson()}';
+  _ChannelHealthSignature _healthSignature(Channel channel) => (
+    contentGeneration: widget.controller.contentGeneration,
+    channelRevision: widget.controller.channelRevision(channel.id),
+  );
+
+  void _pruneHealth(Set<String> liveIds) {
+    _health.removeWhere((id, _) => !liveIds.contains(id));
+    _pendingHealth.removeWhere(
+      (pending) => !liveIds.contains(pending.channel.id),
+    );
+  }
 
   void _scheduleFocusPrune(Set<String> liveIds) {
     final staleIds = {
@@ -948,10 +994,15 @@ class _ChannelsViewState extends State<ChannelsView> {
   }
 }
 
+typedef _ChannelHealthSignature = ({
+  int contentGeneration,
+  int channelRevision,
+});
+
 class _ChannelHealth {
   const _ChannelHealth(this.signature, this.issue);
 
-  final String signature;
+  final _ChannelHealthSignature signature;
   final bool issue;
 }
 
@@ -1180,17 +1231,11 @@ class _SettingsViewState extends State<SettingsView> {
           title: _categoryLabel(_category),
           children: switch (_category) {
             _SettingsCategory.appearance => [
-              _Dropdown<LineupThemeName>(
-                'Theme',
-                'Change the application color system immediately.',
-                value.theme,
-                LineupThemeName.values,
-                (item) => item.label,
-                _saving
-                    ? null
-                    : (item) => _update(
-                        widget.controller.settings.copyWith(theme: item),
-                      ),
+              _ThemeChooser(
+                selected: value.theme,
+                enabled: !_saving,
+                onSelected: (theme) =>
+                    _update(widget.controller.settings.copyWith(theme: theme)),
               ),
             ],
             _SettingsCategory.guide => [
@@ -1546,6 +1591,196 @@ class _SettingsSection extends StatelessWidget {
       ...children,
     ],
   );
+}
+
+class _ThemeChooser extends StatelessWidget {
+  const _ThemeChooser({
+    required this.selected,
+    required this.enabled,
+    required this.onSelected,
+  });
+
+  final LineupThemeName selected;
+  final bool enabled;
+  final ValueChanged<LineupThemeName> onSelected;
+
+  @override
+  Widget build(BuildContext context) => Align(
+    alignment: Alignment.topLeft,
+    child: ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 760),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Choose the color system used throughout Lineup. Changes apply immediately.',
+            style: Theme.of(context).textTheme.bodyMedium
+                ?.copyWith(color: LineupTheme.of(context).secondaryText),
+          ),
+          const SizedBox(height: 16),
+          for (final theme in LineupThemeName.values)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: _ThemeOption(
+                key: ValueKey('theme-option-${theme.storageKey}'),
+                theme: theme,
+                selected: theme == selected,
+                enabled: enabled,
+                onPressed: () {
+                  if (theme != selected) onSelected(theme);
+                },
+              ),
+            ),
+        ],
+      ),
+    ),
+  );
+}
+
+class _ThemeOption extends StatefulWidget {
+  const _ThemeOption({
+    required this.theme,
+    required this.selected,
+    required this.enabled,
+    required this.onPressed,
+    super.key,
+  });
+
+  final LineupThemeName theme;
+  final bool selected;
+  final bool enabled;
+  final VoidCallback onPressed;
+
+  @override
+  State<_ThemeOption> createState() => _ThemeOptionState();
+}
+
+class _ThemeOptionState extends State<_ThemeOption> {
+  bool _focused = false;
+  late final FocusNode _focusNode = FocusNode(
+    debugLabel: 'Theme ${widget.theme.label}',
+  );
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final roles = LineupTheme.of(context);
+    final preview = LineupTheme.forName(widget.theme)
+        .extension<LineupThemeRoles>()!;
+    final swatches = [
+      preview.deepBackground,
+      preview.primarySurface,
+      preview.progressFill,
+      preview.liveAccent,
+    ];
+    return Semantics(
+      key: ValueKey('theme-option-semantics-${widget.theme.storageKey}'),
+      container: true,
+      button: true,
+      enabled: widget.enabled,
+      selected: widget.selected,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          focusNode: _focusNode,
+          onTap: widget.enabled
+              ? () {
+                  _focusNode.requestFocus();
+                  widget.onPressed();
+                }
+              : null,
+          onFocusChange: (focused) => setState(() => _focused = focused),
+          borderRadius: BorderRadius.circular(roles.panelRadius),
+          child: AnimatedContainer(
+            duration: MediaQuery.disableAnimationsOf(context)
+                ? Duration.zero
+                : LineupTheme.fast,
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+            decoration: BoxDecoration(
+              color: widget.selected
+                  ? roles.selectedSurface
+                  : roles.elevatedSurface,
+              borderRadius: BorderRadius.circular(roles.panelRadius),
+              border: Border.all(
+                color: _focused
+                    ? roles.focusBorder
+                    : widget.selected
+                    ? roles.defaultBorder
+                    : roles.subtleBorder,
+                width: _focused ? roles.focusBorderWidth : 1,
+              ),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.theme.label,
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _description(widget.theme),
+                        style: Theme.of(context).textTheme.bodySmall
+                            ?.copyWith(color: roles.secondaryText),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 18),
+                ExcludeSemantics(
+                  child: Row(
+                    children: [
+                      for (final color in swatches) ...[
+                        Container(
+                          width: 24,
+                          height: 24,
+                          decoration: BoxDecoration(
+                            color: color,
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: roles.defaultBorder),
+                          ),
+                        ),
+                        if (color != swatches.last) const SizedBox(width: 6),
+                      ],
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 18),
+                SizedBox(
+                  width: 24,
+                  child: widget.selected
+                      ? Icon(Icons.check_circle, color: roles.progressFill)
+                      : null,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  static String _description(LineupThemeName theme) => switch (theme) {
+    LineupThemeName.emberSteel =>
+      'Warm amber accents over deep charcoal surfaces.',
+    LineupThemeName.slatePine =>
+      'Muted evergreen accents with calm slate neutrals.',
+    LineupThemeName.swiss =>
+      'Crisp square geometry with clean emerald accents.',
+    LineupThemeName.directv =>
+      'Deep blue surfaces with bright broadcast highlights.',
+    LineupThemeName.glass =>
+      'Translucent dark surfaces with luminous cyan accents.',
+  };
 }
 
 class _DiagnosticsSummary extends StatefulWidget {

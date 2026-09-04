@@ -50,12 +50,10 @@ void main() {
       expect(controller.stage, SetupStage.servers);
 
       await controller.selectServer(plex.server);
-      expect(controller.stage, SetupStage.audio);
+      expect(controller.stage, SetupStage.channelSetup);
       expect(controller.connection?.relay, isFalse);
       expect(controller.connection?.latency, const Duration(milliseconds: 18));
 
-      await controller.completeAudioSetup();
-      expect(controller.stage, SetupStage.channelSetup);
       expect(await controller.setLibraries({'movies'}), isTrue);
 
       final channel = _channel(1, anchor: _ProductPlex.now);
@@ -161,19 +159,15 @@ void main() {
         (index) => _channel(index + 1, anchor: _ProductPlex.now),
         growable: false,
       );
-      final rebuild = Stopwatch()..start();
       await controller.applyChannelPlan(
         largeLineup,
         mode: ChannelBuildMode.replace,
       );
-      rebuild.stop();
       expect(controller.channels, hasLength(1000));
       expect(
         (await store.load()).state.channelsByProfileServer['child']!['server']!,
         hasLength(1000),
       );
-      // ignore: avoid_print
-      print('PRODUCT_SPINE rebuild1000Us=${rebuild.elapsedMicroseconds}');
 
       final restoredPlex = _ProductPlex(events)..authorized = true;
       controller = LineupController(

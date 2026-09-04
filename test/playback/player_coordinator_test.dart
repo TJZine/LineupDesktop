@@ -253,6 +253,65 @@ void main() {
     nativePlayer.releaseFullscreen.complete();
 
     await fullscreen;
+    await Future<void>.delayed(Duration.zero);
+    expect(coordinator.fullscreen, isFalse);
+    expect(nativePlayer.fullscreenValues, [true, false]);
+  });
+
+  test(
+    'rapid fullscreen toggles execute from committed native state',
+    () async {
+      final lineup = _TestLineup();
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => _schedule(channel),
+      );
+      final nativePlayer = _Player();
+      final coordinator = PlayerCoordinator(
+        player: nativePlayer,
+        lineup: lineup,
+        guide: guide,
+      );
+      addTearDown(lineup.dispose);
+      addTearDown(guide.dispose);
+      addTearDown(coordinator.dispose);
+
+      await Future.wait([
+        coordinator.toggleFullscreen(),
+        coordinator.toggleFullscreen(),
+      ]);
+
+      expect(nativePlayer.fullscreenValues, [true, false]);
+      expect(coordinator.fullscreen, isFalse);
+    },
+  );
+
+  test('scope cleanup exits after a pending fullscreen enter', () async {
+    final lineup = _TestLineup();
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    )..requestViewport(0, 2);
+    await Future<void>.delayed(Duration.zero);
+    final nativePlayer = _BlockingFullscreenPlayer(blockOn: true);
+    final coordinator = PlayerCoordinator(
+      player: nativePlayer,
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
+    await coordinator.tune('channel-b');
+
+    final enter = coordinator.toggleFullscreen();
+    await nativePlayer.fullscreenStarted.future;
+    lineup.changeContentScope();
+    nativePlayer.releaseFullscreen.complete();
+    await enter;
+    await pumpEventQueue(times: 3);
+
+    expect(nativePlayer.fullscreenValues, [true, false]);
     expect(coordinator.fullscreen, isFalse);
   });
 
@@ -306,6 +365,74 @@ void main() {
 
     await select;
     expect(coordinator.overlay, PlayerOverlay.none);
+  });
+
+  test(
+    'native control failures publish one safe recoverable surface',
+    () async {
+      final lineup = _TestLineup()..diagnostics.enabled = true;
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => _schedule(channel),
+      );
+      final player = _FailingControlPlayer();
+      final coordinator = PlayerCoordinator(
+        player: player,
+        lineup: lineup,
+        guide: guide,
+      );
+      addTearDown(lineup.dispose);
+      addTearDown(guide.dispose);
+      addTearDown(coordinator.dispose);
+
+      await coordinator.play();
+      await coordinator.pause();
+      await coordinator.seekTo(const Duration(seconds: 12));
+      await coordinator.selectTrack(PlayerTrackType.audio, 2);
+      await coordinator.toggleFullscreen();
+
+      expect(
+        coordinator.error,
+        'Playback controls are temporarily unavailable. Try again.',
+      );
+      expect(coordinator.overlay, PlayerOverlay.error);
+      expect(coordinator.canRetry, isFalse);
+      expect(lineup.diagnostics.entries.map((entry) => entry.context), [
+        {'operation': 'play', 'code': 'command_queue_full'},
+        {'operation': 'pause', 'code': 'command_queue_full'},
+        {'operation': 'seek', 'code': 'command_queue_full'},
+        {'operation': 'audio_track', 'code': 'command_queue_full'},
+        {'operation': 'fullscreen', 'code': 'command_queue_full'},
+      ]);
+    },
+  );
+
+  test('stale control failure cannot replace a scope reset', () async {
+    final lineup = _TestLineup()..diagnostics.enabled = true;
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    final player = _BlockingFailingControlPlayer();
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
+
+    final seek = coordinator.seekTo(const Duration(seconds: 12));
+    await player.seekStarted.future;
+    lineup.changeContentScope();
+    player.releaseSeek.complete();
+    await seek;
+    await pumpEventQueue(times: 2);
+
+    expect(coordinator.error, isNull);
+    expect(coordinator.overlay, PlayerOverlay.none);
+    expect(lineup.diagnostics.entries, isEmpty);
   });
 
   testWidgets('stale sleep completion preserves a replacement timer', (
@@ -2137,6 +2264,43 @@ void main() {
     );
   });
 
+  test(
+    'unrelated controls do not supersede a pending cross-part seek',
+    () async {
+      final lineup = _TestLineup(
+        playbackParts: _parts(
+          first: const Duration(hours: 2),
+          second: const Duration(hours: 1),
+        ),
+      );
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => _schedule(channel),
+      )..requestViewport(0, 2);
+      await Future<void>.delayed(Duration.zero);
+      final player = _BlockingSecondLoadPlayer();
+      final coordinator = PlayerCoordinator(
+        player: player,
+        lineup: lineup,
+        guide: guide,
+      );
+      addTearDown(player.close);
+      addTearDown(lineup.dispose);
+      addTearDown(guide.dispose);
+      addTearDown(coordinator.dispose);
+      await coordinator.tune('channel-b');
+
+      final seek = coordinator.seekTo(const Duration(hours: 2, minutes: 5));
+      await player.secondLoadStarted.future;
+      await coordinator.pause();
+      player.releaseSecondLoad.complete();
+      await seek;
+
+      expect(player.seeks.last, const Duration(minutes: 5));
+      expect(coordinator.error, isNull);
+    },
+  );
+
   test('known cross-part target survives authorization recovery', () async {
     final lineup = _TestLineup(
       recoverAuthorization: true,
@@ -2451,6 +2615,44 @@ void main() {
     });
   }
 
+  test('same-part seek supersedes a pending cross-part failure', () async {
+    final lineup = _TestLineup(
+      playbackParts: _parts(
+        first: const Duration(hours: 2),
+        second: const Duration(hours: 1),
+      ),
+    );
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    )..requestViewport(0, 2);
+    await Future<void>.delayed(Duration.zero);
+    final player = _BlockingFailingSecondLoadPlayer();
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(player.close);
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
+    await coordinator.tune('channel-b');
+
+    final stale = coordinator.seekTo(const Duration(hours: 2, minutes: 5));
+    await player.secondLoadStarted.future;
+    await coordinator.seekTo(const Duration(hours: 2, minutes: 10));
+    coordinator.closeOverlay();
+    player.releaseSecondLoad.complete();
+    await stale;
+
+    expect(player.seeks.last, const Duration(minutes: 10));
+    expect(player.seeks, isNot(contains(const Duration(minutes: 5))));
+    expect(player.stops, 0);
+    expect(coordinator.error, isNull);
+    expect(coordinator.overlay, PlayerOverlay.none);
+  });
+
   test('unknown boundaries stay on and report the current part', () async {
     final lineup = _TestLineup(playbackParts: _parts());
     final guide = GuideController(
@@ -2479,6 +2681,7 @@ void main() {
     await Future<void>.delayed(Duration.zero);
 
     expect(player.loads.single.path, '/part-1.mkv');
+    expect(player.seeks, isEmpty);
     expect(coordinator.position, const Duration(seconds: 7));
     expect(coordinator.duration, const Duration(seconds: 20));
   });
@@ -3256,6 +3459,7 @@ class _Player implements NativePlayer {
   final loadPlexTokens = <String?>[];
   final loadGenerations = <int?>[];
   final seeks = <Duration>[];
+  final fullscreenValues = <bool>[];
   final selectedTracks = <(PlayerTrackType, int?)>[];
   int stops = 0;
 
@@ -3292,7 +3496,10 @@ class _Player implements NativePlayer {
   @override
   Future<void> setVideoRect(PlayerVideoRect rect) async {}
   @override
-  Future<void> setFullscreen(bool fullscreen) async {}
+  Future<void> setFullscreen(bool fullscreen) async {
+    fullscreenValues.add(fullscreen);
+  }
+
   @override
   Future<void> selectTrack(PlayerTrackType type, int? id) async =>
       selectedTracks.add((type, id));
@@ -3337,6 +3544,7 @@ class _BlockingFullscreenPlayer extends _Player {
 
   @override
   Future<void> setFullscreen(bool fullscreen) async {
+    await super.setFullscreen(fullscreen);
     if (fullscreen != blockOn) return;
     if (!fullscreenStarted.isCompleted) fullscreenStarted.complete();
     await releaseFullscreen.future;
@@ -3662,6 +3870,44 @@ class _BlockingControlPlayer extends _EventPlayer {
     selectedTracks.add((type, id));
     if (!selectStarted.isCompleted) selectStarted.complete();
     await releaseSelect.future;
+  }
+}
+
+class _FailingControlPlayer extends _Player {
+  static const _failure = PlayerUnavailable(
+    'opaque native control detail',
+    failureCode: 'command_queue_full',
+  );
+
+  @override
+  Future<void> play() async => throw _failure;
+
+  @override
+  Future<void> pause() async => throw _failure;
+
+  @override
+  Future<void> seek(Duration value) async => throw _failure;
+
+  @override
+  Future<void> selectTrack(PlayerTrackType type, int? id) async =>
+      throw _failure;
+
+  @override
+  Future<void> setFullscreen(bool fullscreen) async => throw _failure;
+}
+
+class _BlockingFailingControlPlayer extends _Player {
+  final seekStarted = Completer<void>();
+  final releaseSeek = Completer<void>();
+
+  @override
+  Future<void> seek(Duration value) async {
+    seekStarted.complete();
+    await releaseSeek.future;
+    throw const PlayerUnavailable(
+      'opaque stale detail',
+      failureCode: 'command_error',
+    );
   }
 }
 

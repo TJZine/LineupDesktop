@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
@@ -27,14 +28,14 @@ void main() {
     );
 
     await openDestination(tester, 'Settings');
-    await tester.tap(find.byType(DropdownButton<LineupThemeName>));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Slate & Pine').last);
+    await tester.tap(find.byKey(const Key('theme-option-slate-pine')));
     await tester.pumpAndSettle();
 
     expect(fixture.controller.settings.theme, LineupThemeName.slatePine);
     expect(
-      Theme.of(tester.element(find.text('Theme'))).colorScheme.primary,
+      Theme.of(tester.element(find.byKey(const Key('theme-option-slate-pine'))))
+          .colorScheme
+          .primary,
       slatePine.colorScheme.primary,
     );
     await tester.runAsync(() => Future<void>.delayed(Duration.zero));
@@ -62,6 +63,91 @@ void main() {
       ).colorScheme.primary,
       slatePine.colorScheme.primary,
     );
+  });
+
+  testWidgets('theme chooser exposes selection and remote-style traversal', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    final fixture = UiFixture()..controller.stage = SetupStage.ready;
+    await tester.pumpWidget(fixture.build());
+    await tester.pumpAndSettle();
+    await openDestination(tester, 'Settings');
+
+    final emberSemantics = tester.widget<Semantics>(
+      find.byKey(const Key('theme-option-semantics-ember-steel')),
+    );
+    final slateSemantics = tester.widget<Semantics>(
+      find.byKey(const Key('theme-option-semantics-slate-pine')),
+    );
+    expect(emberSemantics.properties.button, isTrue);
+    expect(emberSemantics.properties.selected, isTrue);
+    expect(slateSemantics.properties.selected, isFalse);
+    expect(
+      tester
+          .getSemantics(
+            find.byKey(const Key('theme-option-semantics-ember-steel')),
+          )
+          .getSemanticsData()
+          .hasAction(SemanticsAction.tap),
+      isTrue,
+    );
+
+    await tester.tap(find.byKey(const Key('theme-option-ember-steel')));
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+
+    expect(fixture.controller.settings.theme, LineupThemeName.slatePine);
+    expect(
+      Focus.of(tester.element(find.byKey(const Key('theme-option-slate-pine'))))
+          .hasFocus,
+      isTrue,
+    );
+    semantics.dispose();
+  });
+
+  testWidgets('theme chooser applies every approved palette', (tester) async {
+    final fixture = UiFixture()..controller.stage = SetupStage.ready;
+    await tester.pumpWidget(fixture.build());
+    await tester.pumpAndSettle();
+    await openDestination(tester, 'Settings');
+
+    for (final theme in LineupThemeName.values.skip(1)) {
+      final option = find.byKey(Key('theme-option-${theme.storageKey}'));
+      await tester.ensureVisible(option);
+      await tester.tap(option);
+      await tester.pumpAndSettle();
+
+      expect(fixture.controller.settings.theme, theme);
+      final semantics = tester.widget<Semantics>(
+        find.byKey(Key('theme-option-semantics-${theme.storageKey}')),
+      );
+      expect(semantics.properties.selected, isTrue);
+    }
+  });
+
+  testWidgets('theme chooser remains reachable at accessible text scale', (
+    tester,
+  ) async {
+    tester.view
+      ..devicePixelRatio = 1
+      ..physicalSize = const Size(800, 600);
+    tester.platformDispatcher.textScaleFactorTestValue = 2;
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    final fixture = UiFixture()..controller.stage = SetupStage.ready;
+    await tester.pumpWidget(fixture.build());
+    await tester.pumpAndSettle();
+    await openDestination(tester, 'Settings');
+
+    final lastTheme = find.byKey(const Key('theme-option-glass'));
+    await tester.ensureVisible(lastTheme);
+    await tester.pumpAndSettle();
+
+    expect(lastTheme, findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('Guide and player use the immersive shell policy', (

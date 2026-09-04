@@ -33,7 +33,10 @@ What happened instead?
 
 ## Logs Or Screenshots
 
-Paste only redacted logs. Do not include Plex tokens, auth headers, tokenized URLs, or crash dumps containing secret-bearing state.
+Paste only redacted logs and screenshots. Do not include Plex credentials,
+authentication headers, tokenized URLs, account or profile details, private
+server or media metadata, personal filesystem paths, or crash dumps containing
+secret-bearing state.
 
 ```text
 

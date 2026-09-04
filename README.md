@@ -60,8 +60,7 @@ A private test build guides the user through:
 1. Link a Plex account with a QR code or four-character PIN.
 2. Choose a Plex Home profile, including protected-profile PIN entry.
 3. Select a reachable Plex Media Server.
-4. Confirm the system-selected audio-output behavior.
-5. Select libraries and build or review the initial channel lineup.
+4. Select libraries and build or review the initial channel lineup.
 
 The main application then provides **Guide**, **Channels**, **Settings**,
 **Diagnostics**, and **Player** destinations. The

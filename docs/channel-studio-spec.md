@@ -194,9 +194,10 @@ second scheduling implementation.
 - Continue the existing persistent management navigation and readable-width
   policy. Studio is grounded inside **Channels**, not presented as a detached
   component demo.
-- The expanded workspace places the station header first, a full-width Air
-  Check ribbon second, and a two-column workbench below it. Programming owns the
-  wider column; identity and playback controls own the narrower column.
+- The expanded workspace places the station identity and actions first, a
+  full-width broadcast-monitor Air Check ribbon second, and a two-column
+  workbench below it. Programming owns the wider column; the station plate and
+  playback controls own the narrower column.
 - Below 900 logical pixels, use one scrolling column while keeping a compact Air
   Check ribbon immediately below the header. Do not return to a modal.
 - Use the existing borders-and-surface-shifts depth strategy. Do not introduce
@@ -214,13 +215,13 @@ second scheduling implementation.
 Expanded structure, as an information hierarchy rather than fixed geometry:
 
 ```text
-┌ Back to Channels   42 Saturday Cartoons   Custom   Saved   Cancel   Save ┐
-├ Air Check   13:10 Scooby-Doo │ ON NOW 13:30 Batman │ 14:00 Animaniacs ┤
+┌ 42  Saturday Cartoons · Edit custom channel · Saved   Back Cancel Tune ┐
+├ ON AIR · Air Check · SAT 13:30 · CH 42 │ now │ next │ cycle/rhythm    ┤
 ├──────────────────────────────────────────────┬─────────────────────────┤
 │ Programming                                  │ Station                 │
 │ Library · Playlist · Filter · Hand-picked    │ Name                    │
-│ Search/facets or selected-program rundown    │ Channel number          │
-│                                              │ Playback rhythm         │
+│ [ Browse ] [ Rundown ] · counts              │ Channel number          │
+│ Search/facets or ordered selected programs   │ Playback rhythm         │
 │                                              │ Cycle facts / issues    │
 └──────────────────────────────────────────────┴─────────────────────────┘
 ```
@@ -283,13 +284,14 @@ The route title and ownership label must make the current mode unambiguous.
 
 ### Station header
 
-The header contains Back to Channels, the channel name or **New channel**, its
-number when valid, the ownership label, save status, and the appropriate
-actions. Custom drafts provide **Cancel** and **Save**. A generated channel
-provides **Save identity** when its name or number is dirty and **Duplicate as
-custom** as a separate action. A saved channel provides **Tune in** separately
-so persistence and playback failures are never combined into one ambiguous
-operation.
+The header contains a station-number dial, the channel name or **New channel**,
+the explicit Studio mode, save status, and the appropriate actions. Custom
+drafts retain **Cancel** and a Save action; Save is enabled only while the draft
+is dirty and valid. A clean saved channel makes **Tune in** primary, while a
+dirty saved channel disables Tune until the change is committed. A generated
+channel provides **Save identity** only for a dirty identity and **Duplicate as
+custom** as a separate action. Persistence and playback failures therefore
+remain separate operations.
 
 Leaving with unsaved changes requires **Discard changes** or **Keep editing**.
 No confirmation appears when the draft is unchanged.
@@ -333,7 +335,10 @@ the user can switch back without losing work. Only the active source is saved.
 
 ### Hand-picked programming
 
-The picker includes:
+The picker separates **Browse** and **Rundown** into two stages so a large
+inventory and an ordered channel are never mounted as competing panes. The
+matching and selected counts remain visible in both stages, and search/filter
+state survives switching stages. It includes:
 
 - a search field over displayed title and show title;
 - library and media-type filters when those facts are available;
@@ -462,10 +467,12 @@ become:
 | **Add generated channels** | Keep all channels and allocate every proposal to a free number |
 | **Refresh generated channels** | Match by builder key; preserve custom channels; preserve matched generated ID, number, name, anchor, and seed; update generator-owned source/playback fields; keep unmatched existing channels |
 
-Review impact must report generated creations, updates, unchanged entries, and
-removals without counting preserved custom channels as removed. The replace
-confirmation says exactly how many generated channels will be removed and how
-many custom channels will remain.
+Review shows the complete proposed final roster, searchable by number or name
+and filterable by protected custom, added/updated, and removed status. It
+reports generated creations, updates, unchanged entries, and removals without
+counting preserved custom channels as removed. The replace confirmation remains
+visible outside the roster scroll and says exactly how many generated channels
+will be removed and how many custom channels will remain.
 
 At every materialization stage, custom channel numbers are reserved. A generated
 plan cannot temporarily duplicate a custom number and rely on later validation

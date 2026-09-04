@@ -18,6 +18,11 @@ void main() {
   testWidgets('shell keeps the deliberate destination inventory and focus', (
     tester,
   ) async {
+    tester.view
+      ..devicePixelRatio = 1
+      ..physicalSize = const Size(1280, 720);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
     final fixture = UiFixture()..controller.stage = SetupStage.ready;
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
@@ -86,6 +91,14 @@ void main() {
       await tester.pumpAndSettle();
       expect(FocusManager.instance.primaryFocus?.debugLabel, target.$2);
       if (target.$2 == 'Channels') {
+        final rail = find.byType(NavigationRail);
+        final selectedLabel = find.descendant(
+          of: rail,
+          matching: find.text('Channels'),
+        );
+        expect(tester.widget<NavigationRail>(rail).selectedIndex, 1);
+        expect(tester.widget<NavigationRail>(rail).extended, isTrue);
+        expect(selectedLabel, findsOneWidget);
         expect(
           tester
               .widget<OutlinedButton>(
@@ -372,9 +385,7 @@ void main() {
     expect(controller.pin, '1345');
   });
 
-  testWidgets('PIN and Audio Setup scale from 800x600 through 4K', (
-    tester,
-  ) async {
+  testWidgets('PIN setup scales from 800x600 through 4K', (tester) async {
     const profile = PlexHomeUser(id: 'child', name: 'Child', protected: true);
     final controller = _ProfileFixtureController()
       ..stage = SetupStage.profiles
@@ -433,13 +444,6 @@ void main() {
       expect(tester.takeException(), isNull, reason: 'PIN viewport $size');
       await tester.tap(find.byTooltip('Cancel'));
       await tester.pumpAndSettle();
-
-      controller.stage = SetupStage.audio;
-      await tester.pumpWidget(fixture.build());
-      await tester.pumpAndSettle();
-      expect(find.text('Continue'), findsOneWidget);
-      expect(tester.takeException(), isNull, reason: 'Audio viewport $size');
-      controller.stage = SetupStage.profiles;
     }
   });
 
@@ -669,12 +673,15 @@ void main() {
     tester,
   ) async {
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    for (final size in const [
-      Size(800, 600),
-      Size(800, 1200),
-      Size(1280, 720),
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    for (final (:size, :textScale) in const [
+      (size: Size(800, 600), textScale: 1.0),
+      (size: Size(800, 1200), textScale: 1.0),
+      (size: Size(1280, 720), textScale: 1.0),
+      (size: Size(800, 1200), textScale: 2.0),
     ]) {
       await tester.binding.setSurfaceSize(size);
+      tester.platformDispatcher.textScaleFactorTestValue = 1;
       final controller = _SetupFixtureController()
         ..stage = SetupStage.channelSetup
         ..libraries = const [
@@ -688,7 +695,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: UpstreamChannelSetupView(
-            key: ValueKey(size),
+            key: ValueKey((size, textScale)),
             controller: controller,
           ),
         ),
@@ -697,6 +704,8 @@ void main() {
       await tester.tap(find.text('Configure channels'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Build Channels'));
+      await tester.pumpAndSettle();
+      tester.platformDispatcher.textScaleFactorTestValue = textScale;
       await tester.pumpAndSettle();
 
       final header = find.text('Channel Setup');
@@ -765,10 +774,75 @@ void main() {
       ),
       findsOneWidget,
     );
-    expect(find.text('Remove 0 generated channels'), findsOneWidget);
+    expect(find.text('Remove 0 generated channels'), findsNothing);
     expect(
-      find.text('1 custom channel will remain unchanged.'),
-      findsOneWidget,
+      tester
+          .widget<FilledButton>(
+            find.widgetWithText(FilledButton, 'Confirm & Replace'),
+          )
+          .onPressed,
+      isNotNull,
+    );
+    final firstPlanned = tester.getTopLeft(find.text('Movies Recently Added'));
+    final secondPlanned = tester.getTopLeft(find.text('Drama'));
+    final protectedCustom = tester.getTopLeft(find.text('Newsroom'));
+    expect(firstPlanned.dy, lessThan(secondPlanned.dy));
+    expect(secondPlanned.dy, lessThan(protectedCustom.dy));
+  });
+
+  testWidgets('Channel Setup protects actual generated removals', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1600, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final controller = _SetupFixtureController()
+      ..stage = SetupStage.channelSetup
+      ..libraries = const [
+        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
+      ]
+      ..channels = [
+        _channel(),
+        Channel(
+          id: 'retired-generated',
+          number: 42,
+          name: 'Retro Detectives',
+          source: const LibrarySource(
+            libraryId: 'movies',
+            libraryType: PlexLibraryType.movie,
+          ),
+          playbackMode: PlaybackMode.shuffle,
+          anchor: DateTime.utc(2026),
+          shuffleSeed: 42,
+          builderKey: 'synthetic:retired-generated',
+        ),
+      ];
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      MaterialApp(home: UpstreamChannelSetupView(controller: controller)),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Configure channels'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Review'));
+    await tester.pumpAndSettle();
+
+    final confirm = find.widgetWithText(FilledButton, 'Confirm & Replace');
+    expect(find.text('Remove 1 generated channel'), findsOneWidget);
+    expect(tester.widget<FilledButton>(confirm).onPressed, isNull);
+
+    await tester.tap(find.text('Remove 1 generated channel'));
+    await tester.pump();
+    expect(tester.widget<FilledButton>(confirm).onPressed, isNotNull);
+    await tester.tap(confirm);
+    await tester.pumpAndSettle();
+
+    expect(
+      controller.channels.where((channel) => channel.id == 'retired-generated'),
+      isEmpty,
+    );
+    expect(
+      controller.channels.where((channel) => channel.id == 'newsroom'),
+      hasLength(1),
     );
   });
 
@@ -834,14 +908,8 @@ void main() {
     expect(find.bySemanticsLabel('Generated removed: 0'), findsOneWidget);
     expect(find.bySemanticsLabel('Custom kept: 1'), findsOneWidget);
     expect(find.bySemanticsLabel('Final: 3'), findsOneWidget);
-    final updateSegment = tester.getRect(
-      find.byKey(const ValueKey('channel-setup-impact-update')),
-    );
-    final unchangedSegment = tester.getRect(
-      find.byKey(const ValueKey('channel-setup-impact-unchanged')),
-    );
-    expect(updateSegment.width, greaterThan(0));
-    expect(unchangedSegment.width, greaterThan(updateSegment.width));
+    expect(find.textContaining('UPDATED'), findsOneWidget);
+    expect(find.textContaining('RETAINED'), findsOneWidget);
     expect(
       find.bySemanticsLabel(RegExp('Channel composition.*Update: 1')),
       findsOneWidget,

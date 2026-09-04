@@ -44,7 +44,12 @@ class Diagnostics {
       }
     }
     _entries.add(
-      DiagnosticEntry(DateTime.now().toUtc(), area, redact(message), safe),
+      DiagnosticEntry(
+        DateTime.now().toUtc(),
+        area,
+        redact(message),
+        Map.unmodifiable(safe),
+      ),
     );
     if (_entries.length > 250) _entries.removeAt(0);
   }
@@ -78,6 +83,7 @@ class Diagnostics {
   static const _stringKeys = {
     'code',
     'failureCode',
+    'operation',
     'container',
     'videoCodec',
     'audioCodec',

@@ -230,6 +230,40 @@ void main() {
     fixture.dispose();
   });
 
+  testWidgets('media Play and Pause route through safe coordinator controls', (
+    tester,
+  ) async {
+    final fixture = _Fixture(
+      PlayerState.playing,
+      dvrControlsEnabled: true,
+      failControls: true,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+
+    for (final key in [
+      LogicalKeyboardKey.mediaPlay,
+      LogicalKeyboardKey.mediaPause,
+    ]) {
+      await tester.sendKeyEvent(key);
+      await tester.pump();
+      expect(
+        fixture.player.error,
+        'Playback controls are temporarily unavailable. Try again.',
+      );
+      expect(fixture.player.overlay, PlayerOverlay.error);
+      expect(tester.takeException(), isNull);
+      fixture.player.closeOverlay();
+    }
+
+    expect(fixture.native.transportCommands, 2);
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
   testWidgets('numpad Enter commits channel entry', (tester) async {
     final fixture = _Fixture(PlayerState.playing, channelCount: 2);
     await tester.pumpWidget(
@@ -659,6 +693,7 @@ void main() {
               TimeOfDay.fromDateTime(
                 fixture.player.nextProgram!.scheduled.start.toLocal(),
               ),
+              alwaysUse24HourFormat: false,
             );
         expect(next.data, contains('Up next • $localizedStart •'));
         expect(next.maxLines, 1);
@@ -2221,6 +2256,10 @@ void main() {
   testWidgets('same program ID with a new path rejects stale artwork', (
     tester,
   ) async {
+    tester.view.physicalSize = const Size(1280, 720);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     final fixture = _Fixture(
       PlayerState.playing,
       richProgram: true,
@@ -2644,6 +2683,7 @@ class _Fixture {
     PlayerState state, {
     bool failLoad = false,
     bool failStop = false,
+    bool failControls = false,
     bool blockLoad = false,
     List<PlayerTrack> tracks = const [],
     int channelCount = 1,
@@ -2686,6 +2726,7 @@ class _Fixture {
       state,
       failLoad: failLoad,
       failStop: failStop,
+      failControls: failControls,
       blockLoad: blockLoad,
       tracks: tracks,
       positionValue: nativePosition,
@@ -2909,6 +2950,7 @@ class _Native implements NativePlayer {
     PlayerState state, {
     this.failLoad = false,
     this.failStop = false,
+    this.failControls = false,
     this.blockLoad = false,
     this.tracks = const [],
     this.positionValue = const Duration(minutes: 10),
@@ -2923,6 +2965,7 @@ class _Native implements NativePlayer {
 
   final bool failLoad;
   final bool failStop;
+  final bool failControls;
   final bool blockLoad;
   final Duration positionValue;
   final Duration durationValue;
@@ -2962,11 +3005,23 @@ class _Native implements NativePlayer {
   @override
   Future<void> play() async {
     transportCommands++;
+    if (failControls) {
+      throw const PlayerUnavailable(
+        'Synthetic play failure.',
+        failureCode: 'command_error',
+      );
+    }
   }
 
   @override
   Future<void> pause() async {
     transportCommands++;
+    if (failControls) {
+      throw const PlayerUnavailable(
+        'Synthetic pause failure.',
+        failureCode: 'command_error',
+      );
+    }
   }
 
   @override

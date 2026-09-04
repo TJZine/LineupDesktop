@@ -1657,6 +1657,10 @@ class _ProgramDetails extends StatelessWidget {
     final episode = _episodeCode(item);
     final badges = _mediaBadges(item);
     final hasClearLogo = clearLogo != null;
+    final hasPosterReference =
+        (item.showThumb?.isNotEmpty ?? false) ||
+        (item.poster?.toString().isNotEmpty ?? false);
+    final showArtworkSlot = showArtwork && hasPosterReference;
     final logoFallback = Text(
       item.showTitle?.toUpperCase() ?? item.title,
       key: const Key('guide-clear-logo-fallback'),
@@ -1669,7 +1673,7 @@ class _ProgramDetails extends StatelessWidget {
     );
     return Row(
       children: [
-        if (showArtwork)
+        if (showArtworkSlot)
           SizedBox(
             key: const Key('guide-focused-artwork'),
             width: artworkWidth,
@@ -1692,7 +1696,7 @@ class _ProgramDetails extends StatelessWidget {
                     ),
             ),
           ),
-        if (showArtwork) const SizedBox(width: 14),
+        if (showArtworkSlot) const SizedBox(width: 14),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,

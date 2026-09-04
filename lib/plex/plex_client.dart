@@ -30,6 +30,11 @@ class PlexServerAccess {
 }
 
 class PlexClient {
+  /// Hard ceiling for JSON/XML control responses. This leaves generous room
+  /// for rich metadata and large playlists while keeping every buffered
+  /// response finite.
+  static const maximumControlResponseBytes = 16 * 1024 * 1024;
+
   PlexClient({
     required this.clientIdentifier,
     http.Client? httpClient,
@@ -53,7 +58,11 @@ class PlexClient {
 
   Future<PlexPin> createPin() async {
     final response = await _send(
-      _http.post(Uri.https('plex.tv', '/api/v2/pins'), headers: _headers()),
+      _request(
+        'POST',
+        Uri.https('plex.tv', '/api/v2/pins'),
+        headers: _headers(),
+      ),
     );
     final json = _json(response, {200, 201});
     return PlexPin(
@@ -65,7 +74,8 @@ class PlexClient {
 
   Future<String?> pollPin(PlexPin pin) async {
     final response = await _send(
-      _http.get(
+      _request(
+        'GET',
         Uri.https('plex.tv', '/api/v2/pins/${pin.id}'),
         headers: _headers(),
       ),
@@ -75,19 +85,22 @@ class PlexClient {
   }
 
   Future<void> cancelPin(PlexPin pin) async {
-    try {
-      await _send(
-        _http.delete(
-          Uri.https('plex.tv', '/api/v2/pins/${pin.id}'),
-          headers: _headers(),
-        ),
-      );
-    } catch (_) {}
+    final response = await _send(
+      _request(
+        'DELETE',
+        Uri.https('plex.tv', '/api/v2/pins/${pin.id}'),
+        headers: _headers(),
+      ),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      _throwResponse(response);
+    }
   }
 
   Future<PlexAccount> account(String token) async {
     final response = await _send(
-      _http.get(
+      _request(
+        'GET',
         Uri.https('plex.tv', '/users/account.json'),
         headers: _headers(token),
       ),
@@ -109,7 +122,11 @@ class PlexClient {
   Future<List<PlexHomeUser>> homeUsers(String accountToken) async {
     for (final path in ['/api/v2/home/users', '/api/home/users']) {
       final response = await _send(
-        _http.get(Uri.https('plex.tv', path), headers: _headers(accountToken)),
+        _request(
+          'GET',
+          Uri.https('plex.tv', path),
+          headers: _headers(accountToken),
+        ),
       );
       final v2 = path.contains('/v2/');
       if (v2 &&
@@ -140,13 +157,11 @@ class PlexClient {
       '/api/home/users/$userId/switch',
     ]) {
       final response = await _send(
-        _http.post(
+        _request(
+          'POST',
           Uri.https('plex.tv', path),
-          headers: {
-            ..._headers(accountToken),
-            'Content-Type': 'application/x-www-form-urlencoded',
-          },
-          body: {if (pin != null && pin.isNotEmpty) 'pin': pin},
+          headers: _headers(accountToken),
+          bodyFields: {if (pin != null && pin.isNotEmpty) 'pin': pin},
         ),
       );
       if (response.statusCode == 401 || response.statusCode == 403) {
@@ -177,7 +192,8 @@ class PlexClient {
 
   Future<List<PlexServerAccess>> discoverServers(String token) async {
     final response = await _send(
-      _http.get(
+      _request(
+        'GET',
         Uri.https('plex.tv', '/api/v2/resources', {
           'includeHttps': '1',
           'includeRelay': '1',
@@ -310,7 +326,8 @@ class PlexClient {
     late final http.Response response;
     try {
       response = await _send(
-        _http.get(
+        _request(
+          'GET',
           connection.uri.resolve('/identity'),
           headers: _headers(token),
         ),
@@ -381,6 +398,12 @@ class PlexClient {
           );
       final json = await _serverJson(uri, token);
       final metadata = _containerList(json, 'Metadata');
+      if (metadata.length > pageSize) {
+        throw const PlexException(
+          'library-page-too-large',
+          'Plex returned more library items than requested.',
+        );
+      }
       output.addAll(
         metadata.map((item) => parseMediaItem(item, libraryId: libraryId)),
       );
@@ -490,6 +513,12 @@ class PlexClient {
     Uri path, {
     int maximumBytes = 4 * 1024 * 1024,
   }) async {
+    if (canonicalPlexArtworkPath(path) == null) {
+      throw const PlexException(
+        'artwork-unavailable',
+        'Program artwork is unavailable.',
+      );
+    }
     final uri = server.resolveUri(path);
     if (!_isSameServerUri(server, uri)) {
       throw const PlexException(
@@ -497,12 +526,13 @@ class PlexClient {
         'Program artwork is unavailable.',
       );
     }
-    final request = http.Request('GET', uri)
-      ..followRedirects = false
-      ..headers.addAll(_headers(token));
-    final response = await _http.send(request).timeout(requestTimeout);
+    final response = await _send(
+      _request('GET', uri, headers: _headers(token)),
+      maximumBytes: maximumBytes,
+      oversizedCode: 'artwork-too-large',
+      oversizedMessage: 'Program artwork is too large.',
+    );
     if (response.statusCode == 401 || response.statusCode == 403) {
-      _cancel(response.stream);
       throw PlexException(
         response.statusCode == 401 ? 'auth-invalid' : 'access-denied',
         response.statusCode == 401
@@ -511,30 +541,12 @@ class PlexClient {
       );
     }
     if (response.statusCode != 200) {
-      _cancel(response.stream);
       throw const PlexException(
         'artwork-unavailable',
         'Program artwork is unavailable.',
       );
     }
-    if ((response.contentLength ?? 0) > maximumBytes) {
-      _cancel(response.stream);
-      throw const PlexException(
-        'artwork-too-large',
-        'Program artwork is too large.',
-      );
-    }
-    final bytes = BytesBuilder(copy: false);
-    await for (final chunk in response.stream.timeout(requestTimeout)) {
-      if (bytes.length + chunk.length > maximumBytes) {
-        throw const PlexException(
-          'artwork-too-large',
-          'Program artwork is too large.',
-        );
-      }
-      bytes.add(chunk);
-    }
-    return bytes.takeBytes();
+    return response.bodyBytes;
   }
 
   void _cancel(Stream<List<int>> stream) {
@@ -546,16 +558,84 @@ class PlexClient {
   }
 
   Future<Map<String, Object?>> _serverJson(Uri uri, String token) async {
-    final response = await _send(_http.get(uri, headers: _headers(token)));
+    final response = await _send(
+      _request('GET', uri, headers: _headers(token)),
+    );
     return _json(response, {200});
   }
 
+  http.Request _request(
+    String method,
+    Uri uri, {
+    required Map<String, String> headers,
+    Map<String, String>? bodyFields,
+  }) {
+    final request = http.Request(method, uri)
+      ..followRedirects = false
+      ..headers.addAll(headers);
+    if (bodyFields != null) request.bodyFields = bodyFields;
+    return request;
+  }
+
   Future<http.Response> _send(
-    Future<http.Response> request, {
+    http.BaseRequest request, {
     Duration? timeout,
+    int maximumBytes = maximumControlResponseBytes,
+    String oversizedCode = 'response-too-large',
+    String oversizedMessage = 'Plex returned too much data.',
   }) async {
+    final limit = timeout ?? requestTimeout;
+    final elapsed = Stopwatch()..start();
     try {
-      return await request.timeout(timeout ?? requestTimeout);
+      final pendingResponse = _http.send(request);
+      late final http.StreamedResponse streamed;
+      try {
+        streamed = await pendingResponse.timeout(limit);
+      } on TimeoutException {
+        unawaited(
+          pendingResponse
+              .then((lateResponse) => _cancel(lateResponse.stream))
+              .onError((_, _) {}),
+        );
+        rethrow;
+      }
+      if (streamed.statusCode < 200 || streamed.statusCode >= 300) {
+        _cancel(streamed.stream);
+        return http.Response.bytes(
+          const [],
+          streamed.statusCode,
+          request: streamed.request ?? request,
+          headers: streamed.headers,
+          isRedirect: streamed.isRedirect,
+          persistentConnection: streamed.persistentConnection,
+          reasonPhrase: streamed.reasonPhrase,
+        );
+      }
+      if ((streamed.contentLength ?? 0) > maximumBytes) {
+        _cancel(streamed.stream);
+        throw PlexException(oversizedCode, oversizedMessage);
+      }
+      final remaining = limit - elapsed.elapsed;
+      if (remaining <= Duration.zero) {
+        _cancel(streamed.stream);
+        throw TimeoutException('Plex response deadline elapsed.');
+      }
+      final body = await _readBounded(
+        streamed.stream,
+        maximumBytes: maximumBytes,
+        timeout: remaining,
+        oversizedCode: oversizedCode,
+        oversizedMessage: oversizedMessage,
+      );
+      return http.Response.bytes(
+        body,
+        streamed.statusCode,
+        request: streamed.request ?? request,
+        headers: streamed.headers,
+        isRedirect: streamed.isRedirect,
+        persistentConnection: streamed.persistentConnection,
+        reasonPhrase: streamed.reasonPhrase,
+      );
     } on TimeoutException {
       throw const PlexException(
         'network-timeout',
@@ -572,6 +652,58 @@ class PlexClient {
         'Plex could not be reached.',
       );
     }
+  }
+
+  Future<Uint8List> _readBounded(
+    Stream<List<int>> stream, {
+    required int maximumBytes,
+    required Duration timeout,
+    required String oversizedCode,
+    required String oversizedMessage,
+  }) {
+    final completer = Completer<Uint8List>();
+    final bytes = BytesBuilder(copy: false);
+    StreamSubscription<List<int>>? subscription;
+
+    void finishError(Object error, StackTrace stackTrace) {
+      if (completer.isCompleted) return;
+      final activeSubscription = subscription;
+      if (activeSubscription != null) {
+        unawaited(activeSubscription.cancel().onError((_, _) {}));
+      }
+      completer.completeError(error, stackTrace);
+    }
+
+    final timer = Timer(
+      timeout,
+      () => finishError(
+        TimeoutException('Plex response deadline elapsed.'),
+        StackTrace.current,
+      ),
+    );
+    subscription = stream.listen(
+      (chunk) {
+        if (bytes.length + chunk.length > maximumBytes) {
+          timer.cancel();
+          finishError(
+            PlexException(oversizedCode, oversizedMessage),
+            StackTrace.current,
+          );
+          return;
+        }
+        bytes.add(chunk);
+      },
+      onError: (Object error, StackTrace stackTrace) {
+        timer.cancel();
+        finishError(error, stackTrace);
+      },
+      onDone: () {
+        timer.cancel();
+        if (!completer.isCompleted) completer.complete(bytes.takeBytes());
+      },
+      cancelOnError: false,
+    );
+    return completer.future;
   }
 
   void close() => _http.close();
@@ -632,9 +764,11 @@ PlexMediaItem parseMediaItem(Object? raw, {String? libraryId}) {
     libraryId: libraryId,
     parentTitle: _optionalText(json['parentTitle']),
     grandparentTitle: _optionalText(json['grandparentTitle']),
-    thumbPath: _optionalText(json['thumb']),
-    grandparentThumbPath: _optionalText(json['grandparentThumb']),
-    artPath: _optionalText(json['art']),
+    thumbPath: canonicalPlexArtworkPathText(_optionalText(json['thumb'])),
+    grandparentThumbPath: canonicalPlexArtworkPathText(
+      _optionalText(json['grandparentThumb']),
+    ),
+    artPath: canonicalPlexArtworkPathText(_optionalText(json['art'])),
     clearLogoPath: _clearLogoPath(json['Image']),
     parts: List.unmodifiable(parts),
     container: _optionalText(media?['container'])?.toLowerCase(),
@@ -681,7 +815,7 @@ String? _clearLogoPath(Object? raw) {
   if (raw is! List) return null;
   for (final entry in raw) {
     if (entry is! Map || entry['type'] != 'clearLogo') continue;
-    final url = _optionalText(entry['url']);
+    final url = canonicalPlexArtworkPathText(_optionalText(entry['url']));
     if (url != null) return url;
   }
   return null;
@@ -718,9 +852,7 @@ List<PlexCastMember> _castMembers(Object? raw) {
       PlexCastMember(
         name: name,
         role: _optionalText(value['role']),
-        thumbPath: canonicalCastPortrait(
-          Uri.tryParse(_optionalText(value['thumb']) ?? ''),
-        )?.toString(),
+        thumbPath: canonicalPlexArtworkPathText(_optionalText(value['thumb'])),
       ),
     );
     if (members.length == maxRichCastMembers) break;

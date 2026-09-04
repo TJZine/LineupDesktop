@@ -252,7 +252,7 @@ void main() {
     );
   });
 
-  test('TV people channels require breadth across three series', () {
+  test('TV people channels normalize tags and require three series', () {
     const library = PlexLibrary(
       id: 'tv',
       title: 'Shows',
@@ -267,7 +267,7 @@ void main() {
           duration: const Duration(minutes: 1),
           libraryId: 'tv',
           grandparentTitle: series[index % series.length],
-          actors: const ['Actor'],
+          actors: const [' Actor '],
         ),
     ];
     final narrow = buildChannelProposals(
@@ -282,6 +282,44 @@ void main() {
     );
     expect(narrow, isEmpty);
     expect(broad.single.name, 'Actor');
+  });
+
+  test('people proposal breadth scales across a large tag catalog', () {
+    const tagCount = 2000;
+    const library = PlexLibrary(
+      id: 'tv',
+      title: 'Shows',
+      type: PlexLibraryType.show,
+    );
+    final items = [
+      for (var tagIndex = 0; tagIndex < tagCount; tagIndex++)
+        for (var seriesIndex = 0; seriesIndex < 3; seriesIndex++)
+          PlexMediaItem(
+            id: '$tagIndex-$seriesIndex',
+            title: 'Episode',
+            type: 'episode',
+            duration: const Duration(minutes: 1),
+            libraryId: 'tv',
+            grandparentTitle: 'Series $seriesIndex',
+            actors: ['Actor $tagIndex'],
+            directors: ['Director $tagIndex'],
+          ),
+    ];
+
+    final proposals = buildChannelProposals(
+      libraries: const [library],
+      items: items,
+      strategies: const {BuilderStrategy.actors, BuilderStrategy.directors},
+      minimumItems: 3,
+      maximumChannels: tagCount * 2,
+    );
+
+    expect(proposals, hasLength(tagCount * 2));
+    expect(proposals.map((proposal) => proposal.itemCount).toSet(), {3});
+    expect(proposals.map((proposal) => proposal.name).toSet(), {
+      for (var index = 0; index < tagCount; index++) 'Actor $index',
+      for (var index = 0; index < tagCount; index++) 'Director $index',
+    });
   });
 
   test(
@@ -328,6 +366,50 @@ void main() {
       expect(merged.channels.single.builderKey, first.builderKey);
     },
   );
+
+  test('merge source comparison ignores map insertion order', () {
+    const proposal = ChannelProposal(
+      name: 'Comedy',
+      source: LibrarySource(
+        libraryId: 'movies',
+        libraryType: PlexLibraryType.movie,
+        filters: {'genre': 'Comedy', 'sort': 'title'},
+      ),
+      mode: PlaybackMode.shuffle,
+      itemCount: 10,
+      strategy: BuilderStrategy.genres,
+    );
+    final generated = materializeChannelPlan(
+      proposals: const [proposal],
+      existing: const [],
+      mode: ChannelBuildMode.replace,
+      anchor: DateTime.utc(2026),
+    ).channels.single;
+    final reordered = Channel(
+      id: generated.id,
+      number: generated.number,
+      name: generated.name,
+      source: const LibrarySource(
+        libraryId: 'movies',
+        libraryType: PlexLibraryType.movie,
+        filters: {'sort': 'title', 'genre': 'Comedy'},
+      ),
+      playbackMode: generated.playbackMode,
+      anchor: generated.anchor,
+      shuffleSeed: generated.shuffleSeed,
+      blockSize: generated.blockSize,
+      builderKey: generated.builderKey,
+    );
+
+    final merged = materializeChannelPlan(
+      proposals: const [proposal],
+      existing: [reordered],
+      mode: ChannelBuildMode.merge,
+      anchor: DateTime.utc(2027),
+    ).channels.single;
+
+    expect(merged, same(reordered));
+  });
 
   test('all build modes reserve sparse custom numbers through 1000', () {
     final proposals = List.generate(
@@ -631,5 +713,48 @@ void main() {
     expect(changed.anchor, DateTime.utc(2025));
     expect(changed.shuffleSeed, staleShuffleSeed);
     expect(changed.builderKey, stale.builderKey);
+  });
+
+  test('plan composition preserves custom channels across every mode', () {
+    Channel channel(String id, int number, {String? builderKey}) => Channel(
+      id: id,
+      number: number,
+      name: id,
+      source: const ManualSource([]),
+      playbackMode: PlaybackMode.sequential,
+      anchor: DateTime.utc(2026),
+      shuffleSeed: number,
+      builderKey: builderKey,
+    );
+
+    final custom = channel('custom', 30);
+    final staleMatch = channel('stale-match', 20, builderKey: 'genre:drama');
+    final staleOther = channel('stale-other', 10, builderKey: 'genre:comedy');
+    final planned = channel('planned', 20, builderKey: 'genre:drama');
+
+    expect(
+      composeChannelPlan(
+        existing: [custom, staleMatch, staleOther],
+        planned: [planned],
+        mode: ChannelBuildMode.replace,
+      ).map((channel) => channel.id),
+      ['planned', 'custom'],
+    );
+    expect(
+      composeChannelPlan(
+        existing: [custom, staleMatch, staleOther],
+        planned: [planned],
+        mode: ChannelBuildMode.append,
+      ).map((channel) => channel.id),
+      ['stale-other', 'stale-match', 'planned', 'custom'],
+    );
+    expect(
+      composeChannelPlan(
+        existing: [custom, staleMatch, staleOther],
+        planned: [planned],
+        mode: ChannelBuildMode.merge,
+      ).map((channel) => channel.id),
+      ['stale-other', 'planned', 'custom'],
+    );
   });
 }

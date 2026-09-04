@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../channels/channel.dart';
 import '../channels/content_resolver.dart';
 import '../plex/plex_models.dart';
+import '../ui/app_theme.dart';
 import '../ui/app_ui.dart';
 import 'channel_air_check.dart';
 import 'form_error.dart';
@@ -90,7 +91,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
   static const _resultWindow = 100;
   GlobalKey<FormState> _form = GlobalKey<FormState>();
   final _backFocus = FocusNode(debugLabel: 'Back to Channels');
-  final _cancelFocus = FocusNode(debugLabel: 'Cancel Studio');
+  final _recoveryFocus = FocusNode(debugLabel: 'Use saved Studio version');
   final _nameFocus = FocusNode(debugLabel: 'Channel name');
   final _numberFocus = FocusNode(debugLabel: 'Channel number');
   final _saveFocus = FocusNode(debugLabel: 'Save channel');
@@ -123,6 +124,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
   String? _manualMediaType;
   final _manualFilters = <String, String>{};
   final _rundownFocus = <_ManualEntry, FocusNode>{};
+  bool _manualRundown = false;
   Timer? _countAnnouncementTimer;
   String _settledCountLabel = '';
   late Map<String, Object?> _baselineDraftSignature;
@@ -226,6 +228,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
       ManualSource(:final items) => items.map(_newManualEntry).toList(),
       _ => <_ManualEntry>[],
     };
+    _manualRundown = _manualEntries.isNotEmpty;
     _libraryId = switch (source) {
       LibrarySource(:final libraryId) => libraryId,
       _ => widget.controller.selectedLibraryIds.firstOrNull,
@@ -279,7 +282,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
   @override
   void dispose() {
     _backFocus.dispose();
-    _cancelFocus.dispose();
+    _recoveryFocus.dispose();
     _name.dispose();
     _number.dispose();
     _search.dispose();
@@ -376,7 +379,8 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
   Widget build(BuildContext context) {
     _refreshPlayableInventory();
     final noNumber = _lowestFreeNumber() == null && _number.text.trim().isEmpty;
-    final saved = !_dirty && _expectedBase != null;
+    final persisted = _expectedBase != null;
+    final saved = !_dirty && persisted;
     final number = int.tryParse(_number.text);
     final validNumber = _validateNumber(_number.text) == null;
     final identityLooksValid = _name.text.trim().isNotEmpty && validNumber;
@@ -394,72 +398,14 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     _stageScheduleIdentity(programmingError);
     return LineupPage(
       traversalPolicy: OrderedTraversalPolicy(),
-      title:
-          '${_name.text.trim().isEmpty ? 'New channel' : _name.text.trim()} • ${validNumber ? 'Channel $number' : 'No channel number'} • ${_modeHeaderLabel(_effectiveMode)} • ${_generated ? 'Generated' : 'Custom'}',
-      actions: Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: [
-          FocusTraversalOrder(
-            order: const NumericFocusOrder(0),
-            child: TextButton.icon(
-              focusNode: _backFocus,
-              autofocus: true,
-              onPressed: _saving ? null : () => unawaited(_leave()),
-              icon: const Icon(Icons.arrow_back),
-              label: const Text('Back to Channels'),
-            ),
-          ),
-          if (!_generated)
-            FocusTraversalOrder(
-              order: const NumericFocusOrder(4),
-              child: TextButton(
-                focusNode: _cancelFocus,
-                onPressed: _saving ? null : () => unawaited(_leave()),
-                child: const Text('Cancel'),
-              ),
-            ),
-          if (_generated)
-            FocusTraversalOrder(
-              order: const NumericFocusOrder(4),
-              child: OutlinedButton(
-                onPressed: _saving ? null : _duplicate,
-                child: const Text('Duplicate as custom'),
-              ),
-            ),
-          if (saved)
-            FocusTraversalOrder(
-              order: const NumericFocusOrder(4),
-              child: OutlinedButton.icon(
-                onPressed: _saving ? null : _tune,
-                icon: const Icon(Icons.play_arrow),
-                label: const Text('Tune in'),
-              ),
-            ),
-          FocusTraversalOrder(
-            order: const NumericFocusOrder(4),
-            child: FilledButton(
-              focusNode: _saveFocus,
-              onPressed:
-                  _saving ||
-                      noNumber ||
-                      (identityLooksValid && programmingError != null) ||
-                      (identityLooksValid && !_airCheckCanSave) ||
-                      (_generated && !_dirty)
-                  ? null
-                  : _save,
-              child: Text(
-                _saving
-                    ? 'Saving…'
-                    : switch (_effectiveMode) {
-                        ChannelStudioMode.editCustom => 'Save changes',
-                        ChannelStudioMode.inspectGenerated => 'Save identity',
-                        _ => 'Save channel',
-                      },
-              ),
-            ),
-          ),
-        ],
+      title: _name.text.trim().isEmpty ? 'New channel' : _name.text.trim(),
+      titleWidget: _studioTitle(validNumber ? number : null, saved),
+      actions: _studioActions(
+        persisted: persisted,
+        saved: saved,
+        noNumber: noNumber,
+        identityLooksValid: identityLooksValid,
+        programmingError: programmingError,
       ),
       child: SingleChildScrollView(
         key: const Key('studio-scroll'),
@@ -468,27 +414,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  Chip(label: Text(_modeLabel(_effectiveMode))),
-                  Chip(label: Text(_generated ? 'Generated' : 'Custom')),
-                  Chip(
-                    label: Text(
-                      _dirty
-                          ? 'Unsaved changes'
-                          : saved
-                          ? 'Saved'
-                          : 'Draft',
-                    ),
-                  ),
-                  if (_number.text.trim().isNotEmpty)
-                    Chip(label: Text('Channel ${_number.text}')),
-                ],
-              ),
-              if (_error != null) ...[
-                const SizedBox(height: 12),
+              if (_error != null && !_conflict && !_baseDeleted) ...[
                 LineupNotice(message: _error!),
               ],
               if (_success != null) ...[
@@ -510,27 +436,14 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                   message: 'No channel numbers are available. Free or renumber a channel from Channels before saving.',
                 ),
               ],
-              if (_conflict || _baseDeleted) ...[
+              if (_conflict || _baseDeleted) ...[_recoveryInterlock()],
+              if (_error != null ||
+                  _success != null ||
+                  _saving ||
+                  noNumber ||
+                  _conflict ||
+                  _baseDeleted)
                 const SizedBox(height: 12),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    OutlinedButton(
-                      onPressed: _saving ? null : _reload,
-                      child: Text(
-                        _baseDeleted ? 'Reload lineup' : 'Reload channel',
-                      ),
-                    ),
-                    if (_conflict)
-                      FilledButton(
-                        onPressed: _saving ? null : _confirmReapply,
-                        child: const Text('Reapply my changes'),
-                      ),
-                  ],
-                ),
-              ],
-              const SizedBox(height: 16),
               FocusTraversalOrder(
                 order: const NumericFocusOrder(1),
                 child: LayoutBuilder(
@@ -581,15 +494,15 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Expanded(
-                              flex: 3,
+                              flex: 5,
                               child: FocusTraversalOrder(
                                 order: const NumericFocusOrder(2),
                                 child: programming,
                               ),
                             ),
                             const SizedBox(width: 16),
-                            Expanded(
-                              flex: 2,
+                            SizedBox(
+                              width: 330,
                               child: FocusTraversalOrder(
                                 order: const NumericFocusOrder(3),
                                 child: station,
@@ -605,6 +518,287 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
       ),
     );
   }
+
+  Widget _studioTitle(int? number, bool saved) {
+    final roles = LineupTheme.of(context);
+    final name = _name.text.trim().isEmpty ? 'New channel' : _name.text.trim();
+    final status = _conflict
+        ? 'My draft retained'
+        : _baseDeleted
+        ? 'Source deleted'
+        : _dirty
+        ? 'Unsaved changes'
+        : saved
+        ? 'Saved'
+        : 'Draft';
+    final mode = _modeLabel(_effectiveMode);
+    return Semantics(
+      header: true,
+      label:
+          '${number == null ? 'No channel number' : 'Channel $number'}, $name, ${_modeHeaderLabel(_effectiveMode)}, $mode, $status',
+      child: ExcludeSemantics(
+        child: Row(
+          children: [
+            Container(
+              width: 52,
+              height: 52,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: roles.progressFill,
+                borderRadius: BorderRadius.circular(roles.panelRadius),
+              ),
+              child: Text(
+                number?.toString() ?? '—',
+                style: TextStyle(
+                  color: roles.onFocus,
+                  fontSize: 21,
+                  fontWeight: FontWeight.w900,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.headlineSmall
+                        ?.copyWith(fontWeight: FontWeight.w800),
+                  ),
+                  DefaultTextStyle.merge(
+                    style: TextStyle(
+                      color: _conflict || _baseDeleted
+                          ? Theme.of(context).colorScheme.error
+                          : roles.secondaryText,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.8,
+                    ),
+                    child: Wrap(
+                      spacing: 6,
+                      runSpacing: 2,
+                      children: [Text(mode), const Text('·'), Text(status)],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _studioActions({
+    required bool persisted,
+    required bool saved,
+    required bool noNumber,
+    required bool identityLooksValid,
+    required String? programmingError,
+  }) {
+    final recovering = _conflict || _baseDeleted;
+    final showSave =
+        !recovering && (!_generated || !persisted || _dirty || _saving);
+    final canSave =
+        !_saving &&
+        (!persisted || _dirty) &&
+        !noNumber &&
+        !(identityLooksValid && programmingError != null) &&
+        !(identityLooksValid && !_airCheckCanSave);
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        FocusTraversalOrder(
+          order: const NumericFocusOrder(0),
+          child: TextButton.icon(
+            focusNode: _backFocus,
+            autofocus: true,
+            onPressed: _saving ? null : () => unawaited(_leave()),
+            icon: const Icon(Icons.arrow_back),
+            label: const Text('Back to Channels'),
+          ),
+        ),
+        if (_generated && !recovering)
+          FocusTraversalOrder(
+            order: const NumericFocusOrder(4),
+            child: OutlinedButton(
+              onPressed: _saving ? null : _duplicate,
+              child: const Text('Duplicate as custom'),
+            ),
+          ),
+        if (persisted && !recovering)
+          FocusTraversalOrder(
+            order: const NumericFocusOrder(4),
+            child: saved
+                ? FilledButton.icon(
+                    key: const Key('studio-tune'),
+                    onPressed: _saving ? null : _tune,
+                    icon: const Icon(Icons.play_arrow),
+                    label: const Text('Tune in'),
+                  )
+                : OutlinedButton.icon(
+                    key: const Key('studio-tune'),
+                    onPressed: null,
+                    icon: const Icon(Icons.play_arrow),
+                    label: const Text('Tune in'),
+                  ),
+          ),
+        if (showSave)
+          FocusTraversalOrder(
+            order: const NumericFocusOrder(4),
+            child: FilledButton(
+              focusNode: _saveFocus,
+              onPressed: canSave ? _save : null,
+              child: Text(
+                _saving
+                    ? 'Saving…'
+                    : switch (_effectiveMode) {
+                        ChannelStudioMode.editCustom => 'Save changes',
+                        ChannelStudioMode.inspectGenerated => 'Save identity',
+                        _ => 'Save channel',
+                      },
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _recoveryInterlock() {
+    final roles = LineupTheme.of(context);
+    final error = Theme.of(context).colorScheme.error;
+    final current = _currentBase;
+    final recoveryButtonStyle = ButtonStyle(
+      side: WidgetStateProperty.resolveWith(
+        (states) => BorderSide(
+          color: states.contains(WidgetState.focused)
+              ? roles.focusBorder
+              : roles.defaultBorder,
+          width: states.contains(WidgetState.focused)
+              ? roles.focusBorderWidth
+              : 1,
+        ),
+      ),
+    );
+    return Semantics(
+      liveRegion: true,
+      container: true,
+      label: _error,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Color.alphaBlend(
+            error.withValues(alpha: 0.08),
+            roles.primarySurface,
+          ),
+          border: Border.all(color: error.withValues(alpha: 0.45)),
+          borderRadius: BorderRadius.circular(roles.panelRadius),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.report_problem_outlined, color: error),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _baseDeleted
+                            ? 'This channel was deleted'
+                            : 'Another edit was saved first',
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w800),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _baseDeleted
+                            ? 'Your draft is retained for reference, but it will not recreate the deleted channel.'
+                            : 'Your complete draft is retained. Choose which version should own channel ${_number.text}.',
+                        style: TextStyle(color: roles.secondaryText),
+                      ),
+                      if (!_baseDeleted && current != null) ...[
+                        const SizedBox(height: 10),
+                        _recoveryVersion('SAVED NOW', current.name),
+                        _recoveryVersion(
+                          'YOUR DRAFT',
+                          _name.text.trim().isEmpty
+                              ? 'Unnamed channel'
+                              : _name.text.trim(),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                if (_baseDeleted)
+                  OutlinedButton(
+                    focusNode: _saveFocus,
+                    style: recoveryButtonStyle,
+                    onPressed: _saving ? null : _reload,
+                    child: const Text('Return to Channels'),
+                  )
+                else ...[
+                  OutlinedButton(
+                    focusNode: _recoveryFocus,
+                    style: recoveryButtonStyle,
+                    onPressed: _saving ? null : _confirmUseSaved,
+                    child: const Text('Use saved version…'),
+                  ),
+                  OutlinedButton(
+                    focusNode: _saveFocus,
+                    style: recoveryButtonStyle,
+                    onPressed: _saving ? null : _confirmReapply,
+                    child: const Text('Replace saved version with my draft…'),
+                  ),
+                ],
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _recoveryVersion(String label, String value) => Padding(
+    padding: const EdgeInsets.only(top: 3),
+    child: Row(
+      children: [
+        SizedBox(
+          width: 92,
+          child: Text(
+            label,
+            style: TextStyle(
+              color: LineupTheme.of(context).mutedText,
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.7,
+            ),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: const TextStyle(fontWeight: FontWeight.w700),
+          ),
+        ),
+      ],
+    ),
+  );
 
   Widget _programmingCard() => LineupSection(
     key: const Key('studio-programming'),
@@ -813,66 +1007,29 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _inventoryStatus(hasInventory: inventory.isNotEmpty),
-        TextField(
-          key: const Key('studio-search'),
-          controller: _search,
-          focusNode: _searchFocus,
-          enabled: !_saving,
-          decoration: const InputDecoration(
-            labelText: 'Search title or show title',
-          ),
-          onChanged: (_) => _browseChanged(),
-        ),
         Wrap(
           spacing: 8,
           runSpacing: 8,
           children: [
-            SizedBox(
-              width: 220,
-              child: _libraryDropdown(
-                key: const Key('studio-manual-library'),
-                value: _manualLibraryId,
-                allowAll: true,
-                onChanged: (value) =>
-                    _browseChanged(() => _manualLibraryId = value),
-              ),
+            ChoiceChip(
+              key: const Key('studio-manual-browse-stage'),
+              selected: !_manualRundown,
+              label: Text('Browse library · ${visible.length}'),
+              onSelected: _saving
+                  ? null
+                  : (_) => setState(() => _manualRundown = false),
             ),
-            SizedBox(
-              width: 180,
-              child: DropdownButtonFormField<String>(
-                key: const Key('studio-media-type'),
-                isExpanded: true,
-                initialValue: _manualMediaType,
-                decoration: const InputDecoration(labelText: 'Media type'),
-                items: [
-                  const DropdownMenuItem(value: '', child: Text('All types')),
-                  for (final type in inventory.map((item) => item.type).toSet())
-                    DropdownMenuItem(value: type, child: Text(type)),
-                ],
-                onChanged: _saving
-                    ? null
-                    : (value) => _browseChanged(
-                        () => _manualMediaType = value?.isEmpty == true
-                            ? null
-                            : value,
-                      ),
-              ),
+            ChoiceChip(
+              key: const Key('studio-manual-rundown-stage'),
+              selected: _manualRundown,
+              label: Text('Rundown · ${_manualEntries.length}'),
+              onSelected: _saving
+                  ? null
+                  : (_) => setState(() => _manualRundown = true),
             ),
           ],
         ),
-        for (final key in _facetKeys)
-          _facetDropdown(
-            key: key,
-            values: facets[key] ?? const [],
-            selected: _manualFilters[key],
-            onChanged: (value) => _browseChanged(() {
-              if (value == null) {
-                _manualFilters.remove(key);
-              } else {
-                _manualFilters[key] = value;
-              }
-            }),
-          ),
+        const SizedBox(height: 6),
         Text(countLabel),
         if (_settledCountLabel.isNotEmpty)
           Semantics(
@@ -880,70 +1037,138 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
             label: _settledCountLabel,
             child: const SizedBox.shrink(),
           ),
-        Wrap(
-          spacing: 8,
-          children: [
-            TextButton(
-              onPressed:
-                  _saving ||
-                      !shown.any((item) => !selectedIds.contains(item.id))
-                  ? null
-                  : () => _selectVisible(shown),
-              child: const Text('Select visible'),
-            ),
-            TextButton(
-              onPressed:
-                  _saving || !shown.any((item) => selectedIds.contains(item.id))
-                  ? null
-                  : () => _clearVisible(shown),
-              child: const Text('Clear visible'),
-            ),
-          ],
-        ),
-        if (visible.length > _resultWindow)
-          Text(
-            'Showing the first $_resultWindow of ${visible.length} matches. Narrow the filters to see more.',
-          ),
-        SizedBox(
-          height: 240,
-          child: ListView.builder(
-            key: const Key('studio-results'),
-            itemCount: shown.length,
-            itemBuilder: (context, index) {
-              final item = shown[index];
-              return CheckboxListTile(
-                key: Key('studio-result-${item.id}'),
-                value: selectedIds.contains(item.id),
-                title: Text(item.title),
-                subtitle: item.grandparentTitle == null
-                    ? null
-                    : Text(item.grandparentTitle!),
-                onChanged: _saving
-                    ? null
-                    : (selected) => _toggleManual(item.id, selected == true),
-              );
-            },
-          ),
-        ),
         const SizedBox(height: 12),
-        const Text(
-          'Selected programming',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        if (_manualEntries.isEmpty) const Text('No programs selected.'),
-        SizedBox(
-          height: _manualEntries.isEmpty ? 0 : 240,
-          child: ListView.builder(
-            key: const Key('studio-rundown'),
-            itemCount: _manualEntries.length,
-            itemBuilder: (context, index) => _rundownRow(
-              _manualEntries[index],
-              index,
-              !inventoryById.containsKey(_manualEntries[index].id),
-              inventoryById,
+        if (!_manualRundown) ...[
+          TextField(
+            key: const Key('studio-search'),
+            controller: _search,
+            focusNode: _searchFocus,
+            enabled: !_saving,
+            decoration: const InputDecoration(
+              labelText: 'Search title or show title',
+              floatingLabelBehavior: FloatingLabelBehavior.always,
+            ),
+            onChanged: (_) => _browseChanged(),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              SizedBox(
+                width: 220,
+                child: _libraryDropdown(
+                  key: const Key('studio-manual-library'),
+                  value: _manualLibraryId,
+                  allowAll: true,
+                  onChanged: (value) =>
+                      _browseChanged(() => _manualLibraryId = value),
+                ),
+              ),
+              SizedBox(
+                width: 180,
+                child: DropdownButtonFormField<String>(
+                  key: const Key('studio-media-type'),
+                  isExpanded: true,
+                  initialValue: _manualMediaType,
+                  decoration: const InputDecoration(labelText: 'Media type'),
+                  items: [
+                    const DropdownMenuItem(value: '', child: Text('All types')),
+                    for (final type
+                        in inventory.map((item) => item.type).toSet())
+                      DropdownMenuItem(value: type, child: Text(type)),
+                  ],
+                  onChanged: _saving
+                      ? null
+                      : (value) => _browseChanged(
+                          () => _manualMediaType = value?.isEmpty == true
+                              ? null
+                              : value,
+                        ),
+                ),
+              ),
+            ],
+          ),
+          for (final key in _facetKeys)
+            _facetDropdown(
+              key: key,
+              values: facets[key] ?? const [],
+              selected: _manualFilters[key],
+              onChanged: (value) => _browseChanged(() {
+                if (value == null) {
+                  _manualFilters.remove(key);
+                } else {
+                  _manualFilters[key] = value;
+                }
+              }),
+            ),
+          Wrap(
+            spacing: 8,
+            children: [
+              TextButton(
+                onPressed:
+                    _saving ||
+                        !shown.any((item) => !selectedIds.contains(item.id))
+                    ? null
+                    : () => _selectVisible(shown),
+                child: const Text('Select visible'),
+              ),
+              TextButton(
+                onPressed:
+                    _saving ||
+                        !shown.any((item) => selectedIds.contains(item.id))
+                    ? null
+                    : () => _clearVisible(shown),
+                child: const Text('Clear visible'),
+              ),
+            ],
+          ),
+          if (visible.length > _resultWindow)
+            Text(
+              'Showing the first $_resultWindow of ${visible.length} matches. Narrow the filters to see more.',
+            ),
+          SizedBox(
+            height: 300,
+            child: ListView.builder(
+              key: const Key('studio-results'),
+              itemCount: shown.length,
+              itemBuilder: (context, index) {
+                final item = shown[index];
+                return CheckboxListTile(
+                  key: Key('studio-result-${item.id}'),
+                  value: selectedIds.contains(item.id),
+                  title: Text(item.title),
+                  subtitle: item.grandparentTitle == null
+                      ? null
+                      : Text(item.grandparentTitle!),
+                  onChanged: _saving
+                      ? null
+                      : (selected) => _toggleManual(item.id, selected == true),
+                );
+              },
             ),
           ),
-        ),
+        ] else ...[
+          Text(
+            _manualEntries.isEmpty
+                ? 'No programs selected. Return to Browse library to add programming.'
+                : '${_manualEntries.length} selected · Alt+Up/Down reorders · Delete removes',
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            height: _manualEntries.isEmpty ? 0 : 420,
+            child: ListView.builder(
+              key: const Key('studio-rundown'),
+              itemCount: _manualEntries.length,
+              itemBuilder: (context, index) => _rundownRow(
+                _manualEntries[index],
+                index,
+                !inventoryById.containsKey(_manualEntries[index].id),
+                inventoryById,
+              ),
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -1267,14 +1492,33 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
       },
       child: Focus(
         focusNode: focus,
-        child: repeatedTitle
-            ? Semantics(
-                container: true,
-                label:
-                    '$positionedTitle${unavailable ? ', unavailable — retained until removed' : ''}',
-                child: tile,
-              )
-            : tile,
+        child: ListenableBuilder(
+          listenable: focus,
+          builder: (context, child) {
+            final roles = LineupTheme.of(context);
+            return Container(
+              decoration: BoxDecoration(
+                color: focus.hasFocus ? roles.selectedSurface : null,
+                border: Border.all(
+                  color: focus.hasFocus
+                      ? roles.focusBorder
+                      : Colors.transparent,
+                  width: focus.hasFocus ? roles.focusBorderWidth : 1,
+                ),
+                borderRadius: BorderRadius.circular(roles.panelRadius),
+              ),
+              child: child,
+            );
+          },
+          child: repeatedTitle
+              ? Semantics(
+                  container: true,
+                  label:
+                      '$positionedTitle${unavailable ? ', unavailable — retained until removed' : ''}',
+                  child: tile,
+                )
+              : tile,
+        ),
       ),
     );
   }
@@ -1308,6 +1552,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     if (index < 0) return;
     _changed(() {
       _manualEntries.removeAt(index);
+      if (_manualEntries.isEmpty) _manualRundown = false;
     });
     final nextEntry = _manualEntries.isEmpty
         ? null
@@ -1345,115 +1590,218 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     });
   }
 
-  Widget _stationCard({required bool hasShowGrouping}) => LineupSection(
-    key: const Key('studio-station'),
-    title: 'Station',
-    children: [
-      TextFormField(
-        key: const Key('studio-name'),
-        controller: _name,
-        focusNode: _nameFocus,
-        enabled: !_saving,
-        decoration: const InputDecoration(
-          labelText: 'Channel name',
-          hintText: 'Required',
-        ),
-        onChanged: (_) => _changed(),
-        validator: (value) => value == null || value.trim().isEmpty
-            ? 'Enter a channel name.'
-            : null,
+  Widget _stationCard({required bool hasShowGrouping}) {
+    final roles = LineupTheme.of(context);
+    final stationName = _name.text.trim().isEmpty
+        ? 'Unnamed station'
+        : _name.text.trim();
+    return Container(
+      key: const Key('studio-station'),
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: roles.primarySurface,
+        border: Border.all(color: roles.subtleBorder),
+        borderRadius: BorderRadius.circular(roles.panelRadius),
       ),
-      const SizedBox(height: 12),
-      TextFormField(
-        key: const Key('studio-number'),
-        controller: _number,
-        focusNode: _numberFocus,
-        enabled: !_saving,
-        keyboardType: TextInputType.number,
-        decoration: const InputDecoration(labelText: 'Channel number (1–1000)'),
-        onChanged: (_) => _changed(),
-        validator: _validateNumber,
-      ),
-      if (_conflictingChannel != null)
-        Align(
-          alignment: Alignment.centerLeft,
-          child: TextButton(
-            onPressed: _saving || _lowestFreeNumber() == null
-                ? null
-                : _useNextAvailable,
-            child: const Text('Use next available'),
-          ),
-        ),
-      const SizedBox(height: 12),
-      InputDecorator(
-        decoration: InputDecoration(
-          labelText: _generated
-              ? 'Playback rhythm (read-only)'
-              : 'Playback rhythm',
-        ),
-        child: _generated
-            ? Text(_rhythmLabel(_playbackMode, _blockSize))
-            : LayoutBuilder(
-                builder: (context, constraints) =>
-                    SegmentedButton<PlaybackMode>(
-                      direction:
-                          MediaQuery.textScalerOf(context).scale(14) > 21 ||
-                              constraints.maxWidth < 420
-                          ? Axis.vertical
-                          : Axis.horizontal,
-                      segments: const [
-                        ButtonSegment(
-                          value: PlaybackMode.sequential,
-                          label: Text('In order'),
-                        ),
-                        ButtonSegment(
-                          value: PlaybackMode.shuffle,
-                          label: Text('Mix it up'),
-                        ),
-                        ButtonSegment(
-                          value: PlaybackMode.block,
-                          label: Text('Mini-marathons'),
-                        ),
-                      ],
-                      selected: {_playbackMode},
-                      onSelectionChanged: _saving
-                          ? null
-                          : (value) => _changed(() {
-                              _playbackMode = value.single;
-                              _blockSize ??= 3;
-                            }),
-                    ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 64,
+                height: 64,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: roles.progressFill,
+                  borderRadius: BorderRadius.circular(roles.panelRadius),
+                ),
+                child: Text(
+                  int.tryParse(_number.text)?.toString() ?? '—',
+                  style: TextStyle(
+                    color: roles.onFocus,
+                    fontSize: 28,
+                    fontWeight: FontWeight.w900,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
               ),
-      ),
-      if (_generated) ...[
-        const SizedBox(height: 12),
-        Text(
-          'Generator recipe: ${_sourceLabel(_source, widget.controller)}. Schedule timing stays the same.',
-        ),
-      ] else if (_playbackMode == PlaybackMode.block) ...[
-        const SizedBox(height: 12),
-        DropdownButtonFormField<int>(
-          key: const Key('studio-block-size'),
-          isExpanded: true,
-          initialValue: (_blockSize ?? 3) >= 2 && (_blockSize ?? 3) <= 5
-              ? _blockSize ?? 3
-              : null,
-          decoration: const InputDecoration(labelText: 'Episodes per show'),
-          items: [
-            for (var size = 2; size <= 5; size++)
-              DropdownMenuItem(value: size, child: Text('$size')),
-          ],
-          onChanged: _saving
-              ? null
-              : (value) => _changed(() => _blockSize = value),
-        ),
-        if (!hasShowGrouping)
-          const Text(
-            'Mini-marathons needs episodes grouped by show title or show artwork. Choose another rhythm or add grouped episodes.',
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'STATION',
+                      style: TextStyle(
+                        color: roles.secondaryText,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Semantics(
+                      header: true,
+                      child: Text(
+                        stationName,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w800),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-      ],
-    ],
-  );
+          const SizedBox(height: 16),
+          TextFormField(
+            key: const Key('studio-name'),
+            controller: _name,
+            focusNode: _nameFocus,
+            enabled: !_saving,
+            decoration: const InputDecoration(
+              labelText: 'Station name',
+              hintText: 'Required',
+            ),
+            onChanged: (_) => _changed(),
+            validator: (value) => value == null || value.trim().isEmpty
+                ? 'Enter a channel name.'
+                : null,
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            key: const Key('studio-number'),
+            controller: _number,
+            focusNode: _numberFocus,
+            enabled: !_saving,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(
+              labelText: 'Channel number (1–1000)',
+            ),
+            onChanged: (_) => _changed(),
+            validator: _validateNumber,
+          ),
+          if (_conflictingChannel != null)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton(
+                onPressed: _saving || _lowestFreeNumber() == null
+                    ? null
+                    : _useNextAvailable,
+                child: const Text('Use next available'),
+              ),
+            ),
+          const SizedBox(height: 18),
+          Text(
+            _generated ? 'PLAYBACK RHYTHM · READ-ONLY' : 'PLAYBACK RHYTHM',
+            style: TextStyle(
+              color: roles.secondaryText,
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1,
+            ),
+          ),
+          const SizedBox(height: 6),
+          if (_generated)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Text(
+                _rhythmLabel(_playbackMode, _blockSize),
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+            )
+          else
+            RadioGroup<PlaybackMode>(
+              groupValue: _playbackMode,
+              onChanged: (value) {
+                if (_saving || value == null) return;
+                _changed(() {
+                  _playbackMode = value;
+                  _blockSize ??= 3;
+                });
+              },
+              child: Column(
+                children: [
+                  _rhythmChoice(
+                    PlaybackMode.sequential,
+                    'In order',
+                    'Plays the lineup from top to bottom',
+                  ),
+                  _rhythmChoice(
+                    PlaybackMode.shuffle,
+                    'Mix it up',
+                    'Uses a stable shuffle for this station',
+                  ),
+                  _rhythmChoice(
+                    PlaybackMode.block,
+                    'Mini-marathons',
+                    'Keeps small groups from the same series together',
+                  ),
+                ],
+              ),
+            ),
+          if (_generated) ...[
+            const SizedBox(height: 12),
+            Text(
+              'Generator recipe: ${_sourceLabel(_source, widget.controller)}. Schedule timing stays the same.',
+            ),
+          ] else if (_playbackMode == PlaybackMode.block) ...[
+            const SizedBox(height: 12),
+            DropdownButtonFormField<int>(
+              key: const Key('studio-block-size'),
+              isExpanded: true,
+              initialValue: (_blockSize ?? 3) >= 2 && (_blockSize ?? 3) <= 5
+                  ? _blockSize ?? 3
+                  : null,
+              decoration: const InputDecoration(labelText: 'Episodes per show'),
+              items: [
+                for (var size = 2; size <= 5; size++)
+                  DropdownMenuItem(value: size, child: Text('$size')),
+              ],
+              onChanged: _saving
+                  ? null
+                  : (value) => _changed(() => _blockSize = value),
+            ),
+            if (!hasShowGrouping)
+              const Text(
+                'Mini-marathons needs episodes grouped by show title or show artwork. Choose another rhythm or add grouped episodes.',
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _rhythmChoice(PlaybackMode value, String title, String detail) {
+    final roles = LineupTheme.of(context);
+    final selected = _playbackMode == value;
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Material(
+        color: selected ? roles.selectedSurface : Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(roles.panelRadius),
+          side: BorderSide(
+            color: selected ? roles.progressFill : roles.subtleBorder,
+          ),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: RadioListTile<PlaybackMode>(
+          value: value,
+          enabled: !_saving,
+          dense: true,
+          title: Text(
+            title,
+            style: const TextStyle(fontWeight: FontWeight.w700),
+          ),
+          subtitle: Text(detail),
+        ),
+      ),
+    );
+  }
 
   Channel? get _conflictingChannel {
     final number = int.tryParse(_number.text);
@@ -1735,11 +2083,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
         () => _error =
             'Fix the highlighted channel identity fields before saving.',
       );
-      if (_name.text.trim().isEmpty) {
-        _nameFocus.requestFocus();
-      } else {
-        _numberFocus.requestFocus();
-      }
+      _focusAndReveal(_name.text.trim().isEmpty ? _nameFocus : _numberFocus);
       return;
     }
     if (!_generated && _programmingError(_resolveDraftContent()) != null) {
@@ -1798,16 +2142,25 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
         _error = _baseDeleted
             ? 'This channel was deleted while you were editing. It will not be recreated.'
             : _conflict
-            ? 'This channel changed while you were editing. Reload it or deliberately reapply your changes.'
+            ? 'This channel changed while you were editing. Choose the saved version or deliberately replace it with your retained draft.'
             : safeFormError(
                 error,
                 'The channel could not be saved. No lineup changes were saved.',
               );
       });
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _saveFocus.requestFocus();
-      });
+      _focusAndReveal(_conflict ? _recoveryFocus : _saveFocus);
     }
+  }
+
+  void _focusAndReveal(FocusNode node) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      node.requestFocus();
+      final focusContext = node.context;
+      if (focusContext != null) {
+        unawaited(Scrollable.ensureVisible(focusContext, alignment: 0.35));
+      }
+    });
   }
 
   ContentSource get _displaySource {
@@ -1845,6 +2198,31 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     });
   }
 
+  Future<void> _confirmUseSaved() async {
+    final confirmed =
+        await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Use the saved version?'),
+            content: const Text(
+              'Your complete Studio draft will be discarded and the newer saved channel will be loaded.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Keep my draft'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Use saved version'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (confirmed && mounted) _reload();
+  }
+
   Future<void> _confirmReapply() async {
     final current = _currentBase;
     if (current == null) {
@@ -1859,18 +2237,18 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
         await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
-            title: const Text('Reapply your changes?'),
+            title: const Text('Replace the saved version?'),
             content: const Text(
-              'This will replace the newer channel with your complete Studio draft.',
+              'The newer saved channel will be replaced with your complete Studio draft.',
             ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context, false),
-                child: const Text('Cancel'),
+                child: const Text('Keep my draft open'),
               ),
               FilledButton(
                 onPressed: () => Navigator.pop(context, true),
-                child: const Text('Reapply changes'),
+                child: const Text('Replace saved version'),
               ),
             ],
           ),
