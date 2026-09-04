@@ -147,6 +147,9 @@ navigation do not enter C++.
   server's probes, libraries, artwork, and playback. A bounded
   authorization recovery refreshes the same server credential once without
   exposing it through public models, persisted state, URLs, or diagnostics.
+  Cast portraits from Plex's exact HTTPS metadata image origin use a separate,
+  redirect-disabled, size-bounded request that sends no Plex credentials;
+  other foreign artwork references remain rejected.
 - Profile and selected-server state remains scoped by Plex profile. The
   application controller serializes whole state mutations through
   snapshot/save/commit or rollback, serializes secure credential writes with
@@ -162,7 +165,8 @@ navigation do not enter C++.
   Setup owns library selection, all eight source
   strategies, priority and cross-library scope, series variants, build mode,
   preview/review/confirmation, and atomic application for up to 1,000
-  channels. Custom channel editing, Settings, and diagnostics remain separate
+  channels. Actor/director proposals do not receive alternate copies or
+  variants. Custom channel editing, Settings, and diagnostics remain separate
   Flutter workflows.
 - Channel Setup inventories up to four selected libraries concurrently while
   preserving library and page order. Page size and pagination are bounded; it

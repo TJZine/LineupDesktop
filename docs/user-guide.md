@@ -96,6 +96,9 @@ Channel Setup has three stages:
 Available strategy families include Plex playlists, collections, recently added
 content, genres, decades, studios, actors, and directors. Depending on the
 strategy, channels can be generated per library or across selected libraries.
+Alternate copies and playback-mode variants apply to eligible series channels;
+actor and director channels are not expanded into those high-cardinality
+alternatives.
 
 The review step applies the accepted plan atomically. Cancelling or a failed
 save preserves the previous lineup.
@@ -215,8 +218,9 @@ genres, concise rating/resolution/dynamic-range/audio badges, poster, and
 official title artwork. When **Prefer official title artwork** is enabled, an
 available Plex
 clear logo leads the identity and text remains the fallback when the logo is
-missing, disabled, or fails. Its playback line is shown only for facts that are
-available: source/runtime details are separate, and actual native playback
+missing, disabled, fails, or would render too small to read. Its playback line
+is shown only for facts that are available: source/runtime details are separate,
+and actual native playback
 position/duration are preferred, with schedule timing used when native duration
 is unavailable. When Plex supplies cast facts, actor portraits appear between
 the synopsis and progress, with names and roles available to accessibility.
