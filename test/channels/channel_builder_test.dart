@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/channels/channel_builder.dart';
 import 'package:lineup_desktop/channels/channel.dart';
+import 'package:lineup_desktop/channels/content_resolver.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
 
 void main() {
@@ -162,19 +163,83 @@ void main() {
     expect((comedy.source as MixedSource).interleave, isTrue);
   });
 
-  test('series ordering and variants expand without losing stable numbers', () {
+  test('series variants use mode and block size identity', () {
     const proposal = ChannelProposal(
       name: 'Series',
       source: LibrarySource(libraryId: 'tv', libraryType: PlexLibraryType.show),
       mode: PlaybackMode.shuffle,
       itemCount: 10,
       strategy: BuilderStrategy.recentlyAdded,
+      series: true,
     );
+
+    final cases =
+        <
+          ({
+            PlaybackMode baseMode,
+            PlaybackMode variantMode,
+            int variantBlockSize,
+            List<PlaybackMode> expectedModes,
+            List<int?> expectedBlockSizes,
+          })
+        >[
+          (
+            baseMode: PlaybackMode.sequential,
+            variantMode: PlaybackMode.shuffle,
+            variantBlockSize: 3,
+            expectedModes: [PlaybackMode.sequential, PlaybackMode.shuffle],
+            expectedBlockSizes: [null, null],
+          ),
+          (
+            baseMode: PlaybackMode.sequential,
+            variantMode: PlaybackMode.block,
+            variantBlockSize: 4,
+            expectedModes: [PlaybackMode.sequential, PlaybackMode.block],
+            expectedBlockSizes: [null, 4],
+          ),
+          (
+            baseMode: PlaybackMode.block,
+            variantMode: PlaybackMode.block,
+            variantBlockSize: 3,
+            expectedModes: [PlaybackMode.block],
+            expectedBlockSizes: [3],
+          ),
+          (
+            baseMode: PlaybackMode.block,
+            variantMode: PlaybackMode.block,
+            variantBlockSize: 4,
+            expectedModes: [PlaybackMode.block, PlaybackMode.block],
+            expectedBlockSizes: [3, 4],
+          ),
+        ];
+    for (final testCase in cases) {
+      final channels = materializeChannelPlan(
+        proposals: const [proposal],
+        existing: const [],
+        mode: ChannelBuildMode.replace,
+        seriesMode: testCase.baseMode,
+        seriesBlockSize: 3,
+        variantMode: testCase.variantMode,
+        variantBlockSize: testCase.variantBlockSize,
+        anchor: DateTime.utc(2026),
+      ).channels;
+      expect(
+        channels.map((channel) => channel.playbackMode),
+        testCase.expectedModes,
+        reason: '${testCase.baseMode.name}->${testCase.variantMode.name}',
+      );
+      expect(
+        channels.map((channel) => channel.blockSize),
+        testCase.expectedBlockSizes,
+      );
+    }
+
     final channels = materializeChannelPlan(
       proposals: const [proposal],
       existing: const [],
       mode: ChannelBuildMode.replace,
       seriesMode: PlaybackMode.block,
+      seriesBlockSize: 3,
       alternateCopies: 2,
       variantMode: PlaybackMode.sequential,
       anchor: DateTime.utc(2026),
@@ -187,6 +252,37 @@ void main() {
       'Series sequential',
     ]);
     expect(channels.first.blockSize, 3);
+  });
+
+  test('actor and director series proposals do not expand', () {
+    for (final strategy in [
+      BuilderStrategy.actors,
+      BuilderStrategy.directors,
+    ]) {
+      final proposal = ChannelProposal(
+        name: strategy.name,
+        source: const LibrarySource(
+          libraryId: 'tv',
+          libraryType: PlexLibraryType.show,
+        ),
+        mode: PlaybackMode.shuffle,
+        itemCount: 10,
+        strategy: strategy,
+        series: true,
+      );
+      final channels = materializeChannelPlan(
+        proposals: [proposal],
+        existing: const [],
+        mode: ChannelBuildMode.replace,
+        seriesMode: PlaybackMode.shuffle,
+        alternateCopies: 2,
+        variantMode: PlaybackMode.block,
+        variantBlockSize: 4,
+        anchor: DateTime.utc(2026),
+      ).channels;
+      expect(channels, hasLength(1), reason: strategy.name);
+      expect(channels.single.playbackMode, PlaybackMode.shuffle);
+    }
   });
 
   test('global limits allocate fairly across enabled strategies', () {
@@ -282,6 +378,129 @@ void main() {
     );
     expect(narrow, isEmpty);
     expect(broad.single.name, 'Actor');
+  });
+
+  test('TV people use stable series keys and canonical filter identity', () {
+    const library = PlexLibrary(
+      id: 'tv',
+      title: 'Shows',
+      type: PlexLibraryType.show,
+    );
+    for (final strategy in [
+      BuilderStrategy.actors,
+      BuilderStrategy.directors,
+    ]) {
+      final items = [
+        for (final entry in const [
+          ('series-1', ' Avery Vale '),
+          ('series-2', 'avery vale'),
+          ('series-3', 'AVERY VALE'),
+        ])
+          PlexMediaItem(
+            id: entry.$1,
+            title: 'Episode',
+            type: 'episode',
+            duration: const Duration(minutes: 1),
+            libraryId: 'tv',
+            parts: [PlexMediaPart(path: '/${entry.$1}')],
+            grandparentTitle: 'Same title',
+            grandparentRatingKey: entry.$1,
+            actors: [entry.$2],
+            directors: [entry.$2],
+          ),
+      ];
+
+      final proposal = buildChannelProposals(
+        libraries: const [library],
+        items: items,
+        strategies: {strategy},
+        minimumItems: 3,
+      ).single;
+
+      expect(proposal.name, 'Avery Vale');
+      expect((proposal.source as LibrarySource).filters, {
+        strategy == BuilderStrategy.actors ? 'actor' : 'director': 'avery vale',
+      });
+      expect(proposal.itemCount, 3);
+      expect(resolveContent(proposal.source, items), hasLength(3));
+    }
+  });
+
+  test('people merge identity ignores display casing and scan order', () {
+    const library = PlexLibrary(
+      id: 'tv',
+      title: 'Shows',
+      type: PlexLibraryType.show,
+    );
+    ChannelProposal proposal(List<String> names) => buildChannelProposals(
+      libraries: const [library],
+      items: [
+        for (final (index, name) in names.indexed)
+          PlexMediaItem(
+            id: 'episode-$index',
+            title: 'Episode',
+            type: 'episode',
+            duration: const Duration(minutes: 1),
+            libraryId: 'tv',
+            grandparentRatingKey: 'series-$index',
+            actors: [name],
+          ),
+      ],
+      strategies: const {BuilderStrategy.actors},
+      minimumItems: 3,
+    ).single;
+    final first = materializeChannelPlan(
+      proposals: [
+        proposal(['Avery Vale', 'avery vale', 'AVERY VALE']),
+      ],
+      existing: const [],
+      mode: ChannelBuildMode.replace,
+      anchor: DateTime.utc(2026),
+    ).channels.single;
+
+    final merged = materializeChannelPlan(
+      proposals: [
+        proposal(['AVERY VALE', 'avery vale', 'Avery Vale']),
+      ],
+      existing: [first],
+      mode: ChannelBuildMode.merge,
+      anchor: DateTime.utc(2027),
+    ).channels;
+
+    expect(merged, hasLength(1));
+    expect(merged.single.id, first.id);
+    expect(merged.single.builderKey, first.builderKey);
+    expect(merged.single.name, 'Avery Vale');
+  });
+
+  test('TV people title fallback normalizes case and whitespace', () {
+    const library = PlexLibrary(
+      id: 'tv',
+      title: 'Shows',
+      type: PlexLibraryType.show,
+    );
+    final items = [
+      for (final title in ['Same title', ' same TITLE ', 'Other title'])
+        PlexMediaItem(
+          id: title,
+          title: 'Episode',
+          type: 'episode',
+          duration: const Duration(minutes: 1),
+          libraryId: 'tv',
+          grandparentTitle: title,
+          actors: const ['Actor'],
+        ),
+    ];
+
+    expect(
+      buildChannelProposals(
+        libraries: const [library],
+        items: items,
+        strategies: const {BuilderStrategy.actors},
+        minimumItems: 3,
+      ),
+      isEmpty,
+    );
   });
 
   test('people proposal breadth scales across a large tag catalog', () {

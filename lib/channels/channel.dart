@@ -277,7 +277,7 @@ List<ChannelCastMember> _persistedCastMembers(Object value) {
 
 class ChannelCastMember {
   ChannelCastMember({required this.name, this.role, Uri? portrait})
-    : portrait = canonicalPlexArtworkPath(portrait);
+    : portrait = canonicalPlexCastPortrait(portrait);
 
   final String name;
   final String? role;
@@ -295,9 +295,33 @@ class ChannelCastMember {
     return ChannelCastMember(
       name: _string(json['name']),
       role: _optionalString(json, 'role'),
-      portrait: _optionalArtworkUri(json, 'portrait'),
+      portrait: _optionalCastPortraitUri(json, 'portrait'),
     );
   }
+}
+
+/// Returns a cast portrait that is either owned by the selected PMS or served
+/// directly by Plex's public metadata image origin.
+Uri? canonicalPlexCastPortrait(Uri? value) {
+  final serverPath = canonicalPlexArtworkPath(value);
+  if (serverPath != null) return serverPath;
+  if (value == null ||
+      value.scheme != 'https' ||
+      value.host != 'metadata-static.plex.tv' ||
+      value.port != 443 ||
+      value.userInfo.isNotEmpty ||
+      value.hasQuery ||
+      value.hasFragment ||
+      value.pathSegments.isEmpty ||
+      value.pathSegments.any((segment) => segment == '.' || segment == '..')) {
+    return null;
+  }
+  return value;
+}
+
+String? canonicalPlexCastPortraitText(String? value) {
+  if (value == null) return null;
+  return canonicalPlexCastPortrait(Uri.tryParse(value))?.toString();
 }
 
 /// Returns the only artwork-reference shape that may enter durable channel
@@ -526,6 +550,14 @@ Uri? _optionalArtworkUri(Map<String, Object?> json, String key) {
   if (value is! String) throw FormatException('Invalid $key');
   final uri = Uri.tryParse(value) ?? (throw FormatException('Invalid $key'));
   return canonicalPlexArtworkPath(uri);
+}
+
+Uri? _optionalCastPortraitUri(Map<String, Object?> json, String key) {
+  if (!json.containsKey(key)) return null;
+  final value = _nonNull(json, key);
+  if (value is! String) throw FormatException('Invalid $key');
+  final uri = Uri.tryParse(value) ?? (throw FormatException('Invalid $key'));
+  return canonicalPlexCastPortrait(uri);
 }
 
 String? _optionalArtworkPath(Map<String, Object?> json, String key) {

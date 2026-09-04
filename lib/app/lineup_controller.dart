@@ -1310,6 +1310,9 @@ class LineupController extends ChangeNotifier {
   }
 
   Future<Uint8List?> artworkForPath(Uri path) async {
+    if (canonicalPlexCastPortrait(path) == path && path.isAbsolute) {
+      return plex.metadataArtwork(path);
+    }
     final serverId = server?.id;
     if (serverId == null || connection == null || path.toString().isEmpty) {
       return null;

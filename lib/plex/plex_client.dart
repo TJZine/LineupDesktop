@@ -549,6 +549,31 @@ class PlexClient {
     return response.bodyBytes;
   }
 
+  Future<Uint8List> metadataArtwork(
+    Uri uri, {
+    int maximumBytes = 4 * 1024 * 1024,
+  }) async {
+    if (canonicalPlexCastPortrait(uri) != uri || !uri.isAbsolute) {
+      throw const PlexException(
+        'artwork-unavailable',
+        'Program artwork is unavailable.',
+      );
+    }
+    final response = await _send(
+      _request('GET', uri, headers: const {'Accept': 'image/*'}),
+      maximumBytes: maximumBytes,
+      oversizedCode: 'artwork-too-large',
+      oversizedMessage: 'Program artwork is too large.',
+    );
+    if (response.statusCode != 200) {
+      throw const PlexException(
+        'artwork-unavailable',
+        'Program artwork is unavailable.',
+      );
+    }
+    return response.bodyBytes;
+  }
+
   void _cancel(Stream<List<int>> stream) {
     final subscription = stream.listen(
       null,
@@ -764,6 +789,7 @@ PlexMediaItem parseMediaItem(Object? raw, {String? libraryId}) {
     libraryId: libraryId,
     parentTitle: _optionalText(json['parentTitle']),
     grandparentTitle: _optionalText(json['grandparentTitle']),
+    grandparentRatingKey: _optionalText(json['grandparentRatingKey']),
     thumbPath: canonicalPlexArtworkPathText(_optionalText(json['thumb'])),
     grandparentThumbPath: canonicalPlexArtworkPathText(
       _optionalText(json['grandparentThumb']),
@@ -777,8 +803,8 @@ PlexMediaItem parseMediaItem(Object? raw, {String? libraryId}) {
     dynamicRange: _dynamicRange(media, _streamCodecs(firstPart)),
     genres: _tagNames(json['Genre']),
     collections: _tagNames(json['Collection']),
-    directors: _tagNames(json['Director']),
-    actors: _actorNames(json['Role']),
+    directors: _personNames(json['Director']),
+    actors: _personNames(json['Role']),
     cast: cast,
     studio: _optionalText(json['studio']),
     year: _optionalInteger(json['year']),
@@ -832,7 +858,7 @@ List<String> _tagNames(Object? raw) {
   return names;
 }
 
-List<String> _actorNames(Object? raw) {
+List<String> _personNames(Object? raw) {
   final names = <String>[];
   final seen = <String>{};
   for (final name in _tagNames(raw)) {
@@ -852,7 +878,7 @@ List<PlexCastMember> _castMembers(Object? raw) {
       PlexCastMember(
         name: name,
         role: _optionalText(value['role']),
-        thumbPath: canonicalPlexArtworkPathText(_optionalText(value['thumb'])),
+        thumbPath: canonicalPlexCastPortraitText(_optionalText(value['thumb'])),
       ),
     );
     if (members.length == maxRichCastMembers) break;

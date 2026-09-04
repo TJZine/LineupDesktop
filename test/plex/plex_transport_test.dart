@@ -849,6 +849,76 @@ void main() {
         plexError('artwork-too-large'),
       );
     });
+
+    test('fetches trusted metadata artwork without Plex credentials', () async {
+      late http.BaseRequest request;
+      final plex = client((value, _) async {
+        request = value;
+        return http.StreamedResponse(Stream.value([1, 2, 3, 4]), 200);
+      });
+      final uri = Uri.parse(
+        'https://metadata-static.plex.tv/f/people/avery-vale.jpg',
+      );
+
+      final bytes = await plex.metadataArtwork(uri, maximumBytes: 4);
+
+      expect(bytes, [1, 2, 3, 4]);
+      expect(request.url, uri);
+      expect(request.followRedirects, isFalse);
+      expect(request.headers.keys, everyElement(isNot(startsWith('X-Plex-'))));
+    });
+
+    test('rejects untrusted metadata artwork before sending', () async {
+      final plex = client((_, _) async => throw StateError('sent request'));
+
+      await expectLater(
+        plex.metadataArtwork(
+          Uri.parse(
+            'https://metadata-static.plex.tv.evil.example/f/people/a.jpg',
+          ),
+        ),
+        plexError('artwork-unavailable'),
+      );
+    });
+
+    test('rejects metadata artwork redirects and cancels the stream', () async {
+      late http.BaseRequest request;
+      final canceled = Completer<void>();
+      final stream = StreamController<List<int>>(onCancel: canceled.complete);
+      final plex = client((value, _) async {
+        request = value;
+        return http.StreamedResponse(
+          stream.stream,
+          302,
+          headers: {'location': 'https://attacker.example/portrait.jpg'},
+        );
+      });
+
+      await expectLater(
+        plex.metadataArtwork(
+          Uri.parse('https://metadata-static.plex.tv/f/people/redirect.jpg'),
+        ),
+        plexError('artwork-unavailable'),
+      );
+      await canceled.future.timeout(const Duration(seconds: 1));
+
+      expect(request.followRedirects, isFalse);
+      expect(canceled.isCompleted, isTrue);
+    });
+
+    test('bounds streamed metadata artwork', () async {
+      final plex = client(
+        (_, _) async => http.StreamedResponse(Stream.value([1, 2, 3, 4]), 200),
+      );
+
+      await expectLater(
+        plex.metadataArtwork(
+          Uri.parse('https://metadata-static.plex.tv/f/people/large.jpg'),
+          maximumBytes: 3,
+        ),
+        plexError('artwork-too-large'),
+      );
+    });
   });
 
   test(

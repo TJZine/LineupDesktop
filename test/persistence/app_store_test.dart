@@ -181,6 +181,23 @@ void main() {
     }
   });
 
+  test('trusted Plex metadata cast portraits round-trip', () {
+    const trusted = 'https://metadata-static.plex.tv/f/people/avery-vale.jpg';
+    final item = ChannelItem.fromJson(const {
+      'id': 'item',
+      'title': 'Item',
+      'durationMs': 60000,
+      'cast': [
+        {'name': 'Actor', 'portrait': trusted},
+      ],
+    });
+
+    expect(item.cast.single.portrait, Uri.parse(trusted));
+    expect(item.toJson()['cast'], [
+      {'name': 'Actor', 'portrait': trusted},
+    ]);
+  });
+
   test(
     'load atomically removes preexisting unsafe artwork from state',
     () async {
@@ -248,7 +265,12 @@ void main() {
     );
     addTearDown(() => directory.delete(recursive: true));
     final stateFile = File('${directory.path}/state.json');
-    final contents = _encodedState(_canonicalJson());
+    const trusted = 'https://metadata-static.plex.tv/f/people/avery-vale.jpg';
+    final contents = _encodedState(
+      _stateJsonWithCast(const [
+        {'name': 'Actor', 'portrait': trusted},
+      ]),
+    );
     await stateFile.writeAsString(contents);
 
     final restored = await FileAppStore(directory).load();

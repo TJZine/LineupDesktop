@@ -63,6 +63,29 @@ void main() {
     },
   );
 
+  test(
+    'artworkForPath routes trusted metadata without PMS credentials',
+    () async {
+      final plex = _FakePlex();
+      final controller = LineupController(
+        store: _MemoryStore(const PersistedState()),
+        credentials: _MemoryCredentials(),
+        plex: plex,
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+      final uri = Uri.parse(
+        'https://metadata-static.plex.tv/f/people/avery-vale.jpg',
+      );
+
+      final bytes = await controller.artworkForPath(uri);
+
+      expect(bytes, [4, 5, 6]);
+      expect(plex.metadataArtworkUri, uri);
+      expect(plex.artworkToken, isNull);
+    },
+  );
+
   test('selected-server requests use only the PMS resource token', () async {
     const owner = PlexHomeUser(id: 'owner', name: 'Owner', protected: false);
     const child = PlexHomeUser(id: 'child', name: 'Child', protected: false);
@@ -4211,6 +4234,7 @@ class _FakePlex extends PlexClient {
   Uri? artworkServer;
   Uri? artworkPath;
   String? artworkToken;
+  Uri? metadataArtworkUri;
 
   @override
   Future<PlexAccount> account(String token) {
@@ -4334,6 +4358,15 @@ class _FakePlex extends PlexClient {
     final handler = artworkHandler;
     if (handler != null) return handler(server, token, path);
     return Uint8List.fromList([1, 2, 3]);
+  }
+
+  @override
+  Future<Uint8List> metadataArtwork(
+    Uri uri, {
+    int maximumBytes = 4 * 1024 * 1024,
+  }) async {
+    metadataArtworkUri = uri;
+    return Uint8List.fromList([4, 5, 6]);
   }
 
   @override

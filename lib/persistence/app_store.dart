@@ -281,7 +281,7 @@ bool _itemHasNoncanonicalArtwork(Object? raw) {
     for (final member in cast) {
       if (member is Map) {
         if (member['portrait'] case final String value) {
-          if (canonicalPlexArtworkPathText(value) != value) return true;
+          if (canonicalPlexCastPortraitText(value) != value) return true;
         }
       }
     }
