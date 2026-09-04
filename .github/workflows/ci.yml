@@ -237,6 +237,57 @@ jobs:
           $env:LINEUP_MPV_ROOT = $mpvRoot
           $engineSource = Join-Path $env:RUNNER_TEMP 'lineup-flutter-source\engine\src'
           & .\tool\windows\build-release.ps1 -EngineSource $engineSource
+          . .\tool\windows\build-inputs.ps1
+          foreach ($coreSymlinks in @('true', 'false')) {
+            $symlinkRepo = Join-Path $env:RUNNER_TEMP "lineup-tracked-symlink-$coreSymlinks"
+            New-Item -ItemType Directory -Path $symlinkRepo -Force | Out-Null
+            & git init --quiet $symlinkRepo
+            & git -C $symlinkRepo config core.symlinks $coreSymlinks
+            & git -C $symlinkRepo config user.email 'ci@example.invalid'
+            & git -C $symlinkRepo config user.name 'Lineup CI'
+            Set-Content -LiteralPath (Join-Path $symlinkRepo 'target.txt') -Value 'target'
+            & git -C $symlinkRepo add target.txt
+            $symlinkBlob = ('target.txt' | & git -C $symlinkRepo hash-object -w --stdin).Trim()
+            & git -C $symlinkRepo update-index --add --cacheinfo "120000,$symlinkBlob,tracked-link"
+            & git -C $symlinkRepo commit --quiet -m 'tracked symlink probe'
+            try {
+              Assert-NoTrackedSymlinks -Repository $symlinkRepo
+              throw "Tracked symlink was accepted with core.symlinks=$coreSymlinks."
+            } catch {
+              if ($_.Exception.Message -notmatch 'tracked symbolic link') { throw }
+            }
+          }
+          $buildJunctionTarget = Join-Path $env:RUNNER_TEMP 'lineup-build-junction-target'
+          $buildJunctionPath = Join-Path $env:GITHUB_WORKSPACE 'build/windows/x64/runner/Release/data/reparse-probe'
+          New-Item -ItemType Directory -Path $buildJunctionTarget -Force | Out-Null
+          New-Item -ItemType Junction -Path $buildJunctionPath -Target $buildJunctionTarget | Out-Null
+          try {
+            try {
+              & .\tool\windows\package.ps1 -Destination 'build/package/build-reparse-check'
+              throw 'Build reparse point was accepted.'
+            } catch {
+              if ($_.Exception.Data['LineupPackageFailure'] -ne 'build-artifact-mismatch') { throw }
+            }
+          } finally {
+            Remove-Item -LiteralPath $buildJunctionPath -Force
+            Remove-Item -LiteralPath $buildJunctionTarget -Recurse -Force
+          }
+          $junctionTarget = Join-Path $env:RUNNER_TEMP 'lineup-package-junction-target'
+          $junctionPath = Join-Path $env:GITHUB_WORKSPACE 'build/package/reparse-probe'
+          New-Item -ItemType Directory -Path $junctionTarget -Force | Out-Null
+          New-Item -ItemType Directory -Path (Split-Path -Parent $junctionPath) -Force | Out-Null
+          New-Item -ItemType Junction -Path $junctionPath -Target $junctionTarget | Out-Null
+          try {
+            try {
+              & .\tool\windows\package.ps1 -Destination 'build/package/reparse-probe/escaped'
+              throw 'Package destination junction was accepted.'
+            } catch {
+              if ($_.Exception.Data['LineupPackageFailure'] -ne 'package-path-reparse') { throw }
+            }
+          } finally {
+            Remove-Item -LiteralPath $junctionPath -Force
+            Remove-Item -LiteralPath $junctionTarget -Recurse -Force
+          }
           $dirtyProbe = Join-Path $env:GITHUB_WORKSPACE 'PACKAGE-DIRTY-PROBE'
           $dirtyDestination = 'build/package/dirty-source-check'
           Set-Content -LiteralPath $dirtyProbe -Value 'dirty'
