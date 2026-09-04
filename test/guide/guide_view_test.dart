@@ -14,6 +14,7 @@ import 'package:lineup_desktop/persistence/app_store.dart';
 import 'package:lineup_desktop/plex/plex_client.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 import 'package:lineup_desktop/ui/app_theme.dart';
+import 'package:lineup_desktop/ui/app_ui.dart';
 
 final _tinyPng = base64Decode(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwC'
@@ -21,6 +22,30 @@ final _tinyPng = base64Decode(
 );
 
 void main() {
+  test('clear logo usability follows decoded size and actual constraints', () {
+    const ordinary = Size(1200, 400);
+    const extremeWide = Size(1200, 20);
+    const guideConstraint = BoxConstraints(maxWidth: 360, maxHeight: 52);
+    const osdConstraint = BoxConstraints(maxWidth: 320, maxHeight: 68);
+    const nowPlayingConstraint = BoxConstraints(maxWidth: 600, maxHeight: 132);
+
+    for (final constraint in [
+      guideConstraint,
+      osdConstraint,
+      nowPlayingConstraint,
+    ]) {
+      expect(clearLogoIsUsable(ordinary, constraint), isTrue);
+      expect(clearLogoIsUsable(extremeWide, constraint), isFalse);
+    }
+    expect(
+      clearLogoIsUsable(
+        const Size(1200, 400),
+        const BoxConstraints(maxWidth: 120, maxHeight: 20),
+      ),
+      isTrue,
+    );
+  });
+
   test(
     'layout policy stays bounded for degenerate constraints and density',
     () {
@@ -399,6 +424,17 @@ void main() {
       ),
       findsOneWidget,
     );
+    final currentCell = find.bySemanticsLabel(
+      'Current Program, $startLabel to $endLabel, currently airing',
+    );
+    expect(
+      find.descendant(
+        of: currentCell,
+        matching: find.byType(FractionallySizedBox),
+      ),
+      findsNothing,
+    );
+    expect(find.bySemanticsLabel('Current time'), findsOneWidget);
     final rawStartLabel = _testTime(current.scheduled.start);
     if (rawStartLabel != startLabel) {
       expect(find.textContaining(rawStartLabel), findsNothing);
@@ -838,6 +874,14 @@ void main() {
           onClose: () {},
           onTune: (_) async {},
         ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.runAsync(
+      () => precacheImage(
+        MemoryImage(_tinyPng),
+        tester.element(find.byType(GuideView)),
       ),
     );
     await tester.pumpAndSettle();
