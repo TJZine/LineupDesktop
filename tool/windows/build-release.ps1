@@ -102,6 +102,7 @@ function Assert-PinnedFlutterCheckout {
 if (Test-SourceDirty $repository) {
   throw 'Refusing to create release provenance from a dirty Lineup source tree.'
 }
+Assert-NoTrackedSymlinks -Repository $repository
 $sourceCommit = Get-GitValue $repository @('rev-parse', '--verify', 'HEAD')
 
 $EngineSource = (Resolve-Path -LiteralPath $EngineSource).Path
