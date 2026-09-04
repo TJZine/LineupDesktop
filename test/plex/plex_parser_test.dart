@@ -102,6 +102,18 @@ void main() {
     expect(item.audioChannels, 6);
   });
 
+  test('normalizes numeric grandparent rating keys', () {
+    final item = parseMediaItem({
+      'ratingKey': 'episode-42',
+      'title': 'Episode',
+      'type': 'episode',
+      'duration': 1000,
+      'grandparentRatingKey': 42,
+    });
+
+    expect(item.grandparentRatingKey, '42');
+  });
+
   test('preserves every ordered part with positive nullable durations', () {
     final item = parseMediaItem({
       'ratingKey': 'multi',

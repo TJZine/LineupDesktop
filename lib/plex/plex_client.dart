@@ -789,7 +789,7 @@ PlexMediaItem parseMediaItem(Object? raw, {String? libraryId}) {
     libraryId: libraryId,
     parentTitle: _optionalText(json['parentTitle']),
     grandparentTitle: _optionalText(json['grandparentTitle']),
-    grandparentRatingKey: _optionalText(json['grandparentRatingKey']),
+    grandparentRatingKey: _optionalId(json['grandparentRatingKey']),
     thumbPath: canonicalPlexArtworkPathText(_optionalText(json['thumb'])),
     grandparentThumbPath: canonicalPlexArtworkPathText(
       _optionalText(json['grandparentThumb']),
@@ -1031,6 +1031,8 @@ String _id(Object? value, String label) =>
     value is num ? value.toString() : _text(value, label);
 String? _optionalText(Object? value) =>
     value is String && value.trim().isNotEmpty ? value.trim() : null;
+String? _optionalId(Object? value) =>
+    value is num ? value.toString() : _optionalText(value);
 int _integer(Object? value, String label) => value is num
     ? value.toInt()
     : int.tryParse(value?.toString() ?? '') ??
