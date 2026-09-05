@@ -1,8 +1,11 @@
 # Lineup Desktop
 
-Read `docs/README.md`, `docs/DEVELOPMENT.md`, and `docs/architecture.md` before
-substantial work. Use `docs/user-guide.md` for current user-facing behavior and
-`docs/windows-native-validation.md` for physical Windows evidence.
+Use relevant sections of `docs/DEVELOPMENT.md` for workflow and commands,
+`docs/architecture.md` for ownership, and `docs/README.md` when the right authority
+is unknown. Use `docs/user-guide.md` for current user-facing behavior,
+`.interface-design/system.md` for approved UI design decisions, and
+`docs/windows-native-validation.md` for physical Windows evidence. Expand reading
+to adjacent contracts or the full document when a material question remains.
 
 - Flutter/Dart owns application and product logic. Flutter owns UI, Guide,
   input, focus, overlays, and accessibility.
@@ -15,6 +18,10 @@ substantial work. Use `docs/user-guide.md` for current user-facing behavior and
   compatibility target.
 - Inspect the real flow before editing. Fix root causes, keep one authoritative
   owner per responsibility, and delete obsolete alternatives.
+- Complete authorized work through verification and repair of failures caused by
+  the change. Resolve routine uncertainty from source and existing decisions; ask
+  only for consequential unresolved choices outside the approved scope. Preserve
+  collaborative approval of new UI direction and protected design changes.
 - Use Codanna for unknown native-code owners, callers, and impact when available;
   confirm important results in source and use `rg`/direct reads for exact queries.
   Codanna does not currently parse Dart, so never treat its native-only index as
