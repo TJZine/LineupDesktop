@@ -399,7 +399,7 @@ vulnerabilities only through the private process in
 | Audio plays but video is black or hidden | Record the exact window size, display scaling, fullscreen state, Guide layout, whether audio continues, and whether the problem follows a resize/minimize/restore transition. Treat this as a native-composition failure and report it with the current commit. |
 | A replacement channel leaves stale audio/video | Stop testing that scenario, record both channel transitions and timestamps, and report it as a native playback-lifetime failure. |
 | A setting or lineup change fails | The previous state should remain. Retry after confirming the Plex server and local storage are available. |
-| A banner says saved app data was corrupt | Lineup moved malformed or schema-invalid state aside and started with empty state. Dismiss the banner after reviewing the resulting setup. Other storage read failures stop startup instead of resetting data. |
+| A banner says saved app data was corrupt | Lineup preserved state with invalid text encoding, malformed JSON, or invalid schema in a separate file and started with empty state. Dismiss the banner after reviewing the resulting setup. Other storage read failures stop startup instead of resetting data. |
 | A private portable package does not launch | Verify the complete package was extracted, `SYSTEM-REQUIREMENTS.txt` is satisfied, the archive hash matches, and the GPU driver supplies `vulkan-1.dll`. |
 
 ## Known limitations

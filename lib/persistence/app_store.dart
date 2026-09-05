@@ -169,14 +169,14 @@ class FileAppStore implements AppStore {
 
   @override
   Future<AppStoreLoadResult> load() async {
-    late final String contents;
+    late final List<int> contents;
     try {
-      contents = await _stateFile.readAsString();
+      contents = await _stateFile.readAsBytes();
     } on PathNotFoundException {
       return const AppStoreLoadResult(PersistedState());
     }
     try {
-      final decoded = jsonDecode(contents);
+      final decoded = jsonDecode(utf8.decode(contents));
       final state = PersistedState.fromJson(decoded);
       if (_hasNoncanonicalArtwork(decoded)) await save(state);
       return AppStoreLoadResult(state);

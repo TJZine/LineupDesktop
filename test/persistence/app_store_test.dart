@@ -578,6 +578,42 @@ void main() {
     });
   }
 
+  test(
+    'invalid UTF-8 preserves bytes in quarantine and allows saving',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'lineup-store-test',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      final stateFile = File('${directory.path}/state.json');
+      final invalidBytes = [0x7b, 0x22, 0xc3, 0x28, 0x22, 0x7d];
+      await stateFile.writeAsBytes(invalidBytes);
+      final instant = DateTime.utc(2026, 8, 23);
+      final store = FileAppStore(directory, clock: () => instant);
+
+      final restored = await store.load();
+
+      expect(restored.recoveredCorruptState, isTrue);
+      expect(restored.state.toJson(), const PersistedState().toJson());
+      expect(await stateFile.exists(), isFalse);
+      final quarantine = File(
+        '${stateFile.path}.corrupt-${instant.millisecondsSinceEpoch}',
+      );
+      expect(await quarantine.readAsBytes(), invalidBytes);
+
+      const replacement = PersistedState(
+        settings: LineupSettings(reduceMotion: true),
+        profileId: 'profile',
+      );
+      await store.save(replacement);
+      final reloaded = await FileAppStore(directory).load();
+
+      expect(reloaded.recoveredCorruptState, isFalse);
+      expect(reloaded.state.toJson(), replacement.toJson());
+      expect(await quarantine.readAsBytes(), invalidBytes);
+    },
+  );
+
   test('missing state is quiet', () async {
     final directory = await Directory.systemTemp.createTemp(
       'lineup-store-test',

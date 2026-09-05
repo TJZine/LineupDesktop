@@ -176,8 +176,9 @@ navigation do not enter C++.
   distinct states. Generated, filtered-library, playlist, and mixed channels
   expose their source read-only during editing; metadata-only saves preserve
   source and generated identity.
-- State loading treats malformed or schema-invalid JSON as corruption, moves it
-  aside, and starts empty with a dismissible recovery banner. Missing state
+- State loading treats invalid UTF-8, malformed JSON, or schema-invalid JSON as
+  corruption, moves the original bytes aside, and starts empty with a
+  dismissible recovery banner. Missing state
   starts empty; transient read or quarantine failures stop startup instead of
   silently replacing data. Diagnostics accept only bounded structured facts
   from a finite allowlist; arbitrary exception and native message text never
