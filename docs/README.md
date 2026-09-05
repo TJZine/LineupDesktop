@@ -11,9 +11,10 @@ audience and purpose.
 | Private tester or future end user | [User Guide](user-guide.md) | [Windows Native Acceptance](windows-native-validation.md) when participating in hardware testing |
 | New contributor | [Contributing](../CONTRIBUTING.md) | [Development](DEVELOPMENT.md) and [Architecture](architecture.md) |
 | Product, parity, or release planning | [Product Parity](product-parity.md) | [Architecture](architecture.md) and [Portable UI Parity](ui-parity.md) |
-| Application or UI work | [Architecture](architecture.md) | [Product Parity](product-parity.md) and [Portable UI Parity](ui-parity.md) |
-| Channel Studio implementation or investigation | [Channel Studio Specification](channel-studio-spec.md) | [Channel Studio Implementation Plan](channel-studio-implementation-plan.md), [Product Parity](product-parity.md), and [Architecture](architecture.md) |
-| Windows media, runner, or packaging work | [Windows Native Acceptance](windows-native-validation.md) | [Development](DEVELOPMENT.md) and [Windows Runtime Provenance](windows-runtime.md) |
+| Application or UI work | [Architecture](architecture.md) | [Approved interface system](../.interface-design/system.md), [Product Parity](product-parity.md), and the affected source/tests; historical parity records only when relevant |
+| Async, persistence, or credential work | [Architecture](architecture.md#changing-asynchronous-and-persisted-state) | Credential/diagnostic contracts in [Implemented now](architecture.md#implemented-now) and the linked owner tests |
+| Channel Studio implementation or investigation | [Channel Studio Specification](channel-studio-spec.md) | [Architecture](architecture.md) and current source/tests; the [completed plan](channel-studio-implementation-plan.md) only for historical evidence |
+| Windows media, runner, or packaging work | [Development verification map](DEVELOPMENT.md#verification-by-task) | [Architecture](architecture.md#windows-presentation-and-ownership), [Windows Runtime Provenance](windows-runtime.md), and relevant [physical acceptance](windows-native-validation.md) scenarios |
 | Planned audio passthrough work | [Audio Passthrough Specification](audio-passthrough-spec.md) | [Windows Native Acceptance](windows-native-validation.md), [Architecture](architecture.md), and the current source |
 | Guide/PiP implementation or investigation | [Guide PiP Specification](guide-pip-composition-spec.md) | [Architecture](architecture.md) and the current source |
 | Security report | [Security Policy](../SECURITY.md) | Use the private reporting route; never open a public issue containing secrets |
@@ -57,9 +58,9 @@ audience and purpose.
   implementation boundaries, acceptance criteria, and deterministic evidence
   for the implemented Desktop-specific channel workspace.
 - [Channel Studio Implementation Plan](channel-studio-implementation-plan.md)
-  records the reviewed implementation slices, Ponytail constraints,
-  orchestration protocol, verification gates, and final evidence for the
-  completed implementation work.
+  is a historical record of the completed implementation campaign. Its agent
+  assignments, review gates, and handoffs applied to that campaign only; use
+  the current specification and source for new work.
 - [Windows Runtime Provenance](windows-runtime.md) records exact native runtime
   sources, hashes, licenses, package policy, and unresolved redistribution
   gates.
@@ -72,6 +73,9 @@ audience and purpose.
 
 Current source and freshly observed evidence outrank old prompts, screenshots,
 commit descriptions, and historical audit sections.
+Completed plans and issue-specific implementation restrictions do not prescribe
+execution for a new task. Preserve still-approved product/design contracts,
+including the [protected Player layouts](../.interface-design/system.md#player-protected-baseline).
 
 Use these terms precisely:
 

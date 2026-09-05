@@ -1,9 +1,16 @@
 # Channel Studio Implementation Plan
 
-Status: Slices 1 through 6 were implemented, reviewed, pushed, and
-deterministically verified on 2026-08-27. The reviewed Slice 7 closeout
-corrections and final evidence are recorded below; the final commit belongs in
-the handoff.
+Status: Completed historical execution record. The original slice status,
+baselines, review gates, and evidence below belong to the 2026-08-27 campaign
+and its named follow-ups. They are not standing instructions to dispatch
+agents, repeat reviews, push slice commits, or maintain a handoff ledger for
+new work. Use [Development](DEVELOPMENT.md) for current workflow and the locked
+specification plus current source/tests for behavior.
+
+Original closeout status: Slices 1 through 6 were implemented, reviewed, pushed,
+and deterministically verified on 2026-08-27. The reviewed Slice 7 closeout
+corrections and final evidence are recorded below; the final commit belonged in
+the campaign handoff.
 
 Locked product contract: [Channel Studio Product and UX Specification](channel-studio-spec.md)
 

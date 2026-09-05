@@ -40,6 +40,8 @@ to adjacent contracts or the full document when a material question remains.
 - Keep documentation claims calibrated: distinguish implemented,
   deterministically tested, platform validated, and supported behavior.
   Historical audit sections retain their original evidence boundaries.
+  Completed plans record past execution; their agent, review, and handoff
+  procedures are not standing instructions for new work.
 - Never include Plex credentials, token-bearing URLs, private media metadata,
   personal paths, or unredacted logs/screenshots in documentation or evidence.
 - Independent review is user-controlled, never automatic. At closeout, state

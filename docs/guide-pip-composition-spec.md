@@ -2,6 +2,13 @@
 
 Status: Implemented in the current branch; physical Windows acceptance pending
 
+The product composition and ownership contracts remain design guidance. The
+issue-30 diagnosis, implementation file scope, and restrictions on native edits
+record that completed campaign, not prerequisites for investigating a new bug.
+Use current source/evidence and [Development](DEVELOPMENT.md) for new work;
+preserve the [approved interface system](../.interface-design/system.md) and
+its protected Player layouts.
+
 Current parity follow-up: revised 2026-08-21. The original issue-30 evidence
 and native-composition boundary remain valid, while the product scope now also
 includes the upstream-informed grid scale, Plex information artwork, and
@@ -11,7 +18,7 @@ Issue: [TJZine/LineupDesktop#30](https://github.com/TJZine/LineupDesktop/issues/
 
 Repository: `TJZine/LineupDesktop`
 
-Branch: `replatform/flutter-native`
+Historical investigation branch: `replatform/flutter-native`
 
 Investigation baseline: `430264b897cb5a6e435eb4fe9a4ee2ad41bb7aaf`
 
@@ -199,7 +206,7 @@ Do not add Electron compatibility, another player, another PiP owner, helper
 processes, WebViews, C#, retries, delays, polling, decoder reloads, speculative
 interfaces, or a new state-management system.
 
-## Expected source scope
+## Historical implementation source scope
 
 Primary implementation owner:
 
@@ -211,8 +218,8 @@ Inspect and change only if evidence requires it:
 - `lib/playback/player_view.dart`
 - `lib/playback/native_video_surface.dart`
 
-Native files should remain unchanged unless physical evidence disproves the
-confirmed Flutter occlusion diagnosis:
+For the issue-30 implementation, native files were to remain unchanged unless
+physical evidence disproved its confirmed Flutter occlusion diagnosis:
 
 - `lib/playback/windows_native_player.dart`
 - `windows/runner/native_player.cpp`
