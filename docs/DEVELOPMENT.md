@@ -50,6 +50,31 @@ Current requirements outrank hypothetical compatibility. Keep one owner per
 responsibility and make cancellation/currentness explicit for asynchronous
 work. Bound queues and caches whose inputs can grow.
 
+Apply SOLID, DRY, KISS, and YAGNI as design judgment:
+
+- Group behavior by shared invariants and reason to change. Split an independent
+  policy or resource lifetime when that improves ownership; file length alone
+  does not justify either splitting or accumulating responsibilities.
+- Keep one authoritative implementation of each business rule, such as schedule
+  resolution. Extract shared knowledge, not merely similar syntax whose callers
+  may evolve independently.
+- Keep interfaces small at real boundaries. Substitutes must preserve errors,
+  ordering, and cleanup as well as successful results. Prefer composition and
+  explicit collaborators; SOLID does not require an interface per class,
+  inheritance, or speculative extension points.
+- Prefer established repository and platform conventions. Judge simplicity by
+  readability and total maintenance cost, not the fewest lines or files.
+- Make scoped refactors and regression protection part of completing the change.
+  YAGNI rules out speculative capability, not work that keeps current code safe
+  to change. Remove obsolete paths replaced by the change; report concrete
+  remaining debt with its consequence rather than adding vague future-proofing.
+
+These interpretations use the maintainer's
+[SOLID/DRY/KISS reference](https://scalastic.io/en/solid-dry-kiss/),
+[Fowler's YAGNI clarification](https://martinfowler.com/bliki/Yagni.html), and
+[Google's design/complexity review guidance](https://google.github.io/eng-practices/review/reviewer/looking-for.html).
+They do not add a mandatory review pass or a new workflow.
+
 ## Quality and safety
 
 - Test pure policies and public seams. Add widget/integration/manual proof when
