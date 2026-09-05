@@ -30,6 +30,91 @@ void main() {
     );
   });
 
+  test(
+    'header deadline triggers request abortion and consumes a late response',
+    () async {
+      final aborted = Completer<void>();
+      final lateBodyCancelled = Completer<void>();
+      final pending = Completer<http.StreamedResponse>();
+      final lateBody = StreamController<List<int>>(
+        onCancel: lateBodyCancelled.complete,
+      );
+      final client = PlexClient(
+        clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+        requestTimeout: const Duration(milliseconds: 5),
+        httpClient: MockClient.streaming((request, _) {
+          expect(request, isA<http.AbortableRequest>());
+          (request as http.AbortableRequest).abortTrigger!.then((_) {
+            aborted.complete();
+          });
+          return pending.future;
+        }),
+      );
+      addTearDown(client.close);
+      await expectLater(client.createPin(), _plexError('network-timeout'));
+      await aborted.future.timeout(const Duration(seconds: 1));
+      pending.complete(http.StreamedResponse(lateBody.stream, 201));
+      await lateBodyCancelled.future.timeout(const Duration(seconds: 1));
+      await lateBody.close();
+    },
+  );
+
+  for (final milliseconds in [9, 10, 11]) {
+    testWidgets(
+      'rejected headers arriving at ${milliseconds}ms around a 10ms deadline complete once',
+      (tester) async {
+        final pending = Completer<http.StreamedResponse>();
+        var aborts = 0;
+        var bodyCancelled = 0;
+        final body = StreamController<List<int>>(
+          onCancel: () {
+            bodyCancelled++;
+          },
+        );
+        final client = PlexClient(
+          clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+          requestTimeout: const Duration(milliseconds: 10),
+          httpClient: MockClient.streaming((request, _) {
+            (request as http.AbortableRequest).abortTrigger!.then((_) {
+              aborts++;
+            });
+            return pending.future;
+          }),
+        );
+        var completions = 0;
+        Object? failure;
+        client.createPin().then(
+          (_) {
+            completions++;
+          },
+          onError: (Object error) {
+            failure = error;
+            completions++;
+          },
+        );
+        await tester.pump(Duration(milliseconds: milliseconds));
+        // A rejected response isolates the header deadline from body timing,
+        // whose remaining budget uses a real Stopwatch rather than fake time.
+        pending.complete(http.StreamedResponse(body.stream, 401));
+        unawaited(body.close());
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 20));
+        expect(completions, 1);
+        expect(bodyCancelled, 1);
+        expect(
+          failure,
+          isA<PlexException>().having(
+            (error) => error.code,
+            'code',
+            milliseconds < 10 ? 'auth-invalid' : 'network-timeout',
+          ),
+        );
+        expect(aborts, milliseconds < 10 ? 0 : 1);
+        client.close();
+      },
+    );
+  }
+
   for (final failure in <Object>[
     const SocketException('opaque socket detail'),
     http.ClientException('opaque client detail'),
@@ -171,13 +256,17 @@ void main() {
 
   test('control response deadline includes body streaming', () async {
     final canceled = Completer<void>();
+    final aborted = Completer<void>();
     final stream = StreamController<List<int>>(onCancel: canceled.complete);
     final client = PlexClient(
       clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
       requestTimeout: const Duration(milliseconds: 5),
-      httpClient: MockClient.streaming(
-        (_, _) async => http.StreamedResponse(stream.stream, 200),
-      ),
+      httpClient: MockClient.streaming((request, _) async {
+        (request as http.AbortableRequest).abortTrigger!.then(
+          (_) => aborted.complete(),
+        );
+        return http.StreamedResponse(stream.stream, 200);
+      }),
     );
 
     await expectLater(
@@ -191,6 +280,7 @@ void main() {
       ),
     );
     await canceled.future.timeout(const Duration(seconds: 1));
+    await aborted.future.timeout(const Duration(seconds: 1));
   });
 
   test('cancel PIN propagates a normalized HTTP failure', () async {
@@ -1000,6 +1090,7 @@ void main() {
       final playlists = await client.playlists(
         Uri.parse('https://plex.example:32400'),
         'secret',
+        isCurrent: () => true,
       );
       expect(episodes.single.type, 'episode');
       expect(episodes.single.duration, const Duration(seconds: 1));
@@ -1010,6 +1101,110 @@ void main() {
       expect(requests.last.host, 'plex.example');
       expect(requests.last.path, '/playlists/p1/items');
       expect(playlists.failedIds, isEmpty);
+    },
+  );
+
+  test('stale playlist discovery sends no catalog request', () async {
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      httpClient: MockClient((_) async => fail('No request should be sent')),
+    );
+    await expectLater(
+      client.playlists(
+        Uri.parse('https://plex.example'),
+        'test-token',
+        isCurrent: () => false,
+      ),
+      _plexError('cancelled'),
+    );
+  });
+
+  test('playlist cancellation during catalog sends no item requests', () async {
+    var current = true;
+    var requests = 0;
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      httpClient: MockClient((_) async {
+        requests++;
+        current = false;
+        return http.Response(
+          jsonEncode({
+            'MediaContainer': {
+              'Metadata': [
+                {'ratingKey': 'p1', 'title': 'Playlist'},
+              ],
+            },
+          }),
+          200,
+        );
+      }),
+    );
+    await expectLater(
+      client.playlists(
+        Uri.parse('https://plex.example'),
+        'test-token',
+        isCurrent: () => current,
+      ),
+      _plexError('cancelled'),
+    );
+    expect(requests, 1);
+  });
+
+  test(
+    'cancelled playlist batch launches no later requests while retry completes',
+    () async {
+      var current = true;
+      var scan = 0;
+      final firstBatchStarted = Completer<void>();
+      final releaseFirstBatch = Completer<void>();
+      final itemRequests = <int>[];
+      final client = PlexClient(
+        clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+        httpClient: MockClient((request) async {
+          if (request.url.path == '/playlists/all') {
+            scan++;
+            return http.Response(
+              jsonEncode({
+                'MediaContainer': {
+                  'Metadata': [
+                    for (var i = 0; i < 8; i++)
+                      {'ratingKey': 'p$i', 'title': 'Playlist $i'},
+                  ],
+                },
+              }),
+              200,
+            );
+          }
+          final requestScan = scan;
+          itemRequests.add(requestScan);
+          if (requestScan == 1) {
+            if (itemRequests.length == 4) firstBatchStarted.complete();
+            await releaseFirstBatch.future;
+          }
+          return http.Response('{"MediaContainer":{"Metadata":[]}}', 200);
+        }),
+      );
+      final abandoned = client.playlists(
+        Uri.parse('https://plex.example'),
+        'test-token',
+        isCurrent: () => current,
+      );
+      final abandonedAssertion = expectLater(
+        abandoned,
+        _plexError('cancelled'),
+      );
+      await firstBatchStarted.future;
+      current = false;
+      final retry = client.playlists(
+        Uri.parse('https://plex.example'),
+        'test-token',
+        isCurrent: () => true,
+      );
+      await retry;
+      releaseFirstBatch.complete();
+      await abandonedAssertion;
+      expect(itemRequests.where((scan) => scan == 1), hasLength(4));
+      expect(itemRequests.where((scan) => scan == 2), hasLength(8));
     },
   );
 
@@ -1462,3 +1657,7 @@ List<PlexPlaybackPartDescriptor> _directPlaybackDescriptor(String partPath) =>
             dynamicRange: DynamicRange.sdr,
           ),
         );
+
+Matcher _plexError(String code) => throwsA(
+  isA<PlexException>().having((exception) => exception.code, 'code', code),
+);

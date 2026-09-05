@@ -58,11 +58,9 @@ class PlexClient {
 
   Future<PlexPin> createPin() async {
     final response = await _send(
-      _request(
-        'POST',
-        Uri.https('plex.tv', '/api/v2/pins'),
-        headers: _headers(),
-      ),
+      'POST',
+      Uri.https('plex.tv', '/api/v2/pins'),
+      headers: _headers(),
     );
     final json = _json(response, {200, 201});
     return PlexPin(
@@ -74,11 +72,9 @@ class PlexClient {
 
   Future<String?> pollPin(PlexPin pin) async {
     final response = await _send(
-      _request(
-        'GET',
-        Uri.https('plex.tv', '/api/v2/pins/${pin.id}'),
-        headers: _headers(),
-      ),
+      'GET',
+      Uri.https('plex.tv', '/api/v2/pins/${pin.id}'),
+      headers: _headers(),
     );
     final json = _json(response, {200});
     return _optionalText(json['authToken']);
@@ -86,11 +82,9 @@ class PlexClient {
 
   Future<void> cancelPin(PlexPin pin) async {
     final response = await _send(
-      _request(
-        'DELETE',
-        Uri.https('plex.tv', '/api/v2/pins/${pin.id}'),
-        headers: _headers(),
-      ),
+      'DELETE',
+      Uri.https('plex.tv', '/api/v2/pins/${pin.id}'),
+      headers: _headers(),
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
       _throwResponse(response);
@@ -99,11 +93,9 @@ class PlexClient {
 
   Future<PlexAccount> account(String token) async {
     final response = await _send(
-      _request(
-        'GET',
-        Uri.https('plex.tv', '/users/account.json'),
-        headers: _headers(token),
-      ),
+      'GET',
+      Uri.https('plex.tv', '/users/account.json'),
+      headers: _headers(token),
     );
     final root = _json(response, {200});
     final json = _record(root['user'] ?? root['User'] ?? root, 'account');
@@ -122,11 +114,9 @@ class PlexClient {
   Future<List<PlexHomeUser>> homeUsers(String accountToken) async {
     for (final path in ['/api/v2/home/users', '/api/home/users']) {
       final response = await _send(
-        _request(
-          'GET',
-          Uri.https('plex.tv', path),
-          headers: _headers(accountToken),
-        ),
+        'GET',
+        Uri.https('plex.tv', path),
+        headers: _headers(accountToken),
       );
       final v2 = path.contains('/v2/');
       if (v2 &&
@@ -157,12 +147,10 @@ class PlexClient {
       '/api/home/users/$userId/switch',
     ]) {
       final response = await _send(
-        _request(
-          'POST',
-          Uri.https('plex.tv', path),
-          headers: _headers(accountToken),
-          bodyFields: {if (pin != null && pin.isNotEmpty) 'pin': pin},
-        ),
+        'POST',
+        Uri.https('plex.tv', path),
+        headers: _headers(accountToken),
+        bodyFields: {if (pin != null && pin.isNotEmpty) 'pin': pin},
       );
       if (response.statusCode == 401 || response.statusCode == 403) {
         throw const PlexException(
@@ -192,14 +180,12 @@ class PlexClient {
 
   Future<List<PlexServerAccess>> discoverServers(String token) async {
     final response = await _send(
-      _request(
-        'GET',
-        Uri.https('plex.tv', '/api/v2/resources', {
-          'includeHttps': '1',
-          'includeRelay': '1',
-        }),
-        headers: _headers(token),
-      ),
+      'GET',
+      Uri.https('plex.tv', '/api/v2/resources', {
+        'includeHttps': '1',
+        'includeRelay': '1',
+      }),
+      headers: _headers(token),
     );
     final data = _jsonList(response, {200});
     final servers = <PlexServerAccess>[];
@@ -326,11 +312,9 @@ class PlexClient {
     late final http.Response response;
     try {
       response = await _send(
-        _request(
-          'GET',
-          connection.uri.resolve('/identity'),
-          headers: _headers(token),
-        ),
+        'GET',
+        connection.uri.resolve('/identity'),
+        headers: _headers(token),
         timeout: const Duration(seconds: 4),
       );
     } catch (_) {
@@ -379,6 +363,7 @@ class PlexClient {
     PlexLibraryType libraryType, {
     required bool Function() isCurrent,
     required void Function(PlexLibraryPageProgress progress) onProgress,
+    Future<void>? cancelled,
   }) async {
     final output = <PlexMediaItem>[];
     var start = 0;
@@ -396,7 +381,7 @@ class PlexClient {
               'X-Plex-Container-Size': '$pageSize',
             },
           );
-      final json = await _serverJson(uri, token);
+      final json = await _serverJson(uri, token, cancelled: cancelled);
       final metadata = _containerList(json, 'Metadata');
       if (metadata.length > pageSize) {
         throw const PlexException(
@@ -433,17 +418,32 @@ class PlexClient {
     );
   }
 
-  Future<PlexPlaylistCatalog> playlists(Uri server, String token) async {
+  Future<PlexPlaylistCatalog> playlists(
+    Uri server,
+    String token, {
+    required bool Function() isCurrent,
+    Future<void>? cancelled,
+  }) async {
+    void checkCurrent() {
+      if (!isCurrent()) {
+        throw const PlexException('cancelled', 'Library scan cancelled.');
+      }
+    }
+
+    checkCurrent();
     final json = await _serverJson(
       server
           .resolve('/playlists/all')
           .replace(queryParameters: const {'playlistType': 'video'}),
       token,
+      cancelled: cancelled,
     );
+    checkCurrent();
     final output = <PlexPlaylist>[];
     final failed = <String>{};
     final metadata = _containerList(json, 'Metadata');
     for (var start = 0; start < metadata.length; start += 4) {
+      checkCurrent();
       final batch = metadata.skip(start).take(4).map((raw) async {
         try {
           final playlist = _record(raw, 'playlist');
@@ -451,7 +451,9 @@ class PlexClient {
           final itemsJson = await _serverJson(
             server.resolve('/playlists/${Uri.encodeComponent(id)}/items'),
             token,
+            cancelled: cancelled,
           );
+          checkCurrent();
           final items = _containerList(itemsJson, 'Metadata')
               .map(parseMediaItem)
               .where((item) => item.isPlayable)
@@ -464,7 +466,9 @@ class PlexClient {
                   items: items,
                 );
         } on PlexException catch (exception) {
+          checkCurrent();
           if (const {
+            'cancelled',
             'auth-invalid',
             'auth-required',
             'access-denied',
@@ -475,12 +479,15 @@ class PlexClient {
           if (value != null) failed.add('$value');
           return null;
         } catch (_) {
+          checkCurrent();
           final value = raw is Map ? raw['ratingKey'] : null;
           if (value != null) failed.add('$value');
           return null;
         }
       });
-      for (final playlist in await Future.wait(batch)) {
+      final results = await Future.wait(batch);
+      checkCurrent();
+      for (final playlist in results) {
         if (playlist != null) output.add(playlist);
       }
     }
@@ -527,7 +534,9 @@ class PlexClient {
       );
     }
     final response = await _send(
-      _request('GET', uri, headers: _headers(token)),
+      'GET',
+      uri,
+      headers: _headers(token),
       maximumBytes: maximumBytes,
       oversizedCode: 'artwork-too-large',
       oversizedMessage: 'Program artwork is too large.',
@@ -560,7 +569,9 @@ class PlexClient {
       );
     }
     final response = await _send(
-      _request('GET', uri, headers: const {'Accept': 'image/*'}),
+      'GET',
+      uri,
+      headers: const {'Accept': 'image/*'},
       maximumBytes: maximumBytes,
       oversizedCode: 'artwork-too-large',
       oversizedMessage: 'Program artwork is too large.',
@@ -582,33 +593,49 @@ class PlexClient {
     unawaited(subscription.cancel().onError((_, _) {}));
   }
 
-  Future<Map<String, Object?>> _serverJson(Uri uri, String token) async {
+  Future<Map<String, Object?>> _serverJson(
+    Uri uri,
+    String token, {
+    Future<void>? cancelled,
+  }) async {
     final response = await _send(
-      _request('GET', uri, headers: _headers(token)),
+      'GET',
+      uri,
+      headers: _headers(token),
+      cancelled: cancelled,
     );
     return _json(response, {200});
   }
 
-  http.Request _request(
+  Future<http.Response> _send(
     String method,
     Uri uri, {
     required Map<String, String> headers,
     Map<String, String>? bodyFields,
-  }) {
-    final request = http.Request(method, uri)
-      ..followRedirects = false
-      ..headers.addAll(headers);
-    if (bodyFields != null) request.bodyFields = bodyFields;
-    return request;
-  }
-
-  Future<http.Response> _send(
-    http.BaseRequest request, {
+    Future<void>? cancelled,
     Duration? timeout,
     int maximumBytes = maximumControlResponseBytes,
     String oversizedCode = 'response-too-large',
     String oversizedMessage = 'Plex returned too much data.',
   }) async {
+    final abort = Completer<void>();
+    var finished = false;
+    void abortRequest() {
+      if (!abort.isCompleted) abort.complete();
+    }
+
+    if (cancelled != null) {
+      unawaited(
+        cancelled.then((_) {
+          if (!finished) abortRequest();
+        }),
+      );
+    }
+    final request =
+        http.AbortableRequest(method, uri, abortTrigger: abort.future)
+          ..followRedirects = false
+          ..headers.addAll(headers);
+    if (bodyFields != null) request.bodyFields = bodyFields;
     final limit = timeout ?? requestTimeout;
     final elapsed = Stopwatch()..start();
     try {
@@ -617,6 +644,7 @@ class PlexClient {
       try {
         streamed = await pendingResponse.timeout(limit);
       } on TimeoutException {
+        abortRequest();
         unawaited(
           pendingResponse
               .then((lateResponse) => _cancel(lateResponse.stream))
@@ -662,10 +690,13 @@ class PlexClient {
         reasonPhrase: streamed.reasonPhrase,
       );
     } on TimeoutException {
+      abortRequest();
       throw const PlexException(
         'network-timeout',
         'Plex did not respond in time. Try again.',
       );
+    } on http.RequestAbortedException {
+      throw const PlexException('cancelled', 'Library scan cancelled.');
     } on SocketException {
       throw const PlexException(
         'network-unavailable',
@@ -676,6 +707,8 @@ class PlexClient {
         'network-unavailable',
         'Plex could not be reached.',
       );
+    } finally {
+      finished = true;
     }
   }
 

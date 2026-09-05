@@ -171,7 +171,10 @@ navigation do not enter C++.
 - Channel Setup inventories up to four selected libraries concurrently while
   preserving library and page order. Page size and pagination are bounded; it
   reports page/item progress and item totals when available, rejects stale
-  results, and supports active cancellation.
+  results, and supports active cancellation. Playlist discovery checks scan
+  currentness between bounded batches. Cancelling or replacing a scan aborts
+  its active library and playlist requests, and each Plex request aborts when
+  its response deadline expires.
   Empty libraries, unsupported media, transient failures, and cancellation are
   distinct states. Generated, filtered-library, playlist, and mixed channels
   expose their source read-only during editing; metadata-only saves preserve

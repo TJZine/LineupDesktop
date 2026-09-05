@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/channels/channel.dart';
@@ -1543,6 +1544,130 @@ void main() {
     expect(controller.libraryScanStatus, LibraryScanStatus.complete);
     expect(controller.libraryScanFacts.keys, {'second'});
   });
+
+  for (final action in ['cancel and retry', 'clear server', 'logout']) {
+    test(
+      'playlist scan $action aborts the active batch without stale commits or failure diagnostics',
+      () async {
+        final firstBatchStarted = Completer<void>();
+        var scan = 0;
+        var aborted = 0;
+        final itemRequests = <int>[];
+        final transport = PlexClient(
+          clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+          httpClient: MockClient.streaming((request, _) async {
+            if (request.url.path == '/playlists/all') {
+              scan++;
+              return http.StreamedResponse(
+                Stream.value(
+                  utf8.encode(
+                    jsonEncode({
+                      'MediaContainer': {
+                        'Metadata': [
+                          for (var i = 0; i < 8; i++)
+                            {'ratingKey': 'p$i', 'title': 'Playlist $i'},
+                        ],
+                      },
+                    }),
+                  ),
+                ),
+                200,
+              );
+            }
+            final requestScan = scan;
+            itemRequests.add(requestScan);
+            if (requestScan == 1) {
+              if (itemRequests.length == 4) firstBatchStarted.complete();
+              await (request as http.AbortableRequest).abortTrigger!;
+              aborted++;
+              throw http.RequestAbortedException(request.url);
+            }
+            return http.StreamedResponse(
+              Stream.value(utf8.encode('{"MediaContainer":{"Metadata":[]}}')),
+              200,
+            );
+          }),
+        );
+        addTearDown(transport.close);
+        final selected = _server('server');
+        final store = _CountingMemoryStore(
+          const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+        );
+        final plex = _FakePlex()
+          ..serversResult = [selected]
+          ..connectionResult = selected.connections.single
+          ..librariesResult = const [
+            PlexLibrary(
+              id: 'movies',
+              title: 'Movies',
+              type: PlexLibraryType.movie,
+            ),
+          ]
+          ..libraryItemsHandler = (_, _, _, _) async {
+            return [_playableMovie];
+          }
+          ..playlistsScanHandler = (server, token, isCurrent, cancelled) =>
+              transport.playlists(
+                server,
+                token,
+                isCurrent: isCurrent,
+                cancelled: cancelled,
+              );
+        final controller = LineupController(
+          store: store,
+          credentials: _MemoryCredentials(accountToken: 'token'),
+          plex: plex,
+        );
+        addTearDown(controller.dispose);
+        await controller.initialize();
+        controller
+          ..selectedLibraryIds = const {'committed'}
+          ..availableMedia = const [
+            PlexMediaItem(
+              id: 'committed',
+              title: 'Committed',
+              type: 'movie',
+              duration: Duration(minutes: 1),
+            ),
+          ]
+          ..diagnostics.enabled = true;
+        final savedBefore = store.saveCalls;
+        final abandoned = controller.setLibraries({'movies'});
+        await firstBatchStarted.future;
+        if (action == 'cancel and retry') {
+          controller.cancelLibraryScan();
+          expect(controller.availableMedia.single.id, 'committed');
+          expect(controller.selectedLibraryIds, {'committed'});
+          expect(store.saveCalls, savedBefore);
+          expect(await controller.setLibraries({'movies'}), isTrue);
+          expect(controller.availableMedia.single.id, _playableMovie.id);
+          expect(controller.libraryScanStatus, LibraryScanStatus.complete);
+          expect(itemRequests.where((scan) => scan == 2), hasLength(8));
+          expect(store.saveCalls, savedBefore + 1);
+        } else if (action == 'clear server') {
+          await controller.clearSavedServer();
+          expect(controller.server, isNull);
+          expect(controller.availableMedia, isEmpty);
+        } else {
+          expect(await controller.logout(), isTrue);
+          expect(controller.account, isNull);
+          expect(controller.availableMedia, isEmpty);
+        }
+        expect(await abandoned, isFalse);
+        expect(aborted, 4);
+        expect(itemRequests.where((scan) => scan == 1), hasLength(4));
+        expect(controller.error, isNull);
+        expect(
+          controller.diagnostics.entries.where(
+            (entry) =>
+                entry.message == 'Playlist discovery unavailable' ||
+                entry.message == 'Some playlists could not be loaded',
+          ),
+          isEmpty,
+        );
+      },
+    );
+  }
 
   test(
     'route cancellation invalidates an active scan before returning ready',
@@ -4209,6 +4334,13 @@ class _FakePlex extends PlexClient {
   libraryItemsScanHandler;
   Future<List<PlexLibrary>> Function(Uri, String)? librariesHandler;
   Future<PlexPlaylistCatalog> Function(Uri, String)? playlistsHandler;
+  Future<PlexPlaylistCatalog> Function(
+    Uri,
+    String,
+    bool Function(),
+    Future<void>?,
+  )?
+  playlistsScanHandler;
   Future<List<PlexServerAccess>> Function(String)? discoverServersHandler;
   Future<Uint8List> Function(Uri, String, Uri)? artworkHandler;
   List<PlexPlaybackPartDescriptor>? playbackDescriptorResult;
@@ -4316,6 +4448,7 @@ class _FakePlex extends PlexClient {
     PlexLibraryType libraryType, {
     required bool Function() isCurrent,
     required void Function(PlexLibraryPageProgress progress) onProgress,
+    Future<void>? cancelled,
   }) async {
     itemTokens.add(token);
     final scanHandler = libraryItemsScanHandler;
@@ -4339,8 +4472,17 @@ class _FakePlex extends PlexClient {
   }
 
   @override
-  Future<PlexPlaylistCatalog> playlists(Uri server, String token) async {
+  Future<PlexPlaylistCatalog> playlists(
+    Uri server,
+    String token, {
+    required bool Function() isCurrent,
+    Future<void>? cancelled,
+  }) async {
     playlistTokens.add(token);
+    final scanHandler = playlistsScanHandler;
+    if (scanHandler != null) {
+      return scanHandler(server, token, isCurrent, cancelled);
+    }
     return playlistsHandler?.call(server, token) ??
         const PlexPlaylistCatalog(playlists: [], failedIds: {});
   }

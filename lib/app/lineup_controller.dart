@@ -137,6 +137,7 @@ class LineupController extends ChangeNotifier {
   Map<String, LibraryScanFact> _libraryScanFacts = const {};
   String? error;
   int _epoch = 0;
+  Completer<void>? _scanCancelled;
   String? _accountToken;
   String? _profileToken;
   Map<String, PlexServerAccess> _serverAccess = const {};
@@ -189,7 +190,7 @@ class LineupController extends ChangeNotifier {
   Map<String, LibraryScanFact> get libraryScanFacts => _libraryScanFacts;
 
   Future<void> initialize() async {
-    final operation = ++_epoch;
+    final operation = _invalidateOperation();
     final loadResult = await store.load();
     if (!_isCurrent(operation)) return;
     _persisted = loadResult.state;
@@ -261,7 +262,7 @@ class LineupController extends ChangeNotifier {
       await cancelLinking();
       return;
     }
-    final operation = ++_epoch;
+    final operation = _invalidateOperation();
     _pinTimer?.cancel();
     await _run(
       () async {
@@ -285,7 +286,7 @@ class LineupController extends ChangeNotifier {
 
   Future<bool> cancelLinking() async {
     final pin = activePin;
-    ++_epoch;
+    _invalidateOperation();
     _pinTimer?.cancel();
     _busyOperation = null;
     busy = true;
@@ -437,7 +438,7 @@ class LineupController extends ChangeNotifier {
   };
 
   Future<bool> selectProfile(PlexHomeUser selected, {String? pin}) {
-    final operation = ++_epoch;
+    final operation = _invalidateOperation();
     _invalidatePmsRefresh();
     _serverTargetId = null;
     _pinTimer?.cancel();
@@ -545,7 +546,7 @@ class LineupController extends ChangeNotifier {
   }
 
   Future<void> refreshServers() async {
-    final operation = ++_epoch;
+    final operation = _invalidateOperation();
     _invalidatePmsRefresh();
     _serverTargetId = null;
     await _run(
@@ -556,7 +557,7 @@ class LineupController extends ChangeNotifier {
   }
 
   Future<void> selectServer(PlexServer selected) async {
-    final operation = ++_epoch;
+    final operation = _invalidateOperation();
     _invalidatePmsRefresh();
     _serverTargetId = selected.id;
     await _run(
@@ -668,7 +669,7 @@ class LineupController extends ChangeNotifier {
   }
 
   Future<bool> setLibraries(Set<String> ids) async {
-    final operation = ++_epoch;
+    final operation = _invalidateOperation();
     final loaded = await _run(
       () async {
         final allowed = libraries.map((library) => library.id).toSet();
@@ -721,6 +722,8 @@ class LineupController extends ChangeNotifier {
     if (selectedServer == null || connection == null) {
       throw const PlexException('server-unreachable', 'Select a server first.');
     }
+    final cancelled = Completer<void>();
+    _scanCancelled = cancelled;
     _libraryScanFacts = Map.unmodifiable({
       for (final id in ids)
         id: const LibraryScanFact(status: LibraryScanStatus.idle),
@@ -756,6 +759,7 @@ class LineupController extends ChangeNotifier {
                 library.id,
                 library.type,
                 isCurrent: () => _isCurrent(operation),
+                cancelled: cancelled.future,
                 onProgress: (progress) {
                   if (!_isCurrent(operation) || firstFailure != null) return;
                   final current = _libraryScanFacts[library.id]!;
@@ -847,11 +851,19 @@ class LineupController extends ChangeNotifier {
         catalog = await _withPmsAuthorization(
           operation,
           selectedServer.id,
-          (token, refreshedConnection) =>
-              plex.playlists((refreshedConnection ?? connection!).uri, token),
+          (token, refreshedConnection) => plex.playlists(
+            (refreshedConnection ?? connection!).uri,
+            token,
+            isCurrent: () => _isCurrent(operation),
+            cancelled: cancelled.future,
+          ),
         );
       } on PlexException catch (exception) {
-        if (_isPmsAuthorizationError(exception)) rethrow;
+        if (!_isCurrent(operation) ||
+            exception.code == 'cancelled' ||
+            _isPmsAuthorizationError(exception)) {
+          rethrow;
+        }
         diagnostics.add('plex-library', 'Playlist discovery unavailable', {
           'code': exception.code,
         });
@@ -863,7 +875,7 @@ class LineupController extends ChangeNotifier {
         }
         catalog = const PlexPlaylistCatalog(playlists: [], failedIds: {});
       }
-      if (operation != _epoch) {
+      if (!_isCurrent(operation)) {
         return (
           failedPlaylistIds: const <String>{},
           media: const <PlexMediaItem>[],
@@ -894,12 +906,15 @@ class LineupController extends ChangeNotifier {
         notifyListeners();
       }
       rethrow;
+    } finally {
+      if (!cancelled.isCompleted) cancelled.complete();
+      if (identical(_scanCancelled, cancelled)) _scanCancelled = null;
     }
   }
 
   void cancelLibraryScan() {
     if (libraryScanStatus != LibraryScanStatus.scanning) return;
-    ++_epoch;
+    _invalidateOperation();
     _busyOperation = null;
     busy = false;
     error = null;
@@ -958,7 +973,7 @@ class LineupController extends ChangeNotifier {
   void cancelProfileSelection() {
     if (!profileSelectionCanCancel || server == null) return;
     if (busy) {
-      ++_epoch;
+      _invalidateOperation();
       _invalidatePmsRefresh();
       _serverTargetId = null;
       _busyOperation = null;
@@ -980,7 +995,7 @@ class LineupController extends ChangeNotifier {
   void cancelServerSelection() {
     if (!serverSelectionCanCancel || server == null) return;
     if (busy) {
-      ++_epoch;
+      _invalidateOperation();
       _invalidatePmsRefresh();
       _serverTargetId = null;
       _busyOperation = null;
@@ -993,7 +1008,7 @@ class LineupController extends ChangeNotifier {
   }
 
   Future<void> clearSavedServer() async {
-    final operation = ++_epoch;
+    final operation = _invalidateOperation();
     await _run(
       () => _queueStateOperation(operation, () async {
         final profileId = profile?.id ?? account?.id;
@@ -1413,7 +1428,7 @@ class LineupController extends ChangeNotifier {
   }
 
   Future<bool> _performLogout() async {
-    ++_epoch;
+    _invalidateOperation();
     final stateBeforeLogout = _stateOperations;
     final releaseStateOperations = Completer<void>();
     _stateOperations = stateBeforeLogout.then(
@@ -1439,7 +1454,7 @@ class LineupController extends ChangeNotifier {
       if (_disposed) return false;
       await stateBeforeLogout;
       if (_disposed) return false;
-      ++_epoch;
+      _invalidateOperation();
       account = null;
       profile = null;
       profiles = const [];
@@ -1769,6 +1784,13 @@ class LineupController extends ChangeNotifier {
     }
   }
 
+  int _invalidateOperation() {
+    final cancelled = _scanCancelled;
+    _scanCancelled = null;
+    if (cancelled != null && !cancelled.isCompleted) cancelled.complete();
+    return ++_epoch;
+  }
+
   bool _isCurrent(int operation) => !_disposed && operation == _epoch;
 
   bool _isCurrentPmsTarget(int operation, String serverId) =>
@@ -1792,7 +1814,7 @@ class LineupController extends ChangeNotifier {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
-    ++_epoch;
+    _invalidateOperation();
     _pinTimer?.cancel();
     _busyOperation = null;
     busy = false;
