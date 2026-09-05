@@ -9,16 +9,11 @@ base branch.
 
 ## Before contributing
 
-Read:
-
-1. [AGENTS.md](AGENTS.md)
-2. [Documentation index](docs/README.md)
-3. [Development](docs/DEVELOPMENT.md)
-4. [Architecture](docs/architecture.md)
-
-For Windows media, runner, engine, DirectComposition, or packaging changes, also
-read [Windows Native Acceptance](docs/windows-native-validation.md) and
-[Windows Runtime Provenance](docs/windows-runtime.md).
+Start with [AGENTS.md](AGENTS.md), then read the relevant workflow and ownership
+sections it names. Use the [documentation index](docs/README.md) when the right
+authority is unclear. Read Windows acceptance and runtime provenance sections
+when the task involves native behavior, packaging, or support claims; broaden
+reading when an invariant remains unclear.
 
 The preserved Electron implementation is on `electron-ui`; use the immutable
 `bfaee636748f2a0d442f3690b7ba5262d32ff17c` baseline when provenance matters.
@@ -45,23 +40,12 @@ being investigated.
 
 ## Development setup
 
-Use the exact Flutter revision and native prerequisites documented in
+Use the exact Flutter revision and task-specific prerequisites documented in
 [Development](docs/DEVELOPMENT.md). Do not silently substitute a newer SDK,
 engine, patch, or media runtime when validating repository behavior.
 
-Common checks:
-
-```sh
-flutter pub get
-dart format --output=none --set-exit-if-changed .
-flutter analyze
-TZ=America/New_York flutter test # canonical full suite on macOS/Linux
-```
-
-Run focused tests while developing, then run the platform-specific relevant
-suite from [Development](docs/DEVELOPMENT.md) before requesting review. A
-compiling Windows build does not prove native video, DirectComposition, HDR,
-hardware decode, focus, or packaged runtime behavior.
+Commands and evidence boundaries live in
+[Development's verification map](docs/DEVELOPMENT.md#verification-by-task).
 
 ## Change design
 
@@ -79,18 +63,17 @@ cost.
 
 ## Tests and validation
 
-Match proof to risk:
+Use [Development](docs/DEVELOPMENT.md#verification-by-task) to select focused
+tests and the relevant full checks. Reuse inspected results while their tested
+code, inputs, dependencies, and relevant environment remain unchanged; rerun
+checks invalidated by edits or integration. Documentation-only changes need
+structural and claim checks, not product test reruns.
 
-| Change | Minimum expected evidence |
-| --- | --- |
-| Pure policy/model | Focused unit tests plus full format/analyze/test |
-| Widget, focus, semantics, responsive layout | Focused widget tests at representative sizes and the relevant full suite |
-| Persistence or credentials | Failure/rollback tests, scope isolation, and secret-flow review |
-| Native player contract | Dart contract tests, C++/CMake build proof, lifecycle/stale-event review |
-| DirectComposition, video layering, HDR, hardware decode, fullscreen, input, packaging | Physical Windows evidence at the exact commit, recorded through the native-acceptance plan |
-
-Do not convert missing physical evidence into a support claim. Classify it as
-unverified or blocked and state the exact test still required.
+Classify missing physical Windows evidence as unverified or blocked for the
+specific native/support claim, and state the exact scenario still required.
+It does not block unrelated portable work. Compilation alone never establishes
+native presentation, HDR, hardware decode, physical input, or package runtime
+behavior.
 
 ## Security and private data
 

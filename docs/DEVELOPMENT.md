@@ -59,49 +59,119 @@ work. Bound queues and caches whose inputs can grow.
   transitive cost, debuggability, and standard-library alternatives. Record
   material license obligations before shipping bundled native libraries.
 - Never commit Plex credentials, authorization headers, tokenized media URLs,
-  private media metadata, or unredacted diagnostics. Redact at the owner before
-  values cross logging, UI, or export boundaries.
+  private media metadata, or unredacted diagnostics. Diagnostic producers use
+  fixed messages and normalized structured facts; never log raw exceptions,
+  native messages, headers, or playback descriptors. Redaction is defense in
+  depth. Preserve the credential and diagnostic contracts in
+  [Architecture](architecture.md#implemented-now).
 - Keep scheduling deterministic and pure. Cancel or reject stale network and
   playback results. Avoid blocking the UI isolate; measure before optimizing,
   then isolate CPU-heavy work and bound large guide/channel workloads.
 - Use coherent conventional commits. Keep generated platform scaffolding with
   the feature that requires it, and do not mix unrelated cleanup.
 
-## Commands
+## Verification by task
+
+Choose the affected checks below; reuse still-current results under the rule
+above. Native behavior and support claims retain their exact-commit physical
+Windows requirements. Missing Windows evidence does not block unrelated
+portable work; report the specific unverified behavior and required scenario.
+
+| Task or evidence | Prerequisites and checks | What the result establishes |
+| --- | --- | --- |
+| Documentation only | `git diff --check`; check changed links, examples, and claims against their owners | Structural and source consistency; no new product or platform evidence |
+| Dart policy, models, async work | Pinned Flutter SDK; focused tests plus the relevant full format/analyze/test checks below | Deterministic contracts; no Xcode application build or Windows engine provisioning required |
+| Flutter layout, focus, semantics | Relevant widget tests at representative sizes; macOS for the two golden suites below | Flutter composition and input/semantics contracts; physical Windows input, AT, and video layering remain separate |
+| Persistence or credentials | Controller/store/transport failure, rollback, scope-isolation, and secret-flow tests named in [Architecture](architecture.md#changing-asynchronous-and-persisted-state) | Deterministic recovery/currentness; OS credential storage and physical filesystem behavior need platform observation |
+| macOS development app | Xcode and macOS setup below; `flutter run -d macos` or `flutter build macos` as relevant | Development UI/runtime or build evidence; the macOS player explicitly reports unsupported playback |
+| Windows package policy | PowerShell 7.4+ on a portable host; `pwsh -File ./tool/windows/verify-release-policy.ps1` | Script parsing and pinned policy inputs; no Windows runtime or package execution proof |
+| Native player contract / C++ integration | Dart adapter/coordinator tests, lifetime/currentness inspection, Windows C++ toolchain and prepared libmpv; `flutter build windows` | Contract and stock-engine compile/link proof; not a runnable or packageable Lineup player |
+| Patched engine / portable package | Full Windows provisioning below; release wrapper and [package acceptance](windows-native-validation.md#8-portable-package-acceptance) | Artifact-bound build/package checks; launch, media, HDR, layering, fullscreen, input, and support claims require [physical Windows acceptance](windows-native-validation.md) |
+
+## Portable commands
 
 Flutter SDK `3.47.0` (revision
 `4cf24164269a5ebf0c16a028a00727d0e77bbb05`, Dart `3.13.0`) is the reproducible
 toolchain for macOS, Windows, and CI.
 
-On macOS, install Xcode and its command-line tools on macOS 12 or newer, then
-select the exact Flutter checkout rather than a different SDK already on PATH:
+Select the exact Flutter checkout rather than a different SDK already on PATH:
 
 ```sh
 git clone https://github.com/flutter/flutter.git /path/to/flutter
 git -C /path/to/flutter checkout 4cf24164269a5ebf0c16a028a00727d0e77bbb05
 export PATH=/path/to/flutter/bin:$PATH
 flutter doctor -v
-flutter config --enable-macos-desktop
 ```
 
-Resolve any Xcode/macOS warnings reported by `flutter doctor` before running
-the repository commands. The application currently targets macOS 12.0.
-
 ```sh
-dart format .
+flutter pub get
 dart format --output=none --set-exit-if-changed .
 flutter analyze
-TZ=America/New_York flutter test # canonical timezone for macOS goldens
+TZ=America/New_York flutter test
+```
+
+Use `dart format <changed-paths>` when formatting is needed. The timezone above
+is canonical for localized schedule goldens. The full suite on Linux/Windows
+excludes the two suites marked `@TestOn('mac-os')`; a pass there is not golden
+evidence. Run these on macOS when the affected UI needs pixel verification:
+
+```sh
+TZ=America/New_York flutter test test/app/ui_acceptance_golden_test.dart
+TZ=America/New_York flutter test test/app/guide_sparse_golden_test.dart
+```
+
+Inspect intentional golden changes from the real widgets. Preserve
+[approved UI decisions](../.interface-design/system.md), including the protected
+Player layouts and separate approval for structural proposals.
+
+## macOS development app
+
+For macOS application builds/runs, install Xcode and its command-line tools on
+macOS 12 or newer. Resolve relevant Xcode/macOS warnings from `flutter doctor`;
+those application prerequisites do not gate unrelated Dart checks. The
+application currently targets macOS 12.0.
+
+```sh
+flutter config --enable-macos-desktop
 flutter run -d macos
 flutter build macos
 ```
 
 ## Windows native player
 
-The Windows player requires Git, Python 3, PowerShell 7.4 or newer (`pwsh`),
-Visual Studio Build Tools 2022 with Desktop C++, ATL, Windows SDK
-`10.0.22621.0`, Debugging Tools for Windows, and 7-Zip with `7z.exe` on PATH.
-The pinned Flutter SDK is also the source checkout for the owned engine patch:
+### Application compile check
+
+Use the pinned Flutter SDK, Git, PowerShell 7.4+ (`pwsh`), Visual Studio Build
+Tools 2022 with Desktop C++ and a Windows SDK, and 7-Zip. Prepare the ignored
+x86-64 LGPL libmpv directory before configuring the application:
+
+```powershell
+Set-Location C:\path\to\LineupDesktop
+$mpvRoot = 'C:\local\lineup-mpv' # New or empty directory.
+& .\tool\windows\prepare-mpv.ps1 -Destination $mpvRoot
+$env:LINEUP_MPV_ROOT = $mpvRoot
+flutter build windows
+```
+
+This is only a compile/link integration check against Flutter's stock cached
+engine. It is not a runnable Lineup player or a packageable release because
+native initialization requires the repository-patched DirectComposition engine.
+
+The preparation script verifies the archive, generates an MSVC import library,
+and writes the provenance record required by CMake. Acquisition pins and
+integrity checks live in the build scripts and CMake; see
+[Windows Runtime Provenance](windows-runtime.md) for the asset identity,
+component versions, licenses, and redistribution obligations. Runnable test and
+package machines also need a GPU driver or Vulkan Runtime providing
+`vulkan-1.dll`, even though Lineup selects D3D11 output.
+
+### Patched engine provisioning
+
+Only engine builds and runnable player/package work require the full engine
+toolchain: the application prerequisites above plus Python 3, pinned
+`depot_tools`, Visual Studio ATL, Windows SDK `10.0.22621.0`, and Debugging Tools
+for Windows. The pinned Flutter checkout is also the engine source checkout.
+Use [build metadata](../tool/windows/build-metadata.psd1) for exact identities:
 
 ```powershell
 $metadata = Import-PowerShellDataFile C:\path\to\LineupDesktop\tool\windows\build-metadata.psd1
@@ -136,26 +206,13 @@ python .\flutter\tools\gn --runtime-mode=release
 ninja -C out\host_release
 ```
 
-The patch must be applied to the exact revisions recorded in
-`tool/flutter_engine/README.md`. Before configuring the application, prepare
-the ignored x86-64 LGPL libmpv directory and set the required build variable:
+See the [engine patch contract](../tool/flutter_engine/README.md) for source
+validation and provenance. Reuse provisioned outputs only while their inputs
+remain current. Select the resulting engine explicitly; do not replace
+Flutter's SDK cache:
 
 ```powershell
 Set-Location C:\path\to\LineupDesktop
-$mpvRoot = 'C:\local\lineup-mpv'
-& .\tool\windows\prepare-mpv.ps1 -Destination $mpvRoot
-$env:LINEUP_MPV_ROOT = $mpvRoot
-```
-
-At this point, bare `flutter build windows` is useful only as a compile/link
-integration check against Flutter's stock cached engine. It is not a runnable
-Lineup player or a packageable release because the native player deliberately
-requires the repository-patched DirectComposition engine at runtime.
-
-Then select the resulting engine explicitly—do not replace Flutter's SDK
-cache:
-
-```powershell
 $engineSource = 'C:\path\to\flutter\engine\src'
 flutter run -d windows `
   --local-engine=host_debug `
@@ -175,28 +232,19 @@ build input copied into the portable package. `tool/windows/package.ps1`
 requires that marker, rechecks it against the clean current commit and pinned
 engine metadata, and rejects stale markers or modified build artifacts.
 
-The preparation script verifies the archive SHA-256, generates an MSVC import
-library from the DLL exports, and writes the runtime provenance record CMake
-requires.
+## CI evidence
 
-The preparation script pins and verifies zhongfly's x86-64 LGPL build from
-release `2026-08-13-7b8915bc1d`. The asset is
-`mpv-dev-lgpl-x86_64-20260813-git-7b8915bc1d.7z`, SHA-256
-`13723530C3A719577A27EA19E0127175CE6A047071F8D988ADC1B0DD400B3D18`.
-It contains mpv `v0.41.0-923-g7b8915bc1` configured with `-Dgpl=false`, FFmpeg
-`N-126123-g8b4fad11a` configured without GPL components, and libplacebo
-`v7.371.0 (v7.360.0-111-g22ee762-dirty)`. CMake verifies the archive identity,
-header, DLL, redistribution marker, and locally generated MSVC import library
-before linking.
-See `docs/windows-runtime.md` for provenance and redistribution obligations.
-The selected DLL also imports the Khronos Vulkan loader even when Lineup uses
-D3D11 output, so test and package machines need a current GPU driver or Vulkan
-Runtime that provides `vulkan-1.dll`.
+[The workflow](../.github/workflows/ci.yml) runs portable Dart verification on
+Linux, the two golden suites and an application build on macOS, portable
+PowerShell release-policy validation, and focused widget tests plus a
+stock-engine C++/CMake application build on Windows Server 2022.
 
-CI runs on Windows Server 2022, bootstraps gclient from the pinned Flutter
-checkout's official `engine/scripts/standard.gclient`, verifies that config's
-blob plus the exact framework, engine, and patched source revisions, builds
-`host_release`, compiles the Windows application against that local engine,
-and exercises release-marker, artifact, runtime-license, and package policy
-failures. It does not execute the application, so the runtime marker and
-DirectComposition presentation still need Windows acceptance evidence.
+The expensive patched-engine/package job is conditional on engine and direct
+package-policy inputs selected by `release-inputs`. Ordinary `lib/` or
+`windows/` source edits alone do not select it. Manual workflow dispatch and an
+unavailable comparison baseline also select the full job. When selected, it
+verifies the pinned source/configuration/patch, builds `host_release`, invokes
+the release wrapper, and exercises artifact/provenance/license/package rejection
+checks. Inspect which jobs actually ran before describing a green CI result.
+CI does not launch the application; runtime markers and native presentation
+still require physical Windows acceptance.
