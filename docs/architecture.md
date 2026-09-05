@@ -120,7 +120,12 @@ navigation do not enter C++.
   Ordered Plex parts remain one Flutter-owned playback lifetime: the
   coordinator gives every native load its own generation, advances natural
   completion once, and maps only known part boundaries. Native events remain
-  the track-state authority.
+  the track-state authority. Seeks into a loading part share its readiness and
+  apply the latest requested position after it loads, including authorization
+  recovery. Playback errors retain a native cleanup obligation even after UI
+  intent is retired. Windows stop completion uses a separate request identity
+  and confirms libmpv is idle with an empty playlist; failed or timed-out stops
+  remain retryable and replacement playback waits for cleanup.
   Keyboard focus in the active timed OSD or mini Guide suspends dismissal;
   presentation generations reject stale focus callbacks. Player transitions
   use Flutter's effective Reduce Motion setting, and track rails initially

@@ -129,7 +129,14 @@ void main() {
     await player.selectTrack(PlayerTrackType.audio, 7);
     await player.selectTrack(PlayerTrackType.subtitle, null);
     await player.setVolume(42.5);
-    await player.stop();
+    final stop = player.stop();
+    await Future<void>.delayed(Duration.zero);
+    await _sendNativeEvent(messenger, {
+      'type': 'stopResult',
+      'stopId': calls.last.arguments['stopId'],
+      'success': true,
+    });
+    await stop;
 
     expect(calls.map((call) => call.method), [
       'initialize',
@@ -605,6 +612,145 @@ void main() {
     },
   );
 
+  test(
+    'stop queue acknowledgment is not completion and failure is retryable',
+    () async {
+      final calls = <MethodCall>[];
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        calls.add(call);
+        return null;
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+      final player = WindowsNativePlayer();
+      addTearDown(player.dispose);
+      await player.initialize();
+      var settled = false;
+      final stop = player.stop().whenComplete(() => settled = true);
+      final failure = expectLater(
+        stop,
+        throwsA(
+          isA<PlayerUnavailable>().having(
+            (error) => error.failureCode,
+            'failureCode',
+            'stop_failed',
+          ),
+        ),
+      );
+      await pumpEventQueue(times: 2);
+      expect(settled, isFalse);
+      final firstId = calls.last.arguments['stopId'];
+      await _sendNativeEvent(messenger, {
+        'type': 'stopResult',
+        'stopId': firstId,
+        'success': false,
+      });
+      await failure;
+      final retry = player.stop();
+      await pumpEventQueue(times: 2);
+      final nextId = calls.last.arguments['stopId'];
+      expect(nextId, isNot(firstId));
+      await _sendNativeEvent(messenger, {
+        'type': 'stopResult',
+        'stopId': nextId,
+        'success': true,
+      });
+      await retry;
+      expect(player.status.state, PlayerState.stopped);
+    },
+  );
+
+  testWidgets(
+    'late stop result after timeout cannot complete a retry or replacement',
+    (tester) async {
+      final calls = <MethodCall>[];
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        calls.add(call);
+        return null;
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+      final player = WindowsNativePlayer(
+        stopTimeout: const Duration(milliseconds: 20),
+      );
+      final initialization = player.initialize();
+      await tester.pump();
+      await initialization;
+      final firstStop = expectLater(
+        player.stop(),
+        throwsA(
+          isA<PlayerUnavailable>().having(
+            (error) => error.failureCode,
+            'failureCode',
+            'stop_timeout',
+          ),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 20));
+      await firstStop;
+      final firstId = calls.last.arguments['stopId'];
+      final retry = player.stop();
+      final replacement = player.load(Uri.parse('file:///replacement.mp4'));
+      await tester.pump();
+      final nextId = calls.last.arguments['stopId'];
+      await _sendNativeEvent(messenger, {
+        'type': 'stopResult',
+        'stopId': firstId,
+        'success': true,
+      });
+      expect(calls.where((call) => call.method == 'load'), isEmpty);
+      await _sendNativeEvent(messenger, {
+        'type': 'stopResult',
+        'stopId': nextId,
+        'success': true,
+      });
+      await retry;
+      await tester.pump();
+      final loadId = calls.last.arguments['loadId'];
+      await _sendNativeEvent(messenger, {
+        'type': 'state',
+        'loadId': loadId,
+        'state': 'playing',
+      });
+      await replacement;
+      await _sendNativeEvent(messenger, {
+        'type': 'stopResult',
+        'stopId': firstId,
+        'success': true,
+      });
+      expect(player.status.state, PlayerState.playing);
+      final disposal = player.dispose();
+      await tester.pump();
+      await disposal;
+    },
+  );
+
+  test(
+    'dispose settles pending stop and rejects its late result after recreation',
+    () async {
+      final calls = <MethodCall>[];
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        calls.add(call);
+        return null;
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+      final player = WindowsNativePlayer();
+      addTearDown(player.dispose);
+      await player.initialize();
+      final stop = player.stop();
+      final failure = expectLater(stop, throwsA(isA<PlayerUnavailable>()));
+      await pumpEventQueue(times: 2);
+      final stopId = calls.last.arguments['stopId'];
+      await player.dispose();
+      await failure;
+      await player.initialize();
+      await _sendNativeEvent(messenger, {
+        'type': 'stopResult',
+        'stopId': stopId,
+        'success': true,
+      });
+      expect(player.status.state, PlayerState.idle);
+    },
+  );
+
   test('stop retires a pending load before its native reply and ignores late events', () async {
     final calls = <MethodCall>[];
     final stopReply = Completer<void>();
@@ -673,6 +819,14 @@ void main() {
     expect(player.telemetry.videoCodec, 'h264');
 
     stopReply.complete();
+    await _sendNativeEvent(messenger, {
+      'type': 'stopResult',
+      'stopId': calls
+          .where((call) => call.method == 'stop')
+          .last
+          .arguments['stopId'],
+      'success': true,
+    });
     await stop;
     await loadFailure;
     expect(player.status.state, PlayerState.stopped);
@@ -683,7 +837,7 @@ void main() {
     expect(player.tracks, isEmpty);
   });
 
-  test('late stop reply cannot reset a replacement load', () async {
+  test('replacement load waits for native stop completion', () async {
     final calls = <MethodCall>[];
     final stopReply = Completer<void>();
     messenger.setMockMethodCallHandler(channel, (call) {
@@ -712,6 +866,17 @@ void main() {
       generation: 2,
     );
     await Future<void>.delayed(Duration.zero);
+    expect(calls.where((call) => call.method == 'load'), hasLength(1));
+    stopReply.complete();
+    await Future<void>.delayed(Duration.zero);
+    expect(calls.where((call) => call.method == 'load'), hasLength(1));
+    await _sendNativeEvent(messenger, {
+      'type': 'stopResult',
+      'stopId': calls.last.arguments['stopId'],
+      'success': true,
+    });
+    await stop;
+    await Future<void>.delayed(Duration.zero);
     final replacementId = calls.last.arguments!['loadId']! as int;
     await _sendNativeEvent(messenger, {
       'type': 'property',
@@ -725,9 +890,6 @@ void main() {
       'state': 'playing',
     });
     await replacement;
-
-    stopReply.complete();
-    await stop;
 
     expect(player.status.state, PlayerState.playing);
     expect(player.telemetry.videoCodec, 'hevc');

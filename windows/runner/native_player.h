@@ -95,6 +95,7 @@ class WindowsNativePlayer {
   void EventLoop(uint64_t generation);
   void HandleMpvEvent(const mpv_event& event, uint64_t generation);
   void QueueEvent(uint64_t generation, flutter::EncodableMap value);
+  void QueueStopResult(uint64_t generation, int64_t stop_id, bool success);
   void PostPlatformWakeup();
   void DrainEvents();
   flutter::EncodableValue EncodeTrackList(const mpv_node& node) const;
@@ -116,6 +117,7 @@ class WindowsNativePlayer {
   std::mutex event_mutex_;
   std::deque<QueuedEvent> events_;
   std::optional<int64_t> active_load_id_;
+  std::optional<int64_t> pending_stop_id_;
   std::optional<int64_t> event_load_id_;
   std::deque<int64_t> pending_load_ids_;
   std::unordered_map<int64_t, int64_t> playlist_load_ids_;

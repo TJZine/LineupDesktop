@@ -247,6 +247,8 @@ Classify every row as **Pass**, **Fail — blocker**, **Fail — non-blocking**,
 | Overlay Guide | Real video remains beneath legible, interactive Flutter artwork, text, focus, and schedule | |
 | Continuity | Player -> Guide -> Player preserves one session and restores focus | |
 | Replacement tune | Guide and mini-Guide replacement leave no stale audio/frame/event, duplicate player, or retained lease | |
+| Failure cleanup | Delay a controlled media response beyond the load deadline, then sign out or switch profile/server; no late audio/video may appear. Repeat with an asynchronous native control failure and a replacement tune while cleanup is pending. A failed stop must remain retryable and must not be reported as completed cleanup | |
+| Multipart seek readiness | With DVR controls enabled, seek twice into the same loading destination part; only the latest target is applied after readiness. Repeat with a failed destination load and with a replacement tune during loading; no hidden failure or stale seek may affect the replacement | |
 | OSD/transport | Verify default classic-TV OSD (transport hidden and Player-local pause/play/seek/stop/media shortcuts blocked), retained channel/tuning/tracks/sleep/menu/fullscreen input, then enable DVR playback controls and verify transport UI plus those shortcuts; include reveal/auto-hide | |
 | Tracks | Audio selection matches output; subtitles select, render, and disable without hiding Flutter controls | |
 | Input | Keyboard contracts pass; available remote/gamepad maps predictably and leaves every core control reachable | |
