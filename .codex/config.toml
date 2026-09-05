@@ -1,3 +1,11 @@
+[agents]
+max_threads = 6
+max_depth = 1
+
+[agents.reviewer]
+description = "Read-only reviewer focused on correctness, regressions, security, architecture fit, maintainability, performance, and missing tests."
+config_file = "agents/reviewer.toml"
+
 [mcp_servers.codanna]
 url = "http://127.0.0.1:8082/mcp"
 http_headers = { Authorization = "Bearer mcp-access-token-dummy" }

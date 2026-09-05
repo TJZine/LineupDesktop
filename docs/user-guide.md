@@ -96,6 +96,9 @@ Channel Setup has three stages:
 Available strategy families include Plex playlists, collections, recently added
 content, genres, decades, studios, actors, and directors. Depending on the
 strategy, channels can be generated per library or across selected libraries.
+Alternate copies and playback-mode variants apply to eligible series channels;
+actor and director channels are not expanded into those high-cardinality
+alternatives.
 
 The review step applies the accepted plan atomically. Cancelling or a failed
 save preserves the previous lineup.
@@ -168,8 +171,9 @@ desktop override.
 Focused program cells reveal long titles with a slow ticker; unfocused cells
 remain stable and ellipsized. Reduce Motion disables the ticker. The program
 information area can use artwork-derived color bleed, the current theme, or a
-Plex backdrop, and can prefer Plex clear title logos when available. Missing
-logos fall back to text. When a program has a Plex poster reference, the normal
+Plex backdrop, and can prefer Plex clear title logos when available. Missing or
+failed logos fall back to text, as do logos that would render too short or narrow
+in their slot. When a program has a Plex poster reference, the normal
 artwork geometry remains stable while it loads or if loading fails. Only a
 program with no poster reference at all omits that slot so the existing details
 can use the available width without decorative placeholder art.
@@ -215,8 +219,9 @@ genres, concise rating/resolution/dynamic-range/audio badges, poster, and
 official title artwork. When **Prefer official title artwork** is enabled, an
 available Plex
 clear logo leads the identity and text remains the fallback when the logo is
-missing, disabled, or fails. Its playback line is shown only for facts that are
-available: source/runtime details are separate, and actual native playback
+missing, disabled, fails, or would render too small to read. Its playback line
+is shown only for facts that are available: source/runtime details are separate,
+and actual native playback
 position/duration are preferred, with schedule timing used when native duration
 is unavailable. When Plex supplies cast facts, actor portraits appear between
 the synopsis and progress, with names and roles available to accessibility.
@@ -395,7 +400,7 @@ vulnerabilities only through the private process in
 | Audio plays but video is black or hidden | Record the exact window size, display scaling, fullscreen state, Guide layout, whether audio continues, and whether the problem follows a resize/minimize/restore transition. Treat this as a native-composition failure and report it with the current commit. |
 | A replacement channel leaves stale audio/video | Stop testing that scenario, record both channel transitions and timestamps, and report it as a native playback-lifetime failure. |
 | A setting or lineup change fails | The previous state should remain. Retry after confirming the Plex server and local storage are available. |
-| A banner says saved app data was corrupt | Lineup moved malformed or schema-invalid state aside and started with empty state. Dismiss the banner after reviewing the resulting setup. Other storage read failures stop startup instead of resetting data. |
+| A banner says saved app data was corrupt | Lineup preserved state with invalid text encoding, malformed JSON, or invalid schema in a separate file and started with empty state. Dismiss the banner after reviewing the resulting setup. Other storage read failures stop startup instead of resetting data. |
 | A private portable package does not launch | Verify the complete package was extracted, `SYSTEM-REQUIREMENTS.txt` is satisfied, the archive hash matches, and the GPU driver supplies `vulkan-1.dll`. |
 
 ## Known limitations
@@ -404,6 +409,9 @@ vulnerabilities only through the private process in
 - Windows native playback and packaging have not yet completed the full
   physical acceptance matrix on the current branch.
 - macOS playback is intentionally unsupported.
+- Playback stops after the tuned program's final media part. Automatic
+  continuation to another scheduled program is not implemented; its behavior
+  after pauses or an early media ending still needs a schedule-alignment decision.
 - Audio-output selection and passthrough controls are not exposed.
 - The native player deliberately has no application codec/container/HDR
   allowlist. Representative codec, HDR, TrueHD/DTS-to-PCM, text/image subtitle,

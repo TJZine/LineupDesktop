@@ -22,6 +22,19 @@ automatically. Recommend it for novel security boundaries, credential or data
 loss risks, complex concurrency, native ABI/lifetime work, or Windows media and
 presentation changes whose proof deserves a second specialist.
 
+Read the relevant sections and affected owners first; broaden to callers, adjacent
+contracts, or complete documents when invariants or behavior remain unclear.
+Continue authorized implementation and repair failures caused by the change without
+requesting approval at each step. Ask when investigation leaves a consequential
+product, design, security, data-loss, or scope decision unresolved. Preserve existing
+UI design approvals in `.interface-design/system.md`.
+
+Reuse inspected verification results when the tested code, inputs, dependencies,
+and relevant environment are unchanged. Rerun affected checks when edits or
+integration invalidate them, and add proof for uncovered interactions. Nonbehavioral
+edits need only the relevant structural or formatting check. Physical Windows
+evidence requirements for native behavior and support claims remain unchanged.
+
 ## Architecture practice
 
 Use a feature-oriented modular monolith. A feature owns its models, policies,

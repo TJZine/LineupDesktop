@@ -67,6 +67,7 @@ void main() {
       'type': 'episode',
       'duration': 3600000,
       'grandparentTitle': 'Show',
+      'grandparentRatingKey': 'show-42',
       'summary': 'A first episode.',
       'contentRating': 'TV-14',
       'parentIndex': 1,
@@ -92,12 +93,25 @@ void main() {
     expect(item.container, 'mkv');
     expect(item.videoCodec, 'hevc');
     expect(item.dynamicRange, DynamicRange.dolbyVision);
+    expect(item.grandparentRatingKey, 'show-42');
     expect(item.summary, 'A first episode.');
     expect(item.contentRating, 'TV-14');
     expect(item.seasonNumber, 1);
     expect(item.episodeNumber, 2);
     expect(item.videoResolution, '4k');
     expect(item.audioChannels, 6);
+  });
+
+  test('normalizes numeric grandparent rating keys', () {
+    final item = parseMediaItem({
+      'ratingKey': 'episode-42',
+      'title': 'Episode',
+      'type': 'episode',
+      'duration': 1000,
+      'grandparentRatingKey': 42,
+    });
+
+    expect(item.grandparentRatingKey, '42');
   });
 
   test('preserves every ordered part with positive nullable durations', () {
@@ -341,6 +355,10 @@ void main() {
           'thumb': '/library/metadata/4/thumb#private',
         },
       ],
+      'Director': [
+        {'tag': '  Jane Director  '},
+        {'tag': 'jane director'},
+      ],
     });
 
     expect(item.actors, [
@@ -351,6 +369,7 @@ void main() {
       'Unsafe Fragment',
     ]);
     expect(item.cast, hasLength(5));
+    expect(item.directors, ['Jane Director']);
     expect(item.cast.first.name, 'Avery Vale');
     expect(item.cast.first.role, 'Detective Rowan');
     expect(item.cast.first.thumbPath, '/library/metadata/avery/thumb');
@@ -365,6 +384,35 @@ void main() {
           return member.thumbPath == null;
         }),
       ),
+    );
+  });
+
+  test('retains only trusted absolute Plex cast portraits', () {
+    const trusted = 'https://metadata-static.plex.tv/f/people/avery-vale.jpg';
+    final item = parseMediaItem({
+      'ratingKey': 'cast-portraits',
+      'title': 'Episode',
+      'type': 'episode',
+      'duration': 1000,
+      'Role': [
+        {'tag': 'Trusted', 'thumb': trusted},
+        for (final unsafe in [
+          'http://metadata-static.plex.tv/f/people/http.jpg',
+          'https://user@metadata-static.plex.tv/f/people/user.jpg',
+          'https://metadata-static.plex.tv:444/f/people/port.jpg',
+          'https://metadata-static.plex.tv/f/people/query.jpg?token=secret',
+          'https://metadata-static.plex.tv/f/people/fragment.jpg#private',
+          'https://metadata-static.plex.tv.evil.example/f/people/lookalike.jpg',
+          'https://metadata-static.plex.tv./f/people/trailing-dot.jpg',
+        ].indexed)
+          {'tag': 'Unsafe ${unsafe.$1}', 'thumb': unsafe.$2},
+      ],
+    });
+
+    expect(item.cast.first.thumbPath, trusted);
+    expect(
+      item.cast.skip(1).map((member) => member.thumbPath),
+      everyElement(isNull),
     );
   });
 

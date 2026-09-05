@@ -169,6 +169,7 @@ class PlexMediaItem {
     this.libraryId,
     this.parentTitle,
     this.grandparentTitle,
+    this.grandparentRatingKey,
     this.thumbPath,
     this.grandparentThumbPath,
     this.artPath,
@@ -202,6 +203,7 @@ class PlexMediaItem {
   final String? libraryId;
   final String? parentTitle;
   final String? grandparentTitle;
+  final String? grandparentRatingKey;
   final String? thumbPath;
   final String? grandparentThumbPath;
   final String? artPath;

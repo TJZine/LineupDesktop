@@ -120,7 +120,12 @@ navigation do not enter C++.
   Ordered Plex parts remain one Flutter-owned playback lifetime: the
   coordinator gives every native load its own generation, advances natural
   completion once, and maps only known part boundaries. Native events remain
-  the track-state authority.
+  the track-state authority. Seeks into a loading part share its readiness and
+  apply the latest requested position after it loads, including authorization
+  recovery. Playback errors retain a native cleanup obligation even after UI
+  intent is retired. Windows stop completion uses a separate request identity
+  and confirms libmpv is idle with an empty playlist; failed or timed-out stops
+  remain retryable and replacement playback waits for cleanup.
   Keyboard focus in the active timed OSD or mini Guide suspends dismissal;
   presentation generations reject stale focus callbacks. Player transitions
   use Flutter's effective Reduce Motion setting, and track rails initially
@@ -147,6 +152,9 @@ navigation do not enter C++.
   server's probes, libraries, artwork, and playback. A bounded
   authorization recovery refreshes the same server credential once without
   exposing it through public models, persisted state, URLs, or diagnostics.
+  Cast portraits from Plex's exact HTTPS metadata image origin use a separate,
+  redirect-disabled, size-bounded request that sends no Plex credentials;
+  other foreign artwork references remain rejected.
 - Profile and selected-server state remains scoped by Plex profile. The
   application controller serializes whole state mutations through
   snapshot/save/commit or rollback, serializes secure credential writes with
@@ -162,18 +170,23 @@ navigation do not enter C++.
   Setup owns library selection, all eight source
   strategies, priority and cross-library scope, series variants, build mode,
   preview/review/confirmation, and atomic application for up to 1,000
-  channels. Custom channel editing, Settings, and diagnostics remain separate
+  channels. Actor/director proposals do not receive alternate copies or
+  variants. Custom channel editing, Settings, and diagnostics remain separate
   Flutter workflows.
 - Channel Setup inventories up to four selected libraries concurrently while
   preserving library and page order. Page size and pagination are bounded; it
   reports page/item progress and item totals when available, rejects stale
-  results, and supports active cancellation.
+  results, and supports active cancellation. Playlist discovery checks scan
+  currentness between bounded batches. Cancelling or replacing a scan aborts
+  its active library and playlist requests, and each Plex request aborts when
+  its response deadline expires.
   Empty libraries, unsupported media, transient failures, and cancellation are
   distinct states. Generated, filtered-library, playlist, and mixed channels
   expose their source read-only during editing; metadata-only saves preserve
   source and generated identity.
-- State loading treats malformed or schema-invalid JSON as corruption, moves it
-  aside, and starts empty with a dismissible recovery banner. Missing state
+- State loading treats invalid UTF-8, malformed JSON, or schema-invalid JSON as
+  corruption, moves the original bytes aside, and starts empty with a
+  dismissible recovery banner. Missing state
   starts empty; transient read or quarantine failures stop startup instead of
   silently replacing data. Diagnostics accept only bounded structured facts
   from a finite allowlist; arbitrary exception and native message text never

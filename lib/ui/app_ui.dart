@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 
 import 'app_theme.dart';
@@ -292,3 +295,104 @@ Future<bool> confirmDestructiveAction(
       ),
     ) ??
     false;
+
+bool clearLogoIsUsable(Size intrinsicSize, BoxConstraints constraints) {
+  if (!intrinsicSize.width.isFinite ||
+      !intrinsicSize.height.isFinite ||
+      intrinsicSize.width <= 0 ||
+      intrinsicSize.height <= 0 ||
+      !constraints.hasBoundedWidth ||
+      !constraints.hasBoundedHeight) {
+    return false;
+  }
+  final fitted = applyBoxFit(
+    BoxFit.contain,
+    intrinsicSize,
+    constraints.biggest,
+  ).destination;
+  return fitted.height >= constraints.maxHeight * 0.35 &&
+      fitted.width >= constraints.maxWidth * 0.2;
+}
+
+class ClearLogoImage extends StatefulWidget {
+  const ClearLogoImage(
+    this.bytes, {
+    required this.fallback,
+    this.imageKey,
+    this.semanticLabel,
+    this.excludeFromSemantics = false,
+    super.key,
+  });
+
+  final Uint8List bytes;
+  final Widget fallback;
+  final Key? imageKey;
+  final String? semanticLabel;
+  final bool excludeFromSemantics;
+
+  @override
+  State<ClearLogoImage> createState() => _ClearLogoImageState();
+}
+
+class _ClearLogoImageState extends State<ClearLogoImage> {
+  Future<Size?>? _intrinsicSize;
+
+  @override
+  void didUpdateWidget(covariant ClearLogoImage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.bytes != widget.bytes) {
+      _intrinsicSize = null;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) => FutureBuilder<Size?>(
+      future: _intrinsicSize ??= _decodeImageSize(
+        widget.bytes,
+        createLocalImageConfiguration(context),
+      ),
+      builder: (context, snapshot) {
+        final size = snapshot.data;
+        if (snapshot.connectionState != ConnectionState.done ||
+            size == null ||
+            !clearLogoIsUsable(size, constraints)) {
+          return widget.fallback;
+        }
+        return Image.memory(
+          widget.bytes,
+          key: widget.imageKey,
+          fit: BoxFit.contain,
+          alignment: Alignment.centerLeft,
+          gaplessPlayback: true,
+          semanticLabel: widget.semanticLabel,
+          excludeFromSemantics: widget.excludeFromSemantics,
+          errorBuilder: (_, _, _) => widget.fallback,
+        );
+      },
+    ),
+  );
+}
+
+Future<Size?> _decodeImageSize(
+  Uint8List bytes,
+  ImageConfiguration configuration,
+) {
+  final completer = Completer<Size?>();
+  final stream = MemoryImage(bytes).resolve(configuration);
+  late final ImageStreamListener listener;
+  listener = ImageStreamListener(
+    (info, _) {
+      completer.complete(
+        Size(info.image.width.toDouble(), info.image.height.toDouble()),
+      );
+      stream.removeListener(listener);
+    },
+    onError: (_, _) {
+      completer.complete();
+      stream.removeListener(listener);
+    },
+  );
+  stream.addListener(listener);
+  return completer.future;
+}

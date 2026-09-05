@@ -515,7 +515,13 @@ void WindowsNativePlayer::HandleMethodCall(
       return;
     }
   } else if (method == "stop") {
-    if (!QueueCommand({CommandType::stop})) {
+    const auto stop_id = arguments ? AsInt(Find(*arguments, "stopId"))
+                                   : std::nullopt;
+    if (!stop_id || *stop_id <= 0) {
+      result->Error("invalid_argument", "A positive integer stopId is required.");
+      return;
+    }
+    if (!QueueCommand({CommandType::stop, *stop_id})) {
       result->Error("command_queue_full", "The native command queue is full.");
       return;
     }
@@ -722,6 +728,7 @@ void WindowsNativePlayer::FinishDispose() {
     wakeup_posted_ = false;
   }
   active_load_id_.reset();
+  pending_stop_id_.reset();
   event_load_id_.reset();
   pending_load_ids_.clear();
   playlist_load_ids_.clear();
@@ -981,7 +988,13 @@ void WindowsNativePlayer::RunCommand(QueuedCommand& command,
     case CommandType::stop: {
       const char* value[] = {"stop", nullptr};
       status = mpv_command(mpv_, value);
-      break;
+      if (status < 0) {
+        QueueStopResult(generation, command.load_id, false);
+      } else {
+        pending_stop_id_ = command.load_id;
+      }
+      // Stop failures belong to the stop request, even after load retirement.
+      return;
     }
     case CommandType::track:
       if (command.load_id == 0) {
@@ -1037,6 +1050,19 @@ void WindowsNativePlayer::EventLoop(uint64_t generation) {
     for (auto& command : commands) {
       RunCommand(command, generation);
       command.plex_header.Clear();
+    }
+    if (pending_stop_id_) {
+      int idle = 0;
+      int64_t playlist_count = -1;
+      // A successful stop command requests teardown; idle confirms it finished.
+      if (mpv_get_property(mpv_, "idle-active", MPV_FORMAT_FLAG, &idle) >= 0 &&
+          idle &&
+          mpv_get_property(mpv_, "playlist-count", MPV_FORMAT_INT64,
+                           &playlist_count) >= 0 &&
+          playlist_count == 0) {
+        QueueStopResult(generation, *pending_stop_id_, true);
+        pending_stop_id_.reset();
+      }
     }
     const mpv_event* event = mpv_wait_event(mpv_, 0.05);
     if (stopping_) {
@@ -1258,6 +1284,15 @@ void WindowsNativePlayer::HandleMpvEvent(const mpv_event& event,
     default:
       break;
   }
+}
+
+void WindowsNativePlayer::QueueStopResult(uint64_t generation,
+                                          int64_t stop_id, bool success) {
+  QueueEvent(generation, {
+      {flutter::EncodableValue("type"), flutter::EncodableValue("stopResult")},
+      {flutter::EncodableValue("stopId"), flutter::EncodableValue(stop_id)},
+      {flutter::EncodableValue("success"), flutter::EncodableValue(success)},
+  });
 }
 
 void WindowsNativePlayer::QueueEvent(uint64_t generation,

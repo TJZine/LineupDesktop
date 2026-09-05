@@ -69,6 +69,7 @@ List<ChannelProposal> buildChannelProposals({
     if (!strategies.contains(strategy)) return;
     final countsByLibrary = <PlexLibrary, Map<String, int>>{};
     final seriesByLibrary = <PlexLibrary, Map<String, Set<String>>>{};
+    final tagLabels = <String, String>{};
     final requiresSeriesBreadth = {
       BuilderStrategy.actors,
       BuilderStrategy.directors,
@@ -77,16 +78,21 @@ List<ChannelProposal> buildChannelProposals({
       final counts = <String, int>{};
       final seriesByTag = <String, Set<String>>{};
       for (final item in items.where((item) => item.libraryId == library.id)) {
-        final selectedTags = select(item)
-            .map((value) => value.trim())
-            .where((value) => value.isNotEmpty)
-            .toSet();
-        for (final tag in selectedTags) {
+        final selectedTags = <String, String>{};
+        for (final value in select(item)) {
+          final label = value.trim();
+          if (label.isEmpty) continue;
+          final tag = requiresSeriesBreadth
+              ? normalizePersonName(label)
+              : label;
+          selectedTags.putIfAbsent(tag, () => label);
+          tagLabels.putIfAbsent(tag, () => label);
+        }
+        for (final tag in selectedTags.keys) {
           counts[tag] = (counts[tag] ?? 0) + 1;
-          if (requiresSeriesBreadth &&
-              library.type == PlexLibraryType.show &&
-              item.grandparentTitle != null) {
-            (seriesByTag[tag] ??= {}).add(item.grandparentTitle!);
+          if (requiresSeriesBreadth && library.type == PlexLibraryType.show) {
+            final series = _peopleSeriesKey(library.id, item);
+            if (series != null) (seriesByTag[tag] ??= {}).add(series);
           }
         }
       }
@@ -125,7 +131,7 @@ List<ChannelProposal> buildChannelProposals({
         if (count >= minimumItems) {
           proposals.add(
             ChannelProposal(
-              name: tag,
+              name: tagLabels[tag]!,
               source: sources.length == 1
                   ? sources.single
                   : MixedSource(sources: sources, interleave: true),
@@ -145,8 +151,8 @@ List<ChannelProposal> buildChannelProposals({
         proposals.add(
           ChannelProposal(
             name: sourceLibraries.length == 1
-                ? entry.key
-                : '${library.title} • ${entry.key}',
+                ? tagLabels[entry.key]!
+                : '${library.title} • ${tagLabels[entry.key]!}',
             source: LibrarySource(
               libraryId: library.id,
               libraryType: library.type,
@@ -247,6 +253,16 @@ List<ChannelProposal> buildChannelProposals({
   return List.unmodifiable(balanced);
 }
 
+String? _peopleSeriesKey(String libraryId, PlexMediaItem item) {
+  final ratingKey = item.grandparentRatingKey?.trim();
+  if (ratingKey?.isNotEmpty == true) return '$libraryId:key:$ratingKey';
+  final title = item.grandparentTitle?.trim();
+  if (title?.isNotEmpty == true) {
+    return '$libraryId:title:${normalizePersonName(title!)}';
+  }
+  return null;
+}
+
 ({List<Channel> channels, bool truncated}) materializeChannelPlan({
   required List<ChannelProposal> proposals,
   required List<Channel> existing,
@@ -296,15 +312,20 @@ List<ChannelProposal> buildChannelProposals({
         ));
       }
     }
-    if (isSeries && baseMode != PlaybackMode.sequential) {
-      if (variantMode != null && variantMode != baseMode) {
+    if (replicable && variantMode != null) {
+      final candidateBlockSize = variantMode == PlaybackMode.block
+          ? variantBlockSize
+          : null;
+      final isDuplicate =
+          variantMode == baseMode &&
+          (variantMode != PlaybackMode.block ||
+              candidateBlockSize == baseBlockSize);
+      if (!isDuplicate) {
         expanded.add((
           proposal: proposal,
           suffix: ' ${variantMode.name}',
           mode: variantMode,
-          blockSize: variantMode == PlaybackMode.block
-              ? variantBlockSize
-              : null,
+          blockSize: candidateBlockSize,
         ));
       }
     }
