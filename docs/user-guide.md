@@ -408,6 +408,9 @@ vulnerabilities only through the private process in
 - Windows native playback and packaging have not yet completed the full
   physical acceptance matrix on the current branch.
 - macOS playback is intentionally unsupported.
+- Playback stops after the tuned program's final media part. Automatic
+  continuation to another scheduled program is not implemented; its behavior
+  after pauses or an early media ending still needs a schedule-alignment decision.
 - Audio-output selection and passthrough controls are not exposed.
 - The native player deliberately has no application codec/container/HDR
   allowlist. Representative codec, HDR, TrueHD/DTS-to-PCM, text/image subtitle,
