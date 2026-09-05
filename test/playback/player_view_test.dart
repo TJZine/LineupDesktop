@@ -2436,6 +2436,10 @@ void main() {
   ) async {
     addTearDown(tester.view.resetDevicePixelRatio);
     addTearDown(tester.view.resetPhysicalSize);
+    // A 3:1 image remains usable in the compact shelf's title-artwork slot.
+    final wideArtwork = base64Decode(
+      'iVBORw0KGgoAAAANSUhEUgAAAAMAAAABCAAAAAA+i0toAAAADElEQVR4nGP4//8/AAX+Av4N70a4AAAAAElFTkSuQmCC',
+    );
 
     for (final variant in const [
       (
@@ -2464,6 +2468,7 @@ void main() {
       final fixture = variant.castPresent
           ? _Fixture(
               PlayerState.playing,
+              artworkBytes: wideArtwork,
               richItemOverride: _fixtureItem(
                 0,
                 rich: true,
@@ -2491,6 +2496,16 @@ void main() {
         await tester.pump();
         fixture.player.showNowPlaying();
         await tester.pumpAndSettle();
+
+        if (index == 0) {
+          await tester.runAsync(
+            () => precacheImage(
+              MemoryImage(variant.castPresent ? wideArtwork : _fixtureArtwork),
+              tester.element(find.byType(PlayerView)),
+            ),
+          );
+          await tester.pumpAndSettle();
+        }
 
         final shelfSize = tester.getSize(
           find.byKey(const Key('player-now-playing-shelf')),

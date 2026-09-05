@@ -20,22 +20,34 @@ final _tinyPng = base64Decode(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwC'
   'AAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
 );
+// Synthetic 3:1 title artwork and a 20x1200 image that fits too narrowly.
+final _wideLogoPng = base64Decode(
+  'iVBORw0KGgoAAAANSUhEUgAAAAMAAAABCAAAAAA+i0toAAAADElEQVR4nGP4//8/AAX+Av4N70a4AAAAAElFTkSuQmCC',
+);
+final _narrowLogoPng = base64Decode(
+  'iVBORw0KGgoAAAANSUhEUgAAABQAAASwCAAAAADeIDU6AAAAWElEQVR4nO3IMQEAAAwCIPuX1gILsANO0kOklFJKKaWUUkoppZRSSimllFJKKaWUUkoppZRSSimllFJKKaWUUkoppZRSSimllFJKKaWUUkoppZRSSinl1xx/t2e0Ivf9MAAAAABJRU5ErkJggg==',
+);
 
 void main() {
   test('clear logo usability follows decoded size and actual constraints', () {
     const ordinary = Size(1200, 400);
     const extremeWide = Size(1200, 20);
+    const extremeNarrow = Size(20, 1200);
     const guideConstraint = BoxConstraints(maxWidth: 360, maxHeight: 52);
     const osdConstraint = BoxConstraints(maxWidth: 320, maxHeight: 68);
     const nowPlayingConstraint = BoxConstraints(maxWidth: 600, maxHeight: 132);
 
     for (final constraint in [
       guideConstraint,
+      const BoxConstraints(maxWidth: 240, maxHeight: 36),
       osdConstraint,
       nowPlayingConstraint,
+      const BoxConstraints(maxWidth: 360, maxHeight: 84),
+      const BoxConstraints(maxWidth: 360, maxHeight: 58),
     ]) {
       expect(clearLogoIsUsable(ordinary, constraint), isTrue);
       expect(clearLogoIsUsable(extremeWide, constraint), isFalse);
+      expect(clearLogoIsUsable(extremeNarrow, constraint), isFalse);
     }
     expect(
       clearLogoIsUsable(
@@ -834,7 +846,7 @@ void main() {
   ) async {
     await tester.binding.setSurfaceSize(const Size(1600, 900));
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    final lineup = _Lineup(1, artworkBytes: _tinyPng)
+    final lineup = _Lineup(1, artworkBytes: _wideLogoPng)
       ..settings = const LineupSettings(
         guideInfoBackgroundMode: GuideInfoBackgroundMode.artwork,
       );
@@ -880,7 +892,7 @@ void main() {
 
     await tester.runAsync(
       () => precacheImage(
-        MemoryImage(_tinyPng),
+        MemoryImage(_wideLogoPng),
         tester.element(find.byType(GuideView)),
       ),
     );
@@ -899,57 +911,71 @@ void main() {
     );
   });
 
-  testWidgets('invalid clear-logo bytes retain the textual title', (
-    tester,
-  ) async {
-    await tester.binding.setSurfaceSize(const Size(1600, 900));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
-    final lineup = _Lineup(
-      1,
-      artworkBytes: Uint8List.fromList(const [1, 2, 3]),
-    );
-    addTearDown(lineup.dispose);
-    lineup.channels = [
-      Channel(
-        id: 'channel',
-        number: 7,
-        name: 'Drama Seven',
-        source: ManualSource([
-          ChannelItem(
-            id: 'episode',
-            title: 'The Arrival',
-            showTitle: 'Signal House',
-            duration: const Duration(hours: 24),
-            poster: Uri.parse('/poster'),
-            clearLogo: Uri.parse('/clear-logo'),
-          ),
-        ]),
-        playbackMode: PlaybackMode.sequential,
-        anchor: DateTime.now().subtract(const Duration(hours: 1)),
-        shuffleSeed: 7,
-      ),
-    ];
-    final guide = GuideController(
-      lineup: lineup,
-      loadSchedule: (channel) async => _schedule(channel),
-    );
-    addTearDown(guide.dispose);
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: GuideView(
-          controller: guide,
-          pictureInPicture: const ColoredBox(color: Colors.black),
-          onClose: () {},
-          onTune: (_) async {},
+  for (final (description, bytes) in [
+    ('invalid clear-logo bytes', Uint8List.fromList(const [1, 2, 3])),
+    ('decoded narrow clear-logo', _narrowLogoPng),
+  ]) {
+    testWidgets('$description retains the textual title', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1600, 900));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final lineup = _Lineup(1, artworkBytes: bytes);
+      addTearDown(lineup.dispose);
+      lineup.channels = [
+        Channel(
+          id: 'channel',
+          number: 7,
+          name: 'Drama Seven',
+          source: ManualSource([
+            ChannelItem(
+              id: 'episode',
+              title: 'The Arrival',
+              showTitle: 'Signal House',
+              duration: const Duration(hours: 24),
+              poster: Uri.parse('/poster'),
+              clearLogo: Uri.parse('/clear-logo'),
+            ),
+          ]),
+          playbackMode: PlaybackMode.sequential,
+          anchor: DateTime.now().subtract(const Duration(hours: 1)),
+          shuffleSeed: 7,
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
+      ];
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => _schedule(channel),
+      );
+      addTearDown(guide.dispose);
 
-    expect(find.byKey(const Key('guide-clear-logo-fallback')), findsOneWidget);
-    expect(find.text('SIGNAL HOUSE'), findsOneWidget);
-  });
+      await tester.pumpWidget(
+        MaterialApp(
+          home: GuideView(
+            controller: guide,
+            pictureInPicture: const ColoredBox(color: Colors.black),
+            onClose: () {},
+            onTune: (_) async {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      if (bytes == _narrowLogoPng) {
+        await tester.runAsync(
+          () => precacheImage(
+            MemoryImage(bytes),
+            tester.element(find.byType(GuideView)),
+          ),
+        );
+        await tester.pumpAndSettle();
+      }
+
+      expect(find.byKey(const Key('guide-clear-logo')), findsNothing);
+      expect(
+        find.byKey(const Key('guide-clear-logo-fallback')),
+        findsOneWidget,
+      );
+      expect(find.text('SIGNAL HOUSE'), findsOneWidget);
+    });
+  }
 
   testWidgets('physical 4K at DPR 2 uses the 1080p Guide row budget', (
     tester,

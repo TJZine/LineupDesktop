@@ -171,8 +171,9 @@ desktop override.
 Focused program cells reveal long titles with a slow ticker; unfocused cells
 remain stable and ellipsized. Reduce Motion disables the ticker. The program
 information area can use artwork-derived color bleed, the current theme, or a
-Plex backdrop, and can prefer Plex clear title logos when available. Missing
-logos fall back to text. When a program has a Plex poster reference, the normal
+Plex backdrop, and can prefer Plex clear title logos when available. Missing or
+failed logos fall back to text, as do logos that would render too short or narrow
+in their slot. When a program has a Plex poster reference, the normal
 artwork geometry remains stable while it loads or if loading fails. Only a
 program with no poster reference at all omits that slot so the existing details
 can use the available width without decorative placeholder art.

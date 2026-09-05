@@ -310,7 +310,8 @@ bool clearLogoIsUsable(Size intrinsicSize, BoxConstraints constraints) {
     intrinsicSize,
     constraints.biggest,
   ).destination;
-  return fitted.height >= constraints.maxHeight * 0.35;
+  return fitted.height >= constraints.maxHeight * 0.35 &&
+      fitted.width >= constraints.maxWidth * 0.2;
 }
 
 class ClearLogoImage extends StatefulWidget {
