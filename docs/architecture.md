@@ -59,11 +59,10 @@ through a Flutter texture. The native baseline explicitly requests
 Stock Flutter 3.47.0 does not request ANGLE's DirectComposition EGL window
 surface mode, so it cannot provide the required transparent composition
 reliably. Lineup therefore owns the single-file patch in
-`tool/flutter_engine`. It targets framework revision
-`4cf24164269a5ebf0c16a028a00727d0e77bbb05` and engine revision
-`5f77625673248ee5846fbcaf5d3e1a3878386fd7`. The runner opts in before engine
-startup; the patched engine records an exact-revision marker only after surface
-creation succeeds; and native initialization rejects a missing or mismatched
+`tool/flutter_engine`, targeting the exact framework and engine identities in
+[Windows build metadata](../tool/windows/build-metadata.psd1). The runner opts
+in before engine startup; the patched engine records an exact-revision marker
+only after surface creation succeeds; native initialization rejects a missing or mismatched
 marker. This makes stock-engine or opaque fallback obvious.
 
 Plezy was studied for Windows composition behavior only; no GPL Plezy
@@ -71,14 +70,25 @@ application source is present in Lineup. The engine change was evaluated
 separately from the BSD-3-Clause `flutter-plezy` patch series at the pinned
 commit recorded in `tool/flutter_engine/NOTICE`.
 
-`WindowsNativePlayer` is the only native owner. It creates and tears down
-libmpv, the presentation host, its event thread, observations, bounded event
-queue, and fullscreen placement. mpv callbacks never call Dart. They copy a
-small whitelist into the queue, post a runner-window message, and the platform
-thread invokes the one MethodChannel. A generation rejects stale events across
-dispose/recreate. Dart remains the owner of application playback coordination;
-Plex authentication, networking, channel policy, settings, Guide behavior, and
-navigation do not enter C++.
+The C++ `WindowsNativePlayer` is the only native player owner. Its worker
+executes queued media commands, reads mpv events, and copies bounded facts into
+the event queue. It posts a runner-window message; only the platform thread
+invokes the MethodChannel or changes runner-owned Windows objects. Native
+lifecycle generations reject events across dispose/recreate. Per-load IDs
+correlate media events across replacement loads; separate stop IDs correlate
+idle confirmation. None substitutes for the others. Dart remains the owner of
+application playback coordination; Plex authentication, networking, channel
+policy, settings, Guide behavior, and navigation do not enter C++.
+
+Normal shutdown is asynchronous: stop accepting commands and invalidate the
+native generation, let the worker destroy libmpv, then handle its platform
+message, join the worker, destroy the presentation host, and complete disposal.
+Window close waits for that handshake. The runner destroys the native owner
+before the Flutter controller/messenger. Preserve this ordering when changing
+close or recreation; the destructor's five-second wait and termination fallback
+is emergency cleanup, not the normal path. See
+[native player lifetime](../windows/runner/native_player.cpp) and
+[runner message handling](../windows/runner/flutter_window.cpp).
 
 ## Implemented now
 
@@ -155,6 +165,15 @@ navigation do not enter C++.
   Cast portraits from Plex's exact HTTPS metadata image origin use a separate,
   redirect-disabled, size-bounded request that sends no Plex credentials;
   other foreign artwork references remain rejected.
+  Authenticated media requires HTTPS in both the Dart adapter and native
+  boundary. The PMS credential crosses the privileged load seam separately
+  from the URL and is applied as a per-load header, never as a global mpv
+  credential option. Authenticated mpv loads reject redirects because custom
+  headers can otherwise follow them; Dart Plex requests also disable redirects.
+  Preserve native header-buffer clearing after command execution and queue
+  cleanup. See [Dart load validation](../lib/playback/windows_native_player.dart),
+  [native load options](../windows/runner/native_player.cpp), and the
+  [physical redirect scenarios](windows-native-validation.md#6-plex-end-to-end-campaign).
 - Profile and selected-server state remains scoped by Plex profile. The
   application controller serializes whole state mutations through
   snapshot/save/commit or rollback, serializes secure credential writes with
@@ -188,10 +207,16 @@ navigation do not enter C++.
   corruption, moves the original bytes aside, and starts empty with a
   dismissible recovery banner. Missing state
   starts empty; transient read or quarantine failures stop startup instead of
-  silently replacing data. Diagnostics accept only bounded structured facts
-  from a finite allowlist; arbitrary exception and native message text never
-  enters diagnostic storage. Existing message redaction remains defense in
-  depth.
+  silently replacing data.
+- Diagnostic producers supply fixed area/message text and normalized structured
+  facts, excluding raw exceptions, native messages, credentials, and media
+  descriptors. `Diagnostics.add` filters context keys, string syntax/length,
+  and numeric bounds; it does not determine whether an otherwise valid string
+  is secret. Its message redaction is defense in depth, not permission to log
+  arbitrary text. Diagnostics remain opt-in, clear when disabled, and retain
+  at most 250 entries. See [storage filtering](../lib/diagnostics/diagnostics.dart),
+  [logger tests](../test/diagnostics/diagnostics_test.dart), and producer tests in
+  [the controller suite](../test/app/lineup_controller_test.dart).
 - Keychain-backed credential ownership on macOS. Unsigned development builds
   use the legacy macOS Keychain compatibility mode; production signing must
   enable and validate the data-protection Keychain. Tokens remain outside
@@ -207,6 +232,33 @@ navigation do not enter C++.
   application builds, focused Windows widget tests, pinned LGPL libmpv
   application builds, conditional patched-engine builds, packaging rejection
   checks, and portable Windows package uploads in CI.
+
+## Changing asynchronous and persisted state
+
+Use [LineupController](../lib/app/lineup_controller.dart)'s existing operation
+epoch for superseded requests and content generation for committed content
+changes. Check currentness before publishing success or failure. Scan
+cancellation also aborts active HTTP requests through
+[PlexClient](../lib/plex/plex_client.dart); rejecting a stale result alone does
+not release its connection. Controller race tests and the
+[IO transport tests](../test/plex/plex_io_transport_test.dart) cover these
+distinct obligations.
+
+The controller's state-operation queue owns snapshot/save/commit or rollback
+across features. `FileAppStore`'s write queue serializes file replacement; it
+does not protect controller snapshots. Credential writes and logout cleanup
+have their own ordered queue. Preserve these responsibilities when adding a
+mutation; see the delayed/failing state and credential tests in
+[lineup_controller_test.dart](../test/app/lineup_controller_test.dart).
+
+[PersistedState](../lib/persistence/app_store.dart) requires an exact structural
+field set. Adding a required field can make previously valid state enter the
+corruption/quarantine path. For a schema change, choose compatible defaults or
+a targeted migration; an intentional reset requires an authorized data-loss
+decision. Exercise existing serialized state and failure/recovery behavior in
+[app_store_test.dart](../test/persistence/app_store_test.dart). Preserve strict
+validation of malformed data and the original bytes on recovery; do not add a
+generic migration framework without a current need.
 
 ## Integration and acceptance status
 
