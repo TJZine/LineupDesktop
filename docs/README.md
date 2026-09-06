@@ -44,6 +44,12 @@ audience and purpose.
 
 ### Evidence and design records
 
+- [Desktop UI Design Specification](desktop-ui-design-spec.md) records the
+  current refinement campaign's locked decisions and remaining design work.
+  The full package is not yet locked or authorized for implementation.
+- [Desktop UI Implementation Plan](desktop-ui-implementation-plan.md) is the
+  associated planning scaffold and future worker/reviewer handoff contract.
+
 - [Product Parity](product-parity.md) is the authoritative current
   bidirectional product-parity, UX/UI, evidence-gap, and release-readiness
   audit. Use it for current classifications and backlog priority.
