@@ -16,6 +16,7 @@ audience and purpose.
 | Channel Studio implementation or investigation | [Channel Studio Specification](channel-studio-spec.md) | [Architecture](architecture.md) and current source/tests; the [completed plan](channel-studio-implementation-plan.md) only for historical evidence |
 | Windows media, runner, or packaging work | [Development verification map](DEVELOPMENT.md#verification-by-task) | [Architecture](architecture.md#windows-presentation-and-ownership), [Windows Runtime Provenance](windows-runtime.md), and relevant [physical acceptance](windows-native-validation.md) scenarios |
 | Planned audio passthrough work | [Audio Passthrough Specification](audio-passthrough-spec.md) | [Windows Native Acceptance](windows-native-validation.md), [Architecture](architecture.md), and the current source |
+| Planned automatic fullscreen HDR work | [Fullscreen HDR Presentation Specification](fullscreen-hdr-spec.md) | [Windows Native Acceptance](windows-native-validation.md), [Architecture](architecture.md), and the current source |
 | Guide/PiP implementation or investigation | [Guide PiP Specification](guide-pip-composition-spec.md) | [Architecture](architecture.md) and the current source |
 | Security report | [Security Policy](../SECURITY.md) | Use the private reporting route; never open a public issue containing secrets |
 
@@ -74,6 +75,9 @@ audience and purpose.
   deferred default-off Settings feature, native ownership boundary, discovery
   gate, implementation checklist, and physical Windows evidence required before
   compressed bitstream output can be claimed.
+- [Fullscreen HDR Presentation Specification](fullscreen-hdr-spec.md) records
+  the planned automatic HDR/SDR fullscreen contract, composition decision gate,
+  ownership boundary, and required physical Windows evidence.
 
 ## Documentation authority
 
