@@ -135,14 +135,33 @@ flutter analyze
 TZ=America/New_York flutter test
 ```
 
+From PowerShell on macOS or Linux, use:
+
+```powershell
+$env:TZ = 'America/New_York'
+flutter test
+```
+
 Use `dart format <changed-paths>` when formatting is needed. The timezone above
-is canonical for localized schedule goldens. The full suite on Linux/Windows
-excludes the two suites marked `@TestOn('mac-os')`; a pass there is not golden
-evidence. Run these on macOS when the affected UI needs pixel verification:
+is canonical for localized schedule goldens. On Windows, Dart uses the Windows
+system timezone; `$env:TZ` alone does not select it. Run the portable Windows
+tests in the machine's configured timezone, or set the OS timezone to Eastern
+Standard Time before treating localized schedule assertions as canonical. The
+full suite on Linux/Windows excludes the two suites marked `@TestOn('mac-os')`;
+a pass there is not golden evidence. Run these on macOS when the affected UI
+needs pixel verification:
 
 ```sh
 TZ=America/New_York flutter test test/app/ui_acceptance_golden_test.dart
 TZ=America/New_York flutter test test/app/guide_sparse_golden_test.dart
+```
+
+The equivalent commands from PowerShell on macOS are:
+
+```powershell
+$env:TZ = 'America/New_York'
+flutter test test/app/ui_acceptance_golden_test.dart
+flutter test test/app/guide_sparse_golden_test.dart
 ```
 
 Inspect intentional golden changes from the real widgets. Preserve

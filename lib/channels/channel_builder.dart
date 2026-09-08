@@ -86,7 +86,13 @@ List<ChannelProposal> buildChannelProposals({
               ? normalizePersonName(label)
               : label;
           selectedTags.putIfAbsent(tag, () => label);
-          tagLabels.putIfAbsent(tag, () => label);
+          tagLabels.update(
+            tag,
+            (current) => requiresSeriesBreadth
+                ? _preferredPersonLabel(current, label)
+                : current,
+            ifAbsent: () => label,
+          );
         }
         for (final tag in selectedTags.keys) {
           counts[tag] = (counts[tag] ?? 0) + 1;
@@ -251,6 +257,15 @@ List<ChannelProposal> buildChannelProposals({
     }
   }
   return List.unmodifiable(balanced);
+}
+
+String _preferredPersonLabel(String first, String second) {
+  bool hasMixedCase(String value) =>
+      value != value.toLowerCase() && value != value.toUpperCase();
+  final firstIsMixed = hasMixedCase(first);
+  final secondIsMixed = hasMixedCase(second);
+  if (firstIsMixed != secondIsMixed) return firstIsMixed ? first : second;
+  return first.compareTo(second) <= 0 ? first : second;
 }
 
 String? _peopleSeriesKey(String libraryId, PlexMediaItem item) {

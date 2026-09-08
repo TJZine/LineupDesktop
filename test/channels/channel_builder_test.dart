@@ -449,19 +449,20 @@ void main() {
       strategies: const {BuilderStrategy.actors},
       minimumItems: 3,
     ).single;
+    final forward = proposal(['Avery Vale', 'avery vale', 'AVERY VALE']);
+    final reversed = proposal(['AVERY VALE', 'avery vale', 'Avery Vale']);
+    expect(forward.name, 'Avery Vale');
+    expect(reversed.name, forward.name);
+
     final first = materializeChannelPlan(
-      proposals: [
-        proposal(['Avery Vale', 'avery vale', 'AVERY VALE']),
-      ],
+      proposals: [forward],
       existing: const [],
       mode: ChannelBuildMode.replace,
       anchor: DateTime.utc(2026),
     ).channels.single;
 
     final merged = materializeChannelPlan(
-      proposals: [
-        proposal(['AVERY VALE', 'avery vale', 'Avery Vale']),
-      ],
+      proposals: [reversed],
       existing: [first],
       mode: ChannelBuildMode.merge,
       anchor: DateTime.utc(2027),
