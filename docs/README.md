@@ -17,6 +17,7 @@ audience and purpose.
 | Windows media, runner, or packaging work | [Development verification map](DEVELOPMENT.md#verification-by-task) | [Architecture](architecture.md#windows-presentation-and-ownership), [Windows Runtime Provenance](windows-runtime.md), and relevant [physical acceptance](windows-native-validation.md) scenarios |
 | Planned audio passthrough work | [Audio Passthrough Specification](audio-passthrough-spec.md) | [Windows Native Acceptance](windows-native-validation.md), [Architecture](architecture.md), and the current source |
 | Planned automatic fullscreen HDR work | [Fullscreen HDR Presentation Specification](fullscreen-hdr-spec.md) | [Windows Native Acceptance](windows-native-validation.md), [Architecture](architecture.md), and the current source |
+| Deferred Guide freshness / collection investigation | [Guide Freshness and Collection Revalidation Investigation](guide-freshness-collection-investigation.md) | [Architecture](architecture.md), the current source, and its cited upstream evidence |
 | Guide/PiP implementation or investigation | [Guide PiP Specification](guide-pip-composition-spec.md) | [Architecture](architecture.md) and the current source |
 | Security report | [Security Policy](../SECURITY.md) | Use the private reporting route; never open a public issue containing secrets |
 
@@ -78,6 +79,11 @@ audience and purpose.
 - [Fullscreen HDR Presentation Specification](fullscreen-hdr-spec.md) records
   the planned automatic HDR/SDR fullscreen contract, composition decision gate,
   ownership boundary, and required physical Windows evidence.
+- [Guide Freshness and Collection Revalidation Investigation](guide-freshness-collection-investigation.md)
+  records two deferred, evidence-led Guide risks: collection/source freshness
+  after cold start or automation, and shuffled schedule continuity across Plex
+  response reorderings. Its upstream references are investigation context, not
+  a Desktop porting mandate.
 
 ## Documentation authority
 
