@@ -175,11 +175,11 @@ class FileAppStore implements AppStore {
     } on PathNotFoundException {
       return const AppStoreLoadResult(PersistedState());
     }
+    late final Object? decoded;
+    late final PersistedState state;
     try {
-      final decoded = jsonDecode(utf8.decode(contents));
-      final state = PersistedState.fromJson(decoded);
-      if (_hasNoncanonicalArtwork(decoded)) await save(state);
-      return AppStoreLoadResult(state);
+      decoded = jsonDecode(utf8.decode(contents));
+      state = PersistedState.fromJson(decoded);
     } on FormatException {
       await _quarantineState();
       return const AppStoreLoadResult(
@@ -187,6 +187,10 @@ class FileAppStore implements AppStore {
         recoveredCorruptState: true,
       );
     }
+    // Migration IO is not decoding: a failed rewrite must never quarantine
+    // valid state or report successful recovery to an empty lineup.
+    if (_hasNoncanonicalArtwork(decoded)) await save(state);
+    return AppStoreLoadResult(state);
   }
 
   Future<void> _quarantineState() async {
@@ -198,11 +202,27 @@ class FileAppStore implements AppStore {
 
   @override
   Future<void> save(PersistedState state) {
-    final next = _writes.then(
-      (_) => _atomicWrite(_stateFile, '${jsonEncode(state.toJson())}\n'),
-    );
+    final next = _writes.then((_) async {
+      final contents = '${jsonEncode(state.toJson())}\n';
+      await _preservePreRefinementState();
+      await _atomicWrite(_stateFile, contents);
+    });
     _writes = next.catchError((_) {});
     return next;
+  }
+
+  Future<void> _preservePreRefinementState() async {
+    final backup = File('${_stateFile.path}.pre-desktop-ui');
+    if (await backup.exists()) return;
+    late final List<int> original;
+    try {
+      original = await _stateFile.readAsBytes();
+    } on PathNotFoundException {
+      return;
+    }
+    // Retain the exact pre-migration bytes, including before a load-triggered
+    // artwork rewrite. A failed backup prevents replacing the original file.
+    await _atomicWriteBytes(backup, original);
   }
 
   @override
@@ -222,13 +242,16 @@ class FileAppStore implements AppStore {
     return id;
   }
 
-  Future<void> _atomicWrite(File target, String contents) async {
+  Future<void> _atomicWrite(File target, String contents) =>
+      _atomicWriteBytes(target, utf8.encode(contents));
+
+  Future<void> _atomicWriteBytes(File target, List<int> contents) async {
     await directory.create(recursive: true);
     final temporary = File(
       '${target.path}.${DateTime.now().microsecondsSinceEpoch}.tmp',
     );
     try {
-      await temporary.writeAsString(contents, flush: true);
+      await temporary.writeAsBytes(contents, flush: true);
       await temporary.rename(target.path);
     } finally {
       if (await temporary.exists()) await temporary.delete();
