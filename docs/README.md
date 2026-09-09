@@ -46,6 +46,12 @@ audience and purpose.
 
 ### Evidence and design records
 
+- [Collaborative desktop visual correction handoff](desktop-ui-collaborative-handoff.md)
+  defines the active user-led surface review, bounded Luna dispatch and explicit
+  approval workflow. Its [approval ledger](desktop-ui-surface-approvals.md) and
+  [portable 1080p packet](design/desktop-ui/review-packets/README.md) support
+  cross-machine manual review.
+
 - [Desktop UI Design Specification](desktop-ui-design-spec.md) contains the
   consolidated approved target. It does not authorize implementation or claim
   that the design has been implemented.
