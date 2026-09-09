@@ -167,7 +167,10 @@ class _SetupState extends State<UpstreamChannelSetupView> {
   Widget build(BuildContext context) {
     final size = MediaQuery.sizeOf(context);
     final expansion = _configurationExpansion(size);
-    final refined = _step == 2 || (_step == 3 && _phase == _BuildPhase.review);
+    final refined =
+        _step == 1 ||
+        _step == 2 ||
+        (_step == 3 && _phase == _BuildPhase.review);
     final scale = refined
         ? (14 + 4 * expansion) / 14
         : LineupLayout.scaleFor(size);
@@ -191,9 +194,15 @@ class _SetupState extends State<UpstreamChannelSetupView> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _header(),
-                  SizedBox(height: refined ? 20 + 12 * expansion : 20 * scale),
-                  if (_error != null && _phase != _BuildPhase.failed) ...[
+                  if (_step != 1) ...[
+                    _header(),
+                    SizedBox(
+                      height: refined ? 20 + 12 * expansion : 20 * scale,
+                    ),
+                  ],
+                  if (_error != null &&
+                      _phase != _BuildPhase.failed &&
+                      _step != 1) ...[
                     LineupNotice(message: _error!),
                     SizedBox(height: 12 * scale),
                   ],
@@ -220,6 +229,18 @@ class _SetupState extends State<UpstreamChannelSetupView> {
   }
 
   Widget _header() {
+    if (_step == 1) {
+      return _configurationHeader(
+        titleText:
+            widget.controller.libraryScanStatus == LibraryScanStatus.scanning
+            ? 'Scanning your libraries'
+            : _libraryScanSettled
+            ? 'Review your libraries'
+            : 'Choose libraries',
+        subtitleText: _librarySummary(),
+        activeStep: 1,
+      );
+    }
     if (_step == 2) return _configurationHeader();
     if (_step == 3 && _phase == _BuildPhase.review) {
       return _configurationHeader(
@@ -318,7 +339,15 @@ class _SetupState extends State<UpstreamChannelSetupView> {
         TextSpan(
           style: textStyle,
           children: [
-            const TextSpan(text: '1 Libraries  /  '),
+            TextSpan(
+              text: '1 Libraries  /  ',
+              style: activeStep == 1
+                  ? TextStyle(
+                      color: roles.primaryText,
+                      fontWeight: FontWeight.w600,
+                    )
+                  : null,
+            ),
             TextSpan(
               text: '2 Configure',
               style: activeStep == 2
@@ -414,6 +443,60 @@ class _SetupState extends State<UpstreamChannelSetupView> {
     },
   );
 
+  bool get _libraryScanSettled => switch (widget.controller.libraryScanStatus) {
+    LibraryScanStatus.complete ||
+    LibraryScanStatus.empty ||
+    LibraryScanStatus.unsupported ||
+    LibraryScanStatus.transientFailure => true,
+    _ => false,
+  };
+
+  String _librarySummary() {
+    final controller = widget.controller;
+    final statuses = [
+      for (final id in _selectedLibraries)
+        controller.libraryScanFacts[id]?.status ?? LibraryScanStatus.idle,
+    ];
+    int count(LibraryScanStatus status) =>
+        statuses.where((value) => value == status).length;
+    if (controller.libraryScanStatus == LibraryScanStatus.scanning) {
+      final checked = statuses
+          .where(
+            (status) => const {
+              LibraryScanStatus.complete,
+              LibraryScanStatus.empty,
+              LibraryScanStatus.unsupported,
+              LibraryScanStatus.transientFailure,
+            }.contains(status),
+          )
+          .length;
+      return '$checked of ${statuses.length} libraries checked';
+    }
+    if (controller.libraryScanStatus == LibraryScanStatus.cancelled) {
+      return 'Your selections are preserved. Scan again when you’re ready.';
+    }
+    if (!_libraryScanSettled || statuses.isEmpty) {
+      return 'Select the Plex libraries to scan for channel ideas.';
+    }
+    final ready = count(LibraryScanStatus.complete);
+    if (ready == 0) {
+      return count(LibraryScanStatus.transientFailure) > 0
+          ? 'No libraries are ready. Retry failed scans or change your selection.'
+          : 'No libraries are ready. Change your selection or scan again.';
+    }
+    return [
+      '$ready ${ready == 1 ? 'library' : 'libraries'} ready',
+      if (count(LibraryScanStatus.empty) > 0)
+        '${count(LibraryScanStatus.empty)} empty',
+      if (count(LibraryScanStatus.unsupported) > 0)
+        '${count(LibraryScanStatus.unsupported)} with no playable media',
+      if (count(LibraryScanStatus.transientFailure) > 0)
+        '${count(LibraryScanStatus.transientFailure)} failed',
+      if (count(LibraryScanStatus.idle) > 0)
+        '${count(LibraryScanStatus.idle)} not scanned',
+    ].join(' · ');
+  }
+
   Widget _libraryStep() {
     final controller = widget.controller;
     final ready = controller.libraryScanReadyIds.intersection(
@@ -423,107 +506,167 @@ class _SetupState extends State<UpstreamChannelSetupView> {
       _selectedLibraries,
     );
     final scanning = controller.libraryScanStatus == LibraryScanStatus.scanning;
-    final mixed =
-        ready.isNotEmpty &&
-        ready.length != _selectedLibraries.length &&
-        !scanning;
+    final canContinue = _libraryScanSettled && ready.isNotEmpty;
     final canRetry =
         !scanning &&
-        (retry.isNotEmpty || (controller.error != null && ready.isNotEmpty));
-    return _Stage(
-      footer: _Footer(
-        leading: [
-          if (scanning)
-            TextButton(
-              onPressed: controller.cancelLibraryScan,
-              child: const Text('Cancel scan'),
+        controller.libraryScanStatus != LibraryScanStatus.cancelled &&
+        (retry.isNotEmpty || controller.error != null);
+    final expansion = _configurationExpansion(MediaQuery.sizeOf(context));
+    final roles = LineupTheme.of(context);
+    final bodyStyle = Theme.of(context).textTheme.bodyMedium!.copyWith(
+      color: roles.secondaryText,
+      fontSize: 14 + 4 * expansion,
+      height: 1.4,
+    );
+    final actionStyle = Theme.of(context).textTheme.labelLarge!
+        .copyWith(fontSize: 14 + 4 * expansion);
+    final retryLabel = retry.isEmpty ? 'Retry scan' : 'Retry failed scans';
+    final scanError = _error ?? controller.error;
+    final excluded = _selectedLibraries.length - ready.length;
+    final footer = _Footer(
+      configuration: true,
+      summary: !scanning && controller.channelSetupCanCancel
+          ? Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton(
+                onPressed: controller.cancelChannelSetup,
+                child: Text('Cancel', style: actionStyle),
+              ),
             )
-          else if (controller.channelSetupCanCancel)
-            TextButton(
-              onPressed: controller.cancelChannelSetup,
-              child: const Text('Cancel'),
-            ),
-          if (canRetry)
-            OutlinedButton(
-              onPressed: controller.busy
+          : const SizedBox.shrink(),
+      leading: [
+        if (canRetry && canContinue)
+          OutlinedButton(
+            key: const ValueKey('retry-failed-libraries'),
+            style: OutlinedButton.styleFrom(textStyle: actionStyle),
+            onPressed: controller.busy
+                ? null
+                : () => _scan(retryFailedOnly: true),
+            child: Text(retryLabel),
+          ),
+      ],
+      trailing: scanning
+          ? TextButton(
+              onPressed: controller.cancelLibraryScan,
+              child: Text('Cancel scan', style: actionStyle),
+            )
+          : canContinue
+          ? FilledButton(
+              key: const ValueKey('continue-ready-libraries'),
+              style: FilledButton.styleFrom(textStyle: actionStyle),
+              onPressed: controller.busy ? null : () => _commitLibraries(ready),
+              child: Text(
+                'Continue with ${ready.length} ${ready.length == 1 ? 'library' : 'libraries'}',
+              ),
+            )
+          : canRetry
+          ? FilledButton(
+              key: const ValueKey('retry-failed-libraries'),
+              style: FilledButton.styleFrom(textStyle: actionStyle),
+              onPressed: _selectedLibraries.isEmpty || controller.busy
                   ? null
                   : () => _scan(retryFailedOnly: true),
+              child: Text(retryLabel),
+            )
+          : FilledButton(
+              key: const ValueKey('scan-selected-libraries'),
+              style: FilledButton.styleFrom(textStyle: actionStyle),
+              onPressed: _selectedLibraries.isEmpty || controller.busy
+                  ? null
+                  : _scan,
               child: Text(
-                retry.isEmpty ? 'Retry scan' : 'Retry ${retry.length} failed',
+                _libraryScanSettled ? 'Scan again' : 'Scan selected libraries',
               ),
             ),
-        ],
-        trailing: mixed
-            ? FilledButton(
-                key: const ValueKey('continue-ready-libraries'),
-                onPressed: controller.busy
-                    ? null
-                    : () => _commitLibraries(ready),
-                child: Text('Continue with ${ready.length} ready'),
+    );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final singleScroll =
+            constraints.maxHeight < 640 ||
+            MediaQuery.textScalerOf(context).scale(1) >= 1.5;
+        final list = ListView.separated(
+          key: const ValueKey('library-selection-list'),
+          shrinkWrap: true,
+          physics: singleScroll ? const NeverScrollableScrollPhysics() : null,
+          itemCount: controller.libraries.length,
+          separatorBuilder: (_, _) => const Divider(height: 1),
+          itemBuilder: (_, index) => _libraryRow(controller.libraries[index]),
+        );
+        final content = Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _header(),
+            SizedBox(height: 20 + 12 * expansion),
+            if (controller.libraries.isEmpty)
+              const Padding(
+                padding: EdgeInsets.only(top: 24),
+                child: LineupEmptyState(
+                  icon: Icons.video_library_outlined,
+                  title: 'No movie or show libraries found',
+                  message:
+                      'Choose another Plex server with accessible libraries.',
+                ),
               )
-            : FilledButton(
-                key: const ValueKey('scan-selected-libraries'),
-                onPressed: _selectedLibraries.isEmpty || controller.busy
-                    ? null
-                    : _scan,
-                child: const Text('Scan selected libraries'),
-              ),
-      ),
-      child: controller.libraries.isEmpty
-          ? const Center(
-              child: LineupEmptyState(
-                icon: Icons.video_library_outlined,
-                title: 'No movie or show libraries found',
-                message:
-                    'Choose another Plex server with accessible libraries.',
-              ),
-            )
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _selectionSummary(),
-                if (controller.error != null && !scanning) ...[
-                  const SizedBox(height: 8),
-                  LineupNotice(message: controller.error!),
-                ],
-                if (mixed) ...[
-                  const SizedBox(height: 8),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(
-                        Icons.info_outline,
-                        size: 18,
-                        color: LineupTheme.of(context).secondaryText,
-                      ),
-                      const SizedBox(width: 7),
-                      Expanded(
-                        child: Text(
-                          '${ready.length} ${ready.length == 1 ? 'library is' : 'libraries are'} ready. Libraries that are empty, unsupported or failed will be excluded.',
-                          style: TextStyle(
-                            color: LineupTheme.of(context).secondaryText,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-                const SizedBox(height: 10),
-                Expanded(
-                  child: ListView.separated(
-                    key: const ValueKey('library-selection-list'),
-                    itemCount: controller.libraries.length,
-                    separatorBuilder: (_, _) => const Divider(height: 1),
-                    itemBuilder: (_, index) =>
-                        _libraryRow(controller.libraries[index]),
+            else ...[
+              _selectionSummary(),
+              if (singleScroll)
+                list
+              else
+                Flexible(fit: FlexFit.loose, child: list),
+            ],
+            if (!scanning && scanError != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 16),
+                child: Semantics(
+                  liveRegion: true,
+                  child: Text(
+                    scanError,
+                    style: bodyStyle.copyWith(color: roles.liveAccent),
                   ),
                 ),
-              ],
+              ),
+            if (canContinue && excluded > 0)
+              Padding(
+                padding: const EdgeInsets.only(top: 16),
+                child: Text(
+                  '${ready.length} ${ready.length == 1 ? 'library is' : 'libraries are'} ready. Continuing uses only the ready libraries; the other $excluded selected ${excluded == 1 ? 'library will' : 'libraries will'} be excluded.',
+                  style: bodyStyle,
+                ),
+              ),
+            SizedBox(height: 16 + 8 * expansion),
+            footer,
+          ],
+        );
+        return Align(
+          alignment: singleScroll ? Alignment.topCenter : Alignment.center,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: math.min(constraints.maxWidth, 880 + 160 * expansion),
             ),
+            child: singleScroll
+                ? SingleChildScrollView(
+                    key: const ValueKey('channel-setup-single-scroll'),
+                    child: content,
+                  )
+                : content,
+          ),
+        );
+      },
     );
   }
 
   Widget _selectionSummary() {
+    final expansion = _configurationExpansion(MediaQuery.sizeOf(context));
+    final roles = LineupTheme.of(context);
+    final summaryStyle = Theme.of(context).textTheme.bodyMedium!.copyWith(
+      color: roles.secondaryText,
+      fontSize: 13 + 3 * expansion,
+      height: 1.4,
+    );
+    final editable =
+        !widget.controller.busy &&
+        widget.controller.libraryScanStatus != LibraryScanStatus.scanning;
     final libraries = widget.controller.libraries;
     final selected = _selectedLibraries.length;
     final all = selected == libraries.length;
@@ -532,23 +675,34 @@ class _SetupState extends State<UpstreamChannelSetupView> {
         : selected == 0
         ? false
         : null;
-    return Row(
-      children: [
-        if (libraries.length > 1) ...[
-          Checkbox(
-            key: const ValueKey('select-all-libraries'),
-            tristate: true,
-            value: value,
-            onChanged: (_) => _toggleAllLibraries(),
-          ),
-          TextButton(
-            onPressed: _toggleAllLibraries,
-            child: const Text('Select all'),
+    return Padding(
+      padding: EdgeInsets.only(bottom: 12 + 4 * expansion),
+      child: Row(
+        children: [
+          if (libraries.length > 1) ...[
+            Checkbox(
+              key: const ValueKey('select-all-libraries'),
+              tristate: true,
+              value: value,
+              onChanged: editable ? (_) => _toggleAllLibraries() : null,
+            ),
+            TextButton(
+              onPressed: editable ? _toggleAllLibraries : null,
+              child: Text(
+                'Select all',
+                style: summaryStyle.copyWith(
+                  color: editable ? roles.secondaryText : roles.mutedText,
+                ),
+              ),
+            ),
+          ],
+          const Spacer(),
+          Text(
+            '$selected of ${libraries.length} selected',
+            style: summaryStyle,
           ),
         ],
-        const Spacer(),
-        Text('$selected of ${libraries.length} selected'),
-      ],
+      ),
     );
   }
 
@@ -564,8 +718,26 @@ class _SetupState extends State<UpstreamChannelSetupView> {
   });
 
   Widget _libraryRow(PlexLibrary library) {
+    final expansion = _configurationExpansion(MediaQuery.sizeOf(context));
+    final roles = LineupTheme.of(context);
+    final textTheme = Theme.of(context).textTheme;
     final selected = _selectedLibraries.contains(library.id);
     final fact = widget.controller.libraryScanFacts[library.id];
+    final titleStyle = textTheme.bodyMedium!.copyWith(
+      color: roles.primaryText,
+      fontSize: 16 + 4 * expansion,
+      fontWeight: FontWeight.w600,
+      height: 1.3,
+    );
+    final statusStyle = textTheme.bodyMedium!.copyWith(
+      fontSize: 14 + 4 * expansion,
+      height: 1.4,
+    );
+    final typeStyle = textTheme.bodyMedium!.copyWith(
+      color: roles.mutedText,
+      fontSize: 13 + 3 * expansion,
+      height: 1.4,
+    );
     void toggle() => setState(() {
       if (selected) {
         _selectedLibraries.remove(library.id);
@@ -574,49 +746,78 @@ class _SetupState extends State<UpstreamChannelSetupView> {
       }
     });
 
-    return Semantics(
-      button: true,
-      selected: selected,
-      label: '${library.title}, ${_libraryType(library)}, ${_scanStatus(fact)}',
-      child: InkWell(
-        onTap: widget.controller.busy ? null : toggle,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Checkbox(
-                value: selected,
-                onChanged: widget.controller.busy ? null : (_) => toggle(),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      library.title,
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    if (fact != null) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        _scanDetail(fact),
-                        style: TextStyle(color: _scanColor(fact.status)),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              const SizedBox(width: 16),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final textScale = MediaQuery.textScalerOf(context).scale(1);
+        final effectiveWidth = constraints.maxWidth / textScale;
+        final narrow = effectiveWidth < 620 || textScale >= 1.6;
+        final details = Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(library.title, style: titleStyle),
+            if (fact != null) ...[
+              const SizedBox(height: 8),
               Text(
-                _libraryType(library),
-                style: TextStyle(color: LineupTheme.of(context).mutedText),
+                _scanDetail(fact),
+                style: statusStyle.copyWith(color: _scanColor(fact.status)),
               ),
             ],
+          ],
+        );
+        final type = Text(
+          _libraryType(library),
+          textAlign: TextAlign.end,
+          style: typeStyle,
+        );
+        final content = narrow
+            ? Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Checkbox(
+                    value: selected,
+                    onChanged: widget.controller.busy ? null : (_) => toggle(),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        details,
+                        const SizedBox(height: 8),
+                        Align(alignment: Alignment.centerRight, child: type),
+                      ],
+                    ),
+                  ),
+                ],
+              )
+            : Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Checkbox(
+                    value: selected,
+                    onChanged: widget.controller.busy ? null : (_) => toggle(),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(child: details),
+                  const SizedBox(width: 16),
+                  type,
+                ],
+              );
+        return MergeSemantics(
+          child: InkWell(
+            canRequestFocus: false,
+            excludeFromSemantics: true,
+            onTap: widget.controller.busy ? null : toggle,
+            child: Padding(
+              padding: EdgeInsets.symmetric(
+                vertical: 12 + 6 * expansion,
+                horizontal: 8,
+              ),
+              child: content,
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -2944,30 +3145,20 @@ class _SetupState extends State<UpstreamChannelSetupView> {
 
   Color _scanColor(LibraryScanStatus status) => switch (status) {
     LibraryScanStatus.transientFailure => Theme.of(context).colorScheme.error,
-    LibraryScanStatus.complete => LineupTheme.of(context).progressFill,
     _ => LineupTheme.of(context).secondaryText,
   };
 
-  String _scanStatus(LibraryScanFact? fact) => fact == null
-      ? 'Not scanned'
-      : switch (fact.status) {
-          LibraryScanStatus.idle => 'Not scanned',
-          LibraryScanStatus.scanning => 'Scanning',
-          LibraryScanStatus.complete => 'Ready',
-          LibraryScanStatus.empty => 'Empty',
-          LibraryScanStatus.unsupported => 'No playable media',
-          LibraryScanStatus.transientFailure => 'Scan failed',
-          LibraryScanStatus.cancelled => 'Cancelled',
-        };
-
-  String _scanDetail(LibraryScanFact fact) {
-    final status = _scanStatus(fact);
-    if (fact.status == LibraryScanStatus.idle) return status;
-    final items = fact.totalItems == null
-        ? '${fact.completedItems} scanned'
-        : '${fact.completedItems}/${fact.totalItems} items';
-    return '$status · $items · ${fact.completedPages} ${fact.completedPages == 1 ? 'page' : 'pages'}';
-  }
+  String _scanDetail(LibraryScanFact fact) => switch (fact.status) {
+    LibraryScanStatus.idle => 'Waiting to scan',
+    LibraryScanStatus.scanning =>
+      'Scanning · ${fact.completedItems} items checked',
+    LibraryScanStatus.complete =>
+      'Ready · ${fact.completedItems} ${fact.completedItems == 1 ? 'item' : 'items'} checked',
+    LibraryScanStatus.empty => 'No media found',
+    LibraryScanStatus.unsupported => 'No playable media found',
+    LibraryScanStatus.transientFailure => 'Couldn’t scan · Try again.',
+    LibraryScanStatus.cancelled => 'Cancelled · Scan again when you’re ready.',
+  };
 
   String _libraryType(PlexLibrary library) =>
       library.type == PlexLibraryType.show ? 'TV Shows' : 'Movies';

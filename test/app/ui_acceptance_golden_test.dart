@@ -473,14 +473,11 @@ void main() {
         ).build(),
       ),
     );
-    expect(find.text('Retry 1 failed'), findsOneWidget);
-    expect(find.text('Ready · 72/72 items · 4 pages'), findsOneWidget);
-    expect(
-      find.text('No playable media · 8/8 items · 2 pages'),
-      findsOneWidget,
-    );
-    expect(find.text('Empty · 0/0 items · 1 page'), findsOneWidget);
-    expect(find.text('Scan failed · 3/32 items · 1 page'), findsOneWidget);
+    expect(find.text('Retry failed scans'), findsOneWidget);
+    expect(find.text('Ready · 72 items checked'), findsOneWidget);
+    expect(find.text('No playable media found'), findsOneWidget);
+    expect(find.text('No media found'), findsOneWidget);
+    expect(find.text('Couldn’t scan · Try again.'), findsOneWidget);
     await _match(
       tester,
       'channel-setup-libraries-1280x720.png',

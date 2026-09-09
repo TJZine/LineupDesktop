@@ -41,13 +41,22 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.textContaining('1 library is ready'), findsOneWidget);
-      expect(find.text('Ready · 6/6 items · 1 page'), findsOneWidget);
-      expect(find.text('Scan failed · 2/6 items · 1 page'), findsOneWidget);
-      expect(find.text('Retry 1 failed'), findsOneWidget);
+      expect(find.text('Ready · 6 items checked'), findsOneWidget);
+      expect(find.text('Couldn’t scan · Try again.'), findsOneWidget);
+      expect(find.text('Retry failed scans'), findsOneWidget);
       expect(
         find.byKey(const ValueKey('continue-ready-libraries')),
         findsOneWidget,
       );
+      await tester.tap(find.text('Movies').first);
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('continue-ready-libraries')),
+        findsNothing,
+      );
+      expect(find.text('Retry failed scans'), findsOneWidget);
+      await tester.tap(find.text('Movies').first);
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('continue-ready-libraries')));
       await tester.pumpAndSettle();
       expect(controller.committedIds, {'movies'});
@@ -66,9 +75,19 @@ void main() {
     await controller.scanStarted.future;
     await tester.pump();
     expect(find.text('Cancel scan'), findsOneWidget);
+    expect(
+      tester
+          .widget<Checkbox>(find.byKey(const ValueKey('select-all-libraries')))
+          .onChanged,
+      isNull,
+    );
     await tester.tap(find.text('Cancel scan'));
     await tester.pumpAndSettle();
 
+    expect(
+      find.byKey(const ValueKey('continue-ready-libraries')),
+      findsNothing,
+    );
     expect(find.text('3 of 3 selected'), findsOneWidget);
     expect(find.textContaining('Cancelled', skipOffstage: false), findsWidgets);
     expect(
@@ -863,9 +882,14 @@ class _SetupController extends FixtureController {
   }) async {
     if (blockScan) {
       libraryScanStatus = LibraryScanStatus.scanning;
+      ready = {ids.first};
       facts = {
         for (final id in ids)
-          id: const LibraryScanFact(status: LibraryScanStatus.scanning),
+          id: LibraryScanFact(
+            status: id == ids.first
+                ? LibraryScanStatus.complete
+                : LibraryScanStatus.scanning,
+          ),
       };
       notifyListeners();
       if (!scanStarted.isCompleted) scanStarted.complete();
@@ -913,7 +937,9 @@ class _SetupController extends FixtureController {
     libraryScanStatus = LibraryScanStatus.cancelled;
     facts = {
       for (final entry in facts.entries)
-        entry.key: const LibraryScanFact(status: LibraryScanStatus.cancelled),
+        entry.key: entry.value.status == LibraryScanStatus.complete
+            ? entry.value
+            : const LibraryScanFact(status: LibraryScanStatus.cancelled),
     };
     notifyListeners();
     if (!_cancelled.isCompleted) _cancelled.complete();
