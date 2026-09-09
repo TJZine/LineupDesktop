@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' show SemanticsAction;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -310,9 +311,23 @@ void main() {
     );
     await tester.pumpWidget(_airCheck(controller, channel));
     await tester.pumpAndSettle();
-    tester
-        .widget<OutlinedButton>(find.byType(OutlinedButton).at(1))
-        .onPressed!();
+    final firstProgram = find.bySemanticsLabel(
+      RegExp(r'Channel 4 .*A.*current'),
+    );
+    final firstSemantics = tester.getSemantics(firstProgram);
+    firstSemantics.owner!.performAction(firstSemantics.id, SemanticsAction.tap);
+    await tester.pump();
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('air-check-selection')),
+        matching: find.text('A'),
+      ),
+      findsOneWidget,
+    );
+    final secondProgram = find.byType(OutlinedButton).at(1);
+    await tester.tap(
+      find.byKey(tester.widget<OutlinedButton>(secondProgram).key!),
+    );
     await tester.pump();
     expect(
       find.descendant(

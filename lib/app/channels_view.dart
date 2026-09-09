@@ -145,43 +145,41 @@ class ChannelsViewState extends State<ChannelsView> {
   }
 
   Future<void> _openGenerateLineupFromStudio() =>
-      _generateLineupEntry ??= _enterGenerateLineupFromStudio();
+      _generateLineupEntry ??= _enterGenerateLineupFromStudio().whenComplete(
+        () => _generateLineupEntry = null,
+      );
 
   Future<void> _enterGenerateLineupFromStudio() async {
-    try {
-      if (!_studioOpen) return;
-      final studio = _studio;
-      if (studio == null || studio.saving) return;
-      if (studio.dirty) {
-        final discard =
-            await showDialog<bool>(
-              context: context,
-              builder: (context) => AlertDialog(
-                title: const Text('Open Generate lineup?'),
-                content: const Text(
-                  'Your unsaved Studio draft cannot be carried into Generate lineup. Existing custom channels remain protected while you review the proposed roster.',
-                ),
-                actions: [
-                  TextButton(
-                    autofocus: true,
-                    onPressed: () => Navigator.pop(context, false),
-                    child: const Text('Keep editing'),
-                  ),
-                  FilledButton(
-                    onPressed: () => Navigator.pop(context, true),
-                    child: const Text('Discard draft and continue'),
-                  ),
-                ],
+    if (!_studioOpen) return;
+    final studio = _studio;
+    if (studio == null || studio.saving) return;
+    if (studio.dirty) {
+      final discard =
+          await showDialog<bool>(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Open Generate lineup?'),
+              content: const Text(
+                'Your unsaved Studio draft cannot be carried into Generate lineup. Existing custom channels remain protected while you review the proposed roster.',
               ),
-            ) ??
-            false;
-        if (!discard || !mounted) return;
-      }
-      _showList(_returnFocusId);
-      await widget.controller.enterChannelSetup();
-    } finally {
-      _generateLineupEntry = null;
+              actions: [
+                TextButton(
+                  autofocus: true,
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Keep editing'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  child: const Text('Discard draft and continue'),
+                ),
+              ],
+            ),
+          ) ??
+          false;
+      if (!discard || !mounted) return;
     }
+    _showList(_returnFocusId);
+    await widget.controller.enterChannelSetup();
   }
 
   void _showList(String? focusId) {
@@ -878,12 +876,13 @@ class ChannelsViewState extends State<ChannelsView> {
   });
 
   Future<void> _moveTo(int from, Map<String, Channel> byId) async {
+    final movedId = _reorderIds[from];
     final target = await showDialog<({String id, bool after})>(
       context: context,
       builder: (context) => _MoveChannelDialog(
         channels: [
           for (final id in _reorderIds)
-            if (id != _reorderIds[from]) byId[id]!,
+            if (id != movedId) ?byId[id],
         ],
       ),
     );

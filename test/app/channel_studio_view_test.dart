@@ -689,9 +689,14 @@ void main() {
           .onPressed,
       isNull,
     );
-    release.complete(false);
+    release.complete(true);
     await tester.pumpAndSettle();
-    expect(find.textContaining('Playback could not start'), findsOneWidget);
+    expect(
+      tester
+          .widget<FilledButton>(find.byKey(const Key('studio-tune')))
+          .onPressed,
+      isNotNull,
+    );
   });
 
   testWidgets('successful Studio tune opens Player', (tester) async {

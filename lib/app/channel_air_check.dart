@@ -582,80 +582,79 @@ class ChannelAirCheckState extends State<ChannelAirCheck> {
           final current = program.isCurrentAt(now);
           final selected = program.id == _selectedId;
           final roles = LineupTheme.of(context);
+          void activate() => setState(() {
+            _selectedId = program.id;
+            _selectionFollowsNow = false;
+            _synopsisExpanded = false;
+          });
           return Semantics(
             button: true,
+            excludeSemantics: true,
             label:
                 'Channel ${preview.channel.number} ${preview.channel.name}, ${program.scheduled.item.title}, ${_time(context, program.scheduled.start)} to ${_time(context, program.scheduled.end)}, ${current ? 'current' : 'upcoming'}',
-            child: ExcludeSemantics(
-              child: OutlinedButton(
-                key: ValueKey('air-check-program-${program.id}'),
-                style: ButtonStyle(
-                  alignment: Alignment.centerLeft,
-                  padding: const WidgetStatePropertyAll(EdgeInsets.zero),
-                  foregroundColor: WidgetStatePropertyAll(roles.primaryText),
-                  backgroundColor: WidgetStatePropertyAll(
-                    selected ? roles.selectedSurface : Colors.transparent,
-                  ),
-                  side: WidgetStateProperty.resolveWith(
-                    (states) => BorderSide(
-                      color: states.contains(WidgetState.focused)
-                          ? roles.focusBorder
-                          : Colors.transparent,
-                      width: states.contains(WidgetState.focused)
-                          ? (roles.focusBorderWidth > 3
-                                ? roles.focusBorderWidth
-                                : 2)
-                          : 1,
-                    ),
+            onTap: activate,
+            child: OutlinedButton(
+              key: ValueKey('air-check-program-${program.id}'),
+              style: ButtonStyle(
+                alignment: Alignment.centerLeft,
+                padding: const WidgetStatePropertyAll(EdgeInsets.zero),
+                foregroundColor: WidgetStatePropertyAll(roles.primaryText),
+                backgroundColor: WidgetStatePropertyAll(
+                  selected ? roles.selectedSurface : Colors.transparent,
+                ),
+                side: WidgetStateProperty.resolveWith(
+                  (states) => BorderSide(
+                    color: states.contains(WidgetState.focused)
+                        ? roles.focusBorder
+                        : Colors.transparent,
+                    width: states.contains(WidgetState.focused)
+                        ? (roles.focusBorderWidth > 3
+                              ? roles.focusBorderWidth
+                              : 2)
+                        : 1,
                   ),
                 ),
-                onPressed: () => setState(() {
-                  _selectedId = program.id;
-                  _selectionFollowsNow = false;
-                  _synopsisExpanded = false;
-                }),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 10,
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SizedBox(
-                        width: 76,
-                        child: Text(
-                          current
-                              ? 'ON NOW'
-                              : _time(context, program.scheduled.start),
-                          style: TextStyle(
-                            color: current
-                                ? roles.liveAccent
-                                : roles.secondaryText,
-                            fontWeight: FontWeight.w800,
+              ),
+              onPressed: activate,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 10,
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(
+                      width: 76,
+                      child: Text(
+                        current
+                            ? 'ON NOW'
+                            : _time(context, program.scheduled.start),
+                        style: TextStyle(
+                          color: current
+                              ? roles.liveAccent
+                              : roles.secondaryText,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            program.scheduled.item.title,
+                            style: const TextStyle(fontWeight: FontWeight.w700),
                           ),
-                        ),
+                          Text(
+                            '${_dateContext(program.scheduled.start)} · ${_time(context, program.scheduled.start)}–${_time(context, program.scheduled.end)}',
+                            style: TextStyle(color: roles.secondaryText),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              program.scheduled.item.title,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            Text(
-                              '${_dateContext(program.scheduled.start)} · ${_time(context, program.scheduled.start)}–${_time(context, program.scheduled.end)}',
-                              style: TextStyle(color: roles.secondaryText),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ),

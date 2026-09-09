@@ -2903,7 +2903,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     }
     if (!mounted || epoch != _tuneEpoch) return;
     if (tuned) {
-      _tuning = false;
+      setState(() => _tuning = false);
       return;
     }
     setState(() {

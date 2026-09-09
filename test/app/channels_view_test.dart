@@ -21,7 +21,6 @@ void main() {
           _channel('third', 20, 'Third', generated: true),
         ];
       final fixture = UiFixture(controller: controller);
-      addTearDown(controller.dispose);
       await tester.pumpWidget(fixture.build());
       await tester.pump();
       await openDestination(tester, 'Channels');
@@ -90,7 +89,6 @@ void main() {
       ];
     controller.pendingReorder = Completer<void>();
     final fixture = UiFixture(controller: controller);
-    addTearDown(controller.dispose);
     await tester.pumpWidget(fixture.build());
     await tester.pump();
     await openDestination(tester, 'Channels');
@@ -132,7 +130,6 @@ void main() {
         _channel('second', 2, 'Second'),
       ];
     final fixture = UiFixture(controller: controller);
-    addTearDown(controller.dispose);
     await tester.pumpWidget(fixture.build());
     await tester.pump();
     await openDestination(tester, 'Channels');
@@ -162,7 +159,6 @@ void main() {
             _channel('second', 7, 'Second'),
           ]
           ..pendingDelete = Completer<void>();
-        addTearDown(controller.dispose);
         await tester.pumpWidget(UiFixture(controller: controller).build());
         await tester.pumpAndSettle();
         await openDestination(tester, 'Channels');
@@ -231,7 +227,6 @@ void main() {
           _channel('first', 2, 'First'),
           _channel('second', 7, 'Second'),
         ];
-      addTearDown(controller.dispose);
       await tester.pumpWidget(UiFixture(controller: controller).build());
       await tester.pumpAndSettle();
       await openDestination(tester, 'Channels');
