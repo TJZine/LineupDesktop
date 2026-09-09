@@ -165,6 +165,8 @@ void main() {
     expect(report, contains('Received video: 1920x1080'));
     expect(report, contains('Received video codec: h264'));
     expect(report, contains('playback: Playback request failed'));
+    expect(report, contains('operation=seek'));
+    expect(report, contains('code=http_error'));
     expect(report, isNot(contains('safe-looking-secret-sentinel')));
     expect(
       () => snapshot.events.add(
@@ -172,5 +174,25 @@ void main() {
       ),
       throwsUnsupportedError,
     );
+  });
+
+  test('support report rejects unsafe metadata independently', () {
+    final diagnostics = Diagnostics();
+    final snapshot = diagnostics.snapshot(
+      reportTime: DateTime.utc(2026, 9, 8, 12),
+      timeZone: 'Pacific\nsecret',
+      appVersion: '1.2.3 private',
+      appBuild: '42',
+      platform: 'windows',
+      plexServerSelected: false,
+      plexConnectionVerified: false,
+      playback: const PlaybackDiagnosticSnapshot(state: PlayerState.idle),
+    );
+
+    final report = diagnostics.buildSupportReport(snapshot);
+    expect(report, contains('Time zone: Unavailable'));
+    expect(report, contains('App: Unavailable (42)'));
+    expect(report, isNot(contains('secret')));
+    expect(report, isNot(contains('private')));
   });
 }
