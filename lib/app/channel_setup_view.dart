@@ -167,7 +167,8 @@ class _SetupState extends State<UpstreamChannelSetupView> {
   Widget build(BuildContext context) {
     final size = MediaQuery.sizeOf(context);
     final expansion = _configurationExpansion(size);
-    final scale = _step == 2
+    final refined = _step == 2 || (_step == 3 && _phase == _BuildPhase.review);
+    final scale = refined
         ? (14 + 4 * expansion) / 14
         : LineupLayout.scaleFor(size);
     return Scaffold(
@@ -181,7 +182,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
             ),
             child: Padding(
               key: const ValueKey('channel-setup-content'),
-              padding: _step == 2
+              padding: refined
                   ? EdgeInsets.symmetric(
                       horizontal: 32 + 16 * expansion,
                       vertical: 24 + 12 * expansion,
@@ -191,9 +192,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   _header(),
-                  SizedBox(
-                    height: _step == 2 ? 20 + 12 * expansion : 20 * scale,
-                  ),
+                  SizedBox(height: refined ? 20 + 12 * expansion : 20 * scale),
                   if (_error != null && _phase != _BuildPhase.failed) ...[
                     LineupNotice(message: _error!),
                     SizedBox(height: 12 * scale),
@@ -222,6 +221,17 @@ class _SetupState extends State<UpstreamChannelSetupView> {
 
   Widget _header() {
     if (_step == 2) return _configurationHeader();
+    if (_step == 3 && _phase == _BuildPhase.review) {
+      return _configurationHeader(
+        titleText: _firstSetup
+            ? 'Review your first lineup'
+            : 'Review your lineup',
+        subtitleText: _firstSetup
+            ? 'Check your channels before creating your lineup.'
+            : 'Check what changes and what stays.',
+        activeStep: 3,
+      );
+    }
     return LayoutBuilder(
       key: const ValueKey('channel-setup-header'),
       builder: (context, constraints) {
@@ -290,7 +300,11 @@ class _SetupState extends State<UpstreamChannelSetupView> {
     );
   }
 
-  Widget _configurationHeader() => LayoutBuilder(
+  Widget _configurationHeader({
+    String titleText = 'Shape your lineup',
+    String? subtitleText,
+    int activeStep = 2,
+  }) => LayoutBuilder(
     key: const ValueKey('channel-setup-header'),
     builder: (context, constraints) {
       final expansion = _configurationExpansion(MediaQuery.sizeOf(context));
@@ -307,12 +321,22 @@ class _SetupState extends State<UpstreamChannelSetupView> {
             const TextSpan(text: '1 Libraries  /  '),
             TextSpan(
               text: '2 Configure',
-              style: TextStyle(
-                color: roles.primaryText,
-                fontWeight: FontWeight.w600,
-              ),
+              style: activeStep == 2
+                  ? TextStyle(
+                      color: roles.primaryText,
+                      fontWeight: FontWeight.w600,
+                    )
+                  : null,
             ),
-            const TextSpan(text: '  /  3 Review'),
+            TextSpan(
+              text: '  /  3 Review',
+              style: activeStep == 3
+                  ? TextStyle(
+                      color: roles.primaryText,
+                      fontWeight: FontWeight.w600,
+                    )
+                  : null,
+            ),
           ],
         ),
         key: const ValueKey('channel-setup-steps'),
@@ -346,7 +370,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
           Semantics(
             header: true,
             child: Text(
-              'Shape your lineup',
+              titleText,
               style: TextStyle(
                 color: roles.primaryText,
                 fontSize: 28 + 10 * expansion,
@@ -356,11 +380,15 @@ class _SetupState extends State<UpstreamChannelSetupView> {
             ),
           ),
           SizedBox(height: 6 + 4 * expansion),
-          Text(switch (_configurationSection) {
-            0 => 'Choose the channels you want from your libraries.',
-            1 => 'Choose how your generated channels will play.',
-            _ => 'Choose the size and balance of your generated lineup.',
-          }, style: textStyle.copyWith(height: 1.4)),
+          Text(
+            subtitleText ??
+                switch (_configurationSection) {
+                  0 => 'Choose the channels you want from your libraries.',
+                  1 => 'Choose how your generated channels will play.',
+                  _ => 'Choose the size and balance of your generated lineup.',
+                },
+            style: textStyle.copyWith(height: 1.4),
+          ),
         ],
       );
       if (constraints.maxWidth < 900 ||
@@ -2045,23 +2073,34 @@ class _SetupState extends State<UpstreamChannelSetupView> {
     );
     final noChanges =
         counts.added == 0 && counts.updated == 0 && counts.removed == 0;
+    final expansion = _configurationExpansion(MediaQuery.sizeOf(context));
+    final roles = LineupTheme.of(context);
+    final actionStyle = FilledButton.styleFrom(
+      textStyle: Theme.of(context).textTheme.labelLarge!
+          .copyWith(fontSize: 14 + 4 * expansion, fontWeight: FontWeight.w600),
+    );
     return _Stage(
       footer: _Footer(
+        configuration: true,
         leading: [
           TextButton(
             onPressed: () => setState(() => _step = 2),
             child: const Text('Back to configure'),
           ),
         ],
-        summary: _methodDecision(),
+        summary: _firstSetup ? const SizedBox.shrink() : _methodDecision(),
         trailing: noChanges
             ? FilledButton(
+                style: actionStyle,
                 onPressed: _viewLineup,
                 child: const Text('View lineup'),
               )
             : FilledButton(
+                style: actionStyle,
                 key: const ValueKey('apply-reviewed-lineup'),
-                onPressed: counts.removed > 0 && !_removalConfirmed
+                onPressed:
+                    _notice == 'Updating review…' ||
+                        (counts.removed > 0 && !_removalConfirmed)
                     ? null
                     : _applyReview,
                 child: Text(switch (_mode) {
@@ -2077,7 +2116,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (_notice != null) ...[
+          if (_notice != null && _notice != 'Updating review…') ...[
             LineupNotice(message: _notice!),
             const SizedBox(height: 8),
           ],
@@ -2090,18 +2129,23 @@ class _SetupState extends State<UpstreamChannelSetupView> {
             const SizedBox(height: 8),
           ],
           _reviewOverview(entries, finalChannels, counts),
-          const SizedBox(height: 8),
+          SizedBox(height: 16 + 8 * expansion),
           Expanded(child: _roster(entries)),
           if (counts.removed > 0)
-            CheckboxListTile(
-              key: const ValueKey('channel-setup-replace-confirmation'),
-              contentPadding: EdgeInsets.zero,
-              value: _removalConfirmed,
-              title: Text(
-                'I understand that ${counts.removed} existing generated ${counts.removed == 1 ? 'channel' : 'channels'} will be removed.',
+            Padding(
+              padding: EdgeInsets.only(top: 12 + 4 * expansion),
+              child: CheckboxListTile(
+                key: const ValueKey('channel-setup-replace-confirmation'),
+                controlAffinity: ListTileControlAffinity.leading,
+                contentPadding: EdgeInsets.zero,
+                value: _removalConfirmed,
+                title: Text(
+                  'I understand that ${counts.removed} existing generated ${counts.removed == 1 ? 'channel' : 'channels'} will be removed.',
+                  style: TextStyle(color: roles.liveAccent),
+                ),
+                onChanged: (value) =>
+                    setState(() => _removalConfirmed = value == true),
               ),
-              onChanged: (value) =>
-                  setState(() => _removalConfirmed = value == true),
             ),
         ],
       ),
@@ -2109,52 +2153,79 @@ class _SetupState extends State<UpstreamChannelSetupView> {
   }
 
   Widget _methodDecision() {
-    if (_firstSetup) {
-      return Text('${_plan!.channels.length} channels ready to create');
-    }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: 310,
-          child: DropdownButtonFormField<ChannelBuildMode>(
-            key: const ValueKey('review-build-method'),
-            initialValue: _mode,
-            isExpanded: true,
-            decoration: const InputDecoration(labelText: 'Build method'),
-            items: const [
-              DropdownMenuItem(
-                value: ChannelBuildMode.merge,
-                child: Text('Update and add'),
-              ),
-              DropdownMenuItem(
-                value: ChannelBuildMode.replace,
-                child: Text('Replace generated channels'),
-              ),
-              DropdownMenuItem(
-                value: ChannelBuildMode.append,
-                child: Text('Add as new channels'),
-              ),
-            ],
-            onChanged: (mode) {
-              setState(() {
-                _mode = mode!;
-                _removalConfirmed = false;
-                _notice = 'Updating review…';
-                _plan = _allocateReview(_reviewBase);
-              });
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (mounted) setState(() => _notice = null);
-              });
-            },
+    if (_firstSetup) return const SizedBox.shrink();
+    final expansion = _configurationExpansion(MediaQuery.sizeOf(context));
+    final roles = LineupTheme.of(context);
+    final textTheme = Theme.of(context).textTheme;
+    final methodStyle = textTheme.bodyMedium!.copyWith(
+      color: roles.primaryText,
+      fontSize: 14 + 4 * expansion,
+      height: 1.4,
+    );
+    final helpStyle = textTheme.bodyMedium!.copyWith(
+      color: roles.secondaryText,
+      fontSize: 13 + 5 * expansion,
+      height: 1.4,
+    );
+    final dropdown = SizedBox(
+      width: 240 + 90 * expansion,
+      child: DropdownButtonFormField<ChannelBuildMode>(
+        key: const ValueKey('review-build-method'),
+        initialValue: _mode,
+        isExpanded: true,
+        style: methodStyle,
+        decoration: const InputDecoration(labelText: 'Build method'),
+        items: const [
+          DropdownMenuItem(
+            value: ChannelBuildMode.merge,
+            child: Text('Update and add'),
           ),
-        ),
-        const SizedBox(height: 5),
-        Text(
-          _modeDescription(_mode),
-          style: TextStyle(color: LineupTheme.of(context).secondaryText),
-        ),
-      ],
+          DropdownMenuItem(
+            value: ChannelBuildMode.replace,
+            child: Text('Replace generated channels'),
+          ),
+          DropdownMenuItem(
+            value: ChannelBuildMode.append,
+            child: Text('Add as new channels'),
+          ),
+        ],
+        onChanged: (mode) {
+          setState(() {
+            _mode = mode!;
+            _removalConfirmed = false;
+            _notice = 'Updating review…';
+            _plan = _allocateReview(_reviewBase);
+          });
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) setState(() => _notice = null);
+          });
+        },
+      ),
+    );
+    final explanation = Text(
+      _notice == 'Updating review…' ? _notice! : _modeDescription(_mode),
+      style: helpStyle,
+    );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final effectiveWidth =
+            constraints.maxWidth / MediaQuery.textScalerOf(context).scale(1);
+        final inline = effectiveWidth >= 700;
+        if (inline) {
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              dropdown,
+              SizedBox(width: 20 + 8 * expansion),
+              Expanded(child: explanation),
+            ],
+          );
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [dropdown, const SizedBox(height: 8), explanation],
+        );
+      },
     );
   }
 
@@ -2163,115 +2234,194 @@ class _SetupState extends State<UpstreamChannelSetupView> {
     List<Channel> finalChannels,
     ({int unchanged, int updated, int added, int removed}) counts,
   ) {
+    final expansion = _configurationExpansion(MediaQuery.sizeOf(context));
+    final roles = LineupTheme.of(context);
+    final textTheme = Theme.of(context).textTheme;
     final finalCount = finalChannels.length;
     final generated = _finalGeneratedCounts(finalChannels);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        if (_firstSetup)
-          Text(
-            '$finalCount channels ready to create',
-            style: Theme.of(context).textTheme.headlineSmall,
-          )
-        else
-          Semantics(
+    final totalStyle = textTheme.titleLarge!.copyWith(
+      color: roles.primaryText,
+      fontSize: 24 + 12 * expansion,
+      fontWeight: FontWeight.w600,
+      height: 1.2,
+    );
+    final currentStyle = textTheme.bodyMedium!.copyWith(
+      color: roles.secondaryText,
+      fontSize: 14 + 4 * expansion,
+      height: 1.4,
+    );
+    final supportingStyle = textTheme.bodyMedium!.copyWith(
+      color: roles.secondaryText,
+      fontSize: 13 + 5 * expansion,
+      height: 1.4,
+    );
+    final total = _firstSetup
+        ? Text('$finalCount channels ready to create', style: totalStyle)
+        : Semantics(
             label: '${_reviewBase.length} current to $finalCount final',
             child: ExcludeSemantics(
               child: Wrap(
                 crossAxisAlignment: WrapCrossAlignment.center,
-                spacing: 8,
+                spacing: 14,
                 children: [
-                  Text(
-                    '${_reviewBase.length} current',
-                    style: Theme.of(context).textTheme.headlineSmall,
-                  ),
+                  Text('${_reviewBase.length} current', style: currentStyle),
                   Icon(
                     Icons.arrow_forward,
-                    size: Theme.of(context).textTheme.headlineSmall?.fontSize,
+                    size: 24 + 8 * expansion,
+                    color: roles.secondaryText,
                   ),
-                  Text(
-                    '$finalCount final',
-                    style: Theme.of(context).textTheme.headlineSmall,
+                  Text('$finalCount final', style: totalStyle),
+                ],
+              ),
+            ),
+          );
+    final filters = Wrap(
+      spacing: 8,
+      runSpacing: 4,
+      children: [
+        _filterChip(_ReviewFilter.unchanged, counts.unchanged),
+        _filterChip(_ReviewFilter.updated, counts.updated),
+        _filterChip(_ReviewFilter.added, counts.added),
+        _filterChip(_ReviewFilter.removed, counts.removed),
+      ],
+    );
+    final sourceBreakdown = Wrap(
+      spacing: 18 + 6 * expansion,
+      runSpacing: 4,
+      children: [
+        Text('Final generated channels', style: supportingStyle),
+        for (final strategy in _sourceOrder)
+          if ((generated.byStrategy[strategy] ?? 0) > 0)
+            Text.rich(
+              TextSpan(
+                text: '${builderStrategyLabels[strategy]} ',
+                style: supportingStyle,
+                children: [
+                  TextSpan(
+                    text: '${generated.byStrategy[strategy]}',
+                    style: supportingStyle.copyWith(
+                      color: roles.primaryText,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ],
               ),
             ),
-          ),
-        if (!_firstSetup) ...[
-          Text(
-            'Changes in this review${counts.removed > 0 ? ' · Includes channels being removed' : ''}',
-            style: TextStyle(color: LineupTheme.of(context).secondaryText),
-          ),
-          const SizedBox(height: 5),
-          if (entries.isNotEmpty)
-            Semantics(
-              label:
-                  '${counts.unchanged} unchanged, ${counts.updated} updated, ${counts.added} added, ${counts.removed} removed. ${entries.length} review entries including outgoing channels.',
-              child: ExcludeSemantics(
-                child: Row(
-                  children: [
-                    _segment(
-                      counts.unchanged,
-                      LineupTheme.of(context).mutedText,
-                    ),
-                    _segment(
-                      counts.updated,
-                      LineupTheme.of(context).focusBorder,
-                    ),
-                    _segment(
-                      counts.added,
-                      LineupTheme.of(context).progressFill,
-                    ),
-                    _segment(
-                      counts.removed,
-                      Theme.of(context).colorScheme.error,
-                    ),
-                  ],
+        if (generated.other > 0)
+          Text.rich(
+            TextSpan(
+              text: 'Other generated ',
+              style: supportingStyle,
+              children: [
+                TextSpan(
+                  text: '${generated.other}',
+                  style: supportingStyle.copyWith(
+                    color: roles.primaryText,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
-              ),
+              ],
             ),
-          Wrap(
-            spacing: 8,
-            children: [
-              _filterChip(_ReviewFilter.unchanged, counts.unchanged),
-              _filterChip(_ReviewFilter.updated, counts.updated),
-              _filterChip(_ReviewFilter.added, counts.added),
-              _filterChip(_ReviewFilter.removed, counts.removed),
-              TextButton(
-                onPressed: () => setState(() => _filter = _ReviewFilter.all),
-                child: const Text('Show all'),
-              ),
-            ],
-          ),
-        ],
-        const Divider(),
-        Wrap(
-          spacing: 18,
-          runSpacing: 4,
-          children: [
-            const Text('Final generated channels'),
-            for (final strategy in _sourceOrder)
-              if ((generated.byStrategy[strategy] ?? 0) > 0)
-                Text(
-                  '${builderStrategyLabels[strategy]} ${generated.byStrategy[strategy]}',
-                ),
-            if (generated.other > 0) Text('Other generated ${generated.other}'),
-          ],
-        ),
-        if (_reviewBase.any((channel) => channel.builderKey == null))
-          Text(
-            '${_reviewBase.where((channel) => channel.builderKey == null).length} custom channels will be kept.',
-            style: TextStyle(color: LineupTheme.of(context).secondaryText),
           ),
       ],
     );
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: roles.primarySurface,
+        border: Border.all(color: roles.subtleBorder),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Padding(
+        padding: EdgeInsets.all(20 + 8 * expansion),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final effectiveWidth =
+                    constraints.maxWidth /
+                    MediaQuery.textScalerOf(context).scale(1);
+                final inline = !_firstSetup && effectiveWidth >= 760;
+                if (inline) {
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Expanded(child: total),
+                      filters,
+                    ],
+                  );
+                }
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    total,
+                    if (!_firstSetup) ...[const SizedBox(height: 12), filters],
+                  ],
+                );
+              },
+            ),
+            if (!_firstSetup) ...[
+              SizedBox(height: 16 + 8 * expansion),
+              Text(
+                'Changes in this review${counts.removed > 0 ? ' · Includes channels being removed' : ''}',
+                style: supportingStyle,
+              ),
+              SizedBox(height: 8 + 4 * expansion),
+              if (entries.isNotEmpty)
+                Semantics(
+                  label:
+                      '${counts.unchanged} unchanged, ${counts.updated} updated, ${counts.added} added, ${counts.removed} removed. ${entries.length} review entries including outgoing channels.',
+                  child: ExcludeSemantics(
+                    child: Row(
+                      children: [
+                        _segment(
+                          counts.unchanged,
+                          roles.mutedText,
+                          height: 10 + 4 * expansion,
+                        ),
+                        _segment(
+                          counts.updated,
+                          roles.focusBorder,
+                          height: 10 + 4 * expansion,
+                        ),
+                        _segment(
+                          counts.added,
+                          roles.progressFill,
+                          height: 10 + 4 * expansion,
+                        ),
+                        _segment(
+                          counts.removed,
+                          Theme.of(context).colorScheme.error,
+                          height: 10 + 4 * expansion,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+            SizedBox(height: 16 + 8 * expansion),
+            Divider(height: 1, color: roles.subtleBorder),
+            SizedBox(height: 12 + 4 * expansion),
+            sourceBreakdown,
+            if (_reviewBase.any((channel) => channel.builderKey == null))
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  '${_reviewBase.where((channel) => channel.builderKey == null).length} custom channels will be kept.',
+                  style: supportingStyle,
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
   }
 
-  Widget _segment(int count, Color color) => count == 0
+  Widget _segment(int count, Color color, {double height = 10}) => count == 0
       ? const SizedBox.shrink()
       : Expanded(
           flex: count,
-          child: Container(height: 10, color: color),
+          child: Container(height: height, color: color),
         );
 
   ({Map<BuilderStrategy, int> byStrategy, int other}) _finalGeneratedCounts(
@@ -2293,13 +2443,73 @@ class _SetupState extends State<UpstreamChannelSetupView> {
     return (byStrategy: byStrategy, other: other);
   }
 
-  Widget _filterChip(_ReviewFilter filter, int count) => FilterChip(
-    selected: _filter == filter,
-    label: Text('$count ${_capitalized(filter.name)}'),
-    onSelected: (_) => setState(() => _filter = filter),
-  );
+  Widget _filterChip(_ReviewFilter filter, int count) {
+    final expansion = _configurationExpansion(MediaQuery.sizeOf(context));
+    final roles = LineupTheme.of(context);
+    final selected = _filter == filter;
+    final swatchColor = count == 0
+        ? roles.subtleBorder
+        : switch (filter) {
+            _ReviewFilter.unchanged => roles.mutedText,
+            _ReviewFilter.updated => roles.focusBorder,
+            _ReviewFilter.added => roles.progressFill,
+            _ReviewFilter.removed => Theme.of(context).colorScheme.error,
+            _ReviewFilter.all => roles.mutedText,
+          };
+    final textStyle = Theme.of(context).textTheme.bodyMedium!.copyWith(
+      color: roles.primaryText,
+      fontSize: 13 + 5 * expansion,
+      height: 1.4,
+    );
+    return Semantics(
+      selected: selected,
+      child: TextButton(
+        style: TextButton.styleFrom(
+          foregroundColor: roles.primaryText,
+          backgroundColor: selected
+              ? roles.selectedSurface
+              : Colors.transparent,
+          side: selected
+              ? BorderSide(color: roles.defaultBorder)
+              : BorderSide.none,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+          minimumSize: Size(0, 32 + 12 * expansion),
+          padding: EdgeInsets.symmetric(
+            horizontal: 8 + 4 * expansion,
+            vertical: 4 + 4 * expansion,
+          ),
+          textStyle: textStyle,
+        ),
+        onPressed: () => setState(() => _filter = filter),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 8 + 2 * expansion,
+              height: 8 + 2 * expansion,
+              color: swatchColor,
+            ),
+            SizedBox(width: 8 + 2 * expansion),
+            Text('$count ${_capitalized(filter.name)}'),
+          ],
+        ),
+      ),
+    );
+  }
 
   Widget _roster(List<_ReviewEntry> all) {
+    final expansion = _configurationExpansion(MediaQuery.sizeOf(context));
+    final roles = LineupTheme.of(context);
+    final textStyle = Theme.of(context).textTheme.bodyMedium!.copyWith(
+      color: roles.secondaryText,
+      fontSize: 13 + 5 * expansion,
+      height: 1.4,
+    );
+    final searchStyle = Theme.of(context).textTheme.bodyMedium!.copyWith(
+      color: roles.primaryText,
+      fontSize: 14 + 4 * expansion,
+      height: 1.4,
+    );
     final query = _search.text.trim().toLowerCase();
     final entries = all.where((entry) {
       final found =
@@ -2313,20 +2523,46 @@ class _SetupState extends State<UpstreamChannelSetupView> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        TextField(
-          key: const ValueKey('channel-setup-review-search'),
-          controller: _search,
-          decoration: const InputDecoration(
-            hintText: 'Search channels by name or number',
-            prefixIcon: Icon(Icons.search),
-          ),
-          onChanged: (_) => setState(() {}),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(
+              child: TextField(
+                key: const ValueKey('channel-setup-review-search'),
+                controller: _search,
+                style: searchStyle,
+                decoration: InputDecoration(
+                  hintText: 'Search channels by name or number',
+                  hintStyle: searchStyle,
+                  prefixIcon: const Icon(Icons.search),
+                ),
+                onChanged: (_) => setState(() {}),
+              ),
+            ),
+            if (!_firstSetup) ...[
+              const SizedBox(width: 12),
+              TextButton(
+                key: const ValueKey('review-show-all'),
+                style: TextButton.styleFrom(
+                  foregroundColor: roles.secondaryText,
+                  textStyle: searchStyle,
+                  minimumSize: Size(0, 44 + 4 * expansion),
+                  padding: EdgeInsets.symmetric(horizontal: 8 + 4 * expansion),
+                ),
+                onPressed: () => setState(() => _filter = _ReviewFilter.all),
+                child: const Text('Show all'),
+              ),
+            ],
+          ],
         ),
+        SizedBox(height: 6 + 2 * expansion),
         Text(
           filtered
               ? '${_capitalized(_filter.name)} · ${entries.length} matching ${entries.length == 1 ? 'channel' : 'channels'}'
               : '${entries.length} of ${all.length} review entries',
+          style: textStyle,
         ),
+        SizedBox(height: 8 + 4 * expansion),
         _rosterHeader(),
         Expanded(
           child: entries.isEmpty
@@ -2341,20 +2577,48 @@ class _SetupState extends State<UpstreamChannelSetupView> {
     );
   }
 
-  Widget _rosterHeader() => Container(
-    key: const ValueKey('review-roster-header'),
-    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-    color: LineupTheme.of(context).primarySurface,
-    child: const Row(
-      children: [
-        SizedBox(width: 58, child: Text('No.')),
-        Expanded(flex: 3, child: Text('Channel')),
-        Expanded(flex: 2, child: Text('Source')),
-        Expanded(flex: 2, child: Text('Playback')),
-        SizedBox(width: 92, child: Text('Change', textAlign: TextAlign.end)),
-      ],
-    ),
-  );
+  Widget _rosterHeader() {
+    final expansion = _configurationExpansion(MediaQuery.sizeOf(context));
+    final roles = LineupTheme.of(context);
+    final headerStyle = Theme.of(context).textTheme.bodyMedium!.copyWith(
+      color: roles.secondaryText,
+      fontSize: 14 + 4 * expansion,
+      height: 1.4,
+    );
+    final numberWidth = 58 + 22 * expansion;
+    final changeWidth = 92 + 28 * expansion;
+    return DecoratedBox(
+      key: const ValueKey('review-roster-header'),
+      decoration: BoxDecoration(color: roles.primarySurface),
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+          12,
+          6 + 2 * expansion,
+          52,
+          6 + 2 * expansion,
+        ),
+        child: Row(
+          children: [
+            SizedBox(
+              width: numberWidth,
+              child: Text('No.', style: headerStyle),
+            ),
+            Expanded(flex: 60, child: Text('Channel', style: headerStyle)),
+            Expanded(flex: 16, child: Text('Source', style: headerStyle)),
+            Expanded(flex: 16, child: Text('Playback', style: headerStyle)),
+            SizedBox(
+              width: changeWidth,
+              child: Text(
+                'Change',
+                textAlign: TextAlign.end,
+                style: headerStyle,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   Widget _emptyRoster(String query, bool filtered) => Center(
     child: Column(
@@ -2377,16 +2641,52 @@ class _SetupState extends State<UpstreamChannelSetupView> {
   );
 
   Widget _reviewRow(_ReviewEntry entry) {
+    final expansion = _configurationExpansion(MediaQuery.sizeOf(context));
+    final roles = LineupTheme.of(context);
+    final textTheme = Theme.of(context).textTheme;
+    final nameStyle = textTheme.bodyMedium!.copyWith(
+      color: roles.primaryText,
+      fontSize: 15 + 5 * expansion,
+      height: 1.4,
+    );
+    final metaStyle = textTheme.bodyMedium!.copyWith(
+      color: roles.secondaryText,
+      fontSize: 14 + 4 * expansion,
+      height: 1.4,
+    );
+    final changeStyle = metaStyle.copyWith(
+      color: switch (entry.kind) {
+        _ReviewKind.unchanged => roles.mutedText,
+        _ReviewKind.updated => roles.focusBorder,
+        _ReviewKind.added => roles.progressFill,
+        _ReviewKind.removed => Theme.of(context).colorScheme.error,
+      },
+    );
+    final numberWidth = 58 + 22 * expansion;
+    final changeWidth = 92 + 28 * expansion;
     final content = Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SizedBox(width: 58, child: Text('${entry.channel.number}')),
-        Expanded(flex: 3, child: Text(entry.channel.name)),
-        Expanded(flex: 2, child: Text(_sourceLabel(entry.channel.source))),
-        Expanded(flex: 2, child: Text(_playbackLabel(entry.channel))),
         SizedBox(
-          width: 92,
-          child: Text(_capitalized(entry.kind.name), textAlign: TextAlign.end),
+          width: numberWidth,
+          child: Text('${entry.channel.number}', style: metaStyle),
+        ),
+        Expanded(flex: 60, child: Text(entry.channel.name, style: nameStyle)),
+        Expanded(
+          flex: 16,
+          child: Text(_sourceLabel(entry.channel.source), style: metaStyle),
+        ),
+        Expanded(
+          flex: 16,
+          child: Text(_playbackLabel(entry.channel), style: metaStyle),
+        ),
+        SizedBox(
+          width: changeWidth,
+          child: Text(
+            _capitalized(entry.kind.name),
+            textAlign: TextAlign.end,
+            style: changeStyle,
+          ),
         ),
       ],
     );
@@ -2401,14 +2701,32 @@ class _SetupState extends State<UpstreamChannelSetupView> {
           ? ExpansionTile(
               tilePadding: const EdgeInsets.symmetric(horizontal: 12),
               title: content,
-              childrenPadding: const EdgeInsets.fromLTRB(70, 0, 12, 12),
+              childrenPadding: EdgeInsets.fromLTRB(
+                numberWidth + 12,
+                0,
+                12,
+                12 + 4 * expansion,
+              ),
               children: [
                 for (final change in changes)
-                  Align(alignment: Alignment.centerLeft, child: Text(change)),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      change,
+                      style: metaStyle.copyWith(
+                        fontFamilyFallback: const ['Arial'],
+                      ),
+                    ),
+                  ),
               ],
             )
           : Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
+              padding: EdgeInsets.fromLTRB(
+                12,
+                13 + 3 * expansion,
+                52,
+                13 + 3 * expansion,
+              ),
               child: content,
             ),
     );
