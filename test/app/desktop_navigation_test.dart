@@ -113,7 +113,6 @@ void main() {
     tester,
   ) async {
     final controller = _LogoutController()..stage = SetupStage.ready;
-    addTearDown(controller.dispose);
     await tester.pumpWidget(UiFixture(controller: controller).build());
     await tester.pumpAndSettle();
 

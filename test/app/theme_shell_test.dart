@@ -143,11 +143,31 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('Settings refreshes from controller setting changes', (
+    tester,
+  ) async {
+    final fixture = UiFixture()..controller.stage = SetupStage.ready;
+    await tester.pumpWidget(fixture.build());
+    await tester.pumpAndSettle();
+    await openDestination(tester, 'Settings');
+    await tester.tap(find.widgetWithText(TextButton, 'Guide'));
+    await tester.pumpAndSettle();
+
+    final guideHours = find.byType(DropdownButton<int>);
+    expect(tester.widget<DropdownButton<int>>(guideHours).value, 2);
+
+    await fixture.controller.updateSettings(
+      fixture.controller.settings.copyWith(guideHours: 4),
+    );
+    await tester.pumpAndSettle();
+
+    expect(tester.widget<DropdownButton<int>>(guideHours).value, 4);
+  });
+
   testWidgets('failed setting save restores value without moving focus', (
     tester,
   ) async {
     final controller = _DelayedSettingsController()..stage = SetupStage.ready;
-    addTearDown(controller.dispose);
     await tester.pumpWidget(UiFixture(controller: controller).build());
     await tester.pumpAndSettle();
     await openDestination(tester, 'Settings');

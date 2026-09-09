@@ -497,11 +497,18 @@ class _LineupShellState extends State<LineupShell> {
     String? helper,
   }) {
     final selected = _selectedIndex == index;
+    final semanticLabel = [
+      label,
+      ?helper,
+      if (selected) 'current page',
+    ].join(', ');
     return Semantics(
+      excludeSemantics: true,
       selected: selected,
       button: true,
       enabled: enabled,
-      label: selected ? '$label, current page' : label,
+      label: semanticLabel,
+      onTap: enabled ? () => unawaited(_select(index)) : null,
       child: TextButton.icon(
         autofocus: autofocus,
         style: TextButton.styleFrom(
@@ -739,9 +746,10 @@ class SettingsView extends StatefulWidget {
 class _SettingsViewState extends State<SettingsView> {
   late SettingsCategory _localCategory;
   late LineupSettings _displaySettings;
+  late LineupSettings _lastControllerSettings;
   bool _categoryFocusPlaced = false;
   final Map<String, Timer> _savingTimers = {};
-  final Set<String> _pending = {};
+  final Set<String> _pendingSettingKeys = {};
   final Set<String> _showSaving = {};
   final Map<String, String> _errors = {};
   Future<void> _saveTail = Future.value();
@@ -753,14 +761,39 @@ class _SettingsViewState extends State<SettingsView> {
   void initState() {
     super.initState();
     _localCategory = widget.category;
-    _displaySettings = widget.controller.settings;
+    _lastControllerSettings = widget.controller.settings;
+    _displaySettings = _lastControllerSettings;
+    widget.controller.addListener(_controllerChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _categoryFocusPlaced = true;
     });
   }
 
   @override
+  void didUpdateWidget(covariant SettingsView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller == widget.controller) return;
+    oldWidget.controller.removeListener(_controllerChanged);
+    widget.controller.addListener(_controllerChanged);
+    _lastControllerSettings = widget.controller.settings;
+    _displaySettings = _lastControllerSettings;
+  }
+
+  void _controllerChanged() {
+    final settings = widget.controller.settings;
+    if (identical(settings, _lastControllerSettings)) return;
+    _lastControllerSettings = settings;
+    var refreshed = settings;
+    for (final keyName in _pendingSettingKeys) {
+      refreshed = _mergeSetting(keyName, refreshed, _displaySettings);
+    }
+    if (!mounted) return;
+    setState(() => _displaySettings = refreshed);
+  }
+
+  @override
   void dispose() {
+    widget.controller.removeListener(_controllerChanged);
     for (final timer in _savingTimers.values) {
       timer.cancel();
     }
@@ -943,9 +976,7 @@ class _SettingsViewState extends State<SettingsView> {
                 ),
               ),
               child: TextButton.icon(
-                focusNode: category == SettingsCategory.appearance
-                    ? widget.focusNode
-                    : null,
+                focusNode: category == _category ? widget.focusNode : null,
                 autofocus: category == _category && !_categoryFocusPlaced,
                 style: TextButton.styleFrom(
                   alignment: Alignment.centerLeft,
@@ -963,6 +994,11 @@ class _SettingsViewState extends State<SettingsView> {
                 onPressed: () {
                   setState(() => _localCategory = category);
                   widget.onCategoryChanged?.call(category);
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted && category == _category) {
+                      widget.focusNode?.requestFocus();
+                    }
+                  });
                 },
                 icon: Icon(_categoryIcon(category), size: 18),
                 label: Text(_categoryLabel(category)),
@@ -994,12 +1030,9 @@ class _SettingsViewState extends State<SettingsView> {
                 value.theme,
                 LineupThemeName.values,
                 (item) => item.label,
-                _pending.contains('theme')
+                _pendingSettingKeys.contains('theme')
                     ? null
-                    : (item) => _update(
-                        'theme',
-                        widget.controller.settings.copyWith(theme: item),
-                      ),
+                    : (item) => _update('theme', value.copyWith(theme: item)),
               ),
               _settingFeedback('theme'),
               _Dropdown<GuideInfoBackgroundMode>(
@@ -1012,13 +1045,11 @@ class _SettingsViewState extends State<SettingsView> {
                   GuideInfoBackgroundMode.themeDefault => 'Theme background',
                   GuideInfoBackgroundMode.artwork => 'Artwork backdrop',
                 },
-                _pending.contains('guideInfoBackgroundMode')
+                _pendingSettingKeys.contains('guideInfoBackgroundMode')
                     ? null
                     : (item) => _update(
                         'guideInfoBackgroundMode',
-                        widget.controller.settings.copyWith(
-                          guideInfoBackgroundMode: item,
-                        ),
+                        value.copyWith(guideInfoBackgroundMode: item),
                       ),
               ),
               _settingFeedback('guideInfoBackgroundMode'),
@@ -1028,13 +1059,11 @@ class _SettingsViewState extends State<SettingsView> {
                   'Use available Plex title artwork with a readable text fallback.',
                 ),
                 value: value.preferClearLogos,
-                onChanged: _pending.contains('preferClearLogos')
+                onChanged: _pendingSettingKeys.contains('preferClearLogos')
                     ? null
                     : (item) => _update(
                         'preferClearLogos',
-                        widget.controller.settings.copyWith(
-                          preferClearLogos: item,
-                        ),
+                        value.copyWith(preferClearLogos: item),
                       ),
               ),
               _settingFeedback('preferClearLogos'),
@@ -1050,11 +1079,11 @@ class _SettingsViewState extends State<SettingsView> {
                   3 => 'Wide (3 hours)',
                   _ => 'Extended ($item hours)',
                 },
-                _pending.contains('guideHours')
+                _pendingSettingKeys.contains('guideHours')
                     ? null
                     : (item) => _update(
                         'guideHours',
-                        widget.controller.settings.copyWith(guideHours: item),
+                        value.copyWith(guideHours: item),
                       ),
               ),
               _settingFeedback('guideHours'),
@@ -1064,13 +1093,11 @@ class _SettingsViewState extends State<SettingsView> {
                   'Identify the playing channel and program while browsing other listings.',
                 ),
                 value: value.nowWatchingBanner,
-                onChanged: _pending.contains('nowWatchingBanner')
+                onChanged: _pendingSettingKeys.contains('nowWatchingBanner')
                     ? null
                     : (item) => _update(
                         'nowWatchingBanner',
-                        widget.controller.settings.copyWith(
-                          nowWatchingBanner: item,
-                        ),
+                        value.copyWith(nowWatchingBanner: item),
                       ),
               ),
               _settingFeedback('nowWatchingBanner'),
@@ -1082,13 +1109,11 @@ class _SettingsViewState extends State<SettingsView> {
                 value.osdAutoHideSeconds,
                 LineupSettings.osdAutoHideSecondsOptions,
                 (item) => '$item seconds',
-                _pending.contains('osdAutoHideSeconds')
+                _pendingSettingKeys.contains('osdAutoHideSeconds')
                     ? null
                     : (item) => _update(
                         'osdAutoHideSeconds',
-                        widget.controller.settings.copyWith(
-                          osdAutoHideSeconds: item,
-                        ),
+                        value.copyWith(osdAutoHideSeconds: item),
                       ),
               ),
               _settingFeedback('osdAutoHideSeconds'),
@@ -1098,13 +1123,11 @@ class _SettingsViewState extends State<SettingsView> {
                   'Show transport controls and enable pause, seek, stop, and media-key shortcuts in Player.',
                 ),
                 value: value.dvrControlsEnabled,
-                onChanged: _pending.contains('dvrControlsEnabled')
+                onChanged: _pendingSettingKeys.contains('dvrControlsEnabled')
                     ? null
                     : (item) => _update(
                         'dvrControlsEnabled',
-                        widget.controller.settings.copyWith(
-                          dvrControlsEnabled: item,
-                        ),
+                        value.copyWith(dvrControlsEnabled: item),
                       ),
               ),
               _settingFeedback('dvrControlsEnabled'),
@@ -1116,11 +1139,11 @@ class _SettingsViewState extends State<SettingsView> {
                   'Disable nonessential application transitions.',
                 ),
                 value: value.reduceMotion,
-                onChanged: _pending.contains('reduceMotion')
+                onChanged: _pendingSettingKeys.contains('reduceMotion')
                     ? null
                     : (item) => _update(
                         'reduceMotion',
-                        widget.controller.settings.copyWith(reduceMotion: item),
+                        value.copyWith(reduceMotion: item),
                       ),
               ),
               _settingFeedback('reduceMotion'),
@@ -1130,13 +1153,11 @@ class _SettingsViewState extends State<SettingsView> {
                   'Use thicker outlines for keyboard and controller focus.',
                 ),
                 value: value.largeFocusIndicators,
-                onChanged: _pending.contains('largeFocusIndicators')
+                onChanged: _pendingSettingKeys.contains('largeFocusIndicators')
                     ? null
                     : (item) => _update(
                         'largeFocusIndicators',
-                        widget.controller.settings.copyWith(
-                          largeFocusIndicators: item,
-                        ),
+                        value.copyWith(largeFocusIndicators: item),
                       ),
               ),
               _settingFeedback('largeFocusIndicators'),
@@ -1163,13 +1184,12 @@ class _SettingsViewState extends State<SettingsView> {
                   'Ask who is watching when this Plex Home has multiple profiles.',
                 ),
                 value: value.profilePickerOnStartup,
-                onChanged: _pending.contains('profilePickerOnStartup')
+                onChanged:
+                    _pendingSettingKeys.contains('profilePickerOnStartup')
                     ? null
                     : (item) => _update(
                         'profilePickerOnStartup',
-                        widget.controller.settings.copyWith(
-                          profilePickerOnStartup: item,
-                        ),
+                        value.copyWith(profilePickerOnStartup: item),
                       ),
               ),
               _settingFeedback('profilePickerOnStartup'),
@@ -1208,13 +1228,11 @@ class _SettingsViewState extends State<SettingsView> {
                   'Tokens, URLs, paths, headers and credentials are excluded.',
                 ),
                 value: value.diagnosticsEnabled,
-                onChanged: _pending.contains('diagnosticsEnabled')
+                onChanged: _pendingSettingKeys.contains('diagnosticsEnabled')
                     ? null
                     : (item) => _update(
                         'diagnosticsEnabled',
-                        widget.controller.settings.copyWith(
-                          diagnosticsEnabled: item,
-                        ),
+                        value.copyWith(diagnosticsEnabled: item),
                       ),
               ),
               _settingFeedback('diagnosticsEnabled'),
@@ -1258,14 +1276,14 @@ class _SettingsViewState extends State<SettingsView> {
   }
 
   Future<void> _update(String keyName, LineupSettings next) async {
-    if (_pending.contains(keyName)) return;
+    if (_pendingSettingKeys.contains(keyName)) return;
     setState(() {
-      _pending.add(keyName);
+      _pendingSettingKeys.add(keyName);
       _errors.remove(keyName);
       _displaySettings = _mergeSetting(keyName, _displaySettings, next);
     });
     _savingTimers[keyName] = Timer(const Duration(milliseconds: 300), () {
-      if (mounted && _pending.contains(keyName)) {
+      if (mounted && _pendingSettingKeys.contains(keyName)) {
         setState(() => _showSaving.add(keyName));
       }
     });
@@ -1284,7 +1302,7 @@ class _SettingsViewState extends State<SettingsView> {
       _savingTimers.remove(keyName)?.cancel();
       if (mounted) {
         setState(() {
-          _pending.remove(keyName);
+          _pendingSettingKeys.remove(keyName);
           _showSaving.remove(keyName);
           if (error != null) {
             _displaySettings = _mergeSetting(
@@ -1508,6 +1526,7 @@ class _Dropdown<T> extends StatelessWidget {
     control: SizedBox(
       width: 220,
       child: DropdownButtonFormField<T>(
+        key: ValueKey(value),
         initialValue: value,
         isExpanded: true,
         decoration: const InputDecoration(
