@@ -36,6 +36,7 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
   var _overlayTransitionDuration = const Duration(milliseconds: 350);
   final _menuFocus = FocusNode(debugLabel: 'Player Lineup menu');
   final _sleepFocus = FocusNode(debugLabel: 'Player sleep timer');
+  Timer? _sleepCountdownTimer;
   var _appActive = true;
 
   @override
@@ -44,12 +45,14 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
     _renderedOverlay = widget.controller.overlay;
     WidgetsBinding.instance.addObserver(this);
     widget.controller.addListener(_changed);
+    _syncSleepCountdownTimer();
   }
 
   @override
   void dispose() {
     widget.controller.removeListener(_changed);
     WidgetsBinding.instance.removeObserver(this);
+    _sleepCountdownTimer?.cancel();
     _menuFocus.dispose();
     _sleepFocus.dispose();
     super.dispose();
@@ -60,11 +63,13 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
     final active = state == AppLifecycleState.resumed;
     if (_appActive == active) return;
     setState(() => _appActive = active);
+    _syncSleepCountdownTimer();
     if (active) unawaited(widget.controller.checkSleepDeadline());
   }
 
   void _changed() {
     if (!mounted) return;
+    _syncSleepCountdownTimer();
     final nextOverlay = widget.controller.overlay;
     setState(() {
       final transitioningNowPlaying =
@@ -88,6 +93,28 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
             : 350,
       );
       _renderedOverlay = nextOverlay;
+    });
+  }
+
+  void _syncSleepCountdownTimer() {
+    final showCountdown =
+        _appActive &&
+        widget.controller.overlay == PlayerOverlay.sleepTimer &&
+        widget.controller.sleepDeadline != null;
+    if (!showCountdown) {
+      _sleepCountdownTimer?.cancel();
+      _sleepCountdownTimer = null;
+      return;
+    }
+    _sleepCountdownTimer ??= Timer.periodic(const Duration(seconds: 30), (_) {
+      if (!mounted) return;
+      if (!_appActive ||
+          widget.controller.overlay != PlayerOverlay.sleepTimer ||
+          widget.controller.sleepDeadline == null) {
+        _syncSleepCountdownTimer();
+        return;
+      }
+      setState(() {});
     });
   }
 

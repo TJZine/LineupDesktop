@@ -561,6 +561,10 @@ void main() {
     expect(coordinator.pendingTrackId, 2);
     player.releaseSelect.complete();
     await Future.wait([first, second]);
+    expect(player.selectedTracks, [
+      (PlayerTrackType.audio, 1),
+      (PlayerTrackType.audio, 2),
+    ]);
 
     player.tracks = const [
       PlayerTrack(id: 1, type: PlayerTrackType.audio, selected: true),

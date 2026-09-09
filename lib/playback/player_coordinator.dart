@@ -1701,6 +1701,9 @@ class PlayerCoordinator extends ChangeNotifier {
 
   void _retirePlaybackIntent() {
     _pendingSeekPart = null;
+    _pendingTrackType = null;
+    _pendingTrackId = null;
+    _trackSelectionError = null;
     _activeLoadGeneration = null;
     _advancingGeneration = null;
     _nativeReplacementGeneration = null;

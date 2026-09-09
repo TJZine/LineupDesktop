@@ -886,10 +886,19 @@ void main() {
       Size(3840, 2160),
     ]) {
       await tester.binding.setSurfaceSize(size);
-      for (final show in <VoidCallback>[
-        fixture.player.showMiniGuide,
-        () => fixture.player.showTracks(PlayerTrackType.audio),
-        fixture.player.showSleepTimer,
+      for (final (show, overlay) in <(VoidCallback, Finder)>[
+        (
+          fixture.player.showMiniGuide,
+          find.byKey(const Key('mini-guide-shelf')),
+        ),
+        (
+          () => fixture.player.showTracks(PlayerTrackType.audio),
+          find.byKey(const Key('playback-options-fade')),
+        ),
+        (
+          fixture.player.showSleepTimer,
+          find.byKey(const Key('sleep-timer-picker')),
+        ),
       ]) {
         fixture.player.closeOverlay();
         show();
@@ -905,6 +914,7 @@ void main() {
           ),
         );
         await tester.pump(const Duration(milliseconds: 350));
+        expect(overlay, findsOneWidget, reason: '$size');
         expect(tester.takeException(), isNull, reason: '$size');
       }
     }
