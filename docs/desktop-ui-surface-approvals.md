@@ -26,7 +26,7 @@ may cover multiple listed states only when that scope is clear to the user.
 | surface-10 | Profile selection | Unreviewed | Not assessed in this pass | — |
 | surface-11 | Profile PIN | Unreviewed | Not assessed in this pass | — |
 | surface-12 | Server selection | Unreviewed | Not assessed in this pass | — |
-| surface-13 | Library scan outcomes | Unreviewed | Not assessed in this pass | — |
+| surface-13 | Library scan outcomes · corrected | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Candidate03 state family; `692083fc` |
 | surface-14 | Setup progress | Unreviewed | Not assessed in this pass | — |
 | surface-15 | Setup complete | Unreviewed | Not assessed in this pass | — |
 | surface-16 | Channel directory | Unreviewed | Not assessed in this pass | — |
@@ -571,3 +571,138 @@ Grouped adaptive/resolution/accessibility checks and physical Windows Segoe UI,
 input/focus validation remain outstanding at the eventual tested commit. No
 independent review is specifically recommended for this bounded pass; none was
 launched. No push, deployment or publication.
+
+### Surface13 initial comparison — September 9, 2026
+
+User selected Library scan outcomes. Clean HEAD
+`e8ad09b1cdd36b039968c29cf46490b854fd4393`. Root inspected original
+`library-scan-states.html`, mixed state, in the browser. It is a natural-width
+736px component, not an authored 1080p page. Root also inspected fresh actual
+`build/desktop-ui/surface-13/current-e8ad09b1.png`, 1920×1080/DPR1/text100%,
+SHA-256 `962d8c8c8d511fbf32ee578eb55728a5a18d952cf41b6e72ec29f632e1204e2a`.
+Production source SHA-256
+`4a899426d1b42906b597eb91eac47aee553edd249041ae67c46089466ddb5c9f`.
+This actual render still matches the frozen packet image exactly. Synthetic
+fixture has one ready, one unsupported, one empty and one failed library; the
+mock has two ready, one empty and one failed. Pinned fonts/Windows limitations
+remain as recorded for earlier surfaces.
+
+Observed: old header typography and missing wordmark, library type labels far
+from names, technical page/item scan details, generic global failure dominating
+row outcomes, and terse footer labels. Proposed direction: approved setup frame,
+bounded readable library rows, clear outcome summary and row-local statuses,
+exclusion explanation above actions, explicit Retry/Continue labels and correct
+none-ready/scanning actions. Brief awaits user feedback; no implementation or
+worker assignment yet. Counts/reasons must use real available scan facts; the
+mock's usable-media counts and specific timeout reason are not automatically
+available from LibraryScanFact.
+
+### Surface13 first-pass direction
+
+User approved the starting corrections, emphasized closer scrutiny and asked
+root to judge compactness. Root chose the shared full-width setup header with a
+centered, unframed outcome/list area capped at 1040px at 1080p, with recovery and
+Continue actions immediately beneath the rows. The body can grow/scroll for more
+libraries; four rows should remain a readable group. Selection remains editable
+in the rows rather than introducing another screen solely to change selection.
+
+Actual assignment: existing worker_luna (GPT-5.6 Luna/xhigh), exclusive
+`channel_setup_view.dart` visual lease for library body/header/rows. Root retains
+state-derived summaries, action availability, honest scan wording, errors and
+behavior verification, to integrate after lease release. Controller scan,
+retention, cancellation and commit owners remain unchanged. Existing meaningful
+selection/cancellation tests will also cover deselecting the only ready library
+and cancellation with a completed row, not layout geometry.
+
+The first candidate exposed a disconnected full-width header above the compact
+body. The user explicitly requested that the heading follow the compact content
+and that the group be vertically centered. This supersedes the first-pass
+full-width-header placement for surface13 only. The same worker_luna received a
+small exclusive presentation follow-up: move the existing header into the bounded
+library column and center the complete group when it fits; preserve scrolling
+for long lists, short windows and enlarged text. Other setup surfaces retain
+their approved layout.
+
+### Surface13 candidate03 — awaiting visual approval
+
+The header, rows and actions now form one centered, bounded group. Long lists
+scroll within the available height; short windows or enlarged text use a
+whole-group scroll fallback. Root personally inspected fresh mixed, none-ready,
+scanning, initial-selection and long-list captures, including the scrolled end.
+Checkboxes and whole-row activation remain; root recommends retaining explicit
+multi-selection controls rather than persistent selected-row backgrounds.
+
+Base HEAD remains `e8ad09b1cdd36b039968c29cf46490b854fd4393`; working-tree
+`channel_setup_view.dart` SHA-256 is
+`ebccc1132a0e68b36df5d66133bef2e720b129fdaf44775f097d5a44fcc51edb`.
+Local ignored evidence in `build/desktop-ui/surface-13/`, all actual
+1920×1080/DPR1/text100%, pinned Roboto body and Arial wordmark:
+
+- `candidate-03.png`: `b0867e4b774df72f8be0bbcdbe5a5a11777c9e02d9700cd5b7b76883ee903a09`.
+- `candidate-03-failed.png`: `e3c5b588048a05bd82d997fb3502d73924a8b170921fa2e74f73d497ac3fbd04`.
+- `candidate-03-scanning.png`: `ef628d63308c60d80cfb19ab1e95b53baa4eeb0e2488669531759282828bf9f5`.
+- `candidate-03-selection.png`: `138da31daf21f394b2e177df481720a83bbacc47ed0464fc05066ce1846c9ba6`.
+- `candidate-03-long.png`: `92109347aa70ccba958b0206db15b710172e353c9d6e02a9f6d602ad60210620`.
+- `candidate-03-long.png-scrolled.png`: `db86d468353df985b0f2a751d0a351baeaef8a00bc49810216f014d0b5cff4dc`.
+
+Root retained controller contracts, made outcome wording reflect available facts,
+prevented Continue after cancellation, and disabled Select all while scanning.
+Existing selection/cancellation behavior tests were strengthened without adding
+layout tests. All 75 focused setup/review/app tests and full Flutter analysis
+passed on this source. Two existing real-controller mixed-scan/cancellation
+checks also passed before the final presentation-only follow-up. Formatting and
+diff checks passed. Temporary capture harness was restored; golden baselines
+and the frozen packet remain unchanged.
+
+No surface13 approval or lock yet. Grouped adaptive/resolution/accessibility and
+physical Windows font/input/focus checks remain outstanding. No independent
+review is specifically recommended for this bounded pass; none was launched.
+
+
+### Surface13 approval and state completion
+
+The user explicitly authorized the lock subject to checking all page states:
+“we can lock it if our all states of this page are properly adjusted”. Root
+completed the remaining 1080p state inspection without production changes:
+cancelled scan with a retained ready row, zero selected libraries, no available
+libraries, empty/unsupported results without failures, global scan failure before
+row facts, and entry from an existing lineup with Cancel. These join the mixed,
+none-ready retry, scanning, selection and long-list states inspected above. All
+use the corrected compact layout. Successful all-ready scans advance through the
+existing `_scan`/`_commitLibraries` flow rather than requiring a new success page.
+The zero-selection capture waits for the checkbox animation to finish.
+
+This records the user's conditional approval after root's state checks, not a
+claim that the user individually inspected every supplemental image. Surface13
+is locked at 1080p under that authorization.
+
+Implementation commit: `692083fcc3bf23204f87e44f43c36621717db0ae`
+(`fix(ui): refine library scan states and compact layout`). Production source
+hash remains the candidate03 hash above. Durable captures, copied byte-for-byte:
+
+- [candidate-03-cancelled.png](design/desktop-ui/approved/2026-09-09-surface-13/candidate-03-cancelled.png): `35b0bc16d9af8608df592f180ea43d04496b740c3e91e6a0488aacafac12728b`.
+- [candidate-03-existing-lineup.png](design/desktop-ui/approved/2026-09-09-surface-13/candidate-03-existing-lineup.png): `8b6c9ff28fd225f89d3807e1b5cecf1bce9f40c2f35bc31a58062d5f6b40f297`.
+- [candidate-03-failed.png](design/desktop-ui/approved/2026-09-09-surface-13/candidate-03-failed.png): `e3c5b588048a05bd82d997fb3502d73924a8b170921fa2e74f73d497ac3fbd04`.
+- [candidate-03-long.png](design/desktop-ui/approved/2026-09-09-surface-13/candidate-03-long.png): `92109347aa70ccba958b0206db15b710172e353c9d6e02a9f6d602ad60210620`.
+- [candidate-03-long.png-scrolled.png](design/desktop-ui/approved/2026-09-09-surface-13/candidate-03-long.png-scrolled.png): `db86d468353df985b0f2a751d0a351baeaef8a00bc49810216f014d0b5cff4dc`.
+- [candidate-03-no-libraries.png](design/desktop-ui/approved/2026-09-09-surface-13/candidate-03-no-libraries.png): `abb53c50a1abc86782c88b4c9aa351981d475649f507ee74e35fcc7c381f23c8`.
+- [candidate-03-no-playable.png](design/desktop-ui/approved/2026-09-09-surface-13/candidate-03-no-playable.png): `25c872b448f16175d0ce3c8dbdf927587bdb83f1100de5e393aca8c7c9c8f37a`.
+- [candidate-03-retry-global.png](design/desktop-ui/approved/2026-09-09-surface-13/candidate-03-retry-global.png): `45cd7d71566325500c963d3baed10aff60fcbf68d1d226ab6c86b07d9838c7d1`.
+- [candidate-03-scanning.png](design/desktop-ui/approved/2026-09-09-surface-13/candidate-03-scanning.png): `ef628d63308c60d80cfb19ab1e95b53baa4eeb0e2488669531759282828bf9f5`.
+- [candidate-03-selection.png](design/desktop-ui/approved/2026-09-09-surface-13/candidate-03-selection.png): `138da31daf21f394b2e177df481720a83bbacc47ed0464fc05066ce1846c9ba6`.
+- [candidate-03-unselected.png](design/desktop-ui/approved/2026-09-09-surface-13/candidate-03-unselected.png): `1856e909af64ab0fc5cb47f6bf4abb5f0bd035a41d1a15b64c85a011d32dbdd7`.
+- [candidate-03.png](design/desktop-ui/approved/2026-09-09-surface-13/candidate-03.png): `b0867e4b774df72f8be0bbcdbe5a5a11777c9e02d9700cd5b7b76883ee903a09`.
+
+The existing 1280×720 library-outcomes golden alone was refreshed and its test
+passed. It was personally inspected for composition, but its existing harness
+loads Roboto only and renders the Arial wordmark as test-font blocks; it is not
+font-acceptance evidence. The durable 1080p evidence loads the actual Arial font.
+No new layout tests were added. The prior 75 behavior checks, two controller scan
+checks and full analysis remain applicable; no production changes followed them.
+
+Grouped adaptive/resolution/DPI/enlarged-text/accessibility checks remain open;
+this limited 720p golden is not completion of that matrix. Physical Windows
+Segoe UI and input/focus validation remain outstanding at the tested commit.
+The frozen comparison packet is unchanged. No independent review is specifically
+recommended for this bounded correction; none was launched. No push, deployment
+or publication.
