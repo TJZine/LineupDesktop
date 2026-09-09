@@ -1441,12 +1441,13 @@ class _LogoutController extends _FakeController {
   }
 
   @override
-  Future<void> saveChannel(
+  Future<Channel> saveChannel(
     Channel channel, {
     required Channel? expectedBase,
   }) async {
     final release = _saveRelease;
     if (release != null) await release.future;
+    return channel;
   }
 
   void releaseSave() => _saveRelease?.complete();

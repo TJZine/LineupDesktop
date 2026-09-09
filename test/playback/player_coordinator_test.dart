@@ -989,6 +989,88 @@ void main() {
   });
 
   test(
+    'reorder and renumber preserve unchanged active playback scope',
+    () async {
+      final lineup = _TestLineup(count: 3);
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => _schedule(channel),
+      )..requestViewport(0, 3);
+      await Future<void>.delayed(Duration.zero);
+      final nativePlayer = _Player();
+      final coordinator = PlayerCoordinator(
+        player: nativePlayer,
+        lineup: lineup,
+        guide: guide,
+      );
+      addTearDown(lineup.dispose);
+      addTearDown(guide.dispose);
+      addTearDown(coordinator.dispose);
+
+      await coordinator.tune('channel-b');
+      coordinator.showMiniGuide();
+      coordinator.setSleepTimer(const Duration(minutes: 30));
+      await coordinator.toggleFullscreen();
+      final loads = nativePlayer.loads.length;
+      final seeks = nativePlayer.seeks.length;
+      final overlay = coordinator.overlay;
+
+      await lineup.reorderChannels(
+        expectedLineup: lineup.channels,
+        orderedChannelIds: const ['channel-2', 'channel-0', 'channel-b'],
+      );
+      await lineup.reorderChannels(
+        expectedLineup: lineup.channels,
+        orderedChannelIds: const ['channel-b', 'channel-2', 'channel-0'],
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      expect(nativePlayer.stops, 0);
+      expect(nativePlayer.loads, hasLength(loads));
+      expect(nativePlayer.seeks, hasLength(seeks));
+      expect(nativePlayer.fullscreenValues, [true]);
+      expect(coordinator.fullscreen, isTrue);
+      expect(coordinator.sleepDuration, const Duration(minutes: 30));
+      expect(coordinator.overlay, overlay);
+      expect(coordinator.hasPlaybackIntent, isTrue);
+    },
+  );
+
+  test('active programming replacement stops playback', () async {
+    final lineup = _TestLineup();
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    )..requestViewport(0, 2);
+    await Future<void>.delayed(Duration.zero);
+    final nativePlayer = _Player();
+    final coordinator = PlayerCoordinator(
+      player: nativePlayer,
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
+
+    await coordinator.tune('channel-b');
+    final active = lineup.channels.singleWhere(
+      (channel) => channel.id == 'channel-b',
+    );
+    lineup.replaceChannels([
+      for (final channel in lineup.channels)
+        if (channel.id == active.id)
+          Channel.fromJson({...active.toJson(), 'shuffleSeed': 99})
+        else
+          channel,
+    ]);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(nativePlayer.stops, 1);
+    expect(coordinator.hasPlaybackIntent, isFalse);
+  });
+
+  test(
     'coordinated logout preserves playback on failure and drains on retry',
     () async {
       final lineup = _LogoutLineup();

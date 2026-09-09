@@ -812,12 +812,30 @@ class LineupController extends ChangeNotifier {
         availableMedia = media;
         availablePlaylists = pending.playlists;
         channels = migrated;
+        libraryScanStatus = _committedLibraryScanStatus(ids);
         _contentGeneration++;
         notifyListeners();
       }),
       operation: operation,
       fallbackStage: SetupStage.channelSetup,
     );
+  }
+
+  LibraryScanStatus _committedLibraryScanStatus(Set<String> ids) {
+    final statuses = ids
+        .map((id) => _libraryScanFacts[id]?.status)
+        .whereType<LibraryScanStatus>()
+        .toSet();
+    if (statuses.contains(LibraryScanStatus.transientFailure)) {
+      return LibraryScanStatus.transientFailure;
+    }
+    if (statuses.contains(LibraryScanStatus.complete)) {
+      return LibraryScanStatus.complete;
+    }
+    if (statuses.contains(LibraryScanStatus.unsupported)) {
+      return LibraryScanStatus.unsupported;
+    }
+    return LibraryScanStatus.empty;
   }
 
   Future<_LibraryScanResult> _loadLibraries(
@@ -1307,13 +1325,14 @@ class LineupController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> saveChannel(
+  Future<Channel> saveChannel(
     Channel channel, {
     required Channel? expectedBase,
   }) async {
     final operation = _epoch;
-    final expected = expectedBase?.toJson();
+    Channel? committed;
     await _queueStateOperation(operation, () async {
+      final expected = expectedBase?.toJson();
       final current = channels
           .where((candidate) => candidate.id == channel.id)
           .firstOrNull;
@@ -1343,7 +1362,12 @@ class LineupController extends ChangeNotifier {
         operation,
         initialCurrentId: savedChannel.id,
       );
+      if (_isCurrent(operation)) committed = savedChannel;
     });
+    if (committed == null) {
+      throw StateError('Channel save was superseded');
+    }
+    return committed!;
   }
 
   void _validateResolvedSource(
@@ -1417,8 +1441,10 @@ class LineupController extends ChangeNotifier {
     final sameProgramming =
         canonicalSourceEquals(current.source, incoming.source) &&
         current.playbackMode == incoming.playbackMode &&
-        current.blockSize == incoming.blockSize &&
-        current.includeSpecials == incoming.includeSpecials;
+        (incoming.playbackMode != PlaybackMode.block ||
+            (current.blockSize ?? 3) == (incoming.blockSize ?? 3)) &&
+        (incoming.playbackMode != PlaybackMode.block ||
+            current.includeSpecials == incoming.includeSpecials);
     if (!sameProgramming) {
       return Channel(
         id: incoming.id,

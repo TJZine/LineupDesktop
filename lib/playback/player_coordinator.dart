@@ -1577,9 +1577,20 @@ class PlayerCoordinator extends ChangeNotifier {
   }
 
   void _lineupChanged() {
+    final activeChannel = _activeChannel;
+    final replacement = activeChannel == null
+        ? null
+        : lineup.channels
+              .where((channel) => channel.id == activeChannel.id)
+              .firstOrNull;
     final activeChannelChanged =
-        _activeChannel != null &&
-        !lineup.channels.any((channel) => identical(channel, _activeChannel));
+        activeChannel != null &&
+        (replacement == null ||
+            canonicalScheduleIdentity(replacement) !=
+                canonicalScheduleIdentity(activeChannel));
+    if (activeChannel != null && replacement != null && !activeChannelChanged) {
+      _activeChannel = replacement;
+    }
     if (_contentGeneration != lineup.contentGeneration ||
         activeChannelChanged) {
       _contentGeneration = lineup.contentGeneration;

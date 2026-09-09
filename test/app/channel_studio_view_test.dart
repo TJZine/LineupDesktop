@@ -1818,6 +1818,148 @@ void main() {
     },
   );
 
+  testWidgets(
+    'persisted people filters remain available and editable in Studio',
+    (tester) async {
+      final original = Channel.fromJson({
+        'id': 'people',
+        'number': 14,
+        'name': 'People',
+        'source': {
+          'type': 'library',
+          'libraryId': 'movies',
+          'libraryType': 'movie',
+          'includeWatched': true,
+          'filters': {
+            'actor': ['  Example Person  '],
+            'director': ['  Director Name  '],
+          },
+        },
+        'playbackMode': 'shuffle',
+        'anchor': DateTime.utc(2026).toIso8601String(),
+        'shuffleSeed': 14,
+      });
+      final media = _media(
+        'people-movie',
+        libraryId: 'movies',
+        actors: const ['Example Person'],
+        directors: const ['Director Name'],
+      );
+      final controller = _RecordingSaveController()
+        ..channels = [original]
+        ..libraries = const [
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+        ]
+        ..selectedLibraryIds = {'movies'}
+        ..availableMedia = [media]
+        ..libraryScanStatus = LibraryScanStatus.complete;
+      addTearDown(controller.dispose);
+
+      expect(resolveContent(original.source, [media]), hasLength(1));
+      await tester.pumpWidget(
+        _studio(controller, ChannelStudioMode.editCustom, channel: original),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('1 matching programs'), findsOneWidget);
+      expect(find.textContaining('unavailable'), findsNothing);
+      expect(find.textContaining('Example Person'), findsOneWidget);
+
+      await tester.enterText(find.byKey(const Key('studio-name')), 'Renamed');
+      await _settleAirCheck(tester);
+      await tester.tap(find.text('Save changes'));
+      await tester.pumpAndSettle();
+
+      final saved = controller.saved!;
+      final filters = (saved.source as LibrarySource).filters;
+      expect(filters[LibraryFilter.actor], ['example person']);
+      expect(filters[LibraryFilter.director], ['director name']);
+      expect(resolveContent(saved.source, [media]), hasLength(1));
+    },
+  );
+
+  testWidgets(
+    'temporary block mode preserves migrated schedule and committed base',
+    (tester) async {
+      final transition = ScheduleTransition(
+        boundary: DateTime.utc(2026, 1, 1, 1),
+        legacyCycleItems: const [
+          ChannelItem(
+            id: 'episode',
+            title: 'Episode',
+            duration: Duration(hours: 1),
+          ),
+        ],
+      );
+      final media = _media(
+        'episode',
+        type: 'episode',
+        showTitle: 'Show',
+        duration: const Duration(hours: 1),
+      );
+      final original = Channel(
+        id: 'migrated-mode',
+        number: 15,
+        name: 'Migrated',
+        source: ManualSource([channelItemFor(media)]),
+        playbackMode: PlaybackMode.shuffle,
+        anchor: DateTime.utc(2026),
+        shuffleSeed: 15,
+        scheduleTransition: transition,
+      );
+      final controller = _RealSaveController()
+        ..channels = [original]
+        ..availableMedia = [media];
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(
+        _studio(controller, ChannelStudioMode.editCustom, channel: original),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(find.text('Mini-marathons'));
+      await tester.tap(find.text('Mini-marathons'));
+      await tester.pump();
+      await tester.tap(
+        find.ancestor(
+          of: find.text('Mix it up').first,
+          matching: find.byType(RadioListTile<PlaybackMode>),
+        ),
+      );
+      await tester.pump();
+      await tester.enterText(find.byKey(const Key('studio-name')), 'First');
+      await _settleAirCheck(tester);
+      await tester.tap(find.text('Save changes'));
+      await tester.pumpAndSettle();
+      expect(controller.channels.single.scheduleTransition, same(transition));
+
+      await tester.enterText(find.byKey(const Key('studio-name')), 'Second');
+      await _settleAirCheck(tester);
+      await tester.tap(find.text('Save changes'));
+      await tester.pumpAndSettle();
+      expect(controller.channels.single.name, 'Second');
+      expect(controller.channels.single.scheduleTransition, same(transition));
+      expect(find.text('Use saved version…'), findsNothing);
+
+      controller.channels = [
+        Channel.fromJson({
+          ...controller.channels.single.toJson(),
+          'name': 'External edit',
+        }),
+      ];
+      controller.notifyListeners();
+      await tester.enterText(find.byKey(const Key('studio-name')), 'Third');
+      await _settleAirCheck(tester);
+      await tester.tap(find.text('Save changes'));
+      await tester.pumpAndSettle();
+      expect(find.text('Use saved version…'), findsOneWidget);
+      expect(controller.channels.single.name, 'External edit');
+    },
+  );
+
   testWidgets('Library duplicate preserves its unchanged source order', (
     tester,
   ) async {
@@ -4321,8 +4463,10 @@ class _FailingSaveController extends FixtureController {
       _testSchedule(channel, this);
 
   @override
-  Future<void> saveChannel(Channel channel, {required Channel? expectedBase}) =>
-      Future.error(StateError('synthetic save failure'));
+  Future<Channel> saveChannel(
+    Channel channel, {
+    required Channel? expectedBase,
+  }) => Future.error(StateError('synthetic save failure'));
 }
 
 class _BlockingSaveController extends FixtureController {
@@ -4334,7 +4478,7 @@ class _BlockingSaveController extends FixtureController {
       _testSchedule(channel, this);
 
   @override
-  Future<void> saveChannel(
+  Future<Channel> saveChannel(
     Channel channel, {
     required Channel? expectedBase,
   }) async {
@@ -4367,12 +4511,13 @@ class _RecordingSaveController extends FixtureController {
   }
 
   @override
-  Future<void> saveChannel(
+  Future<Channel> saveChannel(
     Channel channel, {
     required Channel? expectedBase,
   }) async {
     saved = channel;
     this.expectedBase = expectedBase;
+    return channel;
   }
 }
 
@@ -4406,11 +4551,12 @@ class _ControlledStudioController extends FixtureController {
   }
 
   @override
-  Future<void> saveChannel(
+  Future<Channel> saveChannel(
     Channel channel, {
     required Channel? expectedBase,
   }) async {
     saved = channel;
+    return channel;
   }
 }
 
@@ -4470,12 +4616,13 @@ class _AgreementController extends FixtureController {
   );
 
   @override
-  Future<void> saveChannel(
+  Future<Channel> saveChannel(
     Channel channel, {
     required Channel? expectedBase,
   }) async {
     channels = [channel];
     notifyListeners();
+    return channel;
   }
 
   @override
@@ -4504,7 +4651,7 @@ class _ExpectedBaseController extends FixtureController {
       _testSchedule(channel, this);
 
   @override
-  Future<void> saveChannel(
+  Future<Channel> saveChannel(
     Channel channel, {
     required Channel? expectedBase,
   }) async {
@@ -4516,6 +4663,7 @@ class _ExpectedBaseController extends FixtureController {
     }
     channels = [channel];
     notifyListeners();
+    return channel;
   }
 }
 

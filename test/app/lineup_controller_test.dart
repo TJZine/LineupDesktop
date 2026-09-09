@@ -114,7 +114,7 @@ void main() {
           ),
         ];
       };
-    final store = _MemoryStore(
+    final store = _ControlledSaveStore(
       const PersistedState(selectedServerByProfile: {'owner': 'server'}),
     );
     final controller = LineupController(
@@ -130,8 +130,18 @@ void main() {
     expect(controller.availableMedia, isEmpty);
     expect(controller.selectedLibraryIds, isEmpty);
     expect(await controller.commitLibraryScan({'first', 'second'}), isFalse);
+    store.blockNext(fail: true);
+    final failedCommit = controller.commitLibraryScan({'first'});
+    await store.blockedSaveStarted.future;
+    store.releaseBlockedSave();
+    expect(await failedCommit, isFalse);
+    expect(controller.availableMedia, isEmpty);
+    expect(controller.selectedLibraryIds, isEmpty);
+    expect(controller.libraryScanStatus, LibraryScanStatus.transientFailure);
     expect(await controller.commitLibraryScan({'first'}), isTrue);
     expect(controller.availableMedia.map((item) => item.id), ['first']);
+    expect(controller.libraryScanStatus, LibraryScanStatus.complete);
+    expect(controller.libraryScanRetryIds, {'second'});
     failSecond = false;
     expect(
       await controller.scanLibraries({
@@ -3948,11 +3958,12 @@ void main() {
     );
     await store.blockedSaveStarted.future;
     final stale = controller.saveChannel(_channel('stale'), expectedBase: null);
+    final staleExpectation = expectLater(stale, throwsStateError);
     final logout = controller.logout();
     store.releaseBlockedSave();
 
     await settings;
-    await stale;
+    await staleExpectation;
     expect(await logout, isTrue);
     expect(store.saveCalls, 1);
     expect(store.state.channelsByProfileServer['owner']!['server'], isEmpty);

@@ -83,7 +83,7 @@ List<ChannelProposal> buildChannelProposals({
           final label = value.trim();
           if (label.isEmpty) continue;
           final tag = requiresSeriesBreadth
-              ? normalizePersonName(label)
+              ? canonicalFilterIdentity(LibraryFilter.actor, label)
               : label;
           selectedTags.putIfAbsent(tag, () => label);
           tagLabels.update(
@@ -277,7 +277,7 @@ String? _peopleSeriesKey(String libraryId, PlexMediaItem item) {
   if (ratingKey?.isNotEmpty == true) return '$libraryId:key:$ratingKey';
   final title = item.grandparentTitle?.trim();
   if (title?.isNotEmpty == true) {
-    return '$libraryId:title:${normalizePersonName(title!)}';
+    return '$libraryId:title:${title!.toLowerCase()}';
   }
   return null;
 }

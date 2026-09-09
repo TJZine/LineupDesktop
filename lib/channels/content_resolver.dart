@@ -6,8 +6,6 @@ String? channelDecadeForYear(int? year) {
   return '${year ~/ 10 * 10}s';
 }
 
-String normalizePersonName(String value) => value.trim().toLowerCase();
-
 List<ChannelItem> resolveContent(
   ContentSource source,
   List<PlexMediaItem> media, [
@@ -56,7 +54,9 @@ List<ChannelItem> _library(LibrarySource source, List<PlexMediaItem> media) {
       LibraryFilter.actor => items.where(
         (item) => item.actors.any(
           (actor) => filter.value.any(
-            (value) => normalizePersonName(actor) == normalizePersonName(value),
+            (value) =>
+                canonicalFilterIdentity(LibraryFilter.actor, actor) ==
+                canonicalFilterIdentity(LibraryFilter.actor, value),
           ),
         ),
       ),
@@ -64,7 +64,8 @@ List<ChannelItem> _library(LibrarySource source, List<PlexMediaItem> media) {
         (item) => item.directors.any(
           (director) => filter.value.any(
             (value) =>
-                normalizePersonName(director) == normalizePersonName(value),
+                canonicalFilterIdentity(LibraryFilter.director, director) ==
+                canonicalFilterIdentity(LibraryFilter.director, value),
           ),
         ),
       ),

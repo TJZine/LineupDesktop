@@ -597,14 +597,24 @@ String canonicalScheduleIdentity(Channel channel) => jsonEncode({
   'mode': channel.playbackMode.name,
   'anchor': channel.anchor.toUtc().toIso8601String(),
   'seed': channel.shuffleSeed,
-  'blockSize': channel.blockSize,
-  'includeSpecials': channel.includeSpecials,
+  'blockSize': channel.playbackMode == PlaybackMode.block
+      ? channel.blockSize
+      : null,
+  'includeSpecials':
+      channel.playbackMode == PlaybackMode.block && channel.includeSpecials,
   'scheduleVersion': channel.scheduleVersion,
   'scheduleTransition': channel.scheduleTransition?.toJson(),
 });
 
 bool canonicalSourceEquals(ContentSource left, ContentSource right) =>
     canonicalSourceIdentity(left) == canonicalSourceIdentity(right);
+
+String canonicalFilterIdentity(LibraryFilter filter, String value) {
+  final trimmed = value.trim();
+  return filter == LibraryFilter.actor || filter == LibraryFilter.director
+      ? trimmed.toLowerCase()
+      : trimmed;
+}
 
 int stableChannelSeed(String value) {
   var hash = 0x811c9dc5;
@@ -717,17 +727,14 @@ List<String> _canonicalFilterValues(
 ) {
   final normalized = <String, String>{};
   for (final raw in values) {
-    final value = raw.trim();
+    final value = canonicalFilterIdentity(key, raw);
     if (value.isEmpty) continue;
-    final identity = key == LibraryFilter.actor || key == LibraryFilter.director
-        ? value.toLowerCase()
-        : value;
     if (key == LibraryFilter.actor || key == LibraryFilter.director) {
-      normalized[identity] = identity;
+      normalized[value] = value;
       continue;
     }
     normalized.update(
-      identity,
+      value,
       (current) => current.compareTo(value) <= 0 ? current : value,
       ifAbsent: () => value,
     );

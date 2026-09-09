@@ -28,6 +28,11 @@ typedef _DraftResolution = ({
   String? sourceError,
 });
 
+typedef _FacetOptions = ({
+  Map<String, List<String>> values,
+  Map<String, Map<String, String>> labels,
+});
+
 class _ManualEntry {
   _ManualEntry({
     required this.id,
@@ -58,6 +63,18 @@ String _facetLabel(String key) => switch (key) {
   'decade' => 'Decade',
   _ => key,
 };
+
+String _preferredFacetLabel(LibraryFilter filter, String first, String second) {
+  if (filter != LibraryFilter.actor && filter != LibraryFilter.director) {
+    return first.compareTo(second) <= 0 ? first : second;
+  }
+  bool hasMixedCase(String value) =>
+      value != value.toLowerCase() && value != value.toUpperCase();
+  final firstIsMixed = hasMixedCase(first);
+  final secondIsMixed = hasMixedCase(second);
+  if (firstIsMixed != secondIsMixed) return firstIsMixed ? first : second;
+  return first.compareTo(second) <= 0 ? first : second;
+}
 
 class ChannelStudioView extends StatefulWidget {
   const ChannelStudioView({
@@ -125,6 +142,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
   final _filters = <LibraryFilter, List<String>>{};
   String? _activeFilterKey;
   List<String> _activeFilterValues = const [];
+  Map<String, String> _activeFilterLabels = const {};
   Set<String> _activeAvailableFilterValues = const {};
   final LinkedHashSet<String> _pendingFilterValues = LinkedHashSet();
   bool _showPendingFilterValues = false;
@@ -166,6 +184,10 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
   bool get _busy => _saving || _tuning;
   bool get saving => _saving;
   bool get dirty => _dirty;
+  int? get _effectiveBlockSize =>
+      _playbackMode == PlaybackMode.block ? (_blockSize ?? 3) : null;
+  bool get _effectiveIncludeSpecials =>
+      _playbackMode == PlaybackMode.block && _includeSpecials;
   ChannelStudioMode get _effectiveMode => _expectedBase != null && !_generated
       ? ChannelStudioMode.editCustom
       : widget.mode;
@@ -1020,15 +1042,23 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
           onChanged: (value) => _filterChanged(() => _filterLibraryId = value),
         ),
         const SizedBox(height: 8),
-        _filterControl('collection', facets['collection'] ?? const []),
-        if ((facets['collection'] ?? const []).isEmpty)
+        _filterControl(
+          'collection',
+          facets.values['collection'] ?? const [],
+          facets.labels['collection'] ?? const {},
+        ),
+        if ((facets.values['collection'] ?? const []).isEmpty)
           const Text(
             'This library has no collections. Other filters remain available.',
           ),
         const SizedBox(height: 8),
         const Text('Filters'),
         for (final key in _facetKeys.where((key) => key != 'collection'))
-          _filterControl(key, facets[key] ?? const []),
+          _filterControl(
+            key,
+            facets.values[key] ?? const [],
+            facets.labels[key] ?? const {},
+          ),
         const Text(
           'Any selected value within each filter; all filters together.',
         ),
@@ -1052,9 +1082,16 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     );
   }
 
-  Widget _filterControl(String key, List<String> values) {
+  Widget _filterControl(
+    String key,
+    List<String> values,
+    Map<String, String> labels,
+  ) {
     final filter = _libraryFilter(key);
     final selected = _filters[filter] ?? const [];
+    final selectedLabels = selected
+        .map((value) => labels[value] ?? value)
+        .toList(growable: false);
     final unavailable = selected
         .where((value) => !values.contains(value))
         .length;
@@ -1067,26 +1104,33 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
             ? key == 'collection'
                   ? 'Any collection'
                   : 'Any'
-            : '${selected.take(3).join(', ')}${selected.length > 3 ? ' · +${selected.length - 3} more' : ''}${unavailable > 0 ? ' · $unavailable unavailable' : ''}',
+            : '${selectedLabels.take(3).join(', ')}${selected.length > 3 ? ' · +${selected.length - 3} more' : ''}${unavailable > 0 ? ' · $unavailable unavailable' : ''}',
       ),
       trailing: OutlinedButton(
         focusNode: _filterControlFocus.putIfAbsent(
           key,
           () => FocusNode(debugLabel: 'Edit ${_facetLabel(key)} filter'),
         ),
-        onPressed: _saving ? null : () => _openFilterPicker(key, values),
+        onPressed: _saving
+            ? null
+            : () => _openFilterPicker(key, values, labels),
         child: Text(selected.isEmpty ? 'Choose' : 'Edit'),
       ),
     );
   }
 
-  void _openFilterPicker(String key, List<String> values) {
+  void _openFilterPicker(
+    String key,
+    List<String> values,
+    Map<String, String> labels,
+  ) {
     final filter = _libraryFilter(key);
     setState(() {
       _activeFilterKey = key;
       _activeFilterValues = ({...values, ...?_filters[filter]}.toList()
         ..sort());
       _activeAvailableFilterValues = values.toSet();
+      _activeFilterLabels = Map.unmodifiable(labels);
       _pendingFilterValues
         ..clear()
         ..addAll(_filters[filter] ?? const []);
@@ -1123,7 +1167,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
       value: _pendingFilterValues.contains(value),
       title: Text(
         _activeAvailableFilterValues.contains(value)
-            ? value
+            ? (_activeFilterLabels[value] ?? value)
             : '$value (unavailable — retained)',
       ),
       onChanged: (checked) => setState(() {
@@ -1369,7 +1413,8 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
           for (final key in _facetKeys)
             _facetDropdown(
               key: key,
-              values: facets[key] ?? const [],
+              values: facets.values[key] ?? const [],
+              labels: facets.labels[key] ?? const {},
               selected: _manualFilters[key],
               onChanged: (value) => _browseChanged(() {
                 if (value == null) {
@@ -1678,6 +1723,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
   Widget _facetDropdown({
     required String key,
     required List<String> values,
+    required Map<String, String> labels,
     required String? selected,
     required ValueChanged<String?> onChanged,
   }) {
@@ -1697,7 +1743,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
               child: Text('$selected (unavailable — retained)'),
             ),
           for (final value in values)
-            DropdownMenuItem(value: value, child: Text(value)),
+            DropdownMenuItem(value: value, child: Text(labels[value] ?? value)),
         ],
         onChanged: _saving
             ? null
@@ -1706,29 +1752,57 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     );
   }
 
-  Map<String, List<String>> _facetOptions(
+  _FacetOptions _facetOptions(
     String? libraryId, {
     Iterable<PlexMediaItem>? inventory,
   }) {
     final values = {for (final key in _facetKeys) key: <String>{}};
+    final labels = {for (final key in _facetKeys) key: <String, String>{}};
+    void add(String key, String raw) {
+      final filter = _libraryFilter(key);
+      final identity = canonicalFilterIdentity(filter, raw);
+      if (identity.isEmpty) return;
+      final label = raw.trim();
+      values[key]!.add(identity);
+      labels[key]!.update(
+        identity,
+        (current) => _preferredFacetLabel(filter, current, label),
+        ifAbsent: () => label,
+      );
+    }
+
     for (final item in (inventory ?? _playableInventory.byId.values).where(
       (item) => libraryId == null || item.libraryId == libraryId,
     )) {
-      values['collection']!.addAll(item.collections);
-      values['genre']!.addAll(item.genres);
-      if (item.studio case final studio? when studio.isNotEmpty) {
-        values['studio']!.add(studio);
+      for (final value in item.collections) {
+        add('collection', value);
       }
-      values['actor']!.addAll(item.actors);
-      values['director']!.addAll(item.directors);
+      for (final value in item.genres) {
+        add('genre', value);
+      }
+      if (item.studio case final studio? when studio.isNotEmpty) {
+        add('studio', studio);
+      }
+      for (final value in item.actors) {
+        add('actor', value);
+      }
+      for (final value in item.directors) {
+        add('director', value);
+      }
       if (channelDecadeForYear(item.year) case final decade?) {
-        values['decade']!.add(decade);
+        add('decade', decade);
       }
     }
-    return {
-      for (final entry in values.entries)
-        entry.key: entry.value.toList()..sort(),
-    };
+    return (
+      values: {
+        for (final entry in values.entries)
+          entry.key: entry.value.toList()..sort(),
+      },
+      labels: {
+        for (final entry in labels.entries)
+          entry.key: Map<String, String>.unmodifiable(entry.value),
+      },
+    );
   }
 
   List<PlexMediaItem> _filteredInventory({
@@ -1762,9 +1836,19 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
         ),
         'genre' => items.where((item) => item.genres.any(values.contains)),
         'studio' => items.where((item) => values.contains(item.studio)),
-        'actor' => items.where((item) => item.actors.any(values.contains)),
+        'actor' => items.where(
+          (item) => item.actors.any(
+            (value) => values.contains(
+              canonicalFilterIdentity(LibraryFilter.actor, value),
+            ),
+          ),
+        ),
         'director' => items.where(
-          (item) => item.directors.any(values.contains),
+          (item) => item.directors.any(
+            (value) => values.contains(
+              canonicalFilterIdentity(LibraryFilter.director, value),
+            ),
+          ),
         ),
         'decade' => items.where(
           (item) => values.contains(channelDecadeForYear(item.year)),
@@ -2483,7 +2567,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
             widget.controller.libraryScanStatus == LibraryScanStatus.scanning) {
           return 'Checking filters while library programming loads.';
         }
-        final available = _facetOptions(libraryId);
+        final available = _facetOptions(libraryId).values;
         final missing = [
           for (final entry in filters.entries)
             ...entry.value.where(
@@ -2548,7 +2632,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
         ? (_blockSize ?? 3)
         : null,
     builderKey: _builderKey,
-    includeSpecials: _includeSpecials,
+    includeSpecials: _effectiveIncludeSpecials,
     scheduleVersion: _retainsSchedule(_editedSource())
         ? _expectedBase!.scheduleVersion
         : currentScheduleVersion,
@@ -2573,7 +2657,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
         ? (_blockSize ?? 3)
         : null,
     builderKey: _builderKey,
-    includeSpecials: _includeSpecials,
+    includeSpecials: _effectiveIncludeSpecials,
     scheduleVersion: _retainsSchedule(_displaySource)
         ? _expectedBase!.scheduleVersion
         : currentScheduleVersion,
@@ -2587,11 +2671,9 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     return base != null &&
         canonicalSourceEquals(base.source, source) &&
         base.playbackMode == _playbackMode &&
-        base.blockSize ==
-            (_playbackMode == PlaybackMode.block
-                ? (_blockSize ?? 3)
-                : _blockSize) &&
-        base.includeSpecials == _includeSpecials;
+        (_playbackMode != PlaybackMode.block ||
+            (base.blockSize ?? 3) == _effectiveBlockSize) &&
+        base.includeSpecials == _effectiveIncludeSpecials;
   }
 
   bool _isCurrentAirCheckStatus(ChannelAirCheckStatus? status) =>
@@ -2679,27 +2761,27 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     });
     try {
       final draft = _draft();
-      await widget.controller.saveChannel(
+      final committed = await widget.controller.saveChannel(
         draft,
         expectedBase: rebasedExpected ?? _expectedBase,
       );
       if (!mounted) return;
       setState(() {
-        if (draft.source case ManualSource(:final items)
+        if (committed.source case ManualSource(:final items)
             when items.length == _manualEntries.length) {
           for (var index = 0; index < items.length; index++) {
             _manualEntries[index].item = items[index];
           }
         }
-        _expectedBase = draft;
-        _source = draft.source;
+        _expectedBase = committed;
+        _source = committed.source;
         _dirty = false;
         _baselineDraftSignature = _draftSignature;
         _saving = false;
-        _generated = draft.builderKey != null;
+        _generated = committed.builderKey != null;
         _success = 'Channel saved.';
       });
-      widget.onSaved(draft.id);
+      widget.onSaved(committed.id);
     } catch (error) {
       if (!mounted) return;
       final current = _currentBase;
