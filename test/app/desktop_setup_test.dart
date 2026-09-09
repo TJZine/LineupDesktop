@@ -87,6 +87,35 @@ void main() {
 
     expect(find.byKey(const ValueKey('configure-section-0')), findsOneWidget);
     expect(find.text('200 generated channels'), findsNothing);
+    final grouping = find.byKey(const ValueKey('source-grouping-genres'));
+    final genres = find.widgetWithText(CheckboxListTile, 'Genres');
+    await tester.ensureVisible(grouping);
+    await tester.pumpAndSettle();
+    expect(tester.widget<DropdownButton<bool>>(grouping).value, isFalse);
+    await tester.tap(grouping);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Combine matching genres').last);
+    await tester.pumpAndSettle();
+    expect(tester.widget<DropdownButton<bool>>(grouping).value, isTrue);
+
+    await tester.ensureVisible(genres);
+    await tester.pumpAndSettle();
+    await tester.tap(genres);
+    await tester.pumpAndSettle();
+    expect(tester.widget<DropdownButton<bool>>(grouping).onChanged, isNull);
+    expect(tester.widget<DropdownButton<bool>>(grouping).value, isTrue);
+    await tester.tap(genres);
+    await tester.pumpAndSettle();
+    expect(tester.widget<DropdownButton<bool>>(grouping).onChanged, isNotNull);
+    expect(tester.widget<DropdownButton<bool>>(grouping).value, isTrue);
+
+    await tester.ensureVisible(grouping);
+    await tester.pumpAndSettle();
+    await tester.tap(grouping);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Separate by library').last);
+    await tester.pumpAndSettle();
+    expect(tester.widget<DropdownButton<bool>>(grouping).value, isFalse);
     await tester.tap(find.byKey(const ValueKey('configure-section-1')));
     await tester.pumpAndSettle();
     expect(find.text('Playback order'), findsNWidgets(2));

@@ -357,7 +357,9 @@ class _SetupState extends State<UpstreamChannelSetupView> {
           ),
           SizedBox(height: 6 + 4 * expansion),
           Text(
-            'Choose how your generated channels will play.',
+            _configurationSection == 0
+                ? 'Choose the channels you want from your libraries.'
+                : 'Choose how your generated channels will play.',
             style: textStyle.copyWith(height: 1.4),
           ),
         ],
@@ -743,21 +745,58 @@ class _SetupState extends State<UpstreamChannelSetupView> {
                     _ => 'Set limits and the priority used by balanced source rotation.',
                   },
                 ),
+                if (_configurationSection == 0 && _selectedLibraries.length > 1)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Text(
+                      'Combine matching values to create shared channels across your selected libraries.',
+                      style: TextStyle(
+                        color: roles.secondaryText,
+                        fontSize: 13 + 3 * expansion,
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
                 if (_configurationSection == 0)
                   LayoutBuilder(
                     builder: (_, constraints) {
-                      final width = constraints.maxWidth >= 840
-                          ? (constraints.maxWidth - 16) / 2
-                          : constraints.maxWidth;
-                      return Wrap(
-                        spacing: 16,
-                        runSpacing: 8,
+                      final expansion = _configurationExpansion(
+                        MediaQuery.sizeOf(context),
+                      );
+                      final gap = 28 + 12 * expansion;
+                      final effectiveWidth =
+                          constraints.maxWidth /
+                          MediaQuery.textScalerOf(context).scale(1);
+                      const sourcePairs = [
+                        (
+                          BuilderStrategy.playlists,
+                          BuilderStrategy.collections,
+                        ),
+                        (
+                          BuilderStrategy.recentlyAdded,
+                          BuilderStrategy.decades,
+                        ),
+                        (BuilderStrategy.genres, BuilderStrategy.studios),
+                        (BuilderStrategy.actors, BuilderStrategy.directors),
+                      ];
+                      final desktop = effectiveWidth >= 840;
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          for (final strategy in BuilderStrategy.values)
-                            SizedBox(
-                              width: width,
-                              child: _sourceControl(strategy, allocation),
+                          for (
+                            var index = 0;
+                            index < sourcePairs.length;
+                            index++
+                          ) ...[
+                            _sourcePair(
+                              sourcePairs[index],
+                              allocation,
+                              compact: !desktop,
+                              columnGap: gap,
                             ),
+                            if (index < sourcePairs.length - 1)
+                              const SizedBox(height: 12),
+                          ],
                         ],
                       );
                     },
@@ -929,72 +968,257 @@ class _SetupState extends State<UpstreamChannelSetupView> {
     BuilderStrategy strategy,
     ChannelPlanAllocation allocation,
   ) {
-    final enabled = _strategies.contains(strategy);
+    final expansion = _configurationExpansion(MediaQuery.sizeOf(context));
     final canGroup =
         _supportsGrouping(strategy) && _selectedLibraries.length > 1;
-    final eligible = allocation.eligibleOriginalsByStrategy[strategy] ?? 0;
-    final included = allocation.allocatedOriginalsByStrategy[strategy] ?? 0;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        border: Border(
-          bottom: BorderSide(color: LineupTheme.of(context).subtleBorder),
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: 12 + 4 * expansion),
+      child: ListTileTheme.merge(
+        titleAlignment: ListTileTitleAlignment.top,
+        child: Column(
+          children: [
+            _sourceSelectionControl(strategy, allocation),
+            if (canGroup)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: _sourceGroupingControl(strategy),
+              ),
+          ],
         ),
       ),
-      child: Column(
+    );
+  }
+
+  Widget _sourcePair(
+    (BuilderStrategy, BuilderStrategy) pair,
+    ChannelPlanAllocation allocation, {
+    required bool compact,
+    required double columnGap,
+  }) {
+    final first = pair.$1;
+    final second = pair.$2;
+    final expansion = _configurationExpansion(MediaQuery.sizeOf(context));
+    final roles = LineupTheme.of(context);
+    final rowPadding = 12 + 4 * expansion;
+    final firstCanGroup =
+        _supportsGrouping(first) && _selectedLibraries.length > 1;
+    final secondCanGroup =
+        _supportsGrouping(second) && _selectedLibraries.length > 1;
+
+    if (compact) {
+      return DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border(bottom: BorderSide(color: roles.subtleBorder)),
+        ),
+        child: Column(
+          children: [
+            _sourceControl(first, allocation),
+            _sourceControl(second, allocation),
+          ],
+        ),
+      );
+    }
+
+    Widget separatorCell() => DecoratedBox(
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: roles.subtleBorder)),
+      ),
+      child: const SizedBox.shrink(),
+    );
+
+    return ListTileTheme.merge(
+      titleAlignment: ListTileTitleAlignment.top,
+      child: Table(
+        columnWidths: {
+          0: const FlexColumnWidth(),
+          1: FixedColumnWidth(columnGap),
+          2: const FlexColumnWidth(),
+        },
+        defaultVerticalAlignment: TableCellVerticalAlignment.top,
         children: [
-          CheckboxListTile(
-            value: enabled,
-            controlAffinity: ListTileControlAffinity.leading,
-            contentPadding: EdgeInsets.zero,
-            title: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          TableRow(
+            children: [
+              Padding(
+                padding: EdgeInsets.symmetric(vertical: rowPadding),
+                child: _sourceSelectionControl(first, allocation),
+              ),
+              const SizedBox.shrink(),
+              Padding(
+                padding: EdgeInsets.symmetric(vertical: rowPadding),
+                child: _sourceSelectionControl(second, allocation),
+              ),
+            ],
+          ),
+          if (firstCanGroup || secondCanGroup)
+            TableRow(
               children: [
-                Expanded(child: Text(builderStrategyLabels[strategy]!)),
-                const SizedBox(width: 12),
-                Flexible(
-                  child: Text(
-                    '$eligible qualifying · $included included',
-                    textAlign: TextAlign.end,
-                    style: TextStyle(
-                      color: LineupTheme.of(context).secondaryText,
-                    ),
-                  ),
-                ),
+                firstCanGroup
+                    ? Padding(
+                        padding: EdgeInsets.only(top: 8, bottom: rowPadding),
+                        child: _sourceGroupingControl(first),
+                      )
+                    : const SizedBox.shrink(),
+                const SizedBox.shrink(),
+                secondCanGroup
+                    ? Padding(
+                        padding: EdgeInsets.only(top: 8, bottom: rowPadding),
+                        child: _sourceGroupingControl(second),
+                      )
+                    : const SizedBox.shrink(),
               ],
             ),
-            subtitle: Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: Text(_strategyDescription(strategy)),
-            ),
-            onChanged: (value) => setState(() {
-              if (value == true) {
-                _strategies.add(strategy);
-              } else {
-                _strategies.remove(strategy);
-              }
-            }),
+          TableRow(
+            children: [separatorCell(), separatorCell(), separatorCell()],
           ),
-          if (canGroup)
-            CheckboxListTile(
-              dense: true,
-              controlAffinity: ListTileControlAffinity.leading,
-              contentPadding: const EdgeInsets.only(left: 40, right: 16),
-              value: enabled && _grouped.contains(strategy),
-              title: const Text('Group matching values across libraries'),
-              subtitle: const Text(
-                'One channel combines the same value from every selected library.',
-              ),
-              onChanged: enabled
-                  ? (value) => setState(() {
-                      if (value == true) {
-                        _grouped.add(strategy);
-                      } else {
-                        _grouped.remove(strategy);
-                      }
-                    })
-                  : null,
-            ),
         ],
+      ),
+    );
+  }
+
+  Widget _sourceSelectionControl(
+    BuilderStrategy strategy,
+    ChannelPlanAllocation allocation,
+  ) {
+    final expansion = _configurationExpansion(MediaQuery.sizeOf(context));
+    final roles = LineupTheme.of(context);
+    final enabled = _strategies.contains(strategy);
+    final eligible = allocation.eligibleOriginalsByStrategy[strategy] ?? 0;
+    final included = allocation.allocatedOriginalsByStrategy[strategy] ?? 0;
+    final nameStyle = TextStyle(
+      color: roles.primaryText,
+      fontSize: 16 + 6 * expansion,
+      fontWeight: FontWeight.w600,
+      height: 1.4,
+    );
+    final countStyle = TextStyle(
+      color: roles.secondaryText,
+      fontSize: 13 + 3 * expansion,
+      height: 1.4,
+    );
+    final detailStyle = TextStyle(
+      color: roles.secondaryText,
+      fontSize: 13 + 5 * expansion,
+      height: 1.4,
+    );
+    return CheckboxListTile(
+      value: enabled,
+      controlAffinity: ListTileControlAffinity.leading,
+      contentPadding: EdgeInsets.zero,
+      title: Row(
+        crossAxisAlignment: CrossAxisAlignment.baseline,
+        textBaseline: TextBaseline.alphabetic,
+        children: [
+          Expanded(
+            child: Text(builderStrategyLabels[strategy]!, style: nameStyle),
+          ),
+          const SizedBox(width: 12),
+          Flexible(
+            fit: FlexFit.tight,
+            child: Text(
+              '$eligible qualifying · $included included',
+              textAlign: TextAlign.end,
+              style: countStyle,
+            ),
+          ),
+        ],
+      ),
+      subtitle: Padding(
+        padding: EdgeInsets.only(top: 8 + 4 * expansion),
+        child: Text(_strategyDescription(strategy), style: detailStyle),
+      ),
+      onChanged: (value) => setState(() {
+        if (value == true) {
+          _strategies.add(strategy);
+        } else {
+          _strategies.remove(strategy);
+        }
+      }),
+    );
+  }
+
+  Widget _sourceGroupingControl(BuilderStrategy strategy) {
+    final expansion = _configurationExpansion(MediaQuery.sizeOf(context));
+    final roles = LineupTheme.of(context);
+    final enabled = _strategies.contains(strategy);
+    final countStyle = TextStyle(
+      color: roles.secondaryText,
+      fontSize: 13 + 3 * expansion,
+      height: 1.4,
+    );
+    return Padding(
+      padding: const EdgeInsets.only(left: 56),
+      child: LayoutBuilder(
+        builder: (_, constraints) {
+          final effectiveWidth =
+              constraints.maxWidth / MediaQuery.textScalerOf(context).scale(1);
+          final groupingLabel = switch (strategy) {
+            BuilderStrategy.genres => 'Combine matching genres',
+            BuilderStrategy.studios => 'Combine matching studios',
+            BuilderStrategy.actors => 'Combine matching actors',
+            BuilderStrategy.directors => 'Combine matching directors',
+            _ => 'Combine matching values',
+          };
+          final dropdown = SizedBox(
+            width: math.min(300, constraints.maxWidth),
+            height: 40 + 4 * expansion,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: roles.primarySurface,
+                border: Border.all(color: roles.defaultBorder),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<bool>(
+                  key: ValueKey('source-grouping-${strategy.name}'),
+                  isExpanded: true,
+                  isDense: true,
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  value: _grouped.contains(strategy),
+                  style: Theme.of(context).textTheme.bodyMedium!.copyWith(
+                    fontSize: 13 + 3 * expansion,
+                    height: 1.4,
+                    color: enabled ? roles.primaryText : roles.mutedText,
+                  ),
+                  items: [
+                    const DropdownMenuItem(
+                      value: false,
+                      child: Text('Separate by library'),
+                    ),
+                    DropdownMenuItem(value: true, child: Text(groupingLabel)),
+                  ],
+                  onChanged: enabled
+                      ? (value) => setState(() {
+                          if (value == true) {
+                            _grouped.add(strategy);
+                          } else {
+                            _grouped.remove(strategy);
+                          }
+                        })
+                      : null,
+                ),
+              ),
+            ),
+          );
+          final label = Text('Library grouping', style: countStyle);
+          final inline = effectiveWidth >= 460;
+          return Semantics(
+            label: '${builderStrategyLabels[strategy]} library grouping',
+            container: true,
+            child: inline
+                ? Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Expanded(child: label),
+                      const SizedBox(width: 8),
+                      dropdown,
+                    ],
+                  )
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [label, const SizedBox(height: 8), dropdown],
+                  ),
+          );
+        },
       ),
     );
   }
@@ -2220,14 +2444,17 @@ class _SetupState extends State<UpstreamChannelSetupView> {
   }.contains(strategy);
 
   String _strategyDescription(BuilderStrategy strategy) => switch (strategy) {
-    BuilderStrategy.playlists => 'Channels from Plex playlists.',
-    BuilderStrategy.collections => 'Channels from collection tags.',
-    BuilderStrategy.recentlyAdded => 'One newest-first channel per library.',
+    BuilderStrategy.playlists => 'Create channels from your Plex playlists.',
+    BuilderStrategy.collections =>
+      'Create channels from collections in each selected library.',
+    BuilderStrategy.recentlyAdded =>
+      'Create channels featuring recent additions from each library.',
     BuilderStrategy.genres =>
-      'Examples include drama, comedy and science fiction.',
-    BuilderStrategy.studios => 'Channels grouped by studio metadata.',
+      'Channels grouped by genre, such as drama, comedy and science fiction.',
+    BuilderStrategy.studios =>
+      'Create channels around studios identified in Plex metadata.',
     BuilderStrategy.actors => 'Channels for actors with enough programs.',
-    BuilderStrategy.decades => 'Channels such as 1980s and 1990s.',
+    BuilderStrategy.decades => 'Channels grouped by release decade within each library, such as the 1980s and 1990s.',
     BuilderStrategy.directors => 'Channels for directors with enough programs.',
   };
 
