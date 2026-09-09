@@ -17,7 +17,7 @@ may cover multiple listed states only when that scope is clear to the user.
 | surface-01 | Playback order · corrected | Approved at 1080p | Behavior checks passed; adaptive/Windows checks pending | Logo-first approved `d4126b59`; previous September 9: Shuffle selected, additional versions off; `8e1f1bc0` |
 | surface-02 | Mini-marathons · corrected | Unreviewed | User skipped separate review; adaptive/Windows checks pending | September 9: proceed to surface-03; no separate state lock |
 | surface-03 | Channel sources · corrected | Approved at 1080p | Behavior checks passed; adaptive/Windows checks pending | Logo-first approved `d4126b59`; previous September 9: one and two libraries, grouping separate; `8e972785` |
-| surface-04 | Lineup rules · corrected | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Logo-first approved `d4126b59`; previous September 9: all-fit and limit-reached/Off states; `f535a365` |
+| surface-04 | Lineup rules · corrected | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Feedback refinement approved `2924057b`; logo-first `d4126b59`; previous September 9: all-fit and limit-reached/Off states; `f535a365` |
 | surface-05 | Review lineup · corrected labels | Unreviewed | Not assessed in this pass | — |
 | surface-06 | Review removals · corrected labels | Unreviewed | Not assessed in this pass | — |
 | surface-07 | Linking · corrected | Unreviewed | Not assessed in this pass | — |
@@ -439,3 +439,53 @@ outstanding. Independent review is not specifically recommended; none launched.
 The subsequent question about repeated generated-count information in Lineup
 rules is a discussion of possible refinement, not approval of another visual
 change. No count information was removed at this checkpoint.
+
+
+## September 9, 2026 — Lineup rules count-summary refinement
+
+The user approved removing redundant left-column counts: “yes those changes sound
+good we can lock after those refinements”. The footer remains the authoritative
+count/breakdown summary. Hide the left feedback entirely when channels fit;
+otherwise show concise actionable guidance without repeating counts. Preserve
+appropriate guidance for empty selections and exhausted channel numbers. This is
+approval to implement; the changed surface04 states await fresh visual approval.
+The existing Luna worker owns only `_rulesAllocationFeedback`; root owns test
+adaptation, capture and personal review. Other approved surfaces stay unchanged.
+
+
+### Surface-04 simplified feedback candidate
+
+Source base `f1266bdb90117301bd0d1f0d2100ef8de5eeac41`, working-tree production
+SHA-256 `253baf5b21bf13c5809d4d885b17b9c22e6f0b0f0ebbe680d0dd23721b46c954`.
+Root inspected the diff and these real 1920×1080/DPR1/text100% captures, with the
+same pinned fonts and Windows limitations as the previous evidence:
+
+- `build/desktop-ui/surface-04/candidate-03.png`: SHA-256
+  `5f5a639a06f9e5b6fb700c883c248c04e2cc1a6050bd9b4bad7134c32bfd7bd8`.
+- `build/desktop-ui/surface-04/candidate-03-limited.png`: SHA-256
+  `5a27cee1b4c474a7dbca70c8e8795a2837cd1c0995cf1a9877febbb6981884c7`.
+- `build/desktop-ui/surface-04/candidate-03-empty.png`: SHA-256
+  `7ce59521c07ffad22137472710860e62fda8eb7f11a374cc40006ba5d171a5f1`.
+
+The all-fit state has no left feedback block; limit-reached shows guidance without
+counts; minimum50 on the original synthetic fixture produces zero channels and
+source/minimum guidance with Review disabled. Footer counts remain unchanged.
+Final source passed all 75 focused existing tests, full analysis, formatting and
+`git diff --check`. Existing defaults coverage now checks authoritative footer
+counts and conditional empty guidance. No new layout tests. Candidate visual
+approval and commit remain pending; adaptive/accessibility/Windows checks remain
+outstanding. Independent review is not specifically recommended; none launched.
+
+
+### Surface-04 simplified feedback explicit approval — September 9, 2026
+
+The user approved the two presented candidate-03 normal and limit-reached states:
+“yes locked. time for 05/06 which are the same surface with diff states”.
+Implementation commit `2924057bd33a9708fe7c996bf81ac9e290a10f7d`
+(`fix(ui): simplify lineup rules feedback`) matches the candidate source hash.
+The unchanged approved PNGs are preserved in
+[the feedback refinement evidence directory](design/desktop-ui/approved/2026-09-09-surface-04-feedback/),
+with their candidate-03 hashes recorded above. Empty-state capture remains root
+verification, not a separate user visual lock. Adaptive/accessibility/Windows
+checks remain outstanding; no independent review specifically recommended or
+launched. The user selected surfaces05/06 for joint review next.
