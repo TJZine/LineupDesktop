@@ -1127,6 +1127,39 @@ void main() {
   });
 
   test(
+    'merge reuses equivalent non-block channels when specials is requested',
+    () {
+      const proposal = ChannelProposal(
+        name: 'Movies',
+        source: LibrarySource(
+          libraryId: 'movies',
+          libraryType: PlexLibraryType.movie,
+        ),
+        mode: PlaybackMode.shuffle,
+        itemCount: 20,
+        strategy: BuilderStrategy.recentlyAdded,
+      );
+      final existing = materializeChannelPlan(
+        proposals: const [proposal],
+        existing: const [],
+        mode: ChannelBuildMode.replace,
+        anchor: DateTime.utc(2026),
+      ).channels.single;
+
+      final merged = materializeChannelPlan(
+        proposals: const [proposal],
+        existing: [existing],
+        mode: ChannelBuildMode.merge,
+        includeSpecials: true,
+        anchor: DateTime.utc(2027),
+      ).channels.single;
+
+      expect(merged, same(existing));
+      expect(merged.includeSpecials, isFalse);
+    },
+  );
+
+  test(
     'proposal discovery can return the complete balanced candidate pool',
     () {
       const library = PlexLibrary(

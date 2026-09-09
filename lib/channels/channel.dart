@@ -431,10 +431,10 @@ class Channel {
     required this.shuffleSeed,
     this.blockSize,
     this.builderKey,
-    this.includeSpecials = false,
+    bool includeSpecials = false,
     this.scheduleVersion = currentScheduleVersion,
     this.scheduleTransition,
-  });
+  }) : includeSpecials = playbackMode == PlaybackMode.block && includeSpecials;
 
   final String id;
   final int number;

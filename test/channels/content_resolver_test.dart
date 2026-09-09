@@ -62,14 +62,24 @@ void main() {
   );
 
   test('multi-value filters are OR within and AND between with id dedup', () {
-    final duplicate = PlexMediaItem(
+    final comedy = PlexMediaItem(
       id: 'a',
-      title: 'Duplicate A',
+      title: 'Comedy A',
       type: 'movie',
       duration: const Duration(minutes: 1),
       libraryId: 'movies',
-      parts: [PlexMediaPart(path: '/parts/duplicate-a')],
-      genres: const ['Comedy', 'Drama'],
+      parts: [PlexMediaPart(path: '/parts/comedy-a')],
+      genres: const ['Comedy'],
+      collections: const ['Favorites'],
+    );
+    final drama = PlexMediaItem(
+      id: 'a',
+      title: 'Drama A',
+      type: 'movie',
+      duration: const Duration(minutes: 1),
+      libraryId: 'movies',
+      parts: [PlexMediaPart(path: '/parts/drama-a')],
+      genres: const ['Drama'],
       collections: const ['Favorites'],
     );
     final resolved = resolveContent(
@@ -81,7 +91,7 @@ void main() {
           LibraryFilter.collection: ['Favorites'],
         },
       ),
-      [duplicate, ...media],
+      [comedy, drama],
     );
 
     expect(resolved.map((item) => item.id), ['a']);
@@ -774,6 +784,35 @@ void main() {
     ]) {
       expect(() => Channel.fromJson(invalid), throwsFormatException);
     }
+  });
+
+  test('non-block channels normalize specials in persistence and identity', () {
+    final requested = Channel(
+      id: 'channel',
+      number: 7,
+      name: 'Channel',
+      source: const PlaylistSource('playlist'),
+      playbackMode: PlaybackMode.shuffle,
+      anchor: DateTime.utc(2026, 8, 23),
+      shuffleSeed: 42,
+      includeSpecials: true,
+    );
+    final canonical = Channel(
+      id: 'channel',
+      number: 7,
+      name: 'Channel',
+      source: const PlaylistSource('playlist'),
+      playbackMode: PlaybackMode.shuffle,
+      anchor: DateTime.utc(2026, 8, 23),
+      shuffleSeed: 42,
+    );
+
+    expect(requested.includeSpecials, isFalse);
+    expect(requested.toJson(), isNot(contains('includeSpecials')));
+    expect(
+      canonicalScheduleIdentity(requested),
+      canonicalScheduleIdentity(canonical),
+    );
   });
 
   test(

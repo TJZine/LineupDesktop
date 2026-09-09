@@ -362,6 +362,8 @@ ChannelPlanAllocation materializeChannelPlan({
   ) {
     final name = '${entry.proposal.name}${entry.suffix}';
     final builderKey = _builderKey(entry.proposal, entry.suffix);
+    final normalizedIncludeSpecials =
+        entry.mode == PlaybackMode.block && includeSpecials;
     final matched = mode == ChannelBuildMode.merge
         ? existing
               .where(
@@ -381,7 +383,7 @@ ChannelPlanAllocation materializeChannelPlan({
         canonicalSourceEquals(matched.source, entry.proposal.source) &&
         matched.playbackMode == entry.mode &&
         matched.blockSize == entry.blockSize &&
-        matched.includeSpecials == includeSpecials) {
+        matched.includeSpecials == normalizedIncludeSpecials) {
       return matched;
     }
     final id = matched?.id ?? createChannelId();
@@ -396,9 +398,7 @@ ChannelPlanAllocation materializeChannelPlan({
       shuffleSeed: matched?.shuffleSeed ?? stableChannelSeed(id),
       blockSize: entry.blockSize,
       builderKey: builderKey,
-      includeSpecials: entry.mode == PlaybackMode.block
-          ? includeSpecials
-          : false,
+      includeSpecials: normalizedIncludeSpecials,
     );
     used.add(number);
     if (matched == null) next++;
