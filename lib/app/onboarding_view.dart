@@ -153,21 +153,30 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
 
   Widget _screen({required Key key}) {
     final controller = widget.controller;
-    if (controller.stage == SetupStage.linking) {
-      return _LinkingPanel(
-        key: key,
-        busy: controller.busy,
-        error: controller.error,
-        child: Builder(builder: _linking),
-      );
-    }
     final content = switch (controller.stage) {
       SetupStage.welcome => _welcome(),
-      SetupStage.linking => const SizedBox.shrink(),
+      SetupStage.linking => Builder(builder: _linking),
       SetupStage.profiles => _profiles(),
       SetupStage.servers => _servers(),
       SetupStage.channelSetup || SetupStage.ready => const SizedBox.shrink(),
     };
+    final compactWidth = switch (controller.stage) {
+      SetupStage.linking => 736.0,
+      SetupStage.profiles => 1080.0,
+      SetupStage.servers => 880.0,
+      _ => null,
+    };
+    if (compactWidth != null) {
+      return _OnboardingCompactPanel(
+        key: key,
+        maxWidth: compactWidth,
+        busy: controller.busy,
+        error: controller.stage == SetupStage.servers && _serverError != null
+            ? null
+            : controller.error,
+        child: content,
+      );
+    }
     return _OnboardingPanel(
       key: key,
       busy: controller.busy,
@@ -496,27 +505,91 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
     title: "Who's watching?",
     subtitle: 'Choose a Plex Home profile to continue.',
     compact: true,
+    titleFontSize: 36,
+    subtitleFontSize: 18,
+    titleWeight: FontWeight.w600,
     child: Column(
       children: [
-        Wrap(
-          alignment: WrapAlignment.center,
-          spacing: 16,
-          runSpacing: 16,
-          children: [
-            for (final user in widget.controller.profiles)
-              _ProfileCard(
-                user: user,
-                active: user.id == widget.controller.profile?.id,
-                autofocus: user == widget.controller.profiles.first,
-                onPressed: widget.controller.busy
-                    ? null
-                    : () => _selectProfile(user),
-              ),
-          ],
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
+            final textScale = MediaQuery.textScalerOf(context)
+                .scale(1)
+                .clamp(1.0, 1.75);
+            final availableWidth = constraints.maxWidth.isFinite
+                ? constraints.maxWidth
+                : 1080 * scale;
+            final gap = 16 * scale;
+            final itemWidth = 200 * scale * textScale;
+            final count = widget.controller.profiles.length;
+            final targetColumns = count <= 3
+                ? count.clamp(1, 3)
+                : ((count + 1) ~/ 2).clamp(1, 5);
+            final fittingColumns = ((availableWidth + gap) / (itemWidth + gap))
+                .floor()
+                .clamp(1, targetColumns);
+            final columns = fittingColumns.toInt();
+            final rows = <Widget>[];
+            for (var start = 0; start < count; start += columns) {
+              final rowCount = (count - start).clamp(0, columns).toInt();
+              final rowWidth = ((rowCount * itemWidth) + ((rowCount - 1) * gap))
+                  .clamp(0.0, availableWidth);
+              rows.add(
+                Padding(
+                  padding: EdgeInsets.only(top: start == 0 ? 0 : gap),
+                  child: Center(
+                    child: SizedBox(
+                      width: rowWidth,
+                      child: IntrinsicHeight(
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            for (
+                              var column = 0;
+                              column < rowCount;
+                              column++
+                            ) ...[
+                              if (column > 0) SizedBox(width: gap),
+                              Expanded(
+                                child: _ProfileCard(
+                                  user: widget
+                                      .controller
+                                      .profiles[start + column],
+                                  active:
+                                      widget
+                                          .controller
+                                          .profiles[start + column]
+                                          .id ==
+                                      widget.controller.profile?.id,
+                                  autofocus: start + column == 0,
+                                  onPressed: widget.controller.busy
+                                      ? null
+                                      : () => _selectProfile(
+                                          widget.controller.profiles[start +
+                                              column],
+                                        ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }
+            return Center(child: Column(children: rows));
+          },
         ),
         const SizedBox(height: 28),
         OutlinedButton.icon(
           onPressed: widget.controller.busy ? null : widget.onLogout,
+          style: OutlinedButton.styleFrom(
+            textStyle: Theme.of(context).textTheme.labelLarge?.copyWith(
+              fontSize: 18 * LineupLayout.scaleFor(MediaQuery.sizeOf(context)),
+            ),
+          ),
           icon: const Icon(Icons.logout),
           label: const Text('Sign out'),
         ),
@@ -525,6 +598,12 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
           TextButton(
             focusNode: _profileCancelFocus,
             onPressed: widget.controller.cancelProfileSelection,
+            style: TextButton.styleFrom(
+              textStyle: Theme.of(context).textTheme.labelLarge?.copyWith(
+                fontSize:
+                    18 * LineupLayout.scaleFor(MediaQuery.sizeOf(context)),
+              ),
+            ),
             child: const Text('Back'),
           ),
         ],
@@ -537,6 +616,9 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
     subtitle: 'Select the Plex server you want to watch from.',
     centered: false,
     maxWidth: 880,
+    titleFontSize: 36,
+    subtitleFontSize: 18,
+    titleWeight: FontWeight.w600,
     child: Column(
       children: [
         if (widget.controller.servers.isEmpty && !widget.controller.busy)
@@ -570,18 +652,36 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
             OutlinedButton.icon(
               autofocus: widget.controller.servers.isEmpty,
               onPressed: widget.controller.busy ? null : _refreshServers,
+              style: OutlinedButton.styleFrom(
+                textStyle: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  fontSize:
+                      18 * LineupLayout.scaleFor(MediaQuery.sizeOf(context)),
+                ),
+              ),
               icon: const Icon(Icons.refresh),
               label: const Text('Refresh servers'),
             ),
             if (widget.controller.profiles.length > 1)
               OutlinedButton.icon(
                 onPressed: widget.controller.busy ? null : _showProfiles,
+                style: OutlinedButton.styleFrom(
+                  textStyle: Theme.of(context).textTheme.labelLarge?.copyWith(
+                    fontSize:
+                        18 * LineupLayout.scaleFor(MediaQuery.sizeOf(context)),
+                  ),
+                ),
                 icon: const Icon(Icons.switch_account),
                 label: const Text('Switch profile'),
               ),
             if (widget.controller.serverSelectionCanCancel)
               TextButton(
                 onPressed: widget.controller.cancelServerSelection,
+                style: TextButton.styleFrom(
+                  textStyle: Theme.of(context).textTheme.labelLarge?.copyWith(
+                    fontSize:
+                        18 * LineupLayout.scaleFor(MediaQuery.sizeOf(context)),
+                  ),
+                ),
                 child: const Text('Back'),
               ),
           ],
@@ -647,17 +747,19 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
   }
 }
 
-class _LinkingPanel extends StatelessWidget {
-  const _LinkingPanel({
+class _OnboardingCompactPanel extends StatelessWidget {
+  const _OnboardingCompactPanel({
     required this.busy,
     required this.error,
     required this.child,
+    this.maxWidth = 736,
     super.key,
   });
 
   final bool busy;
   final String? error;
   final Widget child;
+  final double maxWidth;
 
   @override
   Widget build(BuildContext context) {
@@ -668,7 +770,7 @@ class _LinkingPanel extends StatelessWidget {
     final roles = LineupTheme.of(context);
     final bodyFontSize = (narrow ? 14.0 : 18.0) * scale;
     final content = ConstrainedBox(
-      constraints: BoxConstraints(maxWidth: 736 * scale),
+      constraints: BoxConstraints(maxWidth: maxWidth * scale),
       child: SizedBox(
         width: double.infinity,
         child: Column(
@@ -715,7 +817,7 @@ class _LinkingPanel extends StatelessWidget {
     );
     return Center(
       child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: 900 * scale),
+        constraints: BoxConstraints(maxWidth: maxWidth * scale),
         child: content,
       ),
     );
@@ -798,12 +900,18 @@ class _HeroContent extends StatelessWidget {
     this.compact = false,
     this.centered = true,
     this.maxWidth,
+    this.titleFontSize,
+    this.subtitleFontSize,
+    this.titleWeight,
   });
   final String title;
   final String subtitle;
   final bool compact;
   final bool centered;
   final double? maxWidth;
+  final double? titleFontSize;
+  final double? subtitleFontSize;
+  final FontWeight? titleWeight;
   final Widget child;
 
   @override
@@ -819,16 +927,22 @@ class _HeroContent extends StatelessWidget {
           child: Text(
             title,
             textAlign: centered ? TextAlign.center : TextAlign.left,
-            style: Theme.of(context).textTheme.headlineMedium
-                ?.copyWith(fontWeight: FontWeight.w800),
+            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+              fontSize: titleFontSize == null ? null : titleFontSize! * scale,
+              fontWeight: titleWeight ?? FontWeight.w800,
+            ),
           ),
         ),
         const SizedBox(height: 10),
         Text(
           subtitle,
           textAlign: centered ? TextAlign.center : TextAlign.left,
-          style: Theme.of(context).textTheme.titleMedium
-              ?.copyWith(color: LineupTheme.of(context).secondaryText),
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+            fontSize: subtitleFontSize == null
+                ? null
+                : subtitleFontSize! * scale,
+            color: LineupTheme.of(context).secondaryText,
+          ),
         ),
         SizedBox(height: compact ? 16 : 30),
         child,
@@ -857,131 +971,121 @@ class _ProfileCard extends StatelessWidget {
   final VoidCallback? onPressed;
 
   @override
-  Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, constraints) {
-      final size = MediaQuery.sizeOf(context);
-      final scale = LineupLayout.scaleFor(size);
-      final textScale = MediaQuery.textScalerOf(context)
-          .scale(1)
-          .clamp(1.0, 1.75);
-      final width = 176 * scale * textScale;
-      final availableWidth = constraints.maxWidth.isFinite
-          ? constraints.maxWidth
-          : width;
-      final maxGroupWidth = availableWidth.clamp(1.0, double.infinity);
-      final groupWidth = width.clamp(1.0, maxGroupWidth).toDouble();
-      final roles = LineupTheme.of(context);
-      final buttonStyle = ButtonStyle(
-        padding: const WidgetStatePropertyAll(EdgeInsets.zero),
-        minimumSize: const WidgetStatePropertyAll(Size.zero),
-        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        shape: WidgetStatePropertyAll(
-          RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(roles.panelRadius),
-          ),
+  Widget build(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    final scale = LineupLayout.scaleFor(size);
+    final roles = LineupTheme.of(context);
+    final buttonStyle = ButtonStyle(
+      alignment: Alignment.topCenter,
+      padding: const WidgetStatePropertyAll(EdgeInsets.zero),
+      minimumSize: const WidgetStatePropertyAll(Size.zero),
+      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      shape: WidgetStatePropertyAll(
+        RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(roles.panelRadius),
         ),
-        backgroundColor: WidgetStateProperty.resolveWith((states) {
-          if (states.contains(WidgetState.pressed)) {
-            return roles.progressFill.withValues(alpha: 0.14);
-          }
-          if (active) return roles.selectedSurface;
-          if (states.contains(WidgetState.focused)) {
-            return roles.focusedSurface;
-          }
-          if (states.contains(WidgetState.hovered)) {
-            return roles.primarySurface.withValues(alpha: 0.7);
-          }
-          return Colors.transparent;
-        }),
-        foregroundColor: WidgetStateProperty.resolveWith((states) {
-          if (states.contains(WidgetState.disabled)) return roles.mutedText;
-          if (states.contains(WidgetState.focused)) return roles.focusedText;
-          return roles.primaryText;
-        }),
-        side: WidgetStateProperty.resolveWith((states) {
-          if (states.contains(WidgetState.focused)) {
-            return BorderSide(
-              color: roles.focusBorder,
-              width: _onboardingFocusWidth(roles),
-            );
-          }
-          if (states.contains(WidgetState.hovered)) {
-            return BorderSide(color: roles.defaultBorder);
-          }
-          return BorderSide.none;
-        }),
-        overlayColor: WidgetStatePropertyAll(
-          roles.progressFill.withValues(alpha: 0.12),
-        ),
-      );
-      return SizedBox(
-        width: groupWidth,
-        child: MergeSemantics(
-          child: Semantics(
-            button: true,
-            selected: active,
-            enabled: onPressed != null,
-            child: TextButton(
-              autofocus: autofocus,
-              onPressed: onPressed,
-              style: buttonStyle,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 16, 12, 16),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    CircleAvatar(
-                      radius: 42,
-                      backgroundColor: roles.elevatedSurface,
-                      foregroundColor: roles.secondaryText,
-                      backgroundImage: user.thumb?.isAbsolute == true
-                          ? NetworkImage(user.thumb.toString())
-                          : null,
-                      child: user.thumb?.isAbsolute == true
-                          ? null
-                          : Text(
-                              user.name.characters.first.toUpperCase(),
-                              style: const TextStyle(fontSize: 30),
-                            ),
+      ),
+      backgroundColor: WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.pressed)) {
+          return roles.progressFill.withValues(alpha: 0.14);
+        }
+        if (active) return roles.selectedSurface;
+        if (states.contains(WidgetState.focused)) {
+          return roles.focusedSurface;
+        }
+        if (states.contains(WidgetState.hovered)) {
+          return roles.primarySurface.withValues(alpha: 0.7);
+        }
+        return Colors.transparent;
+      }),
+      foregroundColor: WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.disabled)) return roles.mutedText;
+        if (states.contains(WidgetState.focused)) return roles.focusedText;
+        return roles.primaryText;
+      }),
+      side: WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.focused)) {
+          return BorderSide(
+            color: roles.focusBorder,
+            width: _onboardingFocusWidth(roles),
+          );
+        }
+        if (states.contains(WidgetState.hovered)) {
+          return BorderSide(color: roles.defaultBorder);
+        }
+        return BorderSide.none;
+      }),
+      overlayColor: WidgetStatePropertyAll(
+        roles.progressFill.withValues(alpha: 0.12),
+      ),
+    );
+    return SizedBox(
+      width: double.infinity,
+      child: MergeSemantics(
+        child: Semantics(
+          button: true,
+          selected: active,
+          enabled: onPressed != null,
+          child: TextButton(
+            autofocus: autofocus,
+            onPressed: onPressed,
+            style: buttonStyle,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 16, 12, 16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircleAvatar(
+                    radius: 48,
+                    backgroundColor: roles.elevatedSurface,
+                    foregroundColor: roles.secondaryText,
+                    backgroundImage: user.thumb?.isAbsolute == true
+                        ? NetworkImage(user.thumb.toString())
+                        : null,
+                    child: user.thumb?.isAbsolute == true
+                        ? null
+                        : Text(
+                            user.name.characters.first.toUpperCase(),
+                            style: const TextStyle(fontSize: 32),
+                          ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    user.name,
+                    textAlign: TextAlign.center,
+                    softWrap: true,
+                    style: TextStyle(
+                      fontSize: 18 * scale,
+                      fontWeight: FontWeight.w600,
                     ),
-                    const SizedBox(height: 12),
-                    Text(
-                      user.name,
-                      textAlign: TextAlign.center,
-                      softWrap: true,
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
+                  ),
+                  if (user.protected ||
+                      user.admin ||
+                      user.restricted == true ||
+                      active)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Wrap(
+                        alignment: WrapAlignment.center,
+                        spacing: 4,
+                        runSpacing: 4,
+                        children: [
+                          if (user.protected) const _ProfileBadge('PIN'),
+                          if (user.admin) const _ProfileBadge('Admin'),
+                          if (user.restricted == true)
+                            const _ProfileBadge('Restricted'),
+                          if (active) const _ProfileBadge('Active'),
+                        ],
                       ),
                     ),
-                    if (user.protected ||
-                        user.admin ||
-                        user.restricted == true ||
-                        active)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 4),
-                        child: Wrap(
-                          alignment: WrapAlignment.center,
-                          spacing: 4,
-                          runSpacing: 4,
-                          children: [
-                            if (user.protected) const _ProfileBadge('PIN'),
-                            if (user.admin) const _ProfileBadge('Admin'),
-                            if (user.restricted == true)
-                              const _ProfileBadge('Restricted'),
-                            if (active) const _ProfileBadge('Active'),
-                          ],
-                        ),
-                      ),
-                  ],
-                ),
+                ],
               ),
             ),
           ),
         ),
-      );
-    },
-  );
+      ),
+    );
+  }
 }
 
 class _ProfileBadge extends StatelessWidget {
@@ -992,19 +1096,11 @@ class _ProfileBadge extends StatelessWidget {
   Widget build(BuildContext context) => Semantics(
     label: label,
     child: ExcludeSemantics(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-        decoration: BoxDecoration(
-          color: LineupTheme.of(context).elevatedSurface.withValues(alpha: 0.7),
-          borderRadius: BorderRadius.circular(999),
-          border: Border.all(color: LineupTheme.of(context).subtleBorder),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: LineupTheme.of(context).secondaryText,
-            fontSize: 10,
-          ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: LineupTheme.of(context).secondaryText,
+          fontSize: 12,
         ),
       ),
     ),
@@ -1029,6 +1125,13 @@ class _ServerCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
+    final supportStyle = TextStyle(
+      color: LineupTheme.of(context).secondaryText,
+      fontSize: 16 * scale,
+    );
+    final actionStyle = Theme.of(context).textTheme.labelLarge
+        ?.copyWith(fontSize: 18 * scale);
     final actionLabel = pending
         ? 'Connecting…'
         : error != null
@@ -1037,23 +1140,54 @@ class _ServerCard extends StatelessWidget {
     final details = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          server.name,
-          softWrap: true,
-          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+        Wrap(
+          spacing: 12 * scale,
+          runSpacing: 8 * scale,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Text(
+              server.name,
+              softWrap: true,
+              style: TextStyle(
+                fontSize: 22 * scale,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            if (connection != null)
+              Container(
+                padding: EdgeInsets.symmetric(
+                  horizontal: 8 * scale,
+                  vertical: 4 * scale,
+                ),
+                decoration: BoxDecoration(
+                  color: LineupTheme.of(context).progressFill
+                      .withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(6 * scale),
+                ),
+                child: Text(
+                  'Current',
+                  style: TextStyle(
+                    color: LineupTheme.of(context).progressFill,
+                    fontSize: 12 * scale,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+          ],
         ),
         const SizedBox(height: 4),
         Text(
           server.owned ? 'Owned server' : 'Shared server',
-          style: TextStyle(color: LineupTheme.of(context).secondaryText),
+          style: supportStyle,
         ),
-        if (previouslyUsed && connection == null) const Text('Previously used'),
+        if (previouslyUsed && connection == null)
+          Text('Previously used', style: supportStyle),
         if (connection != null) ...[
           const SizedBox(height: 8),
           Text(
             'Current connection: ${plexConnectionDescription(connection!)}',
             softWrap: true,
-            style: const TextStyle(fontWeight: FontWeight.w600),
+            style: supportStyle,
           ),
         ],
       ],
@@ -1064,6 +1198,7 @@ class _ServerCard extends StatelessWidget {
               label: actionLabel,
               child: FilledButton(
                 onPressed: onPressed,
+                style: FilledButton.styleFrom(textStyle: actionStyle),
                 child: ExcludeSemantics(
                   child: Text(
                     pending
@@ -1076,13 +1211,7 @@ class _ServerCard extends StatelessWidget {
               ),
             ),
           )
-        : Text(
-            'Current',
-            style: TextStyle(
-              color: LineupTheme.of(context).secondaryText,
-              fontWeight: FontWeight.w600,
-            ),
-          );
+        : null;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -1094,16 +1223,20 @@ class _ServerCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   details,
-                  const SizedBox(height: 12),
-                  Align(alignment: Alignment.centerLeft, child: trailing),
+                  if (trailing != null) ...[
+                    const SizedBox(height: 12),
+                    Align(alignment: Alignment.centerLeft, child: trailing),
+                  ],
                 ],
               )
             : Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(child: details),
-                  const SizedBox(width: 24),
-                  trailing,
+                  if (trailing != null) ...[
+                    const SizedBox(width: 24),
+                    trailing,
+                  ],
                 ],
               );
         return Container(
@@ -1126,6 +1259,7 @@ class _ServerCard extends StatelessWidget {
                     error!,
                     style: TextStyle(
                       color: Theme.of(context).colorScheme.error,
+                      fontSize: 16 * scale,
                     ),
                   ),
                 ),
