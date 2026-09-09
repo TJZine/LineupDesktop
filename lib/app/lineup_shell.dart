@@ -1497,10 +1497,12 @@ class _SettingsSwitchTile extends StatelessWidget {
   final ValueChanged<bool>? onChanged;
 
   @override
-  Widget build(BuildContext context) => _SettingsRow(
-    label: title,
-    helper: subtitle,
-    control: Switch(value: value, onChanged: onChanged),
+  Widget build(BuildContext context) => MergeSemantics(
+    child: _SettingsRow(
+      label: title,
+      helper: subtitle,
+      control: Switch(value: value, onChanged: onChanged),
+    ),
   );
 }
 
@@ -1520,28 +1522,30 @@ class _Dropdown<T> extends StatelessWidget {
   final String Function(T) display;
   final ValueChanged<T>? changed;
   @override
-  Widget build(BuildContext context) => _SettingsRow(
-    label: Text(label),
-    helper: Text(description),
-    control: SizedBox(
-      width: 220,
-      child: DropdownButtonFormField<T>(
-        key: ValueKey(value),
-        initialValue: value,
-        isExpanded: true,
-        decoration: const InputDecoration(
-          border: OutlineInputBorder(),
-          contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+  Widget build(BuildContext context) => MergeSemantics(
+    child: _SettingsRow(
+      label: Text(label),
+      helper: Text(description),
+      control: SizedBox(
+        width: 220,
+        child: DropdownButtonFormField<T>(
+          key: ValueKey(value),
+          initialValue: value,
+          isExpanded: true,
+          decoration: const InputDecoration(
+            border: OutlineInputBorder(),
+            contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+          ),
+          items: [
+            for (final item in values)
+              DropdownMenuItem(value: item, child: Text(display(item))),
+          ],
+          onChanged: changed == null
+              ? null
+              : (item) {
+                  if (item != null) changed!(item);
+                },
         ),
-        items: [
-          for (final item in values)
-            DropdownMenuItem(value: item, child: Text(display(item))),
-        ],
-        onChanged: changed == null
-            ? null
-            : (item) {
-                if (item != null) changed!(item);
-              },
       ),
     ),
   );

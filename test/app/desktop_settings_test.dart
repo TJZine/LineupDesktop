@@ -1,4 +1,4 @@
-import 'dart:ui' show SemanticsAction;
+import 'dart:ui' show SemanticsAction, Tristate;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -63,6 +63,10 @@ void main() {
           .hasAction(SemanticsAction.tap),
       isTrue,
     );
+    expect(
+      tester.getSemantics(themeDropdown).getSemanticsData().label,
+      contains('Theme'),
+    );
 
     for (final category in SettingsCategory.values.skip(1)) {
       final categoryButton = find.widgetWithText(
@@ -83,6 +87,43 @@ void main() {
     }
     expect(tester.takeException(), isNull);
   }, semanticsEnabled: true);
+
+  testWidgets('Settings switches expose names, state, and activation', (
+    tester,
+  ) async {
+    final controller = FixtureController();
+    addTearDown(controller.dispose);
+
+    await _showSettings(tester, controller);
+    await _openCategory(tester, SettingsCategory.accessibility);
+
+    final reduceMotion = find.byType(Switch).first;
+    var semantics = tester.getSemantics(reduceMotion).getSemanticsData();
+    expect(semantics.label, contains('Reduce motion'));
+    expect(semantics.flagsCollection.isToggled, Tristate.isFalse);
+    expect(semantics.flagsCollection.isEnabled, Tristate.isTrue);
+    expect(semantics.hasAction(SemanticsAction.tap), isTrue);
+
+    await tester.tap(reduceMotion);
+    await tester.pumpAndSettle();
+    expect(controller.settings.reduceMotion, isTrue);
+    semantics = tester.getSemantics(reduceMotion).getSemanticsData();
+    expect(semantics.flagsCollection.isToggled, Tristate.isTrue);
+
+    await _openCategory(tester, SettingsCategory.support);
+    final diagnostics = find.byType(Switch).first;
+    semantics = tester.getSemantics(diagnostics).getSemanticsData();
+    expect(semantics.label, contains('Record redacted diagnostics'));
+    expect(semantics.flagsCollection.isToggled, Tristate.isFalse);
+    expect(semantics.flagsCollection.isEnabled, Tristate.isTrue);
+    expect(semantics.hasAction(SemanticsAction.tap), isTrue);
+
+    await tester.tap(diagnostics);
+    await tester.pumpAndSettle();
+    expect(controller.settings.diagnosticsEnabled, isTrue);
+    semantics = tester.getSemantics(diagnostics).getSemanticsData();
+    expect(semantics.flagsCollection.isToggled, Tristate.isTrue);
+  }, semanticsEnabled: true);
 }
 
 Future<void> _showSettings(
@@ -101,6 +142,16 @@ Future<void> _showSettings(
       ),
     ),
   );
+  await tester.pumpAndSettle();
+}
+
+Future<void> _openCategory(
+  WidgetTester tester,
+  SettingsCategory category,
+) async {
+  final button = find.widgetWithText(TextButton, _categoryLabel(category));
+  await tester.ensureVisible(button);
+  await tester.tap(button);
   await tester.pumpAndSettle();
 }
 
