@@ -98,7 +98,7 @@ void main() {
     await tester.pumpAndSettle();
 
     await openDestination(tester, 'Settings');
-    await tester.tap(find.widgetWithText(OutlinedButton, 'Playback'));
+    await tester.tap(find.widgetWithText(TextButton, 'Playback'));
     await tester.pumpAndSettle();
     expect(find.text('Player controls auto-hide'), findsOneWidget);
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);

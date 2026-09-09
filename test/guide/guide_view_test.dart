@@ -431,7 +431,7 @@ void main() {
     final current = guide.currentProgram('semantic-channel')!;
     final startLabel = _testTime(current.scheduled.start.toLocal());
     final endLabel = _testTime(current.scheduled.end.toLocal());
-    expect(find.text('$startLabel–$endLabel'), findsWidgets);
+    expect(find.textContaining('$startLabel–$endLabel'), findsWidgets);
     expect(
       find.bySemanticsLabel(
         'Current Program, $startLabel to $endLabel, currently airing',
@@ -703,10 +703,13 @@ void main() {
 
     expect(find.text('SIGNAL HOUSE'), findsOneWidget);
     expect(find.text('S01E02'), findsWidgets);
-    expect(find.text('2026'), findsOneWidget);
+    expect(
+      tester.widget<Text>(find.byKey(const Key('guide-program-meta'))).data,
+      contains('2026'),
+    );
     expect(find.text('Drama • Science Fiction'), findsOneWidget);
     for (final badge in ['TV-14', '4K', 'HDR10', 'EAC3', '5.1']) {
-      expect(find.text(badge), findsOneWidget);
+      expect(find.textContaining(badge), findsOneWidget);
     }
     expect(
       find.text('A mysterious signal changes the course of the mission.'),

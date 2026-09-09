@@ -67,7 +67,7 @@ void main() {
 
     for (final category in SettingsCategory.values.skip(1)) {
       final categoryButton = find.widgetWithText(
-        OutlinedButton,
+        TextButton,
         _categoryLabel(category),
       );
       await tester.ensureVisible(categoryButton);

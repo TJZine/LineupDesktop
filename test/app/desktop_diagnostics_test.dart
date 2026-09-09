@@ -42,7 +42,6 @@ void main() {
     await show(tester, controller);
     await tester.pumpAndSettle();
     expect(find.text('Copy redacted report'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('Technical details'), 200);
     await tester.tap(find.text('Technical details'));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
@@ -80,7 +79,7 @@ void main() {
       await tester.tap(find.text('Copy redacted report'));
       await tester.pumpAndSettle();
       expect(find.text('Couldn’t copy the report. Try again.'), findsOneWidget);
-      expect(find.text('Diagnostics'), findsOneWidget);
+      expect(find.text('Diagnostics'), findsWidgets);
       failures = false;
       await tester.tap(find.text('Copy redacted report'));
       await tester.pumpAndSettle();
@@ -105,28 +104,23 @@ void main() {
         'code': 'unexpected',
       });
       await show(tester, controller);
-      await tester.tap(find.text('application: Operation failed'));
+      await tester.tap(find.text('Operation failed'));
       await tester.pumpAndSettle();
       expect(find.text('code: unexpected'), findsOneWidget);
-      final oldPosition = tester.getTopLeft(
-        find.text('application: Operation failed'),
-      );
+      final oldPosition = tester.getTopLeft(find.text('Operation failed'));
       controller.diagnostics.add('plex-auth', 'PIN cancellation failed');
       await tester.pumpAndSettle();
       expect(find.text('1 new event'), findsOneWidget);
       expect(find.text('code: unexpected'), findsOneWidget);
-      expect(
-        tester.getTopLeft(find.text('application: Operation failed')),
-        oldPosition,
-      );
-      expect(find.text('plex-auth: PIN cancellation failed'), findsNothing);
+      expect(tester.getTopLeft(find.text('Operation failed')), oldPosition);
+      expect(find.text('PIN cancellation failed'), findsNothing);
       await tester.tap(find.text('1 new event'));
       await tester.pumpAndSettle();
-      expect(find.text('plex-auth: PIN cancellation failed'), findsOneWidget);
+      expect(find.text('PIN cancellation failed'), findsOneWidget);
       controller.diagnostics.enabled = false;
       await tester.pumpAndSettle();
-      expect(find.text('application: Operation failed'), findsNothing);
-      expect(find.textContaining('Recording is off.'), findsOneWidget);
+      expect(find.text('Operation failed'), findsNothing);
+      expect(find.text('Diagnostic recording is off'), findsOneWidget);
     },
   );
 }

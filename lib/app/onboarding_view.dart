@@ -107,40 +107,49 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    body: DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: RadialGradient(
-          center: Alignment(-0.6, -0.65),
-          radius: 1.25,
-          colors: [
-            LineupTheme.of(context).progressFill.withValues(alpha: 0.08),
-            LineupTheme.of(context).deepBackground,
-          ],
-        ),
-      ),
-      child: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(32),
-            child: ConstrainedBox(
-              key: const ValueKey('onboarding-content'),
-              constraints: const BoxConstraints(maxWidth: double.infinity),
-              child: FocusTraversalGroup(
-                policy: ReadingOrderTraversalPolicy(),
-                child: AnimatedSwitcher(
-                  duration: widget.controller.settings.reduceMotion
-                      ? Duration.zero
-                      : const Duration(milliseconds: 180),
-                  child: _screen(key: ValueKey(widget.controller.stage)),
+  Widget build(BuildContext context) {
+    final roles = LineupTheme.of(context);
+    final refinedStage = switch (widget.controller.stage) {
+      SetupStage.linking || SetupStage.profiles || SetupStage.servers => true,
+      _ => false,
+    };
+    return Scaffold(
+      body: DecoratedBox(
+        decoration: refinedStage
+            ? BoxDecoration(color: roles.deepBackground)
+            : BoxDecoration(
+                gradient: RadialGradient(
+                  center: const Alignment(-0.6, -0.65),
+                  radius: 1.25,
+                  colors: [
+                    roles.progressFill.withValues(alpha: 0.08),
+                    roles.deepBackground,
+                  ],
+                ),
+              ),
+        child: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(32),
+              child: ConstrainedBox(
+                key: const ValueKey('onboarding-content'),
+                constraints: const BoxConstraints(maxWidth: double.infinity),
+                child: FocusTraversalGroup(
+                  policy: ReadingOrderTraversalPolicy(),
+                  child: AnimatedSwitcher(
+                    duration: widget.controller.settings.reduceMotion
+                        ? Duration.zero
+                        : const Duration(milliseconds: 180),
+                    child: _screen(key: ValueKey(widget.controller.stage)),
+                  ),
                 ),
               ),
             ),
           ),
         ),
       ),
-    ),
-  );
+    );
+  }
 
   Widget _screen({required Key key}) {
     final controller = widget.controller;
@@ -157,6 +166,10 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
       error: controller.stage == SetupStage.servers && _serverError != null
           ? null
           : controller.error,
+      refinedSurface:
+          controller.stage == SetupStage.linking ||
+          controller.stage == SetupStage.profiles ||
+          controller.stage == SetupStage.servers,
       child: content,
     );
   }
@@ -420,6 +433,8 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
   Widget _servers() => _HeroContent(
     title: 'Choose a server',
     subtitle: 'Select the Plex server you want to watch from.',
+    centered: false,
+    maxWidth: 880,
     child: Column(
       children: [
         if (widget.controller.servers.isEmpty && !widget.controller.busy)
@@ -518,11 +533,13 @@ class _OnboardingPanel extends StatelessWidget {
   const _OnboardingPanel({
     required this.busy,
     required this.error,
+    required this.refinedSurface,
     required this.child,
     super.key,
   });
   final bool busy;
   final String? error;
+  final bool refinedSurface;
   final Widget child;
 
   @override
@@ -540,13 +557,19 @@ class _OnboardingPanel extends StatelessWidget {
           vertical: 38 * scale,
         ),
         decoration: BoxDecoration(
-          color: LineupTheme.of(context).primarySurface,
+          color: refinedSurface
+              ? LineupTheme.of(context).deepBackground
+              : LineupTheme.of(context).primarySurface,
           borderRadius: BorderRadius.circular(
             LineupTheme.of(context).panelRadius,
           ),
-          border: Border(
-            bottom: BorderSide(color: LineupTheme.of(context).defaultBorder),
-          ),
+          border: refinedSurface
+              ? Border.all(color: LineupTheme.of(context).subtleBorder)
+              : Border(
+                  bottom: BorderSide(
+                    color: LineupTheme.of(context).defaultBorder,
+                  ),
+                ),
         ),
         child: Column(
           children: [
@@ -580,35 +603,52 @@ class _HeroContent extends StatelessWidget {
     required this.subtitle,
     required this.child,
     this.compact = false,
+    this.centered = true,
+    this.maxWidth,
   });
   final String title;
   final String subtitle;
   final bool compact;
+  final bool centered;
+  final double? maxWidth;
   final Widget child;
 
   @override
-  Widget build(BuildContext context) => Column(
-    children: [
-      Semantics(
-        header: true,
-        child: Text(
-          title,
-          textAlign: TextAlign.center,
-          style: Theme.of(context).textTheme.headlineMedium
-              ?.copyWith(fontWeight: FontWeight.w800),
+  Widget build(BuildContext context) {
+    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
+    final content = Column(
+      crossAxisAlignment: centered
+          ? CrossAxisAlignment.center
+          : CrossAxisAlignment.start,
+      children: [
+        Semantics(
+          header: true,
+          child: Text(
+            title,
+            textAlign: centered ? TextAlign.center : TextAlign.left,
+            style: Theme.of(context).textTheme.headlineMedium
+                ?.copyWith(fontWeight: FontWeight.w800),
+          ),
         ),
+        const SizedBox(height: 10),
+        Text(
+          subtitle,
+          textAlign: centered ? TextAlign.center : TextAlign.left,
+          style: Theme.of(context).textTheme.titleMedium
+              ?.copyWith(color: LineupTheme.of(context).secondaryText),
+        ),
+        SizedBox(height: compact ? 16 : 30),
+        child,
+      ],
+    );
+    if (maxWidth == null) return content;
+    return Center(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: maxWidth! * scale),
+        child: SizedBox(width: double.infinity, child: content),
       ),
-      const SizedBox(height: 10),
-      Text(
-        subtitle,
-        textAlign: TextAlign.center,
-        style: Theme.of(context).textTheme.titleMedium
-            ?.copyWith(color: LineupTheme.of(context).secondaryText),
-      ),
-      SizedBox(height: compact ? 16 : 30),
-      child,
-    ],
-  );
+    );
+  }
 }
 
 class _ProfileCard extends StatelessWidget {
@@ -650,8 +690,9 @@ class _ProfileCard extends StatelessWidget {
           if (states.contains(WidgetState.pressed)) {
             return roles.progressFill.withValues(alpha: 0.14);
           }
+          if (active) return roles.selectedSurface;
           if (states.contains(WidgetState.focused)) {
-            return roles.focusedSurface.withValues(alpha: 0.35);
+            return roles.focusedSurface;
           }
           if (states.contains(WidgetState.hovered)) {
             return roles.primarySurface.withValues(alpha: 0.7);
@@ -667,7 +708,7 @@ class _ProfileCard extends StatelessWidget {
           if (states.contains(WidgetState.focused)) {
             return BorderSide(
               color: roles.focusBorder,
-              width: roles.focusBorderWidth,
+              width: _onboardingFocusWidth(roles),
             );
           }
           if (states.contains(WidgetState.hovered)) {
@@ -697,6 +738,8 @@ class _ProfileCard extends StatelessWidget {
                   children: [
                     CircleAvatar(
                       radius: 42,
+                      backgroundColor: roles.elevatedSurface,
+                      foregroundColor: roles.secondaryText,
                       backgroundImage: user.thumb?.isAbsolute == true
                           ? NetworkImage(user.thumb.toString())
                           : null,
@@ -1001,6 +1044,7 @@ class _ProfilePinDialogState extends State<_ProfilePinDialog> {
       onKeyEvent: _key,
       child: Dialog(
         key: const Key('profile-pin-sheet'),
+        backgroundColor: LineupTheme.of(context).primarySurface,
         alignment: Alignment.center,
         insetPadding: const EdgeInsets.all(24),
         shape: RoundedRectangleBorder(
@@ -1011,42 +1055,56 @@ class _ProfilePinDialogState extends State<_ProfilePinDialog> {
         ),
         child: ConstrainedBox(
           key: const Key('profile-pin-surface'),
-          constraints: const BoxConstraints(maxWidth: 420),
+          constraints: const BoxConstraints(maxWidth: 384),
           child: SingleChildScrollView(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(28, 22, 28, 20),
+              padding: const EdgeInsets.all(24),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Container(
-                    padding: const EdgeInsets.all(2),
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: LineupTheme.of(context).focusBorder
-                            .withValues(alpha: 0.45),
-                      ),
-                    ),
-                    child: CircleAvatar(
-                      radius: 28,
-                      backgroundImage: widget.user.thumb?.isAbsolute == true
-                          ? NetworkImage(widget.user.thumb.toString())
-                          : null,
-                      child: widget.user.thumb?.isAbsolute == true
-                          ? null
-                          : Text(
-                              widget.user.name.characters.first.toUpperCase(),
-                              style: const TextStyle(fontSize: 22),
-                            ),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
                   Text(
-                    'Enter PIN for ${widget.user.name}',
+                    'Enter PIN',
                     style: Theme.of(context).textTheme.titleLarge
                         ?.copyWith(fontWeight: FontWeight.w700),
                   ),
                   const SizedBox(height: 16),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 280),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        CircleAvatar(
+                          radius: 20,
+                          backgroundColor: LineupTheme.of(context)
+                              .elevatedSurface,
+                          foregroundColor: LineupTheme.of(context)
+                              .secondaryText,
+                          backgroundImage: widget.user.thumb?.isAbsolute == true
+                              ? NetworkImage(widget.user.thumb.toString())
+                              : null,
+                          child: widget.user.thumb?.isAbsolute == true
+                              ? null
+                              : Text(
+                                  widget.user.name.characters.first
+                                      .toUpperCase(),
+                                  style: const TextStyle(fontSize: 18),
+                                ),
+                        ),
+                        const SizedBox(width: 12),
+                        Flexible(
+                          child: Text(
+                            widget.user.name,
+                            softWrap: true,
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(
+                                  color: LineupTheme.of(context).secondaryText,
+                                ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
                   Semantics(
                     key: const Key('profile-pin-progress'),
                     container: true,
@@ -1059,17 +1117,19 @@ class _ProfilePinDialogState extends State<_ProfilePinDialog> {
                         children: [
                           for (var index = 0; index < 4; index++)
                             Container(
-                              width: 22,
-                              height: 22,
-                              margin: const EdgeInsets.symmetric(horizontal: 8),
+                              width: 16,
+                              height: 16,
+                              margin: const EdgeInsets.symmetric(horizontal: 6),
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
                                 color: index < _pin.length
                                     ? LineupTheme.of(context).progressFill
                                     : Colors.transparent,
                                 border: Border.all(
-                                  color: LineupTheme.of(context).focusBorder,
-                                  width: 2,
+                                  color: index < _pin.length
+                                      ? LineupTheme.of(context).progressFill
+                                      : LineupTheme.of(context).defaultBorder,
+                                  width: 1,
                                 ),
                               ),
                             ),
@@ -1077,16 +1137,49 @@ class _ProfilePinDialogState extends State<_ProfilePinDialog> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(minHeight: 38),
+                    child: _submitting
+                        ? Semantics(
+                            label: 'Checking PIN',
+                            child: const SizedBox.square(
+                              dimension: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          )
+                        : _error == null
+                        ? const Align(
+                            alignment: Alignment.center,
+                            child: Text('Type or use the number pad.'),
+                          )
+                        : Semantics(
+                            key: const Key('profile-pin-error'),
+                            container: true,
+                            liveRegion: true,
+                            label: _error,
+                            child: ExcludeSemantics(
+                              child: Text(
+                                _error!,
+                                softWrap: true,
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: Theme.of(context).colorScheme.error,
+                                ),
+                              ),
+                            ),
+                          ),
+                  ),
+                  const SizedBox(height: 12),
                   SizedBox(
-                    width: 236,
+                    width: 224,
                     child: GridView.count(
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
                       crossAxisCount: 3,
-                      childAspectRatio: 1,
-                      mainAxisSpacing: 10,
-                      crossAxisSpacing: 10,
+                      childAspectRatio: 1.33,
+                      mainAxisSpacing: 8,
+                      crossAxisSpacing: 8,
                       children: [
                         for (var digit = 1; digit <= 9; digit++)
                           _PinKey(
@@ -1103,50 +1196,33 @@ class _ProfilePinDialogState extends State<_ProfilePinDialog> {
                                   _error = null;
                                   _pin = _pin.substring(0, _pin.length - 1);
                                 }),
-                          child: const Icon(Icons.backspace_outlined),
+                          child: const Text(
+                            'Delete',
+                            style: TextStyle(fontSize: 12),
+                          ),
                         ),
                         _PinKey(
                           digit: 0,
                           onPressed: _submitting ? null : () => _digit(0),
                         ),
-                        _PinControlKey(
-                          tooltip: 'Cancel',
-                          onPressed: _submitting
-                              ? null
-                              : () => Navigator.pop(context),
-                          child: const Icon(Icons.close),
-                        ),
+                        const SizedBox.shrink(),
                       ],
                     ),
                   ),
-                  const SizedBox(height: 10),
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(minHeight: 44),
-                    child: _submitting
-                        ? Semantics(
-                            label: 'Checking PIN',
-                            child: const SizedBox.square(
-                              dimension: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            ),
-                          )
-                        : _error == null
+                  const SizedBox(height: 12),
+                  TextButton(
+                    onPressed: _submitting
                         ? null
-                        : Semantics(
-                            key: const Key('profile-pin-error'),
-                            container: true,
-                            liveRegion: true,
-                            label: _error,
-                            child: ExcludeSemantics(
-                              child: Text(
-                                _error!,
-                                softWrap: true,
-                                style: TextStyle(
-                                  color: Theme.of(context).colorScheme.error,
-                                ),
-                              ),
-                            ),
-                          ),
+                        : () => Navigator.pop(context),
+                    style: TextButton.styleFrom(
+                      foregroundColor: LineupTheme.of(context).secondaryText,
+                      minimumSize: const Size(0, 44),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                    ),
+                    child: const Text('Cancel'),
                   ),
                 ],
               ),
@@ -1222,7 +1298,9 @@ ButtonStyle _pinKeyStyle(BuildContext context, {bool secondary = false}) {
   return ButtonStyle(
     minimumSize: const WidgetStatePropertyAll(Size.zero),
     padding: const WidgetStatePropertyAll(EdgeInsets.zero),
-    shape: const WidgetStatePropertyAll(CircleBorder()),
+    shape: WidgetStatePropertyAll(
+      RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+    ),
     backgroundColor: WidgetStateProperty.resolveWith((states) {
       if (states.contains(WidgetState.disabled)) {
         return roles.elevatedSurface.withValues(alpha: 0.45);
@@ -1244,7 +1322,7 @@ ButtonStyle _pinKeyStyle(BuildContext context, {bool secondary = false}) {
             ? roles.focusBorder
             : roles.subtleBorder,
         width: states.contains(WidgetState.focused)
-            ? roles.focusBorderWidth
+            ? _onboardingFocusWidth(roles)
             : 1,
       ),
     ),
@@ -1253,3 +1331,6 @@ ButtonStyle _pinKeyStyle(BuildContext context, {bool secondary = false}) {
     ),
   );
 }
+
+double _onboardingFocusWidth(LineupThemeRoles roles) =>
+    roles.focusBorderWidth >= 5 ? roles.focusBorderWidth : 2;

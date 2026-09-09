@@ -888,12 +888,21 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     ),
   );
 
-  Widget _programmingCard() => LineupSection(
+  Widget _programmingCard() => Column(
     key: const Key('studio-programming'),
-    title: 'Programming',
+    crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      Text(_sourceLabel(_displaySource, widget.controller)),
-      const SizedBox(height: 8),
+      Wrap(
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.end,
+        spacing: 16,
+        runSpacing: 4,
+        children: [
+          Text('Programming', style: Theme.of(context).textTheme.titleLarge),
+          Text(_sourceLabel(_displaySource, widget.controller)),
+        ],
+      ),
+      const SizedBox(height: 10),
       if (_sourceReadOnly)
         const Text('Programming is read-only and will be preserved exactly.')
       else ...[
@@ -933,10 +942,6 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                 ? null
                 : (value) => _changed(() => _sourceChoice = value.singleOrNull),
           ),
-        ),
-        const SizedBox(height: 12),
-        const Text(
-          'Only the selected source is saved. Switching back restores its draft choices.',
         ),
         const SizedBox(height: 8),
         switch (_sourceChoice) {
@@ -1121,6 +1126,23 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     final unavailable = _pendingFilterValues
         .where((value) => !_activeAvailableFilterValues.contains(value))
         .toSet();
+    Widget valueTile(String value) => CheckboxListTile(
+      value: _pendingFilterValues.contains(value),
+      title: Text(
+        _activeAvailableFilterValues.contains(value)
+            ? value
+            : '$value (unavailable — retained)',
+      ),
+      onChanged: (checked) => setState(() {
+        checked == true
+            ? _pendingFilterValues.add(value)
+            : _pendingFilterValues.remove(value);
+      }),
+    );
+    final media = MediaQuery.of(context);
+    final independentlyScrollable =
+        media.size.width >= LineupLayout.compact &&
+        media.textScaler.scale(14) <= 21;
     return CallbackShortcuts(
       bindings: {
         const SingleActivator(LogicalKeyboardKey.escape): () =>
@@ -1169,28 +1191,16 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                 Text('$count matching programs'),
               ],
             ),
-            SizedBox(
-              height: 320,
-              child: ListView.builder(
-                itemCount: visible.length,
-                itemBuilder: (context, index) {
-                  final value = visible[index];
-                  return CheckboxListTile(
-                    value: _pendingFilterValues.contains(value),
-                    title: Text(
-                      _activeAvailableFilterValues.contains(value)
-                          ? value
-                          : '$value (unavailable — retained)',
-                    ),
-                    onChanged: (checked) => setState(() {
-                      checked == true
-                          ? _pendingFilterValues.add(value)
-                          : _pendingFilterValues.remove(value);
-                    }),
-                  );
-                },
-              ),
-            ),
+            if (independentlyScrollable)
+              SizedBox(
+                height: (media.size.height * .17).clamp(120, 240),
+                child: ListView.builder(
+                  itemCount: visible.length,
+                  itemBuilder: (context, index) => valueTile(visible[index]),
+                ),
+              )
+            else
+              for (final value in visible) valueTile(value),
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [

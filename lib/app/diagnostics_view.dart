@@ -17,6 +17,7 @@ class DiagnosticsView extends StatefulWidget {
     this.onOpenMenu,
     this.menuFocusNode,
     this.focusNode,
+    this.onBack,
     super.key,
   });
 
@@ -26,6 +27,7 @@ class DiagnosticsView extends StatefulWidget {
   final LineupMenuCallback? onOpenMenu;
   final FocusNode? menuFocusNode;
   final FocusNode? focusNode;
+  final VoidCallback? onBack;
 
   @override
   State<DiagnosticsView> createState() => _DiagnosticsViewState();
@@ -127,16 +129,33 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
     };
     return LineupPage(
       title: 'Diagnostics',
+      titleWidget: Row(
+        children: [
+          TextButton.icon(
+            onPressed: widget.onBack,
+            icon: const Icon(Icons.arrow_back),
+            label: const Text('Back'),
+          ),
+          const SizedBox(width: 20),
+          Text('Diagnostics', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(width: 16),
+          Text(
+            'Support',
+            style: TextStyle(color: LineupTheme.of(context).secondaryText),
+          ),
+        ],
+      ),
       actions: widget.onOpenMenu == null || widget.menuFocusNode == null
           ? null
           : Builder(
-              builder: (buttonContext) => IconButton.outlined(
+              builder: (buttonContext) => TextButton.icon(
                 key: const Key('diagnostics-app-menu'),
                 focusNode: widget.menuFocusNode,
-                tooltip: 'Open Lineup menu',
                 onPressed: () =>
                     widget.onOpenMenu!(buttonContext, widget.menuFocusNode!),
-                icon: const Icon(Icons.menu),
+                iconAlignment: IconAlignment.end,
+                icon: const Icon(Icons.expand_more),
+                label: const Text('LINEUP'),
               ),
             ),
       child: Material(
@@ -144,167 +163,303 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
         child: ListView(
           controller: _scroll,
           children: [
-            Wrap(
-              spacing: 16,
-              runSpacing: 12,
-              crossAxisAlignment: WrapCrossAlignment.center,
+            Row(
               children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Diagnostics',
+                        style: Theme.of(context).textTheme.headlineMedium,
+                      ),
+                      const Text(
+                        'Playback information and recent support events.',
+                      ),
+                    ],
+                  ),
+                ),
                 FilledButton.icon(
                   focusNode: widget.focusNode,
                   onPressed: _copying ? null : _copy,
                   icon: const Icon(Icons.copy),
                   label: const Text('Copy redacted report'),
                 ),
-                if (_copyFeedback != null)
-                  Semantics(liveRegion: true, child: Text(_copyFeedback!)),
-                const Text('Review the report before sharing it with support.'),
               ],
             ),
-            const SizedBox(height: 32),
+            if (_copyFeedback != null)
+              Align(
+                alignment: Alignment.centerRight,
+                child: Semantics(liveRegion: true, child: Text(_copyFeedback!)),
+              ),
+            const SizedBox(height: 20),
+            Material(
+              color: LineupTheme.of(context).primarySurface,
+              shape: RoundedRectangleBorder(
+                side: BorderSide(color: LineupTheme.of(context).subtleBorder),
+                borderRadius: BorderRadius.circular(
+                  LineupTheme.of(context).panelRadius,
+                ),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(22, 18, 22, 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    LayoutBuilder(
+                      builder: (context, constraints) => Wrap(
+                        spacing: 28,
+                        runSpacing: 18,
+                        children: [
+                          _fact(
+                            context,
+                            'Playback',
+                            '${snapshot.playback.state.name} · $method',
+                            (constraints.maxWidth - 84) / 4,
+                          ),
+                          _fact(
+                            context,
+                            'Video',
+                            telemetry?.width != null &&
+                                    telemetry?.height != null
+                                ? '${telemetry!.width} × ${telemetry.height} · ${telemetry.videoCodec ?? 'Codec unavailable'}'
+                                : 'Unavailable',
+                            (constraints.maxWidth - 84) / 4,
+                          ),
+                          _fact(
+                            context,
+                            'Media signal',
+                            telemetry?.gamma == null
+                                ? 'Unavailable'
+                                : '${telemetry!.gamma} · Reported media information',
+                            (constraints.maxWidth - 84) / 4,
+                          ),
+                          _fact(
+                            context,
+                            'Plex',
+                            snapshot.plexServerSelected
+                                ? (snapshot.plexConnectionVerified
+                                      ? 'Connection verified'
+                                      : 'Connection unverified')
+                                : 'No server selected',
+                            (constraints.maxWidth - 84) / 4,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Divider(),
+                    ExpansionTile(
+                      key: const PageStorageKey('diagnostic-technical-details'),
+                      tilePadding: EdgeInsets.zero,
+                      title: const Text('Technical details'),
+                      childrenPadding: const EdgeInsets.only(bottom: 12),
+                      expandedCrossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Wrap(
+                          spacing: 32,
+                          runSpacing: 12,
+                          children: [
+                            _technicalFact(
+                              'Lineup',
+                              '${snapshot.appVersion} · build ${snapshot.appBuild}',
+                            ),
+                            _technicalFact('Platform', snapshot.platform),
+                            _technicalFact(
+                              'Hardware decoder',
+                              telemetry?.hardwareDecoder ?? 'Unavailable',
+                            ),
+                            _technicalFact(
+                              'Video output',
+                              telemetry?.videoOutput ?? 'Unavailable',
+                            ),
+                            _technicalFact(
+                              'Transfer / pixel format',
+                              '${telemetry?.gamma ?? 'Unavailable'} · ${telemetry?.pixelFormat ?? 'Unavailable'}',
+                            ),
+                            _technicalFact(
+                              'Primaries / color matrix',
+                              '${telemetry?.primaries ?? 'Unavailable'} · ${telemetry?.colorMatrix ?? 'Unavailable'}',
+                            ),
+                            _technicalFact(
+                              'Reported signal peak',
+                              telemetry?.signalPeak?.toString() ??
+                                  'Unavailable',
+                            ),
+                            _technicalFact(
+                              'Per-stream handling',
+                              'Unavailable',
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        const Text(
+                          'Media signal values do not verify display HDR output.',
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
             LayoutBuilder(
               builder: (context, constraints) {
-                final columns =
-                    constraints.maxWidth < 850 ||
-                        MediaQuery.textScalerOf(context).scale(1) >= 1.6
-                    ? 2
-                    : 4;
-                final width =
-                    (constraints.maxWidth - 24 * (columns - 1)) / columns;
-                return Wrap(
-                  spacing: 24,
-                  runSpacing: 24,
+                final title = Wrap(
+                  spacing: 16,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    _fact(
-                      context,
-                      'Playback',
-                      '${snapshot.playback.state.name}\n$method',
-                      width,
+                    Text(
+                      'Recent events',
+                      style: Theme.of(context).textTheme.titleLarge,
                     ),
-                    _fact(
-                      context,
-                      'Video',
-                      telemetry?.width != null && telemetry?.height != null
-                          ? '${telemetry!.width} × ${telemetry.height}\n${telemetry.videoCodec ?? 'Codec unavailable'}'
-                          : 'Unavailable',
-                      width,
+                    Text(
+                      '${_visibleEvents.length} events · newest first',
+                      style: TextStyle(
+                        color: LineupTheme.of(context).secondaryText,
+                      ),
                     ),
-                    _fact(
-                      context,
-                      'Media signal',
-                      telemetry?.gamma == null
-                          ? 'Unavailable'
-                          : '${telemetry!.gamma}\nReported media information',
-                      width,
+                  ],
+                );
+                final actions = Wrap(
+                  spacing: 12,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Text(
+                      'Recording ${snapshot.recordingEnabled ? 'On' : 'Off'}',
                     ),
-                    _fact(
-                      context,
-                      'Plex',
-                      snapshot.plexServerSelected
-                          ? 'Server selected\n${snapshot.plexConnectionVerified ? 'Connection verified' : 'Connection unverified'}'
-                          : 'No server selected',
-                      width,
+                    TextButton(
+                      onPressed: widget.onRecordingSettings,
+                      child: const Text('Recording settings'),
                     ),
+                    SizedBox(
+                      width: 170,
+                      child: Visibility(
+                        visible: unseen > 0,
+                        maintainSize: true,
+                        maintainAnimation: true,
+                        maintainState: true,
+                        child: TextButton(
+                          onPressed: () => setState(
+                            () => _visibleEvents = currentEvents.reversed
+                                .toList(),
+                          ),
+                          child: Text(
+                            '$unseen new ${unseen == 1 ? 'event' : 'events'}',
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+                if (constraints.maxWidth < 1000) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      title,
+                      Align(alignment: Alignment.centerRight, child: actions),
+                    ],
+                  );
+                }
+                return Row(
+                  children: [
+                    Expanded(child: title),
+                    actions,
                   ],
                 );
               },
             ),
-            const SizedBox(height: 24),
-            ExpansionTile(
-              key: const PageStorageKey('diagnostic-technical-details'),
-              title: const Text('Technical details'),
-              childrenPadding: const EdgeInsets.all(16),
-              expandedCrossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'App ${snapshot.appVersion} · Build ${snapshot.appBuild} · ${snapshot.platform}',
-                ),
-                Text('Decoder: ${telemetry?.hardwareDecoder ?? 'Unavailable'}'),
-                Text(
-                  'Video output: ${telemetry?.videoOutput ?? 'Unavailable'}',
-                ),
-                Text(
-                  'Pixel format: ${telemetry?.pixelFormat ?? 'Unavailable'}',
-                ),
-                Text('Primaries: ${telemetry?.primaries ?? 'Unavailable'}'),
-                Text(
-                  'Color matrix: ${telemetry?.colorMatrix ?? 'Unavailable'}',
-                ),
-                Text(
-                  'Reported signal peak: ${telemetry?.signalPeak ?? 'Unavailable'}',
-                ),
-                const Text(
-                  'Media signal values do not verify display HDR output.\nPer-stream handling: Unavailable',
-                ),
-              ],
-            ),
-            const SizedBox(height: 32),
-            Wrap(
-              spacing: 16,
-              runSpacing: 12,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                Text(
-                  'Recent events',
-                  style: Theme.of(context).textTheme.headlineSmall,
-                ),
-                Text('Recording ${snapshot.recordingEnabled ? 'On' : 'Off'}'),
-                TextButton(
-                  onPressed: widget.onRecordingSettings,
-                  child: const Text('Recording settings'),
-                ),
-                SizedBox(
-                  width: 170 * MediaQuery.textScalerOf(context).scale(1),
-                  child: Visibility(
-                    visible: unseen > 0,
-                    maintainSize: true,
-                    maintainAnimation: true,
-                    maintainState: true,
-                    child: TextButton(
-                      onPressed: () => setState(
-                        () => _visibleEvents = currentEvents.reversed.toList(),
-                      ),
-                      child: Text(
-                        '$unseen new ${unseen == 1 ? 'event' : 'events'}',
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const Text(
-              'Enable recording before reproducing a problem. Events are session-only; the latest 250 are retained.',
-            ),
-            const SizedBox(height: 16),
             if (!snapshot.recordingEnabled)
-              const Text(
-                'Recording is off. Enable it in Settings > Support to record events.',
+              SizedBox(
+                height: 180,
+                child: _emptyEvents(
+                  'Diagnostic recording is off',
+                  'Enable recording in Settings > Support, then reproduce the issue.',
+                ),
               )
             else if (_visibleEvents.isEmpty)
-              const Text('No events recorded in this session.')
-            else
-              for (final event in _visibleEvents)
-                ExpansionTile(
-                  key: ObjectKey(event),
-                  title: Text('${event.area}: ${event.message}'),
-                  subtitle: Text(
-                    MaterialLocalizations.of(context).formatTimeOfDay(
-                      TimeOfDay.fromDateTime(event.time.toLocal()),
-                    ),
-                  ),
-                  childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                  expandedCrossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (event.context.isEmpty)
-                      const Text('No additional details'),
-                    for (final fact in event.context.entries)
-                      Text('${fact.key}: ${fact.value}'),
-                  ],
+              SizedBox(
+                height: 180,
+                child: _emptyEvents(
+                  'No events recorded yet',
+                  'Reproduce the issue to collect support events.',
                 ),
+              )
+            else
+              for (final event in _visibleEvents) _eventTile(event),
+            Text(
+              'This session only · Up to 250 recent events retained',
+              style: Theme.of(context).textTheme.bodySmall
+                  ?.copyWith(color: LineupTheme.of(context).secondaryText),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Reports exclude credentials, URLs and private paths. Review before sharing.',
+              style: Theme.of(context).textTheme.bodySmall
+                  ?.copyWith(color: LineupTheme.of(context).secondaryText),
+            ),
           ],
         ),
       ),
     );
   }
+
+  Widget _technicalFact(String label, String value) => SizedBox(
+    width: 210,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: Theme.of(context).textTheme.bodySmall
+              ?.copyWith(color: LineupTheme.of(context).secondaryText),
+        ),
+        const SizedBox(height: 3),
+        Text(value),
+      ],
+    ),
+  );
+
+  Widget _emptyEvents(String title, String message) => Center(
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(title, style: Theme.of(context).textTheme.titleLarge),
+        const SizedBox(height: 8),
+        Text(message),
+      ],
+    ),
+  );
+
+  Widget _eventTile(DiagnosticEntry event) => Semantics(
+    label: '${event.area}: ${event.message}',
+    child: ExpansionTile(
+      key: ObjectKey(event),
+      tilePadding: const EdgeInsets.symmetric(horizontal: 12),
+      title: ExcludeSemantics(
+        child: Row(
+          children: [
+            SizedBox(
+              width: 105,
+              child: Text(
+                MaterialLocalizations.of(
+                  context,
+                ).formatTimeOfDay(TimeOfDay.fromDateTime(event.time.toLocal())),
+              ),
+            ),
+            SizedBox(width: 120, child: Text(event.area)),
+            Expanded(child: Text(event.message)),
+          ],
+        ),
+      ),
+      childrenPadding: const EdgeInsets.fromLTRB(249, 0, 16, 16),
+      expandedCrossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (event.context.isEmpty) const Text('No additional details'),
+        for (final fact in event.context.entries)
+          Text('${fact.key}: ${fact.value}'),
+      ],
+    ),
+  );
 
   Widget _fact(
     BuildContext context,

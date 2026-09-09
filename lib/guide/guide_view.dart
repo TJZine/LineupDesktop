@@ -64,7 +64,7 @@ class GuideLayoutPolicy {
       compact: compact,
       padding: padding,
       channelRailWidth:
-          (compact ? 176 : (width >= 1800 ? 260 : 216)) *
+          (compact ? 176 : (width >= 1800 ? 260 : 208)) *
           scale *
           textScale.clamp(1, 1.5),
       showcaseHeight: showcaseHeight,
@@ -356,7 +356,6 @@ class _GuideViewState extends State<GuideView>
     onClose: widget.onClose,
     onOpenMenu: widget.onOpenMenu,
     menuFocus: _menuFocus,
-    compact: policy.compact,
   );
 
   Widget _showcase(GuideLayoutPolicy policy) => SizedBox(
@@ -597,78 +596,72 @@ class _Toolbar extends StatelessWidget {
     required this.onClose,
     required this.onOpenMenu,
     required this.menuFocus,
-    required this.compact,
   });
   final GuideController controller;
   final VoidCallback onClose;
   final LineupMenuCallback? onOpenMenu;
   final FocusNode menuFocus;
-  final bool compact;
 
   @override
   Widget build(BuildContext context) {
+    final now = controller.now.toLocal();
+    final localizations = MaterialLocalizations.of(context);
     final tunedChannel = controller.lineup.channels
         .where((channel) => channel.id == controller.lineup.currentChannelId)
         .firstOrNull;
     final tunedProgram = tunedChannel == null
         ? null
         : controller.currentProgram(tunedChannel.id);
+    final showPlaying =
+        tunedChannel != null && controller.lineup.settings.nowWatchingBanner;
+    final showDate = MediaQuery.sizeOf(context).width >= 1100;
     return SizedBox(
       height: 56 * LineupLayout.scaleFor(MediaQuery.sizeOf(context)),
       child: Row(
         children: [
-          Image.asset('assets/branding/lineup-logo-mark.png', height: 26),
-          const SizedBox(width: 9),
-          Text(
-            'LINEUP',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-              color: LineupTheme.of(context).progressFill,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 1.3,
-            ),
-          ),
-          if (tunedChannel != null &&
-              controller.lineup.settings.nowWatchingBanner) ...[
-            const SizedBox(width: 18),
-            Text(
-              'NOW PLAYING',
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: LineupTheme.of(context).mutedText,
-                letterSpacing: 1.1,
-                fontWeight: FontWeight.w700,
+          if (onOpenMenu != null)
+            Builder(
+              builder: (invokerContext) => Tooltip(
+                message: 'Open Lineup menu',
+                child: TextButton.icon(
+                  key: const Key('guide-app-menu'),
+                  focusNode: menuFocus,
+                  onPressed: () => onOpenMenu!(invokerContext, menuFocus),
+                  icon: const Icon(Icons.menu, size: 19),
+                  label: const Text('LINEUP'),
+                ),
               ),
+            )
+          else
+            Text(
+              'LINEUP',
+              style: Theme.of(context).textTheme.titleMedium
+                  ?.copyWith(fontWeight: FontWeight.w800, letterSpacing: 1.8),
             ),
-            const SizedBox(width: 8),
-            Flexible(
+          const SizedBox(width: 20),
+          Text('Guide', style: Theme.of(context).textTheme.bodyMedium),
+          if (showPlaying) ...[
+            const SizedBox(width: 20),
+            Expanded(
               child: Text(
-                '${tunedChannel.number} • ${tunedChannel.name}${tunedProgram == null ? '' : ' — ${tunedProgram.scheduled.item.title}'}',
+                '${tunedChannel.number} · ${tunedChannel.name}${tunedProgram == null ? '' : ' — ${tunedProgram.scheduled.item.title}'}',
                 key: const Key('guide-now-playing-context'),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
             ),
-          ],
-          const Spacer(),
-          if (!compact && MediaQuery.sizeOf(context).width >= 1500)
-            Padding(
-              padding: const EdgeInsets.only(right: 16),
-              child: Text(
-                'OK Select  ·  Arrows Navigate  ·  BACK Close',
-                style: Theme.of(context).textTheme.labelSmall
-                    ?.copyWith(color: LineupTheme.of(context).mutedText),
-              ),
+          ] else
+            const Spacer(),
+          if (showDate)
+            Text(
+              '${localizations.formatMediumDate(now)}  ·  ${localizations.formatTimeOfDay(TimeOfDay.fromDateTime(now))}',
+              key: const Key('guide-current-date-time'),
+              maxLines: 1,
+              style: Theme.of(context).textTheme.bodySmall
+                  ?.copyWith(color: LineupTheme.of(context).mutedText),
             ),
-          if (onOpenMenu != null)
-            Builder(
-              builder: (invokerContext) => IconButton(
-                key: const Key('guide-app-menu'),
-                focusNode: menuFocus,
-                tooltip: 'Open Lineup menu',
-                onPressed: () => onOpenMenu!(invokerContext, menuFocus),
-                icon: const Icon(Icons.menu),
-              ),
-            ),
+          const SizedBox(width: 8),
           IconButton(
             tooltip: 'Close Guide',
             onPressed: onClose,
@@ -1109,6 +1102,8 @@ class _GuideRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final focusedChannel = channel.id == controller.focusedChannelId;
+    final focusChannelRail =
+        focusedChannel && controller.focusedProgram == null;
     final selectedChannel = channel.id == controller.selectedChannelId;
     final tunedChannel = controller.lineup.currentChannelId == channel.id;
     final data = controller.row(channel.id);
@@ -1118,7 +1113,7 @@ class _GuideRow extends StatelessWidget {
     }
 
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
+      padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
         children: [
           Semantics(
@@ -1144,16 +1139,18 @@ class _GuideRow extends StatelessWidget {
                       : selectedChannel
                       ? LineupTheme.of(context).selectedSurface
                       : LineupTheme.of(context).primarySurface,
-                  borderRadius: BorderRadius.horizontal(
-                    left: Radius.circular(LineupTheme.of(context).panelRadius),
-                  ),
-                  border: Border.all(
-                    color: focusedChannel
-                        ? LineupTheme.of(context).focusBorder
-                        : Colors.transparent,
-                    width: focusedChannel
-                        ? LineupTheme.of(context).focusBorderWidth
-                        : 1,
+                  border: Border(
+                    left: BorderSide(
+                      color: focusChannelRail
+                          ? LineupTheme.of(context).focusBorder
+                          : Colors.transparent,
+                      width: focusChannelRail
+                          ? LineupTheme.of(context).focusBorderWidth
+                          : 1,
+                    ),
+                    bottom: BorderSide(
+                      color: LineupTheme.of(context).subtleBorder,
+                    ),
                   ),
                 ),
                 child: Row(
@@ -1242,7 +1239,7 @@ class _GuideRow extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(width: 4),
+          const SizedBox(width: 1),
           Expanded(
             child: _Programs(
               channel: channel,
@@ -1521,7 +1518,7 @@ class _ProgramCellState extends State<_ProgramCell> {
     top: 0,
     bottom: 0,
     child: Padding(
-      padding: const EdgeInsets.only(right: 3),
+      padding: const EdgeInsets.only(right: 1),
       child: Semantics(
         button: true,
         selected: widget.selected,
@@ -1547,7 +1544,7 @@ class _ProgramCellState extends State<_ProgramCell> {
               padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
               decoration: BoxDecoration(
                 color: widget.focused
-                    ? LineupTheme.of(context).selectedSurface
+                    ? LineupTheme.of(context).elevatedSurface
                     : widget.past
                     ? LineupTheme.of(context).primarySurface
                           .withValues(alpha: 0.56)
@@ -1555,21 +1552,24 @@ class _ProgramCellState extends State<_ProgramCell> {
                     ? LineupTheme.of(context).selectedSurface
                     : _hovered
                     ? LineupTheme.of(context).elevatedSurface
-                    : LineupTheme.of(context).primarySurface,
-                borderRadius: BorderRadius.circular(
-                  LineupTheme.of(context).panelRadius,
-                ),
-                border: Border.all(
-                  color: widget.focused
-                      ? LineupTheme.of(context).focusBorder
-                      : widget.selected
-                      ? LineupTheme.of(context).defaultBorder
-                      : LineupTheme.of(context).subtleBorder,
-                  width: widget.focused
-                      ? LineupTheme.of(context).focusBorderWidth
-                      : widget.selected
-                      ? 2
-                      : 1,
+                    : LineupTheme.of(context).primarySurface
+                          .withValues(alpha: 0.55),
+                border: Border(
+                  left: BorderSide(
+                    color: widget.focused
+                        ? LineupTheme.of(context).focusBorder
+                        : widget.selected
+                        ? LineupTheme.of(context).defaultBorder
+                        : Colors.transparent,
+                    width: widget.focused
+                        ? LineupTheme.of(context).focusBorderWidth
+                        : widget.selected
+                        ? 2
+                        : 1,
+                  ),
+                  bottom: BorderSide(
+                    color: LineupTheme.of(context).subtleBorder,
+                  ),
                 ),
               ),
               child: Stack(
@@ -2018,6 +2018,18 @@ class _ProgramDetails extends StatelessWidget {
     final episode = _episodeCode(item);
     final badges = _mediaBadges(item);
     final hasClearLogo = clearLogo != null;
+    final scheduledDuration = program.scheduled.end.difference(
+      program.scheduled.start,
+    );
+    final elapsedValue = now.difference(program.scheduled.start);
+    final elapsed = elapsedValue.isNegative
+        ? Duration.zero
+        : elapsedValue > scheduledDuration
+        ? scheduledDuration
+        : elapsedValue;
+    final progress = scheduledDuration.inMilliseconds <= 0
+        ? 0.0
+        : elapsed.inMilliseconds / scheduledDuration.inMilliseconds;
     final logoFallback = Text(
       item.showTitle?.toUpperCase() ?? item.title,
       key: const Key('guide-clear-logo-fallback'),
@@ -2080,27 +2092,32 @@ class _ProgramDetails extends StatelessWidget {
                               : Theme.of(context).textTheme.headlineSmall)
                           ?.copyWith(fontWeight: FontWeight.w800),
                 ),
+              if (episode != null)
+                Text(
+                  episode,
+                  style: Theme.of(context).textTheme.bodyMedium
+                      ?.copyWith(fontWeight: FontWeight.w600),
+                ),
               Padding(
-                padding: const EdgeInsets.only(top: 5),
-                child: Wrap(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  [
+                    '${_time(context, program.scheduled.start)}–${_time(context, program.scheduled.end)}',
+                    _duration(item.duration),
+                    if (item.year != null) '${item.year}',
+                    program.isCurrentAt(now)
+                        ? 'Airing now'
+                        : program.scheduled.end.isBefore(now)
+                        ? 'Ended'
+                        : 'Upcoming',
+                  ].join('  ·  '),
                   key: const Key('guide-program-meta'),
-                  spacing: 6,
-                  runSpacing: 4,
-                  children: [
-                    _InfoPill(
-                      '${_time(context, program.scheduled.start)}–${_time(context, program.scheduled.end)}',
-                    ),
-                    _InfoPill(_duration(item.duration)),
-                    if (episode != null) _InfoPill(episode),
-                    if (item.year != null) _InfoPill('${item.year}'),
-                    _InfoPill(
-                      program.isCurrentAt(now)
-                          ? 'Airing now'
-                          : program.scheduled.end.isBefore(now)
-                          ? 'Ended'
-                          : 'Upcoming',
-                    ),
-                  ],
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: LineupTheme.of(context).mutedText,
+                    fontFeatures: const [ui.FontFeature.tabularFigures()],
+                  ),
                 ),
               ),
               if (showSecondaryMetadata && item.genres.isNotEmpty)
@@ -2116,11 +2133,13 @@ class _ProgramDetails extends StatelessWidget {
               if (showSecondaryMetadata && badges.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.only(top: 5),
-                  child: Wrap(
+                  child: Text(
+                    badges.join('  ·  '),
                     key: const Key('guide-program-badges'),
-                    spacing: 6,
-                    runSpacing: 4,
-                    children: [for (final badge in badges) _Badge(badge)],
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.labelSmall
+                        ?.copyWith(color: LineupTheme.of(context).mutedText),
                   ),
                 ),
               if (showSummary && item.summary != null)
@@ -2135,6 +2154,24 @@ class _ProgramDetails extends StatelessWidget {
                     ),
                   ),
                 ),
+              if (program.isCurrentAt(now)) ...[
+                const SizedBox(height: 7),
+                Semantics(
+                  label:
+                      '${_duration(elapsed)} elapsed, ${_duration(scheduledDuration - elapsed)} remaining',
+                  child: LinearProgressIndicator(
+                    key: const Key('guide-program-progress'),
+                    value: progress,
+                    minHeight: 3,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '${_duration(elapsed)} elapsed  ·  ${_duration(scheduledDuration - elapsed)} remaining',
+                  style: Theme.of(context).textTheme.labelSmall
+                      ?.copyWith(color: LineupTheme.of(context).mutedText),
+                ),
+              ],
               if (playbackMessage != null && showSecondaryMetadata)
                 Text(
                   playbackMessage!,
@@ -2148,49 +2185,6 @@ class _ProgramDetails extends StatelessWidget {
       ],
     );
   }
-}
-
-class _Badge extends StatelessWidget {
-  const _Badge(this.label);
-  final String label;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-    decoration: BoxDecoration(
-      color: Colors.white.withValues(alpha: 0.12),
-      borderRadius: BorderRadius.circular(6),
-      border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
-    ),
-    child: Text(
-      label,
-      style: Theme.of(context).textTheme.labelSmall
-          ?.copyWith(fontWeight: FontWeight.w700),
-    ),
-  );
-}
-
-class _InfoPill extends StatelessWidget {
-  const _InfoPill(this.label);
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-    decoration: BoxDecoration(
-      color: LineupTheme.of(context).deepBackground.withValues(alpha: 0.42),
-      borderRadius: BorderRadius.circular(999),
-      border: Border.all(color: LineupTheme.of(context).defaultBorder),
-    ),
-    child: Text(
-      label,
-      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-        fontWeight: FontWeight.w700,
-        fontFeatures: const [ui.FontFeature.tabularFigures()],
-      ),
-    ),
-  );
 }
 
 String? _episodeCode(ChannelItem item) {

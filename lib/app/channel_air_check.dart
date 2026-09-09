@@ -379,7 +379,7 @@ class ChannelAirCheckState extends State<ChannelAirCheck> {
       child: Container(
         decoration: BoxDecoration(
           color: LineupTheme.of(context).primarySurface,
-          border: Border.all(color: LineupTheme.of(context).defaultBorder),
+          border: Border.all(color: LineupTheme.of(context).subtleBorder),
           borderRadius: BorderRadius.circular(
             LineupTheme.of(context).panelRadius,
           ),
@@ -388,7 +388,6 @@ class ChannelAirCheckState extends State<ChannelAirCheck> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Container(height: 4, color: LineupTheme.of(context).liveAccent),
             Padding(
               padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
               child: Column(
@@ -412,9 +411,9 @@ class ChannelAirCheckState extends State<ChannelAirCheck> {
                   else ...[
                     _facts(preview),
                     const SizedBox(height: 8),
-                    _verticalSchedule(preview, now),
-                    const SizedBox(height: 8),
                     _selection(preview, now),
+                    const SizedBox(height: 8),
+                    _verticalSchedule(preview, now),
                     if (_futureHours < 24)
                       Align(
                         alignment: Alignment.centerLeft,
@@ -487,6 +486,14 @@ class ChannelAirCheckState extends State<ChannelAirCheck> {
 
   Widget _monitorHeader(DateTime now) {
     final roles = LineupTheme.of(context);
+    final draft =
+        widget.originalChannel == null ||
+        _recipeKey(widget.originalChannel!) != _recipeKey(widget.channel);
+    final status = _stale
+        ? 'Updating'
+        : draft
+        ? 'Draft schedule'
+        : 'Saved channel';
     return Wrap(
       alignment: WrapAlignment.spaceBetween,
       crossAxisAlignment: WrapCrossAlignment.center,
@@ -500,41 +507,21 @@ class ChannelAirCheckState extends State<ChannelAirCheck> {
           children: [
             Semantics(
               header: true,
-              label: 'ON AIR, Air Check',
-              child: ExcludeSemantics(
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.circle, size: 9, color: roles.liveAccent),
-                    const SizedBox(width: 7),
-                    const Text(
-                      'ON AIR',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 1,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Air Check',
-                      style: TextStyle(
-                        color: roles.secondaryText,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
-                ),
+              label: 'Schedule preview',
+              child: Text(
+                'Schedule preview',
+                style: Theme.of(context).textTheme.titleMedium
+                    ?.copyWith(fontWeight: FontWeight.w700),
               ),
             ),
-            if (_stale)
-              Text(
-                'Updating — preview is stale',
-                style: TextStyle(
-                  color: roles.secondaryText,
-                  fontSize: 11 * _uiScale,
-                  fontWeight: FontWeight.w700,
-                ),
+            Text(
+              status,
+              style: TextStyle(
+                color: roles.secondaryText,
+                fontSize: 11 * _uiScale,
+                fontWeight: FontWeight.w700,
               ),
+            ),
           ],
         ),
         Text(
@@ -605,6 +592,7 @@ class ChannelAirCheckState extends State<ChannelAirCheck> {
                 style: ButtonStyle(
                   alignment: Alignment.centerLeft,
                   padding: const WidgetStatePropertyAll(EdgeInsets.zero),
+                  foregroundColor: WidgetStatePropertyAll(roles.primaryText),
                   backgroundColor: WidgetStatePropertyAll(
                     selected ? roles.selectedSurface : Colors.transparent,
                   ),
@@ -612,13 +600,11 @@ class ChannelAirCheckState extends State<ChannelAirCheck> {
                     (states) => BorderSide(
                       color: states.contains(WidgetState.focused)
                           ? roles.focusBorder
-                          : selected
-                          ? roles.progressFill
                           : Colors.transparent,
                       width: states.contains(WidgetState.focused)
-                          ? roles.focusBorderWidth
-                          : selected
-                          ? 2
+                          ? (roles.focusBorderWidth > 3
+                                ? roles.focusBorderWidth
+                                : 2)
                           : 1,
                     ),
                   ),
@@ -650,6 +636,7 @@ class ChannelAirCheckState extends State<ChannelAirCheck> {
                           ),
                         ),
                       ),
+                      const SizedBox(width: 12),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -662,6 +649,7 @@ class ChannelAirCheckState extends State<ChannelAirCheck> {
                             ),
                             Text(
                               '${_dateContext(program.scheduled.start)} · ${_time(context, program.scheduled.start)}–${_time(context, program.scheduled.end)}',
+                              style: TextStyle(color: roles.secondaryText),
                             ),
                           ],
                         ),
@@ -702,13 +690,38 @@ class ChannelAirCheckState extends State<ChannelAirCheck> {
     final current = preview.programs
         .where((program) => program.isCurrentAt(now))
         .firstOrNull;
-    final summary = selected.scheduled.item.summary?.trim();
+    final item = selected.scheduled.item;
+    final summary = item.summary?.trim();
+    final showTitle = item.showTitle?.trim();
+    final episode = [
+      if (item.seasonNumber != null && item.episodeNumber != null)
+        'S${item.seasonNumber} E${item.episodeNumber}',
+      if (showTitle?.isNotEmpty == true && item.title != showTitle) item.title,
+    ].join(' · ');
     final details = Column(
       key: const Key('air-check-selection'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(
-          '${selected.scheduled.item.title} • ${_time(context, selected.scheduled.start)}–${_time(context, selected.scheduled.end)} • ${_temporal(selected, now)} • ${widget.inclusionReason}',
+          '${_temporal(selected, now).toUpperCase()} · ${_dateContext(selected.scheduled.start)} · ${_time(context, selected.scheduled.start)}–${_time(context, selected.scheduled.end)}',
+          style: TextStyle(
+            color: LineupTheme.of(context).secondaryText,
+            fontSize: 11 * _uiScale,
+            fontWeight: FontWeight.w800,
+            letterSpacing: .7,
+          ),
+        ),
+        const SizedBox(height: 3),
+        Text(
+          showTitle?.isNotEmpty == true ? showTitle! : item.title,
+          style: Theme.of(context).textTheme.titleMedium
+              ?.copyWith(fontWeight: FontWeight.w800),
+        ),
+        if (episode.isNotEmpty) Text(episode),
+        const SizedBox(height: 3),
+        Text(
+          '${_duration(selected.scheduled.end.difference(selected.scheduled.start))} · ${widget.inclusionReason}',
+          style: TextStyle(color: LineupTheme.of(context).secondaryText),
         ),
         if (summary?.isNotEmpty == true) ...[
           const SizedBox(height: 4),
@@ -739,8 +752,8 @@ class ChannelAirCheckState extends State<ChannelAirCheck> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SizedBox(
-          width: widget.compact ? 112 : 144,
-          height: widget.compact ? 72 : 92,
+          width: 96 * _uiScale,
+          height: 72 * _uiScale,
           child: ClipRRect(
             borderRadius: BorderRadius.circular(
               LineupTheme.of(context).panelRadius,

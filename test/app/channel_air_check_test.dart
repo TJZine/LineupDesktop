@@ -36,11 +36,17 @@ void main() {
         find.byWidgetPredicate(
           (widget) =>
               widget is Semantics &&
-              widget.properties.label == 'ON AIR, Air Check',
+              widget.properties.label == 'Schedule preview',
         ),
       );
       expect(heading.properties.header, isTrue);
-      expect(find.textContaining('One •'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('air-check-selection')),
+          matching: find.text('One'),
+        ),
+        findsOneWidget,
+      );
       now = DateTime.utc(2026, 1, 1, 0, 29, 59, 500);
       await tester.pump(const Duration(seconds: 30));
 
@@ -49,7 +55,13 @@ void main() {
 
       expect(controller.requests, 1);
       expect(find.text('Two'), findsWidgets);
-      expect(find.textContaining('Two •'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('air-check-selection')),
+          matching: find.text('Two'),
+        ),
+        findsOneWidget,
+      );
       expect(
         find.bySemanticsLabel(RegExp(r'Channel 4 .*Two.*current')),
         findsOneWidget,
@@ -305,7 +317,7 @@ void main() {
     expect(
       find.descendant(
         of: find.byKey(const Key('air-check-selection')),
-        matching: find.textContaining('B •'),
+        matching: find.text('B'),
       ),
       findsOneWidget,
     );
@@ -860,7 +872,13 @@ void main() {
       await tester.pump(const Duration(seconds: 30));
 
       expect(controller.requests, 1);
-      expect(find.textContaining('Three •'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('air-check-selection')),
+          matching: find.text('Three'),
+        ),
+        findsOneWidget,
+      );
       expect(
         find.byWidgetPredicate(
           (widget) =>

@@ -1647,6 +1647,8 @@ class _MiniGuide extends StatelessWidget {
     final rowHeight = horizontal
         ? 56.0 * scale * textScale.clamp(1, 1.5)
         : null;
+    final channelColumnWidth = 250.0 * scale;
+    final columnGap = 24.0 * scale;
     final scaledTheme = Theme.of(context).copyWith(
       textTheme: Theme.of(context).textTheme.apply(fontSizeFactor: scale),
     );
@@ -1732,14 +1734,26 @@ class _MiniGuide extends StatelessWidget {
                             ],
                           ),
                           if (horizontal)
-                            const Padding(
-                              padding: EdgeInsets.symmetric(horizontal: 12),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                              ),
                               child: Row(
                                 children: [
-                                  SizedBox(width: 46),
-                                  Expanded(flex: 5, child: Text('Channel')),
-                                  Expanded(flex: 7, child: Text('On now')),
-                                  Expanded(flex: 6, child: Text('Up next')),
+                                  SizedBox(
+                                    width: channelColumnWidth,
+                                    child: const Text('Channel'),
+                                  ),
+                                  SizedBox(width: columnGap),
+                                  const Expanded(
+                                    flex: 115,
+                                    child: Text('On now'),
+                                  ),
+                                  SizedBox(width: columnGap),
+                                  const Expanded(
+                                    flex: 100,
+                                    child: Text('Up next'),
+                                  ),
                                 ],
                               ),
                             ),
@@ -1748,6 +1762,8 @@ class _MiniGuide extends StatelessWidget {
                               controller: controller,
                               channel: channel,
                               rowHeight: rowHeight,
+                              channelColumnWidth: channelColumnWidth,
+                              columnGap: columnGap,
                               active: active,
                             ),
                           SizedBox(height: 8 * scale),
@@ -1790,12 +1806,16 @@ class _MiniGuideRow extends StatelessWidget {
     required this.controller,
     required this.channel,
     required this.rowHeight,
+    required this.channelColumnWidth,
+    required this.columnGap,
     required this.active,
   });
 
   final PlayerCoordinator controller;
   final Channel channel;
   final double? rowHeight;
+  final double channelColumnWidth;
+  final double columnGap;
   final bool active;
 
   @override
@@ -1867,11 +1887,9 @@ class _MiniGuideRow extends StatelessWidget {
             style: Theme.of(context).textTheme.bodySmall
                 ?.copyWith(color: foreground),
           ),
-      ],
-    );
-    final progressBar = current == null
-        ? null
-        : LinearProgressIndicator(
+        if (current != null) ...[
+          const SizedBox(height: 3),
+          LinearProgressIndicator(
             value: progress.clamp(0, 1),
             minHeight: 2,
             color: focused ? foreground : null,
@@ -1879,7 +1897,10 @@ class _MiniGuideRow extends StatelessWidget {
                 ? foreground.withValues(alpha: 0.25)
                 : null,
             semanticsLabel: 'Program progress',
-          );
+          ),
+        ],
+      ],
+    );
     final nextTitle = next == null
         ? null
         : Column(
@@ -1918,7 +1939,7 @@ class _MiniGuideRow extends StatelessWidget {
           'Channel ${channel.number}, ${channel.name}. Now ${current?.scheduled.item.title ?? 'schedule loading'}.${next == null ? '' : ' Next ${next.scheduled.item.title}.'}${tuned ? ' Now watching.' : ''}',
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: focused ? roles.focusedSurface : Colors.transparent,
+          color: focused ? roles.selectedSurface : Colors.transparent,
           border: Border(
             left: BorderSide(
               color: focused ? roles.focusBorder : Colors.transparent,
@@ -1952,7 +1973,6 @@ class _MiniGuideRow extends StatelessWidget {
                             children: [
                               channelIdentity,
                               currentCell,
-                              ?progressBar,
                               ?nextTitle,
                             ],
                           ),
@@ -1966,29 +1986,22 @@ class _MiniGuideRow extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                       child: Row(
                         children: [
-                          number,
                           SizedBox(
-                            width: (MediaQuery.sizeOf(context).width * 0.16)
-                                .clamp(120, 260),
-                            child: channelIdentity,
+                            width: channelColumnWidth,
+                            child: Row(
+                              children: [
+                                number,
+                                Expanded(child: channelIdentity),
+                              ],
+                            ),
                           ),
-                          const SizedBox(width: 16),
-                          Expanded(child: currentCell),
-                          const SizedBox(width: 16),
-                          if (progressBar != null)
-                            SizedBox(
-                              width: (MediaQuery.sizeOf(context).width * 0.12)
-                                  .clamp(96, 220),
-                              child: progressBar,
-                            ),
-                          if (nextTitle != null) ...[
-                            const SizedBox(width: 16),
-                            SizedBox(
-                              width: (MediaQuery.sizeOf(context).width * 0.20)
-                                  .clamp(140, 360),
-                              child: nextTitle,
-                            ),
-                          ],
+                          SizedBox(width: columnGap),
+                          Expanded(flex: 115, child: currentCell),
+                          SizedBox(width: columnGap),
+                          Expanded(
+                            flex: 100,
+                            child: nextTitle ?? const SizedBox.shrink(),
+                          ),
                         ],
                       ),
                     ),

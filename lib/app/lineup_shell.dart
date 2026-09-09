@@ -379,10 +379,21 @@ class _LineupShellState extends State<LineupShell> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Text(
-                          'Lineup',
-                          style: Theme.of(context).textTheme.titleLarge,
+                        padding: const EdgeInsets.fromLTRB(12, 4, 4, 8),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                'Lineup',
+                                style: Theme.of(context).textTheme.titleLarge,
+                              ),
+                            ),
+                            IconButton(
+                              tooltip: 'Close Lineup menu',
+                              onPressed: _closeAppMenu,
+                              icon: const Icon(Icons.close),
+                            ),
+                          ],
                         ),
                       ),
                       _menuDestination(
@@ -410,40 +421,60 @@ class _LineupShellState extends State<LineupShell> {
                         icon: Icons.settings_outlined,
                         label: 'Settings',
                       ),
+                      const Divider(height: 24),
                       Semantics(
                         selected:
                             _selectedIndex == 2 &&
                             _settingsCategory == SettingsCategory.account,
                         button: true,
-                        child: TextButton.icon(
+                        child: TextButton(
                           style: TextButton.styleFrom(
                             alignment: Alignment.centerLeft,
+                            padding: const EdgeInsets.all(12),
+                            foregroundColor:
+                                _selectedIndex == 2 &&
+                                    _settingsCategory ==
+                                        SettingsCategory.account
+                                ? roles.primaryText
+                                : roles.secondaryText,
                           ),
                           onPressed: () => unawaited(_openAccount()),
-                          icon: const Icon(Icons.account_circle_outlined),
-                          label: const Text('Account'),
-                        ),
-                      ),
-                      const Divider(height: 24),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              profileName == null
-                                  ? accountName
-                                  : '$profileName · $accountName',
-                              softWrap: true,
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              serverName,
-                              softWrap: true,
-                              style: Theme.of(context).textTheme.bodySmall
-                                  ?.copyWith(color: roles.mutedText),
-                            ),
-                          ],
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Icon(Icons.account_circle_outlined),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text('Account'),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      profileName == null
+                                          ? accountName
+                                          : '$profileName · $accountName',
+                                      softWrap: true,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodySmall,
+                                    ),
+                                    const SizedBox(height: 3),
+                                    Text(
+                                      serverName,
+                                      softWrap: true,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodySmall
+                                          ?.copyWith(color: roles.mutedText),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              const Icon(Icons.chevron_right),
+                            ],
+                          ),
                         ),
                       ),
                     ],
@@ -475,6 +506,9 @@ class _LineupShellState extends State<LineupShell> {
         autofocus: autofocus,
         style: TextButton.styleFrom(
           alignment: Alignment.centerLeft,
+          foregroundColor: selected
+              ? LineupTheme.of(context).primaryText
+              : LineupTheme.of(context).secondaryText,
           backgroundColor: selected
               ? LineupTheme.of(context).selectedSurface
               : null,
@@ -532,6 +566,13 @@ class _LineupShellState extends State<LineupShell> {
       focusNode: _settingsFocus,
       menuFocusNode: _settingsMenuFocus,
       onOpenMenu: _openAppMenu,
+      onBack: _settingsReturnIndex == null
+          ? null
+          : () {
+              final returnIndex = _settingsReturnIndex!;
+              _settingsReturnIndex = null;
+              unawaited(_select(returnIndex));
+            },
       category: _settingsCategory,
       onCategoryChanged: (category) => setState(() {
         _settingsCategory = category;
@@ -562,6 +603,7 @@ class _LineupShellState extends State<LineupShell> {
         focusNode: _diagnosticsFocus,
         menuFocusNode: _diagnosticsMenuFocus,
         onOpenMenu: _openAppMenu,
+        onBack: () => unawaited(_select(2)),
       ),
       playerView,
     ];
@@ -677,6 +719,7 @@ class SettingsView extends StatefulWidget {
     this.focusNode,
     this.menuFocusNode,
     this.onOpenMenu,
+    this.onBack,
     super.key,
   });
   final LineupController controller;
@@ -687,6 +730,7 @@ class SettingsView extends StatefulWidget {
   final FocusNode? focusNode;
   final FocusNode? menuFocusNode;
   final LineupMenuCallback? onOpenMenu;
+  final VoidCallback? onBack;
 
   @override
   State<SettingsView> createState() => _SettingsViewState();
@@ -735,16 +779,9 @@ class _SettingsViewState extends State<SettingsView> {
       child: Material(
         type: MaterialType.transparency,
         child: FocusTraversalGroup(
-          child: DecoratedBox(
+          child: ColoredBox(
             key: const Key('settings-immersive-scrim'),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  roles.scrim.withValues(alpha: 0.68),
-                  roles.scrim.withValues(alpha: 0.46),
-                ],
-              ),
-            ),
+            color: roles.deepBackground.withValues(alpha: 0.94),
             child: LayoutBuilder(
               builder: (context, constraints) {
                 final size = Size(constraints.maxWidth, constraints.maxHeight);
@@ -761,30 +798,41 @@ class _SettingsViewState extends State<SettingsView> {
                   child: DefaultTextStyle(
                     style: scaledTheme.textTheme.bodyMedium!,
                     child: Builder(
-                      builder: (context) {
-                        final categories = _categoryRail(
-                          context,
-                          compact,
-                          constraints.maxWidth,
-                          scale,
-                        );
-                        final detail = _detailPane(compact, scale);
-                        return compact
-                            ? Column(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  categories,
-                                  Expanded(child: detail),
-                                ],
-                              )
-                            : Row(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  categories,
-                                  Expanded(child: detail),
-                                ],
-                              );
-                      },
+                      builder: (context) => Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _settingsHeader(scale),
+                          Expanded(
+                            child: compact
+                                ? Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: [
+                                      _categoryRail(context, true, scale),
+                                      Expanded(child: _detailPane(true, scale)),
+                                    ],
+                                  )
+                                : Padding(
+                                    padding: EdgeInsets.fromLTRB(
+                                      32 * scale,
+                                      28 * scale,
+                                      32 * scale,
+                                      0,
+                                    ),
+                                    child: Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.stretch,
+                                      children: [
+                                        _categoryRail(context, false, scale),
+                                        Expanded(
+                                          child: _detailPane(false, scale),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 );
@@ -796,73 +844,54 @@ class _SettingsViewState extends State<SettingsView> {
     );
   }
 
-  Widget _categoryRail(
-    BuildContext context,
-    bool compact,
-    double width,
-    double scale,
-  ) {
+  Widget _settingsHeader(double scale) => Container(
+    height: 76 * scale,
+    margin: EdgeInsets.symmetric(horizontal: 32 * scale),
+    decoration: BoxDecoration(
+      border: Border(
+        bottom: BorderSide(color: LineupTheme.of(context).subtleBorder),
+      ),
+    ),
+    child: Row(
+      children: [
+        TextButton.icon(
+          onPressed: widget.onBack,
+          icon: const Icon(Icons.arrow_back),
+          label: const Text('Back'),
+        ),
+        SizedBox(width: 20 * scale),
+        Text('Settings', style: Theme.of(context).textTheme.titleLarge),
+        const Spacer(),
+        if (widget.onOpenMenu != null && widget.menuFocusNode != null)
+          Builder(
+            builder: (buttonContext) => TextButton.icon(
+              key: const Key('settings-app-menu'),
+              focusNode: widget.menuFocusNode,
+              onPressed: () =>
+                  widget.onOpenMenu!(buttonContext, widget.menuFocusNode!),
+              iconAlignment: IconAlignment.end,
+              icon: const Icon(Icons.expand_more),
+              label: const Text('LINEUP'),
+            ),
+          ),
+      ],
+    ),
+  );
+
+  Widget _categoryRail(BuildContext context, bool compact, double scale) {
     final roles = LineupTheme.of(context);
     final content = Padding(
       padding: EdgeInsets.fromLTRB(
-        (compact ? 20 : 24) * scale,
-        (compact ? 16 : 24) * scale,
-        (compact ? 20 : 18) * scale,
-        (compact ? 14 : 24) * scale,
+        compact ? 20 * scale : 0,
+        compact ? 14 * scale : 8 * scale,
+        compact ? 20 * scale : 24 * scale,
+        compact ? 12 * scale : 0,
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Semantics(
-                  header: true,
-                  child: Text(
-                    'Settings',
-                    style: Theme.of(context).textTheme.headlineMedium,
-                  ),
-                ),
-              ),
-              if (widget.onOpenMenu != null && widget.menuFocusNode != null)
-                Builder(
-                  builder: (buttonContext) => IconButton(
-                    key: const Key('settings-app-menu'),
-                    focusNode: widget.menuFocusNode,
-                    tooltip: 'Open Lineup menu',
-                    onPressed: () => widget.onOpenMenu!(
-                      buttonContext,
-                      widget.menuFocusNode!,
-                    ),
-                    icon: const Icon(Icons.menu),
-                  ),
-                ),
-            ],
-          ),
-          Text(
-            'Press Back to return',
-            style: Theme.of(context).textTheme.bodySmall
-                ?.copyWith(color: roles.mutedText),
-          ),
-          SizedBox(height: (compact ? 14 : 24) * scale),
-          if (compact)
-            _categorySelector(true)
-          else
-            Expanded(child: _categorySelector(false)),
-        ],
-      ),
+      child: compact ? _categorySelector(true) : _categorySelector(false),
     );
     return DecoratedBox(
       key: const Key('settings-category-rail'),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            roles.overlaySurface.withValues(alpha: 0.82),
-            roles.deepBackground.withValues(alpha: 0.9),
-          ],
-        ),
         border: Border(
           right: compact
               ? BorderSide.none
@@ -871,22 +900,8 @@ class _SettingsViewState extends State<SettingsView> {
               ? BorderSide(color: roles.subtleBorder)
               : BorderSide.none,
         ),
-        borderRadius: compact
-            ? BorderRadius.only(
-                bottomLeft: Radius.circular(roles.panelRadius),
-                bottomRight: Radius.circular(roles.panelRadius),
-              )
-            : BorderRadius.only(
-                topRight: Radius.circular(roles.panelRadius),
-                bottomRight: Radius.circular(roles.panelRadius),
-              ),
       ),
-      child: compact
-          ? content
-          : SizedBox(
-              width: width * 0.24 > 320 * scale ? 320 * scale : width * 0.24,
-              child: content,
-            ),
+      child: compact ? content : SizedBox(width: 248 * scale, child: content),
     );
   }
 
@@ -894,9 +909,9 @@ class _SettingsViewState extends State<SettingsView> {
     key: const Key('settings-detail-pane'),
     padding: EdgeInsets.fromLTRB(
       (compact ? 20 : 40) * scale,
-      (compact ? 20 : 32) * scale,
+      (compact ? 20 : 8) * scale,
       (compact ? 20 : 40) * scale,
-      (compact ? 20 : 32) * scale,
+      (compact ? 20 : 24) * scale,
     ),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -913,27 +928,45 @@ class _SettingsViewState extends State<SettingsView> {
           child: Semantics(
             selected: category == _category,
             button: true,
-            child: OutlinedButton(
-              focusNode: category == SettingsCategory.appearance
-                  ? widget.focusNode
-                  : null,
-              autofocus: category == _category && !_categoryFocusPlaced,
-              style: OutlinedButton.styleFrom(
-                alignment: Alignment.centerLeft,
-                backgroundColor: category == _category
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: category == _category
                     ? roles.selectedSurface
-                    : null,
-                side: BorderSide(
-                  color: category == _category
-                      ? roles.focusBorder
-                      : roles.subtleBorder,
+                    : Colors.transparent,
+                border: Border(
+                  left: BorderSide(
+                    width: 2,
+                    color: category == _category
+                        ? roles.progressFill
+                        : Colors.transparent,
+                  ),
                 ),
               ),
-              onPressed: () {
-                setState(() => _localCategory = category);
-                widget.onCategoryChanged?.call(category);
-              },
-              child: Text(_categoryLabel(category)),
+              child: TextButton.icon(
+                focusNode: category == SettingsCategory.appearance
+                    ? widget.focusNode
+                    : null,
+                autofocus: category == _category && !_categoryFocusPlaced,
+                style: TextButton.styleFrom(
+                  alignment: Alignment.centerLeft,
+                  foregroundColor: category == _category
+                      ? roles.primaryText
+                      : roles.secondaryText,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 14,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(5),
+                  ),
+                ),
+                onPressed: () {
+                  setState(() => _localCategory = category);
+                  widget.onCategoryChanged?.call(category);
+                },
+                icon: Icon(_categoryIcon(category), size: 18),
+                label: Text(_categoryLabel(category)),
+              ),
             ),
           ),
         ),
@@ -952,6 +985,7 @@ class _SettingsViewState extends State<SettingsView> {
       children: [
         _SettingsSection(
           title: _categoryLabel(_category),
+          description: _categoryDescription(_category),
           children: switch (_category) {
             SettingsCategory.appearance => [
               _Dropdown<LineupThemeName>(
@@ -1308,12 +1342,40 @@ class _SettingsViewState extends State<SettingsView> {
     SettingsCategory.account => 'Account',
     SettingsCategory.support => 'Support',
   };
+
+  static IconData _categoryIcon(SettingsCategory category) =>
+      switch (category) {
+        SettingsCategory.appearance => Icons.palette_outlined,
+        SettingsCategory.guide => Icons.calendar_view_week_outlined,
+        SettingsCategory.playback => Icons.play_arrow_outlined,
+        SettingsCategory.accessibility => Icons.accessibility_new_outlined,
+        SettingsCategory.account => Icons.person_outline,
+        SettingsCategory.support => Icons.help_outline,
+      };
+
+  static String _categoryDescription(SettingsCategory category) =>
+      switch (category) {
+        SettingsCategory.appearance => 'Choose the atmosphere of your lineup.',
+        SettingsCategory.guide => 'Browse the schedule your way.',
+        SettingsCategory.playback => 'Control how playback controls behave.',
+        SettingsCategory.accessibility =>
+          'Make navigation easier to see and follow.',
+        SettingsCategory.account =>
+          'Manage who is watching and where your media comes from.',
+        SettingsCategory.support =>
+          'Collect useful information when something goes wrong.',
+      };
 }
 
 class _SettingsSection extends StatelessWidget {
-  const _SettingsSection({required this.title, required this.children});
+  const _SettingsSection({
+    required this.title,
+    required this.description,
+    required this.children,
+  });
 
   final String title;
+  final String description;
   final List<Widget> children;
 
   @override
@@ -1323,6 +1385,12 @@ class _SettingsSection extends StatelessWidget {
       Semantics(
         header: true,
         child: Text(title, style: Theme.of(context).textTheme.headlineMedium),
+      ),
+      const SizedBox(height: 6),
+      Text(
+        description,
+        style: Theme.of(context).textTheme.bodyMedium
+            ?.copyWith(color: LineupTheme.of(context).secondaryText),
       ),
       const SizedBox(height: 24),
       ...children,
@@ -1364,10 +1432,7 @@ class _SettingsRow extends StatelessWidget {
         ],
       );
       return Container(
-        padding: EdgeInsets.symmetric(
-          horizontal: 16 * scale,
-          vertical: 24 * scale,
-        ),
+        padding: EdgeInsets.symmetric(vertical: 26 * scale),
         decoration: BoxDecoration(
           border: Border(
             bottom: BorderSide(color: LineupTheme.of(context).subtleBorder),
@@ -1440,17 +1505,25 @@ class _Dropdown<T> extends StatelessWidget {
   Widget build(BuildContext context) => _SettingsRow(
     label: Text(label),
     helper: Text(description),
-    control: DropdownButton<T>(
-      value: value,
-      items: [
-        for (final item in values)
-          DropdownMenuItem(value: item, child: Text(display(item))),
-      ],
-      onChanged: changed == null
-          ? null
-          : (item) {
-              if (item != null) changed!(item);
-            },
+    control: SizedBox(
+      width: 220,
+      child: DropdownButtonFormField<T>(
+        initialValue: value,
+        isExpanded: true,
+        decoration: const InputDecoration(
+          border: OutlineInputBorder(),
+          contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+        ),
+        items: [
+          for (final item in values)
+            DropdownMenuItem(value: item, child: Text(display(item))),
+        ],
+        onChanged: changed == null
+            ? null
+            : (item) {
+                if (item != null) changed!(item);
+              },
+      ),
     ),
   );
 }

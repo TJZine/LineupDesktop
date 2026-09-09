@@ -163,9 +163,7 @@ void main() {
     expect(find.text('Saving…'), findsOneWidget);
     expect(
       tester
-          .widget<OutlinedButton>(
-            find.widgetWithText(OutlinedButton, 'Playback'),
-          )
+          .widget<TextButton>(find.widgetWithText(TextButton, 'Playback'))
           .onPressed,
       isNotNull,
     );
@@ -219,9 +217,7 @@ void main() {
     expect(find.byKey(const Key('settings-detail-pane')), findsOneWidget);
   });
 
-  testWidgets('Settings mounts one player surface behind its immersive rail', (
-    tester,
-  ) async {
+  testWidgets('Settings retains one mounted player surface', (tester) async {
     final player = FixturePlayer()
       ..emit(const PlayerStatus(state: PlayerState.ready, message: 'Ready'));
     final fixture = UiFixture(player: player)
@@ -234,18 +230,6 @@ void main() {
     expect(find.byType(NavigationRail), findsNothing);
     expect(find.byType(PlayerSurface), findsOneWidget);
     expect(find.byType(PlayerView), findsNothing);
-    expect(find.byKey(const Key('settings-immersive-scrim')), findsOneWidget);
-    final decoration =
-        tester
-                .widget<DecoratedBox>(
-                  find.byKey(const Key('settings-immersive-scrim')),
-                )
-                .decoration
-            as BoxDecoration;
-    expect(
-      (decoration.gradient! as LinearGradient).colors,
-      everyElement(predicate<Color>((color) => color.a < 1)),
-    );
   });
 
   testWidgets('legacy overlay preference still presents the PiP Guide', (
