@@ -210,10 +210,7 @@ class ChannelAirCheckState extends State<ChannelAirCheck> {
               final preview = _project(schedule, request.key, request.channel);
               _preview = preview;
               _error = null;
-              _selectedId = preview.programs
-                  .where((program) => program.isCurrentAt(widget.clock()))
-                  .firstOrNull
-                  ?.id;
+              _preserveSelection(preview, widget.clock());
               final validity = _comparisonReady
                   ? ChannelAirCheckValidity.valid
                   : ChannelAirCheckValidity.unknown;
@@ -317,18 +314,28 @@ class ChannelAirCheckState extends State<ChannelAirCheck> {
     final next = needsRollover
         ? _project(previous.schedule, previous.key, previous.channel)
         : previous;
-    final current = next.programs
-        .where((item) => item.isCurrentAt(now))
-        .firstOrNull;
-    final selectedStillPresent = next.programs.any(
-      (item) => item.id == _selectedId,
-    );
     setState(() {
       _preview = next;
-      if (_selectionFollowsNow || !selectedStillPresent) {
-        _selectedId = current?.id;
-      }
+      _preserveSelection(next, now);
     });
+  }
+
+  List<GuideProgram> _visiblePrograms(_AirCheckPreview preview, DateTime now) =>
+      preview.programs
+          .where((program) => program.scheduled.end.isAfter(now))
+          .toList(growable: false);
+
+  void _preserveSelection(_AirCheckPreview preview, DateTime now) {
+    final visible = _visiblePrograms(preview, now);
+    final current = visible
+        .where((program) => program.isCurrentAt(now))
+        .firstOrNull;
+    final selectedStillPresent = visible.any(
+      (program) => program.id == _selectedId,
+    );
+    if (_selectionFollowsNow || !selectedStillPresent) {
+      _selectedId = current?.id;
+    }
   }
 
   bool _canRetainOffAir(Object error) {
@@ -478,6 +485,7 @@ class ChannelAirCheckState extends State<ChannelAirCheck> {
         _futureHours = nextHours;
         _preview = expanded;
         _error = null;
+        _preserveSelection(expanded, widget.clock());
       });
     } catch (error) {
       setState(() => _error = error);
@@ -568,7 +576,7 @@ class ChannelAirCheckState extends State<ChannelAirCheck> {
   );
 
   Widget _verticalSchedule(_AirCheckPreview preview, DateTime now) {
-    final programs = preview.programs;
+    final programs = _visiblePrograms(preview, now);
     return ConstrainedBox(
       constraints: const BoxConstraints(maxHeight: 360),
       child: ListView.separated(
@@ -682,11 +690,12 @@ class ChannelAirCheckState extends State<ChannelAirCheck> {
   }
 
   Widget _selection(_AirCheckPreview preview, DateTime now) {
-    final selected = preview.programs
+    final visible = _visiblePrograms(preview, now);
+    final selected = visible
         .where((program) => program.id == _selectedId)
         .firstOrNull;
     if (selected == null) return const SizedBox.shrink();
-    final current = preview.programs
+    final current = visible
         .where((program) => program.isCurrentAt(now))
         .firstOrNull;
     final item = selected.scheduled.item;

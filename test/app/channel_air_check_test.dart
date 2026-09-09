@@ -24,6 +24,12 @@ void main() {
           ChannelItem(id: 'two', title: 'Two', duration: Duration(minutes: 30)),
         ],
       );
+      final schedule = buildSchedule(
+        (channel.source as ManualSource).items,
+        mode: channel.playbackMode,
+        seed: channel.shuffleSeed,
+        blockSize: 3,
+      );
 
       await tester.pumpWidget(_airCheck(controller, channel, clock: () => now));
       await tester.pumpAndSettle();
@@ -70,6 +76,14 @@ void main() {
       expect(
         find.bySemanticsLabel(RegExp(r'Channel 4 .*One.*upcoming')),
         findsWidgets,
+      );
+      final ended = GuideProgram(
+        channelId: 'air-check',
+        scheduled: programAt(channel.anchor, channel.anchor, schedule),
+      );
+      expect(
+        find.byKey(ValueKey('air-check-program-${ended.id}')),
+        findsNothing,
       );
     },
   );
@@ -298,6 +312,174 @@ void main() {
     );
   });
 
+  testWidgets(
+    'Air Check hides ended retained entries and preserves a future inspection',
+    (tester) async {
+      var now = DateTime.utc(2026, 1, 1, 0, 10);
+      final controller = _AirController();
+      addTearDown(controller.dispose);
+      final channel = _channel(
+        items: [_item('one'), _item('two'), _item('three')],
+      );
+      final schedule = buildSchedule(
+        (channel.source as ManualSource).items,
+        mode: channel.playbackMode,
+        seed: channel.shuffleSeed,
+        blockSize: 3,
+      );
+      final future = GuideProgram(
+        channelId: 'air-check',
+        scheduled: programAt(
+          DateTime.utc(2026, 1, 1, 3),
+          channel.anchor,
+          schedule,
+        ),
+      );
+
+      await tester.pumpWidget(_airCheck(controller, channel, clock: () => now));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Show next 6 hours'));
+      await tester.tap(find.text('Show next 6 hours'));
+      await tester.pump();
+      final futureRow = find.byKey(ValueKey('air-check-program-${future.id}'));
+      await tester.scrollUntilVisible(
+        futureRow,
+        240,
+        scrollable: find.descendant(
+          of: find.byKey(const Key('air-check-schedule-list')),
+          matching: find.byType(Scrollable),
+        ),
+      );
+      await tester.tap(futureRow);
+      await tester.pump();
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('air-check-selection')),
+          matching: find.text('One'),
+        ),
+        findsOneWidget,
+      );
+
+      now = DateTime.utc(2026, 1, 1, 2, 10);
+      await tester.pump(const Duration(seconds: 30));
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('air-check-selection')),
+          matching: find.text('One'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.bySemanticsLabel(RegExp(r'Channel 4 .*One.*upcoming')),
+        findsWidgets,
+      );
+      expect(
+        find.bySemanticsLabel(RegExp(r'Channel 4 .*Two.*upcoming')),
+        findsWidgets,
+      );
+    },
+    semanticsEnabled: true,
+  );
+
+  testWidgets('Air Check falls back to now when an inspection ends', (
+    tester,
+  ) async {
+    var now = DateTime.utc(2026, 1, 1, 0, 10);
+    final controller = _AirController();
+    addTearDown(controller.dispose);
+    final channel = _channel(items: [_item('one'), _item('two')]);
+    final schedule = buildSchedule(
+      (channel.source as ManualSource).items,
+      mode: channel.playbackMode,
+      seed: channel.shuffleSeed,
+      blockSize: 3,
+    );
+    final future = GuideProgram(
+      channelId: 'air-check',
+      scheduled: programAt(
+        DateTime.utc(2026, 1, 1, 1),
+        channel.anchor,
+        schedule,
+      ),
+    );
+
+    await tester.pumpWidget(_airCheck(controller, channel, clock: () => now));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(ValueKey('air-check-program-${future.id}')));
+    await tester.pump();
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('air-check-selection')),
+        matching: find.text('One'),
+      ),
+      findsOneWidget,
+    );
+
+    now = DateTime.utc(2026, 1, 1, 1, 40);
+    await tester.pump(const Duration(seconds: 30));
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('air-check-selection')),
+        matching: find.text('Two'),
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('Air Check preserves inspection after successful recalculation', (
+    tester,
+  ) async {
+    var now = DateTime.utc(2026, 1, 1, 0, 10);
+    final controller = _AirController();
+    addTearDown(controller.dispose);
+    final key = GlobalKey<ChannelAirCheckState>();
+    final channel = _channel(items: [_item('one'), _item('two')]);
+    final schedule = buildSchedule(
+      (channel.source as ManualSource).items,
+      mode: channel.playbackMode,
+      seed: channel.shuffleSeed,
+      blockSize: 3,
+    );
+    final future = GuideProgram(
+      channelId: 'air-check',
+      scheduled: programAt(
+        DateTime.utc(2026, 1, 1, 1),
+        channel.anchor,
+        schedule,
+      ),
+    );
+
+    await tester.pumpWidget(
+      _airCheck(controller, channel, key: key, clock: () => now),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(ValueKey('air-check-program-${future.id}')));
+    await tester.pump();
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('air-check-selection')),
+        matching: find.text('One'),
+      ),
+      findsOneWidget,
+    );
+
+    controller.generation++;
+    await tester.pumpWidget(
+      _airCheck(controller, channel, key: key, clock: () => now),
+    );
+    await tester.pump(
+      channelAirCheckDebounce + const Duration(milliseconds: 1),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('air-check-selection')),
+        matching: find.text('One'),
+      ),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('program rows expose selection detail and semantics', (
     tester,
   ) async {
@@ -406,6 +588,20 @@ void main() {
         ),
         findsOneWidget,
       );
+      if (instant == channel.anchor) {
+        final ended = GuideProgram(
+          channelId: 'air-check',
+          scheduled: programAt(
+            channel.anchor.subtract(const Duration(microseconds: 1)),
+            channel.anchor,
+            schedule,
+          ),
+        );
+        expect(
+          find.byKey(ValueKey('air-check-program-${ended.id}')),
+          findsNothing,
+        );
+      }
     }
     expect(controller.requests, 1);
   });
