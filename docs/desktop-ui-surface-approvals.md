@@ -17,7 +17,7 @@ may cover multiple listed states only when that scope is clear to the user.
 | surface-01 | Playback order · corrected | Approved at 1080p | Behavior checks passed; adaptive/Windows checks pending | September 9: Shuffle selected, additional versions off; `8e1f1bc0` |
 | surface-02 | Mini-marathons · corrected | Unreviewed | User skipped separate review; adaptive/Windows checks pending | September 9: proceed to surface-03; no separate state lock |
 | surface-03 | Channel sources · corrected | Approved at 1080p | Behavior checks passed; adaptive/Windows checks pending | September 9: one and two libraries, grouping separate; `8e972785` |
-| surface-04 | Lineup rules · corrected | Unreviewed | Not assessed in this pass | — |
+| surface-04 | Lineup rules · corrected | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | September 9: all-fit and limit-reached/Off states; `f535a365` |
 | surface-05 | Review lineup · corrected labels | Unreviewed | Not assessed in this pass | — |
 | surface-06 | Review removals · corrected labels | Unreviewed | Not assessed in this pass | — |
 | surface-07 | Linking · corrected | Unreviewed | Not assessed in this pass | — |
@@ -296,3 +296,88 @@ to open dropdowns, other grouping selections, enlarged text or physical Windows
 rendering. Grouped adaptive/accessibility and Windows checks remain outstanding.
 No independent review is specifically recommended; none was launched. The frozen
 comparison packet remains unchanged. Next user-selected surface is 04 Lineup rules.
+
+
+## September 9, 2026 — surface-04 initial comparison
+
+User selected Lineup rules after locking surface-03. Root inspected the original
+`lineup-rules-design.html` with its 1920×1080 option, the current source owners,
+and a fresh real Flutter capture at commit
+`884ce5c96009fe266d729b6e74c54ecc5b004f45`:
+`build/desktop-ui/surface-04/current-884ce5c9.png`, SHA-256
+`ae0db94571fc74ccedb61511f915d70f31ef3d357f2911241ea1b7d9fe1d387e`.
+Capture is 1920×1080/DPR1/text100%, pinned Roboto body and Arial wordmark,
+synthetic one-library fixture with two generated channels, maximum200/minimum5.
+The frozen comparison remains historical.
+
+Initial proposed corrections for discussion: exact rules-specific header subtitle;
+Channel limits and Source order as the two main headings; compact numeric controls
+beside full labels with separate descriptions; more spacious source-order rows,
+rank numbers and right-edge arrows; true allocation-derived fit/limit feedback.
+Preserve actual source priority, focus transfer, disabled-source positions and
+existing allocation contracts. No worker dispatched or production changes made
+for surface-04 pending user feedback on this comparison.
+
+
+### Surface-04 agreed correction brief
+
+The user accepted the initial correction list and subsequent neutral all-fit /
+amber excluded-by-limit feedback, with Off beside disabled source names, then
+said “sounds good” to implementation. Preserve the existing frame, theme and
+body font; use the exact rules subtitle, two main headings, compact labeled
+numeric selectors, separate explanations, spacious numbered source-order rows,
+right-edge arrows and aligned two-column composition. Actual allocation and
+focus-transfer behavior remain authoritative; mock order/counts are illustrative.
+The existing `worker_luna` (`gpt-5.6-luna`/`xhigh`) owns bounded presentation edits
+in `channel_setup_view.dart`; root owns allocation feedback, behavior checks,
+integration and visual evidence. Existing ledger edits are preserved. No new
+layout tests, independent reviewers or additional tasks are authorized.
+
+
+### Surface-04 candidate presented for approval
+
+- Candidate-02 source SHA-256 for `lib/app/channel_setup_view.dart`:
+  `943815a68055a62271bb776c9f154d1aabdbf2231abd5ce8b45e1287242baaeb`,
+  based on `884ce5c96009fe266d729b6e74c54ecc5b004f45` plus working-tree edits.
+- Default all-fit state: `build/desktop-ui/surface-04/candidate-02.png`, SHA-256
+  `a36c016c14994b5f765630662f287a0465773732b9f0ccc08f641984a90095dd`.
+  One synthetic movie library, all sources selected, maximum200/minimum5,
+  no extras, two generated channels.
+- Limit-reached/Off state: `build/desktop-ui/surface-04/candidate-02-limited.png`,
+  SHA-256 `fe31e7f1a19a6ac9361d6a9493223fab2c0d55cc7c52a03474078afe9827a75c`.
+  Synthetic expanded genre fixture, Playlists off, maximum50/minimum5,
+  no extras, 50 included and 11 originals excluded by the generated cap.
+- Both captures are real 1920×1080/DPR1/text100%, unscaled/unretouched, using
+  pinned Roboto body and Arial wordmark. Root personally inspected the final
+  captures against the selected mock. Windows Segoe UI evidence is outstanding.
+- Luna completed the bounded presentation unit. Root reviewed and corrected
+  focus-state ownership, added allocation-derived all-fit/empty/excluded feedback
+  including channel-number exhaustion handling, and aligned Off with its name.
+  Existing focus nodes, source priority and allocation algorithms are preserved.
+- Final source passed all 75 existing focused tests, full analysis, formatting and
+  `git diff --check`. The existing configure/defaults check now exercises minimum
+  changes, true qualifying counts and disabled Review when nothing qualifies;
+  existing source-reordering focus coverage passed. No new layout tests.
+- Both candidate states await explicit user approval. No implementation commit
+  or visual lock yet. Adaptive/accessibility checks are grouped at the setup
+  family checkpoint; physical Windows typography/input checks remain outstanding.
+  Independent review is not specifically recommended; none launched.
+
+
+### Surface-04 explicit approval — September 9, 2026
+
+Asked whether both candidate-02 states were acceptable to lock, the user replied
+“yes they are.” Both are visually approved at 1920×1080/DPR1/text100% with the
+state scope recorded above. Implementation commit:
+`f535a365fce7a9583d45287c70e7a899d3ef2c62`
+(`fix(ui): refine lineup rules configuration`), matching the recorded candidate
+source SHA-256. Approved captures are preserved byte-for-byte:
+
+- [All channels fit](design/desktop-ui/approved/2026-09-09-surface-04/lineup-rules-all-fit.png)
+- [Limit reached, Playlists off](design/desktop-ui/approved/2026-09-09-surface-04/lineup-rules-limit-reached.png)
+
+PNG hashes remain those recorded for candidate-02 above. Other states, grouped
+adaptive/accessibility checks and physical Windows typography/input validation
+remain outstanding. Independent review is not specifically recommended; none
+launched. The user's subsequent question about logo/wordmark order is a design
+discussion, not authorization to alter these approved captures or shared branding.
