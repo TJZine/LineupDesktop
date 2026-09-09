@@ -1,0 +1,21 @@
+{
+  "base_commit": "f9f8c93afa8d8cd3615381d8315144759921ea09",
+  "source": "lib/app/onboarding_view.dart",
+  "source_sha256": "f48e7dfe6ebcd783c308d00ea196b17565d8809e6e1930936ca59aa838d5fd5a",
+  "physical_size": [
+    1920,
+    1080
+  ],
+  "dpr": 1,
+  "text_scale": 1,
+  "fonts": "Pinned Roboto body; actual Arial wordmark",
+  "png_sha256": {
+    "servers.png": "a817665965ecee6fe8890e46a91190406af6a5b687657b82e691a272991b990b",
+    "profiles.png": "20d693ca5d54b0c948a00e224d58244830b7edb19d987be136b8ec020839e028"
+  },
+  "implementation_commit": "019f4b0c8c3a9ec93abed57b31e38c714113b4c1",
+  "approval": "locked",
+  "scope": "Profile selection and server selection candidate02 at1920x1080/DPR1/text100%. PIN excluded.",
+  "verification": "Nine existing onboarding behavior checks and capture harness passed; file analysis, formatter and diff checks passed.",
+  "outstanding": "Grouped adaptive/resolution/DPI/enlarged-text/accessibility and physical Windows validation."
+}

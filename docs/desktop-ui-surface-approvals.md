@@ -23,9 +23,9 @@ may cover multiple listed states only when that scope is clear to the user.
 | surface-07 | Linking · corrected | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Candidate01; `3a9d6b7e` |
 | surface-08 | Linking expired · corrected | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Candidate01; `3a9d6b7e` |
 | surface-09 | Terminal linking failure | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Candidate01; `3a9d6b7e` |
-| surface-10 | Profile selection | Unreviewed | Not assessed in this pass | — |
-| surface-11 | Profile PIN | Unreviewed | Not assessed in this pass | — |
-| surface-12 | Server selection | Unreviewed | Not assessed in this pass | — |
+| surface-10 | Profile selection | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Candidate02; `019f4b0c` |
+| surface-11 | Profile PIN | Unreviewed | Deferred by user; no visual capture | Explicitly skipped; unchanged |
+| surface-12 | Server selection | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Candidate02; `019f4b0c` |
 | surface-13 | Library scan outcomes · corrected | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Candidate03 state family; `692083fc` |
 | surface-14 | Setup progress | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Candidate02 family; `22743fd6` |
 | surface-15 | Setup complete | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Candidate02 family; `22743fd6` |
@@ -894,3 +894,70 @@ User authorizes the same compact styling for profile and server selection, with
 more horizontal room for two profile rows and sensible refinements at root
 discretion. PIN is explicitly deferred, untouched and not visually locked. The
 ledger IDs are10 profiles,11 PIN,12 servers (user used11/12/13; names govern scope).
+
+
+Root inspected the original profile/server HTML fragments in standalone browser
+wrappers and their actual1080p baseline Flutter captures, then read current owners.
+The oversized bordered wrapper and standalone centered logo are the main mismatch;
+profile layout currently stretches nine fixture users across one row. User permits
+root discretion and requests wider profile composition retaining two rows.
+Assigned existing worker_luna/GPT-5.6 Luna/xhigh exclusive
+`lib/app/onboarding_view.dart`: reuse compact brand frame with unchanged linking
+defaults; profile group max1080, two desktop rows with wrapping names and modestly
+larger avatars/type; server group max880 with open rows, larger heading/type and
+local status/errors/actions. All callbacks, semantics, focus, currentness and
+verified connection facts preserved. User reiterated skipping PIN visual review;
+no PIN implementation or capture is authorized in this pass. Root owns the reused
+ignored two-screen capture harness and existing behavior checks. No extra reviewer.
+
+### Profile/server candidate01 — awaiting visual approval
+
+Luna implemented the assigned presentation in the sole leased file; root reviewed
+the diff and made bounded fixes for configured action fonts, content-driven row
+heights/avatar alignment, and the existing sub-pixel-width regression. All9
+existing onboarding behavior checks plus the two-screen capture harness pass
+(10 total). No new layout tests. PIN dialog source is byte-identical to HEAD and
+was neither modified nor visually captured. Root inspected profiles and servers
+with synthetic fixtures at1920×1080/DPR1/text100%; these remain unlocked.
+Local evidence: `build/desktop-ui/profiles-servers/candidate-01/`.
+Base `f9f8c93afa8d8cd3615381d8315144759921ea09`; onboarding source SHA-256
+`6d9348e3d78340e454e9159c6b7aa6f94afaa2a183bfce98fa80343f4eede4f5`.
+
+- `servers.png`: `384bbe3ec3a0568fde1e811dec3d427c2cb2e1870b66c19167b5483d5ad4ca51`
+- `profiles.png`: `4094852a3a5fd5775f1156ae3d7086f6761d200e86b88cef75a5b9605681a962`
+
+Grouped adaptive/accessibility and physical Windows checks remain outstanding.
+No additional independent review specifically recommended for these bounded
+presentation changes; none launched. No push/deploy/publication.
+
+User requests candidate01 refinements: independently center incomplete profile
+rows under the full row, and move Current away from the server row top-right.
+Root assigned Luna the same exclusive file for independent row centering and
+a quiet inline amber Current badge beside the name, with lighter supporting
+connection text. Preserve state behavior, PIN and other approved surfaces.
+
+### Profile/server candidate02 — awaiting approval
+
+Luna applied only independently centered profile rows and the inline amber Current
+badge with lighter supporting connection text. Root inspected both final actual
+1920×1080/DPR1/text100% captures. All9 onboarding behavior tests plus capture run
+passed; worker formatter/file analysis/diff checks passed. No PIN edits/capture.
+Local evidence `build/desktop-ui/profiles-servers/candidate-02/evidence.json`.
+Working-tree source SHA-256 `f48e7dfe6ebcd783c308d00ea196b17565d8809e6e1930936ca59aa838d5fd5a`.
+
+- `servers.png`: `a817665965ecee6fe8890e46a91190406af6a5b687657b82e691a272991b990b`
+- `profiles.png`: `20d693ca5d54b0c948a00e224d58244830b7edb19d987be136b8ec020839e028`
+
+Approval remains pending. Existing adaptive/accessibility/physical Windows
+limitations remain open; no additional independent review recommended.
+
+### Profile/server selection — approved and committed
+
+User explicitly approved candidate02: “locked”. Profile selection (surface10) and
+server selection (surface12) are visually locked at1920×1080/DPR1/text100%.
+Implementation commit `019f4b0c8c3a9ec93abed57b31e38c714113b4c1` matches the approved source hash.
+[Durable evidence](design/desktop-ui/approved/2026-09-09-profiles-servers/evidence.json)
+records the approved PNG hashes, implementation commit and verification.
+PIN (surface11) remains untouched and unreviewed, explicitly excluded by user.
+Grouped adaptive/accessibility and physical Windows checks remain outstanding;
+no additional independent review specifically recommended. No push/deploy/publication.
