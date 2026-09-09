@@ -736,6 +736,152 @@ void main() {
     );
   });
 
+  testWidgets(
+    'Guide details keep loading, retry, and error scoped to focused channel',
+    (tester) async {
+      final now = DateTime.utc(2026, 1, 1, 12, 30);
+      final lineup = _Lineup(2, artworkBytes: _tinyPng)
+        ..settings = const LineupSettings(
+          guideHours: 4,
+          reduceMotion: true,
+          guideInfoBackgroundMode: GuideInfoBackgroundMode.artwork,
+        );
+      lineup.channels = [
+        Channel(
+          id: 'channel-a',
+          number: 1,
+          name: 'Channel A',
+          source: ManualSource([
+            ChannelItem(
+              id: 'program-a',
+              title: 'Program A',
+              duration: const Duration(hours: 24),
+              poster: Uri.parse('/poster-a'),
+              backdrop: Uri.parse('/backdrop-a'),
+            ),
+          ]),
+          playbackMode: PlaybackMode.sequential,
+          anchor: now,
+          shuffleSeed: 1,
+        ),
+        Channel(
+          id: 'channel-b',
+          number: 2,
+          name: 'Channel B',
+          source: const ManualSource([
+            ChannelItem(
+              id: 'program-b',
+              title: 'Program B',
+              duration: Duration(hours: 24),
+            ),
+          ]),
+          playbackMode: PlaybackMode.sequential,
+          anchor: now,
+          shuffleSeed: 2,
+        ),
+      ];
+      lineup.currentChannelId = 'channel-a';
+      addTearDown(lineup.dispose);
+      final firstLoad = Completer<ScheduleIndex>();
+      final retryLoad = Completer<ScheduleIndex>();
+      var channelBAttempts = 0;
+      final guide = GuideController(
+        lineup: lineup,
+        clock: () => now,
+        loadSchedule: (channel) {
+          if (channel.id == 'channel-a') {
+            return Future.value(_schedule(channel));
+          }
+          channelBAttempts++;
+          return channelBAttempts == 1 ? firstLoad.future : retryLoad.future;
+        },
+      );
+      addTearDown(guide.dispose);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: GuideView(
+            controller: guide,
+            onClose: () {},
+            onTune: (_) async {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      guide.selectProgram(guide.row('channel-a').programs.first);
+      await tester.pumpAndSettle();
+      final details = find.byKey(const Key('guide-info-dynamic-background'));
+      Finder detailText(String value) =>
+          find.descendant(of: details, matching: find.text(value));
+      expect(detailText('Program A'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: details,
+          matching: find.byKey(const Key('guide-info-backdrop')),
+        ),
+        findsOneWidget,
+      );
+
+      guide.moveVertical(1);
+      await tester.pump();
+      expect(find.text('2 • Channel B'), findsOneWidget);
+      expect(find.text('Loading schedule…'), findsWidgets);
+      expect(
+        find.descendant(
+          of: details,
+          matching: find.byKey(const Key('guide-info-backdrop')),
+        ),
+        findsNothing,
+      );
+
+      firstLoad.completeError(StateError('offline'));
+      await tester.pumpAndSettle();
+      expect(find.text('2 • Channel B'), findsOneWidget);
+      expect(find.text('Schedule unavailable'), findsWidgets);
+      expect(detailText('Program A'), findsNothing);
+      expect(lineup.currentChannelId, 'channel-a');
+
+      await guide.retry('channel-b');
+      await tester.pump();
+      expect(find.text('2 • Channel B'), findsOneWidget);
+      expect(find.text('Retrying…'), findsWidgets);
+      expect(detailText('Program A'), findsNothing);
+
+      retryLoad.completeError(StateError('still offline'));
+      await tester.pumpAndSettle();
+    },
+  );
+
+  testWidgets('Guide details identify a focused ready row with no programs', (
+    tester,
+  ) async {
+    final lineup = _Lineup(2)
+      ..settings = const LineupSettings(guideHours: 0, reduceMotion: true);
+    addTearDown(lineup.dispose);
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    addTearDown(guide.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: GuideView(
+          controller: guide,
+          onClose: () {},
+          onTune: (_) async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    guide.moveVertical(1);
+    await tester.pump();
+
+    expect(guide.row('channel-1').state, GuideLoadState.ready);
+    expect(find.text('2 • Channel 1'), findsOneWidget);
+    expect(find.text('No programs scheduled in this time range'), findsWidgets);
+  });
+
   testWidgets('PiP information color loads artwork only from source metadata', (
     tester,
   ) async {
@@ -1164,7 +1310,7 @@ void main() {
   testWidgets(
     'timeline controls expose one aligned marker and 30-minute steps',
     (tester) async {
-      final now = DateTime.utc(2026, 1, 1, 23, 47);
+      var now = DateTime.utc(2026, 1, 1, 23, 30);
       final lineup = _Lineup(2);
       final guide = GuideController(
         lineup: lineup,
@@ -1182,8 +1328,24 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.byKey(const Key('guide-now-line')), findsOneWidget);
+      Finder marker() => find.byKey(const Key('guide-now-line'));
+      Finder focusedCell() => find.byKey(ValueKey(guide.focusedProgram!.id));
+
+      expect(marker(), findsOneWidget);
       expect(find.bySemanticsLabel('Current time'), findsOneWidget);
+      expect(
+        find.ancestor(
+          of: marker(),
+          matching: find.byWidgetPredicate(
+            (widget) => widget is IgnorePointer && widget.ignoring,
+          ),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        tester.getTopLeft(marker()).dx,
+        closeTo(tester.getTopLeft(focusedCell()).dx, 0.01),
+      );
       expect(
         tester
             .widget<IconButton>(find.byKey(const Key('guide-earlier')))
@@ -1197,6 +1359,32 @@ void main() {
       await tester.tap(find.byKey(const Key('guide-earlier')));
       await tester.pump();
       expect(guide.windowStart, DateTime.utc(2026, 1, 1, 23, 30));
+
+      guide.moveWindow(2);
+      now = guide.windowStart.add(const Duration(hours: 1));
+      await tester.pumpWidget(
+        MaterialApp(
+          home: GuideView(
+            controller: guide,
+            onClose: () {},
+            onTune: (_) async {},
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(
+        tester.getTopLeft(marker()).dx,
+        closeTo(
+          tester.getTopLeft(focusedCell()).dx +
+              tester.getSize(focusedCell()).width / 2,
+          0.01,
+        ),
+      );
+
+      guide.moveWindow(4);
+      await tester.pump();
+      expect(marker(), findsNothing);
 
       guide.dispose();
       lineup.dispose();

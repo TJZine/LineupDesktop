@@ -11,6 +11,8 @@ import '../ui/app_ui.dart';
 import 'focused_ticker.dart';
 import 'guide_controller.dart';
 
+const _guideTimelineGutter = 1.0;
+
 class GuideLayoutPolicy {
   const GuideLayoutPolicy._({
     required this.compact,
@@ -404,7 +406,9 @@ class _GuideViewState extends State<GuideView>
                 (_) => _requestViewport(),
               );
               final timelineWidth =
-                  constraints.maxWidth - policy.channelRailWidth - 4;
+                  constraints.maxWidth -
+                  policy.channelRailWidth -
+                  _guideTimelineGutter;
               final fraction =
                   now.difference(widget.controller.windowStart).inMicroseconds /
                   widget.controller.windowEnd
@@ -449,7 +453,7 @@ class _GuideViewState extends State<GuideView>
                     Positioned(
                       left:
                           policy.channelRailWidth +
-                          4 +
+                          _guideTimelineGutter +
                           timelineWidth * fraction,
                       top: 0,
                       bottom: 0,
@@ -999,6 +1003,7 @@ class _TimeHeader extends StatelessWidget {
               ),
             ),
           ),
+          const SizedBox(width: _guideTimelineGutter),
           Expanded(
             child: LayoutBuilder(
               builder: (context, constraints) {
@@ -1008,78 +1013,71 @@ class _TimeHeader extends StatelessWidget {
                 }
                 final slotWidth = width / slots;
                 final stride = (68 / slotWidth).ceil().clamp(1, slots);
-                return Stack(
-                  fit: StackFit.expand,
+                return Row(
                   children: [
-                    Row(
-                      children: [
-                        for (var index = 0; index < slots; index++)
-                          Expanded(
-                            child: Container(
-                              alignment: Alignment.center,
-                              decoration: BoxDecoration(
-                                border: Border(
-                                  left: BorderSide(
-                                    color: LineupTheme.of(context).subtleBorder,
-                                  ),
-                                ),
+                    for (var index = 0; index < slots; index++)
+                      Expanded(
+                        child: Container(
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            border: Border(
+                              left: BorderSide(
+                                color: LineupTheme.of(context).subtleBorder,
                               ),
-                              child: index % stride == 0
-                                  ? Padding(
-                                      padding: const EdgeInsets.only(left: 12),
-                                      child: Align(
-                                        alignment: Alignment.centerLeft,
-                                        child: Builder(
-                                          builder: (context) {
-                                            final tick = controller.windowStart
-                                                .add(
-                                                  Duration(minutes: 30 * index),
-                                                );
-                                            final midnight =
-                                                tick.hour == 0 &&
-                                                tick.minute == 0;
-                                            return Column(
-                                              mainAxisAlignment:
-                                                  MainAxisAlignment.center,
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              children: [
-                                                Text(
-                                                  _time(context, tick),
-                                                  overflow: TextOverflow.clip,
-                                                  maxLines: 1,
-                                                ),
-                                                if (midnight)
-                                                  Text(
-                                                    MaterialLocalizations.of(
-                                                      context,
-                                                    ).formatMediumDate(
-                                                      tick.toLocal(),
-                                                    ),
-                                                    key: const Key(
-                                                      'guide-midnight-date',
-                                                    ),
-                                                    maxLines: 1,
-                                                    style: Theme.of(context)
-                                                        .textTheme
-                                                        .labelSmall
-                                                        ?.copyWith(
-                                                          color: LineupTheme.of(
-                                                            context,
-                                                          ).progressFill,
-                                                        ),
-                                                  ),
-                                              ],
-                                            );
-                                          },
-                                        ),
-                                      ),
-                                    )
-                                  : null,
                             ),
                           ),
-                      ],
-                    ),
+                          child: index % stride == 0
+                              ? Padding(
+                                  padding: const EdgeInsets.only(left: 12),
+                                  child: Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Builder(
+                                      builder: (context) {
+                                        final tick = controller.windowStart.add(
+                                          Duration(minutes: 30 * index),
+                                        );
+                                        final midnight =
+                                            tick.hour == 0 && tick.minute == 0;
+                                        return Column(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              _time(context, tick),
+                                              overflow: TextOverflow.clip,
+                                              maxLines: 1,
+                                            ),
+                                            if (midnight)
+                                              Text(
+                                                MaterialLocalizations.of(
+                                                  context,
+                                                ).formatMediumDate(
+                                                  tick.toLocal(),
+                                                ),
+                                                key: const Key(
+                                                  'guide-midnight-date',
+                                                ),
+                                                maxLines: 1,
+                                                style: Theme.of(context)
+                                                    .textTheme
+                                                    .labelSmall
+                                                    ?.copyWith(
+                                                      color: LineupTheme.of(
+                                                        context,
+                                                      ).progressFill,
+                                                    ),
+                                              ),
+                                          ],
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                )
+                              : null,
+                        ),
+                      ),
                   ],
                 );
               },
@@ -1249,7 +1247,7 @@ class _GuideRow extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(width: 1),
+          const SizedBox(width: _guideTimelineGutter),
           Expanded(
             child: _Programs(
               channel: channel,
@@ -1839,13 +1837,17 @@ class _DetailsState extends State<_Details> {
   @override
   Widget build(BuildContext context) {
     final controller = widget.controller;
-    final program = controller.focusedProgram ?? controller.selectedProgram;
+    final channel = controller.focusedChannel;
+    final focusedProgram = controller.focusedProgram;
+    final selectedProgram = controller.selectedProgram;
+    final program =
+        focusedProgram ??
+        (channel != null &&
+                controller.row(channel.id).state == GuideLoadState.ready &&
+                selectedProgram?.channelId == channel.id
+            ? selectedProgram
+            : null);
     _ensureArtwork(program);
-    final channel = program == null
-        ? controller.focusedChannel
-        : controller.lineup.channels
-              .where((channel) => channel.id == program.channelId)
-              .firstOrNull;
     final roles = LineupTheme.of(context);
     final dynamicColor = _dynamicColor ?? roles.progressFill;
     final settings = controller.lineup.settings;

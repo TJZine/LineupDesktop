@@ -236,7 +236,7 @@ class GuideController extends ChangeNotifier {
     _rowWaiters.add(completer);
     void changed() {
       final value = _rows[channelId];
-      if (value != null && value.state != GuideLoadState.loading) {
+      if (value != null && !_isLoadInProgress(value.state)) {
         if (!completer.isCompleted) completer.complete();
       } else if (generation != _generation ||
           !_channelById.containsKey(channelId)) {
@@ -707,7 +707,11 @@ class GuideController extends ChangeNotifier {
     _rows.remove(id);
     _rows[id] = value;
     while (_rows.length > maximumCachedRows) {
-      _rows.remove(_rows.keys.first);
+      final evicted = _rows.keys.firstWhere(
+        (id) => !_isLoadInProgress(_rows[id]!.state),
+        orElse: () => _rows.keys.first,
+      );
+      _rows.remove(evicted);
     }
   }
 
@@ -746,7 +750,7 @@ class GuideController extends ChangeNotifier {
     final loading = _rows.entries
         .where(
           (entry) =>
-              entry.value.state == GuideLoadState.loading &&
+              _isLoadInProgress(entry.value.state) &&
               _channelById.containsKey(entry.key),
         )
         .toList(growable: false);
@@ -762,7 +766,7 @@ class GuideController extends ChangeNotifier {
     }
     while (_rows.length > maximumCachedRows) {
       final evicted = _rows.keys.firstWhere(
-        (id) => _rows[id]!.state != GuideLoadState.loading,
+        (id) => !_isLoadInProgress(_rows[id]!.state),
         orElse: () => _rows.keys.first,
       );
       _rows.remove(evicted);
@@ -803,6 +807,7 @@ class GuideController extends ChangeNotifier {
     final lineupChanged =
         contentChanged ||
         (!identical(old, next) && !_listEqualsBy(old, next, _channelEquals));
+    final schedulesChanged = contentChanged || !_sameSchedulesById(old, next);
     final settingsChanged = _settings.guideHours != lineup.settings.guideHours;
     _channels = next;
     _settings = lineup.settings;
@@ -837,7 +842,7 @@ class GuideController extends ChangeNotifier {
         _selectedChannelId = null;
         _selectedProgramId = null;
       }
-      _reloadRows(clearSchedules: true);
+      _reloadRows(clearSchedules: schedulesChanged);
     } else if (settingsChanged) {
       _reloadRows();
     } else {
@@ -968,6 +973,21 @@ bool _channelEquals(Channel left, Channel right) =>
     left.number == right.number &&
     left.name == right.name &&
     canonicalScheduleIdentity(left) == canonicalScheduleIdentity(right);
+
+bool _isLoadInProgress(GuideLoadState state) => switch (state) {
+  GuideLoadState.loading || GuideLoadState.retrying => true,
+  GuideLoadState.ready || GuideLoadState.error => false,
+};
+
+bool _sameSchedulesById(List<Channel> left, List<Channel> right) {
+  if (left.length != right.length) return false;
+  final identities = {
+    for (final channel in left) channel.id: canonicalScheduleIdentity(channel),
+  };
+  return right.every(
+    (channel) => identities[channel.id] == canonicalScheduleIdentity(channel),
+  );
+}
 
 bool _listEqualsBy<T>(List<T> left, List<T> right, bool Function(T, T) equals) {
   if (identical(left, right)) return true;

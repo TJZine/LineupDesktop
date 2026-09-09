@@ -1355,6 +1355,110 @@ void main() {
     guide.dispose();
     lineup.dispose();
   });
+
+  test('current program waits for a successful retry', () async {
+    final lineup = _TestLineup(_channels(2));
+    final retryLoad = Completer<ScheduleIndex>();
+    var attempts = 0;
+    final guide = GuideController(
+      lineup: lineup,
+      maximumCachedRows: 1,
+      loadSchedule: (channel) {
+        if (channel.id == 'channel-1') {
+          return Future.value(_schedule(channel));
+        }
+        attempts++;
+        return attempts == 1
+            ? Future.error(StateError('offline'))
+            : retryLoad.future;
+      },
+    );
+    expect(await guide.ensureCurrentProgram('channel-0'), isNull);
+
+    await guide.retry('channel-0');
+    lineup.setSettings(const LineupSettings(guideHours: 2));
+    guide.requestChannels([lineup.channels.last]);
+    await _settle();
+    final current = guide.ensureCurrentProgram('channel-0');
+    var completed = false;
+    current.whenComplete(() => completed = true);
+    await _settle();
+
+    expect(guide.row('channel-0').state, GuideLoadState.retrying);
+    expect(completed, isFalse);
+
+    retryLoad.complete(_schedule(lineup.channels.first));
+    expect(await current, isNotNull);
+
+    guide.dispose();
+    lineup.dispose();
+  });
+
+  test('current program settles after retry failure', () async {
+    final lineup = _TestLineup(_channels(1));
+    final retryLoad = Completer<ScheduleIndex>();
+    var attempts = 0;
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (_) {
+        attempts++;
+        return attempts == 1
+            ? Future.error(StateError('offline'))
+            : retryLoad.future;
+      },
+    );
+    expect(await guide.ensureCurrentProgram('channel-0'), isNull);
+
+    await guide.retry('channel-0');
+    final current = expectLater(
+      guide.ensureCurrentProgram('channel-0'),
+      completion(isNull),
+    );
+    retryLoad.completeError(StateError('still offline'));
+
+    await current;
+    expect(guide.row('channel-0').state, GuideLoadState.error);
+
+    guide.dispose();
+    lineup.dispose();
+  });
+
+  test('current program retry wait settles on removal and disposal', () async {
+    for (final disposeDuringRetry in [false, true]) {
+      final lineup = _TestLineup(_channels(1));
+      final retryLoad = Completer<ScheduleIndex>();
+      var attempts = 0;
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (_) {
+          attempts++;
+          return attempts == 1
+              ? Future.error(StateError('offline'))
+              : retryLoad.future;
+        },
+      );
+      expect(await guide.ensureCurrentProgram('channel-0'), isNull);
+
+      await guide.retry('channel-0');
+      final current = guide.ensureCurrentProgram('channel-0');
+      if (disposeDuringRetry) {
+        guide.dispose();
+      } else {
+        lineup.setChannels(const []);
+      }
+
+      expect(
+        await current.timeout(const Duration(milliseconds: 500)),
+        isNull,
+        reason: disposeDuringRetry ? 'disposal' : 'removal',
+      );
+
+      if (!disposeDuringRetry) guide.dispose();
+      retryLoad.complete(_schedule(_channels(1).single));
+      await _settle();
+      lineup.dispose();
+    }
+  });
 }
 
 List<Channel> _channels(
