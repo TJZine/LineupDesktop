@@ -777,11 +777,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
           final width = (constraints.maxWidth - gap * (columns - 1)) / columns;
           return RadioGroup<PlaybackMode>(
             groupValue: _playback,
-            onChanged: (mode) => setState(() {
-              _playback = mode!;
-              _notice = null;
-              _clearDuplicateVariant();
-            }),
+            onChanged: (mode) => _setPlaybackMode(mode!),
             child: Wrap(
               spacing: gap,
               runSpacing: 8,
@@ -825,7 +821,10 @@ class _SetupState extends State<UpstreamChannelSetupView> {
               ? 'Alternate schedules are not available with In order. A different playback mode can still be added.'
               : 'Add alternate schedules after every eligible original channel is included.',
         ),
-        onChanged: (value) => setState(() => _extras = value),
+        onChanged: (value) => setState(() {
+          _extras = value;
+          _clearIncludeSpecialsIfUnused();
+        }),
       ),
       if (_extras)
         Wrap(
@@ -858,6 +857,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
                 onChanged: (value) => setState(() {
                   _variantMode = value;
                   _clearDuplicateVariant();
+                  _clearIncludeSpecialsIfUnused();
                 }),
               ),
             ),
@@ -1062,6 +1062,29 @@ class _SetupState extends State<UpstreamChannelSetupView> {
       _clearDuplicateVariant();
     }),
   );
+
+  void _setPlaybackMode(PlaybackMode mode) {
+    if (mode == _playback) return;
+    setState(() {
+      _playback = mode;
+      _notice = null;
+      final enteringInOrder = mode == PlaybackMode.sequential;
+      final removedAlternateSchedules = enteringInOrder && _alternateCopies > 0;
+      if (removedAlternateSchedules) _alternateCopies = 0;
+      _clearDuplicateVariant();
+      if (removedAlternateSchedules && _notice == null) {
+        _notice = 'Alternate schedules aren’t available with In order.';
+      }
+      _clearIncludeSpecialsIfUnused();
+    });
+  }
+
+  void _clearIncludeSpecialsIfUnused() {
+    final hasBlockOutput =
+        _playback == PlaybackMode.block ||
+        (_extras && _variantMode == PlaybackMode.block);
+    if (!hasBlockOutput) _includeSpecials = false;
+  }
 
   void _clearDuplicateVariant() {
     final duplicate =

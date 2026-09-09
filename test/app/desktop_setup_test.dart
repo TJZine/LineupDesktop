@@ -223,7 +223,7 @@ void main() {
     },
   );
 
-  testWidgets('specials remains authoritative for additional Mini-marathons', (
+  testWidgets('specials clears when additional Mini-marathons are disabled', (
     tester,
   ) async {
     final controller = _SetupController();
@@ -263,7 +263,221 @@ void main() {
     expect(specials, findsNothing);
     await tester.tap(extras);
     await tester.pump();
-    expect(tester.widget<CheckboxMenuButton>(specials).value, isTrue);
+    expect(tester.widget<CheckboxMenuButton>(specials).value, isFalse);
+  });
+
+  testWidgets('playback mode transition clears ineligible copies permanently', (
+    tester,
+  ) async {
+    final controller = _SetupController();
+    addTearDown(controller.dispose);
+    await _pump(tester, controller);
+    await _openPlaybackControls(tester);
+
+    final extras = find.widgetWithText(
+      SwitchListTile,
+      'Additional channel versions',
+    );
+    await tester.ensureVisible(extras);
+    await tester.tap(extras);
+    await tester.pumpAndSettle();
+
+    final copies = _setupField<int>('Alternate schedules');
+    await tester.ensureVisible(copies);
+    await tester.tap(copies);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('2').last);
+    await tester.pumpAndSettle();
+    expect(tester.widget<DropdownButtonFormField<int>>(copies).initialValue, 2);
+    expect(find.textContaining('extra version'), findsOneWidget);
+
+    await tester.tap(
+      find.widgetWithText(RadioListTile<PlaybackMode>, 'In order'),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<DropdownButtonFormField<int>>(
+            _setupField<int>('Alternate schedules'),
+          )
+          .initialValue,
+      0,
+    );
+    expect(
+      tester
+          .widget<DropdownButtonFormField<int>>(
+            _setupField<int>('Alternate schedules'),
+          )
+          .onChanged,
+      isNull,
+    );
+    expect(
+      find.text('Alternate schedules aren’t available with In order.'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('extra version'), findsNothing);
+
+    await tester.tap(
+      find.widgetWithText(RadioListTile<PlaybackMode>, 'Shuffle'),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<DropdownButtonFormField<int>>(
+            _setupField<int>('Alternate schedules'),
+          )
+          .initialValue,
+      0,
+    );
+    expect(
+      tester
+          .widget<DropdownButtonFormField<int>>(
+            _setupField<int>('Alternate schedules'),
+          )
+          .onChanged,
+      isNotNull,
+    );
+    expect(find.textContaining('extra version'), findsNothing);
+  });
+
+  testWidgets(
+    'valid variants survive mode changes and duplicates are cleared',
+    (tester) async {
+      final controller = _SetupController();
+      addTearDown(controller.dispose);
+      await _pump(tester, controller);
+      await _openPlaybackControls(tester);
+
+      final extras = find.widgetWithText(
+        SwitchListTile,
+        'Additional channel versions',
+      );
+      await tester.ensureVisible(extras);
+      await tester.tap(extras);
+      await tester.pumpAndSettle();
+
+      final variant = _setupField<PlaybackMode?>('Different playback mode');
+      await tester.tap(variant);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Shuffle').last);
+      await tester.pumpAndSettle();
+      expect(
+        find.text(
+          'The duplicate extra version was removed because it matches your main playback order.',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        tester
+            .widget<DropdownButtonFormField<PlaybackMode?>>(
+              _setupField<PlaybackMode?>('Different playback mode'),
+            )
+            .initialValue,
+        isNull,
+      );
+
+      await tester.tap(_setupField<PlaybackMode?>('Different playback mode'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Mini-marathons').last);
+      await tester.pumpAndSettle();
+      final extraBlock = _setupField<int>('Extra block size');
+      await tester.tap(extraBlock);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('4').last);
+      await tester.pumpAndSettle();
+
+      final inOrder = find.widgetWithText(
+        RadioListTile<PlaybackMode>,
+        'In order',
+      );
+      await tester.ensureVisible(inOrder);
+      await tester.tap(inOrder);
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<DropdownButtonFormField<PlaybackMode?>>(
+              _setupField<PlaybackMode?>('Different playback mode'),
+            )
+            .initialValue,
+        PlaybackMode.block,
+      );
+
+      final mainMiniMarathons = find.widgetWithText(
+        RadioListTile<PlaybackMode>,
+        'Mini-marathons',
+      );
+      await tester.ensureVisible(mainMiniMarathons);
+      await tester.tap(mainMiniMarathons);
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<DropdownButtonFormField<PlaybackMode?>>(
+              _setupField<PlaybackMode?>('Different playback mode'),
+            )
+            .initialValue,
+        PlaybackMode.block,
+      );
+      expect(
+        tester
+            .widget<DropdownButtonFormField<int>>(
+              _setupField<int>('Extra block size'),
+            )
+            .initialValue,
+        4,
+      );
+      expect(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is Text &&
+              RegExp(r'\d+ originals \+ \d+ extra versions')
+                  .hasMatch(widget.data ?? ''),
+        ),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets('disabling extras removes allocation but preserves originals', (
+    tester,
+  ) async {
+    final controller = _SetupController();
+    addTearDown(controller.dispose);
+    await _pump(tester, controller);
+    await _openPlaybackControls(tester);
+
+    final extras = find.widgetWithText(
+      SwitchListTile,
+      'Additional channel versions',
+    );
+    await tester.ensureVisible(extras);
+    await tester.tap(extras);
+    await tester.pumpAndSettle();
+    final variant = _setupField<PlaybackMode?>('Different playback mode');
+    await tester.tap(variant);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Mini-marathons').last);
+    await tester.pumpAndSettle();
+
+    final enabledSummary = tester
+        .widget<Text>(
+          find.byWidgetPredicate(
+            (widget) =>
+                widget is Text &&
+                RegExp(r'\d+ originals \+ \d+ extra versions')
+                    .hasMatch(widget.data ?? ''),
+          ),
+        )
+        .data!;
+    final originalCount = RegExp(r'(\d+) originals')
+        .firstMatch(enabledSummary)!
+        .group(1);
+    expect(find.textContaining('extra version'), findsOneWidget);
+
+    await tester.ensureVisible(extras);
+    await tester.tap(extras);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('extra version'), findsNothing);
+    expect(find.textContaining('$originalCount generated'), findsOneWidget);
   });
 
   testWidgets('stale apply refreshes review and requires another apply', (
@@ -429,6 +643,17 @@ Future<void> _advanceToReview(WidgetTester tester) async {
   await tester.tap(find.byKey(const ValueKey('review-channels')));
   await tester.pumpAndSettle();
 }
+
+Future<void> _openPlaybackControls(WidgetTester tester) async {
+  await _advanceToConfigure(tester);
+  await tester.tap(find.byKey(const ValueKey('configure-section-1')));
+  await tester.pumpAndSettle();
+}
+
+Finder _setupField<T>(String label) => find.byWidgetPredicate(
+  (widget) =>
+      widget is DropdownButtonFormField && widget.decoration.labelText == label,
+);
 
 class _SetupController extends FixtureController {
   _SetupController({
