@@ -10,7 +10,8 @@ package identity, media set, and transition results were not captured. The
 deeper campaign below remains the support/release record, not an urgent
 precondition for continuing product-completeness work.
 
-**Target branch:** `flutter-mvp`
+**Target:** The exact commit requested for acceptance. `flutter-mvp` is the
+default development branch, not a substitute for a requested feature commit.
 
 This is the authoritative physical-Windows campaign for native presentation,
 libmpv playback, focus/input integration, and portable packaging. It is a
@@ -63,32 +64,39 @@ Safety rules:
   that DLL from another machine into the package.
 - Stop immediately if credentials appear in output or an unintended UI surface.
 
-## 1. Define local paths
+## 1. Define the target and local paths
 
-Start in PowerShell 7.4 or newer (`pwsh`) with the exact Flutter and pinned
-`depot_tools` environment from [Development](DEVELOPMENT.md). Edit only these
-values:
+Use the full Windows prerequisites and pinned environment from
+[Development](DEVELOPMENT.md#patched-engine-provisioning). Before the campaign,
+select a clean checkout at the requested commit and put its full SHA below.
+If the request explicitly targets the latest `flutter-mvp`, fetch and
+fast-forward that branch during setup, then record the resolved SHA. Do not
+switch branches or update the checkout during acceptance.
 
 ```powershell
 $Repo = 'C:\src\LineupDesktop'
+$TargetCommit = '<full-40-character-commit-sha>'
 $FlutterRoot = 'C:\src\flutter'
 $MpvRoot = 'C:\local\lineup-mpv' # Must be new or empty.
 $SdrSample = 'C:\test-media\sdr-sample.mp4'
 ```
 
-The machine needs Visual Studio Build Tools 2022 with Desktop C++, ATL, Windows
-SDK `10.0.22621.0`, Debugging Tools for Windows, 7-Zip, Git, PowerShell 7.4 or
-newer, Python, `depot_tools`, and the exact Flutter checkout documented in
-[Development](DEVELOPMENT.md).
-
 ## 2. Establish a clean, exact baseline
 
 ```powershell
 $ErrorActionPreference = 'Stop'
+$PSNativeCommandUseErrorActionPreference = $true
 Set-Location $Repo
 
+if ($TargetCommit -notmatch '^[0-9a-fA-F]{40}$') {
+  throw 'Set TargetCommit to the full requested commit SHA.'
+}
 if (git status --porcelain) {
-  throw 'Worktree must be clean before switching or updating the branch.'
+  throw 'Worktree must be clean before native acceptance.'
+}
+$Head = (git rev-parse --verify HEAD).Trim()
+if ($Head -ne $TargetCommit) {
+  throw 'Checkout does not match TargetCommit; select the requested commit before testing.'
 }
 
 $ExpectedFlutter = [IO.Path]::GetFullPath((Join-Path $FlutterRoot 'bin\flutter.bat'))
@@ -97,15 +105,6 @@ if ($ActualFlutter -ne $ExpectedFlutter) {
   throw "flutter resolves to $ActualFlutter instead of $ExpectedFlutter."
 }
 
-git fetch origin
-git switch flutter-mvp
-git merge --ff-only origin/flutter-mvp
-
-if (git status --porcelain) {
-  throw 'Worktree must be clean before native acceptance.'
-}
-
-$Head = (git rev-parse HEAD).Trim()
 $EvidenceRoot = Join-Path $Repo "build\native-acceptance\$Head"
 New-Item -ItemType Directory -Force -Path $EvidenceRoot | Out-Null
 
@@ -146,12 +145,17 @@ if (git status --porcelain) {
 ```
 
 All commands must pass on `$Head`; a pass on another SHA is not evidence.
+Already inspected results may be reused only under
+[Development's currentness rule](DEVELOPMENT.md), including the same target SHA
+and relevant environment. Windows `flutter test` excludes the macOS-only golden
+suites; record their separate macOS evidence when relevant rather than calling
+the Windows pass pixel proof.
 
 ## 4. Verify the pinned runtime and patched engine
 
 Follow the one-time engine-provisioning procedure in
-[Development](DEVELOPMENT.md). Do not substitute a framework, engine, patch,
-`depot_tools` revision, libmpv asset, or hash.
+[Development](DEVELOPMENT.md#patched-engine-provisioning). Do not substitute a
+framework, engine, patch, `depot_tools` revision, libmpv asset, or hash.
 
 ```powershell
 Set-Location $Repo
@@ -193,15 +197,9 @@ if (-not (Test-Path -LiteralPath $EngineSource)) {
 }
 ```
 
-Build both local-engine configurations when they are not already current:
-
-```powershell
-Set-Location $EngineSource
-python .\flutter\tools\gn --runtime-mode=debug
-ninja -C out\host_debug
-python .\flutter\tools\gn --runtime-mode=release
-ninja -C out\host_release
-```
+This campaign uses both debug and release local-engine configurations. Build
+them with Development's provisioning commands when they are not already current;
+the release wrapper also refreshes its selected engine before packaging.
 
 ## 5. Local SDR smoke test
 
@@ -247,6 +245,8 @@ Classify every row as **Pass**, **Fail — blocker**, **Fail — non-blocking**,
 | Overlay Guide | Real video remains beneath legible, interactive Flutter artwork, text, focus, and schedule | |
 | Continuity | Player -> Guide -> Player preserves one session and restores focus | |
 | Replacement tune | Guide and mini-Guide replacement leave no stale audio/frame/event, duplicate player, or retained lease | |
+| Failure cleanup | Delay a controlled media response beyond the load deadline, then sign out or switch profile/server; no late audio/video may appear. Repeat with an asynchronous native control failure and a replacement tune while cleanup is pending. A failed stop must remain retryable and must not be reported as completed cleanup | |
+| Multipart seek readiness | With DVR controls enabled, seek twice into the same loading destination part; only the latest target is applied after readiness. Repeat with a failed destination load and with a replacement tune during loading; no hidden failure or stale seek may affect the replacement | |
 | OSD/transport | Verify default classic-TV OSD (transport hidden and Player-local pause/play/seek/stop/media shortcuts blocked), retained channel/tuning/tracks/sleep/menu/fullscreen input, then enable DVR playback controls and verify transport UI plus those shortcuts; include reveal/auto-hide | |
 | Tracks | Audio selection matches output; subtitles select, render, and disable without hiding Flutter controls | |
 | Input | Keyboard contracts pass; available remote/gamepad maps predictably and leaves every core control reachable | |
@@ -428,22 +428,25 @@ media metadata.
 You are working in TJZine/LineupDesktop on a physical Windows native-test
 machine.
 
-Required branch: flutter-mvp
+Required target commit: <full-40-character-commit-sha>
 
 Do not merge. Do not make product-code changes during acceptance unless a
 separate implementation task explicitly authorizes them.
 
-Read and follow AGENTS.md, docs/README.md, docs/DEVELOPMENT.md,
-docs/architecture.md, docs/windows-runtime.md,
-docs/windows-native-validation.md, and docs/guide-pip-composition-spec.md.
+Read AGENTS.md and the relevant sections of docs/DEVELOPMENT.md,
+docs/architecture.md, docs/windows-runtime.md, and
+docs/guide-pip-composition-spec.md. Use docs/README.md for authority questions.
 
-Fetch and fast-forward, report the actual HEAD, and require a clean worktree.
+Require a clean worktree and verify HEAD equals the requested target SHA before
+testing. Do not silently replace it with the latest flutter-mvp or another
+branch. Report the actual HEAD and keep it fixed throughout the campaign.
 Use the exact repository-pinned Flutter framework, engine, DirectComposition
 patch, depot_tools revision, and LGPL libmpv runtime. Substitute nothing.
 
 Execute docs/windows-native-validation.md in order. Capture the redacted
-machine/build baseline; run pub get, format, analyze, and all tests; verify and
-build patched debug/release engines; run local SDR smoke; complete Plex,
+machine/build baseline; establish target-commit deterministic checks and verify
+patched debug/release engines, reusing only still-current results as allowed by
+the procedure; run local SDR smoke; complete Plex,
 channels, Guide/PiP/Overlay, Player, replacement, window/DPI/fullscreen,
 focus/input, media/HDR/tracks, and lifecycle scenarios; build and validate the
 portable package; then produce the exact-commit acceptance report.

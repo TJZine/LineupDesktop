@@ -21,6 +21,9 @@ import 'package:lineup_desktop/ui/app_ui.dart';
 final _fixtureArtwork = base64Decode(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
 );
+final _extremeWideArtwork = base64Decode(
+  'iVBORw0KGgoAAAANSUhEUgAABLAAAAAUCAIAAAASgVNzAAAAIGNIUk0AAHomAACAhAAA+gAAAIDoAAB1MAAA6mAAADqYAAAXcJy6UTwAAAAGYktHRAD/AP8A/6C9p5MAAAAHdElNRQfqCQQBEhHq/110AAAAJXRFWHRkYXRlOmNyZWF0ZQAyMDI2LTA5LTA0VDAxOjE4OjE3KzAwOjAwct2ViQAAACV0RVh0ZGF0ZTptb2RpZnkAMjAyNi0wOS0wNFQwMToxODoxNyswMDowMAOALTUAAAAodEVYdGRhdGU6dGltZXN0YW1wADIwMjYtMDktMDRUMDE6MTg6MTcrMDA6MDBUlQzqAAAAjUlEQVR42u3XMQEAIAzAMMC/5yFjRxMFfXtn5gAAANDztgMAAADYYQgBAACiDCEAAECUIQQAAIgyhAAAAFGGEAAAIMoQAgAARBlCAACAKEMIAAAQZQgBAACiDCEAAECUIQQAAIgyhAAAAFGGEAAAIMoQAgAARBlCAACAKEMIAAAQZQgBAACiDCEAAEDUB/B/AyWGhzYyAAAAAElFTkSuQmCC',
+);
 
 void main() {
   testWidgets('unsupported macOS backend keeps the Flutter player accessible', (
@@ -2093,6 +2096,50 @@ void main() {
     fixture.dispose();
   });
 
+  testWidgets('Now Playing keeps series identity when logo is unusable', (
+    tester,
+  ) async {
+    for (final (bytes, description, precache) in [
+      (Uint8List.fromList(const [1, 2, 3]), 'invalid', false),
+      (_extremeWideArtwork, 'extreme-wide', true),
+    ]) {
+      final fixture = _Fixture(
+        PlayerState.playing,
+        richProgram: true,
+        artworkBytes: bytes,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      );
+      fixture.player.showNowPlaying();
+      await tester.pump();
+      if (precache) {
+        await tester.runAsync(
+          () => precacheImage(
+            MemoryImage(bytes),
+            tester.element(find.byType(PlayerView)),
+          ),
+        );
+      }
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('player-now-playing-series')),
+        findsOneWidget,
+        reason: description,
+      );
+      expect(
+        find.byKey(const Key('player-now-playing-title')),
+        findsOneWidget,
+        reason: description,
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    }
+  });
+
   testWidgets('Now Playing input replaces the surface and still executes', (
     tester,
   ) async {
@@ -2147,8 +2194,14 @@ void main() {
       await tester.pump();
 
       fixture.player.showNowPlaying();
-      await tester.pump();
-      await tester.pump();
+      await tester.pumpAndSettle();
+      await tester.runAsync(
+        () => precacheImage(
+          MemoryImage(_fixtureArtwork),
+          tester.element(find.byType(PlayerView)),
+        ),
+      );
+      await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('player-now-playing-title')), findsOneWidget);
       expect(
@@ -2383,6 +2436,10 @@ void main() {
   ) async {
     addTearDown(tester.view.resetDevicePixelRatio);
     addTearDown(tester.view.resetPhysicalSize);
+    // A 3:1 image remains usable in the compact shelf's title-artwork slot.
+    final wideArtwork = base64Decode(
+      'iVBORw0KGgoAAAANSUhEUgAAAAMAAAABCAAAAAA+i0toAAAADElEQVR4nGP4//8/AAX+Av4N70a4AAAAAElFTkSuQmCC',
+    );
 
     for (final variant in const [
       (
@@ -2411,6 +2468,7 @@ void main() {
       final fixture = variant.castPresent
           ? _Fixture(
               PlayerState.playing,
+              artworkBytes: wideArtwork,
               richItemOverride: _fixtureItem(
                 0,
                 rich: true,
@@ -2438,6 +2496,16 @@ void main() {
         await tester.pump();
         fixture.player.showNowPlaying();
         await tester.pumpAndSettle();
+
+        if (index == 0) {
+          await tester.runAsync(
+            () => precacheImage(
+              MemoryImage(variant.castPresent ? wideArtwork : _fixtureArtwork),
+              tester.element(find.byType(PlayerView)),
+            ),
+          );
+          await tester.pumpAndSettle();
+        }
 
         final shelfSize = tester.getSize(
           find.byKey(const Key('player-now-playing-shelf')),
@@ -2692,6 +2760,7 @@ class _Fixture {
     bool preferClearLogos = true,
     bool dvrControlsEnabled = false,
     bool failArtwork = false,
+    Uint8List? artworkBytes,
     bool blockArtwork = false,
     bool shortPrograms = false,
     bool longNextTitle = false,
@@ -2707,6 +2776,7 @@ class _Fixture {
       preferClearLogos: preferClearLogos,
       dvrControlsEnabled: dvrControlsEnabled,
       failArtwork: failArtwork,
+      artworkBytes: artworkBytes,
       blockArtwork: blockArtwork,
       shortPrograms: shortPrograms,
       longNextTitle: longNextTitle,
@@ -2760,6 +2830,7 @@ class _Lineup extends LineupController {
     bool preferClearLogos = true,
     bool dvrControlsEnabled = false,
     this.failArtwork = false,
+    this.artworkBytes,
     this.blockArtwork = false,
     bool shortPrograms = false,
     bool longNextTitle = false,
@@ -2820,6 +2891,7 @@ class _Lineup extends LineupController {
 
   final artworkRequests = <Uri>[];
   final bool failArtwork;
+  final Uint8List? artworkBytes;
   final bool blockArtwork;
   final artworkCompletions = <Uri, Completer<Uint8List?>>{};
   int _contentGeneration = 0;
@@ -2834,7 +2906,7 @@ class _Lineup extends LineupController {
     if (blockArtwork) {
       return (artworkCompletions[path] ??= Completer<Uint8List?>()).future;
     }
-    return _fixtureArtwork;
+    return artworkBytes ?? _fixtureArtwork;
   }
 
   void replaceArtwork(String tag, {bool bumpGeneration = false}) {

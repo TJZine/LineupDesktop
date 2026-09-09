@@ -79,11 +79,14 @@ class PlayerCoordinator extends ChangeNotifier {
   int? _knownTargetGeneration;
   Duration? _knownLocalTarget;
   int _activePartIndex = 0;
+  (int, Future<void>)? _pendingNativeLoad;
+  (int, int, Future<LineupPlaybackRequest?>)? _pendingSeekPart;
   final Map<int, Duration> _partDurations = {};
   int? _advancingGeneration;
   int? _nativeReplacementGeneration;
   Future<void> _tuneOperations = Future.value();
   Future<void>? _nativeStopOperation;
+  bool _nativeCleanupRequired = false;
   Future<void> _scopeCleanup = Future.value();
   Future<void> _fullscreenOperations = Future.value();
   bool _scopeCleanupPending = false;
@@ -261,11 +264,9 @@ class PlayerCoordinator extends ChangeNotifier {
         'videoOutput': event.telemetry.videoOutput,
         'hardwareDecoder': event.telemetry.hardwareDecoder,
       });
-      _activeLoadGeneration = null;
+      unawaited(_stopQuietly());
       _invalidateAuthorizationRecovery();
-      _nativeReplacementGeneration = null;
-      _error =
-          'Playback stopped unexpectedly. Retry or choose another channel.';
+      _error = 'Playback failed. Retry or choose another channel.';
       _tuning = false;
       _canRetry = event.status.recoverable && _retryChannelId != null;
       _activePlayback = null;
@@ -362,6 +363,8 @@ class PlayerCoordinator extends ChangeNotifier {
       await _load(media);
       if (!_disposed && generation == _tuneGeneration) showOsd();
     } catch (error) {
+      if (_disposed || generation != _tuneGeneration) return;
+      await _stopQuietly();
       if (_disposed || generation != _tuneGeneration) return;
       _recordPlaybackFailure(error);
       _error = _safePlaybackError(error);
@@ -508,14 +511,28 @@ class PlayerCoordinator extends ChangeNotifier {
         const PlayerUnavailable('Playback stop is still pending.'),
       );
     }
+    if (retryCeilingRequest == null) _pendingSeekPart = null;
     final generation = ++_nativeLoadGeneration;
     _activeLoadGeneration = generation;
+    _nativeCleanupRequired = true;
     _retryCeilingRequest = retryCeilingRequest;
     _retryCeilingGeneration = retryCeilingRequest == null ? null : generation;
     _knownTargetGeneration = knownLocalTarget == null ? null : generation;
     _knownLocalTarget = knownLocalTarget;
     _nativePosition = Duration.zero;
-    return player.load(media, plexToken: plexToken, generation: generation);
+    final load = player.load(
+      media,
+      plexToken: plexToken,
+      generation: generation,
+    );
+    _pendingNativeLoad = (generation, load);
+    // Every seek into this part shares readiness, including part advancement.
+    unawaited(
+      load.then<void>((_) {}, onError: (Object _) {}).whenComplete(() {
+        if (_pendingNativeLoad?.$1 == generation) _pendingNativeLoad = null;
+      }),
+    );
+    return load;
   }
 
   Future<LineupPlaybackRequest> _loadPlayback(
@@ -605,6 +622,9 @@ class PlayerCoordinator extends ChangeNotifier {
       next.parts[_activePartIndex].uri,
       plexToken: next.plexToken,
       retryCeilingRequest: next,
+      knownLocalTarget: _knownTargetGeneration == rejectedGeneration
+          ? _knownLocalTarget ?? localPosition
+          : localPosition,
     );
     final replacementGeneration = _activeLoadGeneration!;
     await load;
@@ -615,7 +635,10 @@ class PlayerCoordinator extends ChangeNotifier {
         (wasActive && !identical(_activePlayback, rejected))) {
       throw StateError('Playback request was superseded.');
     }
-    if (localPosition > Duration.zero) await player.seek(localPosition);
+    final resumePosition = _knownTargetGeneration == replacementGeneration
+        ? _knownLocalTarget ?? localPosition
+        : localPosition;
+    if (resumePosition > Duration.zero) await player.seek(resumePosition);
     if (_disposed ||
         tuneGeneration != _tuneGeneration ||
         _activeLoadGeneration != replacementGeneration ||
@@ -623,7 +646,7 @@ class PlayerCoordinator extends ChangeNotifier {
         (wasActive && !identical(_activePlayback, rejected))) {
       throw StateError('Playback request was superseded.');
     }
-    _nativePosition = localPosition;
+    _nativePosition = resumePosition;
     if (wasActive) {
       _activePlayback = next;
       _provisionalPlayback = null;
@@ -931,38 +954,66 @@ class PlayerCoordinator extends ChangeNotifier {
     final target = playback == null
         ? null
         : _partForPosition(playback, position);
-    if (playback != null && target != null && target.$1 != _activePartIndex) {
+    final changingPart =
+        playback != null && target != null && target.$1 != _activePartIndex;
+    final pending = _pendingNativeLoad;
+    final shared = _pendingSeekPart;
+    final sharedReadiness =
+        shared != null && shared.$1 == target?.$1 && shared.$2 == tuneGeneration
+        ? shared.$3
+        : null;
+    if (playback != null &&
+        target != null &&
+        (changingPart ||
+            (pending != null && pending.$1 == _activeLoadGeneration) ||
+            sharedReadiness != null ||
+            _authorizationRecovery != null)) {
       final previousGeneration = _activeLoadGeneration;
       _advancingGeneration = previousGeneration;
-      _activePartIndex = target.$1;
-      final replacementGeneration = _nativeLoadGeneration + 1;
-      _nativeReplacementGeneration = replacementGeneration;
+      final replacementGeneration = changingPart
+          ? _nativeLoadGeneration + 1
+          : _authorizationRecoveryGeneration ?? _activeLoadGeneration!;
+      if (changingPart) {
+        _activePartIndex = target.$1;
+        _nativeReplacementGeneration = replacementGeneration;
+      }
+      _knownTargetGeneration = changingPart
+          ? replacementGeneration
+          : _activeLoadGeneration;
+      _knownLocalTarget = target.$2;
       try {
-        final load = _load(
-          playback.parts[_activePartIndex].uri,
-          plexToken: playback.plexToken,
-          knownLocalTarget: target.$2,
-        );
-        var generation = _activeLoadGeneration;
-        await load;
-        if (!_ownsSeek(seekGeneration, tuneGeneration)) return;
+        final load = changingPart
+            ? _load(
+                playback.parts[_activePartIndex].uri,
+                plexToken: playback.plexToken,
+                knownLocalTarget: target.$2,
+              )
+            : pending?.$2 ?? Future<void>.value();
         final rejected = playback;
-        final recovery = _authorizationRecoveryFor(
-          rejected,
-          replacementGeneration,
-        );
-        if (recovery != null) {
-          playback = await recovery;
-          if (!_ownsSeek(seekGeneration, tuneGeneration)) return;
-          _clearAuthorizationRecovery(rejected, replacementGeneration);
-          generation = _activeLoadGeneration;
+        final readiness =
+            sharedReadiness ??
+            _awaitSeekPart(
+              rejected,
+              replacementGeneration,
+              tuneGeneration,
+              load,
+            );
+        _pendingSeekPart = (target.$1, tuneGeneration, readiness);
+        try {
+          playback = await readiness;
+        } finally {
+          if (identical(_pendingSeekPart?.$3, readiness)) {
+            _pendingSeekPart = null;
+          }
         }
         if (!_ownsSeek(seekGeneration, tuneGeneration) ||
-            !identical(_activePlayback, playback) ||
-            _activeLoadGeneration != generation) {
+            playback == null ||
+            !identical(_activePlayback, playback)) {
           return;
         }
-        if (recovery == null) await player.seek(target.$2);
+        final generation = _activeLoadGeneration;
+        if (generation == null) return;
+        if (_nativePosition != target.$2) await player.seek(target.$2);
         if (!_ownsSeek(seekGeneration, tuneGeneration) ||
             !identical(_activePlayback, playback) ||
             _activeLoadGeneration != generation) {
@@ -974,42 +1025,10 @@ class PlayerCoordinator extends ChangeNotifier {
           _knownLocalTarget = null;
         }
       } catch (error) {
-        if (!_ownsSeek(seekGeneration, tuneGeneration)) return;
-        final rejected = playback!;
-        final recovery = _authorizationRecoveryFor(
-          rejected,
-          replacementGeneration,
-        );
-        if (recovery != null) {
-          try {
-            playback = await recovery;
-            final recoveredGeneration = _activeLoadGeneration;
-            if (!_ownsSeek(seekGeneration, tuneGeneration) ||
-                !identical(_activePlayback, playback) ||
-                recoveredGeneration == null) {
-              return;
-            }
-            _clearAuthorizationRecovery(rejected, replacementGeneration);
-          } catch (recoveryError) {
-            if (!_ownsSeek(seekGeneration, tuneGeneration) ||
-                !_ownsAuthorizationRecoveryFailure(
-                  rejected,
-                  replacementGeneration,
-                )) {
-              return;
-            }
-            await _failTransition(recoveryError, tuneGeneration);
-            return;
-          }
-        } else {
-          if (!_ownsSeek(seekGeneration, tuneGeneration) ||
-              _activeLoadGeneration != replacementGeneration ||
-              !identical(_activePlayback, rejected)) {
-            return;
-          }
-          await _failTransition(error, tuneGeneration);
-          return;
+        if (_ownsSeek(seekGeneration, tuneGeneration)) {
+          _publishControlFailure('seek', error);
         }
+        return;
       } finally {
         if (_advancingGeneration == previousGeneration) {
           _advancingGeneration = null;
@@ -1027,6 +1046,52 @@ class PlayerCoordinator extends ChangeNotifier {
     }
     if (!_ownsSeek(seekGeneration, tuneGeneration)) return;
     showOsd();
+  }
+
+  Future<LineupPlaybackRequest?> _awaitSeekPart(
+    LineupPlaybackRequest request,
+    int generation,
+    int tuneGeneration,
+    Future<void> load,
+  ) async {
+    Object? failure;
+    try {
+      await load;
+    } catch (error) {
+      failure = error;
+    }
+    // Position generations may supersede each other, but never their shared
+    // load dependency. Only replacement media or a new tune retires its error.
+    final recovery = _authorizationRecoveryFor(request, generation);
+    if (recovery != null) {
+      try {
+        final next = await recovery;
+        if (_disposed ||
+            tuneGeneration != _tuneGeneration ||
+            !identical(_activePlayback, next)) {
+          return null;
+        }
+        _clearAuthorizationRecovery(request, generation);
+        return next;
+      } catch (error) {
+        if (tuneGeneration == _tuneGeneration &&
+            _ownsAuthorizationRecoveryFailure(request, generation)) {
+          await _failTransition(error, tuneGeneration);
+        }
+        return null;
+      }
+    }
+    if (_disposed ||
+        tuneGeneration != _tuneGeneration ||
+        _activeLoadGeneration != generation ||
+        !identical(_activePlayback, request)) {
+      return null;
+    }
+    if (failure != null) {
+      await _failTransition(failure, tuneGeneration);
+      return null;
+    }
+    return request;
   }
 
   Future<void> selectTrack(PlayerTrackType type, int? id) =>
@@ -1317,7 +1382,7 @@ class PlayerCoordinator extends ChangeNotifier {
       ++_controlGeneration;
       ++_seekGeneration;
       final fullscreenCleanup = _queueFullscreenReset();
-      if (_activePlayback != null || _tuning || _activeLoadGeneration != null) {
+      if (_activePlayback != null || _tuning || _nativeCleanupRequired) {
         ++_tuneGeneration;
         _tuning = false;
         _canRetry = false;
@@ -1456,7 +1521,8 @@ class PlayerCoordinator extends ChangeNotifier {
     if (pending != null) {
       return pending;
     }
-    if (!force && _activeLoadGeneration == null) return null;
+    if (!force && !_nativeCleanupRequired) return null;
+    _nativeCleanupRequired = true;
     _retirePlaybackIntent();
     late final Future<void> operation;
     operation = Future<void>.sync(player.stop)
@@ -1466,6 +1532,9 @@ class PlayerCoordinator extends ChangeNotifier {
             'Native playback did not stop within 10 seconds.',
           ),
         )
+        .then((_) {
+          _nativeCleanupRequired = false;
+        })
         .whenComplete(() {
           if (identical(_nativeStopOperation, operation)) {
             _nativeStopOperation = null;
@@ -1477,6 +1546,7 @@ class PlayerCoordinator extends ChangeNotifier {
   }
 
   void _retirePlaybackIntent() {
+    _pendingSeekPart = null;
     _activeLoadGeneration = null;
     _advancingGeneration = null;
     _nativeReplacementGeneration = null;

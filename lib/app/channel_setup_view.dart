@@ -1800,7 +1800,9 @@ class _BuildProgress extends StatelessWidget {
                       child: ExcludeSemantics(
                         child: _ImpactCount(
                           value: impact.finalCount,
-                          label: 'channels ready',
+                          label: impact.finalCount == 1
+                              ? 'channel ready'
+                              : 'channels ready',
                           emphasized: true,
                         ),
                       ),

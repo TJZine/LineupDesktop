@@ -6,6 +6,8 @@ String? channelDecadeForYear(int? year) {
   return '${year ~/ 10 * 10}s';
 }
 
+String normalizePersonName(String value) => value.trim().toLowerCase();
+
 List<ChannelItem> resolveContent(
   ContentSource source,
   List<PlexMediaItem> media, [
@@ -46,9 +48,18 @@ List<ChannelItem> _library(LibrarySource source, List<PlexMediaItem> media) {
         (item) => item.collections.contains(filter.value),
       ),
       'studio' => items.where((item) => item.studio == filter.value),
-      'actor' => items.where((item) => item.actors.contains(filter.value)),
+      'actor' => items.where(
+        (item) => item.actors.any(
+          (actor) =>
+              normalizePersonName(actor) == normalizePersonName(filter.value),
+        ),
+      ),
       'director' => items.where(
-        (item) => item.directors.contains(filter.value),
+        (item) => item.directors.any(
+          (director) =>
+              normalizePersonName(director) ==
+              normalizePersonName(filter.value),
+        ),
       ),
       'decade' when RegExp(r'^\d{3}0s$').hasMatch(filter.value) => items.where(
         (item) => channelDecadeForYear(item.year) == filter.value,
@@ -119,7 +130,9 @@ ChannelItem channelItemFor(PlexMediaItem item) => ChannelItem(
       (member) => ChannelCastMember(
         name: member.name,
         role: member.role,
-        portrait: _artworkPath(member.thumbPath),
+        portrait: canonicalPlexCastPortrait(
+          member.thumbPath == null ? null : Uri.tryParse(member.thumbPath!),
+        ),
       ),
     ),
   ),

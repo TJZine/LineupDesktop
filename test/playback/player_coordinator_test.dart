@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/channels/channel.dart';
@@ -8,11 +9,181 @@ import 'package:lineup_desktop/guide/guide_controller.dart';
 import 'package:lineup_desktop/persistence/app_store.dart';
 import 'package:lineup_desktop/playback/native_player.dart';
 import 'package:lineup_desktop/playback/player_coordinator.dart';
+import 'package:lineup_desktop/playback/windows_native_player.dart';
 import 'package:lineup_desktop/plex/plex_client.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  for (final failure in ['timeout', 'command_error']) {
+    test(
+      'native $failure retains cleanup through failed stop and logout',
+      () async {
+        const channel = MethodChannel('lineup/native_player');
+        final messenger =
+            TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+        final calls = <MethodCall>[];
+        messenger.setMockMethodCallHandler(channel, (call) async {
+          calls.add(call);
+          return null;
+        });
+        addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+        final lineup = _LogoutLineup();
+        final guide = GuideController(
+          lineup: lineup,
+          loadSchedule: (channel) async => _schedule(channel),
+        );
+        final player = WindowsNativePlayer(
+          loadTimeout: failure == 'timeout' ? Duration.zero : null,
+        );
+        await player.initialize();
+        final coordinator = PlayerCoordinator(
+          player: player,
+          lineup: lineup,
+          guide: guide,
+        );
+        addTearDown(lineup.dispose);
+        addTearDown(guide.dispose);
+        addTearDown(player.dispose);
+        addTearDown(coordinator.dispose);
+        final tune = coordinator.tune('channel-b');
+        while (!calls.any((call) => call.method == 'load')) {
+          await Future<void>.delayed(Duration.zero);
+        }
+        final loadId = calls
+            .firstWhere((call) => call.method == 'load')
+            .arguments['loadId'];
+        if (failure == 'command_error') {
+          await _nativeEvent({
+            'type': 'state',
+            'loadId': loadId,
+            'state': 'playing',
+          });
+          expect(await tune, isTrue);
+          await _nativeEvent({
+            'type': 'state',
+            'loadId': loadId,
+            'state': 'error',
+            'failureCode': 'command_error',
+          });
+        }
+        while (!calls.any((call) => call.method == 'stop')) {
+          await Future<void>.delayed(const Duration(milliseconds: 1));
+        }
+        final firstStop = calls.last.arguments['stopId'];
+        await _nativeEvent({
+          'type': 'state',
+          'loadId': loadId,
+          'state': 'playing',
+        });
+        expect(coordinator.status.state, isNot(PlayerState.playing));
+        await _nativeEvent({
+          'type': 'stopResult',
+          'stopId': firstStop,
+          'success': false,
+        });
+        await tune;
+        await pumpEventQueue(times: 2);
+        expect(calls.where((call) => call.method == 'stop'), hasLength(1));
+        expect(await coordinator.logout(), isFalse);
+        final logout = coordinator.logout();
+        await pumpEventQueue(times: 2);
+        final stops = calls.where((call) => call.method == 'stop').toList();
+        expect(stops, hasLength(2));
+        final secondStop = stops.last.arguments['stopId'];
+        expect(secondStop, isNot(firstStop));
+        await _nativeEvent({
+          'type': 'stopResult',
+          'stopId': firstStop,
+          'success': true,
+        });
+        await _nativeEvent({
+          'type': 'stopResult',
+          'stopId': secondStop,
+          'success': true,
+        });
+        expect(await logout, isTrue);
+        expect(coordinator.hasPlaybackIntent, isFalse);
+        expect(player.status.state, PlayerState.stopped);
+      },
+    );
+  }
+
+  test(
+    'native replacement waits for failure cleanup and ignores retired events',
+    () async {
+      const channel = MethodChannel('lineup/native_player');
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      final calls = <MethodCall>[];
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        calls.add(call);
+        return null;
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+      final lineup = _TestLineup();
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => _schedule(channel),
+      );
+      final player = WindowsNativePlayer();
+      await player.initialize();
+      final coordinator = PlayerCoordinator(
+        player: player,
+        lineup: lineup,
+        guide: guide,
+      );
+      addTearDown(lineup.dispose);
+      addTearDown(guide.dispose);
+      addTearDown(player.dispose);
+      addTearDown(coordinator.dispose);
+      final tune = coordinator.tune('channel-b');
+      await pumpEventQueue(times: 2);
+      final firstId = calls.last.arguments['loadId'];
+      await _nativeEvent({
+        'type': 'state',
+        'loadId': firstId,
+        'state': 'playing',
+      });
+      expect(await tune, isTrue);
+      await _nativeEvent({
+        'type': 'state',
+        'loadId': firstId,
+        'state': 'error',
+        'failureCode': 'command_error',
+      });
+      final replacement = coordinator.tune('channel-0');
+      await pumpEventQueue(times: 2);
+      expect(calls.where((call) => call.method == 'stop'), hasLength(1));
+      expect(calls.where((call) => call.method == 'load'), hasLength(1));
+      final stopId = calls.last.arguments['stopId'];
+      await _nativeEvent({
+        'type': 'stopResult',
+        'stopId': stopId,
+        'success': true,
+      });
+      await pumpEventQueue(times: 2);
+      final replacementId = calls.last.arguments['loadId'];
+      expect(replacementId, isNot(firstId));
+      await _nativeEvent({
+        'type': 'state',
+        'loadId': firstId,
+        'state': 'error',
+        'failureCode': 'command_error',
+      });
+      await _nativeEvent({
+        'type': 'state',
+        'loadId': replacementId,
+        'state': 'playing',
+      });
+      expect(await replacement, isTrue);
+      expect(calls.where((call) => call.method == 'stop'), hasLength(1));
+      expect(coordinator.error, isNull);
+    },
+  );
+
   test(
     'Player tunes the current projection of retained manual content',
     () async {
@@ -1262,12 +1433,15 @@ void main() {
     expect(coordinator.overlay, PlayerOverlay.error);
     expect(coordinator.canRetry, isTrue);
 
-    await coordinator.retry();
-    expect(player.calls, ['load', 'stop', 'load']);
+    final retry = coordinator.retry();
+    await tester.pump();
+    expect(player.calls, ['load', 'stop', 'stop']);
+    player.releaseStop.complete();
+    await tester.pump();
+    await retry;
+    expect(player.calls, ['load', 'stop', 'stop', 'load']);
     expect(lineup.currentChannelId, 'channel-b');
     coordinator.closeOverlay();
-
-    player.releaseStop.complete();
     await tester.pump();
   });
 
@@ -1506,7 +1680,7 @@ void main() {
     await coordinator.tune('channel-0');
     player.failStop = true;
     await expectLater(coordinator.stop(), throwsStateError);
-    expect(player.stops, 1);
+    expect(player.stops, 2);
   });
 
   test('recoverable player errors retain the retry action', () async {
@@ -2615,7 +2789,127 @@ void main() {
     });
   }
 
-  test('same-part seek supersedes a pending cross-part failure', () async {
+  test(
+    'same-part seeks wait for readiness and apply only the latest target',
+    () async {
+      final lineup = _TestLineup(
+        playbackParts: _parts(
+          first: const Duration(hours: 2),
+          second: const Duration(hours: 1),
+        ),
+      );
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => _schedule(channel),
+      );
+      final player = _BlockingSecondLoadPlayer();
+      final coordinator = PlayerCoordinator(
+        player: player,
+        lineup: lineup,
+        guide: guide,
+      );
+      addTearDown(player.close);
+      addTearDown(lineup.dispose);
+      addTearDown(guide.dispose);
+      addTearDown(coordinator.dispose);
+      await coordinator.tune('channel-b');
+      player.seeks.clear();
+      final first = coordinator.seekTo(const Duration(hours: 2, minutes: 5));
+      await player.secondLoadStarted.future;
+      final second = coordinator.seekTo(const Duration(hours: 2, minutes: 10));
+      await pumpEventQueue(times: 2);
+      expect(player.seeks, isEmpty);
+      expect(player.loads, hasLength(2));
+      player.releaseSecondLoad.complete();
+      await Future.wait([first, second]);
+      expect(player.seeks, [const Duration(minutes: 10)]);
+      expect(coordinator.error, isNull);
+    },
+  );
+
+  test(
+    'latest same-part target survives pending authorization recovery',
+    () async {
+      final lineup = _TestLineup(
+        recoverAuthorization: true,
+        blockAuthorizationRecovery: true,
+        playbackParts: _parts(
+          first: const Duration(hours: 2),
+          second: const Duration(hours: 1),
+        ),
+      );
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => _schedule(channel),
+      );
+      final player = _SuccessfulPartAuthorizationPlayer();
+      final coordinator = PlayerCoordinator(
+        player: player,
+        lineup: lineup,
+        guide: guide,
+      );
+      addTearDown(player.close);
+      addTearDown(lineup.dispose);
+      addTearDown(guide.dispose);
+      addTearDown(coordinator.dispose);
+      await coordinator.tune('channel-b');
+      player.seeks.clear();
+      final first = coordinator.seekTo(const Duration(hours: 2, minutes: 5));
+      await lineup.recoveryStarted.future;
+      final second = coordinator.seekTo(const Duration(hours: 2, minutes: 10));
+      await pumpEventQueue(times: 2);
+      expect(player.seeks, isEmpty);
+      lineup.finishRecovery.complete();
+      await Future.wait([first, second]);
+      expect(player.seeks, [const Duration(minutes: 10)]);
+      expect(coordinator.error, isNull);
+    },
+  );
+
+  for (final fail in [false, true]) {
+    test(
+      'latest target awaits authorization replacement load (fails: $fail)',
+      () async {
+        final lineup = _TestLineup(
+          recoverAuthorization: true,
+          playbackParts: _parts(
+            first: const Duration(hours: 2),
+            second: const Duration(hours: 1),
+          ),
+        );
+        final guide = GuideController(
+          lineup: lineup,
+          loadSchedule: (channel) async => _schedule(channel),
+        );
+        final player = _BlockingFailingPartAuthorizationRetryPlayer(fail: fail);
+        final coordinator = PlayerCoordinator(
+          player: player,
+          lineup: lineup,
+          guide: guide,
+        );
+        addTearDown(player.close);
+        addTearDown(lineup.dispose);
+        addTearDown(guide.dispose);
+        addTearDown(coordinator.dispose);
+        await coordinator.tune('channel-b');
+        player.seeks.clear();
+        final first = coordinator.seekTo(const Duration(hours: 2, minutes: 5));
+        await player.retryLoadStarted.future;
+        final second = coordinator.seekTo(
+          const Duration(hours: 2, minutes: 10),
+        );
+        await pumpEventQueue(times: 2);
+        expect(player.seeks, isEmpty);
+        player.releaseRetryLoad.complete();
+        await Future.wait([first, second]);
+        expect(player.seeks, fail ? isEmpty : [const Duration(minutes: 10)]);
+        expect(coordinator.error, fail ? isNotNull : isNull);
+        expect(player.stops, fail ? 1 : 0);
+      },
+    );
+  }
+
+  test('same-part seek preserves its pending cross-part failure', () async {
     final lineup = _TestLineup(
       playbackParts: _parts(
         first: const Duration(hours: 2),
@@ -2641,16 +2935,17 @@ void main() {
 
     final stale = coordinator.seekTo(const Duration(hours: 2, minutes: 5));
     await player.secondLoadStarted.future;
-    await coordinator.seekTo(const Duration(hours: 2, minutes: 10));
-    coordinator.closeOverlay();
+    final latest = coordinator.seekTo(const Duration(hours: 2, minutes: 10));
+    await Future<void>.delayed(Duration.zero);
+    expect(player.seeks, isNot(contains(const Duration(minutes: 10))));
     player.releaseSecondLoad.complete();
-    await stale;
+    await Future.wait([stale, latest]);
 
-    expect(player.seeks.last, const Duration(minutes: 10));
+    expect(player.seeks, isNot(contains(const Duration(minutes: 10))));
     expect(player.seeks, isNot(contains(const Duration(minutes: 5))));
-    expect(player.stops, 0);
-    expect(coordinator.error, isNull);
-    expect(coordinator.overlay, PlayerOverlay.none);
+    expect(player.stops, 1);
+    expect(coordinator.error, isNotNull);
+    expect(coordinator.overlay, PlayerOverlay.error);
   });
 
   test('unknown boundaries stay on and report the current part', () async {
@@ -3692,6 +3987,14 @@ class _SecondLoadFailurePlayer extends _EventPlayer {
 }
 
 class _BlockingSecondLoadPlayer extends _EventPlayer {
+  @override
+  Future<void> seek(Duration position) async {
+    if (secondLoadStarted.isCompleted && !releaseSecondLoad.isCompleted) {
+      throw StateError('Destination part is not ready.');
+    }
+    await super.seek(position);
+  }
+
   final secondLoadStarted = Completer<void>();
   final releaseSecondLoad = Completer<void>();
 
@@ -3815,6 +4118,8 @@ class _FailingPartAuthorizationRetryPlayer
 
 class _BlockingFailingPartAuthorizationRetryPlayer
     extends _PartAuthorizationFailurePlayer {
+  _BlockingFailingPartAuthorizationRetryPlayer({this.fail = true});
+  final bool fail;
   final retryLoadStarted = Completer<void>();
   final releaseRetryLoad = Completer<void>();
 
@@ -3824,7 +4129,7 @@ class _BlockingFailingPartAuthorizationRetryPlayer
     if (loads.length != 3) return;
     retryLoadStarted.complete();
     await releaseRetryLoad.future;
-    throw StateError('stale authorization retry failed');
+    if (fail) throw StateError('authorization retry failed');
   }
 }
 
@@ -3946,3 +4251,13 @@ class _Credentials implements CredentialStore {
   @override
   Future<void> writeProfileToken(String profileId, String token) async {}
 }
+
+Future<void> _nativeEvent(Map<String, Object?> event) =>
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .handlePlatformMessage(
+          'lineup/native_player',
+          const StandardMethodCodec().encodeMethodCall(
+            MethodCall('event', event),
+          ),
+          null,
+        );

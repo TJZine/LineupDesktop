@@ -1151,9 +1151,6 @@ class _Programs extends StatelessWidget {
       viewportWidth: viewportWidth,
     );
     final current = program.isCurrentAt(now);
-    final totalMicroseconds = program.scheduled.end
-        .difference(program.scheduled.start)
-        .inMicroseconds;
     return _ProgramCell(
       key: ValueKey(program.id),
       program: program,
@@ -1161,10 +1158,6 @@ class _Programs extends StatelessWidget {
       selected: program.id == controller.selectedProgramId,
       current: current,
       past: !program.scheduled.end.isAfter(now),
-      progress: current && totalMicroseconds > 0
-          ? now.difference(program.scheduled.start).inMicroseconds /
-                totalMicroseconds
-          : 0,
       left: rect.left,
       width: rect.width,
       onTap: () => controller.focusProgram(program),
@@ -1186,7 +1179,6 @@ class _ProgramCell extends StatefulWidget {
     required this.selected,
     required this.current,
     required this.past,
-    required this.progress,
     required this.left,
     required this.width,
     required this.onTap,
@@ -1199,7 +1191,6 @@ class _ProgramCell extends StatefulWidget {
   final bool selected;
   final bool current;
   final bool past;
-  final double progress;
   final double left;
   final double width;
   final VoidCallback onTap;
@@ -1281,23 +1272,6 @@ class _ProgramCellState extends State<_ProgramCell> {
                     past: widget.past,
                     reduceMotion: widget.reduceMotion,
                   ),
-                  if (widget.current)
-                    Positioned(
-                      left: 0,
-                      right: 0,
-                      bottom: 0,
-                      height: 4,
-                      child: ColoredBox(
-                        color: LineupTheme.of(context).deepBackground,
-                        child: FractionallySizedBox(
-                          alignment: Alignment.centerLeft,
-                          widthFactor: widget.progress.clamp(0, 1),
-                          child: ColoredBox(
-                            color: LineupTheme.of(context).progressFill,
-                          ),
-                        ),
-                      ),
-                    ),
                 ],
               ),
             ),
@@ -1721,14 +1695,11 @@ class _ProgramDetails extends StatelessWidget {
                       maxWidth: showSecondaryMetadata ? 360 : 240,
                       maxHeight: showSecondaryMetadata ? 52 : 36,
                     ),
-                    child: Image.memory(
+                    child: ClearLogoImage(
                       clearLogo!,
-                      key: const Key('guide-clear-logo'),
-                      fit: BoxFit.contain,
-                      alignment: Alignment.centerLeft,
-                      gaplessPlayback: true,
+                      imageKey: const Key('guide-clear-logo'),
+                      fallback: logoFallback,
                       semanticLabel: '${item.showTitle ?? item.title} logo',
-                      errorBuilder: (_, _, _) => logoFallback,
                     ),
                   ),
                 ),

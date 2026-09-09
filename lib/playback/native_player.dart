@@ -38,6 +38,9 @@ abstract interface class NativePlayer {
   ///
   /// A pending [load] must settle with [PlayerUnavailable], and events from
   /// that retired load must be ignored even while native cleanup is pending.
+  /// Completes only after native playback has stopped, not on queue acceptance.
+  /// Failure does not establish that playback stopped; callers retain cleanup
+  /// responsibility and may retry. Replacement loads wait for pending cleanup.
   Future<void> stop();
   Future<void> dispose();
 }

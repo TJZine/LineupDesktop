@@ -641,6 +641,7 @@ class _Osd extends StatelessWidget {
               ),
               fit: BoxFit.contain,
               fallback: _OsdTitle(title: title),
+              clearLogo: true,
             ),
           )
         else
@@ -1291,45 +1292,48 @@ class _NowPlayingIdentityState extends State<_NowPlayingIdentity> {
     future: _logo,
     builder: (context, snapshot) {
       final bytes = snapshot.data;
-      if (bytes == null) {
-        return _NowPlayingTitle(
-          item: widget.program.scheduled.item,
-          compact: widget.compact,
-        );
-      }
+      final item = widget.program.scheduled.item;
+      final logoFallback = FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: Alignment.centerLeft,
+        child: switch (item.showTitle?.trim()) {
+          final showTitle? when showTitle.isNotEmpty => Text(
+            showTitle.toUpperCase(),
+            key: const Key('player-now-playing-series'),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          _ => _NowPlayingTitle(item: item, compact: widget.compact),
+        },
+      );
+      final logoMaxHeight = widget.hasCast && widget.compact
+          ? 58.0
+          : widget.compact
+          ? 84.0
+          : 132.0;
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ConstrainedBox(
-            constraints: BoxConstraints(
-              maxWidth: widget.compact ? 360 : 600,
-              maxHeight: widget.hasCast && widget.compact
-                  ? 58
-                  : widget.compact
-                  ? 84
-                  : 132,
-            ),
-            child: Image.memory(
-              bytes,
-              key: const Key('player-now-playing-logo'),
-              fit: BoxFit.contain,
-              alignment: Alignment.centerLeft,
-              gaplessPlayback: false,
-              excludeFromSemantics: true,
-              frameBuilder: (context, child, frame, synchronous) =>
-                  synchronous || frame != null
-                  ? child
-                  : _NowPlayingTitle(
-                      item: widget.program.scheduled.item,
-                      compact: widget.compact,
-                    ),
-              errorBuilder: (_, _, _) => _NowPlayingTitle(
-                item: widget.program.scheduled.item,
-                compact: widget.compact,
+          if (bytes == null)
+            ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: logoMaxHeight),
+              child: logoFallback,
+            )
+          else
+            ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: widget.compact ? 360 : 600,
+                maxHeight: logoMaxHeight,
+              ),
+              child: ClearLogoImage(
+                bytes,
+                imageKey: const Key('player-now-playing-logo'),
+                excludeFromSemantics: true,
+                fallback: logoFallback,
               ),
             ),
-          ),
-          if (widget.program.scheduled.item.showTitle != null) ...[
+          if (item.showTitle != null) ...[
             SizedBox(height: widget.compact ? 8 : 12),
             Text(
               widget.program.scheduled.item.title,
@@ -1388,6 +1392,7 @@ class _PlayerArtwork extends StatelessWidget {
     this.fallback = const SizedBox.shrink(),
     this.imageKey,
     this.semanticLabel,
+    this.clearLogo = false,
     super.key,
   });
 
@@ -1396,12 +1401,21 @@ class _PlayerArtwork extends StatelessWidget {
   final Widget fallback;
   final Key? imageKey;
   final String? semanticLabel;
+  final bool clearLogo;
 
   @override
   Widget build(BuildContext context) => FutureBuilder<Uint8List?>(
     future: future,
     builder: (context, snapshot) => snapshot.data == null
         ? fallback
+        : clearLogo
+        ? ClearLogoImage(
+            snapshot.data!,
+            fallback: fallback,
+            imageKey: imageKey,
+            semanticLabel: semanticLabel,
+            excludeFromSemantics: semanticLabel == null,
+          )
         : Image.memory(
             snapshot.data!,
             key: imageKey,

@@ -63,6 +63,10 @@ $sourceDirty = & {
 if ($sourceDirty) {
   Throw-PackageFailure 'dirty-source' 'Refusing to create a release package from a dirty source tree. Commit or stash all tracked and untracked changes first.'
 }
+Assert-NoTrackedSymlinks -Repository $repository -FailureReporter {
+  param([string] $Message)
+  Throw-PackageFailure 'tracked-symlink' $Message
+}
 
 $buildMarkerPath = Join-Path $BuildDirectory 'LINEUP-BUILD-PROVENANCE.json'
 if (-not (Test-Path -LiteralPath $buildMarkerPath -PathType Leaf)) {
@@ -216,6 +220,10 @@ foreach ($entry in $licenseMetadata.GetEnumerator()) {
   }
 }
 
+$destinationReparsePoint = Get-ReparsePointPathWithin -Path $Destination -Boundary $packageRoot
+if ($destinationReparsePoint) {
+  Throw-PackageFailure 'package-path-reparse' "Package destination traverses a reparse point: $destinationReparsePoint"
+}
 [IO.Directory]::CreateDirectory($Destination) | Out-Null
 foreach ($file in @(
     'lineup_desktop.exe',

@@ -32,11 +32,16 @@ class WindowsNativePlayer implements NativePlayer {
   };
   static WindowsNativePlayer? _handlerOwner;
 
-  WindowsNativePlayer({Duration? loadTimeout})
-    : _loadTimeout = loadTimeout ?? const Duration(seconds: 30);
+  WindowsNativePlayer({Duration? loadTimeout, Duration? stopTimeout})
+    : _loadTimeout = loadTimeout ?? const Duration(seconds: 30),
+      _stopTimeout = stopTimeout ?? const Duration(seconds: 10);
 
   final _events = StreamController<PlayerEvent>.broadcast(sync: true);
   final Duration _loadTimeout;
+  final Duration _stopTimeout;
+  int _nextStopId = 0;
+  (int, Completer<void>)? _pendingStop;
+  Future<void>? _stopOperation;
   PlayerStatus _status = const PlayerStatus(
     state: PlayerState.idle,
     message: 'Native player not initialized',
@@ -105,6 +110,7 @@ class WindowsNativePlayer implements NativePlayer {
       );
     }
     await _lifecycle;
+    await _stopOperation;
     _requireInitialized();
     final loadId = ++_nextLoadId;
     final pending = Completer<void>();
@@ -194,22 +200,60 @@ class WindowsNativePlayer implements NativePlayer {
       _invoke('setVolume', {'volume': volume});
 
   @override
-  Future<void> stop() async {
-    final loadSequence = _nextLoadId;
+  Future<void> stop() {
+    final existing = _stopOperation;
+    if (existing != null) return existing;
+    final stopId = ++_nextStopId;
+    final pending = Completer<void>();
+    _pendingStop = (stopId, pending);
     _completePendingLoadError(
       const PlayerUnavailable('The media load was stopped.'),
     );
     _pendingLoad = null;
     _activeLoadId = null;
     _activeGeneration = null;
-    await _invoke('stop');
-    if (_nextLoadId != loadSequence) return;
-    _resetMediaState();
-    _setStatus(PlayerState.stopped, 'Stopped');
+    Future<void> performStop() async {
+      // Queue acceptance is separate from native stop execution and idle proof.
+      final completion = pending.future.then<Object?>(
+        (_) => null,
+        onError: (Object error) => error,
+      );
+      await _invoke('stop', {'stopId': stopId});
+      final failure = await completion;
+      if (failure != null) throw failure;
+      if (_pendingStop?.$1 != stopId) return;
+      _resetMediaState();
+      _setStatus(PlayerState.stopped, 'Stopped');
+    }
+
+    late final Future<void> operation;
+    operation = performStop()
+        .timeout(
+          _stopTimeout,
+          onTimeout: () => throw const PlayerUnavailable(
+            'Native playback did not stop in time.',
+            failureCode: 'stop_timeout',
+          ),
+        )
+        .whenComplete(() {
+          if (identical(_stopOperation, operation)) {
+            _stopOperation = null;
+            _pendingStop = null;
+          }
+        });
+    _stopOperation = operation;
+    return operation;
   }
 
   @override
   Future<void> dispose() => _serializeLifecycle(() async {
+    final stop = _pendingStop;
+    if (stop != null && !stop.$2.isCompleted) {
+      stop.$2.completeError(
+        const PlayerUnavailable('The native player was disposed.'),
+      );
+    }
+    _pendingStop = null;
     _completePendingLoadError(
       const PlayerUnavailable('The native player was disposed.'),
     );
@@ -269,6 +313,25 @@ class WindowsNativePlayer implements NativePlayer {
     if (call.method != 'event') return;
     if (call.arguments is! Map) return;
     final event = Map<Object?, Object?>.from(call.arguments as Map);
+    if (event['type'] == 'stopResult') {
+      final pending = _pendingStop;
+      if (pending == null ||
+          event['stopId'] != pending.$1 ||
+          pending.$2.isCompleted) {
+        return;
+      }
+      if (event['success'] == true) {
+        pending.$2.complete();
+      } else {
+        pending.$2.completeError(
+          const PlayerUnavailable(
+            'Native playback could not be stopped.',
+            failureCode: 'stop_failed',
+          ),
+        );
+      }
+      return;
+    }
     if (!_isCurrentLoadEvent(event)) return;
     switch (event['type']) {
       case 'state':

@@ -84,6 +84,13 @@ checked 65 files with zero changes, analysis was clean, the named cross-surface
 gate passed 212 tests sequentially, the full canonical-timezone suite passed
 654 tests sequentially, and the macOS release build succeeded at 51.2 MB.
 
+**Source reconciliation:** 2026-09-05, against
+`ef4548e2b0f047fe2812d12c85551f0746f6ef95`. Current descriptions below recognize
+the startup failure surface, cast portraits, native rectangle regression
+coverage, and artifact-bound package provenance already present in source/tests.
+This documentation correction adds no test-run, CI, platform, or support evidence;
+the named historical campaign results retain their original boundaries.
+
 This is the authoritative current product-parity record. The classifications
 in [Portable UI Parity](ui-parity.md) remain historical evidence for their
 named campaigns; they do not override this audit. Current source and observed
@@ -107,9 +114,9 @@ evidence outrank older documentation.
   findings are implemented and deterministically tested. Physical and package
   acceptance remain separately gated while the product is still pre-MVP.
 - **First public Windows release:** **NOT READY**. Physical acceptance, package
-  engine attestation, package CI coverage, native notice/legal review,
-  project-controlled runtime mirroring, signing/trust, and a release channel
-  remain open.
+  engine-attestation validation, package CI execution evidence, native
+  notice/legal review, project-controlled runtime mirroring, signing/trust, and
+  a release channel remain open.
 - **Dominant next mode:** useful parity and Desktop product closure first;
   representative Windows media-depth validation second; package/public-release
   hardening last.
@@ -169,7 +176,7 @@ independent root blockers.
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Branded startup progress | Structured initialization and recoverable routing | Flutter initializes player/controller behind one semantic progress surface | PARITY | — | HIGH | `lib/app/lineup_app.dart`; `test/app/lineup_app_test.dart` | Flutter app |
 | Fatal startup surface | Blocking sanitized startup error | Later player/controller failures render safe guidance | PARITY | — | HIGH | `lib/app/lineup_app.dart`; `test/app/lineup_app_test.dart` | Flutter app |
-| Pre-widget composition failure | Bootstrap failures are routed through initialized UI owners | Store/client-identity failures occur before `runApp`, so no window can explain recovery | PARTIAL | P2 | HIGH | `lib/main.dart`; `lib/persistence/app_store.dart` | Flutter app: add a minimal composition-failure surface |
+| Bootstrap composition failure | Bootstrap failures are routed through initialized UI owners | `LineupStartup` mounts before asynchronous store/client-identity composition, shows progress, and presents safe synchronous/asynchronous failure copy | PARITY | — | HIGH | `lib/main.dart`; `lib/app/lineup_app.dart`; `test/app/lineup_app_test.dart` | Preserve the startup failure surface and its secret-safe copy |
 | Plex PIN request and QR | Request, QR/code, expiry, cancel, retry | Equivalent fixed-link QR/code flow with countdown and cancellation | PARITY | — | HIGH | Upstream `AuthScreen.ts`; `lib/app/onboarding_view.dart`; `test/app/lineup_app_test.dart` | Auth |
 | PIN polling failure recovery | Retries transient failures and surfaces terminal/retry state | A current poll/account/Home failure stops polling, retires the PIN, shows finite safe retry copy, and rejects stale failures; ambiguous credential writes require secure cancellation before a new PIN | PARITY | — | HIGH | `lib/app/lineup_controller.dart`; `lib/app/onboarding_view.dart`; controller/widget/transport tests; auth failure golden | Auth |
 | Replacement PIN cancellation | Replaced operations are cancelled and stale work rejected | New-code action invalidates local epoch but does not cancel the old server PIN | PARTIAL | P3 | HIGH | `lib/app/onboarding_view.dart`; `lib/app/lineup_controller.dart` | Auth: best-effort cancel superseded PIN |
@@ -327,7 +334,7 @@ without placing credentials in public facts, durable state, URLs, or diagnostics
 | Secure credentials | Client-side tokens | Platform secure storage, separate account/profile keys, no token in JSON | DESKTOP-ENHANCED | — | HIGH | `lib/persistence/app_store.dart`; controller tests | Credentials |
 | macOS UI development | Not applicable to webOS | Exact toolchain analysis/tests/build pass; playback explicitly unsupported | INTENTIONAL DESKTOP ADAPTATION | — | HIGH | local 2026-08-23 commands; macOS backend tests | Supported only as UI development |
 | Windows native player implementation | Not applicable to webOS HTML5 | Narrow C++/libmpv owner, generation filtering, DComp marker, bounds/fullscreen; owner reports successful surface playback | NEEDS EVIDENCE | P2 | MEDIUM | Owner report 2026-08-23; `windows/runner/native_player.cpp`; Dart tests; CI compile | Preserve as implemented; run deeper exact-commit acceptance after core completeness |
-| Native rectangle contract | Browser owns video element | Flutter calculates global bounds/DPR and zeroes on dispose; owner-observed PiP/Overlay works, while fakes still do not assert exact values | NEEDS EVIDENCE | P2 | MEDIUM | Owner report 2026-08-23; `lib/playback/native_video_surface.dart`; no recording fake | Add cheap Dart geometry-contract regression; defer broad physical geometry matrix |
+| Native rectangle contract | Browser owns video element | Flutter calculates global bounds/DPR and zeroes on dispose; a recording fake asserts exact values, deduplication, and teardown. Physical Windows geometry remains separate evidence | NEEDS EVIDENCE | P2 | HIGH | `lib/playback/native_video_surface.dart`; `test/playback/native_video_surface_test.dart`; owner report 2026-08-23 | Run target-commit physical resize/DPI checks before broad geometry claims |
 | Exact-HEAD CI | Upstream webOS CI is comprehensive for its platform | Platform-adapted exact source checks passed Dart, macOS build/goldens, Windows UI and stock-engine compile | INTENTIONAL DESKTOP ADAPTATION | — | HIGH | GitHub run `32589006254`; local 278-test pass; patched job skipped | CI |
 | Patched-engine CI artifact | Not applicable upstream | Exact-HEAD expensive engine job skipped and run produced zero artifacts | NEEDS EVIDENCE | P3 | HIGH | `.github/workflows/ci.yml`; run/job/artifact metadata | Deferred release engineering: force a manual exact-commit engine/package build when packaging becomes the active phase |
 | Package engine provenance | Not applicable upstream | Release wrapper validates the exact patched source and selected engine, then binds source/engine identity to hashes of every packaged build input; packaging rejects stale markers and changed artifacts | NEEDS EVIDENCE | P3 | HIGH | `tool/windows/build-release.ps1`; `tool/windows/package.ps1`; CI negative probes | Run the full patched-engine/package job and physical package acceptance at the exact release commit |
@@ -416,13 +423,15 @@ top-right channel bug, year/genres, concise rating/resolution/dynamic-range/
 audio badges, synopsis, and truth-gated source/runtime playback facts. It
 prefers native position/duration and falls back to schedule timing when native
 duration is unavailable, leaves the playback canvas visible, and remains
-mutually exclusive with OSD, mini Guide, tracks, and errors. The actor/portrait
-row remains absent because the current `ChannelItem` has no complete
-actor/headshot facts; upstream circles are portraits, not initials. Up Next and
-secondary actions remain OSD-owned. Cast/headshots and a separate rich-details
-auto-hide preference remain parked. Browser subtitle delivery modes are not a
-Desktop requirement; the remaining P2 question is whether representative
-native text/image formats and Plex-managed external sidecars all reach libmpv.
+mutually exclusive with OSD, mini Guide, tracks, and errors. `ChannelItem` now
+retains bounded cast facts; the shelf renders available portraits, neutral
+fallbacks, names, overflow counts, and semantics, omitting the row when cast is
+absent. `test/playback/player_view_test.dart` covers these states and responsive
+composition. Up Next and secondary actions remain OSD-owned. A separate
+rich-details auto-hide preference remains parked. Browser subtitle delivery
+modes are not a Desktop requirement; the remaining P2 question is whether
+representative native text/image formats and Plex-managed external sidecars all
+reach libmpv.
 
 ### Settings
 
@@ -674,11 +683,11 @@ format-open libmpv playback are Desktop-specific value.
 | Server remux/transcode | No active consumer because native playback is unrestricted | Product decision; if accepted, one forced bandwidth/failure fixture proving resolver, cleanup, and playback | Mac/CI plus Windows | No unless requirement accepted | Blocks only a transcode/remote-quality claim |
 | Native Player/PiP/Overlay/fullscreen depth | Owner reports surface success, but exact commit/machine/media/transition facts are not durably recorded | Record target commit and repeat resize, overlay, replacement, minimize, DPI, fullscreen, teardown | Physical Windows 10/11 | P2 after core work | Blocks a supported native claim |
 | HDR/tone mapping/hardware decode | Native path and owner smoke exist, but output telemetry/visual result is not captured | Representative HDR10 plus DV/HLG when claimed, on named displays | Physical Windows HDR system | P2 | Blocks only named HDR claims |
-| Native rectangle DPR/resize/dispose forwarding | Owner smoke supports viability; fakes ignore exact values | Recording fake plus one target-commit physical resize/DPI check | Mac test; Windows | P2 | Blocks broad geometry support claim |
+| Native rectangle DPR/resize/dispose forwarding | Exact Flutter bounds/DPR, deduplication, and teardown are asserted by a recording fake; native physical geometry is unrecorded | Target-commit physical resize/DPI check | Physical Windows | P2 evidence | Blocks broad geometry support claim |
 | Physical keyboard/AT Player usability | Flutter focus/semantics tests keep OSD and mini Guide controls operable beyond timeouts, suppress reduced-motion transitions, and focus selected tracks; no physical AT session exists | Exact-commit Windows keyboard and screen-reader session across OSD, mini Guide, tracks, progress, loading, and errors | Physical Windows AT | P2 evidence | Blocks accessibility support claim |
 | Dense 12-hour Guide semantics/performance | Vertical cardinality fixtures use long programs | Profile short-slot visible rows and record nodes/frame timings | Mac profile; confirm Windows | P2 unless slow | Blocks 12h/1,000 performance claim |
 | Network loss and OS suspend/resume | Request recovery tests do not prove live-session recovery | Redacted tune/Guide session across network/server/sleep/minimize transitions | Physical Windows | P2 | Blocks broad reliability claim |
-| Patched package and engine attestation | Exact-head expensive CI job skipped; package claim is not bound to built engine | Forced clean engine/package build, identity negative/positive test, launch, manifest, hash | Clean Windows systems | Deferred P3 | Blocks distribution |
+| Patched package and engine attestation | Artifact-bound provenance and rejection checks are implemented; the named historical CI run skipped the expensive job, and exact-release package runtime acceptance remains unrecorded | Forced clean engine/package build, identity negative/positive test, launch, manifest, hash | Clean Windows systems | Deferred P3 | Blocks distribution |
 | Native notice/legal completeness | Top-level texts do not prove transitive obligations | Dependency/license manifest, vendored hashes, independent legal approval | Release/legal review | Deferred P3 | Blocks distribution |
 | Signing and publication trust | No selected signing/release channel | Signing identity and reproducible publication/recovery workflow | Release infrastructure | Deferred P3 | Blocks supported public release |
 
@@ -749,8 +758,8 @@ format-open libmpv playback are Desktop-specific value.
 
 - **Priority:** P3 by owner sequencing, while still mandatory before the
   corresponding distribution/support claim.
-- **Scope:** bind package attestation to the actual engine, give package-only
-  changes CI ownership, produce an exact-commit patched artifact, finish
+- **Scope:** validate the implemented artifact-bound attestation and conditional
+  package CI paths, produce an exact-commit patched artifact, finish
   notices/legal review and runtime mirroring, and decide signing/publication.
 - **Trigger:** begin after the application is feature-complete enough that the
   intended package and support surface are stable.

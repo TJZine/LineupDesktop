@@ -146,6 +146,42 @@ void main() {
     }
   });
 
+  test('people filters normalize names consistently with proposals', () {
+    final people = [
+      for (final entry in const [
+        ('one', ' Avery Vale '),
+        ('two', 'avery vale'),
+      ])
+        PlexMediaItem(
+          id: entry.$1,
+          title: entry.$1,
+          type: 'movie',
+          duration: const Duration(minutes: 1),
+          libraryId: 'movies',
+          parts: [PlexMediaPart(path: '/${entry.$1}')],
+          actors: [entry.$2, entry.$2.toUpperCase()],
+          directors: [entry.$2, entry.$2.toUpperCase()],
+        ),
+    ];
+
+    for (final filter in const [
+      {'actor': 'avery vale'},
+      {'director': 'AVERY VALE'},
+    ]) {
+      expect(
+        resolveContent(
+          LibrarySource(
+            libraryId: 'movies',
+            libraryType: PlexLibraryType.movie,
+            filters: filter,
+          ),
+          people,
+        ).map((item) => item.id),
+        ['one', 'two'],
+      );
+    }
+  });
+
   test('manual content refreshes in stored order without mutation', () {
     const retained = ManualSource([
       ChannelItem(id: 'b', title: 'Old B', duration: Duration(seconds: 1)),
@@ -430,6 +466,31 @@ void main() {
       item.cast.skip(1).map((member) => member.portrait),
       everyElement(isNull),
     );
+  });
+
+  test('maps trusted Plex metadata cast portraits only for cast', () {
+    const trusted = 'https://metadata-static.plex.tv/f/people/avery-vale.jpg';
+    final item = channelItemFor(
+      const PlexMediaItem(
+        id: 'episode',
+        title: 'Episode',
+        type: 'episode',
+        duration: Duration(minutes: 1),
+        thumbPath: trusted,
+        cast: [
+          PlexCastMember(name: 'Avery Vale', thumbPath: trusted),
+          PlexCastMember(
+            name: 'Lookalike',
+            thumbPath:
+                'https://metadata-static.plex.tv.evil.example/f/people/a.jpg',
+          ),
+        ],
+      ),
+    );
+
+    expect(item.poster, isNull);
+    expect(item.cast.first.portrait, Uri.parse(trusted));
+    expect(item.cast.last.portrait, isNull);
   });
 
   test('drops noncanonical artwork from manually supplied Plex models', () {

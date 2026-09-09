@@ -359,6 +359,7 @@ class _ProductPlex extends PlexClient {
     PlexLibraryType libraryType, {
     required bool Function() isCurrent,
     required void Function(PlexLibraryPageProgress progress) onProgress,
+    Future<void>? cancelled,
   }) async {
     events.add('library:$libraryId');
     return List.generate(
@@ -380,8 +381,12 @@ class _ProductPlex extends PlexClient {
   }
 
   @override
-  Future<PlexPlaylistCatalog> playlists(Uri server, String token) async =>
-      const PlexPlaylistCatalog(playlists: [], failedIds: {});
+  Future<PlexPlaylistCatalog> playlists(
+    Uri server,
+    String token, {
+    required bool Function() isCurrent,
+    Future<void>? cancelled,
+  }) async => const PlexPlaylistCatalog(playlists: [], failedIds: {});
 
   @override
   void close() {}

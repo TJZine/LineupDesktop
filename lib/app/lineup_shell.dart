@@ -1277,7 +1277,9 @@ class _SettingsViewState extends State<SettingsView> {
                 'Keep recently ended programs available in the Guide.',
                 value.pastMinutes,
                 LineupSettings.pastMinutesOptions,
-                (item) => '$item minutes',
+                (item) => item == 0
+                    ? 'Current half-hour slot'
+                    : 'At least $item minutes',
                 _saving
                     ? null
                     : (item) => _update(

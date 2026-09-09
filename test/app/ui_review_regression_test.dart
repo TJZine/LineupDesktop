@@ -623,6 +623,13 @@ void main() {
     await tester.tap(find.widgetWithText(OutlinedButton, 'Guide'));
     await tester.pumpAndSettle();
 
+    await tester.tap(find.byType(DropdownButton<int>).at(1));
+    await tester.pumpAndSettle();
+    expect(find.text('Current half-hour slot'), findsOneWidget);
+    expect(find.text('At least 15 minutes'), findsOneWidget);
+    await tester.tapAt(const Offset(8, 8));
+    await tester.pumpAndSettle();
+
     await tester.tap(find.byType(DropdownButton<int>).first);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Desktop extended (6 hours)').last);
@@ -832,6 +839,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.bySemanticsLabel('Channel update complete'), findsOneWidget);
+    expect(find.text('channel ready'), findsOneWidget);
+    expect(find.bySemanticsLabel('Final: 1'), findsOneWidget);
     expect(
       tester
           .widget<LinearProgressIndicator>(find.byType(LinearProgressIndicator))
@@ -1039,6 +1048,10 @@ class _ProfileFixtureController extends FixtureController {
 }
 
 class _FailingChannelSetupController extends FixtureController {
+  _FailingChannelSetupController({this.includeGenre = true});
+
+  final bool includeGenre;
+
   @override
   Future<bool> setLibraries(Set<String> ids) async {
     selectedLibraryIds = Set.unmodifiable(ids);
@@ -1051,7 +1064,7 @@ class _FailingChannelSetupController extends FixtureController {
           duration: const Duration(minutes: 90),
           libraryId: 'movies',
           parts: [PlexMediaPart(path: '/parts/movie-$index')],
-          genres: const ['Drama'],
+          genres: includeGenre ? const ['Drama'] : const [],
         ),
     ];
     libraryScanStatus = LibraryScanStatus.complete;
@@ -1066,6 +1079,8 @@ class _FailingChannelSetupController extends FixtureController {
 }
 
 class _PendingChannelSetupController extends _FailingChannelSetupController {
+  _PendingChannelSetupController() : super(includeGenre: false);
+
   final _apply = Completer<void>();
 
   @override
