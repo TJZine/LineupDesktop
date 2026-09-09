@@ -356,12 +356,11 @@ class _SetupState extends State<UpstreamChannelSetupView> {
             ),
           ),
           SizedBox(height: 6 + 4 * expansion),
-          Text(
-            _configurationSection == 0
-                ? 'Choose the channels you want from your libraries.'
-                : 'Choose how your generated channels will play.',
-            style: textStyle.copyWith(height: 1.4),
-          ),
+          Text(switch (_configurationSection) {
+            0 => 'Choose the channels you want from your libraries.',
+            1 => 'Choose how your generated channels will play.',
+            _ => 'Choose the size and balance of your generated lineup.',
+          }, style: textStyle.copyWith(height: 1.4)),
         ],
       );
       if (constraints.maxWidth < 900 ||
@@ -737,14 +736,15 @@ class _SetupState extends State<UpstreamChannelSetupView> {
             child: ListView(
               key: ValueKey(_configurationSection),
               children: [
-                _heading(
-                  labels[_configurationSection],
-                  switch (_configurationSection) {
-                    0 => 'Choose which kinds of generated channels to include.',
-                    1 => 'For generated channels containing TV episodes',
-                    _ => 'Set limits and the priority used by balanced source rotation.',
-                  },
-                ),
+                if (_configurationSection != 2)
+                  _heading(
+                    labels[_configurationSection],
+                    switch (_configurationSection) {
+                      0 =>
+                        'Choose which kinds of generated channels to include.',
+                      _ => 'For generated channels containing TV episodes',
+                    },
+                  ),
                 if (_configurationSection == 0 && _selectedLibraries.length > 1)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 8),
@@ -805,10 +805,15 @@ class _SetupState extends State<UpstreamChannelSetupView> {
                 if (_configurationSection == 2)
                   LayoutBuilder(
                     builder: (_, constraints) {
-                      if (constraints.maxWidth < 840) {
+                      final effectiveWidth =
+                          constraints.maxWidth /
+                          MediaQuery.textScalerOf(context).scale(1);
+                      final rulesGap = 40 + 24 * expansion;
+                      if (effectiveWidth < 840) {
                         return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            _limitControls(),
+                            _limitControls(allocation),
                             const SizedBox(height: 20),
                             _orderControls(),
                           ],
@@ -817,9 +822,9 @@ class _SetupState extends State<UpstreamChannelSetupView> {
                       return Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Expanded(child: _limitControls()),
-                          const SizedBox(width: 32),
-                          Expanded(child: _orderControls()),
+                          Expanded(flex: 85, child: _limitControls(allocation)),
+                          SizedBox(width: rulesGap),
+                          Expanded(flex: 115, child: _orderControls()),
                         ],
                       );
                     },
@@ -1670,89 +1675,361 @@ class _SetupState extends State<UpstreamChannelSetupView> {
         : 'The duplicate extra version was removed because it matches your main playback order.';
   }
 
-  Widget _limitControls() => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      Text('Limits', style: Theme.of(context).textTheme.titleMedium),
-      const SizedBox(height: 10),
-      DropdownButtonFormField<int>(
-        initialValue: _maximum,
-        decoration: const InputDecoration(
-          labelText: 'Maximum generated channels',
-        ),
-        items: const [50, 100, 200, 300, 500, 750, 1000]
-            .map(
-              (value) => DropdownMenuItem(value: value, child: Text('$value')),
-            )
-            .toList(),
-        onChanged: (value) => setState(() => _maximum = value!),
-      ),
-      const SizedBox(height: 12),
-      DropdownButtonFormField<int>(
-        initialValue: _minimum,
-        decoration: const InputDecoration(
-          labelText: 'Minimum programs per channel',
-        ),
-        items: const [1, 5, 10, 20, 50]
-            .map(
-              (value) => DropdownMenuItem(value: value, child: Text('$value')),
-            )
-            .toList(),
-        onChanged: (value) => setState(() => _minimum = value!),
-      ),
-      const SizedBox(height: 8),
-      Text(
-        'Movies and individual episodes count as programs. Extra versions count toward the generated limit.',
-        style: TextStyle(color: LineupTheme.of(context).secondaryText),
-      ),
-    ],
-  );
+  Widget _limitControls(ChannelPlanAllocation allocation) {
+    final expansion = _configurationExpansion(MediaQuery.sizeOf(context));
+    final roles = LineupTheme.of(context);
+    final textTheme = Theme.of(context).textTheme;
+    final headingStyle = textTheme.titleMedium!.copyWith(
+      color: roles.primaryText,
+      fontSize: 18 + 6 * expansion,
+      fontWeight: FontWeight.w600,
+      height: 1.3,
+    );
+    final subtitleStyle = textTheme.bodyMedium!.copyWith(
+      color: roles.secondaryText,
+      fontSize: 14 + 4 * expansion,
+      height: 1.4,
+    );
+    final labelStyle = textTheme.bodyMedium!.copyWith(
+      color: roles.primaryText,
+      fontSize: 16 + 6 * expansion,
+      fontWeight: FontWeight.normal,
+      height: 1.4,
+    );
+    final descriptionStyle = textTheme.bodyMedium!.copyWith(
+      color: roles.secondaryText,
+      fontSize: 13 + 5 * expansion,
+      height: 1.4,
+    );
+    final dropdownStyle = textTheme.bodyMedium!.copyWith(
+      color: roles.primaryText,
+      fontSize: 14 + 4 * expansion,
+      height: 1.4,
+    );
 
-  Widget _orderControls() => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      Text('Source order', style: Theme.of(context).textTheme.titleMedium),
-      for (var index = 0; index < _sourceOrder.length; index++)
-        DecoratedBox(
-          key: ValueKey('source-order-${_sourceOrder[index].name}'),
-          decoration: BoxDecoration(
-            border: Border(
-              bottom: BorderSide(color: LineupTheme.of(context).subtleBorder),
-            ),
+    Widget field({
+      required Key key,
+      required String label,
+      required int value,
+      required List<int> choices,
+      required String description,
+      required ValueChanged<int> onChanged,
+    }) {
+      return DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border(bottom: BorderSide(color: roles.subtleBorder)),
+        ),
+        child: Padding(
+          padding: EdgeInsets.symmetric(vertical: 24 + 12 * expansion),
+          child: LayoutBuilder(
+            builder: (_, constraints) {
+              final textScale = MediaQuery.textScalerOf(context).scale(1);
+              final desiredWidth = 90 + 20 * expansion;
+              final dropdownWidth = math.min(
+                desiredWidth,
+                constraints.maxWidth,
+              );
+              final inline =
+                  constraints.maxWidth / textScale >= 320 &&
+                  constraints.maxWidth >= dropdownWidth + 16;
+              final dropdown = Semantics(
+                label: label,
+                container: true,
+                child: SizedBox(
+                  width: dropdownWidth,
+                  height: 36 + 12 * expansion,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: roles.primarySurface,
+                      border: Border.all(color: roles.defaultBorder),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<int>(
+                        key: key,
+                        isExpanded: true,
+                        isDense: true,
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                        value: value,
+                        style: dropdownStyle,
+                        items: [
+                          for (final choice in choices)
+                            DropdownMenuItem(
+                              value: choice,
+                              child: Text('$choice'),
+                            ),
+                        ],
+                        onChanged: (next) {
+                          if (next != null) onChanged(next);
+                        },
+                      ),
+                    ),
+                  ),
+                ),
+              );
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (inline)
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Expanded(child: Text(label, style: labelStyle)),
+                        const SizedBox(width: 16),
+                        dropdown,
+                      ],
+                    )
+                  else ...[
+                    Text(label, style: labelStyle),
+                    const SizedBox(height: 8),
+                    Align(alignment: Alignment.centerLeft, child: dropdown),
+                  ],
+                  SizedBox(height: 10 + 6 * expansion),
+                  Text(description, style: descriptionStyle),
+                ],
+              );
+            },
           ),
-          child: ListTile(
-            contentPadding: EdgeInsets.zero,
-            title: Text(builderStrategyLabels[_sourceOrder[index]]!),
-            subtitle: _strategies.contains(_sourceOrder[index])
-                ? null
-                : const Text('Off'),
-            trailing: Wrap(
-              children: [
-                IconButton(
-                  focusNode: _orderFocus[_sourceOrder[index]]!.earlier,
-                  tooltip: 'Move earlier',
-                  onPressed: index == 0 ? null : () => _moveSource(index, -1),
-                  icon: const Icon(Icons.arrow_upward),
-                ),
-                IconButton(
-                  focusNode: _orderFocus[_sourceOrder[index]]!.later,
-                  tooltip: 'Move later',
-                  onPressed: index == _sourceOrder.length - 1
-                      ? null
-                      : () => _moveSource(index, 1),
-                  icon: const Icon(Icons.arrow_downward),
-                ),
-              ],
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('Channel limits', style: headingStyle),
+        const SizedBox(height: 8),
+        Text(
+          'Keep enough variety without overcrowding your guide.',
+          style: subtitleStyle,
+        ),
+        field(
+          key: const ValueKey('rules-maximum'),
+          label: 'Maximum generated channels',
+          value: _maximum,
+          choices: const [50, 100, 200, 300, 500, 750, 1000],
+          description: 'Includes additional versions. Custom and retained channels may bring the final lineup above this limit.',
+          onChanged: (value) => setState(() => _maximum = value),
+        ),
+        field(
+          key: const ValueKey('rules-minimum'),
+          label: 'Minimum programs per channel',
+          value: _minimum,
+          choices: const [1, 5, 10, 20, 50],
+          description: 'Movies and individual episodes count as programs. Higher values exclude smaller channel candidates.',
+          onChanged: (value) => setState(() => _minimum = value),
+        ),
+        _rulesAllocationFeedback(allocation),
+      ],
+    );
+  }
+
+  Widget _rulesAllocationFeedback(ChannelPlanAllocation allocation) {
+    final expansion = _configurationExpansion(MediaQuery.sizeOf(context));
+    final roles = LineupTheme.of(context);
+    final included = allocation.channels.length;
+    final excluded = allocation.excludedOriginals + allocation.excludedExtras;
+    final numberExcluded = allocation.numberLimitExcluded;
+    final capExcluded = excluded - numberExcluded;
+    final title = excluded > 0
+        ? '$included included · $excluded excluded'
+        : included == 0
+        ? 'No generated channels qualify'
+        : 'All $included generated channels fit';
+    final description = excluded > 0
+        ? [
+            if (capExcluded > 0)
+              '$capExcluded excluded by the $_maximum-channel limit.',
+            if (numberExcluded > 0)
+              '$numberExcluded excluded because channel numbers are exhausted.',
+          ].join(' ')
+        : included == 0
+        ? 'Choose more sources or lower the minimum programs per channel.'
+        : 'Your current selection fits within the $_maximum-channel limit.';
+    return Semantics(
+      liveRegion: true,
+      child: Container(
+        margin: EdgeInsets.only(top: 24 + 12 * expansion),
+        padding: EdgeInsets.only(left: 14 + 6 * expansion),
+        decoration: BoxDecoration(
+          border: Border(
+            left: BorderSide(
+              color: excluded > 0 ? roles.progressFill : roles.subtleBorder,
+              width: 2,
             ),
           ),
         ),
-      const SizedBox(height: 8),
-      Text(
-        'Lineup takes one eligible original from each source in order, repeats, and skips exhausted sources.',
-        style: TextStyle(color: LineupTheme.of(context).secondaryText),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: TextStyle(
+                color: excluded > 0 ? roles.progressFill : roles.primaryText,
+                fontSize: 15 + 6 * expansion,
+                fontWeight: FontWeight.w600,
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              description,
+              style: TextStyle(
+                color: roles.secondaryText,
+                fontSize: 13 + 5 * expansion,
+                height: 1.4,
+              ),
+            ),
+          ],
+        ),
       ),
-    ],
-  );
+    );
+  }
+
+  Widget _orderControls() {
+    final expansion = _configurationExpansion(MediaQuery.sizeOf(context));
+    final roles = LineupTheme.of(context);
+    final textTheme = Theme.of(context).textTheme;
+    final headingStyle = textTheme.titleMedium!.copyWith(
+      color: roles.primaryText,
+      fontSize: 18 + 6 * expansion,
+      fontWeight: FontWeight.w600,
+      height: 1.3,
+    );
+    final subtitleStyle = textTheme.bodyMedium!.copyWith(
+      color: roles.secondaryText,
+      fontSize: 14 + 4 * expansion,
+      height: 1.4,
+    );
+    final nameStyle = textTheme.bodyMedium!.copyWith(
+      color: roles.primaryText,
+      fontSize: 15 + 6 * expansion,
+      height: 1.4,
+    );
+    final rankStyle = textTheme.bodyMedium!.copyWith(
+      color: roles.secondaryText,
+      fontSize: 13 + 5 * expansion,
+      height: 1.4,
+    );
+    final rowHeight = 42 + 18 * expansion;
+    final buttonSize = 32 + 12 * expansion;
+    final buttonIconSize = 20 + 4 * expansion;
+    final rowGap = 12 + 4 * expansion;
+
+    Widget rowFor(int index, BuilderStrategy strategy) {
+      var hovered = false;
+      var focused =
+          _orderFocus[strategy]!.earlier.hasFocus ||
+          _orderFocus[strategy]!.later.hasFocus;
+      final enabled = _strategies.contains(strategy);
+      return StatefulBuilder(
+        key: ValueKey('source-order-state-${strategy.name}'),
+        builder: (context, setRowState) => Focus(
+          canRequestFocus: false,
+          skipTraversal: true,
+          onFocusChange: (value) {
+            if (focused != value) setRowState(() => focused = value);
+          },
+          child: MouseRegion(
+            onEnter: (_) {
+              if (!hovered) setRowState(() => hovered = true);
+            },
+            onExit: (_) {
+              if (hovered) setRowState(() => hovered = false);
+            },
+            child: DecoratedBox(
+              key: ValueKey('source-order-${strategy.name}'),
+              decoration: BoxDecoration(
+                color: hovered || focused
+                    ? roles.primarySurface
+                    : Colors.transparent,
+                border: Border(bottom: BorderSide(color: roles.subtleBorder)),
+              ),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: rowHeight),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    SizedBox(
+                      width: 20 + 8 * expansion,
+                      child: Text('${index + 1}', style: rankStyle),
+                    ),
+                    SizedBox(width: rowGap),
+                    Expanded(
+                      child: Text.rich(
+                        TextSpan(
+                          children: [
+                            TextSpan(text: builderStrategyLabels[strategy]!),
+                            if (!enabled)
+                              TextSpan(text: '  Off', style: rankStyle),
+                          ],
+                        ),
+                        style: nameStyle,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Wrap(
+                      spacing: 4,
+                      children: [
+                        IconButton(
+                          focusNode: _orderFocus[strategy]!.earlier,
+                          constraints: BoxConstraints.tightFor(
+                            width: buttonSize,
+                            height: buttonSize,
+                          ),
+                          padding: EdgeInsets.zero,
+                          iconSize: buttonIconSize,
+                          tooltip: 'Move earlier',
+                          onPressed: index == 0
+                              ? null
+                              : () => _moveSource(index, -1),
+                          icon: const Icon(Icons.arrow_upward),
+                        ),
+                        IconButton(
+                          focusNode: _orderFocus[strategy]!.later,
+                          constraints: BoxConstraints.tightFor(
+                            width: buttonSize,
+                            height: buttonSize,
+                          ),
+                          padding: EdgeInsets.zero,
+                          iconSize: buttonIconSize,
+                          tooltip: 'Move later',
+                          onPressed: index == _sourceOrder.length - 1
+                              ? null
+                              : () => _moveSource(index, 1),
+                          icon: const Icon(Icons.arrow_downward),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('Source order', style: headingStyle),
+        const SizedBox(height: 8),
+        Text(
+          'Take one channel from each source, then repeat.',
+          style: subtitleStyle,
+        ),
+        SizedBox(height: 16 + 8 * expansion),
+        for (var index = 0; index < _sourceOrder.length; index++)
+          rowFor(index, _sourceOrder[index]),
+        SizedBox(height: 16 + 8 * expansion),
+        Text(
+          'Repeat this order until the limit is reached. Skip sources with no remaining channels.',
+          style: subtitleStyle,
+        ),
+      ],
+    );
+  }
 
   void _moveSource(int index, int delta) {
     final strategy = _sourceOrder[index];

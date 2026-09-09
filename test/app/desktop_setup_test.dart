@@ -186,10 +186,33 @@ void main() {
     );
     await tester.tap(find.byKey(const ValueKey('configure-section-2')));
     await tester.pumpAndSettle();
-    expect(find.text('Lineup rules'), findsNWidgets(2));
+    expect(find.text('Lineup rules'), findsOneWidget);
     expect(find.text('Maximum generated channels'), findsOneWidget);
     expect(find.text('Minimum programs per channel'), findsOneWidget);
-    expect(find.textContaining('one eligible original'), findsOneWidget);
+    expect(
+      find.text('Take one channel from each source, then repeat.'),
+      findsOneWidget,
+    );
+    expect(find.text('All 6 generated channels fit'), findsOneWidget);
+    final minimum = find.byKey(const ValueKey('rules-minimum'));
+    await tester.ensureVisible(minimum);
+    await tester.pumpAndSettle();
+    await tester.tap(minimum);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('10').last);
+    await tester.pumpAndSettle();
+    expect(find.text('No generated channels qualify'), findsOneWidget);
+    expect(
+      tester
+          .widget<FilledButton>(find.byKey(const ValueKey('review-channels')))
+          .onPressed,
+      isNull,
+    );
+    await tester.tap(minimum);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('5').last);
+    await tester.pumpAndSettle();
+    expect(find.text('All 6 generated channels fit'), findsOneWidget);
   });
 
   testWidgets(
