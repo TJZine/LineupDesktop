@@ -1962,7 +1962,7 @@ class _MiniGuideRow extends StatelessWidget {
                 ? Padding(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 12,
-                      vertical: 8,
+                      vertical: 7,
                     ),
                     child: Row(
                       children: [

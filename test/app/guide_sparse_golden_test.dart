@@ -1,7 +1,6 @@
 @TestOn('mac-os')
 library;
 
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -20,22 +19,15 @@ import '../support/ui_fixture.dart';
 const _goldenKey = Key('guide-sparse-visual-boundary');
 const _viewport = Size(1920, 1080);
 final _fixedNow = DateTime.utc(2026, 1, 15, 3, 17);
-final Uint8List _posterBytes = File(
-  'test/support/now_playing/signal-after-midnight-poster.png',
-).readAsBytesSync();
+// Keep this composition capture independent of asynchronous palette decoding:
+// empty artwork resolves to the same color before and after sampling.
+final Uint8List _artworkBytes = Uint8List(0);
 
 void main() {
   setUpAll(loadPinnedTestFonts);
 
   testWidgets('matched rich Guide information', (tester) async {
-    final context = await _pumpGuide(tester, rich: true);
-    await tester.runAsync(
-      () => precacheImage(
-        ResizeImage.resizeIfNeeded(360, null, MemoryImage(_posterBytes)),
-        context,
-      ),
-    );
-    await tester.pumpAndSettle();
+    await _pumpGuide(tester, rich: true);
 
     expect(find.byKey(const Key('guide-picture-in-picture')), findsOneWidget);
     expect(
@@ -55,10 +47,7 @@ void main() {
   });
 }
 
-Future<BuildContext> _pumpGuide(
-  WidgetTester tester, {
-  required bool rich,
-}) async {
+Future<void> _pumpGuide(WidgetTester tester, {required bool rich}) async {
   await tester.pumpWidget(const SizedBox.shrink());
   await tester.pump();
   tester.view
@@ -93,7 +82,6 @@ Future<BuildContext> _pumpGuide(
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 500));
   await tester.pumpAndSettle();
-  return tester.element(find.byKey(_goldenKey));
 }
 
 Future<void> _match(WidgetTester tester, String name) async {
@@ -167,5 +155,5 @@ class _ComparisonController extends FixtureController {
   );
 
   @override
-  Future<Uint8List?> artworkForPath(Uri path) async => _posterBytes;
+  Future<Uint8List?> artworkForPath(Uri path) async => _artworkBytes;
 }

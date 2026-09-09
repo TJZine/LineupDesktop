@@ -73,7 +73,7 @@ void main() {
 
     await openDestination(tester, 'Settings');
     expect(FocusManager.instance.primaryFocus?.debugLabel, 'Settings');
-    await tester.tap(find.widgetWithText(OutlinedButton, 'Support'));
+    await tester.tap(find.widgetWithText(TextButton, 'Support'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Open Diagnostics'));
     await tester.pumpAndSettle();

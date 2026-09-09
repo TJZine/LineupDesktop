@@ -91,7 +91,7 @@ void main() {
     await tester.tap(find.text('Add a custom channel'));
     await tester.pumpAndSettle();
     expect(find.text('Create custom channel'), findsOneWidget);
-    expect(find.text('Air Check'), findsOneWidget);
+    expect(find.text('Schedule preview'), findsOneWidget);
     expect(find.text('New channel'), findsWidgets);
     expect(find.text('1'), findsWidgets);
     await tester.tap(find.text('Back to Channels'));
@@ -100,7 +100,7 @@ void main() {
     await tester.tap(find.byTooltip('Open Custom four'));
     await tester.pumpAndSettle();
     expect(find.text('Edit custom channel'), findsOneWidget);
-    expect(find.text('Air Check'), findsOneWidget);
+    expect(find.text('Schedule preview'), findsOneWidget);
     expect(find.byType(Dialog), findsNothing);
     await tester.tap(find.text('Back to Channels'));
     await tester.pumpAndSettle();
@@ -109,7 +109,7 @@ void main() {
     await tester.tap(find.byTooltip('Open Generated eight'));
     await tester.pumpAndSettle();
     expect(find.text('Inspect generated channel'), findsOneWidget);
-    expect(find.text('Air Check'), findsOneWidget);
+    expect(find.text('Schedule preview'), findsOneWidget);
     expect(
       find.text('Programming is read-only and will be preserved exactly.'),
       findsOneWidget,
@@ -118,7 +118,7 @@ void main() {
     await tester.tap(find.text('Duplicate as custom'));
     await tester.pumpAndSettle();
     expect(find.text('Duplicate as custom'), findsWidgets);
-    expect(find.text('Air Check'), findsOneWidget);
+    expect(find.text('Schedule preview'), findsOneWidget);
     expect(find.text('Duplicate as custom'), findsWidgets);
     expect(
       tester
@@ -3724,7 +3724,7 @@ void main() {
       );
       await _settleAirCheck(tester);
       expect(tester.takeException(), isNull, reason: 'viewport $size');
-      expect(find.text('Air Check'), findsOneWidget);
+      expect(find.text('Schedule preview'), findsOneWidget);
       expect(find.byKey(const Key('studio-programming')), findsOneWidget);
       expect(find.byKey(const Key('studio-station')), findsOneWidget);
       expect(find.text('Save channel'), findsOneWidget);
@@ -4116,7 +4116,9 @@ void main() {
           ),
         );
         await _settleAirCheck(tester);
-        final context = tester.element(find.text('Air Check'));
+        final context = tester.element(
+          find.byKey(const Key('channel-air-check')),
+        );
         expect(MediaQuery.disableAnimationsOf(context), isTrue);
         expect(
           Theme.of(context).extension<LineupThemeRoles>()!.focusBorderWidth,

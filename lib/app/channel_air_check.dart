@@ -490,7 +490,7 @@ class ChannelAirCheckState extends State<ChannelAirCheck> {
         widget.originalChannel == null ||
         _recipeKey(widget.originalChannel!) != _recipeKey(widget.channel);
     final status = _stale
-        ? 'Updating'
+        ? 'Updating — preview is stale'
         : draft
         ? 'Draft schedule'
         : 'Saved channel';
