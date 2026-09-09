@@ -1,11 +1,9 @@
 import 'dart:async';
-import 'dart:collection';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../channels/channel.dart';
 import '../guide/guide_controller.dart';
 import '../guide/guide_view.dart';
 import '../playback/native_player.dart';
@@ -16,7 +14,8 @@ import '../settings/lineup_settings.dart';
 import '../ui/app_ui.dart';
 import '../ui/app_theme.dart';
 import 'channel_setup_view.dart';
-import 'channel_studio_view.dart';
+import 'channels_view.dart';
+import 'diagnostics_view.dart';
 import 'lineup_controller.dart';
 import 'onboarding_view.dart';
 
@@ -42,14 +41,26 @@ class _LineupShellState extends State<LineupShell> {
   late final GuideController _guide;
   late final PlayerCoordinator _player;
   final _playerKey = GlobalKey();
-  final _channelsKey = GlobalKey<_ChannelsViewState>();
+  final _channelsKey = GlobalKey<ChannelsViewState>();
   final _guideFocus = FocusNode(debugLabel: 'Guide');
   final _channelsFocus = FocusNode(debugLabel: 'Channels');
   final _settingsFocus = FocusNode(debugLabel: 'Settings');
   final _diagnosticsFocus = FocusNode(debugLabel: 'Diagnostics');
   final _playerFocus = FocusNode(debugLabel: 'Player');
+  final _channelsMenuFocus = FocusNode(debugLabel: 'Channels Lineup menu');
+  final _settingsMenuFocus = FocusNode(debugLabel: 'Settings Lineup menu');
+  final _diagnosticsMenuFocus = FocusNode(
+    debugLabel: 'Diagnostics Lineup menu',
+  );
+  final _appMenuScope = FocusScopeNode(
+    debugLabel: 'Lineup menu',
+    traversalEdgeBehavior: TraversalEdgeBehavior.closedLoop,
+  );
   bool _selectionPending = false;
   bool _appMenuOpen = false;
+  Rect? _appMenuAnchor;
+  FocusNode? _appMenuInvokerFocus;
+  SettingsCategory _settingsCategory = SettingsCategory.appearance;
   bool _guideOpenedFromPlayer = false;
   late SetupStage _lastStage = widget.controller.stage;
   @override
@@ -97,11 +108,19 @@ class _LineupShellState extends State<LineupShell> {
     _settingsFocus.dispose();
     _diagnosticsFocus.dispose();
     _playerFocus.dispose();
+    _channelsMenuFocus.dispose();
+    _settingsMenuFocus.dispose();
+    _diagnosticsMenuFocus.dispose();
+    _appMenuScope.dispose();
     super.dispose();
   }
 
   Future<void> _select(int index) async {
     if (_selectionPending) return;
+    if (index == 4 && !_hasPlaybackSurface) {
+      if (_appMenuOpen) _closeAppMenu();
+      return;
+    }
     if (index == _selectedIndex) {
       if (_appMenuOpen) _closeAppMenu();
       return;
@@ -130,12 +149,17 @@ class _LineupShellState extends State<LineupShell> {
       setState(() {
         _selectedIndex = index;
         _appMenuOpen = false;
+        _appMenuAnchor = null;
+        _appMenuInvokerFocus = null;
       });
       WidgetsBinding.instance.addPostFrameCallback((_) => _restoreRouteFocus());
     } finally {
       _selectionPending = false;
     }
   }
+
+  bool get _hasPlaybackSurface =>
+      _player.hasPlaybackIntent || _player.error != null;
 
   void _restoreRouteFocus() {
     if (!mounted) return;
@@ -150,26 +174,67 @@ class _LineupShellState extends State<LineupShell> {
     target.requestFocus();
   }
 
-  void _openAppMenu() => setState(() => _appMenuOpen = true);
+  void _openAppMenu(BuildContext invokerContext, FocusNode invokerFocus) {
+    final renderObject = invokerContext.findRenderObject();
+    if (renderObject is! RenderBox || !renderObject.hasSize) return;
+    setState(() {
+      _appMenuAnchor =
+          renderObject.localToGlobal(Offset.zero) & renderObject.size;
+      _appMenuInvokerFocus = invokerFocus;
+      _appMenuOpen = true;
+    });
+  }
+
+  void _openAppMenuFromCurrentFocus() {
+    final focus = FocusManager.instance.primaryFocus;
+    final focusContext = focus?.context;
+    if (focus != null && focusContext != null) {
+      _openAppMenu(focusContext, focus);
+    }
+  }
 
   void _closeGuide(bool hasPlaybackSurface) {
     final returnToPlayer = hasPlaybackSurface || _guideOpenedFromPlayer;
     _guideOpenedFromPlayer = false;
-    returnToPlayer ? unawaited(_select(4)) : _openAppMenu();
+    returnToPlayer ? unawaited(_select(4)) : _openAppMenuFromCurrentFocus();
   }
 
   Future<void> _tuneFromGuide(String channelId) async {
+    final tuning = _player.tune(channelId);
     await _select(4);
-    await _player.tune(channelId);
+    await tuning;
   }
 
-  void _closeAppMenu() {
-    setState(() => _appMenuOpen = false);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _restoreRouteFocus());
+  void _closeAppMenu({bool restoreInvoker = true}) {
+    final invoker = _appMenuInvokerFocus;
+    setState(() {
+      _appMenuOpen = false;
+      _appMenuAnchor = null;
+      _appMenuInvokerFocus = null;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (restoreInvoker && invoker?.context != null) {
+        invoker!.requestFocus();
+      } else {
+        _restoreRouteFocus();
+      }
+    });
+  }
+
+  Future<void> _openAccount() async {
+    _settingsCategory = SettingsCategory.account;
+    await _select(2);
   }
 
   KeyEventResult _globalKey(FocusNode _, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    if (event.logicalKey == LogicalKeyboardKey.backspace &&
+        FocusManager.instance.primaryFocus?.context
+                ?.findAncestorStateOfType<EditableTextState>() !=
+            null) {
+      return KeyEventResult.ignored;
+    }
     final keyboard = HardwareKeyboard.instance;
     if (_selectedIndex == 2 &&
         _settingsReturnIndex != null &&
@@ -222,6 +287,33 @@ class _LineupShellState extends State<LineupShell> {
     });
   }
 
+  Future<void> _requestLogout() async {
+    final confirmed =
+        await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Sign out of Plex?'),
+            content: const Text(
+              "Playback will stop. You'll need to link Plex again to continue.",
+            ),
+            actions: [
+              TextButton(
+                autofocus: true,
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Sign out'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (!confirmed || !mounted) return;
+    await _logout();
+  }
+
   Future<void> _logout() async {
     if (_selectedIndex == 1 &&
         !(await (_channelsKey.currentState?.requestLeave() ??
@@ -245,19 +337,25 @@ class _LineupShellState extends State<LineupShell> {
     );
   }
 
-  Widget _immersiveAppMenu() => Stack(
-    fit: StackFit.expand,
-    children: [
-      ModalBarrier(
-        dismissible: true,
-        onDismiss: _closeAppMenu,
-        color: LineupTheme.of(context).scrim.withValues(alpha: 0.45),
-      ),
-      Align(
-        alignment: Alignment.topRight,
-        child: SafeArea(
-          minimum: const EdgeInsets.all(16),
+  Widget _immersiveAppMenu(bool hasPlaybackSurface) {
+    final anchor = _appMenuAnchor;
+    if (anchor == null) return const SizedBox.shrink();
+    final roles = LineupTheme.of(context);
+    final profileName = widget.controller.profile?.name;
+    final accountName = widget.controller.account?.name ?? 'Plex account';
+    final serverName = widget.controller.server?.name ?? 'No server selected';
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        ModalBarrier(
+          dismissible: true,
+          onDismiss: _closeAppMenu,
+          color: roles.scrim.withValues(alpha: 0.45),
+        ),
+        CustomSingleChildLayout(
+          delegate: _AnchoredMenuLayout(anchor),
           child: FocusScope(
+            node: _appMenuScope,
             autofocus: true,
             onKeyEvent: (_, event) {
               if (event is KeyDownEvent &&
@@ -273,50 +371,127 @@ class _LineupShellState extends State<LineupShell> {
               policy: WidgetOrderTraversalPolicy(),
               child: Card(
                 key: const Key('immersive-app-menu'),
-                child: SizedBox(
-                  width: 280,
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.all(12),
-                          child: Text(
-                            'Lineup',
-                            style: Theme.of(context).textTheme.titleLarge,
-                          ),
+                margin: EdgeInsets.zero,
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Text(
+                          'Lineup',
+                          style: Theme.of(context).textTheme.titleLarge,
                         ),
-                        for (final destination in const [
-                          (0, Icons.live_tv_outlined, 'Guide'),
-                          (1, Icons.view_list_outlined, 'Channels'),
-                          (2, Icons.settings_outlined, 'Settings'),
-                          (3, Icons.monitor_heart_outlined, 'Diagnostics'),
-                          (4, Icons.play_circle_outline, 'Player'),
-                        ])
-                          TextButton.icon(
-                            style: TextButton.styleFrom(
-                              alignment: Alignment.centerLeft,
-                              backgroundColor: _selectedIndex == destination.$1
-                                  ? LineupTheme.of(context).selectedSurface
-                                  : null,
-                            ),
-                            onPressed: () => unawaited(_select(destination.$1)),
-                            icon: Icon(destination.$2),
-                            label: Text(destination.$3),
+                      ),
+                      _menuDestination(
+                        index: 0,
+                        icon: Icons.live_tv_outlined,
+                        label: 'Guide',
+                        autofocus: true,
+                      ),
+                      _menuDestination(
+                        index: 4,
+                        icon: Icons.play_circle_outline,
+                        label: 'Player',
+                        enabled: hasPlaybackSurface,
+                        helper: hasPlaybackSurface
+                            ? null
+                            : 'Choose a channel in Guide',
+                      ),
+                      _menuDestination(
+                        index: 1,
+                        icon: Icons.view_list_outlined,
+                        label: 'Channels',
+                      ),
+                      _menuDestination(
+                        index: 2,
+                        icon: Icons.settings_outlined,
+                        label: 'Settings',
+                      ),
+                      Semantics(
+                        selected:
+                            _selectedIndex == 2 &&
+                            _settingsCategory == SettingsCategory.account,
+                        button: true,
+                        child: TextButton.icon(
+                          style: TextButton.styleFrom(
+                            alignment: Alignment.centerLeft,
                           ),
-                      ],
-                    ),
+                          onPressed: () => unawaited(_openAccount()),
+                          icon: const Icon(Icons.account_circle_outlined),
+                          label: const Text('Account'),
+                        ),
+                      ),
+                      const Divider(height: 24),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              profileName == null
+                                  ? accountName
+                                  : '$profileName · $accountName',
+                              softWrap: true,
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              serverName,
+                              softWrap: true,
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(color: roles.mutedText),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
             ),
           ),
         ),
+      ],
+    );
+  }
+
+  Widget _menuDestination({
+    required int index,
+    required IconData icon,
+    required String label,
+    bool enabled = true,
+    bool autofocus = false,
+    String? helper,
+  }) {
+    final selected = _selectedIndex == index;
+    return Semantics(
+      selected: selected,
+      button: true,
+      enabled: enabled,
+      label: selected ? '$label, current page' : label,
+      child: TextButton.icon(
+        autofocus: autofocus,
+        style: TextButton.styleFrom(
+          alignment: Alignment.centerLeft,
+          backgroundColor: selected
+              ? LineupTheme.of(context).selectedSurface
+              : null,
+        ),
+        onPressed: enabled ? () => unawaited(_select(index)) : null,
+        icon: Icon(icon),
+        label: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label),
+            if (helper != null)
+              Text(helper, style: Theme.of(context).textTheme.bodySmall),
+          ],
+        ),
       ),
-    ],
-  );
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -337,18 +512,13 @@ class _LineupShellState extends State<LineupShell> {
       openGuide: () => unawaited(_select(0)),
       openMenu: _openAppMenu,
     );
-    final hasPlaybackSurface =
-        _player.hasPlaybackIntent || _player.error != null;
-    final overlayGuide =
-        controller.settings.guideLayoutMode == GuideLayoutMode.overlay &&
-        hasPlaybackSurface;
+    final hasPlaybackSurface = _hasPlaybackSurface;
     final guideView = GuideView(
       controller: _guide,
       focusNode: _guideFocus,
       onClose: () => _closeGuide(hasPlaybackSurface),
       onOpenMenu: _openAppMenu,
-      overlayMode: overlayGuide,
-      pictureInPicture: hasPlaybackSurface && !overlayGuide
+      pictureInPicture: hasPlaybackSurface
           ? PlayerSurface(controller: _player, showErrors: true)
           : null,
       playbackMessage: _player.tuning
@@ -360,137 +530,121 @@ class _LineupShellState extends State<LineupShell> {
     final settingsView = SettingsView(
       controller: controller,
       focusNode: _settingsFocus,
+      menuFocusNode: _settingsMenuFocus,
       onOpenMenu: _openAppMenu,
+      category: _settingsCategory,
+      onCategoryChanged: (category) => setState(() {
+        _settingsCategory = category;
+      }),
+      onSignOut: _requestLogout,
+      onOpenDiagnostics: () => unawaited(_select(3)),
     );
     final views = <Widget>[
-      overlayGuide
-          ? Stack(
-              fit: StackFit.expand,
-              children: [
-                PlayerSurface(controller: _player),
-                guideView,
-              ],
-            )
-          : guideView,
+      guideView,
       ChannelsView(
         key: _channelsKey,
         controller: controller,
         player: _player,
         clock: widget.guideClock,
         focusNode: _channelsFocus,
+        menuFocusNode: _channelsMenuFocus,
+        onOpenMenu: _openAppMenu,
         onOpenPlayer: () => unawaited(_select(4)),
       ),
       settingsView,
       DiagnosticsView(
         controller: controller,
-        status: _player.status,
+        playback: _player.diagnosticPlaybackSnapshot,
+        onRecordingSettings: () {
+          _settingsCategory = SettingsCategory.support;
+          unawaited(_select(2));
+        },
         focusNode: _diagnosticsFocus,
+        menuFocusNode: _diagnosticsMenuFocus,
+        onOpenMenu: _openAppMenu,
       ),
       playerView,
     ];
-    if (_selectedIndex == 0 || _selectedIndex == 2 || _selectedIndex == 4) {
-      final immersiveView = _selectedIndex == 2
-          ? Stack(
-              fit: StackFit.expand,
-              children: [
-                if (hasPlaybackSurface) PlayerSurface(controller: _player),
-                settingsView,
-              ],
-            )
-          : views[_selectedIndex];
-      return _withGlobalKeys(
-        Scaffold(
-          backgroundColor: Colors.transparent,
-          body: Stack(
+    final routeView = _selectedIndex == 2
+        ? Stack(
             fit: StackFit.expand,
             children: [
-              ExcludeSemantics(
-                key: const Key('immersive-route-semantics'),
-                excluding: _appMenuOpen,
-                child: ExcludeFocus(
-                  excluding: _appMenuOpen,
-                  child: SafeArea(child: immersiveView),
-                ),
-              ),
-              if (_appMenuOpen) _immersiveAppMenu(),
+              if (hasPlaybackSurface) PlayerSurface(controller: _player),
+              settingsView,
             ],
-          ),
-        ),
-      );
-    }
+          )
+        : views[_selectedIndex];
     return _withGlobalKeys(
       Scaffold(
         backgroundColor: Colors.transparent,
-        body: SafeArea(
-          child: Row(
-            children: [
-              ColoredBox(
-                color: Theme.of(context).scaffoldBackgroundColor,
-                child: NavigationRail(
-                  selectedIndex: _selectedIndex,
-                  onDestinationSelected: (index) => unawaited(_select(index)),
-                  extended:
-                      MediaQuery.sizeOf(context).width >=
-                      LineupLayout.expandedNavigation,
-                  leading: const Padding(
-                    padding: EdgeInsets.fromLTRB(12, 16, 12, 28),
-                    child: _Brand(),
+        body: Stack(
+          fit: StackFit.expand,
+          children: [
+            ExcludeSemantics(
+              key: const Key('immersive-route-semantics'),
+              excluding: _appMenuOpen,
+              child: ExcludeFocus(
+                excluding: _appMenuOpen,
+                child: SafeArea(
+                  child: ColoredBox(
+                    color:
+                        _selectedIndex == 2 ||
+                            _selectedIndex == 4 ||
+                            (_selectedIndex == 0 && hasPlaybackSurface)
+                        ? Colors.transparent
+                        : Theme.of(context).scaffoldBackgroundColor,
+                    child: routeView,
                   ),
-                  trailing: Expanded(
-                    child: Align(
-                      alignment: Alignment.bottomCenter,
-                      child: Padding(
-                        padding: const EdgeInsets.only(bottom: 16),
-                        child: IconButton(
-                          tooltip: 'Sign out of Plex',
-                          onPressed: controller.busy ? null : _logout,
-                          icon: const Icon(Icons.logout),
-                        ),
-                      ),
-                    ),
-                  ),
-                  destinations: const [
-                    NavigationRailDestination(
-                      icon: Icon(Icons.live_tv_outlined),
-                      selectedIcon: Icon(Icons.live_tv),
-                      label: Text('Guide'),
-                    ),
-                    NavigationRailDestination(
-                      icon: Icon(Icons.view_list_outlined),
-                      selectedIcon: Icon(Icons.view_list),
-                      label: Text('Channels'),
-                    ),
-                    NavigationRailDestination(
-                      icon: Icon(Icons.settings_outlined),
-                      selectedIcon: Icon(Icons.settings),
-                      label: Text('Settings'),
-                    ),
-                    NavigationRailDestination(
-                      icon: Icon(Icons.monitor_heart_outlined),
-                      selectedIcon: Icon(Icons.monitor_heart),
-                      label: Text('Diagnostics'),
-                    ),
-                    NavigationRailDestination(
-                      icon: Icon(Icons.play_circle_outline),
-                      selectedIcon: Icon(Icons.play_circle),
-                      label: Text('Player'),
-                    ),
-                  ],
                 ),
               ),
-              const VerticalDivider(width: 1),
-              Expanded(
-                child: ColoredBox(
-                  color: Theme.of(context).scaffoldBackgroundColor,
-                  child: views[_selectedIndex],
-                ),
-              ),
-            ],
-          ),
+            ),
+            if (_appMenuOpen) _immersiveAppMenu(hasPlaybackSurface),
+          ],
         ),
       ),
     );
   }
+}
+
+class _AnchoredMenuLayout extends SingleChildLayoutDelegate {
+  const _AnchoredMenuLayout(this.anchor);
+
+  static const _margin = 16.0;
+  static const _gap = 8.0;
+  final Rect anchor;
+
+  @override
+  BoxConstraints getConstraintsForChild(BoxConstraints constraints) =>
+      BoxConstraints(
+        maxWidth: (constraints.maxWidth - _margin * 2).clamp(0, 320),
+        maxHeight: (constraints.maxHeight - _margin * 2).clamp(
+          0,
+          double.infinity,
+        ),
+      );
+
+  @override
+  Offset getPositionForChild(Size size, Size childSize) {
+    final left = (anchor.right - childSize.width).clamp(
+      _margin,
+      size.width - childSize.width - _margin,
+    );
+    final below = anchor.bottom + _gap;
+    final above = anchor.top - childSize.height - _gap;
+    final top = below + childSize.height <= size.height - _margin
+        ? below
+        : above >= _margin
+        ? above
+        : (anchor.center.dy - childSize.height / 2).clamp(
+            _margin,
+            size.height - childSize.height - _margin,
+          );
+    return Offset(left, top);
+  }
+
+  @override
+  bool shouldRelayout(_AnchoredMenuLayout oldDelegate) =>
+      oldDelegate.anchor != anchor;
 }
 
 Uri _mediaUri(String value) {
@@ -504,590 +658,157 @@ Uri _mediaUri(String value) {
       : Uri.file(value, windows: Platform.isWindows);
 }
 
-class ChannelsView extends StatefulWidget {
-  const ChannelsView({
-    required this.controller,
-    required this.player,
-    required this.onOpenPlayer,
-    this.focusNode,
-    this.clock,
-    super.key,
-  });
-
-  final LineupController controller;
-  final PlayerCoordinator player;
-  final VoidCallback onOpenPlayer;
-  final FocusNode? focusNode;
-  final DateTime Function()? clock;
-
-  @override
-  State<ChannelsView> createState() => _ChannelsViewState();
+enum SettingsCategory {
+  appearance,
+  guide,
+  playback,
+  accessibility,
+  account,
+  support,
 }
-
-class _ChannelsViewState extends State<ChannelsView> {
-  static const _maximumHealthLoads = 2;
-  static const _maximumPendingHealth = 12;
-  static const _maximumCachedHealth = 1000;
-  Future<void>? _generateLineupEntry;
-  String? _error;
-  ChannelStudioMode? _studioMode;
-  Channel? _studioChannel;
-  String? _returnFocusId;
-  final _openFocus = <String, FocusNode>{};
-  final _deleteFocus = <String, FocusNode>{};
-  Future<bool>? _leaveRequest;
-  bool _focusPruneScheduled = false;
-  bool _focusPruneNeedsRestore = false;
-  final LinkedHashMap<String, _ChannelHealth> _health = LinkedHashMap();
-  final Queue<({Channel channel, _ChannelHealthSignature signature})>
-  _pendingHealth = Queue();
-  final Map<String, _ChannelHealthSignature> _activeHealth = {};
-  int _activeHealthLoads = 0;
-  int _healthEpoch = 0;
-  int? _healthContentGeneration;
-  GlobalKey<ChannelStudioViewState> _studioKey =
-      GlobalKey<ChannelStudioViewState>();
-
-  bool get _studioOpen => _studioMode != null;
-  ChannelStudioViewState? get _studio => _studioKey.currentState;
-
-  void openNew() => setState(() {
-    _studioKey = GlobalKey<ChannelStudioViewState>();
-    _studioMode = ChannelStudioMode.createCustom;
-    _studioChannel = null;
-    _returnFocusId = null;
-    _error = null;
-  });
-
-  void _open(Channel channel) => setState(() {
-    _studioKey = GlobalKey<ChannelStudioViewState>();
-    _studioMode = channel.builderKey == null
-        ? ChannelStudioMode.editCustom
-        : ChannelStudioMode.inspectGenerated;
-    _studioChannel = channel;
-    _returnFocusId = channel.id;
-    _error = null;
-  });
-
-  void _openDuplicate(Channel source) => setState(() {
-    _studioKey = GlobalKey<ChannelStudioViewState>();
-    _studioMode = ChannelStudioMode.duplicateCustom;
-    _studioChannel = source;
-    _returnFocusId = source.id;
-    _error = null;
-  });
-
-  Future<bool> requestLeave([String? focusId]) =>
-      _leaveRequest ??= _requestLeave(focusId)
-          .whenComplete(() => _leaveRequest = null);
-
-  Future<bool> _requestLeave(String? focusId) async {
-    if (!_studioOpen) return true;
-    final studio = _studio;
-    if (studio == null || studio.saving) return false;
-    if (studio.dirty) {
-      final discard =
-          await showDialog<bool>(
-            context: context,
-            builder: (context) => AlertDialog(
-              title: const Text('Discard changes?'),
-              content: const Text(
-                'Your unsaved Channel Studio changes will be lost.',
-              ),
-              actions: [
-                TextButton(
-                  autofocus: true,
-                  onPressed: () => Navigator.pop(context, false),
-                  child: const Text('Keep editing'),
-                ),
-                FilledButton(
-                  onPressed: () => Navigator.pop(context, true),
-                  child: const Text('Discard changes'),
-                ),
-              ],
-            ),
-          ) ??
-          false;
-      if (!discard || !mounted) return false;
-    }
-    _showList(focusId ?? _returnFocusId);
-    return true;
-  }
-
-  Future<void> closeStudio([String? focusId]) async {
-    await requestLeave(focusId);
-  }
-
-  Future<void> _openGenerateLineupFromStudio() =>
-      _generateLineupEntry ??= _enterGenerateLineupFromStudio();
-
-  Future<void> _enterGenerateLineupFromStudio() async {
-    try {
-      if (!_studioOpen) return;
-      final studio = _studio;
-      if (studio == null || studio.saving) return;
-      if (studio.dirty) {
-        final discard =
-            await showDialog<bool>(
-              context: context,
-              builder: (context) => AlertDialog(
-                title: const Text('Open Generate lineup?'),
-                content: const Text(
-                  'Your unsaved Studio draft cannot be carried into Generate lineup. Existing custom channels remain protected while you review the proposed roster.',
-                ),
-                actions: [
-                  TextButton(
-                    autofocus: true,
-                    onPressed: () => Navigator.pop(context, false),
-                    child: const Text('Keep editing'),
-                  ),
-                  FilledButton(
-                    onPressed: () => Navigator.pop(context, true),
-                    child: const Text('Discard draft and continue'),
-                  ),
-                ],
-              ),
-            ) ??
-            false;
-        if (!discard || !mounted) return;
-      }
-      _showList(_returnFocusId);
-      await widget.controller.enterChannelSetup();
-    } finally {
-      _generateLineupEntry = null;
-    }
-  }
-
-  void _showList(String? focusId) {
-    setState(() {
-      _studioMode = null;
-      _studioChannel = null;
-    });
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      (_openFocus[focusId] ?? widget.focusNode)?.requestFocus();
-    });
-  }
-
-  @override
-  void dispose() {
-    _healthEpoch++;
-    for (final node in {..._openFocus.values, ..._deleteFocus.values}) {
-      node.dispose();
-    }
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (_studioMode case final mode?) {
-      return PopScope(
-        canPop: false,
-        onPopInvokedWithResult: (didPop, _) {
-          if (!didPop) unawaited(closeStudio());
-        },
-        child: ChannelStudioView(
-          key: _studioKey,
-          controller: widget.controller,
-          mode: mode,
-          channel: _studioChannel,
-          onBack: closeStudio,
-          onSaved: (id) => _returnFocusId = id,
-          onDuplicate: _openDuplicate,
-          onOpenGenerateLineup: _openGenerateLineupFromStudio,
-          clock: widget.clock,
-          onTune: (id) async {
-            final success = await widget.player.tune(id);
-            if (success) widget.onOpenPlayer();
-            return success;
-          },
-        ),
-      );
-    }
-
-    final channels = [...widget.controller.channels]
-      ..sort((left, right) => left.number.compareTo(right.number));
-    if (_healthContentGeneration != widget.controller.contentGeneration) {
-      _healthContentGeneration = widget.controller.contentGeneration;
-      _healthEpoch++;
-      _health.clear();
-      _pendingHealth.clear();
-    }
-    final liveIds = channels.map((channel) => channel.id).toSet();
-    _pruneHealth(liveIds);
-    _scheduleFocusPrune(liveIds);
-    return LineupPage(
-      title: 'Channels',
-      actions: Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: [
-          OutlinedButton.icon(
-            focusNode: widget.focusNode,
-            onPressed: widget.controller.enterChannelSetup,
-            icon: const Icon(Icons.auto_awesome_outlined),
-            label: const Text('Generate lineup'),
-          ),
-          FilledButton.icon(
-            onPressed: openNew,
-            icon: const Icon(Icons.add),
-            label: const Text('New channel'),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          if (_error != null) ...[
-            LineupNotice(message: _error!),
-            const SizedBox(height: 12),
-          ],
-          Expanded(
-            child: channels.isEmpty
-                ? LineupEmptyState(
-                    icon: Icons.view_list,
-                    title: 'Build your first channel',
-                    message: 'Generate a lineup from Plex or create one custom channel.',
-                    action: Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      alignment: WrapAlignment.center,
-                      children: [
-                        FilledButton.icon(
-                          onPressed: widget.controller.enterChannelSetup,
-                          icon: const Icon(Icons.auto_awesome_outlined),
-                          label: const Text('Generate lineup'),
-                        ),
-                        OutlinedButton.icon(
-                          onPressed: openNew,
-                          icon: const Icon(Icons.add),
-                          label: const Text('Create a custom channel'),
-                        ),
-                      ],
-                    ),
-                  )
-                : ListView.separated(
-                    itemCount: channels.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 8),
-                    itemBuilder: (context, index) {
-                      final channel = channels[index];
-                      _requestHealth(channel);
-                      final ownership = channel.builderKey == null
-                          ? 'Custom'
-                          : 'Generated';
-                      return Card(
-                        key: ValueKey('channel-row-${channel.id}'),
-                        child: ListTile(
-                          leading: CircleAvatar(
-                            child: Text('${channel.number}'),
-                          ),
-                          title: Text(channel.name),
-                          subtitle: Text(
-                            [
-                              '$ownership • ${channelSourceLabel(channel.source, widget.controller)} • ${channelRhythmLabel(channel.playbackMode, channel.blockSize)}',
-                              if (_health[channel.id]?.issue == true)
-                                'Schedule issue — open this channel to recover',
-                            ].join('\n'),
-                          ),
-                          trailing: Wrap(
-                            children: [
-                              IconButton(
-                                tooltip: 'Open ${channel.name}',
-                                focusNode: _openFocus.putIfAbsent(
-                                  channel.id,
-                                  () => FocusNode(
-                                    debugLabel: 'Open ${channel.name}',
-                                  ),
-                                ),
-                                onPressed: () => _open(channel),
-                                icon: const Icon(Icons.open_in_new),
-                              ),
-                              IconButton(
-                                tooltip: 'Delete ${channel.name}',
-                                focusNode: _deleteFocus.putIfAbsent(
-                                  channel.id,
-                                  () => FocusNode(
-                                    debugLabel: 'Delete ${channel.name}',
-                                  ),
-                                ),
-                                onPressed: () => _delete(channel),
-                                icon: const Icon(Icons.delete_outline),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _requestHealth(Channel channel) {
-    final signature = _healthSignature(channel);
-    final cached = _health[channel.id];
-    if (cached?.signature == signature ||
-        _activeHealth[channel.id] == signature ||
-        _pendingHealth.any(
-          (pending) =>
-              pending.channel.id == channel.id &&
-              pending.signature == signature,
-        )) {
-      return;
-    }
-    _pendingHealth.removeWhere((pending) => pending.channel.id == channel.id);
-    if (_pendingHealth.length >= _maximumPendingHealth) {
-      _pendingHealth.removeFirst();
-    }
-    _pendingHealth.add((channel: channel, signature: signature));
-    WidgetsBinding.instance.addPostFrameCallback((_) => _pumpHealth());
-  }
-
-  void _pumpHealth() {
-    if (!mounted) return;
-    var blocked = 0;
-    while (_activeHealthLoads < _maximumHealthLoads &&
-        _pendingHealth.isNotEmpty) {
-      final pending = _pendingHealth.removeFirst();
-      final channel = pending.channel;
-      if (_activeHealth.containsKey(channel.id)) {
-        _pendingHealth.add(pending);
-        blocked++;
-        if (blocked >= _pendingHealth.length) break;
-        continue;
-      }
-      blocked = 0;
-      final epoch = _healthEpoch;
-      final signature = pending.signature;
-      final current = widget.controller.channels
-          .where((item) => item.id == channel.id)
-          .firstOrNull;
-      if (current == null || _healthSignature(current) != signature) {
-        if (current != null) _requestHealth(current);
-        continue;
-      }
-      _activeHealthLoads++;
-      _activeHealth[channel.id] = signature;
-      widget.controller
-          .loadScheduleFor(channel)
-          .then(
-            (_) => _finishHealth(channel.id, signature, false, epoch),
-            onError: (_) => _finishHealth(channel.id, signature, true, epoch),
-          );
-    }
-  }
-
-  void _finishHealth(
-    String id,
-    _ChannelHealthSignature signature,
-    bool issue,
-    int epoch,
-  ) {
-    _activeHealthLoads--;
-    if (_activeHealth[id] == signature) _activeHealth.remove(id);
-    if (!mounted) return;
-    final current = widget.controller.channels
-        .where((channel) => channel.id == id)
-        .firstOrNull;
-    if (epoch == _healthEpoch &&
-        current != null &&
-        _healthSignature(current) == signature) {
-      _health.remove(id);
-      _health[id] = _ChannelHealth(signature, issue);
-      while (_health.length > _maximumCachedHealth) {
-        _health.remove(_health.keys.first);
-      }
-      setState(() {});
-    } else if (current != null) {
-      _requestHealth(current);
-    }
-    _pumpHealth();
-  }
-
-  _ChannelHealthSignature _healthSignature(Channel channel) => (
-    contentGeneration: widget.controller.contentGeneration,
-    channelRevision: widget.controller.channelRevision(channel.id),
-  );
-
-  void _pruneHealth(Set<String> liveIds) {
-    _health.removeWhere((id, _) => !liveIds.contains(id));
-    _pendingHealth.removeWhere(
-      (pending) => !liveIds.contains(pending.channel.id),
-    );
-  }
-
-  void _scheduleFocusPrune(Set<String> liveIds) {
-    final staleIds = {
-      ..._openFocus.keys,
-      ..._deleteFocus.keys,
-    }.where((id) => !liveIds.contains(id)).toList();
-    if (staleIds.isEmpty) return;
-    _focusPruneNeedsRestore |= staleIds.any(
-      (id) =>
-          (_openFocus[id]?.hasFocus ?? false) ||
-          (_deleteFocus[id]?.hasFocus ?? false),
-    );
-    if (_focusPruneScheduled) return;
-    _focusPruneScheduled = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _focusPruneScheduled = false;
-      if (!mounted) return;
-      final currentIds = widget.controller.channels
-          .map((channel) => channel.id)
-          .toSet();
-      final staleIds = {
-        ..._openFocus.keys,
-        ..._deleteFocus.keys,
-      }.where((id) => !currentIds.contains(id)).toList();
-      final restoreFocus = _focusPruneNeedsRestore;
-      _focusPruneNeedsRestore = false;
-      if (restoreFocus) {
-        final survivingId = widget.controller.channels
-            .map((channel) => channel.id)
-            .where((id) => !staleIds.contains(id))
-            .firstOrNull;
-        (_openFocus[survivingId] ?? widget.focusNode)?.requestFocus();
-        FocusManager.instance.applyFocusChangesIfNeeded();
-      }
-      for (final id in staleIds) {
-        _openFocus.remove(id)?.dispose();
-        _deleteFocus.remove(id)?.dispose();
-      }
-    });
-  }
-
-  Future<void> _delete(Channel channel) async {
-    final generated = channel.builderKey != null;
-    final confirmed = await confirmDestructiveAction(
-      context,
-      title: 'Delete ${channel.name}?',
-      message: generated
-          ? 'This removes channel ${channel.number}. A future Generate lineup refresh may propose it again.'
-          : 'This removes channel ${channel.number} from the lineup. This action cannot be undone.',
-      confirmLabel: 'Delete channel',
-    );
-    if (!mounted) return;
-    if (!confirmed) {
-      _deleteFocus[channel.id]?.requestFocus();
-      return;
-    }
-    try {
-      await widget.controller.deleteChannel(channel.id);
-    } catch (_) {
-      if (!mounted) return;
-      setState(
-        () => _error =
-            'The channel could not be deleted. No lineup changes were saved.',
-      );
-      _deleteFocus[channel.id]?.requestFocus();
-      return;
-    }
-    if (!mounted) return;
-    final deletedFocus = _deleteFocus.remove(channel.id);
-    _openFocus.remove(channel.id)?.dispose();
-    setState(() => _error = null);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      deletedFocus?.dispose();
-      widget.focusNode?.requestFocus();
-    });
-  }
-}
-
-typedef _ChannelHealthSignature = ({
-  int contentGeneration,
-  int channelRevision,
-});
-
-class _ChannelHealth {
-  const _ChannelHealth(this.signature, this.issue);
-
-  final _ChannelHealthSignature signature;
-  final bool issue;
-}
-
-enum _SettingsCategory { appearance, guide, accessibility, account, support }
 
 class SettingsView extends StatefulWidget {
   const SettingsView({
     required this.controller,
+    this.category = SettingsCategory.appearance,
+    this.onCategoryChanged,
+    this.onSignOut,
+    this.onOpenDiagnostics,
     this.focusNode,
+    this.menuFocusNode,
     this.onOpenMenu,
     super.key,
   });
   final LineupController controller;
+  final SettingsCategory category;
+  final ValueChanged<SettingsCategory>? onCategoryChanged;
+  final Future<void> Function()? onSignOut;
+  final VoidCallback? onOpenDiagnostics;
   final FocusNode? focusNode;
-  final VoidCallback? onOpenMenu;
+  final FocusNode? menuFocusNode;
+  final LineupMenuCallback? onOpenMenu;
 
   @override
   State<SettingsView> createState() => _SettingsViewState();
 }
 
 class _SettingsViewState extends State<SettingsView> {
-  _SettingsCategory _category = _SettingsCategory.appearance;
+  late SettingsCategory _localCategory;
+  late LineupSettings _displaySettings;
   bool _categoryFocusPlaced = false;
-  bool _saving = false;
-  String? _error;
+  final Map<String, Timer> _savingTimers = {};
+  final Set<String> _pending = {};
+  final Set<String> _showSaving = {};
+  final Map<String, String> _errors = {};
+  Future<void> _saveTail = Future.value();
+
+  SettingsCategory get _category =>
+      widget.onCategoryChanged == null ? _localCategory : widget.category;
 
   @override
   void initState() {
     super.initState();
+    _localCategory = widget.category;
+    _displaySettings = widget.controller.settings;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _categoryFocusPlaced = true;
     });
   }
 
   @override
+  void dispose() {
+    for (final timer in _savingTimers.values) {
+      timer.cancel();
+    }
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final roles = LineupTheme.of(context);
-    return Material(
-      type: MaterialType.transparency,
-      child: FocusTraversalGroup(
-        child: DecoratedBox(
-          key: const Key('settings-immersive-scrim'),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [
-                roles.scrim.withValues(alpha: 0.68),
-                roles.scrim.withValues(alpha: 0.46),
-              ],
+    final settingsTheme = LineupTheme.forName(
+      _displaySettings.theme,
+      largeFocusIndicators: _displaySettings.largeFocusIndicators,
+    );
+    final roles = settingsTheme.extension<LineupThemeRoles>()!;
+    return Theme(
+      data: settingsTheme,
+      child: Material(
+        type: MaterialType.transparency,
+        child: FocusTraversalGroup(
+          child: DecoratedBox(
+            key: const Key('settings-immersive-scrim'),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  roles.scrim.withValues(alpha: 0.68),
+                  roles.scrim.withValues(alpha: 0.46),
+                ],
+              ),
             ),
-          ),
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final compact = constraints.maxWidth < LineupLayout.compact;
-              final categories = _categoryRail(compact, constraints.maxWidth);
-              final detail = _detailPane(compact);
-              return compact
-                  ? Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        categories,
-                        Expanded(child: detail),
-                      ],
-                    )
-                  : Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        categories,
-                        Expanded(child: detail),
-                      ],
-                    );
-            },
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final size = Size(constraints.maxWidth, constraints.maxHeight);
+                final scale = LineupLayout.scaleFor(size);
+                final compact =
+                    LineupLayout.isCompactWidth(constraints.maxWidth) ||
+                    MediaQuery.textScalerOf(context).scale(1) >= 2;
+                final scaledTheme = Theme.of(context).copyWith(
+                  textTheme: Theme.of(context).textTheme
+                      .apply(fontSizeFactor: scale),
+                );
+                return Theme(
+                  data: scaledTheme,
+                  child: DefaultTextStyle(
+                    style: scaledTheme.textTheme.bodyMedium!,
+                    child: Builder(
+                      builder: (context) {
+                        final categories = _categoryRail(
+                          context,
+                          compact,
+                          constraints.maxWidth,
+                          scale,
+                        );
+                        final detail = _detailPane(compact, scale);
+                        return compact
+                            ? Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  categories,
+                                  Expanded(child: detail),
+                                ],
+                              )
+                            : Row(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  categories,
+                                  Expanded(child: detail),
+                                ],
+                              );
+                      },
+                    ),
+                  ),
+                );
+              },
+            ),
           ),
         ),
       ),
     );
   }
 
-  Widget _categoryRail(bool compact, double width) {
+  Widget _categoryRail(
+    BuildContext context,
+    bool compact,
+    double width,
+    double scale,
+  ) {
     final roles = LineupTheme.of(context);
     final content = Padding(
       padding: EdgeInsets.fromLTRB(
-        compact ? 20 : 24,
-        compact ? 16 : 24,
-        compact ? 20 : 18,
-        compact ? 14 : 24,
+        (compact ? 20 : 24) * scale,
+        (compact ? 16 : 24) * scale,
+        (compact ? 20 : 18) * scale,
+        (compact ? 14 : 24) * scale,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1103,11 +824,18 @@ class _SettingsViewState extends State<SettingsView> {
                   ),
                 ),
               ),
-              if (widget.onOpenMenu != null)
-                IconButton(
-                  tooltip: 'Open Lineup menu',
-                  onPressed: widget.onOpenMenu,
-                  icon: const Icon(Icons.menu),
+              if (widget.onOpenMenu != null && widget.menuFocusNode != null)
+                Builder(
+                  builder: (buttonContext) => IconButton(
+                    key: const Key('settings-app-menu'),
+                    focusNode: widget.menuFocusNode,
+                    tooltip: 'Open Lineup menu',
+                    onPressed: () => widget.onOpenMenu!(
+                      buttonContext,
+                      widget.menuFocusNode!,
+                    ),
+                    icon: const Icon(Icons.menu),
+                  ),
                 ),
             ],
           ),
@@ -1116,7 +844,7 @@ class _SettingsViewState extends State<SettingsView> {
             style: Theme.of(context).textTheme.bodySmall
                 ?.copyWith(color: roles.mutedText),
           ),
-          SizedBox(height: compact ? 14 : 24),
+          SizedBox(height: (compact ? 14 : 24) * scale),
           if (compact)
             _categorySelector(true)
           else
@@ -1156,45 +884,37 @@ class _SettingsViewState extends State<SettingsView> {
       child: compact
           ? content
           : SizedBox(
-              width: width * 0.24 > 320 ? 320 : width * 0.24,
+              width: width * 0.24 > 320 * scale ? 320 * scale : width * 0.24,
               child: content,
             ),
     );
   }
 
-  Widget _detailPane(bool compact) => Padding(
+  Widget _detailPane(bool compact, double scale) => Padding(
     key: const Key('settings-detail-pane'),
     padding: EdgeInsets.fromLTRB(
-      compact ? 20 : 40,
-      compact ? 20 : 32,
-      compact ? 20 : 40,
-      compact ? 20 : 32,
+      (compact ? 20 : 40) * scale,
+      (compact ? 20 : 32) * scale,
+      (compact ? 20 : 40) * scale,
+      (compact ? 20 : 32) * scale,
     ),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        if (_saving)
-          const LinearProgressIndicator(semanticsLabel: 'Saving settings'),
-        if (_error != null) ...[
-          LineupNotice(message: _error!),
-          const SizedBox(height: 12),
-        ],
-        Expanded(child: _categoryDetail()),
-      ],
+      children: [Expanded(child: _categoryDetail())],
     ),
   );
 
   Widget _categorySelector(bool compact) {
     final roles = LineupTheme.of(context);
     final controls = [
-      for (final category in _SettingsCategory.values)
+      for (final category in SettingsCategory.values)
         Padding(
           padding: const EdgeInsets.only(right: 8, bottom: 8),
           child: Semantics(
             selected: category == _category,
             button: true,
             child: OutlinedButton(
-              focusNode: category == _SettingsCategory.appearance
+              focusNode: category == SettingsCategory.appearance
                   ? widget.focusNode
                   : null,
               autofocus: category == _category && !_categoryFocusPlaced,
@@ -1209,7 +929,10 @@ class _SettingsViewState extends State<SettingsView> {
                       : roles.subtleBorder,
                 ),
               ),
-              onPressed: () => setState(() => _category = category),
+              onPressed: () {
+                setState(() => _localCategory = category);
+                widget.onCategoryChanged?.call(category);
+              },
               child: Text(_categoryLabel(category)),
             ),
           ),
@@ -1224,257 +947,253 @@ class _SettingsViewState extends State<SettingsView> {
   }
 
   Widget _categoryDetail() {
-    final value = widget.controller.settings;
+    final value = _displaySettings;
     return ListView(
       children: [
         _SettingsSection(
           title: _categoryLabel(_category),
           children: switch (_category) {
-            _SettingsCategory.appearance => [
-              _ThemeChooser(
-                selected: value.theme,
-                enabled: !_saving,
-                onSelected: (theme) =>
-                    _update(widget.controller.settings.copyWith(theme: theme)),
-              ),
-            ],
-            _SettingsCategory.guide => [
-              _Dropdown<GuideLayoutMode>(
-                'Guide presentation',
-                'Choose classic Guide with PiP or Guide over full video.',
-                value.guideLayoutMode,
-                GuideLayoutMode.values,
-                (item) => switch (item) {
-                  GuideLayoutMode.pictureInPicture => 'Classic with PiP',
-                  GuideLayoutMode.overlay => 'Overlay',
-                },
-                _saving
+            SettingsCategory.appearance => [
+              _Dropdown<LineupThemeName>(
+                'Theme',
+                'Color and surface treatment throughout Lineup.',
+                value.theme,
+                LineupThemeName.values,
+                (item) => item.label,
+                _pending.contains('theme')
                     ? null
                     : (item) => _update(
-                        widget.controller.settings.copyWith(
-                          guideLayoutMode: item,
-                        ),
+                        'theme',
+                        widget.controller.settings.copyWith(theme: item),
                       ),
               ),
-              _Dropdown<int>(
-                'Visible time range',
-                'Use the upstream-scale view or a wider desktop schedule.',
-                value.guideHours,
-                LineupSettings.guideHoursOptions,
-                (item) => switch (item) {
-                  2 => 'Detailed (2 hours)',
-                  3 => 'Wide (3 hours)',
-                  _ => 'Desktop extended ($item hours)',
-                },
-                _saving
-                    ? null
-                    : (item) => _update(
-                        widget.controller.settings.copyWith(guideHours: item),
-                      ),
-              ),
-              _Dropdown<int>(
-                'Past window',
-                'Keep recently ended programs available in the Guide.',
-                value.pastMinutes,
-                LineupSettings.pastMinutesOptions,
-                (item) => item == 0
-                    ? 'Current half-hour slot'
-                    : 'At least $item minutes',
-                _saving
-                    ? null
-                    : (item) => _update(
-                        widget.controller.settings.copyWith(pastMinutes: item),
-                      ),
-              ),
-              _Dropdown<GuideDensity>(
-                'Row density',
-                'Keep the upstream-scale rows or fit more on desktop.',
-                value.guideDensity,
-                GuideDensity.values,
-                (item) => _enumLabel(item.name),
-                _saving
-                    ? null
-                    : (item) => _update(
-                        widget.controller.settings.copyWith(guideDensity: item),
-                      ),
-              ),
+              _settingFeedback('theme'),
               _Dropdown<GuideInfoBackgroundMode>(
-                'Info box background',
-                'Choose dynamic color, the theme surface, or Plex artwork.',
+                'Guide information background',
+                'Choose artwork colors, the theme, or an artwork backdrop.',
                 value.guideInfoBackgroundMode,
                 GuideInfoBackgroundMode.values,
                 (item) => switch (item) {
-                  GuideInfoBackgroundMode.bleed => 'Artwork color bleed',
-                  GuideInfoBackgroundMode.themeDefault => 'Theme default',
+                  GuideInfoBackgroundMode.bleed => 'Artwork colors',
+                  GuideInfoBackgroundMode.themeDefault => 'Theme background',
                   GuideInfoBackgroundMode.artwork => 'Artwork backdrop',
                 },
-                _saving
+                _pending.contains('guideInfoBackgroundMode')
                     ? null
                     : (item) => _update(
+                        'guideInfoBackgroundMode',
                         widget.controller.settings.copyWith(
                           guideInfoBackgroundMode: item,
                         ),
                       ),
               ),
-              SwitchListTile(
-                title: const Text('Prefer official title artwork'),
+              _settingFeedback('guideInfoBackgroundMode'),
+              _SettingsSwitchTile(
+                title: const Text('Use title artwork'),
                 subtitle: const Text(
-                  'Use official Plex title artwork in Guide and Player surfaces when available.',
+                  'Use available Plex title artwork with a readable text fallback.',
                 ),
                 value: value.preferClearLogos,
-                onChanged: _saving
+                onChanged: _pending.contains('preferClearLogos')
                     ? null
                     : (item) => _update(
+                        'preferClearLogos',
                         widget.controller.settings.copyWith(
                           preferClearLogos: item,
                         ),
                       ),
               ),
-              SwitchListTile(
-                title: const Text('Library filters'),
-                subtitle: const Text(
-                  'Show a source-library filter in the Guide toolbar.',
-                ),
-                value: value.libraryTabsEnabled,
-                onChanged: _saving
+              _settingFeedback('preferClearLogos'),
+            ],
+            SettingsCategory.guide => [
+              _Dropdown<int>(
+                'Visible hours',
+                'Choose how much of the schedule appears at once.',
+                value.guideHours,
+                LineupSettings.guideHoursOptions,
+                (item) => switch (item) {
+                  2 => 'Detailed (2 hours)',
+                  3 => 'Wide (3 hours)',
+                  _ => 'Extended ($item hours)',
+                },
+                _pending.contains('guideHours')
                     ? null
                     : (item) => _update(
-                        widget.controller.settings.copyWith(
-                          libraryTabsEnabled: item,
-                        ),
+                        'guideHours',
+                        widget.controller.settings.copyWith(guideHours: item),
                       ),
               ),
-              SwitchListTile(
-                title: const Text('Now Playing context'),
+              _settingFeedback('guideHours'),
+              _SettingsSwitchTile(
+                title: const Text('Show now playing in Guide'),
                 subtitle: const Text(
-                  'Keep the tuned channel and program visible in the Guide.',
+                  'Identify the playing channel and program while browsing other listings.',
                 ),
                 value: value.nowWatchingBanner,
-                onChanged: _saving
+                onChanged: _pending.contains('nowWatchingBanner')
                     ? null
                     : (item) => _update(
+                        'nowWatchingBanner',
                         widget.controller.settings.copyWith(
                           nowWatchingBanner: item,
                         ),
                       ),
               ),
+              _settingFeedback('nowWatchingBanner'),
+            ],
+            SettingsCategory.playback => [
               _Dropdown<int>(
                 'Player controls auto-hide',
                 'Set how long controls remain visible while playing.',
                 value.osdAutoHideSeconds,
                 LineupSettings.osdAutoHideSecondsOptions,
                 (item) => '$item seconds',
-                _saving
+                _pending.contains('osdAutoHideSeconds')
                     ? null
                     : (item) => _update(
+                        'osdAutoHideSeconds',
                         widget.controller.settings.copyWith(
                           osdAutoHideSeconds: item,
                         ),
                       ),
               ),
-              SwitchListTile(
+              _settingFeedback('osdAutoHideSeconds'),
+              _SettingsSwitchTile(
                 title: const Text('DVR playback controls'),
                 subtitle: const Text(
                   'Show transport controls and enable pause, seek, stop, and media-key shortcuts in Player.',
                 ),
                 value: value.dvrControlsEnabled,
-                onChanged: _saving
+                onChanged: _pending.contains('dvrControlsEnabled')
                     ? null
                     : (item) => _update(
+                        'dvrControlsEnabled',
                         widget.controller.settings.copyWith(
                           dvrControlsEnabled: item,
                         ),
                       ),
               ),
+              _settingFeedback('dvrControlsEnabled'),
             ],
-            _SettingsCategory.accessibility => [
-              SwitchListTile(
+            SettingsCategory.accessibility => [
+              _SettingsSwitchTile(
                 title: const Text('Reduce motion'),
                 subtitle: const Text(
                   'Disable nonessential application transitions.',
                 ),
                 value: value.reduceMotion,
-                onChanged: _saving
+                onChanged: _pending.contains('reduceMotion')
                     ? null
                     : (item) => _update(
+                        'reduceMotion',
                         widget.controller.settings.copyWith(reduceMotion: item),
                       ),
               ),
-              SwitchListTile(
+              _settingFeedback('reduceMotion'),
+              _SettingsSwitchTile(
                 title: const Text('Large focus indicators'),
                 subtitle: const Text(
                   'Use thicker outlines for keyboard and controller focus.',
                 ),
                 value: value.largeFocusIndicators,
-                onChanged: _saving
+                onChanged: _pending.contains('largeFocusIndicators')
                     ? null
                     : (item) => _update(
+                        'largeFocusIndicators',
                         widget.controller.settings.copyWith(
                           largeFocusIndicators: item,
                         ),
                       ),
               ),
+              _settingFeedback('largeFocusIndicators'),
             ],
-            _SettingsCategory.account => [
-              ListTile(
-                title: const Text('Plex Home profile'),
-                subtitle: Text(
+            SettingsCategory.account => [
+              _SettingsRow(
+                label: const Text('Plex Home profile'),
+                helper: Text(
                   widget.controller.profile?.name ??
                       widget.controller.account?.name ??
                       'Plex account',
                 ),
-                trailing: OutlinedButton.icon(
-                  onPressed: _saving || widget.controller.profiles.isEmpty
+                control: OutlinedButton.icon(
+                  onPressed: widget.controller.profiles.isEmpty
                       ? null
                       : widget.controller.showProfiles,
                   icon: const Icon(Icons.switch_account),
                   label: const Text('Switch profile'),
                 ),
               ),
-              ListTile(
-                title: const Text('Plex Media Server'),
-                subtitle: Text(
+              _SettingsSwitchTile(
+                title: const Text('Show profile picker on startup'),
+                subtitle: const Text(
+                  'Ask who is watching when this Plex Home has multiple profiles.',
+                ),
+                value: value.profilePickerOnStartup,
+                onChanged: _pending.contains('profilePickerOnStartup')
+                    ? null
+                    : (item) => _update(
+                        'profilePickerOnStartup',
+                        widget.controller.settings.copyWith(
+                          profilePickerOnStartup: item,
+                        ),
+                      ),
+              ),
+              _settingFeedback('profilePickerOnStartup'),
+              _SettingsRow(
+                label: const Text('Plex Media Server'),
+                helper: Text(
                   widget.controller.server == null
                       ? 'No server selected'
                       : widget.controller.connection == null
                       ? widget.controller.server!.name
                       : '${widget.controller.server!.name} • ${plexConnectionDescription(widget.controller.connection!)}',
                 ),
-                trailing: OutlinedButton.icon(
-                  onPressed: _saving ? null : widget.controller.showServers,
+                control: OutlinedButton.icon(
+                  onPressed: widget.controller.showServers,
                   icon: const Icon(Icons.dns_outlined),
                   label: const Text('Switch server'),
                 ),
               ),
-              SwitchListTile(
-                title: const Text('Show profile picker on startup'),
-                subtitle: const Text(
-                  'Ask who is watching when this Plex Home has multiple profiles.',
+              const Divider(height: 32),
+              _SettingsRow(
+                label: const Text('Signed-in Plex account'),
+                helper: Text(widget.controller.account?.name ?? 'Plex account'),
+                control: FilledButton.tonalIcon(
+                  onPressed: widget.onSignOut == null
+                      ? null
+                      : () => unawaited(widget.onSignOut!()),
+                  icon: const Icon(Icons.logout),
+                  label: const Text('Sign out of Plex'),
                 ),
-                value: value.profilePickerOnStartup,
-                onChanged: _saving
-                    ? null
-                    : (item) => _update(
-                        widget.controller.settings.copyWith(
-                          profilePickerOnStartup: item,
-                        ),
-                      ),
               ),
             ],
-            _SettingsCategory.support => [
-              SwitchListTile(
+            SettingsCategory.support => [
+              _SettingsSwitchTile(
                 title: const Text('Record redacted diagnostics'),
                 subtitle: const Text(
                   'Tokens, URLs, paths, headers and credentials are excluded.',
                 ),
                 value: value.diagnosticsEnabled,
-                onChanged: _saving
+                onChanged: _pending.contains('diagnosticsEnabled')
                     ? null
                     : (item) => _update(
+                        'diagnosticsEnabled',
                         widget.controller.settings.copyWith(
                           diagnosticsEnabled: item,
                         ),
                       ),
+              ),
+              _settingFeedback('diagnosticsEnabled'),
+              _SettingsRow(
+                label: const Text('Diagnostics'),
+                helper: const Text(
+                  'Review redacted support events from this session.',
+                ),
+                control: OutlinedButton.icon(
+                  onPressed: widget.onOpenDiagnostics,
+                  icon: const Icon(Icons.monitor_heart_outlined),
+                  label: const Text('Open Diagnostics'),
+                ),
               ),
             ],
           },
@@ -1483,96 +1202,112 @@ class _SettingsViewState extends State<SettingsView> {
     );
   }
 
-  Future<void> _update(LineupSettings next) async {
-    if (_saving) return;
+  Widget _settingFeedback(String keyName) {
+    final error = _errors[keyName];
+    if (error != null) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+        child: Text(
+          error,
+          key: ValueKey('setting-error-$keyName'),
+          style: TextStyle(color: Theme.of(context).colorScheme.error),
+        ),
+      );
+    }
+    if (_showSaving.contains(keyName)) {
+      return const Padding(
+        padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+        child: Text('Saving…'),
+      );
+    }
+    return const SizedBox.shrink();
+  }
+
+  Future<void> _update(String keyName, LineupSettings next) async {
+    if (_pending.contains(keyName)) return;
     setState(() {
-      _saving = true;
-      _error = null;
+      _pending.add(keyName);
+      _errors.remove(keyName);
+      _displaySettings = _mergeSetting(keyName, _displaySettings, next);
+    });
+    _savingTimers[keyName] = Timer(const Duration(milliseconds: 300), () {
+      if (mounted && _pending.contains(keyName)) {
+        setState(() => _showSaving.add(keyName));
+      }
     });
     String? error;
     try {
-      await widget.controller.updateSettings(next);
+      final operation = _saveTail.then(
+        (_) => widget.controller.updateSettings(
+          _mergeSetting(keyName, widget.controller.settings, next),
+        ),
+      );
+      _saveTail = operation.then<void>((_) {}, onError: (_, _) {});
+      await operation;
     } catch (_) {
-      error = 'This setting could not be saved. Your previous value remains.';
+      error = 'Could not save. The previous value was restored.';
     } finally {
+      _savingTimers.remove(keyName)?.cancel();
       if (mounted) {
         setState(() {
-          _saving = false;
-          _error = error;
+          _pending.remove(keyName);
+          _showSaving.remove(keyName);
+          if (error != null) {
+            _displaySettings = _mergeSetting(
+              keyName,
+              _displaySettings,
+              widget.controller.settings,
+            );
+            _errors[keyName] = error;
+          }
         });
       }
     }
   }
 
-  static String _categoryLabel(_SettingsCategory category) =>
-      switch (category) {
-        _SettingsCategory.appearance => 'Appearance',
-        _SettingsCategory.guide => 'Guide',
-        _SettingsCategory.accessibility => 'Accessibility',
-        _SettingsCategory.account => 'Account',
-        _SettingsCategory.support => 'Support',
-      };
-
-  static String _enumLabel(String value) =>
-      '${value[0].toUpperCase()}${value.substring(1)}';
-}
-
-class DiagnosticsView extends StatelessWidget {
-  const DiagnosticsView({
-    required this.controller,
-    required this.status,
-    this.focusNode,
-    super.key,
-  });
-  final LineupController controller;
-  final PlayerStatus status;
-  final FocusNode? focusNode;
-  @override
-  Widget build(BuildContext context) => LineupPage(
-    title: 'Diagnostics',
-    child: ListView(
-      children: [
-        _DiagnosticsSummary(
-          focusNode: focusNode,
-          status: status,
-          serverName: controller.server?.name,
-          entryCount: controller.diagnostics.entries.length,
-        ),
-        if (controller.diagnostics.entries.isEmpty)
-          Padding(
-            padding: const EdgeInsets.only(top: 16),
-            child: LineupEmptyState(
-              icon: Icons.fact_check_outlined,
-              title: 'No diagnostic events',
-              message: controller.settings.diagnosticsEnabled
-                  ? 'Lineup has not recorded any support events in this session.'
-                  : 'Diagnostic recording is off. You can enable it in Settings under Support.',
-            ),
-          )
-        else
-          for (final entry in controller.diagnostics.entries.reversed)
-            Card(
-              child: ListTile(
-                title: Text('${entry.area}: ${entry.message}'),
-                subtitle: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(entry.time.toLocal().toString()),
-                    if (entry.context.isNotEmpty)
-                      Text(
-                        entry.context.entries
-                            .map((item) => '${item.key}=${item.value}')
-                            .join(' • '),
-                        softWrap: true,
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                  ],
-                ),
-              ),
-            ),
-      ],
+  static LineupSettings _mergeSetting(
+    String keyName,
+    LineupSettings current,
+    LineupSettings requested,
+  ) => switch (keyName) {
+    'theme' => current.copyWith(theme: requested.theme),
+    'guideHours' => current.copyWith(guideHours: requested.guideHours),
+    'guideInfoBackgroundMode' => current.copyWith(
+      guideInfoBackgroundMode: requested.guideInfoBackgroundMode,
     ),
-  );
+    'preferClearLogos' => current.copyWith(
+      preferClearLogos: requested.preferClearLogos,
+    ),
+    'nowWatchingBanner' => current.copyWith(
+      nowWatchingBanner: requested.nowWatchingBanner,
+    ),
+    'osdAutoHideSeconds' => current.copyWith(
+      osdAutoHideSeconds: requested.osdAutoHideSeconds,
+    ),
+    'dvrControlsEnabled' => current.copyWith(
+      dvrControlsEnabled: requested.dvrControlsEnabled,
+    ),
+    'reduceMotion' => current.copyWith(reduceMotion: requested.reduceMotion),
+    'largeFocusIndicators' => current.copyWith(
+      largeFocusIndicators: requested.largeFocusIndicators,
+    ),
+    'profilePickerOnStartup' => current.copyWith(
+      profilePickerOnStartup: requested.profilePickerOnStartup,
+    ),
+    'diagnosticsEnabled' => current.copyWith(
+      diagnosticsEnabled: requested.diagnosticsEnabled,
+    ),
+    _ => throw ArgumentError.value(keyName, 'keyName'),
+  };
+
+  static String _categoryLabel(SettingsCategory category) => switch (category) {
+    SettingsCategory.appearance => 'Appearance',
+    SettingsCategory.guide => 'Guide',
+    SettingsCategory.playback => 'Playback',
+    SettingsCategory.accessibility => 'Accessibility',
+    SettingsCategory.account => 'Account',
+    SettingsCategory.support => 'Support',
+  };
 }
 
 class _SettingsSection extends StatelessWidget {
@@ -1595,239 +1330,95 @@ class _SettingsSection extends StatelessWidget {
   );
 }
 
-class _ThemeChooser extends StatelessWidget {
-  const _ThemeChooser({
-    required this.selected,
-    required this.enabled,
-    required this.onSelected,
+class _SettingsRow extends StatelessWidget {
+  const _SettingsRow({
+    required this.label,
+    required this.helper,
+    required this.control,
   });
 
-  final LineupThemeName selected;
-  final bool enabled;
-  final ValueChanged<LineupThemeName> onSelected;
+  final Widget label;
+  final Widget helper;
+  final Widget control;
 
   @override
-  Widget build(BuildContext context) => Align(
-    alignment: Alignment.topLeft,
-    child: ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 760),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
+      final reflow =
+          constraints.maxWidth < 600 ||
+          MediaQuery.textScalerOf(context).scale(1) >= 2;
+      final description = Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Choose the color system used throughout Lineup. Changes apply immediately.',
+          DefaultTextStyle.merge(
+            style: Theme.of(context).textTheme.titleMedium,
+            child: label,
+          ),
+          const SizedBox(height: 4),
+          DefaultTextStyle.merge(
             style: Theme.of(context).textTheme.bodyMedium
                 ?.copyWith(color: LineupTheme.of(context).secondaryText),
+            child: helper,
           ),
-          const SizedBox(height: 16),
-          for (final theme in LineupThemeName.values)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: _ThemeOption(
-                key: ValueKey('theme-option-${theme.storageKey}'),
-                theme: theme,
-                selected: theme == selected,
-                enabled: enabled,
-                onPressed: () {
-                  if (theme != selected) onSelected(theme);
-                },
-              ),
-            ),
         ],
-      ),
-    ),
-  );
-}
-
-class _ThemeOption extends StatefulWidget {
-  const _ThemeOption({
-    required this.theme,
-    required this.selected,
-    required this.enabled,
-    required this.onPressed,
-    super.key,
-  });
-
-  final LineupThemeName theme;
-  final bool selected;
-  final bool enabled;
-  final VoidCallback onPressed;
-
-  @override
-  State<_ThemeOption> createState() => _ThemeOptionState();
-}
-
-class _ThemeOptionState extends State<_ThemeOption> {
-  bool _focused = false;
-  late final FocusNode _focusNode = FocusNode(
-    debugLabel: 'Theme ${widget.theme.label}',
-  );
-
-  @override
-  void dispose() {
-    _focusNode.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final roles = LineupTheme.of(context);
-    final preview = LineupTheme.forName(widget.theme)
-        .extension<LineupThemeRoles>()!;
-    final swatches = [
-      preview.deepBackground,
-      preview.primarySurface,
-      preview.progressFill,
-      preview.liveAccent,
-    ];
-    return Semantics(
-      key: ValueKey('theme-option-semantics-${widget.theme.storageKey}'),
-      container: true,
-      button: true,
-      enabled: widget.enabled,
-      selected: widget.selected,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          focusNode: _focusNode,
-          onTap: widget.enabled
-              ? () {
-                  _focusNode.requestFocus();
-                  widget.onPressed();
-                }
-              : null,
-          onFocusChange: (focused) => setState(() => _focused = focused),
-          borderRadius: BorderRadius.circular(roles.panelRadius),
-          child: AnimatedContainer(
-            duration: MediaQuery.disableAnimationsOf(context)
-                ? Duration.zero
-                : LineupTheme.fast,
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-            decoration: BoxDecoration(
-              color: widget.selected
-                  ? roles.selectedSurface
-                  : roles.elevatedSurface,
-              borderRadius: BorderRadius.circular(roles.panelRadius),
-              border: Border.all(
-                color: _focused
-                    ? roles.focusBorder
-                    : widget.selected
-                    ? roles.defaultBorder
-                    : roles.subtleBorder,
-                width: _focused ? roles.focusBorderWidth : 1,
+      );
+      return Container(
+        padding: EdgeInsets.symmetric(
+          horizontal: 16 * scale,
+          vertical: 24 * scale,
+        ),
+        decoration: BoxDecoration(
+          border: Border(
+            bottom: BorderSide(color: LineupTheme.of(context).subtleBorder),
+          ),
+        ),
+        child: reflow
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  description,
+                  const SizedBox(height: 12),
+                  Align(alignment: Alignment.centerLeft, child: control),
+                ],
+              )
+            : Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Expanded(child: description),
+                  const SizedBox(width: 24),
+                  Flexible(
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: control,
+                    ),
+                  ),
+                ],
               ),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        widget.theme.label,
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.w700),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        _description(widget.theme),
-                        style: Theme.of(context).textTheme.bodySmall
-                            ?.copyWith(color: roles.secondaryText),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 18),
-                ExcludeSemantics(
-                  child: Row(
-                    children: [
-                      for (final color in swatches) ...[
-                        Container(
-                          width: 24,
-                          height: 24,
-                          decoration: BoxDecoration(
-                            color: color,
-                            borderRadius: BorderRadius.circular(4),
-                            border: Border.all(color: roles.defaultBorder),
-                          ),
-                        ),
-                        if (color != swatches.last) const SizedBox(width: 6),
-                      ],
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 18),
-                SizedBox(
-                  width: 24,
-                  child: widget.selected
-                      ? Icon(Icons.check_circle, color: roles.progressFill)
-                      : null,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  static String _description(LineupThemeName theme) => switch (theme) {
-    LineupThemeName.emberSteel =>
-      'Warm amber accents over deep charcoal surfaces.',
-    LineupThemeName.slatePine =>
-      'Muted evergreen accents with calm slate neutrals.',
-    LineupThemeName.swiss =>
-      'Crisp square geometry with clean emerald accents.',
-    LineupThemeName.directv =>
-      'Deep blue surfaces with bright broadcast highlights.',
-    LineupThemeName.glass =>
-      'Translucent dark surfaces with luminous cyan accents.',
-  };
+      );
+    },
+  );
 }
 
-class _DiagnosticsSummary extends StatefulWidget {
-  const _DiagnosticsSummary({
-    required this.status,
-    required this.entryCount,
-    this.serverName,
-    this.focusNode,
+class _SettingsSwitchTile extends StatelessWidget {
+  const _SettingsSwitchTile({
+    required this.title,
+    required this.subtitle,
+    required this.value,
+    required this.onChanged,
   });
-  final PlayerStatus status;
-  final int entryCount;
-  final String? serverName;
-  final FocusNode? focusNode;
+
+  final Widget title;
+  final Widget subtitle;
+  final bool value;
+  final ValueChanged<bool>? onChanged;
 
   @override
-  State<_DiagnosticsSummary> createState() => _DiagnosticsSummaryState();
-}
-
-class _DiagnosticsSummaryState extends State<_DiagnosticsSummary> {
-  bool _focused = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final roles = LineupTheme.of(context);
-    return Focus(
-      focusNode: widget.focusNode,
-      onFocusChange: (focused) => setState(() => _focused = focused),
-      child: Card(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(roles.panelRadius),
-          side: BorderSide(
-            color: _focused ? roles.focusBorder : roles.subtleBorder,
-            width: _focused ? roles.focusBorderWidth : 1,
-          ),
-        ),
-        child: ListTile(
-          leading: const Icon(Icons.shield_outlined),
-          title: const Text('Credential-safe diagnostics'),
-          subtitle: Text(
-            'Playback: ${widget.status.message}\nPlex: ${widget.serverName ?? 'not connected'}\nEntries: ${widget.entryCount}',
-          ),
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => _SettingsRow(
+    label: title,
+    helper: subtitle,
+    control: Switch(value: value, onChanged: onChanged),
+  );
 }
 
 class _Dropdown<T> extends StatelessWidget {
@@ -1846,10 +1437,10 @@ class _Dropdown<T> extends StatelessWidget {
   final String Function(T) display;
   final ValueChanged<T>? changed;
   @override
-  Widget build(BuildContext context) => ListTile(
-    title: Text(label),
-    subtitle: Text(description),
-    trailing: DropdownButton<T>(
+  Widget build(BuildContext context) => _SettingsRow(
+    label: Text(label),
+    helper: Text(description),
+    control: DropdownButton<T>(
       value: value,
       items: [
         for (final item in values)
@@ -1860,34 +1451,6 @@ class _Dropdown<T> extends StatelessWidget {
           : (item) {
               if (item != null) changed!(item);
             },
-    ),
-  );
-}
-
-class _Brand extends StatelessWidget {
-  const _Brand();
-  @override
-  Widget build(BuildContext context) => Semantics(
-    label: 'Lineup Desktop',
-    header: true,
-    child: Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Image.asset(
-          'assets/branding/lineup-logo-mark.png',
-          width: 42,
-          height: 42,
-        ),
-        if (MediaQuery.sizeOf(context).width >=
-            LineupLayout.expandedNavigation) ...[
-          const SizedBox(width: 12),
-          Text(
-            'LINEUP',
-            style: Theme.of(context).textTheme.titleMedium
-                ?.copyWith(letterSpacing: 3),
-          ),
-        ],
-      ],
     ),
   );
 }

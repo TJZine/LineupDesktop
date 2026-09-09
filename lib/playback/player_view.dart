@@ -1,10 +1,12 @@
 import 'dart:async';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../channels/channel.dart';
 import '../guide/guide_controller.dart';
+import '../guide/focused_ticker.dart';
 import '../ui/app_theme.dart';
 import '../ui/app_ui.dart';
 import 'native_player.dart';
@@ -22,28 +24,43 @@ class PlayerView extends StatefulWidget {
 
   final PlayerCoordinator controller;
   final VoidCallback openGuide;
-  final VoidCallback? openMenu;
+  final LineupMenuCallback? openMenu;
   final FocusNode? focusNode;
 
   @override
   State<PlayerView> createState() => _PlayerViewState();
 }
 
-class _PlayerViewState extends State<PlayerView> {
+class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
   late PlayerOverlay _renderedOverlay;
   var _overlayTransitionDuration = const Duration(milliseconds: 350);
+  final _menuFocus = FocusNode(debugLabel: 'Player Lineup menu');
+  final _sleepFocus = FocusNode(debugLabel: 'Player sleep timer');
+  var _appActive = true;
 
   @override
   void initState() {
     super.initState();
     _renderedOverlay = widget.controller.overlay;
+    WidgetsBinding.instance.addObserver(this);
     widget.controller.addListener(_changed);
   }
 
   @override
   void dispose() {
     widget.controller.removeListener(_changed);
+    WidgetsBinding.instance.removeObserver(this);
+    _menuFocus.dispose();
+    _sleepFocus.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final active = state == AppLifecycleState.resumed;
+    if (_appActive == active) return;
+    setState(() => _appActive = active);
+    if (active) unawaited(widget.controller.checkSleepDeadline());
   }
 
   void _changed() {
@@ -88,7 +105,9 @@ class _PlayerViewState extends State<PlayerView> {
         controller.showFullGuide();
         widget.openGuide();
       } else {
+        final restoreSleep = controller.overlay == PlayerOverlay.sleepTimer;
         controller.closeOverlay();
+        if (restoreSleep) _restoreSleepFocus();
       }
       return KeyEventResult.handled;
     }
@@ -240,7 +259,7 @@ class _PlayerViewState extends State<PlayerView> {
         (key == LogicalKeyboardKey.keyF || key == LogicalKeyboardKey.f11)) {
       unawaited(controller.toggleFullscreen());
     } else if (initialPress && key == LogicalKeyboardKey.keyS) {
-      controller.cycleSleepTimer();
+      controller.showSleepTimer();
     } else if (key == LogicalKeyboardKey.keyA) {
       controller.showTracks(PlayerTrackType.audio);
     } else if (key == LogicalKeyboardKey.keyC) {
@@ -267,6 +286,12 @@ class _PlayerViewState extends State<PlayerView> {
     return KeyEventResult.handled;
   }
 
+  void _restoreSleepFocus() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _sleepFocus.requestFocus();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final controller = widget.controller;
@@ -290,7 +315,16 @@ class _PlayerViewState extends State<PlayerView> {
           onHover: (_) => controller.handlePointerActivity(),
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
-            onTap: controller.showOsd,
+            onTap: () {
+              if (controller.overlay == PlayerOverlay.miniGuide) {
+                controller.closeOverlay();
+              } else if (controller.overlay == PlayerOverlay.sleepTimer) {
+                controller.closeOverlay();
+                _restoreSleepFocus();
+              } else {
+                controller.showOsd();
+              }
+            },
             child: Stack(
               fit: StackFit.expand,
               children: [
@@ -375,12 +409,16 @@ class _PlayerViewState extends State<PlayerView> {
                       PlayerOverlay.osd => _Osd(
                         controller: controller,
                         openMenu: widget.openMenu,
+                        menuFocus: _menuFocus,
+                        sleepFocus: _sleepFocus,
                       ),
                       PlayerOverlay.nowPlaying => _NowPlaying(
                         controller: controller,
                       ),
                       PlayerOverlay.miniGuide => _MiniGuide(
                         controller: controller,
+                        active: _appActive,
+                        openGuide: widget.openGuide,
                       ),
                       PlayerOverlay.audioTracks => _Tracks(
                         controller: controller,
@@ -389,6 +427,10 @@ class _PlayerViewState extends State<PlayerView> {
                       PlayerOverlay.subtitleTracks => _Tracks(
                         controller: controller,
                         type: PlayerTrackType.subtitle,
+                      ),
+                      PlayerOverlay.sleepTimer => _SleepTimerPicker(
+                        controller: controller,
+                        triggerFocus: _sleepFocus,
                       ),
                       PlayerOverlay.channelNumber => _ChannelNumber(
                         controller: controller,
@@ -481,9 +523,16 @@ class _SurfaceError extends StatelessWidget {
 }
 
 class _Osd extends StatelessWidget {
-  const _Osd({required this.controller, this.openMenu});
+  const _Osd({
+    required this.controller,
+    required this.menuFocus,
+    required this.sleepFocus,
+    this.openMenu,
+  });
   final PlayerCoordinator controller;
-  final VoidCallback? openMenu;
+  final LineupMenuCallback? openMenu;
+  final FocusNode menuFocus;
+  final FocusNode sleepFocus;
 
   @override
   Widget build(BuildContext context) {
@@ -554,9 +603,13 @@ class _Osd extends StatelessWidget {
     final subtitlesLabel = selectedSubtitles == null
         ? '${expanded ? 'Subtitles' : 'Subs'} • Off'
         : _osdTrackLabel(expanded ? 'Subtitles' : 'Subs', selectedSubtitles);
-    final sleepLabel = controller.sleepDuration == null
+    final sleepRemaining = controller.sleepRemaining;
+    final remainingMinutes = sleepRemaining == null
+        ? null
+        : (sleepRemaining.inSeconds / Duration.secondsPerMinute).ceil();
+    final sleepLabel = remainingMinutes == null
         ? 'Sleep • Off'
-        : 'Sleep • ${controller.sleepDuration!.inMinutes}m';
+        : 'Stops in $remainingMinutes min';
     final optionActions = <Widget>[
       _osdAction(
         context,
@@ -584,19 +637,23 @@ class _Osd extends StatelessWidget {
         context,
         key: const Key('player-osd-sleep'),
         label: sleepLabel,
-        tooltip: 'Sleep timer',
+        tooltip: sleepRemaining == null ? 'Stop playback after…' : sleepLabel,
         icon: Icons.bedtime_outlined,
-        onPressed: controller.cycleSleepTimer,
+        focusNode: sleepFocus,
+        onPressed: controller.showSleepTimer,
         compact: !expanded,
       ),
     ];
     final windowActions = <Widget>[
       if (openMenu != null)
-        IconButton(
-          key: const Key('player-app-menu'),
-          tooltip: 'Open Lineup menu',
-          onPressed: openMenu,
-          icon: const Icon(Icons.menu),
+        Builder(
+          builder: (invokerContext) => IconButton(
+            key: const Key('player-app-menu'),
+            focusNode: menuFocus,
+            tooltip: 'Open Lineup menu',
+            onPressed: () => openMenu!(invokerContext, menuFocus),
+            icon: const Icon(Icons.menu),
+          ),
         ),
       IconButton(
         tooltip: unsupported
@@ -1569,73 +1626,156 @@ class _CastFallback extends StatelessWidget {
 }
 
 class _MiniGuide extends StatelessWidget {
-  const _MiniGuide({required this.controller});
+  const _MiniGuide({
+    required this.controller,
+    required this.active,
+    required this.openGuide,
+  });
   final PlayerCoordinator controller;
+  final bool active;
+  final VoidCallback openGuide;
 
   @override
   Widget build(BuildContext context) {
     final channels = controller.miniGuideChannels;
     final roles = LineupTheme.of(context);
     final size = MediaQuery.sizeOf(context);
+    final scale = LineupLayout.scaleFor(size);
     final horizontal =
         size.height >= 720 && !LineupLayout.isCompactWidth(size.width);
-    final rowHeight = horizontal ? (size.height >= 900 ? 48.0 : 56.0) : null;
-    final compressed = size.height >= 900;
-    return Align(
-      alignment: Alignment.topCenter,
-      child: SafeArea(
-        bottom: false,
-        child: Container(
-          key: const Key('mini-guide-shelf'),
-          width: double.infinity,
-          constraints: BoxConstraints(maxHeight: size.height),
-          padding: EdgeInsets.fromLTRB(
-            roles.overlaySafeArea,
-            compressed ? 8 : 12,
-            roles.overlaySafeArea,
-            compressed ? 10 : 16,
-          ),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                roles.scrim.withValues(alpha: 0.60),
-                roles.scrim.withValues(alpha: 0.48),
-                roles.scrim.withValues(alpha: 0.24),
-                Colors.transparent,
-              ],
-              stops: const [0, 0.50, 0.80, 1],
-            ),
-            border: Border(bottom: BorderSide(color: roles.subtleBorder)),
-            borderRadius: BorderRadius.vertical(
-              bottom: Radius.circular(roles.panelRadius),
-            ),
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: Semantics(
-            container: true,
-            explicitChildNodes: true,
-            label: 'Mini Guide',
-            child: SingleChildScrollView(
-              key: const Key('mini-guide-scroll'),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  for (final channel in channels)
-                    _MiniGuideRow(
-                      controller: controller,
-                      channel: channel,
-                      rowHeight: rowHeight,
-                    ),
-                  SizedBox(height: compressed ? 4 : 8),
-                  Text(
-                    'UP/DOWN Browse • CH± Page • OK Watch • RIGHT Full Guide • BACK Close',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: compressed ? 11 : 12),
+    final textScale = MediaQuery.textScalerOf(context).scale(1);
+    final rowHeight = horizontal
+        ? 56.0 * scale * textScale.clamp(1, 1.5)
+        : null;
+    final scaledTheme = Theme.of(context).copyWith(
+      textTheme: Theme.of(context).textTheme.apply(fontSizeFactor: scale),
+    );
+    return Theme(
+      data: scaledTheme,
+      child: DefaultTextStyle(
+        style: scaledTheme.textTheme.bodyMedium!,
+        child: Builder(
+          builder: (context) => Align(
+            alignment: Alignment.topCenter,
+            child: SafeArea(
+              bottom: false,
+              child: Container(
+                key: const Key('mini-guide-shelf'),
+                width: double.infinity,
+                constraints: BoxConstraints(maxHeight: size.height),
+                padding: EdgeInsets.fromLTRB(
+                  roles.overlaySafeArea,
+                  12 * scale,
+                  roles.overlaySafeArea,
+                  16 * scale,
+                ),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      roles.scrim.withValues(alpha: 0.78),
+                      roles.scrim.withValues(alpha: 0.66),
+                      roles.scrim.withValues(alpha: 0.52),
+                      roles.scrim.withValues(alpha: 0.20),
+                      Colors.transparent,
+                    ],
+                    stops: const [0, 0.30, 0.72, 0.90, 1],
                   ),
-                ],
+                ),
+                child: Semantics(
+                  container: true,
+                  explicitChildNodes: true,
+                  label: 'Mini Guide',
+                  child: Listener(
+                    onPointerSignal: (event) {
+                      if (event is PointerScrollEvent &&
+                          event.scrollDelta.dy != 0) {
+                        controller.moveMiniGuide(
+                          event.scrollDelta.dy > 0 ? 1 : -1,
+                        );
+                      }
+                    },
+                    child: SingleChildScrollView(
+                      key: const Key('mini-guide-scroll'),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Wrap(
+                            alignment: WrapAlignment.spaceBetween,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            spacing: 12,
+                            children: [
+                              ExcludeSemantics(
+                                child: Text(
+                                  'Mini Guide',
+                                  style: Theme.of(context).textTheme.titleLarge,
+                                ),
+                              ),
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  TextButton(
+                                    onPressed: () {
+                                      controller.showFullGuide();
+                                      openGuide();
+                                    },
+                                    child: const Text('Full Guide'),
+                                  ),
+                                  TextButton(
+                                    onPressed: controller.closeOverlay,
+                                    child: const Text('Close'),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                          if (horizontal)
+                            const Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 12),
+                              child: Row(
+                                children: [
+                                  SizedBox(width: 46),
+                                  Expanded(flex: 5, child: Text('Channel')),
+                                  Expanded(flex: 7, child: Text('On now')),
+                                  Expanded(flex: 6, child: Text('Up next')),
+                                ],
+                              ),
+                            ),
+                          for (final channel in channels)
+                            _MiniGuideRow(
+                              controller: controller,
+                              channel: channel,
+                              rowHeight: rowHeight,
+                              active: active,
+                            ),
+                          SizedBox(height: 8 * scale),
+                          Text(
+                            'Up / Down to browse • Enter to tune • Esc to close',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontSize: 12 * scale),
+                          ),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              IconButton(
+                                tooltip: 'Previous channel',
+                                onPressed: () => controller.moveMiniGuide(-1),
+                                icon: const Icon(Icons.arrow_upward),
+                              ),
+                              IconButton(
+                                tooltip: 'Next channel',
+                                onPressed: () => controller.moveMiniGuide(1),
+                                icon: const Icon(Icons.arrow_downward),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
               ),
             ),
           ),
@@ -1650,11 +1790,13 @@ class _MiniGuideRow extends StatelessWidget {
     required this.controller,
     required this.channel,
     required this.rowHeight,
+    required this.active,
   });
 
   final PlayerCoordinator controller;
   final Channel channel;
   final double? rowHeight;
+  final bool active;
 
   @override
   Widget build(BuildContext context) {
@@ -1676,15 +1818,23 @@ class _MiniGuideRow extends StatelessWidget {
         : now.difference(current.scheduled.start).inMilliseconds /
               spanMilliseconds;
     final horizontal = rowHeight != null;
+    final titleStyle = Theme.of(context).textTheme.bodyMedium
+        ?.copyWith(color: foreground);
+    Widget ticker(String text, Key key, {TextStyle? style}) => FocusedTicker(
+      key: key,
+      text: text,
+      focused: focused,
+      active: active,
+      reduceMotion: MediaQuery.disableAnimationsOf(context),
+      style: style,
+    );
     final channelIdentity = Row(
       children: [
         Expanded(
-          child: Text(
+          child: ticker(
             channel.name,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.bodyMedium
-                ?.copyWith(color: foreground, fontWeight: FontWeight.w700),
+            Key('mini-guide-channel-${channel.id}'),
+            style: titleStyle?.copyWith(fontWeight: FontWeight.w700),
           ),
         ),
         if (tuned)
@@ -1695,13 +1845,29 @@ class _MiniGuideRow extends StatelessWidget {
           ),
       ],
     );
-    final currentTitle = Text(
-      current?.scheduled.item.title ?? 'Schedule loading…',
-      key: Key('mini-guide-current-${channel.id}'),
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-      style: Theme.of(context).textTheme.bodyMedium
-          ?.copyWith(color: foreground),
+    final row = controller.guide.row(channel.id);
+    final unavailable = row.state == GuideLoadState.error;
+    final currentText = unavailable
+        ? 'Schedule unavailable'
+        : current?.scheduled.item.title ?? 'Loading schedule…';
+    final currentTitle = ticker(
+      currentText,
+      Key('mini-guide-current-${channel.id}'),
+      style: titleStyle,
+    );
+    final currentCell = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        currentTitle,
+        if (current != null)
+          Text(
+            '${_time(context, current.scheduled.start)}–${_time(context, current.scheduled.end)}',
+            maxLines: 1,
+            style: Theme.of(context).textTheme.bodySmall
+                ?.copyWith(color: foreground),
+          ),
+      ],
     );
     final progressBar = current == null
         ? null
@@ -1716,31 +1882,24 @@ class _MiniGuideRow extends StatelessWidget {
           );
     final nextTitle = next == null
         ? null
-        : Text(
-            'Next • ${next.scheduled.item.title}',
-            key: Key('mini-guide-next-${channel.id}'),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.bodySmall
-                ?.copyWith(color: foreground),
+        : Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ticker(
+                next.scheduled.item.title,
+                Key('mini-guide-next-${channel.id}'),
+                style: Theme.of(context).textTheme.bodySmall
+                    ?.copyWith(color: foreground),
+              ),
+              Text(
+                _time(context, next.scheduled.start),
+                maxLines: 1,
+                style: Theme.of(context).textTheme.bodySmall
+                    ?.copyWith(color: foreground),
+              ),
+            ],
           );
-    final tuneButton = IconButton(
-      style: focused
-          ? IconButton.styleFrom(
-              foregroundColor: foreground,
-              disabledForegroundColor: foreground.withValues(alpha: 0.70),
-            )
-          : null,
-      tooltip: unsupported
-          ? 'Playback unavailable'
-          : tuned
-          ? 'Watching this channel'
-          : 'Watch channel',
-      onPressed: tuned || unsupported
-          ? null
-          : () => controller.tune(channel.id),
-      icon: const Icon(Icons.play_arrow),
-    );
     final number = SizedBox(
       width: 46,
       child: Text(
@@ -1772,6 +1931,12 @@ class _MiniGuideRow extends StatelessWidget {
           color: Colors.transparent,
           child: InkWell(
             onTap: () => controller.focusMiniGuideChannel(channel.id),
+            onDoubleTap: unsupported || unavailable
+                ? null
+                : () {
+                    controller.focusMiniGuideChannel(channel.id);
+                    unawaited(controller.tuneMiniGuideSelection());
+                  },
             child: rowHeight == null
                 ? Padding(
                     padding: const EdgeInsets.symmetric(
@@ -1786,13 +1951,12 @@ class _MiniGuideRow extends StatelessWidget {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               channelIdentity,
-                              currentTitle,
+                              currentCell,
                               ?progressBar,
                               ?nextTitle,
                             ],
                           ),
                         ),
-                        tuneButton,
                       ],
                     ),
                   )
@@ -1809,7 +1973,7 @@ class _MiniGuideRow extends StatelessWidget {
                             child: channelIdentity,
                           ),
                           const SizedBox(width: 16),
-                          Expanded(child: currentTitle),
+                          Expanded(child: currentCell),
                           const SizedBox(width: 16),
                           if (progressBar != null)
                             SizedBox(
@@ -1825,11 +1989,117 @@ class _MiniGuideRow extends StatelessWidget {
                               child: nextTitle,
                             ),
                           ],
-                          tuneButton,
                         ],
                       ),
                     ),
                   ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SleepTimerPicker extends StatelessWidget {
+  const _SleepTimerPicker({
+    required this.controller,
+    required this.triggerFocus,
+  });
+
+  final PlayerCoordinator controller;
+  final FocusNode triggerFocus;
+
+  void _choose(Duration? duration) {
+    controller.setSleepTimer(duration);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (triggerFocus.canRequestFocus) triggerFocus.requestFocus();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final roles = LineupTheme.of(context);
+    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
+    final scaledTheme = Theme.of(context).copyWith(
+      textTheme: Theme.of(context).textTheme.apply(fontSizeFactor: scale),
+    );
+    final selected = controller.sleepDuration;
+    final choices = <(String, Duration?)>[
+      ('Off', null),
+      ('30 minutes', const Duration(minutes: 30)),
+      ('1 hour', const Duration(hours: 1)),
+      ('90 minutes', const Duration(minutes: 90)),
+    ];
+    return Theme(
+      data: scaledTheme,
+      child: DefaultTextStyle(
+        style: scaledTheme.textTheme.bodyMedium!,
+        child: SafeArea(
+          child: Align(
+            alignment: Alignment.bottomRight,
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(
+                24 * scale,
+                24 * scale,
+                roles.overlaySafeArea * scale,
+                132 * scale,
+              ),
+              child: Material(
+                key: const Key('sleep-timer-picker'),
+                color: roles.scrim.withValues(alpha: 0.92),
+                borderRadius: BorderRadius.circular(roles.panelRadius),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxWidth: 280 * scale,
+                    maxHeight: (MediaQuery.sizeOf(context).height - 180).clamp(
+                      240,
+                      double.infinity,
+                    ),
+                  ),
+                  child: SingleChildScrollView(
+                    child: Padding(
+                      padding: EdgeInsets.all(14 * scale),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Text(
+                            'Stop playback after…',
+                            style: scaledTheme.textTheme.titleMedium,
+                          ),
+                          const SizedBox(height: 8),
+                          for (final choice in choices)
+                            ListTile(
+                              key: Key(
+                                'sleep-timer-${choice.$2?.inMinutes ?? 'off'}',
+                              ),
+                              dense: true,
+                              autofocus: choice.$2 == selected,
+                              title: Text(choice.$1),
+                              trailing: choice.$2 == selected
+                                  ? Icon(
+                                      Icons.check,
+                                      color: roles.progressFill,
+                                      semanticLabel: 'Selected preset',
+                                    )
+                                  : null,
+                              onTap: () => _choose(choice.$2),
+                            ),
+                          if (controller.sleepRemaining case final remaining?)
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                              child: Text(
+                                'Stops in ${(remaining.inSeconds / 60).ceil()} min',
+                                style: scaledTheme.textTheme.bodySmall,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
           ),
         ),
       ),
@@ -1879,154 +2149,237 @@ class _TracksState extends State<_Tracks> {
     final selectedTrack = tracks.where((track) => track.selected).firstOrNull;
     return LayoutBuilder(
       builder: (context, constraints) {
-        final railWidth = (constraints.maxWidth * 0.4).clamp(0.0, 420.0);
-        final padding = constraints.maxWidth <= 800 ? 20.0 : 28.0;
+        final size = constraints.biggest;
+        final scale = LineupLayout.scaleFor(size);
+        final railWidth = (constraints.maxWidth * 0.4).clamp(
+          0.0,
+          420.0 * scale,
+        );
+        final fadeWidth = (150.0 * scale).clamp(
+          0.0,
+          constraints.maxWidth - railWidth,
+        );
+        final padding = (constraints.maxWidth <= 800 ? 20.0 : 28.0) * scale;
+        final textTheme = Theme.of(context).textTheme;
+        TextStyle? scaled(TextStyle? style) => style?.fontSize == null
+            ? style
+            : style!.copyWith(fontSize: style.fontSize! * scale);
         return Align(
           alignment: Alignment.centerRight,
           child: FocusScope(
             child: Container(
-              key: const Key('playback-options-rail'),
-              width: railWidth,
+              key: const Key('playback-options-fade'),
+              width: railWidth + fadeWidth,
               height: double.infinity,
-              padding: EdgeInsets.all(padding),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
                   colors: [
-                    roles.scrim.withValues(alpha: 0.54),
-                    roles.scrim.withValues(alpha: 0.74),
+                    Colors.transparent,
+                    roles.scrim.withValues(alpha: 0.44),
+                    roles.scrim.withValues(alpha: 0.76),
+                    roles.scrim.withValues(alpha: 0.84),
                   ],
-                ),
-                border: Border(left: BorderSide(color: roles.subtleBorder)),
-                borderRadius: BorderRadius.horizontal(
-                  left: Radius.circular(roles.panelRadius),
+                  stops: const [0, 0.22, 0.4, 1],
                 ),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    'PLAYBACK OPTIONS',
-                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                      color: roles.mutedText,
-                      letterSpacing: 1.4,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    widget.type == PlayerTrackType.audio
-                        ? 'Audio'
-                        : 'Subtitles',
-                    style: Theme.of(context).textTheme.headlineSmall
-                        ?.copyWith(fontWeight: FontWeight.w700),
-                  ),
-                  const SizedBox(height: 18),
-                  Expanded(
-                    child: ClipRect(
-                      child: ListView.separated(
-                        key: const Key('playback-options-list'),
-                        controller: _scrollController,
-                        itemCount:
-                            tracks.length +
-                            (widget.type == PlayerTrackType.subtitle ? 1 : 0),
-                        separatorBuilder: (_, _) => const SizedBox(height: 10),
-                        itemBuilder: (context, index) {
-                          final off =
-                              widget.type == PlayerTrackType.subtitle &&
-                              index == 0;
-                          final track = off
-                              ? null
-                              : tracks[index -
-                                    (widget.type == PlayerTrackType.subtitle
-                                        ? 1
-                                        : 0)];
-                          final selected = off
-                              ? selectedTrack == null
-                              : track!.selected;
-                          final metadata = track == null
-                              ? const <String>[]
-                              : [
-                                  if (track.language != null) track.language!,
-                                  if (track.codec != null) track.codec!,
-                                ];
-                          final shape = RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(
-                              roles.panelRadius,
-                            ),
-                            side: BorderSide(
-                              color: selected
-                                  ? roles.progressFill
-                                  : roles.subtleBorder,
-                              width: selected ? 2 : 1,
-                            ),
-                          );
-                          return Material(
-                            color: Colors.transparent,
-                            shape: shape,
-                            clipBehavior: Clip.antiAlias,
-                            child: ListTile(
-                              key: Key(
-                                off
-                                    ? 'playback-track-off'
-                                    : 'playback-track-${widget.type.name}-${track!.id}',
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: SizedBox(
+                  key: const Key('playback-options-rail'),
+                  width: railWidth,
+                  child: Padding(
+                    padding: EdgeInsets.all(padding),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                widget.type == PlayerTrackType.audio
+                                    ? 'Audio'
+                                    : 'Subtitles',
+                                style: scaled(textTheme.headlineSmall)
+                                    ?.copyWith(fontWeight: FontWeight.w500),
                               ),
-                              autofocus: selected,
-                              selected: selected,
-                              selectedTileColor: roles.selectedSurface,
-                              focusColor: roles.focusedSurface,
-                              shape: shape,
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 14,
-                                vertical: 2,
+                            ),
+                            TextButton(
+                              autofocus:
+                                  tracks.isEmpty &&
+                                  widget.type != PlayerTrackType.subtitle,
+                              onPressed: widget.controller.closeOverlay,
+                              style: TextButton.styleFrom(
+                                textStyle: scaled(textTheme.labelLarge),
                               ),
-                              title: Text(
-                                off
-                                    ? 'Off'
-                                    : track!.title ??
-                                          track.language ??
-                                          '${track.type.name} ${track.id}',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w600,
+                              child: const Text('Close'),
+                            ),
+                          ],
+                        ),
+                        SizedBox(height: 18 * scale),
+                        if (tracks.isEmpty &&
+                            widget.type == PlayerTrackType.subtitle)
+                          Padding(
+                            padding: EdgeInsets.only(bottom: 12 * scale),
+                            child: Text(
+                              widget.controller.tuning ||
+                                      widget.controller.status.state ==
+                                          PlayerState.loading
+                                  ? 'Loading tracks…'
+                                  : 'No subtitle tracks available',
+                              style: scaled(textTheme.bodyMedium),
+                            ),
+                          ),
+                        Expanded(
+                          child: ClipRect(
+                            child:
+                                tracks.isEmpty &&
+                                    widget.type == PlayerTrackType.audio
+                                ? Center(
+                                    child: Text(
+                                      widget.controller.tuning ||
+                                              widget.controller.status.state ==
+                                                  PlayerState.loading
+                                          ? 'Loading tracks…'
+                                          : 'No audio tracks available',
+                                      style: scaled(textTheme.bodyMedium),
+                                    ),
+                                  )
+                                : ListView.separated(
+                                    key: const Key('playback-options-list'),
+                                    controller: _scrollController,
+                                    itemCount:
+                                        tracks.length +
+                                        (widget.type == PlayerTrackType.subtitle
+                                            ? 1
+                                            : 0),
+                                    separatorBuilder: (_, _) => Divider(
+                                      height: 1,
+                                      color: roles.subtleBorder.withValues(
+                                        alpha: 0.45,
+                                      ),
+                                    ),
+                                    itemBuilder: (context, index) {
+                                      final off =
+                                          widget.type ==
+                                              PlayerTrackType.subtitle &&
+                                          index == 0;
+                                      final track = off
+                                          ? null
+                                          : tracks[index -
+                                                (widget.type ==
+                                                        PlayerTrackType.subtitle
+                                                    ? 1
+                                                    : 0)];
+                                      final selected = off
+                                          ? selectedTrack == null
+                                          : track!.selected;
+                                      final metadata = track == null
+                                          ? const <String>[]
+                                          : [
+                                              if (track.language != null)
+                                                track.language!,
+                                              if (track.codec != null)
+                                                track.codec!,
+                                            ];
+                                      return Material(
+                                        color: Colors.transparent,
+                                        child: ListTile(
+                                          key: Key(
+                                            off
+                                                ? 'playback-track-off'
+                                                : 'playback-track-${widget.type.name}-${track!.id}',
+                                          ),
+                                          autofocus: selected,
+                                          selected: selected,
+                                          selectedTileColor:
+                                              roles.selectedSurface,
+                                          focusColor: roles.focusedSurface,
+                                          contentPadding: EdgeInsets.symmetric(
+                                            horizontal: 12 * scale,
+                                            vertical: 8 * scale,
+                                          ),
+                                          title: Text(
+                                            off
+                                                ? 'Off'
+                                                : track!.title ??
+                                                      track.language ??
+                                                      '${track.type.name} ${track.id}',
+                                            maxLines: 3,
+                                            overflow: TextOverflow.visible,
+                                            softWrap: true,
+                                            style: scaled(textTheme.bodyLarge)
+                                                ?.copyWith(
+                                                  fontWeight: FontWeight.w500,
+                                                ),
+                                          ),
+                                          subtitle: metadata.isEmpty
+                                              ? null
+                                              : Text(
+                                                  metadata.join(' • '),
+                                                  maxLines: 3,
+                                                  overflow:
+                                                      TextOverflow.visible,
+                                                  softWrap: true,
+                                                  style: scaled(
+                                                    textTheme.bodyMedium,
+                                                  ),
+                                                ),
+                                          trailing:
+                                              widget
+                                                          .controller
+                                                          .pendingTrackType ==
+                                                      widget.type &&
+                                                  widget
+                                                          .controller
+                                                          .pendingTrackId ==
+                                                      track?.id
+                                              ? const SizedBox.square(
+                                                  dimension: 18,
+                                                  child:
+                                                      CircularProgressIndicator(
+                                                        strokeWidth: 2,
+                                                        semanticsLabel:
+                                                            'Changing track',
+                                                      ),
+                                                )
+                                              : selected
+                                              ? Icon(
+                                                  Icons.check,
+                                                  color: roles.progressFill,
+                                                  semanticLabel: 'Selected',
+                                                )
+                                              : null,
+                                          onTap: () =>
+                                              widget.controller.selectTrack(
+                                                widget.type,
+                                                track?.id,
+                                              ),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                          ),
+                        ),
+                        if (widget.controller.trackSelectionError
+                            case final error?)
+                          Padding(
+                            padding: EdgeInsets.only(top: 10 * scale),
+                            child: Semantics(
+                              liveRegion: true,
+                              child: Text(
+                                error,
+                                style: TextStyle(
+                                  color: Theme.of(context).colorScheme.error,
                                 ),
                               ),
-                              subtitle: metadata.isEmpty
-                                  ? null
-                                  : Text(
-                                      metadata.join(' • '),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                              trailing: selected
-                                  ? Icon(
-                                      Icons.check_circle,
-                                      color: roles.progressFill,
-                                      semanticLabel: 'Selected',
-                                    )
-                                  : null,
-                              onTap: () => widget.controller.selectTrack(
-                                widget.type,
-                                track?.id,
-                              ),
                             ),
-                          );
-                        },
-                      ),
+                          ),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  TextButton.icon(
-                    autofocus:
-                        tracks.isEmpty &&
-                        widget.type != PlayerTrackType.subtitle,
-                    onPressed: widget.controller.closeOverlay,
-                    icon: const Icon(Icons.arrow_back),
-                    label: const Text('Back'),
-                  ),
-                ],
+                ),
               ),
             ),
           ),
@@ -2196,6 +2549,7 @@ Widget _osdAction(
   required IconData icon,
   required VoidCallback? onPressed,
   required bool compact,
+  FocusNode? focusNode,
 }) {
   final roles = LineupTheme.of(context);
   return ConstrainedBox(
@@ -2204,6 +2558,7 @@ Widget _osdAction(
       message: tooltip,
       child: TextButton.icon(
         key: key,
+        focusNode: focusNode,
         onPressed: onPressed,
         icon: Icon(icon, size: compact ? 17 : 18),
         label: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),

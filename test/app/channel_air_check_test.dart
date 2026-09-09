@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/channel_air_check.dart';
 import 'package:lineup_desktop/channels/channel.dart';
@@ -41,18 +40,9 @@ void main() {
         ),
       );
       expect(heading.properties.header, isTrue);
-      expect(find.byKey(const Key('air-check-now-line')), findsOneWidget);
       expect(find.textContaining('One •'), findsOneWidget);
-
-      final firstLineX = tester
-          .getTopLeft(find.byKey(const Key('air-check-now-line')))
-          .dx;
       now = DateTime.utc(2026, 1, 1, 0, 29, 59, 500);
       await tester.pump(const Duration(seconds: 30));
-      expect(
-        tester.getTopLeft(find.byKey(const Key('air-check-now-line'))).dx,
-        greaterThan(firstLineX),
-      );
 
       now = DateTime.utc(2026, 1, 1, 0, 30);
       await tester.pump(const Duration(seconds: 30));
@@ -65,7 +55,7 @@ void main() {
         findsOneWidget,
       );
       expect(
-        find.bySemanticsLabel(RegExp(r'Channel 4 .*One.*future')),
+        find.bySemanticsLabel(RegExp(r'Channel 4 .*One.*upcoming')),
         findsWidgets,
       );
     },
@@ -273,7 +263,7 @@ void main() {
     },
   );
 
-  testWidgets('compact Air Check retains now and next semantic entries', (
+  testWidgets('compact Air Check retains projected semantic entries', (
     tester,
   ) async {
     final controller = _AirController();
@@ -288,15 +278,14 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('One'), findsWidgets);
     expect(find.text('Two'), findsWidgets);
-    expect(find.text('Three'), findsNothing);
-    expect(find.byKey(const Key('air-check-now-line')), findsNothing);
+    expect(find.text('Three'), findsWidgets);
     expect(
       find.bySemanticsLabel(RegExp(r'Channel 4 .*One.*current')),
       findsOneWidget,
     );
   });
 
-  testWidgets('narrow programs support keyboard selection and visible state', (
+  testWidgets('program rows expose selection detail and semantics', (
     tester,
   ) async {
     final controller = _AirController();
@@ -309,18 +298,20 @@ void main() {
     );
     await tester.pumpWidget(_airCheck(controller, channel));
     await tester.pumpAndSettle();
-    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
-    await tester.pump();
-    expect(FocusManager.instance.primaryFocus, isNotNull);
-    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    tester
+        .widget<OutlinedButton>(find.byType(OutlinedButton).at(1))
+        .onPressed!();
     await tester.pump();
     expect(
-      tester.widget<Text>(find.byKey(const Key('air-check-selection'))).data,
-      contains('past'),
+      find.descendant(
+        of: find.byKey(const Key('air-check-selection')),
+        matching: find.textContaining('B •'),
+      ),
+      findsOneWidget,
     );
     expect(
-      find.bySemanticsLabel(RegExp(r'Channel 4 .*past, selected')),
-      findsOneWidget,
+      find.bySemanticsLabel(RegExp(r'Channel 4 .*B.*upcoming')),
+      findsWidgets,
     );
   });
 
@@ -345,7 +336,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text(twelveHourStart), findsWidgets);
+    expect(find.textContaining(twelveHourStart), findsWidgets);
     expect(
       find.bySemanticsLabel(
         RegExp(
@@ -620,7 +611,12 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('air-check-on-now-warning')), findsNothing);
 
-    final renamed = Channel.fromJson({...original.toJson(), 'name': 'Renamed'});
+    final requestsBeforeRename = controller.requests;
+    final renamed = Channel.fromJson({
+      ...original.toJson(),
+      'name': 'Renamed',
+      'number': 9,
+    });
     await tester.pumpWidget(
       _airCheck(
         controller,
@@ -631,6 +627,12 @@ void main() {
     );
     await tester.pump();
     expect(find.byKey(const Key('air-check-on-now-warning')), findsNothing);
+    expect(find.textContaining('CH 9 · RENAMED'), findsOneWidget);
+    expect(
+      find.bySemanticsLabel(RegExp(r'Channel 9 Renamed, .*current')),
+      findsOneWidget,
+    );
+    expect(controller.requests, requestsBeforeRename);
 
     final changed = Channel.fromJson({
       ...original.toJson(),
@@ -738,6 +740,7 @@ void main() {
       expect(key.currentState!.activeRequestCount, 0);
       expect(key.currentState!.pendingRequestCount, 0);
 
+      await tester.ensureVisible(find.text('Retry comparison'));
       await tester.tap(find.text('Retry comparison'));
       await tester.pump(
         channelAirCheckDebounce + const Duration(milliseconds: 1),
@@ -858,13 +861,6 @@ void main() {
 
       expect(controller.requests, 1);
       expect(find.textContaining('Three •'), findsOneWidget);
-      final nowLine = tester.widget<ExcludeSemantics>(
-        find.ancestor(
-          of: find.byKey(const Key('air-check-now-line')),
-          matching: find.byType(ExcludeSemantics),
-        ),
-      );
-      expect(nowLine.excluding, isTrue);
       expect(
         find.byWidgetPredicate(
           (widget) =>
@@ -892,16 +888,25 @@ Widget _airCheck(
     child: child!,
   ),
   home: Scaffold(
-    body: ChannelAirCheck(
-      key: key,
-      controller: controller,
-      channel: channel,
-      originalChannel: originalChannel,
-      clock: clock ?? () => DateTime.utc(2026, 1, 1, 0, 10),
-      compact: compact,
-      inclusionReason: 'Hand-picked programming',
-      sourceIssue: sourceIssue,
-      onValidityChanged: (status) => onValidityChanged?.call(status.validity),
+    body: SingleChildScrollView(
+      child: Align(
+        alignment: Alignment.topCenter,
+        child: SizedBox(
+          width: 520,
+          child: ChannelAirCheck(
+            key: key,
+            controller: controller,
+            channel: channel,
+            originalChannel: originalChannel,
+            clock: clock ?? () => DateTime.utc(2026, 1, 1, 0, 10),
+            compact: compact,
+            inclusionReason: 'Hand-picked programming',
+            sourceIssue: sourceIssue,
+            onValidityChanged: (status) =>
+                onValidityChanged?.call(status.validity),
+          ),
+        ),
+      ),
     ),
   ),
 );

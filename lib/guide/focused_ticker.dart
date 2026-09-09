@@ -7,6 +7,7 @@ class FocusedTicker extends StatefulWidget {
   const FocusedTicker({
     required this.text,
     required this.focused,
+    this.active = true,
     this.reduceMotion = false,
     this.style,
     super.key,
@@ -14,6 +15,7 @@ class FocusedTicker extends StatefulWidget {
 
   final String text;
   final bool focused;
+  final bool active;
   final bool reduceMotion;
   final TextStyle? style;
 
@@ -24,8 +26,9 @@ class FocusedTicker extends StatefulWidget {
 class _FocusedTickerState extends State<FocusedTicker>
     with SingleTickerProviderStateMixin {
   static const _startDelay = Duration(milliseconds: 900);
-  static const _endPause = Duration(milliseconds: 600);
+  static const _endPause = Duration(milliseconds: 1500);
   static const _pixelsPerSecond = 34.0;
+  static const _overflowTolerance = 0.5;
 
   late final AnimationController _animationController = AnimationController(
     vsync: this,
@@ -53,7 +56,8 @@ class _FocusedTickerState extends State<FocusedTicker>
         final width = constraints.hasBoundedWidth ? constraints.maxWidth : null;
         final textSize = _measureText(textDirection, textScaler, style);
         final textWidth = textSize.width;
-        final overflow = width != null && textWidth > width;
+        final overflow =
+            width != null && textWidth - width > _overflowTolerance;
         final configuration = (
           text: widget.text,
           width: width,
@@ -61,7 +65,11 @@ class _FocusedTickerState extends State<FocusedTicker>
           textDirection: textDirection,
           textScaler: textScaler,
           style: style,
-          canAnimate: widget.focused && !widget.reduceMotion && overflow,
+          canAnimate:
+              widget.active &&
+              widget.focused &&
+              !widget.reduceMotion &&
+              overflow,
         );
         _synchronize(configuration);
 
@@ -93,7 +101,9 @@ class _FocusedTickerState extends State<FocusedTicker>
             width: width,
             height: textSize.height,
             child: OverflowBox(
-              alignment: Alignment.centerLeft,
+              alignment: textDirection == TextDirection.ltr
+                  ? Alignment.centerLeft
+                  : Alignment.centerRight,
               minWidth: width,
               maxWidth: double.infinity,
               minHeight: textSize.height,
@@ -104,7 +114,11 @@ class _FocusedTickerState extends State<FocusedTicker>
                 builder: (context, child) {
                   final distance = configuration.textWidth - width;
                   return Transform.translate(
-                    offset: Offset(-_offset(distance), 0),
+                    offset: Offset(
+                      (textDirection == TextDirection.ltr ? -1 : 1) *
+                          _offset(distance),
+                      0,
+                    ),
                     child: child,
                   );
                 },

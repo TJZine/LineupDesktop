@@ -127,7 +127,7 @@ void main() {
     expect(proposals.first.source, isA<PlaylistSource>());
     expect((proposals.first.source as PlaylistSource).playlistId, 'p1');
     expect((proposals.last.source as LibrarySource).filters, {
-      'collection': 'Friday Night',
+      LibraryFilter.collection: ['Friday Night'],
     });
   });
 
@@ -247,9 +247,9 @@ void main() {
     expect(channels.map((channel) => channel.number), [1, 2, 3, 4]);
     expect(channels.map((channel) => channel.name), [
       'Series',
+      'Series sequential',
       'Series Alt 1',
       'Series Alt 2',
-      'Series sequential',
     ]);
     expect(channels.first.blockSize, 3);
   });
@@ -419,7 +419,11 @@ void main() {
 
       expect(proposal.name, 'Avery Vale');
       expect((proposal.source as LibrarySource).filters, {
-        strategy == BuilderStrategy.actors ? 'actor' : 'director': 'avery vale',
+        strategy == BuilderStrategy.actors
+            ? LibraryFilter.actor
+            : LibraryFilter.director: [
+          'avery vale',
+        ],
       });
       expect(proposal.itemCount, 3);
       expect(resolveContent(proposal.source, items), hasLength(3));
@@ -550,7 +554,9 @@ void main() {
         source: LibrarySource(
           libraryId: 'movies',
           libraryType: PlexLibraryType.movie,
-          filters: {'genre': 'Comedy'},
+          filters: {
+            LibraryFilter.genre: ['Comedy'],
+          },
         ),
         mode: PlaybackMode.shuffle,
         itemCount: 10,
@@ -593,7 +599,10 @@ void main() {
       source: LibrarySource(
         libraryId: 'movies',
         libraryType: PlexLibraryType.movie,
-        filters: {'genre': 'Comedy', 'sort': 'title'},
+        filters: {
+          LibraryFilter.genre: ['Comedy'],
+          LibraryFilter.studio: ['Title'],
+        },
       ),
       mode: PlaybackMode.shuffle,
       itemCount: 10,
@@ -612,7 +621,10 @@ void main() {
       source: const LibrarySource(
         libraryId: 'movies',
         libraryType: PlexLibraryType.movie,
-        filters: {'sort': 'title', 'genre': 'Comedy'},
+        filters: {
+          LibraryFilter.studio: ['Title'],
+          LibraryFilter.genre: ['Comedy'],
+        },
       ),
       playbackMode: generated.playbackMode,
       anchor: generated.anchor,
@@ -639,7 +651,9 @@ void main() {
         source: LibrarySource(
           libraryId: 'movies',
           libraryType: PlexLibraryType.movie,
-          filters: {'genre': 'Drama $index'},
+          filters: {
+            LibraryFilter.genre: ['Drama $index'],
+          },
         ),
         mode: PlaybackMode.shuffle,
         itemCount: 10,
@@ -678,6 +692,7 @@ void main() {
         proposals: proposals,
         existing: custom,
         mode: mode,
+        maximumChannels: 1000,
         anchor: DateTime.utc(2027),
       );
 
@@ -837,7 +852,9 @@ void main() {
       source: LibrarySource(
         libraryId: 'movies',
         libraryType: PlexLibraryType.movie,
-        filters: {'genre': 'Drama'},
+        filters: {
+          LibraryFilter.genre: ['Drama'],
+        },
       ),
       mode: PlaybackMode.shuffle,
       itemCount: 10,
@@ -977,4 +994,178 @@ void main() {
       ['stale-other', 'planned', 'custom'],
     );
   });
+
+  test('allocation fills originals before fair extra-version rounds', () {
+    ChannelProposal proposal(String name) => ChannelProposal(
+      name: name,
+      source: LibrarySource(libraryId: name, libraryType: PlexLibraryType.show),
+      mode: PlaybackMode.shuffle,
+      itemCount: 20,
+      strategy: BuilderStrategy.recentlyAdded,
+      series: true,
+    );
+
+    final result = materializeChannelPlan(
+      proposals: [proposal('First'), proposal('Second')],
+      existing: const [],
+      mode: ChannelBuildMode.replace,
+      alternateCopies: 2,
+      variantMode: PlaybackMode.block,
+      variantBlockSize: 4,
+      maximumChannels: 6,
+      anchor: DateTime.utc(2026),
+    );
+
+    expect(result.channels.map((channel) => channel.name), [
+      'First',
+      'Second',
+      'First block',
+      'Second block',
+      'First Alt 1',
+      'Second Alt 1',
+    ]);
+    expect(result.allocatedOriginals, 2);
+    expect(result.excludedOriginals, 0);
+    expect(result.allocatedExtras, 4);
+    expect(result.excludedExtras, 2);
+    expect(
+      result.allocatedChannelsByStrategy[BuilderStrategy.recentlyAdded],
+      6,
+    );
+    expect(result.truncated, isTrue);
+  });
+
+  test('excluded originals never receive extra versions', () {
+    ChannelProposal proposal(String name) => ChannelProposal(
+      name: name,
+      source: LibrarySource(libraryId: name, libraryType: PlexLibraryType.show),
+      mode: PlaybackMode.shuffle,
+      itemCount: 20,
+      strategy: BuilderStrategy.recentlyAdded,
+      series: true,
+    );
+
+    final result = materializeChannelPlan(
+      proposals: [proposal('First'), proposal('Second'), proposal('Excluded')],
+      existing: const [],
+      mode: ChannelBuildMode.replace,
+      alternateCopies: 2,
+      maximumChannels: 2,
+      anchor: DateTime.utc(2026),
+    );
+
+    expect(result.channels.map((channel) => channel.name), ['First', 'Second']);
+    expect(result.allocatedOriginals, 2);
+    expect(result.excludedOriginals, 1);
+    expect(result.allocatedExtras, 0);
+    expect(result.excludedExtras, 4);
+  });
+
+  test('in-order originals keep only a requested different-mode version', () {
+    const proposal = ChannelProposal(
+      name: 'Series',
+      source: LibrarySource(
+        libraryId: 'shows',
+        libraryType: PlexLibraryType.show,
+      ),
+      mode: PlaybackMode.shuffle,
+      itemCount: 20,
+      strategy: BuilderStrategy.recentlyAdded,
+      series: true,
+    );
+
+    final result = materializeChannelPlan(
+      proposals: const [proposal],
+      existing: const [],
+      mode: ChannelBuildMode.replace,
+      seriesMode: PlaybackMode.sequential,
+      alternateCopies: 3,
+      variantMode: PlaybackMode.block,
+      maximumChannels: 10,
+      anchor: DateTime.utc(2026),
+    );
+
+    expect(result.channels, hasLength(2));
+    expect(result.channels.last.playbackMode, PlaybackMode.block);
+    expect(result.allocatedExtras, 1);
+    expect(result.excludedExtras, 0);
+  });
+
+  test('reviewed specials setting updates matched generated channels', () {
+    const proposal = ChannelProposal(
+      name: 'Series',
+      source: LibrarySource(
+        libraryId: 'shows',
+        libraryType: PlexLibraryType.show,
+      ),
+      mode: PlaybackMode.shuffle,
+      itemCount: 20,
+      strategy: BuilderStrategy.recentlyAdded,
+      series: true,
+    );
+    final existing = materializeChannelPlan(
+      proposals: const [proposal],
+      existing: const [],
+      mode: ChannelBuildMode.replace,
+      seriesMode: PlaybackMode.block,
+      includeSpecials: true,
+      anchor: DateTime.utc(2026),
+    ).channels.single;
+
+    final updated = materializeChannelPlan(
+      proposals: const [proposal],
+      existing: [existing],
+      mode: ChannelBuildMode.merge,
+      seriesMode: PlaybackMode.block,
+      includeSpecials: false,
+      anchor: DateTime.utc(2027),
+    ).channels.single;
+
+    expect(updated.id, existing.id);
+    expect(updated.includeSpecials, isFalse);
+    expect(updated, isNot(same(existing)));
+  });
+
+  test(
+    'proposal discovery can return the complete balanced candidate pool',
+    () {
+      const library = PlexLibrary(
+        id: 'movies',
+        title: 'Movies',
+        type: PlexLibraryType.movie,
+      );
+      final items = [
+        for (var index = 0; index < 3; index++)
+          PlexMediaItem(
+            id: '$index',
+            title: 'Movie $index',
+            type: 'movie',
+            duration: const Duration(minutes: 1),
+            libraryId: 'movies',
+            genres: ['Genre $index'],
+          ),
+      ];
+
+      expect(
+        buildChannelProposals(
+          libraries: const [library],
+          items: items,
+          strategies: const {BuilderStrategy.genres},
+          minimumItems: 1,
+          maximumChannels: 2,
+        ),
+        hasLength(2),
+      );
+      expect(
+        buildChannelProposals(
+          libraries: const [library],
+          items: items,
+          strategies: const {BuilderStrategy.genres},
+          minimumItems: 1,
+          maximumChannels: null,
+        ),
+        hasLength(3),
+      );
+    },
+  );
 }

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -67,6 +68,7 @@ class ChannelStudioView extends StatefulWidget {
     required this.onTune,
     required this.onDuplicate,
     required this.onOpenGenerateLineup,
+    this.onOpenChannel,
     this.channel,
     this.clock,
     super.key,
@@ -80,6 +82,7 @@ class ChannelStudioView extends StatefulWidget {
   final Future<bool> Function(String channelId) onTune;
   final ValueChanged<Channel> onDuplicate;
   final Future<void> Function() onOpenGenerateLineup;
+  final Future<void> Function(Channel channel)? onOpenChannel;
   final DateTime Function()? clock;
 
   @override
@@ -88,7 +91,6 @@ class ChannelStudioView extends StatefulWidget {
 
 class ChannelStudioViewState extends State<ChannelStudioView> {
   static const _countAnnouncementDelay = Duration(milliseconds: 300);
-  static const _resultWindow = 100;
   GlobalKey<FormState> _form = GlobalKey<FormState>();
   final _backFocus = FocusNode(debugLabel: 'Back to Channels');
   final _recoveryFocus = FocusNode(debugLabel: 'Use saved Studio version');
@@ -96,6 +98,8 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
   final _numberFocus = FocusNode(debugLabel: 'Channel number');
   final _saveFocus = FocusNode(debugLabel: 'Save channel');
   final _searchFocus = FocusNode(debugLabel: 'Search programming');
+  final _filterPickerSearch = TextEditingController();
+  final _filterControlFocus = <String, FocusNode>{};
   late final TextEditingController _name;
   late final TextEditingController _number;
   late final TextEditingController _search;
@@ -107,6 +111,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
   DateTime? _candidateAnchor;
   int? _candidateShuffleSeed;
   late int? _blockSize;
+  late bool _includeSpecials;
   late String? _builderKey;
   late Channel? _expectedBase;
   late bool _generated;
@@ -114,27 +119,44 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
   _SourceChoice? _sourceChoice;
   late List<_ManualEntry> _manualEntries;
   final _manualKeyCounts = <String, int>{};
-  late String? _libraryId;
-  late bool _includeWatched;
   late bool _filterIncludeWatched;
   String? _playlistId;
   String? _filterLibraryId;
-  final _filters = <String, String>{};
+  final _filters = <LibraryFilter, List<String>>{};
+  String? _activeFilterKey;
+  List<String> _activeFilterValues = const [];
+  Set<String> _activeAvailableFilterValues = const {};
+  final LinkedHashSet<String> _pendingFilterValues = LinkedHashSet();
+  bool _showPendingFilterValues = false;
+  LibraryOrder _filterOrder = LibraryOrder.supplied;
+  bool _filterOrderExplicit = false;
   String? _manualLibraryId;
   String? _manualMediaType;
   final _manualFilters = <String, String>{};
+  final LinkedHashSet<String> _browseSelection = LinkedHashSet();
+  final Map<String, PlexMediaItem> _browseSelectionItems = {};
+  bool _browseSelecting = false;
+  bool _showBrowseSelected = false;
+  List<_ManualEntry> _lastAddedEntries = const [];
   final _rundownFocus = <_ManualEntry, FocusNode>{};
+  late final TextEditingController _rundownSearch;
+  final _browseScroll = ScrollController();
+  final _rundownScroll = ScrollController();
   bool _manualRundown = false;
   Timer? _countAnnouncementTimer;
   String _settledCountLabel = '';
   late Map<String, Object?> _baselineDraftSignature;
   bool _dirty = false;
   bool _saving = false;
+  bool _tuning = false;
+  int _tuneEpoch = 0;
   bool _conflict = false;
   bool _baseDeleted = false;
   String? _error;
   String? _success;
   ChannelAirCheckStatus? _airCheckStatus;
+
+  double get _uiScale => LineupLayout.scaleFor(MediaQuery.sizeOf(context));
   bool _scheduleIdentityCommitted = false;
   late ({
     List<PlexMediaItem> media,
@@ -143,6 +165,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
   })
   _playableInventory;
 
+  bool get _busy => _saving || _tuning;
   bool get saving => _saving;
   bool get dirty => _dirty;
   ChannelStudioMode get _effectiveMode => _expectedBase != null && !_generated
@@ -183,12 +206,14 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     );
     _number = TextEditingController(text: initialNumber?.toString() ?? '');
     _search = TextEditingController();
+    _rundownSearch = TextEditingController();
     _source = original?.source ?? _defaultSource();
     _playbackMode = original?.playbackMode ?? PlaybackMode.shuffle;
     _anchor =
         original?.anchor ?? DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
     _shuffleSeed = original?.shuffleSeed ?? 0;
     _blockSize = original?.blockSize;
+    _includeSpecials = original?.includeSpecials ?? false;
     _builderKey = _generated ? original!.builderKey : null;
     _configureSource(_source);
     _baselineDraftSignature = _draftSignature;
@@ -202,14 +227,17 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
         .firstOrNull;
     return library == null
         ? const ManualSource([])
-        : LibrarySource(libraryId: library.id, libraryType: library.type);
+        : LibrarySource(
+            libraryId: library.id,
+            libraryType: library.type,
+            order: LibraryOrder.title,
+          );
   }
 
   void _configureSource(ContentSource source) {
     _sourceReadOnly = _generated;
     _sourceChoice = switch (source) {
-      LibrarySource(:final filters) =>
-        filters.isEmpty ? _SourceChoice.library : _SourceChoice.filter,
+      LibrarySource() => _SourceChoice.library,
       PlaylistSource() => _SourceChoice.playlist,
       ManualSource() => _SourceChoice.handPicked,
       MixedSource() => null,
@@ -229,18 +257,8 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
       _ => <_ManualEntry>[],
     };
     _manualRundown = _manualEntries.isNotEmpty;
-    _libraryId = switch (source) {
-      LibrarySource(:final libraryId) => libraryId,
-      _ => widget.controller.selectedLibraryIds.firstOrNull,
-    };
-    _includeWatched = switch (source) {
-      LibrarySource(:final includeWatched) => includeWatched,
-      _ => true,
-    };
     _filterIncludeWatched = switch (source) {
-      LibrarySource(:final includeWatched, :final filters)
-          when filters.isNotEmpty =>
-        includeWatched,
+      LibrarySource(:final includeWatched) => includeWatched,
       _ => true,
     };
     _playlistId = switch (source) {
@@ -248,16 +266,20 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
       _ => _playableInventory.playlists.firstOrNull?.id,
     };
     _filterLibraryId = switch (source) {
-      LibrarySource(:final libraryId, :final filters) when filters.isNotEmpty =>
-        libraryId,
+      LibrarySource(:final libraryId) => libraryId,
       _ => widget.controller.selectedLibraryIds.firstOrNull,
     };
     _filters
       ..clear()
       ..addAll(switch (source) {
-        LibrarySource(:final filters) when filters.isNotEmpty => filters,
+        LibrarySource(:final filters) => filters,
         _ => const {},
       });
+    _filterOrder = switch (source) {
+      LibrarySource(:final order) => order,
+      _ => LibraryOrder.supplied,
+    };
+    _filterOrderExplicit = false;
     _manualLibraryId = null;
     _manualMediaType = null;
     _manualFilters.clear();
@@ -286,12 +308,19 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     _name.dispose();
     _number.dispose();
     _search.dispose();
+    _rundownSearch.dispose();
+    _browseScroll.dispose();
+    _rundownScroll.dispose();
+    _filterPickerSearch.dispose();
     _nameFocus.dispose();
     _numberFocus.dispose();
     _saveFocus.dispose();
     _searchFocus.dispose();
     _countAnnouncementTimer?.cancel();
     for (final node in _rundownFocus.values) {
+      node.dispose();
+    }
+    for (final node in _filterControlFocus.values) {
       node.dispose();
     }
     super.dispose();
@@ -320,6 +349,9 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
           : _playbackMode == PlaybackMode.block
           ? (_blockSize ?? 3)
           : null,
+      'includeSpecials': _playbackMode == PlaybackMode.block
+          ? _includeSpecials
+          : false,
       'builderKey': _builderKey,
     };
   }
@@ -327,15 +359,32 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
   Object get _sourceDraftSignature => switch (_sourceChoice) {
     _SourceChoice.library => {
       'type': 'library',
-      'libraryId': _libraryId,
-      'includeWatched': _includeWatched,
+      'libraryId': _filterLibraryId,
+      'includeWatched': _filterIncludeWatched,
+      'filters': {
+        for (final entry in _filters.entries)
+          entry.key.name: [...entry.value]..sort(),
+      },
+      'order': _libraryDraftOrder(
+        _filterLibraryId,
+        includeWatched: _filterIncludeWatched,
+        filters: _filters,
+      ).name,
     },
     _SourceChoice.playlist => {'type': 'playlist', 'playlistId': _playlistId},
     _SourceChoice.filter => {
       'type': 'filter',
       'libraryId': _filterLibraryId,
       'includeWatched': _filterIncludeWatched,
-      'filters': Map<String, String>.of(_filters),
+      'filters': {
+        for (final entry in _filters.entries)
+          entry.key.name: [...entry.value]..sort(),
+      },
+      'order': _filterDraftOrder(
+        _filterLibraryId,
+        includeWatched: _filterIncludeWatched,
+        filters: _filters,
+      ).name,
     },
     _SourceChoice.handPicked => _manualDraftSignature,
     null => _source.toJson(),
@@ -395,124 +444,155 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
               item.showThumb?.trim().isNotEmpty == true,
         ) ??
         false;
+    final confirmedMovieOnly = _confirmedMovieOnly(draftResolution);
     _stageScheduleIdentity(programmingError);
     return LineupPage(
       traversalPolicy: OrderedTraversalPolicy(),
       title: _name.text.trim().isEmpty ? 'New channel' : _name.text.trim(),
-      titleWidget: _studioTitle(validNumber ? number : null, saved),
-      actions: _studioActions(
-        persisted: persisted,
-        saved: saved,
-        noNumber: noNumber,
-        identityLooksValid: identityLooksValid,
-        programmingError: programmingError,
+      titleWidget: Builder(
+        builder: (_) => _studioTitle(validNumber ? number : null, saved),
       ),
-      child: SingleChildScrollView(
-        key: const Key('studio-scroll'),
-        child: Form(
-          key: _form,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (_error != null && !_conflict && !_baseDeleted) ...[
-                LineupNotice(message: _error!),
-              ],
-              if (_success != null) ...[
-                const SizedBox(height: 12),
-                Semantics(liveRegion: true, child: Text(_success!)),
-              ],
-              if (_saving) ...[
-                const SizedBox(height: 12),
-                Semantics(
-                  liveRegion: true,
-                  container: true,
-                  label: 'Saving channel',
-                  child: const Text('Saving channel…'),
-                ),
-              ],
-              if (noNumber) ...[
-                const SizedBox(height: 12),
-                const LineupNotice(
-                  message: 'No channel numbers are available. Free or renumber a channel from Channels before saving.',
-                ),
-              ],
-              if (_conflict || _baseDeleted) ...[_recoveryInterlock()],
-              if (_error != null ||
-                  _success != null ||
-                  _saving ||
-                  noNumber ||
-                  _conflict ||
-                  _baseDeleted)
-                const SizedBox(height: 12),
-              FocusTraversalOrder(
-                order: const NumericFocusOrder(1),
-                child: LayoutBuilder(
-                  builder: (context, constraints) => ChannelAirCheck(
-                    controller: widget.controller,
-                    channel: _previewDraft,
-                    originalChannel: _expectedBase,
-                    clock: _clock,
-                    compact: constraints.maxWidth < LineupLayout.compact,
-                    inclusionReason: _sourceLabel(
-                      _displaySource,
-                      widget.controller,
+      actions: Builder(
+        builder: (_) => _studioActions(
+          persisted: persisted,
+          saved: saved,
+          noNumber: noNumber,
+          identityLooksValid: identityLooksValid,
+          programmingError: programmingError,
+        ),
+      ),
+      child: Builder(
+        builder: (context) => SingleChildScrollView(
+          key: const Key('studio-scroll'),
+          child: AbsorbPointer(
+            absorbing: _busy,
+            child: Form(
+              key: _form,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (_error != null && !_conflict && !_baseDeleted) ...[
+                    LineupNotice(message: _error!),
+                  ],
+                  if (_success != null) ...[
+                    const SizedBox(height: 12),
+                    Semantics(liveRegion: true, child: Text(_success!)),
+                  ],
+                  if (_saving) ...[
+                    const SizedBox(height: 12),
+                    Semantics(
+                      liveRegion: true,
+                      container: true,
+                      label: 'Saving channel',
+                      child: const Text('Saving channel…'),
                     ),
-                    sourceIssue: programmingError,
-                    playableById: _playableInventory.byId,
-                    onValidityChanged: (status) {
-                      if (!mounted || _airCheckStatus == status) return;
-                      setState(() => _airCheckStatus = status);
-                      if (_isCurrentAirCheckStatus(status)) {
-                        _commitScheduleIdentity();
-                      }
+                  ],
+                  if (noNumber) ...[
+                    const SizedBox(height: 12),
+                    const LineupNotice(
+                      message: 'No channel numbers are available. Free or renumber a channel from Channels before saving.',
+                    ),
+                  ],
+                  if (_conflict || _baseDeleted) ...[_recoveryInterlock()],
+                  if (_error != null ||
+                      _success != null ||
+                      _saving ||
+                      noNumber ||
+                      _conflict ||
+                      _baseDeleted)
+                    const SizedBox(height: 12),
+                  if (_hasPendingProgrammingChoice) ...[
+                    Semantics(
+                      liveRegion: true,
+                      child: Text(
+                        _activeFilterKey != null
+                            ? 'Finish this filter with Done, or cancel it, before saving or tuning.'
+                            : 'Add the selected programs, or cancel selection, before saving or tuning.',
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final programming = _programmingCard();
+                      final station = _stationCard(
+                        hasShowGrouping: hasShowGrouping,
+                        confirmedMovieOnly: confirmedMovieOnly,
+                      );
+                      final preview = ChannelAirCheck(
+                        controller: widget.controller,
+                        channel: _previewDraft,
+                        originalChannel: _expectedBase,
+                        clock: _clock,
+                        compact: constraints.maxWidth < LineupLayout.compact,
+                        inclusionReason: _sourceLabel(
+                          _displaySource,
+                          widget.controller,
+                        ),
+                        sourceIssue: programmingError,
+                        playableById: _playableInventory.byId,
+                        onValidityChanged: (status) {
+                          if (!mounted || _airCheckStatus == status) return;
+                          setState(() => _airCheckStatus = status);
+                          if (_isCurrentAirCheckStatus(status)) {
+                            _commitScheduleIdentity();
+                          }
+                        },
+                      );
+                      return constraints.maxWidth < LineupLayout.compact
+                          ? Column(
+                              children: [
+                                FocusTraversalOrder(
+                                  order: const NumericFocusOrder(1),
+                                  child: station,
+                                ),
+                                const SizedBox(height: 16),
+                                FocusTraversalOrder(
+                                  order: const NumericFocusOrder(2),
+                                  child: programming,
+                                ),
+                                const SizedBox(height: 16),
+                                FocusTraversalOrder(
+                                  order: const NumericFocusOrder(3),
+                                  child: preview,
+                                ),
+                              ],
+                            )
+                          : Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                FocusTraversalOrder(
+                                  order: const NumericFocusOrder(1),
+                                  child: station,
+                                ),
+                                const SizedBox(height: 16),
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Expanded(
+                                      flex: 5,
+                                      child: FocusTraversalOrder(
+                                        order: const NumericFocusOrder(2),
+                                        child: programming,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 16),
+                                    Expanded(
+                                      flex: 4,
+                                      child: FocusTraversalOrder(
+                                        order: const NumericFocusOrder(3),
+                                        child: preview,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            );
                     },
                   ),
-                ),
+                ],
               ),
-              const SizedBox(height: 16),
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  final programming = _programmingCard();
-                  final station = _stationCard(
-                    hasShowGrouping: hasShowGrouping,
-                  );
-                  return constraints.maxWidth < LineupLayout.compact
-                      ? Column(
-                          children: [
-                            FocusTraversalOrder(
-                              order: const NumericFocusOrder(2),
-                              child: programming,
-                            ),
-                            const SizedBox(height: 16),
-                            FocusTraversalOrder(
-                              order: const NumericFocusOrder(3),
-                              child: station,
-                            ),
-                          ],
-                        )
-                      : Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(
-                              flex: 5,
-                              child: FocusTraversalOrder(
-                                order: const NumericFocusOrder(2),
-                                child: programming,
-                              ),
-                            ),
-                            const SizedBox(width: 16),
-                            SizedBox(
-                              width: 330,
-                              child: FocusTraversalOrder(
-                                order: const NumericFocusOrder(3),
-                                child: station,
-                              ),
-                            ),
-                          ],
-                        );
-                },
-              ),
-            ],
+            ),
           ),
         ),
       ),
@@ -551,7 +631,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                 number?.toString() ?? '—',
                 style: TextStyle(
                   color: roles.onFocus,
-                  fontSize: 21,
+                  fontSize: 21 * _uiScale,
                   fontWeight: FontWeight.w900,
                   fontFeatures: const [FontFeature.tabularFigures()],
                 ),
@@ -567,14 +647,15 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.headlineSmall
-                        ?.copyWith(fontWeight: FontWeight.w800),
+                        ?.apply(fontSizeFactor: _uiScale)
+                        .copyWith(fontWeight: FontWeight.w800),
                   ),
                   DefaultTextStyle.merge(
                     style: TextStyle(
                       color: _conflict || _baseDeleted
                           ? Theme.of(context).colorScheme.error
                           : roles.secondaryText,
-                      fontSize: 12,
+                      fontSize: 12 * _uiScale,
                       fontWeight: FontWeight.w800,
                       letterSpacing: 0.8,
                     ),
@@ -604,7 +685,8 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     final showSave =
         !recovering && (!_generated || !persisted || _dirty || _saving);
     final canSave =
-        !_saving &&
+        !_busy &&
+        !_hasPendingProgrammingChoice &&
         (!persisted || _dirty) &&
         !noNumber &&
         !(identityLooksValid && programmingError != null) &&
@@ -618,7 +700,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
           child: TextButton.icon(
             focusNode: _backFocus,
             autofocus: true,
-            onPressed: _saving ? null : () => unawaited(_leave()),
+            onPressed: _busy ? null : () => unawaited(_leave()),
             icon: const Icon(Icons.arrow_back),
             label: const Text('Back to Channels'),
           ),
@@ -627,7 +709,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
           FocusTraversalOrder(
             order: const NumericFocusOrder(4),
             child: OutlinedButton(
-              onPressed: _saving ? null : _duplicate,
+              onPressed: _busy ? null : _duplicate,
               child: const Text('Duplicate as custom'),
             ),
           ),
@@ -637,13 +719,13 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
             child: saved
                 ? FilledButton.icon(
                     key: const Key('studio-tune'),
-                    onPressed: _saving ? null : _tune,
+                    onPressed: _busy ? null : _tune,
                     icon: const Icon(Icons.play_arrow),
                     label: const Text('Tune in'),
                   )
                 : OutlinedButton.icon(
                     key: const Key('studio-tune'),
-                    onPressed: null,
+                    onPressed: canSave ? _confirmSaveAndTune : null,
                     icon: const Icon(Icons.play_arrow),
                     label: const Text('Tune in'),
                   ),
@@ -716,7 +798,8 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                             ? 'This channel was deleted'
                             : 'Another edit was saved first',
                         style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.w800),
+                            ?.apply(fontSizeFactor: _uiScale)
+                            .copyWith(fontWeight: FontWeight.w800),
                       ),
                       const SizedBox(height: 4),
                       Text(
@@ -745,14 +828,19 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
               spacing: 10,
               runSpacing: 10,
               children: [
-                if (_baseDeleted)
+                if (_baseDeleted) ...[
                   OutlinedButton(
                     focusNode: _saveFocus,
                     style: recoveryButtonStyle,
+                    onPressed: _saving ? null : _prepareSaveAsNew,
+                    child: const Text('Save as new custom channel'),
+                  ),
+                  OutlinedButton(
+                    style: recoveryButtonStyle,
                     onPressed: _saving ? null : _reload,
                     child: const Text('Return to Channels'),
-                  )
-                else ...[
+                  ),
+                ] else ...[
                   OutlinedButton(
                     focusNode: _recoveryFocus,
                     style: recoveryButtonStyle,
@@ -784,7 +872,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
             label,
             style: TextStyle(
               color: LineupTheme.of(context).mutedText,
-              fontSize: 11,
+              fontSize: 11 * _uiScale,
               fontWeight: FontWeight.w800,
               letterSpacing: 0.7,
             ),
@@ -833,11 +921,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
               ),
               ButtonSegment(
                 value: _SourceChoice.playlist,
-                label: Text('Playlist'),
-              ),
-              ButtonSegment(
-                value: _SourceChoice.filter,
-                label: Text('Collection or filter'),
+                label: Text('Plex playlist'),
               ),
               ButtonSegment(
                 value: _SourceChoice.handPicked,
@@ -851,8 +935,12 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
           ),
         ),
         const SizedBox(height: 12),
+        const Text(
+          'Only the selected source is saved. Switching back restores its draft choices.',
+        ),
+        const SizedBox(height: 8),
         switch (_sourceChoice) {
-          _SourceChoice.library => _libraryEditor(),
+          _SourceChoice.library => _filterEditor(),
           _SourceChoice.playlist => _playlistEditor(),
           _SourceChoice.filter => _filterEditor(),
           _SourceChoice.handPicked => _manualEditor(),
@@ -862,49 +950,22 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     ],
   );
 
-  Widget _libraryEditor() => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      _inventoryStatus(),
-      DropdownButtonFormField<String>(
-        isExpanded: true,
-        initialValue:
-            widget.controller.libraries.any(
-              (library) =>
-                  library.id == _libraryId &&
-                  widget.controller.selectedLibraryIds.contains(library.id),
-            )
-            ? _libraryId
-            : null,
-        decoration: const InputDecoration(labelText: 'Content library'),
-        items: [
-          for (final library in widget.controller.libraries.where(
-            (library) =>
-                widget.controller.selectedLibraryIds.contains(library.id),
-          ))
-            DropdownMenuItem(value: library.id, child: Text(library.title)),
-        ],
-        onChanged: _saving
-            ? null
-            : (value) => _changed(() => _libraryId = value),
-      ),
-      SwitchListTile(
-        value: _includeWatched,
-        title: const Text('Include watched items'),
-        onChanged: _saving
-            ? null
-            : (value) => _changed(() => _includeWatched = value),
-      ),
-    ],
-  );
-
   Widget _playlistEditor() {
     final available = _playableInventory.playlists;
     final selected = available.any((playlist) => playlist.id == _playlistId);
+    final otherUses = widget.controller.channels.where(
+      (channel) =>
+          channel.id != _id &&
+          channel.source is PlaylistSource &&
+          (channel.source as PlaylistSource).playlistId == _playlistId,
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _inventoryStatus(),
+        const Text(
+          'Uses an existing Plex playlist. Manage its contents in Plex.',
+        ),
         if (_playlistId != null && !selected)
           Text(
             'Playlist $_playlistId is unavailable — retained until replaced.',
@@ -922,6 +983,21 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
               ? null
               : (value) => _changed(() => _playlistId = value),
         ),
+        if (otherUses.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          const Text('Also used by'),
+          for (final channel in otherUses)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text('${channel.number} · ${channel.name}'),
+              trailing: TextButton(
+                onPressed: _saving || widget.onOpenChannel == null
+                    ? null
+                    : () => widget.onOpenChannel!(channel),
+                child: const Text('Open channel'),
+              ),
+            ),
+        ],
       ],
     );
   }
@@ -933,6 +1009,9 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
       filters: _filters,
       includeWatched: _filterIncludeWatched,
     );
+    if (_activeFilterKey case final key?) {
+      return _filterPickerPanel(key);
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -940,45 +1019,32 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
         _libraryDropdown(
           key: const Key('studio-filter-library'),
           value: _filterLibraryId,
-          onChanged: (value) => _filterChanged(() {
-            _filterLibraryId = value;
-            _filters.clear();
-          }),
+          onChanged: (value) => _filterChanged(() => _filterLibraryId = value),
         ),
-        for (final key in _facetKeys)
-          _facetDropdown(
-            key: key,
-            values: facets[key] ?? const [],
-            selected: _filters[key],
-            onChanged: (value) => _filterChanged(() {
-              if (value == null) {
-                _filters.remove(key);
-              } else {
-                _filters[key] = value;
-              }
-            }),
+        const SizedBox(height: 8),
+        _filterControl('collection', facets['collection'] ?? const []),
+        if ((facets['collection'] ?? const []).isEmpty)
+          const Text(
+            'This library has no collections. Other filters remain available.',
           ),
-        SwitchListTile(
-          key: const Key('studio-filter-include-watched'),
-          value: _filterIncludeWatched,
-          title: const Text('Include watched items'),
-          onChanged: _saving
-              ? null
-              : (value) => _filterChanged(() => _filterIncludeWatched = value),
+        const SizedBox(height: 8),
+        const Text('Filters'),
+        for (final key in _facetKeys.where((key) => key != 'collection'))
+          _filterControl(key, facets[key] ?? const []),
+        const Text(
+          'Any selected value within each filter; all filters together.',
         ),
-        SwitchListTile(
-          key: const Key('studio-newest-first'),
-          value: _filters['sort'] == 'added:desc',
-          title: const Text('Newest first'),
-          onChanged: _saving
-              ? null
-              : (value) => _filterChanged(() {
-                  if (value) {
-                    _filters['sort'] = 'added:desc';
-                  } else {
-                    _filters.remove('sort');
-                  }
-                }),
+        Material(
+          color: Theme.of(context).colorScheme.surface,
+          child: SwitchListTile(
+            key: const Key('studio-filter-include-watched'),
+            value: _filterIncludeWatched,
+            title: const Text('Include watched items'),
+            onChanged: _saving
+                ? null
+                : (value) =>
+                      _filterChanged(() => _filterIncludeWatched = value),
+          ),
         ),
         Text('${matches.length} matching programs'),
         for (final item in matches.take(5)) Text(item.title),
@@ -987,6 +1053,194 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
       ],
     );
   }
+
+  Widget _filterControl(String key, List<String> values) {
+    final filter = _libraryFilter(key);
+    final selected = _filters[filter] ?? const [];
+    final unavailable = selected
+        .where((value) => !values.contains(value))
+        .length;
+    return ListTile(
+      key: Key('studio-filter-$key'),
+      contentPadding: EdgeInsets.zero,
+      title: Text(_facetLabel(key)),
+      subtitle: Text(
+        selected.isEmpty
+            ? key == 'collection'
+                  ? 'Any collection'
+                  : 'Any'
+            : '${selected.take(3).join(', ')}${selected.length > 3 ? ' · +${selected.length - 3} more' : ''}${unavailable > 0 ? ' · $unavailable unavailable' : ''}',
+      ),
+      trailing: OutlinedButton(
+        focusNode: _filterControlFocus.putIfAbsent(
+          key,
+          () => FocusNode(debugLabel: 'Edit ${_facetLabel(key)} filter'),
+        ),
+        onPressed: _saving ? null : () => _openFilterPicker(key, values),
+        child: Text(selected.isEmpty ? 'Choose' : 'Edit'),
+      ),
+    );
+  }
+
+  void _openFilterPicker(String key, List<String> values) {
+    final filter = _libraryFilter(key);
+    setState(() {
+      _activeFilterKey = key;
+      _activeFilterValues = ({...values, ...?_filters[filter]}.toList()
+        ..sort());
+      _activeAvailableFilterValues = values.toSet();
+      _pendingFilterValues
+        ..clear()
+        ..addAll(_filters[filter] ?? const []);
+      _showPendingFilterValues = false;
+      _filterPickerSearch.clear();
+    });
+  }
+
+  Widget _filterPickerPanel(String key) {
+    final query = _filterPickerSearch.text.trim().toLowerCase();
+    final visible = _activeFilterValues
+        .where(
+          (value) =>
+              (!_showPendingFilterValues ||
+                  _pendingFilterValues.contains(value)) &&
+              value.toLowerCase().contains(query),
+        )
+        .toList(growable: false);
+    final pendingFilters = Map<LibraryFilter, List<String>>.from(_filters);
+    if (_pendingFilterValues.isEmpty) {
+      pendingFilters.remove(_libraryFilter(key));
+    } else {
+      pendingFilters[_libraryFilter(key)] = _pendingFilterValues.toList();
+    }
+    final count = _filteredInventory(
+      libraryId: _filterLibraryId,
+      filters: pendingFilters,
+      includeWatched: _filterIncludeWatched,
+    ).length;
+    final unavailable = _pendingFilterValues
+        .where((value) => !_activeAvailableFilterValues.contains(value))
+        .toSet();
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.escape): () =>
+            _closeFilterPicker(key),
+      },
+      child: Focus(
+        autofocus: true,
+        child: Column(
+          key: Key('studio-filter-picker-$key'),
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('${_libraryTitle(_filterLibraryId)} · ${_facetLabel(key)}'),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _filterPickerSearch,
+              autofocus: true,
+              decoration: const InputDecoration(
+                labelText: 'Search values',
+                prefixIcon: Icon(Icons.search),
+              ),
+              onChanged: (_) => setState(() {}),
+            ),
+            Wrap(
+              spacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                TextButton(
+                  onPressed: () => setState(
+                    () => _showPendingFilterValues = !_showPendingFilterValues,
+                  ),
+                  child: Text('${_pendingFilterValues.length} selected'),
+                ),
+                TextButton(
+                  onPressed: _pendingFilterValues.isEmpty
+                      ? null
+                      : () => setState(_pendingFilterValues.clear),
+                  child: const Text('Clear selection'),
+                ),
+                if (unavailable.isNotEmpty)
+                  TextButton(
+                    onPressed: () => setState(
+                      () => _pendingFilterValues.removeAll(unavailable),
+                    ),
+                    child: Text('Remove ${unavailable.length} unavailable'),
+                  ),
+                Text('$count matching programs'),
+              ],
+            ),
+            SizedBox(
+              height: 320,
+              child: ListView.builder(
+                itemCount: visible.length,
+                itemBuilder: (context, index) {
+                  final value = visible[index];
+                  return CheckboxListTile(
+                    value: _pendingFilterValues.contains(value),
+                    title: Text(
+                      _activeAvailableFilterValues.contains(value)
+                          ? value
+                          : '$value (unavailable — retained)',
+                    ),
+                    onChanged: (checked) => setState(() {
+                      checked == true
+                          ? _pendingFilterValues.add(value)
+                          : _pendingFilterValues.remove(value);
+                    }),
+                  );
+                },
+              ),
+            ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: () => _closeFilterPicker(key),
+                  child: const Text('Cancel'),
+                ),
+                const SizedBox(width: 8),
+                FilledButton(
+                  onPressed: () {
+                    final result = _pendingFilterValues.toList();
+                    final filter = _libraryFilter(key);
+                    _filterChanged(() {
+                      if (result.isEmpty) {
+                        _filters.remove(filter);
+                      } else {
+                        _filters[filter] = List.unmodifiable(result);
+                      }
+                      _activeFilterKey = null;
+                    });
+                    _restoreFilterFocus(key);
+                  },
+                  child: const Text('Done'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _closeFilterPicker(String key) {
+    setState(() => _activeFilterKey = null);
+    _restoreFilterFocus(key);
+  }
+
+  void _restoreFilterFocus(String key) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _filterControlFocus[key]?.requestFocus();
+    });
+  }
+
+  String _libraryTitle(String? id) =>
+      widget.controller.libraries
+          .where((library) => library.id == id)
+          .firstOrNull
+          ?.title ??
+      id ??
+      'Library';
 
   Widget _manualEditor() {
     final inventory = _playableInventory.byId.values;
@@ -999,8 +1253,28 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
       filters: _manualFilters,
       search: _search.text,
     );
-    final shown = visible.take(_resultWindow).toList(growable: false);
+    final shown = _showBrowseSelected
+        ? _browseSelection
+              .map(
+                (id) =>
+                    _playableInventory.byId[id] ?? _browseSelectionItems[id],
+              )
+              .nonNulls
+              .toList(growable: false)
+        : visible;
+    final unavailableSelections = _browseSelection
+        .where((id) => !_playableInventory.byId.containsKey(id))
+        .length;
     final selectedIds = _manualEntries.map((entry) => entry.id).toSet();
+    final rundownQuery = _rundownSearch.text.trim().toLowerCase();
+    final rundownEntries = [
+      for (var index = 0; index < _manualEntries.length; index++)
+        if (_manualEntrySearchText(
+          _manualEntries[index],
+          inventoryById,
+        ).contains(rundownQuery))
+          (entry: _manualEntries[index], index: index),
+    ];
     final countLabel =
         '${visible.length} matching, ${_manualEntries.length} selected';
     return Column(
@@ -1022,7 +1296,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
             ChoiceChip(
               key: const Key('studio-manual-rundown-stage'),
               selected: _manualRundown,
-              label: Text('Rundown · ${_manualEntries.length}'),
+              label: Text('Channel programs · ${_manualEntries.length}'),
               onSelected: _saving
                   ? null
                   : (_) => setState(() => _manualRundown = true),
@@ -1104,66 +1378,136 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
             ),
           Wrap(
             spacing: 8,
-            children: [
-              TextButton(
-                onPressed:
-                    _saving ||
-                        !shown.any((item) => !selectedIds.contains(item.id))
-                    ? null
-                    : () => _selectVisible(shown),
-                child: const Text('Select visible'),
-              ),
-              TextButton(
-                onPressed:
-                    _saving ||
-                        !shown.any((item) => selectedIds.contains(item.id))
-                    ? null
-                    : () => _clearVisible(shown),
-                child: const Text('Clear visible'),
-              ),
-            ],
+            runSpacing: 8,
+            children: _browseSelecting
+                ? [
+                    Text(
+                      '${_browseSelection.length} selected${_browseSelection.where((id) => !visible.any((item) => item.id == id)).isEmpty ? '' : ' · selections outside this view'}${unavailableSelections == 0 ? '' : ' · $unavailableSelections unavailable; retained off air if added'}',
+                    ),
+                    TextButton(
+                      onPressed: _browseSelection.isEmpty
+                          ? null
+                          : () => _setShowBrowseSelected(true),
+                      child: const Text('Show selected'),
+                    ),
+                    if (_showBrowseSelected)
+                      TextButton(
+                        onPressed: () => _setShowBrowseSelected(false),
+                        child: const Text('Back to results'),
+                      ),
+                    TextButton(
+                      onPressed: () => setState(() {
+                        _browseSelecting = false;
+                        _browseSelection.clear();
+                        _browseSelectionItems.clear();
+                        _showBrowseSelected = false;
+                      }),
+                      child: const Text('Cancel'),
+                    ),
+                    FilledButton(
+                      onPressed: _browseSelection.isEmpty
+                          ? null
+                          : _addBrowseSelected,
+                      child: Text('Add selected (${_browseSelection.length})'),
+                    ),
+                  ]
+                : [
+                    OutlinedButton(
+                      onPressed: () => setState(() => _browseSelecting = true),
+                      child: const Text('Select'),
+                    ),
+                    if (_lastAddedEntries.isNotEmpty)
+                      TextButton(
+                        onPressed: _undoLastAddition,
+                        child: const Text('Undo last addition'),
+                      ),
+                  ],
           ),
-          if (visible.length > _resultWindow)
-            Text(
-              'Showing the first $_resultWindow of ${visible.length} matches. Narrow the filters to see more.',
-            ),
           SizedBox(
             height: 300,
             child: ListView.builder(
               key: const Key('studio-results'),
+              controller: _browseScroll,
               itemCount: shown.length,
               itemBuilder: (context, index) {
                 final item = shown[index];
-                return CheckboxListTile(
+                final available = _playableInventory.byId.containsKey(item.id);
+                return ListTile(
                   key: Key('studio-result-${item.id}'),
-                  value: selectedIds.contains(item.id),
                   title: Text(item.title),
-                  subtitle: item.grandparentTitle == null
+                  subtitle: item.grandparentTitle != null || !available
+                      ? Text(
+                          [
+                            ?item.grandparentTitle,
+                            if (!available)
+                              'Unavailable — retained off air if added',
+                          ].join(' · '),
+                        )
+                      : null,
+                  leading: _browseSelecting
+                      ? Checkbox(
+                          value: _browseSelection.contains(item.id),
+                          onChanged: selectedIds.contains(item.id)
+                              ? null
+                              : (_) => _toggleBrowseSelection(item),
+                        )
+                      : null,
+                  trailing: _browseSelecting
                       ? null
-                      : Text(item.grandparentTitle!),
-                  onChanged: _saving
+                      : TextButton(
+                          onPressed: _saving || selectedIds.contains(item.id)
+                              ? null
+                              : () => _addManualItem(item),
+                          child: Text(
+                            selectedIds.contains(item.id) ? 'Added' : 'Add',
+                          ),
+                        ),
+                  onTap: selectedIds.contains(item.id)
                       ? null
-                      : (selected) => _toggleManual(item.id, selected == true),
+                      : _browseSelecting
+                      ? () => _toggleBrowseSelection(item)
+                      : () => _addManualItem(item),
                 );
               },
             ),
           ),
         ] else ...[
+          TextField(
+            key: const Key('studio-rundown-search'),
+            controller: _rundownSearch,
+            decoration: InputDecoration(
+              labelText: 'Find a channel program',
+              suffixIcon: rundownQuery.isEmpty
+                  ? null
+                  : IconButton(
+                      tooltip: 'Clear channel program search',
+                      onPressed: () => setState(_rundownSearch.clear),
+                      icon: const Icon(Icons.clear),
+                    ),
+            ),
+            onChanged: (_) => setState(() {}),
+          ),
+          const SizedBox(height: 8),
           Text(
             _manualEntries.isEmpty
                 ? 'No programs selected. Return to Browse library to add programming.'
-                : '${_manualEntries.length} selected · Alt+Up/Down reorders · Delete removes',
+                : '${rundownEntries.length} of ${_manualEntries.length} shown · Alt+Up/Down reorders · Delete removes${rundownQuery.isEmpty ? '' : ' · Clear search to drag reorder'}',
           ),
           const SizedBox(height: 8),
           SizedBox(
-            height: _manualEntries.isEmpty ? 0 : 420,
-            child: ListView.builder(
+            height: rundownEntries.isEmpty ? 0 : 420,
+            child: ReorderableListView.builder(
               key: const Key('studio-rundown'),
-              itemCount: _manualEntries.length,
+              scrollController: _rundownScroll,
+              buildDefaultDragHandles: false,
+              itemCount: rundownEntries.length,
+              onReorderItem: _saving || rundownQuery.isNotEmpty
+                  ? (_, _) {}
+                  : (from, to) => _reorderManual(from, to),
               itemBuilder: (context, index) => _rundownRow(
-                _manualEntries[index],
-                index,
-                !inventoryById.containsKey(_manualEntries[index].id),
+                rundownEntries[index].entry,
+                rundownEntries[index].index,
+                !inventoryById.containsKey(rundownEntries[index].entry.id),
                 inventoryById,
               ),
             ),
@@ -1173,18 +1517,62 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     );
   }
 
-  void _toggleManual(String id, bool selected) {
+  void _addManualItem(PlexMediaItem item) {
+    _refreshPlayableInventory();
+    final current = _playableInventory.byId[item.id];
+    if (current == null) {
+      setState(() {});
+      return;
+    }
+    final entry = _newManualEntry(channelItemFor(current));
+    _changed(() {
+      _manualEntries.add(entry);
+      _lastAddedEntries = [entry];
+    });
+  }
+
+  void _toggleBrowseSelection(PlexMediaItem item) => setState(() {
+    if (_browseSelection.remove(item.id)) {
+      _browseSelectionItems.remove(item.id);
+    } else {
+      _browseSelection.add(item.id);
+      _browseSelectionItems[item.id] = item;
+    }
+  });
+
+  void _setShowBrowseSelected(bool value) {
+    setState(() => _showBrowseSelected = value);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _browseScroll.hasClients) _browseScroll.jumpTo(0);
+    });
+  }
+
+  void _addBrowseSelected() {
+    final added = <_ManualEntry>[];
     _refreshPlayableInventory();
     _changed(() {
-      if (selected && !_manualEntries.any((entry) => entry.id == id)) {
-        if (_playableInventory.byId[id] case final item?) {
-          _manualEntries.add(_newManualEntry(channelItemFor(item)));
+      for (final id in _browseSelection) {
+        if (_manualEntries.any((entry) => entry.id == id)) continue;
+        if (_playableInventory.byId[id] ?? _browseSelectionItems[id]
+            case final item?) {
+          final entry = _newManualEntry(channelItemFor(item));
+          _manualEntries.add(entry);
+          added.add(entry);
         }
-      } else if (!selected) {
-        _removeManualEntriesWhere((entry) => entry.id == id);
       }
-      _settledCountLabel = '';
-      _scheduleCountAnnouncement();
+      _lastAddedEntries = List.unmodifiable(added);
+      _browseSelection.clear();
+      _browseSelectionItems.clear();
+      _browseSelecting = false;
+      _showBrowseSelected = false;
+    });
+  }
+
+  void _undoLastAddition() {
+    final undo = _lastAddedEntries.toSet();
+    _changed(() {
+      _removeManualEntriesWhere(undo.contains);
+      _lastAddedEntries = const [];
     });
   }
 
@@ -1344,7 +1732,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     Iterable<PlexMediaItem>? inventory,
     String? libraryId,
     String? mediaType,
-    Map<String, String> filters = const {},
+    Map<Object, Object> filters = const {},
     String search = '',
     bool includeWatched = true,
   }) {
@@ -1359,20 +1747,26 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
               (item.grandparentTitle?.toLowerCase().contains(query) ?? false)),
     );
     for (final filter in filters.entries) {
-      items = switch (filter.key) {
+      final key = filter.key is LibraryFilter
+          ? (filter.key as LibraryFilter).name
+          : filter.key as String;
+      final values = filter.value is List<String>
+          ? filter.value as List<String>
+          : [filter.value as String];
+      items = switch (key) {
         'collection' => items.where(
-          (item) => item.collections.contains(filter.value),
+          (item) => item.collections.any(values.contains),
         ),
-        'genre' => items.where((item) => item.genres.contains(filter.value)),
-        'studio' => items.where((item) => item.studio == filter.value),
-        'actor' => items.where((item) => item.actors.contains(filter.value)),
+        'genre' => items.where((item) => item.genres.any(values.contains)),
+        'studio' => items.where((item) => values.contains(item.studio)),
+        'actor' => items.where((item) => item.actors.any(values.contains)),
         'director' => items.where(
-          (item) => item.directors.contains(filter.value),
+          (item) => item.directors.any(values.contains),
         ),
         'decade' => items.where(
-          (item) => channelDecadeForYear(item.year) == filter.value,
+          (item) => values.contains(channelDecadeForYear(item.year)),
         ),
-        'sort' when filter.value == 'added:desc' =>
+        'sort' when values.single == 'added:desc' =>
           items.toList()..sort(
             (left, right) =>
                 (right.addedAt ?? DateTime.fromMillisecondsSinceEpoch(0))
@@ -1395,29 +1789,6 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
 
   String get _countLabel =>
       '${_manualMatches.length} matching, ${_manualEntries.length} selected';
-
-  void _selectVisible(List<PlexMediaItem> rendered) {
-    _refreshPlayableInventory();
-    _changed(() {
-      for (final renderedItem in rendered) {
-        if (_playableInventory.byId[renderedItem.id] case final current?
-            when !_manualEntries.any((entry) => entry.id == current.id)) {
-          _manualEntries.add(_newManualEntry(channelItemFor(current)));
-        }
-      }
-      _settledCountLabel = '';
-      _scheduleCountAnnouncement();
-    });
-  }
-
-  void _clearVisible(List<PlexMediaItem> rendered) {
-    final visibleIds = rendered.map((item) => item.id).toSet();
-    _changed(() {
-      _removeManualEntriesWhere((entry) => visibleIds.contains(entry.id));
-      _settledCountLabel = '';
-      _scheduleCountAnnouncement();
-    });
-  }
 
   Widget _rundownRow(
     _ManualEntry entry,
@@ -1442,23 +1813,36 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
       () => FocusNode(debugLabel: 'Selected program $positionedTitle'),
     );
     focus.debugLabel = 'Selected program $positionedTitle';
+    final liveItem = inventoryById[entry.id];
+    final duration = liveItem?.duration ?? entry.item.duration;
+    final season = liveItem?.seasonNumber ?? entry.item.seasonNumber;
+    final episode = liveItem?.episodeNumber ?? entry.item.episodeNumber;
+    final facts = [
+      '${index + 1} of ${_manualEntries.length}',
+      _compactDuration(duration),
+      if (season != null || episode != null)
+        'S${season ?? '—'} E${episode ?? '—'}',
+    ];
     final tile = ListTile(
-      key: entry.occurrence == 1
-          ? Key('studio-rundown-${entry.id}')
-          : ObjectKey(entry),
+      key: entry.occurrence == 1 ? Key('studio-rundown-${entry.id}') : null,
       title: Text(title),
-      subtitle: unavailable
-          ? Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Unavailable — retained until removed'),
-                Text('${index + 1} of ${_manualEntries.length}'),
-              ],
-            )
-          : Text('${index + 1} of ${_manualEntries.length}'),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(facts.join(' · ')),
+          if (unavailable) const Text('Unavailable — retained until removed'),
+        ],
+      ),
       trailing: Wrap(
         spacing: 4,
         children: [
+          Tooltip(
+            message: 'Drag $positionedTitle to reorder',
+            child: ReorderableDragStartListener(
+              index: index,
+              child: const Icon(Icons.drag_handle),
+            ),
+          ),
           IconButton(
             tooltip: 'Move $positionedTitle earlier in $_draftChannelLabel',
             onPressed: _saving || index == 0
@@ -1474,6 +1858,11 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
             icon: const Icon(Icons.arrow_downward),
           ),
           IconButton(
+            tooltip: 'Move $positionedTitle before or after another program',
+            onPressed: _saving ? null : () => _moveManualTo(entry),
+            icon: const Icon(Icons.low_priority),
+          ),
+          IconButton(
             tooltip: 'Remove $positionedTitle from $_draftChannelLabel',
             onPressed: _saving ? null : () => _removeManual(entry),
             icon: const Icon(Icons.delete_outline),
@@ -1482,6 +1871,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
       ),
     );
     return CallbackShortcuts(
+      key: ObjectKey(entry),
       bindings: {
         const SingleActivator(LogicalKeyboardKey.arrowUp, alt: true): () =>
             _moveManual(entry, -1),
@@ -1528,6 +1918,20 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     Map<String, PlexMediaItem> inventoryById,
   ) => inventoryById[entry.id]?.title ?? entry.item.title;
 
+  String _manualEntrySearchText(
+    _ManualEntry entry,
+    Map<String, PlexMediaItem> inventoryById,
+  ) {
+    final item = inventoryById[entry.id];
+    return [
+      item?.title ?? entry.item.title,
+      item?.grandparentTitle ?? entry.item.showTitle,
+      item?.seasonNumber ?? entry.item.seasonNumber,
+      item?.episodeNumber ?? entry.item.episodeNumber,
+      entry.id,
+    ].join(' ').toLowerCase();
+  }
+
   String get _draftChannelLabel => _name.text.trim().isEmpty
       ? 'new channel'
       : 'channel ${_name.text.trim()}';
@@ -1543,6 +1947,37 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _rundownFocus[entry]?.requestFocus();
+    });
+  }
+
+  void _reorderManual(int from, int to) {
+    if (_saving || from == to) return;
+    final entry = _manualEntries[from];
+    _changed(() {
+      _manualEntries.removeAt(from);
+      _manualEntries.insert(to, entry);
+    });
+  }
+
+  Future<void> _moveManualTo(_ManualEntry entry) async {
+    final target = await showDialog<({int index, bool after})>(
+      context: context,
+      builder: (context) => _MoveProgramDialog(
+        entries: _manualEntries,
+        moving: entry,
+        titleFor: (candidate) =>
+            _manualEntryTitle(candidate, _playableInventory.byId),
+      ),
+    );
+    if (target == null || !mounted) return;
+    final from = _manualEntries.indexOf(entry);
+    if (from < 0) return;
+    _changed(() {
+      _manualEntries.removeAt(from);
+      var destination = target.index;
+      if (from < destination) destination--;
+      if (target.after) destination++;
+      _manualEntries.insert(destination.clamp(0, _manualEntries.length), entry);
     });
   }
 
@@ -1590,99 +2025,132 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     });
   }
 
-  Widget _stationCard({required bool hasShowGrouping}) {
+  Widget _stationCard({
+    required bool hasShowGrouping,
+    required bool confirmedMovieOnly,
+  }) {
     final roles = LineupTheme.of(context);
-    final stationName = _name.text.trim().isEmpty
-        ? 'Unnamed station'
-        : _name.text.trim();
     return Container(
       key: const Key('studio-station'),
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.only(top: 8, bottom: 16),
       decoration: BoxDecoration(
-        color: roles.primarySurface,
-        border: Border.all(color: roles.subtleBorder),
-        borderRadius: BorderRadius.circular(roles.panelRadius),
+        border: Border(bottom: BorderSide(color: roles.subtleBorder)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              Container(
-                width: 64,
-                height: 64,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: roles.progressFill,
-                  borderRadius: BorderRadius.circular(roles.panelRadius),
-                ),
-                child: Text(
-                  int.tryParse(_number.text)?.toString() ?? '—',
-                  style: TextStyle(
-                    color: roles.onFocus,
-                    fontSize: 28,
-                    fontWeight: FontWeight.w900,
-                    fontFeatures: const [FontFeature.tabularFigures()],
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final identity = Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      key: const Key('studio-name'),
+                      controller: _name,
+                      focusNode: _nameFocus,
+                      enabled: !_saving,
+                      decoration: const InputDecoration(
+                        labelText: 'Station name',
+                        hintText: 'Required',
+                      ),
+                      onChanged: (_) => _changed(),
+                      validator: (value) =>
+                          value == null || value.trim().isEmpty
+                          ? 'Enter a channel name.'
+                          : null,
+                    ),
                   ),
-                ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
+                  const SizedBox(width: 12),
+                  SizedBox(
+                    width: 120,
+                    child: TextFormField(
+                      key: const Key('studio-number'),
+                      controller: _number,
+                      focusNode: _numberFocus,
+                      enabled: !_saving,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(labelText: 'Number'),
+                      onChanged: (_) => _changed(),
+                      validator: _validateNumber,
+                    ),
+                  ),
+                ],
+              );
+              final playback = Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    _generated
+                        ? 'PLAYBACK RHYTHM · READ-ONLY'
+                        : 'PLAYBACK RHYTHM',
+                    style: TextStyle(
+                      color: roles.secondaryText,
+                      fontSize: 11 * _uiScale,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  if (_generated)
                     Text(
-                      'STATION',
-                      style: TextStyle(
-                        color: roles.secondaryText,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.2,
+                      _rhythmLabel(_playbackMode, _blockSize),
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    )
+                  else
+                    RadioGroup<PlaybackMode>(
+                      groupValue: _playbackMode,
+                      onChanged: (value) {
+                        if (_busy || value == null) return;
+                        _changed(() {
+                          _playbackMode = value;
+                          _blockSize ??= 3;
+                        });
+                      },
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: _rhythmChoice(
+                              PlaybackMode.sequential,
+                              'In order',
+                              enabled: true,
+                            ),
+                          ),
+                          Expanded(
+                            child: _rhythmChoice(
+                              PlaybackMode.shuffle,
+                              'Mix it up',
+                              enabled: true,
+                            ),
+                          ),
+                          Expanded(
+                            child: _rhythmChoice(
+                              PlaybackMode.block,
+                              'Mini-marathons',
+                              enabled:
+                                  !confirmedMovieOnly ||
+                                  _playbackMode == PlaybackMode.block,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    const SizedBox(height: 4),
-                    Semantics(
-                      header: true,
-                      child: Text(
-                        stationName,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.w800),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          TextFormField(
-            key: const Key('studio-name'),
-            controller: _name,
-            focusNode: _nameFocus,
-            enabled: !_saving,
-            decoration: const InputDecoration(
-              labelText: 'Station name',
-              hintText: 'Required',
-            ),
-            onChanged: (_) => _changed(),
-            validator: (value) => value == null || value.trim().isEmpty
-                ? 'Enter a channel name.'
-                : null,
-          ),
-          const SizedBox(height: 12),
-          TextFormField(
-            key: const Key('studio-number'),
-            controller: _number,
-            focusNode: _numberFocus,
-            enabled: !_saving,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(
-              labelText: 'Channel number (1–1000)',
-            ),
-            onChanged: (_) => _changed(),
-            validator: _validateNumber,
+                  Text(_rhythmHelp(_playbackMode)),
+                ],
+              );
+              if (constraints.maxWidth < 760) {
+                return Column(
+                  children: [identity, const SizedBox(height: 12), playback],
+                );
+              }
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(flex: 9, child: identity),
+                  const SizedBox(width: 24),
+                  Expanded(flex: 11, child: playback),
+                ],
+              );
+            },
           ),
           if (_conflictingChannel != null)
             Align(
@@ -1694,53 +2162,16 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                 child: const Text('Use next available'),
               ),
             ),
-          const SizedBox(height: 18),
-          Text(
-            _generated ? 'PLAYBACK RHYTHM · READ-ONLY' : 'PLAYBACK RHYTHM',
-            style: TextStyle(
-              color: roles.secondaryText,
-              fontSize: 11,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 1,
-            ),
-          ),
-          const SizedBox(height: 6),
-          if (_generated)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Text(
-                _rhythmLabel(_playbackMode, _blockSize),
-                style: const TextStyle(fontWeight: FontWeight.w700),
-              ),
-            )
-          else
-            RadioGroup<PlaybackMode>(
-              groupValue: _playbackMode,
-              onChanged: (value) {
-                if (_saving || value == null) return;
-                _changed(() {
-                  _playbackMode = value;
-                  _blockSize ??= 3;
-                });
-              },
-              child: Column(
-                children: [
-                  _rhythmChoice(
-                    PlaybackMode.sequential,
-                    'In order',
-                    'Plays the lineup from top to bottom',
-                  ),
-                  _rhythmChoice(
-                    PlaybackMode.shuffle,
-                    'Mix it up',
-                    'Uses a stable shuffle for this station',
-                  ),
-                  _rhythmChoice(
-                    PlaybackMode.block,
-                    'Mini-marathons',
-                    'Keeps small groups from the same series together',
-                  ),
-                ],
+          if (!_generated &&
+              confirmedMovieOnly &&
+              _playbackMode != PlaybackMode.block)
+            Focus(
+              child: Semantics(
+                key: const Key('studio-mini-marathon-explanation'),
+                focusable: true,
+                child: const Text(
+                  'Mini-marathons is available when this source includes episodes with series information.',
+                ),
               ),
             ),
           if (_generated) ...[
@@ -1765,9 +2196,31 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                   ? null
                   : (value) => _changed(() => _blockSize = value),
             ),
+            Material(
+              color: Theme.of(context).colorScheme.surface,
+              child: SwitchListTile(
+                key: const Key('studio-include-specials'),
+                value: _includeSpecials,
+                title: const Text('Include specials'),
+                subtitle: _includeSpecials
+                    ? const Text(
+                        'Season 0 specials play after regular seasons.',
+                      )
+                    : null,
+                onChanged: _saving
+                    ? null
+                    : (value) => _changed(() => _includeSpecials = value),
+              ),
+            ),
             if (!hasShowGrouping)
-              const Text(
-                'Mini-marathons needs episodes grouped by show title or show artwork. Choose another rhythm or add grouped episodes.',
+              Focus(
+                child: Semantics(
+                  key: const Key('studio-mini-marathon-explanation'),
+                  focusable: true,
+                  child: const Text(
+                    'Mini-marathons needs episodes grouped by show title or show artwork. Choose another rhythm or add grouped episodes.',
+                  ),
+                ),
               ),
           ],
         ],
@@ -1775,33 +2228,37 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     );
   }
 
-  Widget _rhythmChoice(PlaybackMode value, String title, String detail) {
+  Widget _rhythmChoice(
+    PlaybackMode value,
+    String title, {
+    bool enabled = true,
+  }) {
     final roles = LineupTheme.of(context);
     final selected = _playbackMode == value;
     return Padding(
       padding: const EdgeInsets.only(top: 6),
       child: Material(
-        color: selected ? roles.selectedSurface : Colors.transparent,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(roles.panelRadius),
-          side: BorderSide(
-            color: selected ? roles.progressFill : roles.subtleBorder,
-          ),
-        ),
-        clipBehavior: Clip.antiAlias,
+        color: selected ? roles.selectedSurface : roles.primarySurface,
         child: RadioListTile<PlaybackMode>(
           value: value,
-          enabled: !_saving,
+          enabled: !_busy && enabled,
           dense: true,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 4),
           title: Text(
             title,
+            maxLines: 2,
             style: const TextStyle(fontWeight: FontWeight.w700),
           ),
-          subtitle: Text(detail),
         ),
       ),
     );
   }
+
+  String _rhythmHelp(PlaybackMode mode) => switch (mode) {
+    PlaybackMode.sequential => 'Plays the lineup from top to bottom.',
+    PlaybackMode.shuffle => 'Uses a stable shuffle for this station.',
+    PlaybackMode.block => 'Keeps small groups from the same series together.',
+  };
 
   Channel? get _conflictingChannel {
     final number = int.tryParse(_number.text);
@@ -1845,6 +2302,9 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
       shuffleSeed: _shuffleSeed,
       blockSize: _blockSize,
       builderKey: _builderKey,
+      includeSpecials: _includeSpecials,
+      scheduleVersion: widget.channel!.scheduleVersion,
+      scheduleTransition: widget.channel!.scheduleTransition,
     );
     widget.onDuplicate(source);
   }
@@ -1852,7 +2312,10 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
   ContentSource _editedSource() {
     if (_sourceReadOnly) return _source;
     return switch (_sourceChoice) {
-      _SourceChoice.library => _librarySource(_libraryId),
+      _SourceChoice.library => _librarySource(
+        _filterLibraryId,
+        filters: Map.unmodifiable(_filters),
+      ),
       _SourceChoice.playlist =>
         _playlistId == null
             ? throw const FormatException('Select a playlist.')
@@ -1878,7 +2341,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
 
   LibrarySource _librarySource(
     String? id, {
-    Map<String, String> filters = const {},
+    Map<LibraryFilter, List<String>> filters = const {},
   }) {
     final library = _selectedLibraries
         .where((library) => library.id == id)
@@ -1887,10 +2350,74 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     return LibrarySource(
       libraryId: library.id,
       libraryType: library.type,
-      includeWatched: _sourceChoice == _SourceChoice.library
-          ? _includeWatched
-          : _filterIncludeWatched,
+      includeWatched: _filterIncludeWatched,
       filters: filters,
+      order: _filterDraftOrder(
+        library.id,
+        includeWatched: _filterIncludeWatched,
+        filters: filters,
+        libraryType: library.type,
+      ),
+    );
+  }
+
+  LibraryOrder _libraryDraftOrder(
+    String? libraryId, {
+    required bool includeWatched,
+    Map<LibraryFilter, List<String>> filters = const {},
+    PlexLibraryType? libraryType,
+  }) {
+    final original = _source;
+    if (original is! LibrarySource || libraryId == null) {
+      return _playbackMode == PlaybackMode.sequential
+          ? LibraryOrder.title
+          : LibraryOrder.supplied;
+    }
+    final type =
+        libraryType ??
+        _selectedLibraries
+            .where((library) => library.id == libraryId)
+            .firstOrNull
+            ?.type;
+    if (type == null) return original.order;
+    final candidate = LibrarySource(
+      libraryId: libraryId,
+      libraryType: type,
+      includeWatched: includeWatched,
+      filters: filters,
+      order: original.order,
+    );
+    final recipeUnchanged = canonicalSourceEquals(original, candidate);
+    final originalMode =
+        _expectedBase?.playbackMode ?? widget.channel?.playbackMode;
+    if (recipeUnchanged &&
+        (original.order == LibraryOrder.addedDescending ||
+            originalMode == _playbackMode)) {
+      return original.order;
+    }
+    return _playbackMode == PlaybackMode.sequential
+        ? LibraryOrder.title
+        : LibraryOrder.supplied;
+  }
+
+  LibraryOrder _filterDraftOrder(
+    String? libraryId, {
+    required bool includeWatched,
+    required Map<LibraryFilter, List<String>> filters,
+    PlexLibraryType? libraryType,
+  }) {
+    if (_filterOrderExplicit) {
+      return _filterOrder == LibraryOrder.addedDescending
+          ? LibraryOrder.addedDescending
+          : _playbackMode == PlaybackMode.sequential
+          ? LibraryOrder.title
+          : LibraryOrder.supplied;
+    }
+    return _libraryDraftOrder(
+      libraryId,
+      includeWatched: includeWatched,
+      filters: filters,
+      libraryType: libraryType,
     );
   }
 
@@ -1914,6 +2441,16 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     } on FormatException {
       return (source: source, content: null, sourceError: null);
     }
+  }
+
+  bool _confirmedMovieOnly(_DraftResolution? resolution) {
+    final content = resolution?.content;
+    if (content == null || content.isEmpty) return false;
+    if (resolution!.source is LibrarySource &&
+        widget.controller.libraryScanStatus != LibraryScanStatus.complete) {
+      return false;
+    }
+    return content.every((item) => item.mediaKind == ChannelMediaKind.movie);
   }
 
   String? _programmingError(_DraftResolution resolution) {
@@ -1953,9 +2490,28 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
 
   String? _liveSourceError(ContentSource source, List<ChannelItem>? resolved) {
     switch (source) {
-      case LibrarySource(:final libraryId):
+      case LibrarySource(:final libraryId, :final filters):
         if (!_selectedLibraries.any((library) => library.id == libraryId)) {
           return 'The saved library is unavailable. Choose a selected Plex library.';
+        }
+        if (widget.controller.libraryScanStatus == LibraryScanStatus.scanning) {
+          return 'Checking library programming while the selected Plex library finishes loading.';
+        }
+        if (filters.isNotEmpty &&
+            widget.controller.libraryScanStatus == LibraryScanStatus.scanning) {
+          return 'Checking filters while library programming loads.';
+        }
+        final available = _facetOptions(libraryId);
+        final missing = [
+          for (final entry in filters.entries)
+            ...entry.value.where(
+              (value) =>
+                  !(available[entry.key.name] ?? const []).contains(value),
+            ),
+        ];
+        if (missing.isNotEmpty &&
+            widget.controller.libraryScanStatus == LibraryScanStatus.complete) {
+          return '${missing.length} selected filter ${missing.length == 1 ? 'value is' : 'values are'} unavailable. Replace or remove them before saving.';
         }
         if (resolved == null) {
           return 'This source contains an unsupported filter. Choose a supported replacement.';
@@ -2010,6 +2566,13 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
         ? (_blockSize ?? 3)
         : null,
     builderKey: _builderKey,
+    includeSpecials: _includeSpecials,
+    scheduleVersion: _retainsSchedule(_editedSource())
+        ? _expectedBase!.scheduleVersion
+        : currentScheduleVersion,
+    scheduleTransition: _retainsSchedule(_editedSource())
+        ? _expectedBase!.scheduleTransition
+        : null,
   );
 
   Channel get _previewDraft => Channel(
@@ -2028,7 +2591,26 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
         ? (_blockSize ?? 3)
         : null,
     builderKey: _builderKey,
+    includeSpecials: _includeSpecials,
+    scheduleVersion: _retainsSchedule(_displaySource)
+        ? _expectedBase!.scheduleVersion
+        : currentScheduleVersion,
+    scheduleTransition: _retainsSchedule(_displaySource)
+        ? _expectedBase!.scheduleTransition
+        : null,
   );
+
+  bool _retainsSchedule(ContentSource source) {
+    final base = _expectedBase;
+    return base != null &&
+        canonicalSourceEquals(base.source, source) &&
+        base.playbackMode == _playbackMode &&
+        base.blockSize ==
+            (_playbackMode == PlaybackMode.block
+                ? (_blockSize ?? 3)
+                : _blockSize) &&
+        base.includeSpecials == _includeSpecials;
+  }
 
   bool _isCurrentAirCheckStatus(ChannelAirCheckStatus? status) =>
       status != null &&
@@ -2041,6 +2623,8 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
           status.validity == ChannelAirCheckValidity.retainedOffAir);
 
   bool get _airCheckCanSave => _isCurrentAirCheckStatus(_airCheckStatus);
+  bool get _hasPendingProgrammingChoice =>
+      _activeFilterKey != null || _browseSelecting;
 
   void _stageScheduleIdentity(String? programmingError) {
     if (_scheduleIdentityCommitted ||
@@ -2049,7 +2633,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
       return;
     }
     _candidateAnchor = _clock().toUtc();
-    _candidateShuffleSeed = _id.hashCode;
+    _candidateShuffleSeed = stableChannelSeed(_id);
   }
 
   void _commitScheduleIdentity() {
@@ -2076,6 +2660,15 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
   }
 
   Future<void> _save({Channel? rebasedExpected}) async {
+    if (_busy) return;
+    if (_hasPendingProgrammingChoice) {
+      setState(
+        () => _error = _activeFilterKey != null
+            ? 'Finish or cancel the open filter before saving.'
+            : 'Add or cancel the selected programs before saving.',
+      );
+      return;
+    }
     _refreshPlayableInventory();
     final valid = _form.currentState?.validate() ?? false;
     if (!valid) {
@@ -2186,6 +2779,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
       _anchor = current.anchor;
       _shuffleSeed = current.shuffleSeed;
       _blockSize = current.blockSize;
+      _includeSpecials = current.includeSpecials;
       _builderKey = current.builderKey;
       _expectedBase = current;
       _configureSource(current.source);
@@ -2223,6 +2817,31 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     if (confirmed && mounted) _reload();
   }
 
+  void _prepareSaveAsNew() {
+    final number = _lowestFreeNumber();
+    if (number == null) {
+      setState(
+        () => _error = 'No channel numbers are available. Return to Channels and free a number first.',
+      );
+      return;
+    }
+    setState(() {
+      _id = createChannelId();
+      _number.text = '$number';
+      _expectedBase = null;
+      _builderKey = null;
+      _generated = false;
+      _sourceReadOnly = false;
+      _baseDeleted = false;
+      _conflict = false;
+      _scheduleIdentityCommitted = false;
+      _candidateAnchor = null;
+      _candidateShuffleSeed = null;
+      _dirty = true;
+      _error = 'Review the available channel number and schedule preview, then save this new custom channel.';
+    });
+  }
+
   Future<void> _confirmReapply() async {
     final current = _currentBase;
     if (current == null) {
@@ -2258,15 +2877,59 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
   }
 
   Future<void> _tune() async {
+    if (_busy) return;
+    final epoch = ++_tuneEpoch;
+    final channelId = _id;
+    FocusManager.instance.primaryFocus?.unfocus();
     setState(() {
+      _tuning = true;
       _error = null;
-      _success = null;
     });
-    if (await widget.onTune(_id) || !mounted) return;
-    setState(
-      () => _error =
-          'The saved channel could not be tuned. Your lineup is unchanged.',
-    );
+    var tuned = false;
+    try {
+      tuned = await widget.onTune(channelId);
+    } catch (_) {
+      tuned = false;
+    }
+    if (!mounted || epoch != _tuneEpoch) return;
+    if (tuned) {
+      _tuning = false;
+      return;
+    }
+    setState(() {
+      _tuning = false;
+      _error = _success == 'Channel saved.'
+          ? 'Playback could not start, but your channel changes were saved.'
+          : 'Playback could not start. Your saved lineup is unchanged.';
+    });
+  }
+
+  Future<void> _confirmSaveAndTune() async {
+    final confirmed =
+        await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Save changes and tune in?'),
+            content: const Text(
+              'Your changes to this channel will be saved before playback starts.',
+            ),
+            actions: [
+              TextButton(
+                autofocus: true,
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Keep editing'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Save and tune in'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (!confirmed || !mounted) return;
+    await _save();
+    if (mounted && !_dirty && !_saving && _expectedBase != null) await _tune();
   }
 }
 
@@ -2277,11 +2940,18 @@ String _sourceLabel(
   ContentSource source,
   LineupController controller,
 ) => switch (source) {
-  LibrarySource(:final libraryId, :final includeWatched, :final filters) => [
-    'Library: ${controller.libraries.where((library) => library.id == libraryId).firstOrNull?.title ?? libraryId}',
-    for (final filter in filters.entries) ?_filterFact(filter),
-    includeWatched ? 'includes watched' : 'unwatched only',
-  ].join(' • '),
+  LibrarySource(
+    :final libraryId,
+    :final includeWatched,
+    :final filters,
+    :final order,
+  ) =>
+    [
+      'Library: ${controller.libraries.where((library) => library.id == libraryId).firstOrNull?.title ?? libraryId}',
+      for (final filter in filters.entries) ?_filterFact(filter),
+      if (order == LibraryOrder.addedDescending) 'Newest first',
+      includeWatched ? 'includes watched' : 'unwatched only',
+    ].join(' • '),
   ManualSource(:final items) => '${items.length} hand-picked programs',
   PlaylistSource(:final playlistId) =>
     'Playlist: ${controller.availablePlaylists.where((playlist) => playlist.id == playlistId).firstOrNull?.title ?? playlistId}',
@@ -2289,16 +2959,11 @@ String _sourceLabel(
     '${sources.length}-source mix • ${interleave ? 'interleaved' : 'in sequence'}',
 };
 
-String? _filterFact(MapEntry<String, String> filter) => switch (filter) {
-  MapEntry(key: 'collection', :final value) => 'Collection: $value',
-  MapEntry(key: 'genre', :final value) => 'Genre: $value',
-  MapEntry(key: 'studio', :final value) => 'Studio: $value',
-  MapEntry(key: 'actor', :final value) => 'Actor: $value',
-  MapEntry(key: 'director', :final value) => 'Director: $value',
-  MapEntry(key: 'decade', :final value) => 'Decade: $value',
-  MapEntry(key: 'sort', value: 'added:desc') => 'Newest first',
-  _ => null,
-};
+String? _filterFact(MapEntry<LibraryFilter, List<String>> filter) =>
+    '${_facetLabel(filter.key.name)}: ${filter.value.join(', ')}';
+
+LibraryFilter _libraryFilter(String key) =>
+    LibraryFilter.values.where((filter) => filter.name == key).first;
 
 String channelRhythmLabel(PlaybackMode mode, int? blockSize) =>
     _rhythmLabel(mode, blockSize);
@@ -2322,3 +2987,119 @@ String _modeHeaderLabel(ChannelStudioMode mode) => switch (mode) {
   ChannelStudioMode.inspectGenerated => 'Inspect',
   ChannelStudioMode.duplicateCustom => 'Duplicate',
 };
+
+String _compactDuration(Duration value) {
+  final hours = value.inHours;
+  final minutes = value.inMinutes.remainder(60);
+  return [if (hours > 0) '${hours}h', if (minutes > 0) '${minutes}m'].join(' ');
+}
+
+class _MoveProgramDialog extends StatefulWidget {
+  const _MoveProgramDialog({
+    required this.entries,
+    required this.moving,
+    required this.titleFor,
+  });
+
+  final List<_ManualEntry> entries;
+  final _ManualEntry moving;
+  final String Function(_ManualEntry entry) titleFor;
+
+  @override
+  State<_MoveProgramDialog> createState() => _MoveProgramDialogState();
+}
+
+class _MoveProgramDialogState extends State<_MoveProgramDialog> {
+  _ManualEntry? _target;
+  bool _after = false;
+  final _search = TextEditingController();
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  String _label(_ManualEntry entry) {
+    final title = widget.titleFor(entry);
+    final matches = widget.entries
+        .where((candidate) => widget.titleFor(candidate) == title)
+        .toList();
+    final occurrence = matches.indexOf(entry) + 1;
+    return '$title · position ${widget.entries.indexOf(entry) + 1}${matches.length > 1 ? ' · occurrence $occurrence of ${matches.length}' : ''}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final query = _search.text.trim().toLowerCase();
+    final targets = widget.entries
+        .where(
+          (entry) =>
+              !identical(entry, widget.moving) &&
+              _label(entry).toLowerCase().contains(query),
+        )
+        .toList(growable: false);
+    if (_target == null || !targets.contains(_target)) {
+      _target = targets.firstOrNull;
+    }
+    return AlertDialog(
+      title: Text('Move ${widget.titleFor(widget.moving)}'),
+      content: SizedBox(
+        width: 520,
+        height: 380,
+        child: Column(
+          children: [
+            TextField(
+              key: const Key('move-program-search'),
+              controller: _search,
+              autofocus: true,
+              decoration: const InputDecoration(labelText: 'Find program'),
+              onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: RadioGroup<_ManualEntry>(
+                groupValue: _target,
+                onChanged: (value) => setState(() => _target = value),
+                child: ListView(
+                  children: [
+                    for (final entry in targets)
+                      RadioListTile<_ManualEntry>(
+                        value: entry,
+                        title: Text(_label(entry)),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            SegmentedButton<bool>(
+              segments: const [
+                ButtonSegment(value: false, label: Text('Before')),
+                ButtonSegment(value: true, label: Text('After')),
+              ],
+              selected: {_after},
+              onSelectionChanged: (value) =>
+                  setState(() => _after = value.single),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          autofocus: true,
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _target == null
+              ? null
+              : () => Navigator.pop(context, (
+                  index: widget.entries.indexOf(_target!),
+                  after: _after,
+                )),
+          child: const Text('Move'),
+        ),
+      ],
+    );
+  }
+}

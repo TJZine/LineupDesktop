@@ -63,19 +63,9 @@ class FixtureController extends LineupController {
 }
 
 Future<void> openDestination(WidgetTester tester, String destination) async {
-  final menu = find.byKey(const Key('guide-app-menu'));
-  if (menu.evaluate().isNotEmpty) {
-    await tester.tap(menu);
-    await tester.pump(const Duration(milliseconds: 250));
-    await tester.tap(find.text(destination).last);
-  } else {
-    await tester.tap(
-      find.descendant(
-        of: find.byType(NavigationRail),
-        matching: find.text(destination),
-      ),
-    );
-  }
+  await tester.tap(find.byTooltip('Open Lineup menu'));
+  await tester.pump(const Duration(milliseconds: 250));
+  await tester.tap(find.text(destination).last);
   await tester.pumpAndSettle();
 }
 

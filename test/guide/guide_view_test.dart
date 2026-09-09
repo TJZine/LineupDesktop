@@ -58,37 +58,34 @@ void main() {
     );
   });
 
-  test(
-    'layout policy stays bounded for degenerate constraints and density',
-    () {
-      for (final size in const [
-        Size.zero,
-        Size(320, 240),
-        Size(double.infinity, 720),
-        Size(1280, double.infinity),
-      ]) {
-        final policy = GuideLayoutPolicy.forSize(size, hasPicture: true);
-        expect(policy.showcaseHeight, isNonNegative, reason: '$size');
-        expect(policy.showcaseHeight.isFinite, isTrue, reason: '$size');
-        expect(policy.pictureWidth, isNonNegative, reason: '$size');
-        expect(policy.pictureWidth.isFinite, isTrue, reason: '$size');
-      }
+  test('layout policy stays bounded and keeps one five-row composition', () {
+    for (final size in const [
+      Size.zero,
+      Size(320, 240),
+      Size(double.infinity, 720),
+      Size(1280, double.infinity),
+    ]) {
+      final policy = GuideLayoutPolicy.forSize(size, hasPicture: true);
+      expect(policy.showcaseHeight, isNonNegative, reason: '$size');
+      expect(policy.showcaseHeight.isFinite, isTrue, reason: '$size');
+      expect(policy.pictureWidth, isNonNegative, reason: '$size');
+      expect(policy.pictureWidth.isFinite, isTrue, reason: '$size');
+    }
 
-      final comfortable = GuideLayoutPolicy.forSize(
-        const Size(1920, 1080),
-        hasPicture: true,
-      );
-      final compact = GuideLayoutPolicy.forSize(
-        const Size(1920, 1080),
-        hasPicture: true,
-        density: GuideDensity.compact,
-      );
-      expect(comfortable.rowHeight, 108);
-      expect(compact.rowHeight, 78);
-      expect(comfortable.minimumRows, 5);
-      expect(compact.minimumRows, 7);
-    },
-  );
+    final comfortable = GuideLayoutPolicy.forSize(
+      const Size(1920, 1080),
+      hasPicture: true,
+    );
+    final enlarged = GuideLayoutPolicy.forSize(
+      const Size(1920, 1080),
+      hasPicture: true,
+      textScale: 2,
+    );
+    expect(comfortable.rowHeight, closeTo(111.2, 0.1));
+    expect(enlarged.rowHeight, greaterThanOrEqualTo(116));
+    expect(comfortable.minimumRows, 5);
+    expect(enlarged.minimumRows, 5);
+  });
 
   testWidgets('non-positive timeline slots render safely', (tester) async {
     final lineup = _Lineup(1)..settings = const LineupSettings(guideHours: 0);
@@ -145,7 +142,7 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.mediaPlay);
     await tester.pumpAndSettle();
 
-    expect(guide.windowStart, DateTime.utc(2026, 1, 1, 11, 30));
+    expect(guide.windowStart, DateTime.utc(2026, 1, 1, 12));
     expect(guide.focusTime, now);
 
     await tester.pumpWidget(const SizedBox.shrink());
@@ -154,8 +151,11 @@ void main() {
   testWidgets('established viewport work is independent of lineup cardinality', (
     tester,
   ) async {
-    await tester.binding.setSurfaceSize(const Size(1280, 800));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
+    tester.view
+      ..devicePixelRatio = 1
+      ..physicalSize = const Size(1280, 800);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     for (final count in [200, 500, 1000]) {
       final lineup = _Lineup(count);
       addTearDown(lineup.dispose);
@@ -208,8 +208,11 @@ void main() {
     addTearDown(guide.dispose);
     final rssBefore = ProcessInfo.currentRss;
     final firstViewport = Stopwatch()..start();
-    await tester.binding.setSurfaceSize(const Size(1280, 800));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
+    tester.view
+      ..devicePixelRatio = 1
+      ..physicalSize = const Size(1280, 800);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(
       MaterialApp(
         home: GuideView(
@@ -252,16 +255,12 @@ void main() {
     lineup.dispose();
   });
 
-  testWidgets('1000-channel 12-hour compact Guide stays lazy and focusable', (
+  testWidgets('1000-channel four-hour Guide stays lazy and focusable', (
     tester,
   ) async {
     final now = DateTime.utc(2026, 1, 1, 12, 15);
     final lineup = _Lineup(1000)
-      ..settings = const LineupSettings(
-        guideHours: 12,
-        guideDensity: GuideDensity.compact,
-        reduceMotion: true,
-      );
+      ..settings = const LineupSettings(guideHours: 4, reduceMotion: true);
     lineup.channels = [
       for (var index = 0; index < 1000; index++)
         Channel(
@@ -292,8 +291,11 @@ void main() {
       },
     );
     addTearDown(guide.dispose);
-    await tester.binding.setSurfaceSize(const Size(1600, 900));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
+    tester.view
+      ..devicePixelRatio = 1
+      ..physicalSize = const Size(1600, 900);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
 
     final firstViewport = Stopwatch()..start();
     await tester.pumpWidget(
@@ -325,8 +327,8 @@ void main() {
         .evaluate()
         .length;
 
-    expect(fullyVisibleRows, 7);
-    expect(programCells, inInclusiveRange(100, 350));
+    expect(fullyVisibleRows, 5);
+    expect(programCells, inInclusiveRange(40, 160));
     expect(loadedChannelIds.length, lessThan(20));
     expect(loadedChannelIds.toSet().length, loadedChannelIds.length);
     expect(loadedChannelIds, isNot(contains('channel-999')));
@@ -335,7 +337,7 @@ void main() {
     expect(guide.activeLoadCount, 0);
     expect(lineup.artworkLoads, 0);
     for (final channelId in loadedChannelIds) {
-      expect(guide.row(channelId).programs.length, inInclusiveRange(24, 26));
+      expect(guide.row(channelId).programs.length, inInclusiveRange(8, 10));
     }
 
     final initialProgram = guide.focusedProgramId;
@@ -347,13 +349,13 @@ void main() {
     expect(guide.focusedChannelId, 'channel-1');
     await tester.sendKeyEvent(LogicalKeyboardKey.pageDown);
     await tester.pumpAndSettle();
-    expect(guide.focusedChannelId, 'channel-8');
+    expect(guide.focusedChannelId, 'channel-6');
     expect(loadedChannelIds.length, lessThan(30));
     expect(guide.cachedRowCount, lessThanOrEqualTo(64));
     expect(find.text('Channel 999'), findsNothing);
 
     debugPrint(
-      'GUIDE_DENSE_PROFILE channels=1000 hours=12 rows=$fullyVisibleRows '
+      'GUIDE_PROFILE channels=1000 hours=4 rows=$fullyVisibleRows '
       'firstViewportUs=${firstViewport.elapsedMicroseconds} '
       'widgets=${tester.allWidgets.length} programCells=$programCells '
       'scheduleLoads=${loadedChannelIds.length} cachedRows=${guide.cachedRowCount}',
@@ -377,7 +379,7 @@ void main() {
           ChannelItem(
             id: 'ended-program',
             title: 'Ended Program',
-            duration: Duration(minutes: 30),
+            duration: Duration(minutes: 10),
           ),
           ChannelItem(
             id: 'current-program',
@@ -391,7 +393,7 @@ void main() {
           ),
         ]),
         playbackMode: PlaybackMode.sequential,
-        anchor: now.subtract(const Duration(minutes: 45)),
+        anchor: DateTime.utc(2026, 1, 1, 12, 30),
         shuffleSeed: 1,
       ),
     ];
@@ -423,7 +425,7 @@ void main() {
       findsOneWidget,
     );
     fail = false;
-    await tester.tap(find.text('Schedule unavailable — select to retry'));
+    await tester.tap(find.text('Retry'));
     await tester.pumpAndSettle();
 
     final current = guide.currentProgram('semantic-channel')!;
@@ -463,8 +465,12 @@ void main() {
     expect(channelSemantics.hasAction(SemanticsAction.tap), isTrue);
     expect(find.bySemanticsLabel(RegExp(r'^Now watching$')), findsNothing);
 
-    await tester.tap(find.bySemanticsLabel(RegExp('upcoming')));
-    await tester.pump();
+    final upcomingCell = find.bySemanticsLabel(
+      RegExp(r'^Upcoming Program, .+, upcoming$'),
+    );
+    expect(upcomingCell, findsOneWidget);
+    await tester.tap(upcomingCell);
+    await tester.pump(const Duration(milliseconds: 400));
     expect(guide.focusedProgramId, isNot(current.id));
     for (final key in [
       LogicalKeyboardKey.enter,
@@ -474,11 +480,10 @@ void main() {
       await tester.sendKeyEvent(key);
       await tester.pump();
     }
-    await tester.pump(const Duration(milliseconds: 400));
-    await tester.tap(find.bySemanticsLabel(RegExp('upcoming')));
+    await tester.tap(upcomingCell);
     await tester.pump(const Duration(milliseconds: 50));
-    await tester.tap(find.bySemanticsLabel(RegExp('upcoming')));
-    await tester.pump();
+    await tester.tap(upcomingCell);
+    await tester.pump(const Duration(milliseconds: 100));
     expect(tunes, 0);
     await tester.tap(channelRail);
     await tester.pump();
@@ -511,22 +516,28 @@ void main() {
     var tunes = 0;
     var closes = 0;
 
-    await tester.binding.setSurfaceSize(const Size(800, 600));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
-    for (final (size, expectedWidth, minimumRows) in const [
-      (Size(800, 600), 401.78, 4),
-      (Size(1920, 719), 499.33, 4),
-      (Size(1280, 720), 483.56, 5),
-      (Size(800, 720), 464.0, 5),
-      (Size(600, 720), 264.0, 5),
-      (Size(1360, 840), 593.33, 5),
-      (Size(1920, 899), 639.22, 5),
-      (Size(1600, 900), 625.78, 5),
-      (Size(1920, 1079), 671.82, 5),
-      (Size(1920, 1080), 672.0, 5),
-      (Size(3840, 2160), 672.0, 7),
+    tester.view
+      ..devicePixelRatio = 1
+      ..physicalSize = const Size(800, 600);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    for (final size in const [
+      Size(800, 600),
+      Size(1920, 719),
+      Size(1280, 720),
+      Size(800, 720),
+      Size(600, 720),
+      Size(1360, 840),
+      Size(1920, 899),
+      Size(1600, 900),
+      Size(1920, 1079),
+      Size(1920, 1080),
+      Size(2560, 1440),
+      Size(3840, 2160),
     ]) {
-      await tester.binding.setSurfaceSize(size);
+      tester.view
+        ..devicePixelRatio = 1
+        ..physicalSize = size;
       await tester.pumpWidget(
         MaterialApp(
           home: GuideView(
@@ -551,16 +562,26 @@ void main() {
         closeTo(16 / 9, 0.001),
         reason: '$size',
       );
-      expect(pictureSize.width, closeTo(expectedWidth, 1), reason: '$size');
+      final policy = GuideLayoutPolicy.forSize(size, hasPicture: true);
+      expect(
+        pictureSize.width,
+        closeTo(policy.pictureWidth, 1),
+        reason: '$size',
+      );
       final list = tester.widget<ListView>(
         find.byKey(const Key('guide-schedule-list')),
       );
       final scheduleHeight = tester
           .getSize(find.byKey(const Key('guide-schedule-list')))
           .height;
+      final standardFiveRowSize =
+          size == const Size(1280, 720) ||
+          size == const Size(1920, 1080) ||
+          size == const Size(2560, 1440) ||
+          size == const Size(3840, 2160);
       expect(
         (scheduleHeight / list.itemExtent!).floor(),
-        greaterThanOrEqualTo(minimumRows),
+        greaterThanOrEqualTo(standardFiveRowSize ? 5 : 3),
         reason: '$size',
       );
       expect(
@@ -585,25 +606,25 @@ void main() {
     expect(guide.selectedProgramId, guide.focusedProgramId);
     expect(tunes, 1);
 
-    await tester.binding.setSurfaceSize(const Size(1280, 720));
+    tester.view
+      ..devicePixelRatio = 1
+      ..physicalSize = const Size(1280, 720);
     await tester.pumpWidget(
       MaterialApp(
         home: GuideView(
           controller: guide,
-          overlayMode: true,
           onClose: () => closes++,
           onTune: (_) async {},
         ),
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('guide-focused-artwork')), findsNothing);
-    final overlayList = tester.widget<ListView>(
+    final classicList = tester.widget<ListView>(
       find.byKey(const Key('guide-schedule-list')),
     );
     expect(
       (tester.getSize(find.byKey(const Key('guide-schedule-list'))).height /
-              overlayList.itemExtent!)
+              classicList.itemExtent!)
           .floor(),
       greaterThanOrEqualTo(5),
     );
@@ -618,8 +639,11 @@ void main() {
   testWidgets('Guide details project Plex metadata and artwork color', (
     tester,
   ) async {
-    await tester.binding.setSurfaceSize(const Size(1600, 900));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
+    tester.view
+      ..devicePixelRatio = 1
+      ..physicalSize = const Size(1600, 900);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     final lineup = _Lineup(1, artworkBytes: _tinyPng);
     addTearDown(lineup.dispose);
     lineup.channels = [
@@ -708,86 +732,87 @@ void main() {
     );
   });
 
-  testWidgets(
-    'overlay reserves artwork only from synchronous source metadata',
-    (tester) async {
-      await tester.binding.setSurfaceSize(const Size(1280, 720));
-      addTearDown(() => tester.binding.setSurfaceSize(null));
-      final lineup = _Lineup(2);
-      addTearDown(lineup.dispose);
-      lineup.channels = [
-        Channel(
-          id: 'without-artwork',
-          number: 1,
-          name: 'Home Video',
-          source: const ManualSource([
-            ChannelItem(
-              id: 'without-artwork-item',
-              title: 'Family Movie',
-              duration: Duration(hours: 24),
-            ),
-          ]),
-          playbackMode: PlaybackMode.sequential,
-          anchor: DateTime.now().subtract(const Duration(hours: 1)),
-          shuffleSeed: 1,
-        ),
-        Channel(
-          id: 'with-artwork',
-          number: 2,
-          name: 'Plex Movie',
-          source: ManualSource([
-            ChannelItem(
-              id: 'with-artwork-item',
-              title: 'Catalog Movie',
-              duration: const Duration(hours: 24),
-              poster: Uri.parse('/poster-that-fails'),
-            ),
-          ]),
-          playbackMode: PlaybackMode.sequential,
-          anchor: DateTime.now().subtract(const Duration(hours: 1)),
-          shuffleSeed: 2,
-        ),
-      ];
-      final guide = GuideController(
-        lineup: lineup,
-        loadSchedule: (channel) async => _schedule(channel),
-      );
-      addTearDown(guide.dispose);
-
-      for (final size in const [
-        Size(800, 600),
-        Size(1280, 720),
-        Size(1920, 1080),
-      ]) {
-        await tester.binding.setSurfaceSize(size);
-        await tester.pumpWidget(
-          MaterialApp(
-            home: GuideView(
-              controller: guide,
-              overlayMode: true,
-              onClose: () {},
-              onTune: (_) async {},
-            ),
+  testWidgets('PiP information color loads artwork only from source metadata', (
+    tester,
+  ) async {
+    tester.view
+      ..devicePixelRatio = 1
+      ..physicalSize = const Size(1280, 720);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final lineup = _Lineup(2);
+    addTearDown(lineup.dispose);
+    lineup.channels = [
+      Channel(
+        id: 'without-artwork',
+        number: 1,
+        name: 'Home Video',
+        source: const ManualSource([
+          ChannelItem(
+            id: 'without-artwork-item',
+            title: 'Family Movie',
+            duration: Duration(hours: 24),
           ),
-        );
-        await tester.pumpAndSettle();
+        ]),
+        playbackMode: PlaybackMode.sequential,
+        anchor: DateTime.now().subtract(const Duration(hours: 1)),
+        shuffleSeed: 1,
+      ),
+      Channel(
+        id: 'with-artwork',
+        number: 2,
+        name: 'Plex Movie',
+        source: ManualSource([
+          ChannelItem(
+            id: 'with-artwork-item',
+            title: 'Catalog Movie',
+            duration: const Duration(hours: 24),
+            poster: Uri.parse('/poster-that-fails'),
+          ),
+        ]),
+        playbackMode: PlaybackMode.sequential,
+        anchor: DateTime.now().subtract(const Duration(hours: 1)),
+        shuffleSeed: 2,
+      ),
+    ];
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    addTearDown(guide.dispose);
 
-        expect(guide.focusedChannelId, 'without-artwork');
-        expect(find.byKey(const Key('guide-focused-artwork')), findsNothing);
-        expect(tester.takeException(), isNull, reason: '$size');
-      }
-      expect(lineup.artworkLoads, 0);
-
-      guide.moveVertical(1);
-      await tester.pump();
-
-      expect(guide.focusedChannelId, 'with-artwork');
-      expect(find.byKey(const Key('guide-focused-artwork')), findsOneWidget);
+    for (final size in const [
+      Size(800, 600),
+      Size(1280, 720),
+      Size(1920, 1080),
+    ]) {
+      tester.view
+        ..devicePixelRatio = 1
+        ..physicalSize = size;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: GuideView(
+            controller: guide,
+            pictureInPicture: const SizedBox.expand(),
+            onClose: () {},
+            onTune: (_) async {},
+          ),
+        ),
+      );
       await tester.pumpAndSettle();
-      expect(find.byKey(const Key('guide-focused-artwork')), findsOneWidget);
-      expect(lineup.artworkLoads, 1);
-    },
-  );
+
+      expect(guide.focusedChannelId, 'without-artwork');
+      expect(tester.takeException(), isNull, reason: '$size');
+    }
+    expect(lineup.artworkLoads, 0);
+
+    guide.moveVertical(1);
+    await tester.pump();
+
+    expect(guide.focusedChannelId, 'with-artwork');
+    await tester.pumpAndSettle();
+    expect(lineup.artworkLoads, 1);
+  });
 
   testWidgets('Guide omits incomplete episode coordinates', (tester) async {
     final lineup = _Lineup(1);
@@ -844,8 +869,11 @@ void main() {
   testWidgets('Guide artwork mode renders backdrop and preferred clear logo', (
     tester,
   ) async {
-    await tester.binding.setSurfaceSize(const Size(1600, 900));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
+    tester.view
+      ..devicePixelRatio = 1
+      ..physicalSize = const Size(1600, 900);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     final lineup = _Lineup(1, artworkBytes: _wideLogoPng)
       ..settings = const LineupSettings(
         guideInfoBackgroundMode: GuideInfoBackgroundMode.artwork,
@@ -916,8 +944,11 @@ void main() {
     ('decoded narrow clear-logo', _narrowLogoPng),
   ]) {
     testWidgets('$description retains the textual title', (tester) async {
-      await tester.binding.setSurfaceSize(const Size(1600, 900));
-      addTearDown(() => tester.binding.setSurfaceSize(null));
+      tester.view
+        ..devicePixelRatio = 1
+        ..physicalSize = const Size(1600, 900);
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
       final lineup = _Lineup(1, artworkBytes: bytes);
       addTearDown(lineup.dispose);
       lineup.channels = [
@@ -1011,7 +1042,7 @@ void main() {
     );
     expect(
       tester.getSize(find.byKey(const Key('guide-picture-in-picture'))).width,
-      closeTo(672, 0.01),
+      closeTo(576, 0.01),
     );
     final list = tester.widget<ListView>(
       find.byKey(const Key('guide-schedule-list')),
@@ -1027,6 +1058,204 @@ void main() {
     guide.dispose();
     lineup.dispose();
   });
+
+  testWidgets('search owns Escape and Enter focus without tuning', (
+    tester,
+  ) async {
+    final lineup = _Lineup(3);
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    var closes = 0;
+    var tunes = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: GuideView(
+          controller: guide,
+          onClose: () => closes++,
+          onTune: (_) async => tunes++,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final search = find.byKey(const Key('guide-channel-search'));
+    await tester.tap(search);
+    await tester.enterText(search, 'Channel 2');
+    await tester.pump();
+    expect(guide.channels.single.id, 'channel-2');
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+    expect(tester.widget<TextField>(search).focusNode!.hasFocus, isFalse);
+    expect(tunes, 0);
+    await tester.tap(search);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+    expect(guide.searchQuery, isEmpty);
+    expect(tester.widget<TextField>(search).focusNode!.hasFocus, isTrue);
+    expect(closes, 0);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+    expect(tester.widget<TextField>(search).focusNode!.hasFocus, isFalse);
+    expect(tunes, 0);
+    expect(closes, 0);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    expect(closes, 1);
+    guide.dispose();
+    lineup.dispose();
+  });
+
+  testWidgets(
+    'timeline controls expose one aligned marker and 30-minute steps',
+    (tester) async {
+      final now = DateTime.utc(2026, 1, 1, 23, 47);
+      final lineup = _Lineup(2);
+      final guide = GuideController(
+        lineup: lineup,
+        clock: () => now,
+        loadSchedule: (channel) async => _schedule(channel),
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: GuideView(
+            controller: guide,
+            onClose: () {},
+            onTune: (_) async {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('guide-now-line')), findsOneWidget);
+      expect(find.bySemanticsLabel('Current time'), findsOneWidget);
+      expect(
+        tester
+            .widget<IconButton>(find.byKey(const Key('guide-earlier')))
+            .onPressed,
+        isNull,
+      );
+      await tester.tap(find.byKey(const Key('guide-later')));
+      await tester.pump();
+      expect(guide.windowStart, DateTime.utc(2026, 1, 2));
+      expect(find.byKey(const Key('guide-midnight-date')), findsWidgets);
+      await tester.tap(find.byKey(const Key('guide-earlier')));
+      await tester.pump();
+      expect(guide.windowStart, DateTime.utc(2026, 1, 1, 23, 30));
+
+      guide.dispose();
+      lineup.dispose();
+    },
+  );
+
+  testWidgets('removing a wrapping library label preserves channel search', (
+    tester,
+  ) async {
+    const libraryId =
+        'International television documentaries and limited series archive';
+    final lineup = _Lineup(2);
+    lineup.channels = [
+      Channel(
+        id: 'library-channel',
+        number: 17,
+        name: 'Library Channel',
+        source: const LibrarySource(
+          libraryId: libraryId,
+          libraryType: PlexLibraryType.show,
+        ),
+        playbackMode: PlaybackMode.sequential,
+        anchor: DateTime.now(),
+        shuffleSeed: 1,
+      ),
+      lineup.channels.last,
+    ];
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    tester.view
+      ..devicePixelRatio = 1
+      ..physicalSize = const Size(800, 720);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: GuideView(
+          controller: guide,
+          onClose: () {},
+          onTune: (_) async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('guide-channel-search')),
+      'Library',
+    );
+    guide.setLibraryFilter(libraryId);
+    await tester.pump();
+
+    final label = find.byKey(const Key('guide-active-library-label'));
+    expect(label, findsOneWidget);
+    expect(find.text('Libraries'), findsOneWidget);
+    expect(tester.widget<Text>(label).data, libraryId);
+    expect(tester.getSize(label).height, greaterThan(16));
+    await tester.tap(find.byTooltip('Remove library filter'));
+    await tester.pump();
+    expect(guide.libraryFilterId, isNull);
+    expect(guide.searchQuery, 'library');
+
+    tester.view.resetPhysicalSize();
+    tester.view.resetDevicePixelRatio();
+    guide.dispose();
+    lineup.dispose();
+  });
+
+  testWidgets(
+    'standard resolutions and enlarged text do not clip Guide controls',
+    (tester) async {
+      final lineup = _Lineup(20)
+        ..settings = const LineupSettings(reduceMotion: true);
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => _schedule(channel),
+      );
+      for (final size in const [
+        Size(1280, 720),
+        Size(1920, 1080),
+        Size(2560, 1440),
+        Size(3840, 2160),
+      ]) {
+        tester.view
+          ..devicePixelRatio = 1
+          ..physicalSize = size;
+        await tester.pumpWidget(
+          MaterialApp(
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context)
+                  .copyWith(textScaler: const TextScaler.linear(2)),
+              child: child!,
+            ),
+            home: GuideView(
+              controller: guide,
+              pictureInPicture: const ColoredBox(color: Colors.black),
+              onClose: () {},
+              onTune: (_) async {},
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.byKey(const Key('guide-channel-search')), findsOneWidget);
+        expect(find.byKey(const Key('guide-hours')), findsOneWidget);
+        expect(tester.takeException(), isNull, reason: '$size');
+      }
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+      guide.dispose();
+      lineup.dispose();
+    },
+  );
 
   testWidgets('Now Playing context remains stable while Guide focus moves', (
     tester,
@@ -1109,8 +1338,11 @@ void main() {
       home: GuideView(controller: guide, onClose: () {}, onTune: (_) async {}),
     );
 
-    await tester.binding.setSurfaceSize(const Size(1280, 720));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
+    tester.view
+      ..devicePixelRatio = 1
+      ..physicalSize = const Size(1280, 720);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(buildGuide());
     await tester.pumpAndSettle();
     const scheduleList = Key('guide-schedule-list');
@@ -1177,8 +1409,11 @@ void main() {
       expect(guide.focusedChannelIndex, lessThan(first + visible));
     }
 
-    await tester.binding.setSurfaceSize(const Size(1280, 900));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
+    tester.view
+      ..devicePixelRatio = 1
+      ..physicalSize = const Size(1280, 900);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(buildGuide());
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 120));
@@ -1190,14 +1425,18 @@ void main() {
     await tester.pump();
     expect(guide.focusedChannelIndex, 20);
 
-    await tester.binding.setSurfaceSize(const Size(1280, 899));
+    tester.view
+      ..devicePixelRatio = 1
+      ..physicalSize = const Size(1280, 899);
     await tester.pump();
     await tester.pump();
     expectFocusedRowVisible();
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump();
-    await tester.binding.setSurfaceSize(const Size(1280, 900));
+    tester.view
+      ..devicePixelRatio = 1
+      ..physicalSize = const Size(1280, 900);
     await tester.pumpWidget(buildGuide());
     await tester.pump();
     await tester.pump();
@@ -1217,8 +1456,11 @@ void main() {
       loadSchedule: (channel) async => _schedule(channel),
     );
     addTearDown(guide.dispose);
-    await tester.binding.setSurfaceSize(const Size(1280, 900));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
+    tester.view
+      ..devicePixelRatio = 1
+      ..physicalSize = const Size(1280, 900);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(
       MaterialApp(
         home: GuideView(

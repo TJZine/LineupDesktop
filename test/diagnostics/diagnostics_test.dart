@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/diagnostics/diagnostics.dart';
+import 'package:lineup_desktop/playback/native_player.dart';
 
 void main() {
   test('redacts tokens, URLs, credentials, and paths before storage', () {
@@ -91,15 +92,23 @@ void main() {
 
   test('disabled diagnostics retain nothing and clear existing entries', () {
     final diagnostics = Diagnostics();
+    var notifications = 0;
+    diagnostics.addListener(() => notifications++);
     diagnostics.add('plex', 'not retained');
     expect(diagnostics.entries, isEmpty);
+    expect(notifications, 0);
 
     diagnostics.enabled = true;
     diagnostics.add('plex', 'retained');
     expect(diagnostics.entries, hasLength(1));
+    expect(notifications, 2);
 
     diagnostics.enabled = false;
     expect(diagnostics.entries, isEmpty);
+    expect(notifications, 3);
+    diagnostics.enabled = false;
+    expect(notifications, 3);
+    diagnostics.dispose();
   });
 
   test('retention remains bounded', () {
@@ -110,5 +119,50 @@ void main() {
 
     expect(diagnostics.entries, hasLength(250));
     expect(diagnostics.entries.first.message, 'entry 1');
+  });
+
+  test('support report exports only typed facts and known producer events', () {
+    final diagnostics = Diagnostics()..enabled = true;
+    diagnostics.add('playback', 'Playback request failed', {
+      'operation': 'seek',
+      'code': 'http_error',
+    });
+    diagnostics.add('safe-looking-area', 'safe-looking-secret-sentinel', {
+      'videoCodec': 'safe-looking-secret-sentinel',
+    });
+    final snapshot = diagnostics.snapshot(
+      reportTime: DateTime.utc(2026, 9, 8, 12),
+      timeZone: 'Pacific Standard Time',
+      appVersion: '1.2.3',
+      appBuild: '42',
+      platform: 'windows',
+      plexServerSelected: true,
+      plexConnectionVerified: false,
+      playback: const PlaybackDiagnosticSnapshot(
+        state: PlayerState.playing,
+        receivedTelemetry: PlayerTelemetry(
+          width: 1920,
+          height: 1080,
+          videoCodec: 'h264',
+          videoOutput: 'safe-looking-secret-sentinel',
+        ),
+      ),
+    );
+
+    final report = diagnostics.buildSupportReport(snapshot);
+    expect(report, contains('Time zone: Pacific Standard Time'));
+    expect(report, contains('Playback method: Unknown'));
+    expect(report, contains('Plex server selected: Yes'));
+    expect(report, contains('Plex connection verified: No'));
+    expect(report, contains('Received video: 1920x1080'));
+    expect(report, contains('Received video codec: h264'));
+    expect(report, contains('playback: Playback request failed'));
+    expect(report, isNot(contains('safe-looking-secret-sentinel')));
+    expect(
+      () => snapshot.events.add(
+        DiagnosticEntry(DateTime.now(), 'x', 'y', const {}),
+      ),
+      throwsUnsupportedError,
+    );
   });
 }

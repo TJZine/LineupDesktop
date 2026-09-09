@@ -1,16 +1,28 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
 import 'app_theme.dart';
 
+typedef LineupMenuCallback = void Function(
+  BuildContext invokerContext,
+  FocusNode invokerFocus,
+);
+
 abstract final class LineupLayout {
   static const compact = 900.0;
   static const expandedNavigation = 1100.0;
-  static const readableWidth = 1120.0;
 
   static bool isCompactWidth(double width) => width < compact;
+
+  static double scaleFor(Size size) =>
+      math.min(size.width / 1920, size.height / 1080).clamp(1.0, 1.35);
+
+  static EdgeInsets pageInsets(Size size) => EdgeInsets.all(
+    (isCompactWidth(size.width) ? 20.0 : 32.0) * scaleFor(size),
+  );
 }
 
 class LineupNotice extends StatelessWidget {
@@ -68,15 +80,20 @@ class LineupPage extends StatelessWidget {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final compact = LineupLayout.isCompactWidth(constraints.maxWidth);
-          return Padding(
-            padding: EdgeInsets.all(compact ? 20 : 32),
-            child: Center(
-              child: ConstrainedBox(
-                key: const ValueKey('lineup-page-content'),
-                constraints: const BoxConstraints(
-                  maxWidth: LineupLayout.readableWidth,
-                ),
+          final size = Size(constraints.maxWidth, constraints.maxHeight);
+          final scale = LineupLayout.scaleFor(size);
+          return Theme(
+            data: Theme.of(context).copyWith(
+              textTheme: Theme.of(context).textTheme
+                  .apply(fontSizeFactor: scale),
+            ),
+            child: DefaultTextStyle(
+              style: Theme.of(context).textTheme.bodyMedium!
+                  .apply(fontSizeFactor: scale),
+              child: Padding(
+                padding: LineupLayout.pageInsets(size),
                 child: Column(
+                  key: const ValueKey('lineup-page-content'),
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     if (compact)
@@ -109,7 +126,7 @@ class LineupPage extends StatelessWidget {
                           ?actions,
                         ],
                       ),
-                    const SizedBox(height: 24),
+                    SizedBox(height: 24 * scale),
                     Expanded(child: child),
                   ],
                 ),
@@ -172,27 +189,40 @@ class LineupEmptyState extends StatelessWidget {
   final Widget? action;
 
   @override
-  Widget build(BuildContext context) => Center(
-    child: Card(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 48, color: Theme.of(context).colorScheme.primary),
-            const SizedBox(height: 16),
-            Semantics(
-              header: true,
-              child: Text(
-                title,
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.headlineSmall,
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) => SingleChildScrollView(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          minHeight: constraints.maxHeight.isFinite ? constraints.maxHeight : 0,
+        ),
+        child: Center(
+          child: Card(
+            child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    icon,
+                    size: 48,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                  const SizedBox(height: 16),
+                  Semantics(
+                    header: true,
+                    child: Text(
+                      title,
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.headlineSmall,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(message, textAlign: TextAlign.center),
+                  if (action != null) ...[const SizedBox(height: 24), action!],
+                ],
               ),
             ),
-            const SizedBox(height: 8),
-            Text(message, textAlign: TextAlign.center),
-            if (action != null) ...[const SizedBox(height: 24), action!],
-          ],
+          ),
         ),
       ),
     ),

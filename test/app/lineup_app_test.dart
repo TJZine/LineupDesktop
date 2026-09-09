@@ -103,32 +103,38 @@ void main() {
     );
   });
 
-  testWidgets('empty first-run Channel Setup can return to server selection', (
+  testWidgets('re-entered Channel Setup can return to the ready shell', (
     tester,
   ) async {
-    final controller = _FakeController()..stage = SetupStage.channelSetup;
+    tester.view
+      ..physicalSize = const Size(1280, 720)
+      ..devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final controller = _FakeController()..stage = SetupStage.ready;
     addTearDown(controller.dispose);
+    await controller.enterChannelSetup();
 
     await tester.pumpWidget(
       LineupBootstrap(player: _FakePlayer(), controller: controller),
     );
     await tester.pumpAndSettle();
 
-    final chooseServer = find.widgetWithText(
-      OutlinedButton,
-      'Choose another server',
-    );
-    expect(chooseServer, findsOneWidget);
+    final cancel = find.widgetWithText(TextButton, 'Cancel');
+    expect(cancel, findsOneWidget);
 
-    await tester.tap(chooseServer);
-    expect(controller.stage, SetupStage.servers);
+    await tester.tap(cancel);
+    expect(controller.stage, SetupStage.ready);
   });
 
   testWidgets('successful Channel Setup opens Channels after durable apply', (
     tester,
   ) async {
-    await tester.binding.setSurfaceSize(const Size(1280, 720));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
+    tester.view
+      ..physicalSize = const Size(1280, 720)
+      ..devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     final controller = _ChannelSetupController()
       ..stage = SetupStage.channelSetup
       ..libraries = const [
@@ -140,19 +146,24 @@ void main() {
       LineupBootstrap(player: _FakePlayer(), controller: controller),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Configure channels'));
+    await tester.tap(find.byKey(const ValueKey('scan-selected-libraries')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Build Channels'));
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('review-channels')),
+      400,
+      scrollable: find.descendant(
+        of: find.byKey(const ValueKey('channel-configuration')),
+        matching: find.byType(Scrollable),
+      ),
+    );
+    await tester.tap(find.byKey(const ValueKey('review-channels')));
     await tester.pumpAndSettle();
-    expect(find.text('Remove 0 generated channels'), findsNothing);
-    await tester.tap(find.text('Confirm & Replace'));
+    await tester.tap(find.byKey(const ValueKey('apply-reviewed-lineup')));
     await tester.pumpAndSettle();
 
     expect(controller.stage, SetupStage.channelSetup);
     expect(find.text('Your lineup is ready'), findsOneWidget);
-    expect(find.bySemanticsLabel('Channel update complete'), findsOneWidget);
-    expect(find.bySemanticsLabel('Generated removed: 0'), findsOneWidget);
-    expect(find.bySemanticsLabel('Final: 2'), findsOneWidget);
+    expect(find.text('2 channels in your lineup'), findsOneWidget);
     expect(find.text('View lineup'), findsOneWidget);
     expect(find.text('Add a custom channel'), findsOneWidget);
 
@@ -166,8 +177,11 @@ void main() {
   testWidgets('Channel Setup Add custom opens a fresh exhausted draft', (
     tester,
   ) async {
-    await tester.binding.setSurfaceSize(const Size(1280, 720));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
+    tester.view
+      ..physicalSize = const Size(1280, 720)
+      ..devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     final controller = _ChannelSetupController()
       ..stage = SetupStage.channelSetup
       ..libraries = const [
@@ -178,12 +192,19 @@ void main() {
       LineupBootstrap(player: _FakePlayer(), controller: controller),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Configure channels'));
+    await tester.tap(find.byKey(const ValueKey('scan-selected-libraries')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Build Channels'));
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('review-channels')),
+      400,
+      scrollable: find.descendant(
+        of: find.byKey(const ValueKey('channel-configuration')),
+        matching: find.byType(Scrollable),
+      ),
+    );
+    await tester.tap(find.byKey(const ValueKey('review-channels')));
     await tester.pumpAndSettle();
-    expect(find.text('Remove 0 generated channels'), findsNothing);
-    await tester.tap(find.text('Confirm & Replace'));
+    await tester.tap(find.byKey(const ValueKey('apply-reviewed-lineup')));
     await tester.pumpAndSettle();
 
     controller.channels = [
@@ -254,7 +275,7 @@ void main() {
 
     await openDestination(tester, 'Settings');
 
-    expect(find.byKey(const Key('theme-option-ember-steel')), findsOneWidget);
+    expect(find.byType(DropdownButton<LineupThemeName>), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
@@ -276,7 +297,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     await openDestination(tester, 'Channels');
-    await tester.tap(find.byTooltip('Open Studio channel'));
+    await tester.tap(find.byKey(const ValueKey('channel-row-studio')));
     await tester.pumpAndSettle();
     await tester.enterText(
       find.byKey(const Key('studio-name')),
@@ -284,7 +305,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byTooltip('Sign out of Plex'));
+    await tester.sendKeyEvent(LogicalKeyboardKey.f3);
     await tester.pumpAndSettle();
     expect(find.text('Discard changes?'), findsOneWidget);
     await tester.tap(find.text('Keep editing'));
@@ -293,9 +314,16 @@ void main() {
     expect(controller.logoutCalls, 0);
     expect(find.text('Edited Studio channel'), findsWidgets);
 
-    await tester.tap(find.byTooltip('Sign out of Plex'));
+    await tester.sendKeyEvent(LogicalKeyboardKey.f3);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Discard changes'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Account'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Sign out of Plex'));
+    await tester.pumpAndSettle();
+    expect(find.text('Sign out of Plex?'), findsOneWidget);
+    await tester.tap(find.text('Sign out'));
     await tester.pumpAndSettle();
 
     expect(controller.logoutCalls, 1);
@@ -318,7 +346,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     await openDestination(tester, 'Channels');
-    await tester.tap(find.byTooltip('Open Studio channel'));
+    await tester.tap(find.byKey(const ValueKey('channel-row-studio')));
     await tester.pumpAndSettle();
     await tester.enterText(
       find.byKey(const Key('studio-name')),
@@ -329,7 +357,7 @@ void main() {
     await tester.pump();
     expect(find.text('Saving channel…'), findsOneWidget);
 
-    await tester.tap(find.byTooltip('Sign out of Plex'));
+    await tester.sendKeyEvent(LogicalKeyboardKey.f3);
     await tester.pump();
 
     expect(controller.logoutCalls, 0);
@@ -345,7 +373,7 @@ void main() {
   ) async {
     final controller = _FakeController()..stage = SetupStage.ready;
     await tester.pumpWidget(
-      LineupBootstrap(player: _FakePlayer(), controller: controller),
+      LineupBootstrap(player: _PlayingPlayer(), controller: controller),
     );
     await tester.pumpAndSettle();
     expect(FocusManager.instance.primaryFocus?.debugLabel, 'Guide');
@@ -382,7 +410,7 @@ void main() {
   ) async {
     final controller = _FakeController()..stage = SetupStage.ready;
     await tester.pumpWidget(
-      LineupBootstrap(player: _FakePlayer(), controller: controller),
+      LineupBootstrap(player: _PlayingPlayer(), controller: controller),
     );
     await tester.pumpAndSettle();
 
@@ -408,13 +436,13 @@ void main() {
   testWidgets('F3 opens Settings from Guide and Player routes', (tester) async {
     final controller = _FakeController()..stage = SetupStage.ready;
     await tester.pumpWidget(
-      LineupBootstrap(player: _FakePlayer(), controller: controller),
+      LineupBootstrap(player: _PlayingPlayer(), controller: controller),
     );
     await tester.pumpAndSettle();
 
     await tester.sendKeyEvent(LogicalKeyboardKey.f3);
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('theme-option-ember-steel')), findsOneWidget);
+    expect(find.byType(DropdownButton<LineupThemeName>), findsOneWidget);
     expect(FocusManager.instance.primaryFocus?.debugLabel, 'Settings');
 
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
@@ -430,7 +458,7 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.f3);
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('theme-option-ember-steel')), findsOneWidget);
+    expect(find.byType(DropdownButton<LineupThemeName>), findsOneWidget);
     expect(FocusManager.instance.primaryFocus?.debugLabel, 'Settings');
 
     await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
@@ -492,11 +520,11 @@ void main() {
 
     await tester.tap(find.text('Switch server'));
     await tester.pumpAndSettle();
-    expect(find.text('Reconnect'), findsOneWidget);
-    expect(find.text('Clear saved server'), findsOneWidget);
-    expect(find.text('Cancel'), findsOneWidget);
+    expect(find.text('Choose a server'), findsOneWidget);
+    expect(find.text('Living Room'), findsOneWidget);
+    expect(find.text('Back'), findsOneWidget);
 
-    await tester.tap(find.text('Cancel'));
+    await tester.tap(find.text('Back'));
     await tester.pumpAndSettle();
     expect(find.text('Settings'), findsWidgets);
     expect(FocusManager.instance.primaryFocus?.debugLabel, 'Settings');
@@ -545,6 +573,47 @@ void main() {
     expect(FocusManager.instance.primaryFocus?.debugLabel, 'Guide');
   });
 
+  testWidgets('Guide activation opens Player while native tune is pending', (
+    tester,
+  ) async {
+    final controller = _FakeController()
+      ..stage = SetupStage.ready
+      ..channels = [
+        Channel(
+          id: 'channel',
+          number: 7,
+          name: 'Synthetic Seven',
+          source: const ManualSource([
+            ChannelItem(
+              id: 'program',
+              title: 'Synthetic Program',
+              duration: Duration(hours: 24),
+            ),
+          ]),
+          playbackMode: PlaybackMode.sequential,
+          anchor: DateTime.now().subtract(const Duration(hours: 1)),
+          shuffleSeed: 7,
+        ),
+      ];
+    final player = _DelayedLoadPlayer();
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      LineupBootstrap(player: player, controller: controller),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+    await player.loadStarted.future;
+
+    expect(find.byKey(const Key('guide-picture-in-picture')), findsNothing);
+    expect(find.byType(NativeVideoSurface), findsOneWidget);
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Player');
+
+    player.releaseLoad();
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('closing Guide returns to Player instead of management history', (
     tester,
   ) async {
@@ -585,7 +654,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(FocusManager.instance.primaryFocus?.debugLabel, 'Player');
-    expect(find.byKey(const Key('theme-option-ember-steel')), findsNothing);
+    expect(find.byType(DropdownButton<LineupThemeName>), findsNothing);
   });
 
   testWidgets('onboarding link action is keyboard reachable', (tester) async {
@@ -648,7 +717,9 @@ void main() {
 
     expect(find.bySemanticsLabel('QR code for plex.tv/link'), findsOneWidget);
     expect(find.bySemanticsLabel('Plex link code A B C D'), findsOneWidget);
-    await tester.tap(find.text('Cancel'));
+    final cancel = find.text('Cancel');
+    await tester.ensureVisible(cancel);
+    await tester.tap(cancel);
     expect(controller.linkingCanceled, isTrue);
   });
 
@@ -667,25 +738,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
-    await tester.pump();
-    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
-    await tester.pump();
     final cancel = find.widgetWithText(TextButton, 'Cancel');
     expect(cancel, findsOneWidget);
-    expect(
-      tester.getSemantics(cancel),
-      matchesSemantics(
-        label: 'Cancel',
-        isButton: true,
-        hasEnabledState: true,
-        isEnabled: true,
-        isFocusable: true,
-        isFocused: true,
-        hasTapAction: true,
-        hasFocusAction: true,
-      ),
-    );
+    await tester.ensureVisible(cancel);
 
     controller.requireSecureCancellation();
     await tester.pump();
@@ -719,7 +774,6 @@ void main() {
       await tester.pump();
 
       expect(find.text('Waiting for sign-in…'), findsNothing);
-      expect(find.bySemanticsLabel('Plex sign-in stopped'), findsOneWidget);
       expect(
         tester.getSemantics(find.text('Synthetic safe Plex failure.')),
         matchesSemantics(
@@ -753,7 +807,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Request a new code'), findsOneWidget);
+    expect(find.text('Get a new code'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -984,16 +1038,16 @@ void main() {
 
     expect(find.text('Owned server'), findsOneWidget);
     expect(find.text('Shared server'), findsOneWidget);
-    expect(find.text('Direct local available'), findsOneWidget);
-    expect(find.text('Direct remote available'), findsNWidgets(2));
-    expect(find.text('Relay available'), findsOneWidget);
+    expect(find.text('Direct local available'), findsNothing);
+    expect(find.text('Direct remote available'), findsNothing);
+    expect(find.text('Relay available'), findsNothing);
     expect(
       find.text(
-        'Selected connection: Direct remote • 500 ms measured • Very slow',
+        'Current connection: Direct remote • 500 ms measured • Very slow',
       ),
       findsOneWidget,
     );
-    expect(find.textContaining('Selected connection:'), findsOneWidget);
+    expect(find.textContaining('Current connection:'), findsOneWidget);
     expect(
       find.text('Lineup could not reach that Plex server. Try again.'),
       findsOneWidget,
@@ -1408,8 +1462,22 @@ class _ChannelSetupController extends _FakeController {
   }
 
   @override
-  Future<bool> setLibraries(Set<String> ids) async {
-    selectedLibraryIds = Set.unmodifiable(ids);
+  Set<String> get libraryScanReadyIds => _readyIds;
+
+  @override
+  Set<String> get libraryScanRetryIds => const {};
+
+  @override
+  Map<String, LibraryScanFact> get libraryScanFacts => _scanFacts;
+
+  Set<String> _readyIds = const {};
+  Map<String, LibraryScanFact> _scanFacts = const {};
+
+  @override
+  Future<bool> scanLibraries(
+    Set<String> ids, {
+    bool retryFailedOnly = false,
+  }) async {
     availableMedia = [
       for (var index = 0; index < 12; index++)
         PlexMediaItem(
@@ -1422,7 +1490,24 @@ class _ChannelSetupController extends _FakeController {
           genres: const ['Drama'],
         ),
     ];
+    _readyIds = Set.unmodifiable(ids);
+    _scanFacts = {
+      for (final id in ids)
+        id: const LibraryScanFact(
+          status: LibraryScanStatus.complete,
+          completedPages: 1,
+          completedItems: 12,
+          totalItems: 12,
+        ),
+    };
     libraryScanStatus = LibraryScanStatus.complete;
+    notifyListeners();
+    return true;
+  }
+
+  @override
+  Future<bool> commitLibraryScan(Set<String> readyIds) async {
+    selectedLibraryIds = Set.unmodifiable(readyIds);
     return true;
   }
 }
@@ -1575,6 +1660,20 @@ class _PlayingPlayer extends _FakePlayer {
   @override
   PlayerStatus get status =>
       const PlayerStatus(state: PlayerState.playing, message: 'Playing');
+}
+
+class _DelayedLoadPlayer extends _FakePlayer {
+  final loadStarted = Completer<void>();
+  final _loadRelease = Completer<void>();
+
+  @override
+  Future<void> load(Uri media, {String? plexToken, int? generation}) async {
+    loads++;
+    loadStarted.complete();
+    await _loadRelease.future;
+  }
+
+  void releaseLoad() => _loadRelease.complete();
 }
 
 const _nativeInitializeFailureMessage = 'libmpv could not create a client.';

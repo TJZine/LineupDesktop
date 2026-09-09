@@ -364,7 +364,7 @@ void main() {
 
     await coordinator.tune('channel-b');
     coordinator.showMiniGuide();
-    coordinator.cycleSleepTimer();
+    coordinator.setSleepTimer(const Duration(minutes: 30));
     lineup.changeContentScope();
     await Future<void>.delayed(Duration.zero);
 
@@ -538,6 +538,82 @@ void main() {
     expect(coordinator.overlay, PlayerOverlay.none);
   });
 
+  test('rapid track intent waits for the latest native confirmation', () async {
+    final lineup = _TestLineup();
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    final player = _BlockingControlPlayer();
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(player.close);
+    addTearDown(coordinator.dispose);
+
+    final first = coordinator.selectTrack(PlayerTrackType.audio, 1);
+    await player.selectStarted.future;
+    final second = coordinator.selectTrack(PlayerTrackType.audio, 2);
+    expect(coordinator.pendingTrackId, 2);
+    player.releaseSelect.complete();
+    await Future.wait([first, second]);
+
+    player.tracks = const [
+      PlayerTrack(id: 1, type: PlayerTrackType.audio, selected: true),
+      PlayerTrack(id: 2, type: PlayerTrackType.audio, selected: false),
+    ];
+    player.emitStatus(PlayerState.playing);
+    await pumpEventQueue();
+    expect(coordinator.pendingTrackId, 2);
+
+    player.tracks = const [
+      PlayerTrack(id: 1, type: PlayerTrackType.audio, selected: false),
+      PlayerTrack(id: 2, type: PlayerTrackType.audio, selected: true),
+    ];
+    player.emitStatus(PlayerState.playing);
+    await pumpEventQueue();
+    expect(coordinator.pendingTrackType, isNull);
+  });
+
+  test('unrelated control does not strand a pending track failure', () async {
+    final lineup = _TestLineup()..diagnostics.enabled = true;
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    final player = _BlockingFailingTrackPlayer();
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
+
+    final selection = coordinator.selectTrack(PlayerTrackType.audio, 2);
+    await player.selectStarted.future;
+    await coordinator.play();
+    player.releaseSelect.complete();
+    await selection;
+
+    expect(coordinator.pendingTrackType, isNull);
+    expect(coordinator.pendingTrackId, isNull);
+    expect(
+      coordinator.trackSelectionError,
+      'Could not change this track. Try again.',
+    );
+    expect(player.plays, 1);
+    expect(lineup.diagnostics.entries.single.context, {
+      'operation': 'audio_track',
+      'code': 'command_error',
+    });
+  });
+
   test(
     'native control failures publish one safe recoverable surface',
     () async {
@@ -624,11 +700,11 @@ void main() {
     addTearDown(guide.dispose);
     addTearDown(coordinator.dispose);
 
-    coordinator.cycleSleepTimer();
+    coordinator.setSleepTimer(const Duration(minutes: 30));
     await tester.pump(const Duration(minutes: 30));
     await player.stopStarted.future;
 
-    coordinator.cycleSleepTimer();
+    coordinator.setSleepTimer(const Duration(minutes: 60));
     expect(coordinator.sleepDuration, const Duration(minutes: 60));
     player.releaseStop.complete();
     await tester.pump();
@@ -639,6 +715,51 @@ void main() {
 
     expect(player.stops, 2);
     expect(coordinator.sleepDuration, isNull);
+  });
+
+  testWidgets('stale sleep completion cannot dismiss a newer tune', (
+    tester,
+  ) async {
+    final lineup = _TestLineup();
+    final scheduleStarted = Completer<void>();
+    final releaseSchedule = Completer<void>();
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async {
+        if (!scheduleStarted.isCompleted) scheduleStarted.complete();
+        await releaseSchedule.future;
+        return _schedule(channel);
+      },
+    );
+    final player = _BlockingStopPlayer();
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
+
+    coordinator.setSleepTimer(const Duration(minutes: 30));
+    await tester.pump(const Duration(minutes: 30));
+    await player.stopStarted.future;
+
+    final tune = coordinator.tune('channel-b');
+    expect(coordinator.overlay, PlayerOverlay.osd);
+    player.releaseStop.complete();
+    await scheduleStarted.future;
+    await tester.pump();
+
+    expect(coordinator.overlay, PlayerOverlay.osd);
+    expect(coordinator.tuning, isTrue);
+    expect(coordinator.error, isNull);
+
+    releaseSchedule.complete();
+    expect(await tune, isTrue);
+    expect(lineup.currentChannelId, 'channel-b');
+    coordinator.closeOverlay();
+    await coordinator.stop();
   });
 
   testWidgets('sleep completion does not notify after disposal', (
@@ -659,7 +780,7 @@ void main() {
     addTearDown(guide.dispose);
     addTearDown(coordinator.dispose);
 
-    coordinator.cycleSleepTimer();
+    coordinator.setSleepTimer(const Duration(minutes: 30));
     await tester.pump(const Duration(minutes: 30));
     await player.stopStarted.future;
 
@@ -689,7 +810,7 @@ void main() {
     addTearDown(player.close);
     addTearDown(coordinator.dispose);
 
-    coordinator.cycleSleepTimer();
+    coordinator.setSleepTimer(const Duration(minutes: 30));
     await tester.pump(const Duration(minutes: 30));
     await tester.pump();
 
@@ -709,6 +830,32 @@ void main() {
       '${lineup.diagnostics.entries.single.context}',
       isNot(contains('opaque-secret-sentinel')),
     );
+  });
+
+  test('an expired deadline stops before a resume command can play', () async {
+    final lineup = _TestLineup();
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    final player = _Player();
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
+
+    coordinator.setSleepTimer(Duration.zero);
+    await coordinator.play();
+
+    expect(player.plays, 0);
+    expect(player.stops, 1);
+    expect(coordinator.sleepDuration, isNull);
+    expect(coordinator.status.state, PlayerState.stopped);
+    expect(coordinator.status.message, 'Playback stopped by timer');
   });
 
   test('removing the active channel stops playback', () async {
@@ -1069,7 +1216,7 @@ void main() {
     expect(coordinator.overlay, PlayerOverlay.none);
   });
 
-  testWidgets('focused timed overlays suspend and restart their full timeout', (
+  testWidgets('OSD focus suspends timeout while Mini Guide never times out', (
     tester,
   ) async {
     final lineup = _TestLineup();
@@ -1114,10 +1261,8 @@ void main() {
       guideGeneration,
       false,
     );
-    await tester.pump(const Duration(milliseconds: 7999));
+    await tester.pump(const Duration(minutes: 5));
     expect(coordinator.overlay, PlayerOverlay.miniGuide);
-    await tester.pump(const Duration(milliseconds: 2));
-    expect(coordinator.overlay, PlayerOverlay.none);
   });
 
   testWidgets(
@@ -3757,6 +3902,7 @@ class _Player implements NativePlayer {
   final fullscreenValues = <bool>[];
   final selectedTracks = <(PlayerTrackType, int?)>[];
   int stops = 0;
+  int plays = 0;
 
   @override
   PlayerStatus status = const PlayerStatus(
@@ -3783,7 +3929,10 @@ class _Player implements NativePlayer {
   }
 
   @override
-  Future<void> play() async {}
+  Future<void> play() async {
+    plays++;
+  }
+
   @override
   Future<void> pause() async {}
   @override
@@ -4209,6 +4358,22 @@ class _BlockingFailingControlPlayer extends _Player {
   Future<void> seek(Duration value) async {
     seekStarted.complete();
     await releaseSeek.future;
+    throw const PlayerUnavailable(
+      'opaque stale detail',
+      failureCode: 'command_error',
+    );
+  }
+}
+
+class _BlockingFailingTrackPlayer extends _Player {
+  final selectStarted = Completer<void>();
+  final releaseSelect = Completer<void>();
+
+  @override
+  Future<void> selectTrack(PlayerTrackType type, int? id) async {
+    selectedTracks.add((type, id));
+    selectStarted.complete();
+    await releaseSelect.future;
     throw const PlayerUnavailable(
       'opaque stale detail',
       failureCode: 'command_error',

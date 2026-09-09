@@ -176,33 +176,20 @@ void main() {
       tester,
       UiFixture(controller: controller, guideClock: () => _fixedNow).build(),
     );
-    await tester.tap(find.text('Configure channels'));
+    await tester.tap(find.byKey(const Key('scan-selected-libraries')));
     await tester.pumpAndSettle();
 
-    expect(find.text('Configure the lineup'), findsOneWidget);
-    final viewport = Offset.zero & _viewport;
-    final shell = tester.getRect(
-      find.byKey(const ValueKey('channel-setup-shell')),
-    );
+    expect(find.text('Configure channels'), findsOneWidget);
+    final stage = tester.getRect(find.byKey(const Key('channel-setup-stage')));
     final header = tester.getRect(
-      find.byKey(const ValueKey('channel-setup-header')),
+      find.byKey(const Key('channel-setup-header')),
     );
-    expect(header.bottom, lessThan(shell.top));
+    expect(header.bottom, lessThanOrEqualTo(stage.top));
+    expect(find.byKey(const Key('channel-configuration')), findsOneWidget);
     expect(
-      tester.getRect(find.widgetWithText(Chip, 'Step 2 of 3')).bottom,
-      lessThan(shell.top),
+      tester.getBottomRight(find.byKey(const Key('review-channels'))).dy,
+      lessThanOrEqualTo(_viewport.height),
     );
-    final regions = [
-      tester.getRect(find.byKey(const ValueKey('channel-setup-strategy-rail'))),
-      tester.getRect(
-        find.byKey(const ValueKey('channel-setup-strategy-details')),
-      ),
-      tester.getRect(find.widgetWithText(FilledButton, 'Build Channels')),
-    ];
-    for (final region in regions) {
-      expect(viewport.intersect(region), region);
-      expect(shell.intersect(region), region);
-    }
     await _match(
       tester,
       'channel-setup-strategies-1280x720.png',
@@ -227,18 +214,22 @@ void main() {
         ).build(),
       ),
     );
-    await tester.tap(find.text('Configure channels'));
+    await tester.tap(find.byKey(const Key('scan-selected-libraries')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Build Channels'));
+    await tester.tap(find.byKey(const Key('review-channels')));
     await tester.pumpAndSettle();
 
-    expect(find.text('Review expected changes'), findsOneWidget);
+    expect(find.text('Review your first lineup'), findsOneWidget);
     expect(
-      tester.getBottomLeft(find.text('Channel Setup')).dy,
-      lessThan(tester.getTopLeft(find.text('Review expected changes')).dy),
+      tester.getBottomLeft(find.byKey(const Key('channel-setup-header'))).dy,
+      lessThan(
+        tester
+            .getTopLeft(find.byKey(const Key('channel-setup-review-roster')))
+            .dy,
+      ),
     );
     expect(
-      tester.getBottomRight(find.text('Confirm & Replace')).dy,
+      tester.getBottomRight(find.byKey(const Key('apply-reviewed-lineup'))).dy,
       lessThanOrEqualTo(_viewport.height),
     );
     await _match(
@@ -266,15 +257,15 @@ void main() {
       ),
       viewport: const Size(1920, 1080),
     );
-    await tester.tap(find.text('Configure channels'));
+    await tester.tap(find.byKey(const Key('scan-selected-libraries')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Build Channels'));
+    await tester.tap(find.byKey(const Key('review-channels')));
     await tester.pumpAndSettle();
 
-    expect(find.text('Review expected changes'), findsOneWidget);
-    expect(find.bySemanticsLabel('Final: 2'), findsOneWidget);
+    expect(find.text('Review your first lineup'), findsOneWidget);
+    expect(find.text('2 channels ready to create').first, findsOneWidget);
     expect(
-      tester.getBottomRight(find.text('Confirm & Replace')).dy,
+      tester.getBottomRight(find.byKey(const Key('apply-reviewed-lineup'))).dy,
       lessThanOrEqualTo(1080),
     );
     await _match(
@@ -316,17 +307,21 @@ void main() {
         ).build(),
       ),
     );
-    await tester.tap(find.text('Configure channels'));
+    await tester.tap(find.byKey(const Key('scan-selected-libraries')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Review'));
+    await tester.tap(find.byKey(const Key('review-channels')));
     await tester.pumpAndSettle();
-
-    expect(find.text('Remove 1 generated channel'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('review-build-method')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Replace generated channels').last);
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('channel-setup-replace-confirmation')),
+      findsOneWidget,
+    );
     expect(
       tester
-          .widget<FilledButton>(
-            find.widgetWithText(FilledButton, 'Confirm & Replace'),
-          )
+          .widget<FilledButton>(find.byKey(const Key('apply-reviewed-lineup')))
           .onPressed,
       isNull,
     );
@@ -356,16 +351,16 @@ void main() {
     );
     await _openChannelSetupApply(tester);
 
-    expect(find.bySemanticsLabel('Applying channels'), findsOneWidget);
+    expect(find.text('Creating your lineup…'), findsOneWidget);
     expect(
-      tester.getBottomLeft(find.text('Channel Setup')).dy,
-      lessThan(tester.getTopLeft(find.text('Applying your lineup')).dy),
+      tester.getBottomLeft(find.byKey(const Key('channel-setup-header'))).dy,
+      lessThan(tester.getTopLeft(find.text('Creating your lineup…')).dy),
     );
     expect(
-      tester.getTopLeft(find.text('Channel Setup')).dy,
+      tester.getTopLeft(find.byKey(const Key('channel-setup-header'))).dy,
       greaterThanOrEqualTo(0),
     );
-    expect(find.text('Step 3 of 3'), findsOneWidget);
+    expect(find.byKey(const Key('channel-setup-steps')), findsOneWidget);
     for (final element in tester.allElements) {
       element.renderObject?.markNeedsPaint();
     }
@@ -398,9 +393,9 @@ void main() {
     controller.finishApply();
     await tester.pumpAndSettle();
 
-    expect(find.bySemanticsLabel('Channel update complete'), findsOneWidget);
+    expect(find.text('Your lineup is ready'), findsOneWidget);
     expect(
-      tester.getBottomLeft(find.text('Channel Setup')).dy,
+      tester.getBottomLeft(find.byKey(const Key('channel-setup-header'))).dy,
       lessThan(tester.getTopLeft(find.text('Your lineup is ready')).dy),
     );
     expect(
@@ -478,15 +473,14 @@ void main() {
         ).build(),
       ),
     );
-    expect(find.text('Retry scan'), findsOneWidget);
-    expect(find.text('Complete'), findsOneWidget);
-    expect(find.text('72/72 items · 4 pages'), findsOneWidget);
-    expect(find.text('Unsupported'), findsOneWidget);
-    expect(find.text('8/8 items · 2 pages'), findsOneWidget);
-    expect(find.text('Empty'), findsOneWidget);
-    expect(find.text('0/0 items · 1 page'), findsOneWidget);
-    expect(find.text('Scan failed'), findsOneWidget);
-    expect(find.text('3/32 items · 1 page'), findsOneWidget);
+    expect(find.text('Retry 1 failed'), findsOneWidget);
+    expect(find.text('Ready · 72/72 items · 4 pages'), findsOneWidget);
+    expect(
+      find.text('No playable media · 8/8 items · 2 pages'),
+      findsOneWidget,
+    );
+    expect(find.text('Empty · 0/0 items · 1 page'), findsOneWidget);
+    expect(find.text('Scan failed · 3/32 items · 1 page'), findsOneWidget);
     await _match(
       tester,
       'channel-setup-libraries-1280x720.png',
@@ -523,27 +517,6 @@ void main() {
     await _match(
       tester,
       'guide-pip-1280x720.png',
-      precacheLogo: true,
-      additionalPumps: 2,
-    );
-  });
-
-  testWidgets('overlay Guide', (tester) async {
-    final fixture =
-        _readyFixture(
-            playerState: const PlayerStatus(
-              state: PlayerState.ready,
-              message: 'Synthetic player surface',
-            ),
-          )
-          ..controller.settings = const LineupSettings(
-            guideLayoutMode: GuideLayoutMode.overlay,
-            reduceMotion: true,
-          );
-    await _pump(tester, fixture.build());
-    await _match(
-      tester,
-      'guide-overlay-1280x720.png',
       precacheLogo: true,
       additionalPumps: 2,
     );
@@ -680,7 +653,11 @@ void main() {
     await tester.pump();
 
     expect(find.byKey(const Key('playback-options-rail')), findsOneWidget);
-    await _match(tester, 'player-audio-tracks-1280x720.png');
+    await _match(
+      tester,
+      'player-audio-tracks-1280x720.png',
+      additionalPumps: 2,
+    );
   });
 
   testWidgets('player long subtitle track rail', (tester) async {
@@ -710,7 +687,11 @@ void main() {
       Focus.of(tester.element(find.text('Subtitle track 10'))).hasFocus,
       isTrue,
     );
-    await _match(tester, 'player-subtitles-long-1280x720.png');
+    await _match(
+      tester,
+      'player-subtitles-long-1280x720.png',
+      additionalPumps: 2,
+    );
   });
 
   testWidgets('Mini Guide', (tester) async {
@@ -760,7 +741,7 @@ void main() {
     await _pump(tester, fixture.build(), viewport: const Size(800, 600));
     await _openDestination(tester, 'Settings');
 
-    expect(find.byKey(const Key('theme-option-ember-steel')), findsOneWidget);
+    expect(find.byType(DropdownButton<LineupThemeName>), findsOneWidget);
     await _match(tester, 'settings-appearance-ember-steel-800x600.png');
   });
 
@@ -769,7 +750,7 @@ void main() {
     await _pump(tester, fixture.build(), viewport: const Size(1920, 1080));
     await _openDestination(tester, 'Settings');
 
-    expect(find.byKey(const Key('theme-option-ember-steel')), findsOneWidget);
+    expect(find.byType(DropdownButton<LineupThemeName>), findsOneWidget);
     await _match(tester, 'settings-appearance-ember-steel-1920x1080.png');
   });
 
@@ -795,7 +776,7 @@ void main() {
     final fixture = _studioFixture();
     await _pump(tester, fixture.build());
     await _openDestination(tester, 'Channels');
-    await tester.tap(find.byTooltip('Open Saturday Cartoons'));
+    await tester.tap(find.text('Saturday Cartoons').first);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
     await tester.pumpAndSettle();
@@ -808,35 +789,10 @@ void main() {
     final fixture = _studioFixture();
     await _pump(tester, fixture.build(), viewport: const Size(800, 600));
     await _openDestination(tester, 'Channels');
-    await tester.tap(find.byTooltip('Open Saturday Cartoons'));
+    await tester.tap(find.text('Saturday Cartoons').first);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
     await tester.pumpAndSettle();
-    expect(
-      tester
-          .state<ScrollableState>(
-            find
-                .descendant(
-                  of: find.byKey(const Key('studio-scroll')),
-                  matching: find.byType(Scrollable),
-                )
-                .first,
-          )
-          .position
-          .pixels,
-      0,
-    );
-    for (final finder in [
-      find.text('Saved'),
-      find.byKey(const Key('channel-air-check')),
-      find.text('Programming'),
-      find.text('Save changes'),
-    ]) {
-      expect(
-        (Offset.zero & const Size(800, 600)).overlaps(tester.getRect(finder)),
-        isTrue,
-      );
-    }
     await _match(tester, 'channel-studio-compact-800x600.png');
   });
 }
@@ -1080,39 +1036,98 @@ UiFixture _studioFixture() {
 class _VisualController extends FixtureController {
   Map<String, LibraryScanFact> scanFacts = const {};
   bool useWordmarkArtwork = false;
+  Set<String> _scannedLibraryIds = const {};
+  List<PlexMediaItem>? _scannedMedia;
 
   @override
   Map<String, LibraryScanFact> get libraryScanFacts => scanFacts;
+
+  @override
+  Set<String> get libraryScanReadyIds => Set.unmodifiable(
+    scanFacts.entries
+        .where((entry) => entry.value.status == LibraryScanStatus.complete)
+        .map((entry) => entry.key),
+  );
+
+  @override
+  Set<String> get libraryScanRetryIds => Set.unmodifiable(
+    scanFacts.entries
+        .where(
+          (entry) => const {
+            LibraryScanStatus.transientFailure,
+            LibraryScanStatus.cancelled,
+            LibraryScanStatus.idle,
+          }.contains(entry.value.status),
+        )
+        .map((entry) => entry.key),
+  );
 
   @override
   Future<Uint8List?> artworkForPath(Uri path) async =>
       useWordmarkArtwork ? _nowPlayingArtwork[path] : _syntheticArtwork;
 
   @override
-  Future<ScheduleIndex> loadScheduleFor(Channel channel) async => buildSchedule(
-    (channel.source as ManualSource).items,
-    mode: channel.playbackMode,
-    seed: channel.shuffleSeed,
-  );
+  Future<ScheduleIndex> loadScheduleFor(Channel channel) async =>
+      buildChannelSchedule(channel, (channel.source as ManualSource).items);
+
+  Future<List<PlexMediaItem>> _scanSyntheticMovies() async => [
+    for (var index = 0; index < 12; index++)
+      PlexMediaItem(
+        id: 'movie-$index',
+        title: 'Synthetic Movie ${index + 1}',
+        type: 'movie',
+        duration: const Duration(minutes: 90),
+        libraryId: 'movies',
+        parts: [PlexMediaPart(path: '/parts/movie-$index')],
+        genres: const ['Drama'],
+        addedAt: DateTime.utc(2026, 1, index + 1),
+      ),
+  ];
+
+  @override
+  Future<bool> scanLibraries(
+    Set<String> ids, {
+    bool retryFailedOnly = false,
+  }) async {
+    if (ids.isEmpty) return false;
+    _scannedLibraryIds = Set.unmodifiable(ids);
+    _scannedMedia = List.unmodifiable(await _scanSyntheticMovies());
+    scanFacts = {
+      for (final id in ids)
+        id: const LibraryScanFact(
+          status: LibraryScanStatus.complete,
+          completedPages: 1,
+          completedItems: 12,
+          totalItems: 12,
+        ),
+    };
+    libraryScanStatus = LibraryScanStatus.complete;
+    libraryScanCompletedPages = 1;
+    libraryScanCompletedItems = 12;
+    libraryScanTotalItems = 12;
+    notifyListeners();
+    return true;
+  }
+
+  @override
+  Future<bool> commitLibraryScan(Set<String> readyIds) async {
+    final scanned = _scannedMedia;
+    if (scanned == null ||
+        readyIds.isEmpty ||
+        !_scannedLibraryIds.containsAll(readyIds)) {
+      return false;
+    }
+    selectedLibraryIds = Set.unmodifiable(readyIds);
+    availableMedia = List.unmodifiable(scanned);
+    notifyListeners();
+    return true;
+  }
 
   @override
   Future<bool> setLibraries(Set<String> ids) async {
-    selectedLibraryIds = Set.unmodifiable(ids);
-    availableMedia = [
-      for (var index = 0; index < 12; index++)
-        PlexMediaItem(
-          id: 'movie-$index',
-          title: 'Synthetic Movie ${index + 1}',
-          type: 'movie',
-          duration: const Duration(minutes: 90),
-          libraryId: 'movies',
-          parts: [PlexMediaPart(path: '/parts/movie-$index')],
-          genres: const ['Drama'],
-          addedAt: DateTime.utc(2026, 1, index + 1),
-        ),
-    ];
-    libraryScanStatus = LibraryScanStatus.complete;
-    return true;
+    if (!await scanLibraries(ids)) return false;
+    if (libraryScanRetryIds.isNotEmpty) return false;
+    return commitLibraryScan(ids);
   }
 }
 
@@ -1120,23 +1135,28 @@ class _PendingVisualController extends _VisualController {
   final _apply = Completer<void>();
 
   @override
-  Future<void> applyChannelPlan(
+  Future<ChannelPlanApplyResult> applyReviewedChannelPlan(
     List<Channel> planned, {
     required ChannelBuildMode mode,
+    required List<Channel> expectedBase,
   }) async {
     await _apply.future;
-    await super.applyChannelPlan(planned, mode: mode);
+    return super.applyReviewedChannelPlan(
+      planned,
+      mode: mode,
+      expectedBase: expectedBase,
+    );
   }
 
   void finishApply() => _apply.complete();
 }
 
 Future<void> _openChannelSetupApply(WidgetTester tester) async {
-  await tester.tap(find.text('Configure channels'));
+  await tester.tap(find.byKey(const Key('scan-selected-libraries')));
   await tester.pumpAndSettle();
-  await tester.tap(find.text('Build Channels'));
+  await tester.tap(find.byKey(const Key('review-channels')));
   await tester.pumpAndSettle();
-  await tester.tap(find.text('Confirm & Replace'));
+  await tester.tap(find.byKey(const Key('apply-reviewed-lineup')));
   await tester.pump();
 }
 

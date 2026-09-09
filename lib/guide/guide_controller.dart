@@ -56,7 +56,7 @@ abstract final class GuideGeometry {
   }
 }
 
-enum GuideLoadState { loading, ready, error }
+enum GuideLoadState { loading, retrying, ready, error }
 
 enum GuideArtworkKind { poster, backdrop, clearLogo }
 
@@ -140,6 +140,9 @@ class GuideController extends ChangeNotifier {
   String? _selectedChannelId;
   String? _selectedProgramId;
   String? _libraryFilterId;
+  String _searchQuery = '';
+  String? _preservedFocusedChannelId;
+  String? _preservedFocusedProgramId;
   int _generation = 0;
   late int _contentGeneration;
   int _activeLoads = 0;
@@ -159,8 +162,9 @@ class GuideController extends ChangeNotifier {
   String? get selectedChannelId => _selectedChannelId;
   String? get selectedProgramId => _selectedProgramId;
   String? get libraryFilterId => _libraryFilterId;
-  GuideDensity get density => _settings.guideDensity;
+  String get searchQuery => _searchQuery;
   int get guideHours => _settings.guideHours;
+  bool get canBrowseEarlier => _windowStart.isAfter(_liveBoundary);
   int get cachedRowCount => _rows.length;
   int get activeLoadCount => _activeLoads;
   double verticalOffsetFor(double rowHeight) =>
@@ -170,6 +174,7 @@ class GuideController extends ChangeNotifier {
   int get focusedChannelIndex =>
       _visibleIndexById[_focusedChannelId] ??
       (_visibleChannels.isEmpty ? -1 : 0);
+  Channel? get focusedChannel => _channelById[_focusedChannelId];
 
   GuideRowData row(String channelId) =>
       _rows[channelId] ?? const GuideRowData(state: GuideLoadState.loading);
@@ -362,9 +367,12 @@ class GuideController extends ChangeNotifier {
   }
 
   Future<void> retry(String channelId) async {
-    _rows.remove(channelId);
+    if (_rows[channelId]?.state != GuideLoadState.error) return;
     final channel = _channelById[channelId];
-    if (channel != null) _request(channel, prioritize: true);
+    if (channel == null) return;
+    _rows[channelId] = const GuideRowData(state: GuideLoadState.retrying);
+    notifyListeners();
+    _request(channel, prioritize: true, retrying: true);
   }
 
   void focusProgram(GuideProgram program) {
@@ -420,6 +428,11 @@ class GuideController extends ChangeNotifier {
     final current = programs.indexWhere(
       (program) => program.id == _focusedProgramId,
     );
+    if (offset < 0 && !canBrowseEarlier && current <= 0) {
+      _focusedProgramId = null;
+      notifyListeners();
+      return;
+    }
     if (current >= 0 &&
         current + offset >= 0 &&
         current + offset < programs.length) {
@@ -449,48 +462,77 @@ class GuideController extends ChangeNotifier {
   void playToNow() {
     final now = _clock();
     _focusTime = now;
-    _windowStart = _floorHalfHour(
-      now.subtract(Duration(minutes: _settings.pastMinutes)),
-    );
+    _windowStart = _floorHalfHour(now);
     _reloadRows();
+  }
+
+  void refreshForPresentation() {
+    final current = _clock();
+    if (!windowEnd.isAfter(current)) playToNow();
+  }
+
+  void moveWindow(int halfHours) {
+    if (halfHours == 0) return;
+    final next = _windowStart.add(Duration(minutes: halfHours * 30));
+    final target = next.isBefore(_liveBoundary) ? _liveBoundary : next;
+    if (target == _windowStart) {
+      if (halfHours < 0) {
+        _focusedProgramId = null;
+        notifyListeners();
+      }
+      return;
+    }
+    _windowStart = target;
+    _reloadRows();
+  }
+
+  void setSearchQuery(String value) {
+    final query = value.trim().toLowerCase();
+    if (_searchQuery == query) return;
+    _rememberInspection();
+    _searchQuery = query;
+    _applyFilters();
+    notifyListeners();
+  }
+
+  Future<void> setGuideHours(int hours) async {
+    if (!LineupSettings.guideHoursOptions.contains(hours) ||
+        hours == guideHours) {
+      return;
+    }
+    await lineup.updateSettings(lineup.settings.copyWith(guideHours: hours));
   }
 
   void setLibraryFilter(String? libraryId) {
     if (_libraryFilterId == libraryId) return;
+    _rememberInspection();
     _libraryFilterId = libraryId;
-    _updateVisibleChannels();
-    final visible = _visibleChannels;
-    if (!visible.any((channel) => channel.id == _focusedChannelId)) {
-      _focusedChannelId = visible.firstOrNull?.id;
-      _focusedProgramId = null;
-    }
-    if (!visible.any((channel) => channel.id == _selectedChannelId)) {
-      _selectedChannelId = null;
-      _selectedProgramId = null;
-    }
+    _applyFilters();
     notifyListeners();
   }
 
   void _shiftWindow(int direction) {
-    final minimum = _floorHalfHour(
-      _clock().subtract(Duration(minutes: _settings.pastMinutes)),
-    );
-    final next = _windowStart.add(Duration(minutes: 30 * direction));
-    _windowStart = next.isBefore(minimum) ? minimum : next;
-    _reloadRows();
+    moveWindow(direction);
   }
 
   void _selectAtFocusTime() {
     final channelId = _focusedChannelId;
     if (channelId == null) return;
     final programs = row(channelId).programs;
-    final match = programs
+    var match = programs
         .where(
           (program) =>
               !_focusTime.isBefore(program.scheduled.start) &&
               _focusTime.isBefore(program.scheduled.end),
         )
         .firstOrNull;
+    if (match == null && programs.isNotEmpty) {
+      match = programs.reduce((nearest, candidate) {
+        final nearestDistance = _distanceFrom(_focusTime, nearest);
+        final candidateDistance = _distanceFrom(_focusTime, candidate);
+        return candidateDistance < nearestDistance ? candidate : nearest;
+      });
+    }
     _focusedProgramId = match?.id;
   }
 
@@ -519,10 +561,11 @@ class GuideController extends ChangeNotifier {
     Channel channel, {
     bool viewport = false,
     bool prioritize = false,
+    bool retrying = false,
     bool pump = true,
   }) {
     if (_disposed) return;
-    if (_rows.containsKey(channel.id)) return;
+    if (_rows.containsKey(channel.id) && !retrying) return;
     final cachedSchedule = _schedules[channel.id];
     if (cachedSchedule != null) {
       _putRow(channel.id, _projectedRow(channel, cachedSchedule));
@@ -571,7 +614,9 @@ class GuideController extends ChangeNotifier {
       }
       final generation = _generation;
       _activeLoads++;
-      _rows[channel.id] = const GuideRowData(state: GuideLoadState.loading);
+      if (_rows[channel.id]?.state != GuideLoadState.retrying) {
+        _rows[channel.id] = const GuideRowData(state: GuideLoadState.loading);
+      }
       final cachedSchedule = _schedules.remove(channel.id);
       final loading = cachedSchedule == null
           ? _loadScheduleWithTimeout(channel)
@@ -608,7 +653,10 @@ class GuideController extends ChangeNotifier {
           )
           .whenComplete(() {
             _activeLoads--;
-            if (!_disposed) _pump();
+            if (!_disposed) {
+              _pump();
+              notifyListeners();
+            }
           });
     }
   }
@@ -744,22 +792,17 @@ class GuideController extends ChangeNotifier {
     final lineupChanged =
         contentChanged ||
         (!identical(old, next) && !_listEqualsBy(old, next, _channelEquals));
-    final settingsChanged =
-        _settings.guideHours != lineup.settings.guideHours ||
-        _settings.pastMinutes != lineup.settings.pastMinutes ||
-        _settings.guideDensity != lineup.settings.guideDensity ||
-        _settings.libraryTabsEnabled != lineup.settings.libraryTabsEnabled;
+    final settingsChanged = _settings.guideHours != lineup.settings.guideHours;
     _channels = next;
     _settings = lineup.settings;
     if (contentChanged) {
       _libraryFilterId = null;
+      _searchQuery = '';
+      _preservedFocusedChannelId = null;
+      _preservedFocusedProgramId = null;
       _focusedProgramId = null;
       _selectedChannelId = null;
       _selectedProgramId = null;
-    }
-    if (!_settings.libraryTabsEnabled && _libraryFilterId != null) {
-      _libraryFilterId = null;
-      _updateVisibleChannels();
     }
     if (lineupChanged) {
       _updateVisibleChannels();
@@ -785,7 +828,7 @@ class GuideController extends ChangeNotifier {
       }
       _reloadRows(clearSchedules: true);
     } else if (settingsChanged) {
-      playToNow();
+      _reloadRows();
     } else {
       notifyListeners();
     }
@@ -797,22 +840,63 @@ class GuideController extends ChangeNotifier {
       for (final channel in _channels) ..._sourceLibraryIds(channel.source),
     };
     final filter = _libraryFilterId;
-    _visibleChannels = filter == null
-        ? _channels
-        : _channels
-              .where(
-                (channel) => _sourceLibraryIds(channel.source).contains(filter),
-              )
-              .toList(growable: false);
+    final query = _searchQuery;
+    _visibleChannels = _channels
+        .where((channel) {
+          if (filter != null &&
+              !_sourceLibraryIds(channel.source).contains(filter)) {
+            return false;
+          }
+          return query.isEmpty ||
+              channel.name.toLowerCase().contains(query) ||
+              '${channel.number}'.contains(query);
+        })
+        .toList(growable: false);
     _visibleIndexById = {
       for (var index = 0; index < _visibleChannels.length; index++)
         _visibleChannels[index].id: index,
     };
   }
 
-  DateTime get _initialWindowStart => _floorHalfHour(
-    _clock().subtract(Duration(minutes: _settings.pastMinutes)),
-  );
+  DateTime get _initialWindowStart => _liveBoundary;
+  DateTime get _liveBoundary => _floorHalfHour(_clock());
+
+  void _rememberInspection() {
+    if (_focusedChannelId == null) return;
+    _preservedFocusedChannelId = _focusedChannelId;
+    _preservedFocusedProgramId = _focusedProgramId;
+  }
+
+  void _applyFilters() {
+    _updateVisibleChannels();
+    if (_visibleChannels.isEmpty) {
+      _focusedChannelId = null;
+      _focusedProgramId = null;
+      _selectedChannelId = null;
+      _selectedProgramId = null;
+      return;
+    }
+    if (_visibleIndexById.containsKey(_focusedChannelId)) {
+      if (!_visibleIndexById.containsKey(_selectedChannelId)) {
+        _selectedChannelId = null;
+        _selectedProgramId = null;
+      }
+      return;
+    }
+    final restoreId = _preservedFocusedChannelId;
+    if (restoreId != null && _visibleIndexById.containsKey(restoreId)) {
+      _focusedChannelId = restoreId;
+      _focusedProgramId = _preservedFocusedProgramId;
+    } else {
+      _focusedChannelId = _visibleChannels.first.id;
+      _focusedProgramId = null;
+    }
+    _selectAtFocusTime();
+    if (!_visibleIndexById.containsKey(_selectedChannelId)) {
+      _selectedChannelId = null;
+      _selectedProgramId = null;
+    }
+  }
 
   @override
   void dispose() {
@@ -864,60 +948,7 @@ bool _channelEquals(Channel left, Channel right) =>
     left.id == right.id &&
     left.number == right.number &&
     left.name == right.name &&
-    left.anchor == right.anchor &&
-    left.shuffleSeed == right.shuffleSeed &&
-    left.blockSize == right.blockSize &&
-    left.playbackMode == right.playbackMode &&
-    _sourceEquals(left.source, right.source);
-
-bool _sourceEquals(ContentSource left, ContentSource right) {
-  if (identical(left, right)) return true;
-  return switch (left) {
-    LibrarySource() when right is LibrarySource =>
-      left.libraryId == right.libraryId &&
-          left.libraryType == right.libraryType &&
-          left.includeWatched == right.includeWatched &&
-          mapEquals(left.filters, right.filters),
-    ManualSource() when right is ManualSource => _listEqualsBy(
-      left.items,
-      right.items,
-      _itemEquals,
-    ),
-    PlaylistSource() when right is PlaylistSource =>
-      left.playlistId == right.playlistId,
-    MixedSource() when right is MixedSource =>
-      left.interleave == right.interleave &&
-          _listEqualsBy(left.sources, right.sources, _sourceEquals),
-    _ => false,
-  };
-}
-
-bool _itemEquals(ChannelItem left, ChannelItem right) =>
-    left.id == right.id &&
-    left.title == right.title &&
-    left.duration == right.duration &&
-    left.showTitle == right.showTitle &&
-    left.showThumb == right.showThumb &&
-    left.poster == right.poster &&
-    left.backdrop == right.backdrop &&
-    left.clearLogo == right.clearLogo &&
-    left.summary == right.summary &&
-    left.contentRating == right.contentRating &&
-    listEquals(left.genres, right.genres) &&
-    left.year == right.year &&
-    left.seasonNumber == right.seasonNumber &&
-    left.episodeNumber == right.episodeNumber &&
-    left.resolution == right.resolution &&
-    left.videoCodec == right.videoCodec &&
-    left.audioCodec == right.audioCodec &&
-    left.audioChannels == right.audioChannels &&
-    left.dynamicRange == right.dynamicRange &&
-    _listEqualsBy(left.cast, right.cast, _castMemberEquals);
-
-bool _castMemberEquals(ChannelCastMember left, ChannelCastMember right) =>
-    left.name == right.name &&
-    left.role == right.role &&
-    left.portrait == right.portrait;
+    canonicalScheduleIdentity(left) == canonicalScheduleIdentity(right);
 
 bool _listEqualsBy<T>(List<T> left, List<T> right, bool Function(T, T) equals) {
   if (identical(left, right)) return true;
@@ -933,6 +964,13 @@ DateTime _floorHalfHour(DateTime value) {
   return value.isUtc
       ? DateTime.utc(value.year, value.month, value.day, value.hour, minute)
       : DateTime(value.year, value.month, value.day, value.hour, minute);
+}
+
+int _distanceFrom(DateTime time, GuideProgram program) {
+  if (time.isBefore(program.scheduled.start)) {
+    return program.scheduled.start.difference(time).inMicroseconds;
+  }
+  return time.difference(program.scheduled.end).inMicroseconds;
 }
 
 Set<String> _sourceLibraryIds(ContentSource source) => switch (source) {

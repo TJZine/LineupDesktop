@@ -37,17 +37,21 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('guide-focused-artwork')), findsOneWidget);
+    expect(find.byKey(const Key('guide-picture-in-picture')), findsOneWidget);
+    expect(
+      find.byKey(const Key('guide-info-dynamic-background')),
+      findsOneWidget,
+    );
     expect(find.byKey(const Key('guide-program-badges')), findsOneWidget);
-    await _match(tester, 'guide-overlay-rich-1920x1080.png');
+    await _match(tester, 'guide-rich-1920x1080.png');
   });
 
   testWidgets('matched reference-free Guide information', (tester) async {
     await _pumpGuide(tester, rich: false);
 
-    expect(find.byKey(const Key('guide-focused-artwork')), findsNothing);
+    expect(find.byKey(const Key('guide-picture-in-picture')), findsOneWidget);
     expect(find.byKey(const Key('guide-program-badges')), findsNothing);
-    await _match(tester, 'guide-overlay-sparse-1920x1080.png');
+    await _match(tester, 'guide-reference-free-1920x1080.png');
   });
 }
 
@@ -78,7 +82,7 @@ Future<BuildContext> _pumpGuide(
         theme: LineupTheme.forName(LineupThemeName.emberSteel),
         home: GuideView(
           controller: guide,
-          overlayMode: true,
+          pictureInPicture: const SizedBox.expand(),
           playbackMessage: 'Synthetic player surface',
           onClose: () {},
           onTune: (_) async {},
@@ -150,10 +154,7 @@ List<Channel> _channels(bool rich) => [
 class _ComparisonController extends FixtureController {
   _ComparisonController(List<Channel> fixtureChannels) {
     stage = SetupStage.ready;
-    settings = const LineupSettings(
-      guideLayoutMode: GuideLayoutMode.overlay,
-      reduceMotion: true,
-    );
+    settings = const LineupSettings(reduceMotion: true);
     channels = fixtureChannels;
     currentChannelId = fixtureChannels[1].id;
   }

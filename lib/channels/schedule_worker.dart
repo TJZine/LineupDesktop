@@ -150,11 +150,9 @@ class ScheduleWorker {
       try {
         output.send([
           id,
-          buildSchedule(
+          buildChannelSchedule(
+            channel,
             resolveContent(channel.source, media, playlists),
-            mode: channel.playbackMode,
-            seed: channel.shuffleSeed,
-            blockSize: channel.blockSize ?? 3,
           ),
           null,
         ]);

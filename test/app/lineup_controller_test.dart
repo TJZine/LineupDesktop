@@ -37,6 +37,288 @@ Future<void> _waitForTestState(
 }
 
 void main() {
+  test('Plex PIN cancellation failure stays retryable even after local credentials clear', () async {
+    final plex = _FakePlex()
+      ..pinResult = PlexPin(
+        id: 1,
+        code: 'TEST',
+        expiresAt: DateTime.now().add(const Duration(minutes: 4)),
+      )
+      ..cancelPinFailure = const PlexException(
+        'server-unreachable',
+        'Synthetic failure',
+      );
+    final controller = LineupController(
+      store: _MemoryStore(),
+      credentials: _MemoryCredentials(),
+      plex: plex,
+    );
+    addTearDown(controller.dispose);
+    await controller.startLinking();
+    final pin = controller.activePin;
+    expect(pin, isNotNull);
+    expect(await controller.cancelLinking(), isFalse);
+    expect(controller.stage, SetupStage.linking);
+    expect(controller.activePin, pin);
+    expect(controller.secureCancellationRequired, isTrue);
+    expect(await controller.cancelLinking(), isTrue);
+    expect(controller.stage, SetupStage.welcome);
+  });
+
+  test(
+    'late failed persistence after disposal preserves its original error',
+    () async {
+      final store = _ControlledSaveStore();
+      final controller = LineupController(
+        store: store,
+        credentials: _MemoryCredentials(),
+        plex: _FakePlex(),
+      );
+      await controller.initialize();
+      controller.diagnostics.enabled = true;
+      store.blockNext(fail: true);
+      final pending = controller.updateSettings(controller.settings);
+      final failure = expectLater(pending, throwsStateError);
+      await store.blockedSaveStarted.future;
+      controller.dispose();
+      store.releaseBlockedSave();
+      await failure;
+      expect(controller.diagnostics.entries, isEmpty);
+    },
+  );
+
+  test('mixed scan commits only explicitly ready libraries and retries only failures', () async {
+    final selected = _server('server');
+    final calls = <String, int>{};
+    var failSecond = true;
+    final plex = _FakePlex()
+      ..serversResult = [selected]
+      ..connectionResult = selected.connections.single
+      ..librariesResult = const [
+        PlexLibrary(id: 'first', title: 'First', type: PlexLibraryType.movie),
+        PlexLibrary(id: 'second', title: 'Second', type: PlexLibraryType.movie),
+      ]
+      ..libraryItemsHandler = (_, _, id, _) async {
+        calls.update(id, (value) => value + 1, ifAbsent: () => 1);
+        if (id == 'second' && failSecond) {
+          throw const PlexException('offline', 'Try again');
+        }
+        return [
+          PlexMediaItem(
+            id: id,
+            title: id,
+            type: 'movie',
+            duration: const Duration(minutes: 1),
+            libraryId: id,
+            parts: [PlexMediaPart(path: '/library/parts/$id')],
+          ),
+        ];
+      };
+    final store = _MemoryStore(
+      const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+    );
+    final controller = LineupController(
+      store: store,
+      credentials: _MemoryCredentials(accountToken: 'token'),
+      plex: plex,
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+    expect(await controller.scanLibraries({'first', 'second'}), isTrue);
+    expect(controller.libraryScanReadyIds, {'first'});
+    expect(controller.libraryScanRetryIds, {'second'});
+    expect(controller.availableMedia, isEmpty);
+    expect(controller.selectedLibraryIds, isEmpty);
+    expect(await controller.commitLibraryScan({'first', 'second'}), isFalse);
+    expect(await controller.commitLibraryScan({'first'}), isTrue);
+    expect(controller.availableMedia.map((item) => item.id), ['first']);
+    failSecond = false;
+    expect(
+      await controller.scanLibraries({
+        'first',
+        'second',
+      }, retryFailedOnly: true),
+      isTrue,
+    );
+    expect(calls, {'first': 1, 'second': 2});
+    expect(controller.selectedLibraryIds, {'first'});
+    expect(await controller.commitLibraryScan({'first', 'second'}), isTrue);
+    expect(controller.availableMedia.map((item) => item.id), [
+      'first',
+      'second',
+    ]);
+    expect(store.state.selectedLibraryIdsByProfileServer['owner']!['server'], [
+      'first',
+      'second',
+    ]);
+  });
+
+  test(
+    'reviewed apply checks the full queued base but ignores tuning',
+    () async {
+      final store = _ControlledSaveStore();
+      final first = _channel('first');
+      final generated = _generatedChannel('generated', 2);
+      final controller = LineupController(
+        store: store,
+        credentials: _MemoryCredentials(),
+        plex: _FakePlex(),
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+      controller
+        ..channels = [first]
+        ..connection = _server('server').connections.single
+        ..availableMedia = [_playableMovie];
+      final expected = List<Channel>.of(controller.channels);
+      controller.currentChannelId = first.id;
+      expect(
+        await controller.applyReviewedChannelPlan(
+          [generated],
+          mode: ChannelBuildMode.append,
+          expectedBase: expected,
+        ),
+        ChannelPlanApplyResult.applied,
+      );
+      final saves = store.saveCalls;
+      expect(
+        await controller.applyReviewedChannelPlan(
+          [generated],
+          mode: ChannelBuildMode.append,
+          expectedBase: expected,
+        ),
+        ChannelPlanApplyResult.stale,
+      );
+      expect(store.saveCalls, saves);
+      store.blockNext();
+      final deleting = controller.deleteChannels(expectedChannels: [first]);
+      await store.blockedSaveStarted.future;
+      final queued = controller.applyReviewedChannelPlan(
+        [generated],
+        mode: ChannelBuildMode.append,
+        expectedBase: List.of(controller.channels),
+      );
+      store.releaseBlockedSave();
+      await deleting;
+      expect(await queued, ChannelPlanApplyResult.stale);
+      expect(store.saveCalls, saves + 1);
+    },
+  );
+
+  test('server refresh discovers without reconnecting or navigating the working session', () async {
+    final selected = _server('server');
+    final plex = _FakePlex()
+      ..serversResult = [selected]
+      ..connectionResult = selected.connections.single;
+    final controller = LineupController(
+      store: _MemoryStore(
+        const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+      ),
+      credentials: _MemoryCredentials(accountToken: 'token'),
+      plex: plex,
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+    final connection = controller.connection;
+    final probes = plex.selectedTokens.length;
+    controller.stage = SetupStage.ready;
+    controller.showServers();
+    await controller.refreshServers();
+    expect(controller.stage, SetupStage.servers);
+    expect(controller.server, selected);
+    expect(controller.connection, connection);
+    expect(controller.serverSelectionCanCancel, isTrue);
+    expect(plex.selectedTokens.length, probes);
+    expect(controller.savedServerId, selected.id);
+  });
+
+  test('batch delete saves once and queued stale selection cannot delete changed channels', () async {
+    final store = _ControlledSaveStore();
+    final first = _channel('first');
+    final second = Channel.fromJson({
+      ..._channel('second').toJson(),
+      'number': 20,
+    });
+    final third = Channel.fromJson({
+      ..._channel('third').toJson(),
+      'number': 30,
+    });
+    final controller = LineupController(
+      store: store,
+      credentials: _MemoryCredentials(),
+      plex: _FakePlex(),
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+    controller
+      ..channels = [first, second, third]
+      ..currentChannelId = second.id;
+    store.blockNext();
+    final deleting = controller.deleteChannels(
+      expectedChannels: [first, second],
+    );
+    await store.blockedSaveStarted.future;
+    expect(controller.channels, [first, second, third]);
+    final stale = controller.deleteChannels(expectedChannels: [second]);
+    final staleExpectation = expectLater(
+      stale,
+      throwsA(isA<ChannelStateConflictException>()),
+    );
+    store.releaseBlockedSave();
+    await deleting;
+    await staleExpectation;
+    expect(controller.channels, [third]);
+    expect(controller.currentChannelId, third.id);
+    expect(store.saveCalls, 1);
+  });
+
+  test('reorder retains numbers and recipe, and failed save never publishes a draft', () async {
+    final store = _ControlledSaveStore();
+    final first = _channel('first');
+    final second = Channel.fromJson({
+      ..._channel('second').toJson(),
+      'number': 20,
+    });
+    final controller = LineupController(
+      store: store,
+      credentials: _MemoryCredentials(),
+      plex: _FakePlex(),
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+    controller
+      ..channels = [first, second]
+      ..currentChannelId = first.id;
+    store.blockNext(fail: true);
+    final failed = controller.reorderChannels(
+      expectedLineup: [first, second],
+      orderedChannelIds: [second.id, first.id],
+    );
+    final failure = expectLater(failed, throwsStateError);
+    await store.blockedSaveStarted.future;
+    expect(controller.channels, [first, second]);
+    store.releaseBlockedSave();
+    await failure;
+    expect(controller.channels, [first, second]);
+    await controller.reorderChannels(
+      expectedLineup: [first, second],
+      orderedChannelIds: [second.id, first.id],
+    );
+    expect(controller.channels.map((channel) => channel.id), [
+      second.id,
+      first.id,
+    ]);
+    expect(controller.channels.map((channel) => channel.number), [
+      first.number,
+      second.number,
+    ]);
+    expect(controller.channels.first.toJson(), {
+      ...second.toJson(),
+      'number': first.number,
+    });
+    expect(controller.currentChannelId, first.id);
+  });
+
   test(
     'artworkForPath uses the active authenticated server transport',
     () async {
@@ -193,6 +475,130 @@ void main() {
       'dynamicRange': 'sdr',
     });
   });
+
+  test(
+    'legacy schedule migration persists before publishing its boundary',
+    () async {
+      final rawLegacy = _channel('legacy').toJson()..remove('scheduleVersion');
+      final legacy = Channel.fromJson(rawLegacy);
+      final selected = _server('server');
+      final store = _MigrationBlockingStore(
+        PersistedState(
+          selectedServerByProfile: const {'owner': 'server'},
+          selectedLibraryIdsByProfileServer: const {
+            'owner': {
+              'server': ['movies'],
+            },
+          },
+          channelsByProfileServer: {
+            'owner': {
+              'server': [legacy],
+            },
+          },
+        ),
+      );
+      final plex = _FakePlex()
+        ..serversResult = [selected]
+        ..pinResult = PlexPin(
+          id: 5,
+          code: 'ABCD',
+          expiresAt: DateTime.utc(2026, 1, 1, 0, 5),
+        )
+        ..librariesResult = const [
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+        ]
+        ..libraryItemsHandler = (_, _, _, _) async => [_playableMovie];
+      final now = DateTime.utc(2026, 1, 1, 0, 0, 30);
+      final controller = LineupController(
+        store: store,
+        credentials: _MemoryCredentials(accountToken: 'account-token'),
+        plex: plex,
+        scheduleClock: () => now,
+      );
+      addTearDown(controller.dispose);
+
+      final initialization = controller.initialize();
+      await store.migrationSaveStarted.future;
+
+      expect(controller.channels.single.scheduleVersion, 1);
+      expect(controller.channels.single.scheduleTransition, isNull);
+
+      store.releaseMigrationSave();
+      await initialization;
+
+      final migrated = controller.channels.single;
+      expect(migrated.scheduleVersion, currentScheduleVersion);
+      expect(
+        migrated.scheduleTransition?.boundary,
+        DateTime.utc(2026, 1, 1, 0, 1),
+      );
+      expect(migrated.scheduleTransition?.legacyCycleItems.single.id, 'movie');
+      final restarted = Channel.fromJson(
+        store.state.channelsByProfileServer['owner']!['server']!.single
+            .toJson(),
+      );
+      expect(
+        canonicalScheduleIdentity(restarted),
+        canonicalScheduleIdentity(migrated),
+      );
+    },
+  );
+
+  test(
+    'invalidated legacy migration never publishes its saved candidate',
+    () async {
+      final rawLegacy = _channel('legacy').toJson()..remove('scheduleVersion');
+      final legacy = Channel.fromJson(rawLegacy);
+      final selected = _server('server');
+      final store = _MigrationBlockingStore(
+        PersistedState(
+          selectedServerByProfile: const {'owner': 'server'},
+          selectedLibraryIdsByProfileServer: const {
+            'owner': {
+              'server': ['movies'],
+            },
+          },
+          channelsByProfileServer: {
+            'owner': {
+              'server': [legacy],
+            },
+          },
+        ),
+      );
+      final plex = _FakePlex()
+        ..serversResult = [selected]
+        ..librariesResult = const [
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+        ]
+        ..libraryItemsHandler = (_, _, _, _) async => [_playableMovie];
+      final controller = LineupController(
+        store: store,
+        credentials: _MemoryCredentials(accountToken: 'account-token'),
+        plex: plex,
+        scheduleClock: () => DateTime.utc(2026, 1, 1, 0, 0, 30),
+      );
+
+      final initialization = controller.initialize();
+      await store.migrationSaveStarted.future;
+      expect(controller.channels.single.scheduleVersion, 1);
+
+      final superseding = controller.startLinking();
+      store.releaseMigrationSave();
+      await Future.wait([initialization, superseding]);
+
+      expect(controller.channels.single.scheduleVersion, 1);
+      expect(controller.channels.single.scheduleTransition, isNull);
+      controller.dispose();
+    },
+  );
 
   test('concurrent PMS authorization failures coalesce one refresh', () async {
     final selected = _server('server');
@@ -1355,7 +1761,7 @@ void main() {
     expect(controller.libraryScanFacts, isEmpty);
   });
 
-  test('first library failure drains claimed peers and leaves queued libraries idle', () async {
+  test('library failure settles all selected rows without publishing partial inventory', () async {
     final selected = _server('server');
     final fourStarted = Completer<void>();
     final failFirst = Completer<void>();
@@ -1437,8 +1843,8 @@ void main() {
 
     expect(await scan, isFalse);
     expect(controller.error, 'First failure');
-    expect(started, [for (var index = 0; index < 4; index++) 'library-$index']);
-    expect(controller.libraryScanCompletedItems, itemsAtFailure);
+    expect(started, [for (var index = 0; index < 7; index++) 'library-$index']);
+    expect(controller.libraryScanCompletedItems, greaterThan(itemsAtFailure));
     expect(controller.selectedLibraryIds, {'committed'});
     expect(controller.availableMedia.single.id, 'committed');
     expect(
@@ -1460,7 +1866,7 @@ void main() {
     for (var index = 4; index < 7; index++) {
       expect(
         controller.libraryScanFacts['library-$index']!.status,
-        LibraryScanStatus.idle,
+        LibraryScanStatus.complete,
       );
     }
     expect(
@@ -2535,7 +2941,9 @@ void main() {
       source: const LibrarySource(
         libraryId: 'movies',
         libraryType: PlexLibraryType.movie,
-        filters: {'future': 'value'},
+        filters: {
+          LibraryFilter.decade: ['invalid'],
+        },
       ),
       playbackMode: PlaybackMode.sequential,
       anchor: DateTime.utc(2026),
@@ -2969,7 +3377,10 @@ void main() {
             libraryId: 'movies',
             libraryType: PlexLibraryType.movie,
             includeWatched: false,
-            filters: {'genre': 'Comedy', 'sort': 'added:desc'},
+            filters: {
+              LibraryFilter.genre: ['Comedy'],
+            },
+            order: LibraryOrder.addedDescending,
           ),
         ),
         custom(
@@ -3943,7 +4354,7 @@ void main() {
     await selection;
   });
 
-  test('discovery clears an unavailable runtime server without crossing profile scope', () async {
+  test('discovery refresh does not discard a working session absent from discovery', () async {
     final selected = _server('server-a');
     final plex = _FakePlex()
       ..homeUsersResult = const [
@@ -3970,9 +4381,17 @@ void main() {
     await controller.refreshServers();
 
     expect(controller.stage, SetupStage.servers);
-    expect(controller.server, isNull);
-    expect(controller.connection, isNull);
-    expect(controller.channels, isEmpty);
+    expect(controller.server?.id, selected.id);
+    expect(controller.connection, selected.connections.single);
+    expect(controller.servers, isEmpty);
+    expect(
+      await controller.artworkForPath(
+        Uri.parse('/library/metadata/synthetic/thumb'),
+      ),
+      [1, 2, 3],
+    );
+    expect(plex.artworkToken, plex.resourceToken);
+    expect(plex.artworkServer, selected.connections.single.uri);
   });
 
   test('a failed settings transaction settles before the next value', () async {
@@ -4218,6 +4637,28 @@ class _BlockingSaveStore extends _MemoryStore {
   Future<void> save(PersistedState value) async {
     if (!saveStarted.isCompleted) saveStarted.complete();
     await finishSave.future;
+    await super.save(value);
+  }
+}
+
+class _MigrationBlockingStore extends _MemoryStore {
+  _MigrationBlockingStore(super.state);
+
+  final migrationSaveStarted = Completer<void>();
+  final _release = Completer<void>();
+
+  void releaseMigrationSave() => _release.complete();
+
+  @override
+  Future<void> save(PersistedState value) async {
+    final migrating = value.channelsByProfileServer.values
+        .expand((servers) => servers.values)
+        .expand((channels) => channels)
+        .any((channel) => channel.scheduleTransition != null);
+    if (migrating && !migrationSaveStarted.isCompleted) {
+      migrationSaveStarted.complete();
+      await _release.future;
+    }
     await super.save(value);
   }
 }
