@@ -56,6 +56,11 @@ blanket decoration. Focus light and on-air coral retain separate meanings.
   separation.
 - Inputs are darker than their parent surface.
 - Motion is short and decelerating. Reduce Motion must settle immediately.
+- When the actual Lineup logo and LINEUP wordmark appear together horizontally,
+  place the logo first, then the wordmark. Preserve the approved Arial Regular
+  uppercase/letter-spaced wordmark treatment in the configuration header. This
+  September 9 refinement changes order only; menu hamburger/chevron icons and
+  standalone branding retain their own roles.
 
 ## Guide
 

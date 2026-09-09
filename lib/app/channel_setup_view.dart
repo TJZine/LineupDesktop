@@ -323,6 +323,12 @@ class _SetupState extends State<UpstreamChannelSetupView> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
+              Image.asset(
+                'assets/branding/lineup-logo-mark.png',
+                height: 18 + 6 * expansion,
+                excludeFromSemantics: true,
+              ),
+              SizedBox(width: 10 + 2 * expansion),
               Text(
                 'LINEUP',
                 style: TextStyle(
@@ -333,12 +339,6 @@ class _SetupState extends State<UpstreamChannelSetupView> {
                   letterSpacing: 1.5,
                   height: 1.4,
                 ),
-              ),
-              SizedBox(width: 10 + 2 * expansion),
-              Image.asset(
-                'assets/branding/lineup-logo-mark.png',
-                height: 18 + 6 * expansion,
-                excludeFromSemantics: true,
               ),
             ],
           ),
