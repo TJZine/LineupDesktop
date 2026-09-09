@@ -219,6 +219,93 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
     expect(find.byKey(const Key('profile-pin-sheet')), findsOneWidget);
   });
+
+  testWidgets('server action semantics follow pending and error state', (
+    tester,
+  ) async {
+    const server = PlexServer(
+      id: 'server',
+      name: 'Test server',
+      connections: [],
+    );
+    final controller = _ServerController()
+      ..stage = SetupStage.servers
+      ..servers = const [server];
+    addTearDown(controller.dispose);
+    final semantics = tester.ensureSemantics();
+    await show(tester, controller);
+
+    expect(
+      tester
+          .getSemantics(find.widgetWithText(FilledButton, 'Connect'))
+          .getSemanticsData()
+          .label,
+      'Connect to Test server',
+    );
+
+    final pending = Completer<void>();
+    controller.pendingSelection = pending;
+    await tester.tap(find.text('Connect'));
+    await tester.pump();
+    expect(
+      tester
+          .getSemantics(find.widgetWithText(FilledButton, 'Connecting…'))
+          .getSemanticsData()
+          .label,
+      'Connecting…',
+    );
+
+    pending.complete();
+    await tester.pump();
+    controller.failSelection = true;
+    await tester.tap(find.text('Connect'));
+    await tester.pump();
+    expect(
+      tester
+          .getSemantics(find.widgetWithText(FilledButton, 'Retry'))
+          .getSemanticsData()
+          .label,
+      'Retry',
+    );
+    semantics.dispose();
+  });
+
+  testWidgets('refresh and profile switch clear stale server errors', (
+    tester,
+  ) async {
+    const server = PlexServer(
+      id: 'server',
+      name: 'Test server',
+      connections: [],
+    );
+    final controller = _ServerController()
+      ..stage = SetupStage.servers
+      ..servers = const [server]
+      ..profiles = const [
+        PlexHomeUser(id: 'one', name: 'One', protected: false),
+        PlexHomeUser(id: 'two', name: 'Two', protected: false),
+      ]
+      ..failSelection = true;
+    addTearDown(controller.dispose);
+    await show(tester, controller);
+
+    await tester.tap(find.text('Connect'));
+    await tester.pump();
+    expect(find.text('Server selection failed.'), findsOneWidget);
+
+    await tester.tap(find.text('Refresh servers'));
+    await tester.pump();
+    expect(find.text('Fresh discovery failed.'), findsOneWidget);
+    expect(find.text('Server selection failed.'), findsNothing);
+
+    await tester.tap(find.text('Connect'));
+    await tester.pump();
+    await tester.tap(find.text('Switch profile'));
+    await tester.pump();
+    controller.showServers();
+    await tester.pump();
+    expect(find.text('Server selection failed.'), findsNothing);
+  });
 }
 
 class _PinController extends FixtureController {
@@ -228,5 +315,29 @@ class _PinController extends FixtureController {
     submitted.add(pin ?? '');
     error = 'Incorrect PIN. Try again.';
     return false;
+  }
+}
+
+class _ServerController extends FixtureController {
+  Completer<void>? pendingSelection;
+  bool failSelection = false;
+
+  @override
+  Future<void> selectServer(PlexServer server) async {
+    final pending = pendingSelection;
+    if (pending != null) {
+      await pending.future;
+      pendingSelection = null;
+    }
+    if (failSelection) {
+      error = 'Server selection failed.';
+      notifyListeners();
+    }
+  }
+
+  @override
+  Future<void> refreshServers() async {
+    error = 'Fresh discovery failed.';
+    notifyListeners();
   }
 }

@@ -10,7 +10,11 @@ Future<void> openPlexLink() async {
     ),
     _ => throw UnsupportedError('Browser linking is unavailable.'),
   };
-  final result = await Process.run(executable, arguments);
+  final result = await Process.run(executable, arguments).timeout(
+    const Duration(seconds: 5),
+    onTimeout: () =>
+        throw const ProcessException('browser', [], 'Could not open browser.'),
+  );
   if (result.exitCode != 0) {
     throw const ProcessException('browser', [], 'Could not open browser.');
   }

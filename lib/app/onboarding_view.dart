@@ -467,17 +467,13 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
           children: [
             OutlinedButton.icon(
               autofocus: widget.controller.servers.isEmpty,
-              onPressed: widget.controller.busy
-                  ? null
-                  : widget.controller.refreshServers,
+              onPressed: widget.controller.busy ? null : _refreshServers,
               icon: const Icon(Icons.refresh),
               label: const Text('Refresh servers'),
             ),
             if (widget.controller.profiles.length > 1)
               OutlinedButton.icon(
-                onPressed: widget.controller.busy
-                    ? null
-                    : widget.controller.showProfiles,
+                onPressed: widget.controller.busy ? null : _showProfiles,
                 icon: const Icon(Icons.switch_account),
                 label: const Text('Switch profile'),
               ),
@@ -491,6 +487,26 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
       ],
     ),
   );
+
+  void _clearServerError() {
+    if (!mounted) return;
+    setState(() {
+      _failedServerId = null;
+      _serverError = null;
+    });
+  }
+
+  Future<void> _refreshServers() async {
+    if (!mounted || widget.controller.busy) return;
+    _clearServerError();
+    await widget.controller.refreshServers();
+  }
+
+  void _showProfiles() {
+    if (!mounted || widget.controller.busy) return;
+    _clearServerError();
+    widget.controller.showProfiles();
+  }
 
   Future<void> _connectServer(PlexServer server) async {
     if (widget.controller.busy) return;
@@ -835,6 +851,11 @@ class _ServerCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final actionLabel = pending
+        ? 'Connecting…'
+        : error != null
+        ? 'Retry'
+        : 'Connect to ${server.name}';
     final details = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -862,7 +883,7 @@ class _ServerCard extends StatelessWidget {
     final trailing = connection == null
         ? MergeSemantics(
             child: Semantics(
-              label: 'Connect to ${server.name}',
+              label: actionLabel,
               child: FilledButton(
                 onPressed: onPressed,
                 child: ExcludeSemantics(
