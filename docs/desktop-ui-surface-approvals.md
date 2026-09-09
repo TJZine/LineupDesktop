@@ -14,10 +14,10 @@ may cover multiple listed states only when that scope is clear to the user.
 
 | ID | Surface | 1080p visual status | Adaptation/interaction status | Approval record |
 | --- | --- | --- | --- | --- |
-| surface-01 | Playback order · corrected | Approved at 1080p | Behavior checks passed; adaptive/Windows checks pending | September 9: Shuffle selected, additional versions off; `8e1f1bc0` |
+| surface-01 | Playback order · corrected | Approved at 1080p | Behavior checks passed; adaptive/Windows checks pending | Logo-first approved `d4126b59`; previous September 9: Shuffle selected, additional versions off; `8e1f1bc0` |
 | surface-02 | Mini-marathons · corrected | Unreviewed | User skipped separate review; adaptive/Windows checks pending | September 9: proceed to surface-03; no separate state lock |
-| surface-03 | Channel sources · corrected | Approved at 1080p | Behavior checks passed; adaptive/Windows checks pending | September 9: one and two libraries, grouping separate; `8e972785` |
-| surface-04 | Lineup rules · corrected | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | September 9: all-fit and limit-reached/Off states; `f535a365` |
+| surface-03 | Channel sources · corrected | Approved at 1080p | Behavior checks passed; adaptive/Windows checks pending | Logo-first approved `d4126b59`; previous September 9: one and two libraries, grouping separate; `8e972785` |
+| surface-04 | Lineup rules · corrected | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Logo-first approved `d4126b59`; previous September 9: all-fit and limit-reached/Off states; `f535a365` |
 | surface-05 | Review lineup · corrected labels | Unreviewed | Not assessed in this pass | — |
 | surface-06 | Review removals · corrected labels | Unreviewed | Not assessed in this pass | — |
 | surface-07 | Linking · corrected | Unreviewed | Not assessed in this pass | — |
@@ -381,3 +381,61 @@ adaptive/accessibility checks and physical Windows typography/input validation
 remain outstanding. Independent review is not specifically recommended; none
 launched. The user's subsequent question about logo/wordmark order is a design
 discussion, not authorization to alter these approved captures or shared branding.
+
+
+## September 9, 2026 — shared logo-first branding refinement
+
+User explicitly requested logo → LINEUP ordering wherever that actual horizontal
+combination appears. Root audited all production logo-asset uses and LINEUP text:
+only `_configurationHeader` combines the logo asset with the LINEUP wordmark.
+It is shared by configuration surfaces01–04. Guide/Channels hamburger buttons,
+Settings/Diagnostics dropdown buttons, standalone branding and stage-title/logo
+arrangements have different roles and were preserved.
+
+The existing Luna worker changed only the order of the three existing header
+children in `channel_setup_view.dart`; Arial style, image size, gap, semantics and
+all other geometry remain unchanged. Root inspected the diff and all six fresh
+1920×1080/DPR1/text100% captures. Each capture compiled and rendered real Flutter
+widgets without exceptions. Formatting and diff checks passed; no new layout
+tests. Prior behavior results remain relevant to the unchanged behavior.
+
+Source base: `ba5acd4e527cb31f6e2a6bf278ed5bf315ad600a`; working-tree source SHA-256:
+`39592675086af58350fcd3d91e748a9c958c8c680918418dd5e586a766978ee8`.
+Fresh candidate evidence (same pinned Roboto body / Arial wordmark limitations):
+
+- `build/desktop-ui/surface-01/branding-01.png`: SHA-256
+  `1028f7ef0037f64c9fe96addfa03d40df3f9ebe8c6c8cd4048d76fd920c1931a`.
+- `build/desktop-ui/branding/branding-02.png`: SHA-256
+  `5d999c80f83a1c71780bb6f409b71e17247b467ae9864499bff0e72679713e04`.
+- `build/desktop-ui/surface-03/branding-03.png`: SHA-256
+  `a7ba2ce0adae63aee1e7dc4c9621a6585f6770a6b5879f035e85a15c5b36f084`.
+- `build/desktop-ui/surface-03/branding-03-multi.png`: SHA-256
+  `ba56d012c4fa781511c1ea72ae0f18d7d4aa34390dbf1f28268aeb608c77abef`.
+- `build/desktop-ui/surface-04/branding-04.png`: SHA-256
+  `2db0393828075ef14a234a1eaa3c6766911c672569b662a87e09551551c1e4ca`.
+- `build/desktop-ui/surface-04/branding-04-limited.png`: SHA-256
+  `c526271fe6bb9ed237fb7ad9fd8e97d073d60c2c534da046dadd6acac5c738e2`.
+
+The previous surface01/03/04 approvals remain historical evidence at their
+recorded commits; the changed branding awaits renewed visual approval across
+those states. Surface02 remains without a separate whole-surface visual lock.
+Grouped adaptive/accessibility and physical Windows checks remain outstanding.
+No independent review is specifically recommended; none launched. Frozen packets
+and approved original PNGs were preserved. No commit or push yet for this revision.
+
+
+### Logo-first branding explicit approval — September 9, 2026
+
+Asked whether the branding order was right to lock across affected screens, the
+user replied “yes.” Commit `d4126b59187af726446e92c2ba118f0ddac413d3`
+(`fix(ui): place logo before lineup wordmark`) matches the source hash above.
+The same six PNGs, with the same hashes, are preserved in
+[the logo-first evidence directory](design/desktop-ui/approved/2026-09-09-logo-first/).
+This renews the existing surface01/03/04 state approvals with the logo-first
+header. Surface02's branding is approved; its separate whole-surface review
+remains skipped. Adaptive/accessibility and physical Windows evidence remain
+outstanding. Independent review is not specifically recommended; none launched.
+
+The subsequent question about repeated generated-count information in Lineup
+rules is a discussion of possible refinement, not approval of another visual
+change. No count information was removed at this checkpoint.
