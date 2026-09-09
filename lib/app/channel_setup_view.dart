@@ -37,6 +37,7 @@ class UpstreamChannelSetupView extends StatefulWidget {
 
 class _SetupState extends State<UpstreamChannelSetupView> {
   int _step = 1;
+  int _configurationSection = 0;
   final _selectedLibraries = <String>{};
   final _strategies = <BuilderStrategy>{...BuilderStrategy.values};
   final _grouped = <BuilderStrategy>{};
@@ -548,64 +549,126 @@ class _SetupState extends State<UpstreamChannelSetupView> {
           child: const Text('Review channels'),
         ),
       ),
-      child: ListView(
-        key: const ValueKey('channel-configuration'),
-        children: [
-          _heading(
-            'Channel sources',
-            'Choose which kinds of generated channels to include.',
-          ),
-          LayoutBuilder(
-            builder: (_, constraints) {
-              final width = constraints.maxWidth >= 840
-                  ? (constraints.maxWidth - 16) / 2
-                  : constraints.maxWidth;
-              return Wrap(
-                spacing: 16,
-                runSpacing: 8,
-                children: [
-                  for (final strategy in BuilderStrategy.values)
-                    SizedBox(
-                      width: width,
-                      child: _sourceControl(strategy, allocation),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          const labels = ['Channel sources', 'Playback order', 'Lineup rules'];
+          final roles = LineupTheme.of(context);
+          final compact =
+              constraints.maxWidth < 900 ||
+              MediaQuery.textScalerOf(context).scale(1) >= 1.6;
+          final navigation = [
+            for (var index = 0; index < labels.length; index++)
+              Semantics(
+                selected: _configurationSection == index,
+                child: TextButton(
+                  key: ValueKey('configure-section-$index'),
+                  style: TextButton.styleFrom(
+                    alignment: Alignment.centerLeft,
+                    foregroundColor: roles.primaryText,
+                    backgroundColor: _configurationSection == index
+                        ? roles.selectedSurface
+                        : Colors.transparent,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 14,
                     ),
-                ],
-              );
-            },
-          ),
-          const SizedBox(height: 28),
-          _heading(
-            'Playback order',
-            'Choose how programs are arranged on generated channels.',
-          ),
-          _playbackControls(),
-          const SizedBox(height: 28),
-          _heading(
-            'Lineup rules',
-            'Set limits and the priority used by balanced source rotation.',
-          ),
-          LayoutBuilder(
-            builder: (_, constraints) {
-              if (constraints.maxWidth < 840) {
-                return Column(
+                  ),
+                  onPressed: () =>
+                      setState(() => _configurationSection = index),
+                  child: Text(labels[index]),
+                ),
+              ),
+          ];
+          final content = KeyedSubtree(
+            key: const ValueKey('channel-configuration'),
+            child: ListView(
+              key: ValueKey(_configurationSection),
+              children: [
+                _heading(
+                  labels[_configurationSection],
+                  switch (_configurationSection) {
+                    0 => 'Choose which kinds of generated channels to include.',
+                    1 =>
+                      'Choose how programs are arranged on generated channels.',
+                    _ => 'Set limits and the priority used by balanced source rotation.',
+                  },
+                ),
+                if (_configurationSection == 0)
+                  LayoutBuilder(
+                    builder: (_, constraints) {
+                      final width = constraints.maxWidth >= 840
+                          ? (constraints.maxWidth - 16) / 2
+                          : constraints.maxWidth;
+                      return Wrap(
+                        spacing: 16,
+                        runSpacing: 8,
+                        children: [
+                          for (final strategy in BuilderStrategy.values)
+                            SizedBox(
+                              width: width,
+                              child: _sourceControl(strategy, allocation),
+                            ),
+                        ],
+                      );
+                    },
+                  ),
+                if (_configurationSection == 1) _playbackControls(),
+                if (_configurationSection == 2)
+                  LayoutBuilder(
+                    builder: (_, constraints) {
+                      if (constraints.maxWidth < 840) {
+                        return Column(
+                          children: [
+                            _limitControls(),
+                            const SizedBox(height: 20),
+                            _orderControls(),
+                          ],
+                        );
+                      }
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(child: _limitControls()),
+                          const SizedBox(width: 32),
+                          Expanded(child: _orderControls()),
+                        ],
+                      );
+                    },
+                  ),
+              ],
+            ),
+          );
+          return compact
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _limitControls(),
-                    const SizedBox(height: 20),
-                    _orderControls(),
+                    Wrap(spacing: 8, runSpacing: 4, children: navigation),
+                    const SizedBox(height: 16),
+                    Expanded(child: content),
+                  ],
+                )
+              : Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(
+                      width:
+                          176 *
+                          LineupLayout.scaleFor(MediaQuery.sizeOf(context)),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          for (final item in navigation) ...[
+                            item,
+                            const SizedBox(height: 8),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 28),
+                    Expanded(child: content),
                   ],
                 );
-              }
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(child: _limitControls()),
-                  const SizedBox(width: 32),
-                  Expanded(child: _orderControls()),
-                ],
-              );
-            },
-          ),
-        ],
+        },
       ),
     );
   }
@@ -641,14 +704,32 @@ class _SetupState extends State<UpstreamChannelSetupView> {
       ),
       child: Column(
         children: [
-          SwitchListTile(
+          CheckboxListTile(
             value: enabled,
-            title: Text(builderStrategyLabels[strategy]!),
-            subtitle: Text(
-              '${_strategyDescription(strategy)}\n$eligible qualifying · $included included',
+            controlAffinity: ListTileControlAffinity.leading,
+            contentPadding: EdgeInsets.zero,
+            title: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: Text(builderStrategyLabels[strategy]!)),
+                const SizedBox(width: 12),
+                Flexible(
+                  child: Text(
+                    '$eligible qualifying · $included included',
+                    textAlign: TextAlign.end,
+                    style: TextStyle(
+                      color: LineupTheme.of(context).secondaryText,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            subtitle: Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(_strategyDescription(strategy)),
             ),
             onChanged: (value) => setState(() {
-              if (value) {
+              if (value == true) {
                 _strategies.add(strategy);
               } else {
                 _strategies.remove(strategy);
@@ -658,7 +739,8 @@ class _SetupState extends State<UpstreamChannelSetupView> {
           if (canGroup)
             CheckboxListTile(
               dense: true,
-              contentPadding: const EdgeInsets.only(left: 56, right: 16),
+              controlAffinity: ListTileControlAffinity.leading,
+              contentPadding: const EdgeInsets.only(left: 40, right: 16),
               value: enabled && _grouped.contains(strategy),
               title: const Text('Group matching values across libraries'),
               subtitle: const Text(
@@ -682,35 +764,53 @@ class _SetupState extends State<UpstreamChannelSetupView> {
   Widget _playbackControls() => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      RadioGroup<PlaybackMode>(
-        groupValue: _playback,
-        onChanged: (mode) => setState(() {
-          _playback = mode!;
-          _notice = null;
-          _clearDuplicateVariant();
-        }),
-        child: Wrap(
-          spacing: 12,
-          runSpacing: 8,
-          children: [
-            _playbackChoice(
-              PlaybackMode.shuffle,
-              'Shuffle',
-              'A stable shuffled schedule.',
+      LayoutBuilder(
+        builder: (context, constraints) {
+          final effectiveWidth =
+              constraints.maxWidth / MediaQuery.textScalerOf(context).scale(1);
+          final columns = effectiveWidth >= 780
+              ? 3
+              : effectiveWidth >= 520
+              ? 2
+              : 1;
+          final gap = 12.0;
+          final width = (constraints.maxWidth - gap * (columns - 1)) / columns;
+          return RadioGroup<PlaybackMode>(
+            groupValue: _playback,
+            onChanged: (mode) => setState(() {
+              _playback = mode!;
+              _notice = null;
+              _clearDuplicateVariant();
+            }),
+            child: Wrap(
+              spacing: gap,
+              runSpacing: 8,
+              children: [
+                _playbackChoice(
+                  PlaybackMode.shuffle,
+                  'Shuffle',
+                  'A stable shuffled schedule.',
+                  width: width,
+                ),
+                _playbackChoice(
+                  PlaybackMode.sequential,
+                  'In order',
+                  'Preserve the source order.',
+                  width: width,
+                ),
+                _playbackChoice(
+                  PlaybackMode.block,
+                  'Mini-marathons',
+                  'Rotate shows in short chronological blocks.',
+                  width: width,
+                ),
+              ],
             ),
-            _playbackChoice(
-              PlaybackMode.sequential,
-              'In order',
-              'Preserve the source order.',
-            ),
-            _playbackChoice(
-              PlaybackMode.block,
-              'Mini-marathons',
-              'Rotate shows in short chronological blocks.',
-            ),
-          ],
-        ),
+          );
+        },
       ),
+      const SizedBox(height: 16),
+      _episodeStrip(),
       if (_playback == PlaybackMode.block)
         Wrap(
           spacing: 20,
@@ -799,15 +899,151 @@ class _SetupState extends State<UpstreamChannelSetupView> {
     ],
   );
 
-  Widget _playbackChoice(PlaybackMode mode, String title, String description) =>
-      SizedBox(
-        width: 290,
-        child: RadioListTile<PlaybackMode>(
-          value: mode,
-          title: Text(title),
-          subtitle: Text(description),
+  Widget _playbackChoice(
+    PlaybackMode mode,
+    String title,
+    String description, {
+    required double width,
+  }) {
+    final roles = LineupTheme.of(context);
+    final selected = _playback == mode;
+    return SizedBox(
+      width: width,
+      child: Container(
+        constraints: BoxConstraints(
+          minHeight: 104 * LineupLayout.scaleFor(MediaQuery.sizeOf(context)),
         ),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(roles.panelRadius),
+          border: Border.all(
+            color: selected
+                ? roles.progressFill.withValues(alpha: 0.7)
+                : roles.subtleBorder,
+          ),
+        ),
+        child: Material(
+          color: selected ? roles.selectedSurface : roles.primarySurface,
+          borderRadius: BorderRadius.circular(roles.panelRadius),
+          child: RadioListTile<PlaybackMode>(
+            value: mode,
+            selected: selected,
+            activeColor: roles.progressFill,
+            controlAffinity: ListTileControlAffinity.leading,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 8,
+            ),
+            title: Text(title, style: TextStyle(color: roles.primaryText)),
+            subtitle: Text(
+              description,
+              style: TextStyle(color: roles.secondaryText),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _episodeStrip() {
+    final episodes = switch (_playback) {
+      PlaybackMode.shuffle => const [
+        ('Summit', '02'),
+        ('Harbor', '01'),
+        ('Summit', '03'),
+        ('Harbor', '02'),
+        ('Harbor', '03'),
+        ('Summit', '01'),
+      ],
+      PlaybackMode.sequential => const [
+        ('Harbor', '01'),
+        ('Harbor', '02'),
+        ('Harbor', '03'),
+        ('Summit', '01'),
+        ('Summit', '02'),
+        ('Summit', '03'),
+      ],
+      PlaybackMode.block => _miniMarathonEpisodes(),
+    };
+    final roles = LineupTheme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      decoration: BoxDecoration(
+        border: Border.symmetric(
+          horizontal: BorderSide(color: roles.subtleBorder),
+        ),
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final effectiveWidth =
+              constraints.maxWidth / MediaQuery.textScalerOf(context).scale(1);
+          final columns = effectiveWidth >= 900
+              ? 6
+              : effectiveWidth >= 560
+              ? 3
+              : effectiveWidth >= 320
+              ? 2
+              : 1;
+          final gap = 8.0;
+          final width = (constraints.maxWidth - gap * (columns - 1)) / columns;
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Illustrative schedule · Each tile is one episode',
+                style: TextStyle(color: roles.secondaryText),
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: gap,
+                runSpacing: gap,
+                children: [
+                  for (final episode in episodes)
+                    SizedBox(
+                      width: width,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: roles.primarySurface,
+                          border: Border(
+                            left: BorderSide(color: roles.defaultBorder),
+                          ),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(episode.$1),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Episode ${episode.$2}',
+                                style: TextStyle(color: roles.secondaryText),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  List<(String, String)> _miniMarathonEpisodes() {
+    final blockSize = _blockSize.clamp(2, 5).toInt();
+    return List.generate(6, (index) {
+      final block = index ~/ blockSize;
+      final episode = index % blockSize + 1;
+      final seasonBlock = block ~/ 2;
+      return (
+        block.isEven ? 'Harbor' : 'Summit',
+        '${seasonBlock * blockSize + episode}'.padLeft(2, '0'),
       );
+    });
+  }
 
   Widget _blockField({required bool main}) => DropdownButtonFormField<int>(
     initialValue: main ? _blockSize : _variantBlockSize,
@@ -1229,7 +1465,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
 
   Widget _filterChip(_ReviewFilter filter, int count) => FilterChip(
     selected: _filter == filter,
-    label: Text('$count ${filter.name}'),
+    label: Text('$count ${_capitalized(filter.name)}'),
     onSelected: (_) => setState(() => _filter = filter),
   );
 
@@ -1320,7 +1556,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
         Expanded(flex: 2, child: Text(_playbackLabel(entry.channel))),
         SizedBox(
           width: 92,
-          child: Text(entry.kind.name, textAlign: TextAlign.end),
+          child: Text(_capitalized(entry.kind.name), textAlign: TextAlign.end),
         ),
       ],
     );
@@ -1610,9 +1846,9 @@ class _SetupState extends State<UpstreamChannelSetupView> {
   String _changeSummary(
     ({int unchanged, int updated, int added, int removed}) counts,
   ) => [
-    if (counts.added > 0) '${counts.added} added',
-    if (counts.updated > 0) '${counts.updated} updated',
-    if (counts.removed > 0) '${counts.removed} removed',
+    if (counts.added > 0) '${counts.added} Added',
+    if (counts.updated > 0) '${counts.updated} Updated',
+    if (counts.removed > 0) '${counts.removed} Removed',
   ].join(' · ');
 
   String _modeDescription(ChannelBuildMode mode) => switch (mode) {

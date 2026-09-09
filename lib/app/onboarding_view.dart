@@ -244,12 +244,17 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
     final controller = widget.controller;
     final pin = controller.activePin;
     final usable = _usableLink;
+    final expired =
+        pin != null &&
+        !pin.expiresAt.isAfter(DateTime.now()) &&
+        !controller.secureCancellationRequired;
     final remaining =
         pin?.expiresAt.difference(DateTime.now()) ?? Duration.zero;
     final seconds = remaining.inSeconds.clamp(0, 3599);
     final time =
         '${seconds ~/ 60}:${(seconds % 60).toString().padLeft(2, '0')}';
     final feedback = _feedbackPinId == pin?.id ? _linkFeedback : null;
+    final roles = LineupTheme.of(context);
     final instructions = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -259,42 +264,49 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
           style: Theme.of(context).textTheme.headlineMedium,
         ),
         const SizedBox(height: 12),
-        const Text(
-          'Open your browser or scan the QR code, then enter this code at plex.tv/link.',
+        Text(
+          pin == null || expired
+              ? 'Request a fresh code to finish signing in.'
+              : 'Open plex.tv/link and enter this code.',
         ),
-        const SizedBox(height: 24),
-        if (pin != null)
-          Semantics(
-            label: 'Plex link code ${pin.code.split('').join(' ')}',
-            excludeSemantics: true,
-            child: SelectableText(
-              pin.code,
-              style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                letterSpacing: 6,
-                fontWeight: FontWeight.w700,
-                color: usable
-                    ? LineupTheme.of(context).primaryText
-                    : LineupTheme.of(context).mutedText,
-              ),
-            ),
-          ),
         const SizedBox(height: 20),
+        if (pin != null)
+          Wrap(
+            spacing: 16,
+            runSpacing: 12,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Semantics(
+                label: 'Plex link code ${pin.code.split('').join(' ')}',
+                excludeSemantics: true,
+                child: SelectableText(
+                  pin.code,
+                  style: Theme.of(context).textTheme.headlineLarge?.copyWith(
+                    letterSpacing: 6,
+                    fontWeight: FontWeight.w700,
+                    color: usable ? roles.primaryText : roles.mutedText,
+                  ),
+                ),
+              ),
+              OutlinedButton.icon(
+                onPressed: usable ? _copyCode : null,
+                icon: const Icon(Icons.copy),
+                label: const Text('Copy code'),
+              ),
+            ],
+          ),
+        const SizedBox(height: 16),
         Wrap(
           spacing: 12,
           runSpacing: 12,
           children: [
-            if (usable) ...[
+            if (usable)
               FilledButton.icon(
                 onPressed: _openingBrowser ? null : _openBrowser,
                 icon: const Icon(Icons.open_in_browser),
                 label: const Text('Open browser'),
-              ),
-              OutlinedButton.icon(
-                onPressed: _copyCode,
-                icon: const Icon(Icons.copy),
-                label: const Text('Copy code'),
-              ),
-            ] else
+              )
+            else
               FilledButton(
                 focusNode: _linkActionFocus,
                 autofocus: true,
@@ -320,66 +332,122 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
     final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
     return Center(
       child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: 880 * scale),
+        constraints: BoxConstraints(maxWidth: 736 * scale),
         child: SizedBox(
           width: double.infinity,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  final narrow =
-                      constraints.maxWidth < 720 ||
-                      MediaQuery.textScalerOf(context).scale(1) >= 1.6;
-                  final qr = usable
-                      ? Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: QrImageView(
-                            data: 'https://plex.tv/link',
-                            size: 190,
-                            padding: EdgeInsets.zero,
-                            semanticsLabel: 'QR code for plex.tv/link',
-                          ),
-                        )
-                      : const SizedBox.shrink();
-                  return narrow
-                      ? Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            instructions,
-                            if (usable) ...[const SizedBox(height: 24), qr],
-                          ],
-                        )
-                      : Row(
-                          children: [
-                            Expanded(child: instructions),
-                            if (usable) ...[const SizedBox(width: 48), qr],
-                          ],
-                        );
-                },
+              Center(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: 560 * scale),
+                  child: LayoutBuilder(
+                    builder: (context, bodyConstraints) {
+                      final narrow =
+                          bodyConstraints.maxWidth <= 520 ||
+                          MediaQuery.textScalerOf(context).scale(1) >= 1.6;
+                      final qrSize = (narrow ? 140.0 : 172.0) * scale;
+                      final qr = (usable || expired)
+                          ? Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                Container(
+                                  width: qrSize,
+                                  height: qrSize,
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: usable
+                                        ? Colors.white
+                                        : roles.primarySurface,
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: expired
+                                        ? Border.all(color: roles.subtleBorder)
+                                        : null,
+                                  ),
+                                  alignment: Alignment.center,
+                                  child: usable
+                                      ? QrImageView(
+                                          data: 'https://plex.tv/link',
+                                          size: qrSize - 24,
+                                          padding: EdgeInsets.zero,
+                                          semanticsLabel:
+                                              'QR code for plex.tv/link',
+                                        )
+                                      : Semantics(
+                                          label: 'Code expired',
+                                          image: true,
+                                          child: Text(
+                                            'Code expired',
+                                            textAlign: TextAlign.center,
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .bodyMedium
+                                                ?.copyWith(
+                                                  color: roles.secondaryText,
+                                                ),
+                                          ),
+                                        ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  expired
+                                      ? 'Request a new code'
+                                      : 'Or scan with your phone',
+                                  textAlign: TextAlign.center,
+                                  style: Theme.of(context).textTheme.bodySmall
+                                      ?.copyWith(color: roles.secondaryText),
+                                ),
+                              ],
+                            )
+                          : const SizedBox.shrink();
+                      return narrow
+                          ? Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                instructions,
+                                if (usable || expired) ...[
+                                  const SizedBox(height: 24),
+                                  Align(alignment: Alignment.center, child: qr),
+                                ],
+                              ],
+                            )
+                          : Row(
+                              children: [
+                                Expanded(child: instructions),
+                                if (usable || expired) ...[
+                                  const SizedBox(width: 40),
+                                  qr,
+                                ],
+                              ],
+                            );
+                    },
+                  ),
+                ),
               ),
               const SizedBox(height: 28),
               const Divider(),
-              Wrap(
-                spacing: 24,
-                runSpacing: 12,
-                crossAxisAlignment: WrapCrossAlignment.center,
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Text(
-                    usable
-                        ? 'Waiting for sign-in · Expires in $time'
-                        : 'This code is no longer active.',
+                  Expanded(
+                    child: Text(
+                      usable
+                          ? 'Waiting for sign-in · Expires in $time'
+                          : expired
+                          ? 'This code has expired'
+                          : 'This code is no longer active.',
+                    ),
                   ),
                   if (!controller.secureCancellationRequired)
-                    TextButton(
-                      onPressed: controller.busy
-                          ? null
-                          : controller.cancelLinking,
-                      child: const Text('Cancel'),
+                    Padding(
+                      padding: const EdgeInsets.only(left: 12),
+                      child: TextButton(
+                        onPressed: controller.busy
+                            ? null
+                            : controller.cancelLinking,
+                        child: const Text('Cancel'),
+                      ),
                     ),
                 ],
               ),

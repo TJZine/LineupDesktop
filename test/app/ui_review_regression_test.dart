@@ -716,7 +716,7 @@ void main() {
 
     expect(
       find.descendant(
-        of: find.widgetWithText(SwitchListTile, 'Playlists'),
+        of: find.widgetWithText(CheckboxListTile, 'Playlists'),
         matching: find.textContaining('2 qualifying · 2 included'),
       ),
       findsOneWidget,

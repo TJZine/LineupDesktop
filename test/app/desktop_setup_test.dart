@@ -50,7 +50,7 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('continue-ready-libraries')));
       await tester.pumpAndSettle();
       expect(controller.committedIds, {'movies'});
-      expect(find.text('Channel sources'), findsOneWidget);
+      expect(find.byKey(const ValueKey('configure-section-0')), findsOneWidget);
     },
   );
 
@@ -84,18 +84,11 @@ void main() {
     await _pump(tester, controller);
     await _advanceToConfigure(tester);
 
-    expect(find.text('Channel sources'), findsOneWidget);
+    expect(find.byKey(const ValueKey('configure-section-0')), findsOneWidget);
     expect(find.text('200 generated channels'), findsNothing);
-    await tester.scrollUntilVisible(
-      find.text('Playback order', skipOffstage: false),
-      400,
-      scrollable: find.descendant(
-        of: find.byKey(const ValueKey('channel-configuration')),
-        matching: find.byType(Scrollable),
-      ),
-    );
+    await tester.tap(find.byKey(const ValueKey('configure-section-1')));
     await tester.pumpAndSettle();
-    expect(find.text('Playback order'), findsOneWidget);
+    expect(find.text('Playback order'), findsNWidgets(2));
     expect(find.text('Additional channel versions'), findsOneWidget);
     expect(
       tester
@@ -105,15 +98,9 @@ void main() {
           .value,
       isFalse,
     );
-    await tester.scrollUntilVisible(
-      find.text('Lineup rules', skipOffstage: false),
-      400,
-      scrollable: find.descendant(
-        of: find.byKey(const ValueKey('channel-configuration')),
-        matching: find.byType(Scrollable),
-      ),
-    );
-    expect(find.text('Lineup rules'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('configure-section-2')));
+    await tester.pumpAndSettle();
+    expect(find.text('Lineup rules'), findsNWidgets(2));
     expect(find.text('Maximum generated channels'), findsOneWidget);
     expect(find.text('Minimum programs per channel'), findsOneWidget);
     expect(find.textContaining('one eligible original'), findsOneWidget);
@@ -194,6 +181,8 @@ void main() {
       addTearDown(controller.dispose);
       await _pump(tester, controller);
       await _advanceToConfigure(tester);
+      await tester.tap(find.byKey(const ValueKey('configure-section-2')));
+      await tester.pumpAndSettle();
       final row = find.byKey(const ValueKey('source-order-recentlyAdded'));
       await tester.drag(
         find.byKey(const ValueKey('channel-configuration')),
@@ -241,10 +230,7 @@ void main() {
     addTearDown(controller.dispose);
     await _pump(tester, controller);
     await _advanceToConfigure(tester);
-    await tester.drag(
-      find.byKey(const ValueKey('channel-configuration')),
-      const Offset(0, -600),
-    );
+    await tester.tap(find.byKey(const ValueKey('configure-section-1')));
     await tester.pumpAndSettle();
     final extras = find.widgetWithText(
       SwitchListTile,

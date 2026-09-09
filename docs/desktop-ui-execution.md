@@ -407,3 +407,39 @@ Playing over real footage; HDR/DirectComposition and packaging. Independent
 review is specifically recommended after user visual feedback is incorporated,
 not another automated review cycle before that feedback. No push, deployment or
 publication occurred.
+
+### Muse finding adjudication and bounded correction — September 9
+
+Baseline `ae48acb2`. See [adjudication](desktop-ui-muse-adjudication.md) for all
+nine dispositions and the additional missing setup section-rail finding. This
+record corrects the earlier overly broad setup-composition assessment; it does
+not retroactively change historical evidence.
+
+Two configured `worker_luna`/Luna-xhigh units owned linking presentation and setup
+controls separately. Root personally adjudicated and inspected renders, restored
+the section rail/detail composition after the setup file handoff, and corrected
+uneven playback-card heights. QR quiet-zone preservation was caught during root
+review. No new independent reviewer was dispatched and no Player file changed.
+
+Verification: 72 existing setup/app/UI-regression cases passed (71 initially;
+one obsolete source-switch selector repaired and its case rerun), plus 10 focused
+onboarding cases. Full Flutter analysis, changed-file formatting and diff checks
+passed. Five affected existing golden cases were refreshed and checked; no new
+layout assertions or permanent capture matrix were added. The temporary capture
+harness was restored after use.
+
+Changed-surface captures cover all four physical resolutions at DPR1/text1 and
+DPR1/1.25/1.5/2 respectively with text2. Root inspected normal composition,
+expiry, playback choices and representative enlarged-text/scroll-reachability
+captures. The matrix ran without framework exceptions; this is not a claim that
+every pixel/state at every scale received individual visual inspection. Artifact
+index, source/image hashes and reproducible temporary harnesses are under
+`build/desktop-ui/muse-corrections/`. Unchanged surfaces were not recaptured in
+this correction pass. No full repository test rerun or Windows validation ran.
+
+Ready for the user's manual visual audit, not declared pixel-perfect. Production
+typography/native control affordances remain; physical Windows checks still
+require tested-commit evidence across resolutions/DPI/text scale, input/focus,
+real-footage layering/contrast, HDR/DirectComposition and packaging. Independent
+review is not specifically recommended before this manual visual feedback for
+these localized changes. No push, deployment or publication occurred.
