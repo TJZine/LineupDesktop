@@ -27,8 +27,8 @@ may cover multiple listed states only when that scope is clear to the user.
 | surface-11 | Profile PIN | Unreviewed | Not assessed in this pass | — |
 | surface-12 | Server selection | Unreviewed | Not assessed in this pass | — |
 | surface-13 | Library scan outcomes · corrected | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Candidate03 state family; `692083fc` |
-| surface-14 | Setup progress | Unreviewed | Not assessed in this pass | — |
-| surface-15 | Setup complete | Unreviewed | Not assessed in this pass | — |
+| surface-14 | Setup progress | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Candidate02 family; `22743fd6` |
+| surface-15 | Setup complete | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Candidate02 family; `22743fd6` |
 | surface-16 | Channel directory | Unreviewed | Not assessed in this pass | — |
 | surface-17 | Channel selection | Unreviewed | Not assessed in this pass | — |
 | surface-18 | Channel reorder | Unreviewed | Not assessed in this pass | — |
@@ -706,3 +706,126 @@ Segoe UI and input/focus validation remain outstanding at the tested commit.
 The frozen comparison packet is unchanged. No independent review is specifically
 recommended for this bounded correction; none was launched. No push, deployment
 or publication.
+
+
+### Surfaces14/15 — new motion direction under discussion
+
+User requested a significant enhancement beyond the minimal original mock:
+fluid moving gradients using more screen area, with continuity from creation to
+completion. Root inspected both original `setup-result-states.html` states in
+browser and fresh actual renders at HEAD `52229edc9046ae3ca1dc6d4975177a8b0808c66d`.
+Current progress SHA-256 `7407e45bdae1f5d4f68cb9d6f037958bcf6c9db7d0c826ae552317dfb82c18a5`;
+completion `e39a99b152ec53619b423df13fd3ce1bfb697ee9ed9b36cdea3de17b1a71a1bc`.
+Both still match the immutable packet. Local captures are in
+`build/desktop-ui/surface-14-15/`, actual 1920×1080/DPR1/text100%.
+
+Root prepared an exploratory conversation motion concept: broad warm light
+moving across the film-gate background while saving, settling into a static
+horizontal glow on completion; larger centered headline and nearby result
+actions. The concept uses synthetic counts and offers intensity/state choices.
+This is a proposed material departure from the minimal composition, not an
+approved replacement or a Flutter implementation. Preserve real save completion,
+no invented percentages or artificial delay, immediate access to result actions,
+reduced-motion handling, failure recovery and held-Enter protection. No worker
+assigned until the correction brief is settled. Surfaces remain unlocked.
+
+User's next refinement: remove the loading circle/spinner and make the light
+richer with more visible movement so the background conveys activity. Root
+updated the exploratory concept accordingly: no spinner markup, stronger bronze
+and pale-gold layers, wider travel and 8–12 second alternating sweeps, settling
+into the existing calm completion glow. Reduced-motion remains static. This is
+still a concept revision awaiting feedback, not a Flutter change or visual lock.
+
+User accepted the concept brightness and requested a slight upward shift and
+another small speed increase. Root raised both moving light and settled glow by
+5% of the preview height and shortened the three sweep durations to 7.5, 10 and
+6.7 seconds (about 20% faster), preserving color/opacity and text geometry.
+The revised concept remains pending final direction approval.
+
+User agreed to curved ribbons, removal of the success checkmark, concise result
+information and a tighter grouping, with a final request for a natural, fluid
+transition. Root revised the concept to keep the same light layers through the
+transition: native animation playback decelerates to zero over 1.3 seconds while
+light intensity eases to 38%; no separate replacement backdrop. Result text and
+actions appear promptly, without waiting for the atmosphere to stop. The success
+mark is removed; the failure mark remains. Root inspected creation and settled
+completion in browser. This establishes the implementation direction, but no
+Flutter implementation or production-state lock has occurred yet.
+
+
+### Surfaces14/15 — Flutter candidate02 awaiting visual approval
+
+User accepted the revised HTML direction: “this looks great and im ready to
+lock,” then agreed to implementation with “sounds good.” Root clarified that the
+concept omitted the shared logo-first LINEUP header and production would restore
+it. This approval covers the design direction; the actual Flutter candidate still
+requires explicit visual approval before production lock or implementation commit.
+The durable concept is `docs/design/desktop-ui/setup-result-fluid-light.html`
+(SHA-256 `3ca74b94c53834d6b396a9c387a65a062aa47121043251c8010ce4c186f3dfbf`).
+
+Actual assignment: existing `setup_frame_correction` worker, exposed
+`worker_luna` / GPT-5.6 Luna / xhigh, exclusively owned
+`lib/app/channel_setup_view.dart` for header, centered result hierarchy and
+nearby actions. Root retained motion/lifecycle ownership in
+`lib/app/setup_result_atmosphere.dart`, behavior checks and integration. Worker
+released its file lease; root personally reviewed the diff and final renders.
+No independent reviewer or additional user-facing task was launched.
+
+Candidate02 preserves the same curved light layers through the 1.3-second coast,
+with immediate completion actions and a 420ms content reveal. Reduced motion is
+static; failures retain their meaningful error mark and recovery action. Spinner
+and success checkmark are removed. Existing-lineup changes omit zero counts.
+No persistence, save timing or held-Enter contract changes.
+
+Evidence remains local in `build/desktop-ui/surface-14-15/` pending approval.
+All PNGs are actual 1920×1080 Flutter renders, DPR1/text100%, with synthetic data,
+Roboto body and actual Arial wordmark; no upscaling. Root inspected progress,
+completion, existing-lineup completion, failure, reduced-motion completion and
+transition frames. Source HEAD is `52229edc9046ae3ca1dc6d4975177a8b0808c66d` plus:
+
+- `lib/app/channel_setup_view.dart`: `787379dff4853c95e866efb656b0e28ff0bcebe06e10978e9373290622ce0d19`
+- `lib/app/setup_result_atmosphere.dart`: `744405b113085be021bb99b29dca6802a2aa97a91c2991edfced381200e3fcbc`
+
+Candidate PNG SHA-256 values:
+
+- `candidate-02-progress.png`: `a9ab2cb6fec9d17807c9bf3367208feee571e2f4d01f0dee015867c116ffb3de`
+- `candidate-02-complete.png`: `fbdafd08d257a22e255ece55c241fc840151d1ee094fe67e6fc1d0b1127e2430`
+- `candidate-02-existing-complete.png`: `61cf48a41d661d0be847eb130f0d9e0d957b6a7db398b0c6b6b4364a3827d35b`
+- `candidate-02-failed.png`: `925e984d3b147c96eff514c63b9167a0925ab6e0790f1f2a6707244731dd4143`
+- `candidate-02-reduced-complete.png`: `b5262ab1e747e3efe7906836b7cc8af696a975bd99a66c1ad024faf35832c378`
+
+`candidate-02-transition.mp4`: `cad2f74de71b61b8d367563d37ea4916c3e7b0600c4afccf77dc8d49859d4f34`.
+The six-second recording encodes 120 original Flutter frames at 20fps, with
+completion at frame70; no resizing. Its JSON records all frame hashes and source
+identity. This demonstrates appearance and simulated transition timing, not
+physical Windows frame pacing or GPU performance.
+
+Final 75 existing setup/review/app behavior checks passed, including immediate
+completion actions, held-Enter protection and stopping/restarting animation for
+reduced motion. No new UI layout tests were added. Grouped adaptive dimensions,
+DPI, enlarged text, accessibility and physical Windows Segoe UI/input/focus/motion
+performance checks remain open. Frozen comparison packet unchanged. Independent
+review is not specifically recommended for this bounded visual correction.
+
+Full pinned Flutter analysis passed with no issues; formatting and diff checks
+passed. No source changes followed the candidate02 captures.
+
+### Surfaces14/15 — approved and committed
+
+User: “yes looks great. locked. ready for 7,8,and 9 the linking surface.”
+Candidate02 is visually locked at 1920×1080/DPR1/text100%, including the
+progress-to-completion transition and associated state family reviewed above.
+Implementation commit: `22743fd6262773bf96e6295c06504a2923ba1de4`. The source hashes match
+the reviewed captures; no production changes followed those checks.
+Durable [approved evidence](design/desktop-ui/approved/2026-09-09-surface-14-15/evidence.json)
+binds the original PNGs and 20fps transition recording to this commit.
+Grouped adaptive/accessibility and physical Windows checks remain outstanding as
+listed above. Frozen comparison packet unchanged. No push, deploy or publication.
+
+### Surfaces07–09 — focused linking audit started
+
+User requested one subagent review of the mock versus implementation across all
+linking states before agreeing refinements, with a compact first review and final
+lock confirmation to conserve usage. Assigned `linking_visual_audit`, exposed
+worker_luna / GPT-5.6 Luna / xhigh, read-only except ignored local evidence.
+Root reviews its evidence and proposed brief; no implementation is approved yet.
