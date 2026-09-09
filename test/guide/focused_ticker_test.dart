@@ -71,19 +71,27 @@ void main() {
   testWidgets('unchanged rebuild does not restart an active reveal', (
     tester,
   ) async {
-    const ticker = FocusedTicker(
+    final ticker = FocusedTicker(
       key: ValueKey('ticker'),
       text: 'A very long title whose reveal survives ordinary rebuilds',
       focused: true,
     );
-    await tester.pumpWidget(const _Harness(child: ticker));
+    await tester.pumpWidget(_Harness(child: ticker));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 900));
     await tester.pump(const Duration(milliseconds: 400));
     final finder = find.text(ticker.text);
     final before = tester.getTopLeft(finder).dx;
 
-    await tester.pumpWidget(const _Harness(child: ticker));
+    await tester.pumpWidget(
+      _Harness(
+        child: FocusedTicker(
+          key: const ValueKey('ticker'),
+          text: ticker.text,
+          focused: ticker.focused,
+        ),
+      ),
+    );
     await tester.pump(const Duration(milliseconds: 100));
 
     expect(tester.getTopLeft(finder).dx, lessThan(before));
@@ -123,6 +131,7 @@ void main() {
       ),
     );
     final resetX = tester.getTopLeft(find.text(text)).dx;
+    expect(resetX, initialX);
     await tester.pump(const Duration(seconds: 3));
     expect(tester.getTopLeft(find.text(text)).dx, resetX);
   });

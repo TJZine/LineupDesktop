@@ -232,6 +232,13 @@ class _GuideViewState extends State<GuideView>
 
   void _changed() {
     if (!mounted) return;
+    final searchQuery = widget.controller.searchQuery;
+    if (_searchController.text != searchQuery) {
+      _searchController.value = TextEditingValue(
+        text: searchQuery,
+        selection: TextSelection.collapsed(offset: searchQuery.length),
+      );
+    }
     _syncActivityPulse();
     final focusedChannelId = widget.controller.focusedChannelId;
     final revealFocus = focusedChannelId != _lastFocusedChannelId;
@@ -743,24 +750,27 @@ class _GuideControls extends StatelessWidget {
           );
     Widget search(double width) => SizedBox(
       width: width,
-      child: Focus(
-        onKeyEvent: onSearchKey,
-        child: TextField(
-          key: const Key('guide-channel-search'),
-          controller: searchController,
-          focusNode: searchFocus,
-          decoration: InputDecoration(
-            isDense: true,
-            labelText: 'Search channels',
-            hintText: 'Channel name or number',
-            prefixIcon: const Icon(Icons.search, size: 18),
-            suffixIcon: searchController.text.isEmpty
-                ? null
-                : IconButton(
-                    tooltip: 'Clear search',
-                    onPressed: searchController.clear,
-                    icon: const Icon(Icons.close, size: 17),
-                  ),
+      child: ValueListenableBuilder<TextEditingValue>(
+        valueListenable: searchController,
+        builder: (context, value, child) => Focus(
+          onKeyEvent: onSearchKey,
+          child: TextField(
+            key: const Key('guide-channel-search'),
+            controller: searchController,
+            focusNode: searchFocus,
+            decoration: InputDecoration(
+              isDense: true,
+              labelText: 'Search channels',
+              hintText: 'Channel name or number',
+              prefixIcon: const Icon(Icons.search, size: 18),
+              suffixIcon: value.text.isEmpty
+                  ? null
+                  : IconButton(
+                      tooltip: 'Clear search',
+                      onPressed: searchController.clear,
+                      icon: const Icon(Icons.close, size: 17),
+                    ),
+            ),
           ),
         ),
       ),
@@ -1424,7 +1434,6 @@ class _ScheduleStatus extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Semantics(
     label: label,
-    liveRegion: true,
     child: Center(
       child: Row(
         mainAxisSize: MainAxisSize.min,

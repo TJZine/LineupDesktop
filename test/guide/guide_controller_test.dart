@@ -1110,6 +1110,31 @@ void main() {
     lineup.dispose();
   });
 
+  test(
+    'right navigation focuses the first program before moving time',
+    () async {
+      final now = DateTime(2026, 8, 13, 12);
+      final lineup = _TestLineup(_channels(1));
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => _schedule(channel),
+        clock: () => now,
+      )..requestViewport(0, 1);
+      await _settle();
+      guide.moveHorizontal(-1);
+      final windowStart = guide.windowStart;
+      final focusTime = guide.focusTime;
+
+      guide.moveHorizontal(1);
+
+      expect(guide.focusedProgramId, guide.row('channel-0').programs.first.id);
+      expect(guide.windowStart, windowStart);
+      expect(guide.focusTime, focusTime);
+      guide.dispose();
+      lineup.dispose();
+    },
+  );
+
   test('window paging keeps focus on the nearest visible program', () async {
     final lineup = _TestLineup(_channels(1));
     final guide = GuideController(
@@ -1231,6 +1256,50 @@ void main() {
     },
   );
 
+  test(
+    'restored inspection can be replaced by a later filter session',
+    () async {
+      final lineup = _TestLineup(_channels(3));
+      final guide = GuideController(
+        lineup: lineup,
+        clock: () => DateTime(2026, 8, 13, 12, 17),
+        loadSchedule: (channel) async => _schedule(channel),
+      )..requestViewport(0, 3);
+      await _settle();
+      guide.moveVertical(2);
+
+      guide.setSearchQuery('Custom 0');
+      guide.setSearchQuery('no such channel');
+      guide.setSearchQuery('');
+      expect(guide.focusedChannelId, 'channel-2');
+
+      guide.moveVertical(-1);
+      guide.setSearchQuery('Custom 0');
+      guide.setSearchQuery('no such channel');
+      guide.setSearchQuery('');
+      expect(guide.focusedChannelId, 'channel-1');
+
+      guide.dispose();
+      lineup.dispose();
+    },
+  );
+
+  test('Guide hours absorb save failure after owner rollback', () async {
+    final lineup = _TestLineup(_channels(1), store: _FailingStore());
+    lineup.diagnostics.enabled = true;
+    final guide = GuideController(lineup: lineup);
+
+    await guide.setGuideHours(2);
+
+    expect(lineup.settings.guideHours, 4);
+    expect(guide.guideHours, 4);
+    expect(lineup.diagnostics.entries, hasLength(1));
+    expect(lineup.diagnostics.entries.single.message, 'State save failed');
+    expect(lineup.diagnostics.entries.single.context, {'code': 'write-failed'});
+    guide.dispose();
+    lineup.dispose();
+  });
+
   test('future return is preserved until its visible window elapses', () {
     var now = DateTime(2026, 8, 13, 12, 47);
     final lineup = _TestLineup(_channels(1))
@@ -1334,14 +1403,17 @@ ScheduleIndex _schedule(Channel channel) {
 Future<void> _settle() => Future<void>.delayed(Duration.zero);
 
 class _TestLineup extends LineupController {
-  _TestLineup(List<Channel> value, {super.scheduleWorkerFactory})
-    : super(
-        store: _MemoryStore(),
-        credentials: _MemoryCredentials(),
-        plex: PlexClient(
-          clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
-        ),
-      ) {
+  _TestLineup(
+    List<Channel> value, {
+    AppStore? store,
+    super.scheduleWorkerFactory,
+  }) : super(
+         store: store ?? _MemoryStore(),
+         credentials: _MemoryCredentials(),
+         plex: PlexClient(
+           clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+         ),
+       ) {
     connection = PlexConnection(
       uri: Uri.parse('https://synthetic.invalid'),
       local: true,
@@ -1425,6 +1497,13 @@ class _MemoryStore implements AppStore {
       const AppStoreLoadResult(PersistedState());
   @override
   Future<void> save(PersistedState state) async {}
+}
+
+class _FailingStore extends _MemoryStore {
+  @override
+  Future<void> save(PersistedState state) async {
+    throw StateError('Synthetic save failure');
+  }
 }
 
 class _MemoryCredentials implements CredentialStore {

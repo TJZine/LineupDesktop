@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -1062,6 +1063,39 @@ void main() {
     lineup.dispose();
   });
 
+  testWidgets('schedule loading labels are not repeated as live regions', (
+    tester,
+  ) async {
+    final lineup = _Lineup(1);
+    addTearDown(lineup.dispose);
+    final pending = Completer<ScheduleIndex>();
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (_) => pending.future,
+    );
+    addTearDown(guide.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: GuideView(
+          controller: guide,
+          onClose: () {},
+          onTune: (_) async {},
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final status = find.byWidgetPredicate(
+      (widget) =>
+          widget is Semantics && widget.properties.label == 'Loading schedule…',
+    );
+    expect(status, findsOneWidget);
+    expect(tester.widget<Semantics>(status).properties.liveRegion, isNot(true));
+
+    pending.complete(_schedule(lineup.channels.single));
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('search owns Escape and Enter focus without tuning', (
     tester,
   ) async {
@@ -1084,7 +1118,22 @@ void main() {
     await tester.pumpAndSettle();
 
     final search = find.byKey(const Key('guide-channel-search'));
+    expect(find.byTooltip('Clear search'), findsNothing);
     await tester.tap(search);
+    await tester.enterText(search, '   ');
+    await tester.pump();
+    expect(guide.searchQuery, isEmpty);
+    expect(find.byTooltip('Clear search'), findsOneWidget);
+    await tester.tap(find.byTooltip('Clear search'));
+    await tester.pump();
+    expect(find.byTooltip('Clear search'), findsNothing);
+
+    guide.setSearchQuery('CHANNEL 1');
+    await tester.pump();
+    final searchValue = tester.widget<TextField>(search).controller!.value;
+    expect(searchValue.text, 'channel 1');
+    expect(searchValue.selection, const TextSelection.collapsed(offset: 9));
+
     await tester.enterText(search, 'Channel 2');
     await tester.pump();
     expect(guide.channels.single.id, 'channel-2');
@@ -1182,6 +1231,8 @@ void main() {
     tester.view
       ..devicePixelRatio = 1
       ..physicalSize = const Size(800, 720);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(
       MaterialApp(
         home: GuideView(
@@ -1209,8 +1260,6 @@ void main() {
     expect(guide.libraryFilterId, isNull);
     expect(guide.searchQuery, 'library');
 
-    tester.view.resetPhysicalSize();
-    tester.view.resetDevicePixelRatio();
     guide.dispose();
     lineup.dispose();
   });
@@ -1224,6 +1273,11 @@ void main() {
         lineup: lineup,
         loadSchedule: (channel) async => _schedule(channel),
       );
+      tester.view
+        ..devicePixelRatio = 1
+        ..physicalSize = const Size(1280, 720);
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
       for (final size in const [
         Size(1280, 720),
         Size(1920, 1080),
@@ -1253,8 +1307,6 @@ void main() {
         expect(find.byKey(const Key('guide-hours')), findsOneWidget);
         expect(tester.takeException(), isNull, reason: '$size');
       }
-      tester.view.resetPhysicalSize();
-      tester.view.resetDevicePixelRatio();
       guide.dispose();
       lineup.dispose();
     },

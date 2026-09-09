@@ -428,6 +428,11 @@ class GuideController extends ChangeNotifier {
     final current = programs.indexWhere(
       (program) => program.id == _focusedProgramId,
     );
+    if (offset > 0 && current == -1 && programs.isNotEmpty) {
+      _focusedProgramId = programs.first.id;
+      notifyListeners();
+      return;
+    }
     if (offset < 0 && !canBrowseEarlier && current <= 0) {
       _focusedProgramId = null;
       notifyListeners();
@@ -500,7 +505,11 @@ class GuideController extends ChangeNotifier {
         hours == guideHours) {
       return;
     }
-    await lineup.updateSettings(lineup.settings.copyWith(guideHours: hours));
+    try {
+      await lineup.updateSettings(lineup.settings.copyWith(guideHours: hours));
+    } catch (_) {
+      // LineupController owns rollback and persistence diagnostics.
+    }
   }
 
   void setLibraryFilter(String? libraryId) {
@@ -862,7 +871,7 @@ class GuideController extends ChangeNotifier {
   DateTime get _liveBoundary => _floorHalfHour(_clock());
 
   void _rememberInspection() {
-    if (_focusedChannelId == null) return;
+    if (_focusedChannelId == null || _preservedFocusedChannelId != null) return;
     _preservedFocusedChannelId = _focusedChannelId;
     _preservedFocusedProgramId = _focusedProgramId;
   }
@@ -887,6 +896,8 @@ class GuideController extends ChangeNotifier {
     if (restoreId != null && _visibleIndexById.containsKey(restoreId)) {
       _focusedChannelId = restoreId;
       _focusedProgramId = _preservedFocusedProgramId;
+      _preservedFocusedChannelId = null;
+      _preservedFocusedProgramId = null;
     } else {
       _focusedChannelId = _visibleChannels.first.id;
       _focusedProgramId = null;
