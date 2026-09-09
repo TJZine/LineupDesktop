@@ -1279,6 +1279,13 @@ void main() {
       guide.setSearchQuery('');
       expect(guide.focusedChannelId, 'channel-1');
 
+      guide.setSearchQuery('Custom 1');
+      guide.setSearchQuery('');
+      guide.moveVertical(-1);
+      guide.setSearchQuery('no such channel');
+      guide.setSearchQuery('');
+      expect(guide.focusedChannelId, 'channel-0');
+
       guide.dispose();
       lineup.dispose();
     },

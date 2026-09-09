@@ -91,7 +91,7 @@ void main() {
           LibraryFilter.collection: ['Favorites'],
         },
       ),
-      [comedy, drama],
+      [comedy, drama, media[1]],
     );
 
     expect(resolved.map((item) => item.id), ['a']);

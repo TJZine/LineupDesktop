@@ -497,6 +497,7 @@ class GuideController extends ChangeNotifier {
     _rememberInspection();
     _searchQuery = query;
     _applyFilters();
+    _finishFilterSessionIfInactive();
     notifyListeners();
   }
 
@@ -517,6 +518,7 @@ class GuideController extends ChangeNotifier {
     _rememberInspection();
     _libraryFilterId = libraryId;
     _applyFilters();
+    _finishFilterSessionIfInactive();
     notifyListeners();
   }
 
@@ -874,6 +876,12 @@ class GuideController extends ChangeNotifier {
     if (_focusedChannelId == null || _preservedFocusedChannelId != null) return;
     _preservedFocusedChannelId = _focusedChannelId;
     _preservedFocusedProgramId = _focusedProgramId;
+  }
+
+  void _finishFilterSessionIfInactive() {
+    if (_libraryFilterId != null || _searchQuery.isNotEmpty) return;
+    _preservedFocusedChannelId = null;
+    _preservedFocusedProgramId = null;
   }
 
   void _applyFilters() {
