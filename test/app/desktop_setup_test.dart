@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' show CheckedState;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -89,6 +90,62 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('configure-section-1')));
     await tester.pumpAndSettle();
     expect(find.text('Playback order'), findsNWidgets(2));
+    final semantics = tester.ensureSemantics();
+    try {
+      final shuffle = find.byKey(const ValueKey('setup-playback-shuffle'));
+      final inOrder = find.byKey(const ValueKey('setup-playback-sequential'));
+      final miniMarathons = find.byKey(const ValueKey('setup-playback-block'));
+      for (final card in [shuffle, inOrder, miniMarathons]) {
+        expect(
+          tester
+              .getSemantics(card)
+              .getSemanticsData()
+              .flagsCollection
+              .isInMutuallyExclusiveGroup,
+          isTrue,
+        );
+      }
+      tester.widget<RawRadio<PlaybackMode>>(shuffle).focusNode.requestFocus();
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .getSemantics(inOrder)
+            .getSemanticsData()
+            .flagsCollection
+            .isChecked,
+        CheckedState.isTrue,
+      );
+      expect(
+        tester
+            .getSemantics(shuffle)
+            .getSemanticsData()
+            .flagsCollection
+            .isChecked,
+        CheckedState.isFalse,
+      );
+      expect(
+        tester.widget<RawRadio<PlaybackMode>>(inOrder).focusNode.hasFocus,
+        isTrue,
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pumpAndSettle();
+      expect(find.text('Include specials'), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .getSemantics(shuffle)
+            .getSemanticsData()
+            .flagsCollection
+            .isChecked,
+        CheckedState.isTrue,
+      );
+      expect(find.text('Include specials'), findsNothing);
+    } finally {
+      semantics.dispose();
+    }
     expect(find.text('Additional channel versions'), findsOneWidget);
     expect(
       tester
@@ -279,11 +336,13 @@ void main() {
       'Additional channel versions',
     );
     await tester.ensureVisible(extras);
+    await tester.pumpAndSettle();
     await tester.tap(extras);
     await tester.pumpAndSettle();
 
     final copies = _setupField<int>('Alternate schedules');
     await tester.ensureVisible(copies);
+    await tester.pumpAndSettle();
     await tester.tap(copies);
     await tester.pumpAndSettle();
     await tester.tap(find.text('2').last);
@@ -291,9 +350,11 @@ void main() {
     expect(tester.widget<DropdownButtonFormField<int>>(copies).initialValue, 2);
     expect(find.textContaining('extra version'), findsOneWidget);
 
-    await tester.tap(
-      find.widgetWithText(RadioListTile<PlaybackMode>, 'In order'),
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('setup-playback-sequential')),
     );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('setup-playback-sequential')));
     await tester.pumpAndSettle();
     expect(
       tester
@@ -317,9 +378,11 @@ void main() {
     );
     expect(find.textContaining('extra version'), findsNothing);
 
-    await tester.tap(
-      find.widgetWithText(RadioListTile<PlaybackMode>, 'Shuffle'),
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('setup-playback-shuffle')),
     );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('setup-playback-shuffle')));
     await tester.pumpAndSettle();
     expect(
       tester
@@ -353,10 +416,13 @@ void main() {
         'Additional channel versions',
       );
       await tester.ensureVisible(extras);
+      await tester.pumpAndSettle();
       await tester.tap(extras);
       await tester.pumpAndSettle();
 
       final variant = _setupField<PlaybackMode?>('Different playback mode');
+      await tester.ensureVisible(variant);
+      await tester.pumpAndSettle();
       await tester.tap(variant);
       await tester.pumpAndSettle();
       await tester.tap(find.text('Shuffle').last);
@@ -376,21 +442,25 @@ void main() {
         isNull,
       );
 
+      await tester.ensureVisible(
+        _setupField<PlaybackMode?>('Different playback mode'),
+      );
+      await tester.pumpAndSettle();
       await tester.tap(_setupField<PlaybackMode?>('Different playback mode'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Mini-marathons').last);
       await tester.pumpAndSettle();
       final extraBlock = _setupField<int>('Extra block size');
+      await tester.ensureVisible(extraBlock);
+      await tester.pumpAndSettle();
       await tester.tap(extraBlock);
       await tester.pumpAndSettle();
       await tester.tap(find.text('4').last);
       await tester.pumpAndSettle();
 
-      final inOrder = find.widgetWithText(
-        RadioListTile<PlaybackMode>,
-        'In order',
-      );
+      final inOrder = find.byKey(const ValueKey('setup-playback-sequential'));
       await tester.ensureVisible(inOrder);
+      await tester.pumpAndSettle();
       await tester.tap(inOrder);
       await tester.pumpAndSettle();
       expect(
@@ -402,11 +472,11 @@ void main() {
         PlaybackMode.block,
       );
 
-      final mainMiniMarathons = find.widgetWithText(
-        RadioListTile<PlaybackMode>,
-        'Mini-marathons',
+      final mainMiniMarathons = find.byKey(
+        const ValueKey('setup-playback-block'),
       );
       await tester.ensureVisible(mainMiniMarathons);
+      await tester.pumpAndSettle();
       await tester.tap(mainMiniMarathons);
       await tester.pumpAndSettle();
       expect(
@@ -450,9 +520,12 @@ void main() {
       'Additional channel versions',
     );
     await tester.ensureVisible(extras);
+    await tester.pumpAndSettle();
     await tester.tap(extras);
     await tester.pumpAndSettle();
     final variant = _setupField<PlaybackMode?>('Different playback mode');
+    await tester.ensureVisible(variant);
+    await tester.pumpAndSettle();
     await tester.tap(variant);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Mini-marathons').last);
@@ -474,10 +547,18 @@ void main() {
     expect(find.textContaining('extra version'), findsOneWidget);
 
     await tester.ensureVisible(extras);
+    await tester.pumpAndSettle();
     await tester.tap(extras);
     await tester.pumpAndSettle();
     expect(find.textContaining('extra version'), findsNothing);
-    expect(find.textContaining('$originalCount generated'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('configuration-allocation-summary')),
+        matching: find.text(originalCount!),
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('No additional versions'), findsOneWidget);
   });
 
   testWidgets('stale apply refreshes review and requires another apply', (
@@ -632,7 +713,7 @@ Future<void> _pump(
 Future<void> _advanceToConfigure(WidgetTester tester) async {
   await tester.tap(find.byKey(const ValueKey('scan-selected-libraries')));
   await tester.pumpAndSettle();
-  expect(find.text('Configure channels'), findsOneWidget);
+  expect(find.text('Shape your lineup'), findsOneWidget);
 }
 
 Future<void> _advanceToReview(WidgetTester tester) async {

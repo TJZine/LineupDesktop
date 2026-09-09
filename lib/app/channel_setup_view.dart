@@ -19,6 +19,10 @@ enum _ReviewFilter { all, unchanged, updated, added, removed }
 
 typedef _ReviewEntry = ({Channel channel, Channel? before, _ReviewKind kind});
 
+// Interpolate the approved 720p and 1080p configuration dimensions.
+double _configurationExpansion(Size size) =>
+    math.max(0, (math.min(size.width / 1280, size.height / 720) - 1) * 2);
+
 class UpstreamChannelSetupView extends StatefulWidget {
   const UpstreamChannelSetupView({
     required this.controller,
@@ -42,6 +46,10 @@ class _SetupState extends State<UpstreamChannelSetupView> {
   final _strategies = <BuilderStrategy>{...BuilderStrategy.values};
   final _grouped = <BuilderStrategy>{};
   final _sourceOrder = <BuilderStrategy>[...BuilderStrategy.values];
+  final _playbackFocus = {
+    for (final mode in PlaybackMode.values)
+      mode: FocusNode(debugLabel: 'Setup playback ${mode.name}'),
+  };
   final _orderFocus = {
     for (final strategy in BuilderStrategy.values)
       strategy: (earlier: FocusNode(), later: FocusNode()),
@@ -98,6 +106,9 @@ class _SetupState extends State<UpstreamChannelSetupView> {
 
   @override
   void dispose() {
+    for (final node in _playbackFocus.values) {
+      node.dispose();
+    }
     for (final nodes in _orderFocus.values) {
       nodes.earlier.dispose();
       nodes.later.dispose();
@@ -155,7 +166,10 @@ class _SetupState extends State<UpstreamChannelSetupView> {
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.sizeOf(context);
-    final scale = LineupLayout.scaleFor(size);
+    final expansion = _configurationExpansion(size);
+    final scale = _step == 2
+        ? (14 + 4 * expansion) / 14
+        : LineupLayout.scaleFor(size);
     return Scaffold(
       body: Material(
         color: LineupTheme.of(context).deepBackground,
@@ -167,12 +181,19 @@ class _SetupState extends State<UpstreamChannelSetupView> {
             ),
             child: Padding(
               key: const ValueKey('channel-setup-content'),
-              padding: LineupLayout.pageInsets(size),
+              padding: _step == 2
+                  ? EdgeInsets.symmetric(
+                      horizontal: 32 + 16 * expansion,
+                      vertical: 24 + 12 * expansion,
+                    )
+                  : LineupLayout.pageInsets(size),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   _header(),
-                  SizedBox(height: 20 * scale),
+                  SizedBox(
+                    height: _step == 2 ? 20 + 12 * expansion : 20 * scale,
+                  ),
                   if (_error != null && _phase != _BuildPhase.failed) ...[
                     LineupNotice(message: _error!),
                     SizedBox(height: 12 * scale),
@@ -199,68 +220,165 @@ class _SetupState extends State<UpstreamChannelSetupView> {
     );
   }
 
-  Widget _header() => LayoutBuilder(
+  Widget _header() {
+    if (_step == 2) return _configurationHeader();
+    return LayoutBuilder(
+      key: const ValueKey('channel-setup-header'),
+      builder: (context, constraints) {
+        final title = Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Image.asset('assets/branding/lineup-logo-mark.png', height: 42),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Semantics(
+                    header: true,
+                    child: Text(switch (_step) {
+                      1 => 'Choose libraries',
+                      _ =>
+                        _phase == _BuildPhase.review
+                            ? (_firstSetup
+                                  ? 'Review your first lineup'
+                                  : 'Review your lineup')
+                            : 'Channel Setup',
+                    }, style: Theme.of(context).textTheme.headlineMedium),
+                  ),
+                  Text(
+                    switch (_step) {
+                      1 =>
+                        'Select the Plex libraries to scan for channel ideas.',
+                      _ =>
+                        _phase == _BuildPhase.review
+                            ? (_firstSetup
+                                  ? 'Check your channels before creating your lineup.'
+                                  : 'Check what changes and what stays.')
+                            : 'Your setup choices remain available.',
+                    },
+                    style: TextStyle(
+                      color: LineupTheme.of(context).secondaryText,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        );
+        final steps = Text(
+          '1 Libraries  /  2 Configure  /  3 Review',
+          key: const ValueKey('channel-setup-steps'),
+          style: TextStyle(color: LineupTheme.of(context).secondaryText),
+        );
+        if (constraints.maxWidth < 900 ||
+            MediaQuery.textScalerOf(context).scale(14) >= 21) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [title, const SizedBox(height: 8), steps],
+          );
+        }
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: title),
+            const SizedBox(width: 20),
+            steps,
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _configurationHeader() => LayoutBuilder(
     key: const ValueKey('channel-setup-header'),
     builder: (context, constraints) {
-      final title = Row(
+      final expansion = _configurationExpansion(MediaQuery.sizeOf(context));
+      final roles = LineupTheme.of(context);
+      final textStyle = TextStyle(
+        fontSize: 14 + 4 * expansion,
+        height: 1.4,
+        color: roles.secondaryText,
+      );
+      final steps = Text.rich(
+        TextSpan(
+          style: textStyle,
+          children: [
+            const TextSpan(text: '1 Libraries  /  '),
+            TextSpan(
+              text: '2 Configure',
+              style: TextStyle(
+                color: roles.primaryText,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const TextSpan(text: '  /  3 Review'),
+          ],
+        ),
+        key: const ValueKey('channel-setup-steps'),
+      );
+      final title = Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Image.asset('assets/branding/lineup-logo-mark.png', height: 42),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Semantics(
-                  header: true,
-                  child: Text(switch (_step) {
-                    1 => 'Choose libraries',
-                    2 => 'Configure channels',
-                    _ =>
-                      _phase == _BuildPhase.review
-                          ? (_firstSetup
-                                ? 'Review your first lineup'
-                                : 'Review your lineup')
-                          : 'Channel Setup',
-                  }, style: Theme.of(context).textTheme.headlineMedium),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Text(
+                'LINEUP',
+                style: TextStyle(
+                  color: roles.progressFill,
+                  fontFamily: 'Arial',
+                  fontSize: 14 + 4 * expansion,
+                  fontWeight: FontWeight.normal,
+                  letterSpacing: 1.5,
+                  height: 1.4,
                 ),
-                Text(
-                  switch (_step) {
-                    1 => 'Select the Plex libraries to scan for channel ideas.',
-                    2 => 'Choose sources, playback order and lineup rules.',
-                    _ =>
-                      _phase == _BuildPhase.review
-                          ? (_firstSetup
-                                ? 'Check your channels before creating your lineup.'
-                                : 'Check what changes and what stays.')
-                          : 'Your setup choices remain available.',
-                  },
-                  style: TextStyle(
-                    color: LineupTheme.of(context).secondaryText,
-                  ),
-                ),
-              ],
+              ),
+              SizedBox(width: 10 + 2 * expansion),
+              Image.asset(
+                'assets/branding/lineup-logo-mark.png',
+                height: 18 + 6 * expansion,
+                excludeFromSemantics: true,
+              ),
+            ],
+          ),
+          SizedBox(height: 6 + 4 * expansion),
+          Semantics(
+            header: true,
+            child: Text(
+              'Shape your lineup',
+              style: TextStyle(
+                color: roles.primaryText,
+                fontSize: 28 + 10 * expansion,
+                fontWeight: FontWeight.w600,
+                height: 1.2,
+              ),
             ),
           ),
+          SizedBox(height: 6 + 4 * expansion),
+          Text(
+            'Choose how your generated channels will play.',
+            style: textStyle.copyWith(height: 1.4),
+          ),
         ],
-      );
-      final steps = Text(
-        '1 Libraries  /  2 Configure  /  3 Review',
-        key: const ValueKey('channel-setup-steps'),
-        style: TextStyle(color: LineupTheme.of(context).secondaryText),
       );
       if (constraints.maxWidth < 900 ||
           MediaQuery.textScalerOf(context).scale(14) >= 21) {
         return Column(
+          key: const ValueKey('channel-setup-header-stack'),
           crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [title, const SizedBox(height: 8), steps],
+          children: [
+            title,
+            const SizedBox(height: 8),
+            Align(alignment: Alignment.centerRight, child: steps),
+          ],
         );
       }
       return Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Expanded(child: title),
-          const SizedBox(width: 20),
+          const SizedBox(width: 32),
           steps,
         ],
       );
@@ -534,17 +652,43 @@ class _SetupState extends State<UpstreamChannelSetupView> {
 
   Widget _configureStep() {
     final allocation = _allocate(widget.controller.channels);
+    final size = MediaQuery.sizeOf(context);
+    final expansion = _configurationExpansion(size);
+    final roles = LineupTheme.of(context);
+    final actionHeight = 44 + 12 * expansion;
+    final actionPadding = EdgeInsets.symmetric(
+      horizontal: 12 + 4 * expansion,
+      vertical: 8 + 4 * expansion,
+    );
+    final actionTextStyle = Theme.of(context).textTheme.labelLarge!.copyWith(
+      fontSize: 14 + 4 * expansion,
+      height: 1.4,
+      fontWeight: FontWeight.normal,
+    );
     return _Stage(
+      footerGap: 0,
       footer: _Footer(
+        configuration: true,
         leading: [
           TextButton(
+            style: TextButton.styleFrom(
+              foregroundColor: roles.secondaryText,
+              minimumSize: Size(0, actionHeight),
+              padding: actionPadding,
+              textStyle: actionTextStyle,
+            ),
             onPressed: () => setState(() => _step = 1),
             child: const Text('Back to libraries'),
           ),
         ],
-        summary: Text(_allocationSummary(allocation)),
+        summary: _configurationSummary(allocation),
         trailing: FilledButton(
           key: const ValueKey('review-channels'),
+          style: FilledButton.styleFrom(
+            minimumSize: Size(0, actionHeight),
+            padding: actionPadding,
+            textStyle: actionTextStyle.copyWith(fontWeight: FontWeight.w600),
+          ),
           onPressed: allocation.channels.isEmpty ? null : _prepareReview,
           child: const Text('Review channels'),
         ),
@@ -552,10 +696,14 @@ class _SetupState extends State<UpstreamChannelSetupView> {
       child: LayoutBuilder(
         builder: (context, constraints) {
           const labels = ['Channel sources', 'Playback order', 'Lineup rules'];
-          final roles = LineupTheme.of(context);
           final compact =
               constraints.maxWidth < 900 ||
               MediaQuery.textScalerOf(context).scale(1) >= 1.6;
+          final navigationHeight = 44 + 12 * expansion;
+          final navigationPadding = EdgeInsets.symmetric(
+            horizontal: 12 + 4 * expansion,
+            vertical: 8 + 4 * expansion,
+          );
           final navigation = [
             for (var index = 0; index < labels.length; index++)
               Semantics(
@@ -568,9 +716,12 @@ class _SetupState extends State<UpstreamChannelSetupView> {
                     backgroundColor: _configurationSection == index
                         ? roles.selectedSurface
                         : Colors.transparent,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 14,
+                    minimumSize: Size(0, navigationHeight),
+                    padding: navigationPadding,
+                    textStyle: Theme.of(context).textTheme.labelLarge!.copyWith(
+                      fontSize: 14 + 4 * expansion,
+                      fontWeight: FontWeight.normal,
+                      height: 1.4,
                     ),
                   ),
                   onPressed: () =>
@@ -588,8 +739,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
                   labels[_configurationSection],
                   switch (_configurationSection) {
                     0 => 'Choose which kinds of generated channels to include.',
-                    1 =>
-                      'Choose how programs are arranged on generated channels.',
+                    1 => 'For generated channels containing TV episodes',
                     _ => 'Set limits and the priority used by balanced source rotation.',
                   },
                 ),
@@ -651,20 +801,18 @@ class _SetupState extends State<UpstreamChannelSetupView> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     SizedBox(
-                      width:
-                          176 *
-                          LineupLayout.scaleFor(MediaQuery.sizeOf(context)),
+                      width: 176 + 60 * expansion,
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           for (final item in navigation) ...[
                             item,
-                            const SizedBox(height: 8),
+                            SizedBox(height: 8 + 4 * expansion),
                           ],
                         ],
                       ),
                     ),
-                    const SizedBox(width: 28),
+                    SizedBox(width: 28 + 12 * expansion),
                     Expanded(child: content),
                   ],
                 );
@@ -673,19 +821,109 @@ class _SetupState extends State<UpstreamChannelSetupView> {
     );
   }
 
-  Widget _heading(String title, String description) => Padding(
-    padding: const EdgeInsets.only(bottom: 12),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(title, style: Theme.of(context).textTheme.titleLarge),
-        Text(
-          description,
-          style: TextStyle(color: LineupTheme.of(context).secondaryText),
-        ),
-      ],
-    ),
-  );
+  Widget _heading(String title, String description) {
+    final expansion = _configurationExpansion(MediaQuery.sizeOf(context));
+    final roles = LineupTheme.of(context);
+    final titleStyle = TextStyle(
+      color: roles.primaryText,
+      fontSize: 18 + 6 * expansion,
+      fontWeight: FontWeight.w600,
+      height: 1.3,
+    );
+    final descriptionStyle = TextStyle(
+      color: roles.secondaryText,
+      fontSize: 14 + 4 * expansion,
+      height: 1.4,
+    );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final inline =
+            constraints.maxWidth >= 640 &&
+            MediaQuery.textScalerOf(context).scale(1) < 1.4;
+        return Padding(
+          padding: EdgeInsets.only(bottom: 8 + 4 * expansion),
+          child: inline
+              ? Row(
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  children: [
+                    Text(title, style: titleStyle),
+                    SizedBox(width: 16 + 16 * expansion),
+                    Expanded(child: Text(description, style: descriptionStyle)),
+                  ],
+                )
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: titleStyle),
+                    const SizedBox(height: 8),
+                    Text(description, style: descriptionStyle),
+                  ],
+                ),
+        );
+      },
+    );
+  }
+
+  Widget _configurationSummary(ChannelPlanAllocation result) {
+    final expansion = _configurationExpansion(MediaQuery.sizeOf(context));
+    final roles = LineupTheme.of(context);
+    final total = result.channels.length;
+    final details = <String>[
+      if (result.allocatedExtras == 0)
+        'No additional versions'
+      else
+        '${result.allocatedOriginals} originals + ${result.allocatedExtras} extra versions',
+    ];
+    final excluded = [
+      if (result.excludedOriginals > 0)
+        '${result.excludedOriginals} ${result.excludedOriginals == 1 ? 'original' : 'originals'} excluded',
+      if (result.excludedExtras > 0)
+        '${result.excludedExtras} extra ${result.excludedExtras == 1 ? 'version' : 'versions'} excluded',
+    ];
+    if (excluded.isNotEmpty) {
+      final reason = result.numberLimitExcluded > 0
+          ? 'Channel numbers exhausted'
+          : 'Channel limit reached';
+      details.add('$reason · ${excluded.join(' · ')}');
+    }
+    final secondaryStyle = TextStyle(
+      color: roles.secondaryText,
+      fontSize: 14 + 4 * expansion,
+      height: 1.4,
+    );
+    return MergeSemantics(
+      key: const ValueKey('configuration-allocation-summary'),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Text(
+                '$total',
+                style: TextStyle(
+                  color: roles.primaryText,
+                  fontSize: 22 + 8 * expansion,
+                  fontWeight: FontWeight.w600,
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  'generated ${total == 1 ? 'channel' : 'channels'}',
+                  style: secondaryStyle,
+                ),
+              ),
+            ],
+          ),
+          for (final detail in details) Text(detail, style: secondaryStyle),
+        ],
+      ),
+    );
+  }
 
   Widget _sourceControl(
     BuilderStrategy strategy,
@@ -761,143 +999,175 @@ class _SetupState extends State<UpstreamChannelSetupView> {
     );
   }
 
-  Widget _playbackControls() => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      LayoutBuilder(
-        builder: (context, constraints) {
-          final effectiveWidth =
-              constraints.maxWidth / MediaQuery.textScalerOf(context).scale(1);
-          final columns = effectiveWidth >= 780
-              ? 3
-              : effectiveWidth >= 520
-              ? 2
-              : 1;
-          final gap = 12.0;
-          final width = (constraints.maxWidth - gap * (columns - 1)) / columns;
-          return RadioGroup<PlaybackMode>(
-            groupValue: _playback,
-            onChanged: (mode) => _setPlaybackMode(mode!),
-            child: Wrap(
-              spacing: gap,
-              runSpacing: 8,
-              children: [
-                _playbackChoice(
-                  PlaybackMode.shuffle,
-                  'Shuffle',
-                  'A stable shuffled schedule.',
-                  width: width,
-                ),
-                _playbackChoice(
-                  PlaybackMode.sequential,
-                  'In order',
-                  'Preserve the source order.',
-                  width: width,
-                ),
-                _playbackChoice(
-                  PlaybackMode.block,
-                  'Mini-marathons',
-                  'Rotate shows in short chronological blocks.',
-                  width: width,
-                ),
-              ],
-            ),
-          );
-        },
-      ),
-      const SizedBox(height: 16),
-      _episodeStrip(),
-      if (_playback == PlaybackMode.block)
-        Wrap(
-          spacing: 20,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [SizedBox(width: 220, child: _blockField(main: true))],
-        ),
-      SwitchListTile(
-        value: _extras,
-        title: const Text('Additional channel versions'),
-        subtitle: Text(
-          _playback == PlaybackMode.sequential
-              ? 'Alternate schedules are not available with In order. A different playback mode can still be added.'
-              : 'Add alternate schedules after every eligible original channel is included.',
-        ),
-        onChanged: (value) => setState(() {
-          _extras = value;
-          _clearIncludeSpecialsIfUnused();
-        }),
-      ),
-      if (_extras)
-        Wrap(
-          spacing: 16,
-          runSpacing: 12,
-          children: [
-            SizedBox(
-              width: 240,
-              child: DropdownButtonFormField<PlaybackMode?>(
-                isExpanded: true,
-                initialValue: _variantMode,
-                decoration: const InputDecoration(
-                  labelText: 'Different playback mode',
-                ),
-                items: const [
-                  DropdownMenuItem(value: null, child: Text('None')),
-                  DropdownMenuItem(
-                    value: PlaybackMode.shuffle,
-                    child: Text('Shuffle'),
+  Widget _playbackControls() {
+    final expansion = _configurationExpansion(MediaQuery.sizeOf(context));
+    final sectionGap = 16 + 8 * expansion;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SizedBox(height: sectionGap),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final effectiveWidth =
+                constraints.maxWidth /
+                MediaQuery.textScalerOf(context).scale(1);
+            final columns = effectiveWidth >= 780
+                ? 3
+                : effectiveWidth >= 520
+                ? 2
+                : 1;
+            final gap = 12 + 8 * expansion;
+            final width =
+                (constraints.maxWidth - gap * (columns - 1)) / columns;
+            return RadioGroup<PlaybackMode>(
+              groupValue: _playback,
+              onChanged: (mode) => _setPlaybackMode(mode!),
+              child: Wrap(
+                spacing: gap,
+                runSpacing: gap,
+                children: [
+                  _playbackChoice(
+                    PlaybackMode.shuffle,
+                    'Shuffle',
+                    'Mix programs into a shuffled schedule.',
+                    width: width,
                   ),
-                  DropdownMenuItem(
-                    value: PlaybackMode.sequential,
-                    child: Text('In order'),
+                  _playbackChoice(
+                    PlaybackMode.sequential,
+                    'In order',
+                    'Keep the order supplied by the channel’s source.',
+                    width: width,
                   ),
-                  DropdownMenuItem(
-                    value: PlaybackMode.block,
-                    child: Text('Mini-marathons'),
+                  _playbackChoice(
+                    PlaybackMode.block,
+                    'Mini-marathons',
+                    'Play a few episodes of one show, then move to another.',
+                    width: width,
                   ),
                 ],
-                onChanged: (value) => setState(() {
-                  _variantMode = value;
-                  _clearDuplicateVariant();
-                  _clearIncludeSpecialsIfUnused();
-                }),
+              ),
+            );
+          },
+        ),
+        SizedBox(height: sectionGap),
+        _episodeStrip(),
+        if (_playback == PlaybackMode.block) ...[
+          SizedBox(height: 12 + 4 * expansion),
+          Wrap(
+            spacing: 20,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [SizedBox(width: 220, child: _blockField(main: true))],
+          ),
+        ],
+        SizedBox(height: 20 + 8 * expansion),
+        ListTileTheme.merge(
+          titleAlignment: ListTileTitleAlignment.top,
+          child: SwitchListTile(
+            value: _extras,
+            controlAffinity: ListTileControlAffinity.leading,
+            contentPadding: EdgeInsets.zero,
+            title: Text(
+              'Additional channel versions',
+              style: TextStyle(
+                fontSize: 16 + 6 * expansion,
+                fontWeight: FontWeight.w600,
+                height: 1.4,
               ),
             ),
-            if (_variantMode == PlaybackMode.block)
-              SizedBox(width: 210, child: _blockField(main: false)),
-            SizedBox(
-              width: 220,
-              child: DropdownButtonFormField<int>(
-                initialValue: _alternateCopies,
-                decoration: const InputDecoration(
-                  labelText: 'Alternate schedules',
+            subtitle: Padding(
+              padding: EdgeInsets.only(top: 8 + 4 * expansion),
+              child: Text(
+                _playback == PlaybackMode.sequential
+                    ? 'Alternate schedules are not available with In order. A different playback mode can still be added.'
+                    : 'Create extra channels with alternate schedules or another playback mode.',
+                style: TextStyle(
+                  color: LineupTheme.of(context).secondaryText,
+                  fontSize: 13 + 5 * expansion,
+                  height: 1.4,
                 ),
-                items: const [0, 1, 2, 3]
-                    .map(
-                      (value) =>
-                          DropdownMenuItem(value: value, child: Text('$value')),
-                    )
-                    .toList(),
-                onChanged: _playback == PlaybackMode.sequential
-                    ? null
-                    : (value) => setState(() => _alternateCopies = value!),
               ),
             ),
-          ],
+            onChanged: (value) => setState(() {
+              _extras = value;
+              _clearIncludeSpecialsIfUnused();
+            }),
+          ),
         ),
-      if (_playback == PlaybackMode.block ||
-          (_extras && _variantMode == PlaybackMode.block))
-        CheckboxMenuButton(
-          value: _includeSpecials,
-          onChanged: (value) =>
-              setState(() => _includeSpecials = value ?? false),
-          child: const Text('Include specials'),
-        ),
-      if (_notice != null)
-        Text(
-          _notice!,
-          style: TextStyle(color: LineupTheme.of(context).secondaryText),
-        ),
-    ],
-  );
+        if (_extras)
+          Wrap(
+            spacing: 16,
+            runSpacing: 12,
+            children: [
+              SizedBox(
+                width: 240,
+                child: DropdownButtonFormField<PlaybackMode?>(
+                  isExpanded: true,
+                  initialValue: _variantMode,
+                  decoration: const InputDecoration(
+                    labelText: 'Different playback mode',
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: null, child: Text('None')),
+                    DropdownMenuItem(
+                      value: PlaybackMode.shuffle,
+                      child: Text('Shuffle'),
+                    ),
+                    DropdownMenuItem(
+                      value: PlaybackMode.sequential,
+                      child: Text('In order'),
+                    ),
+                    DropdownMenuItem(
+                      value: PlaybackMode.block,
+                      child: Text('Mini-marathons'),
+                    ),
+                  ],
+                  onChanged: (value) => setState(() {
+                    _variantMode = value;
+                    _clearDuplicateVariant();
+                    _clearIncludeSpecialsIfUnused();
+                  }),
+                ),
+              ),
+              if (_variantMode == PlaybackMode.block)
+                SizedBox(width: 210, child: _blockField(main: false)),
+              SizedBox(
+                width: 220,
+                child: DropdownButtonFormField<int>(
+                  initialValue: _alternateCopies,
+                  decoration: const InputDecoration(
+                    labelText: 'Alternate schedules',
+                  ),
+                  items: const [0, 1, 2, 3]
+                      .map(
+                        (value) => DropdownMenuItem(
+                          value: value,
+                          child: Text('$value'),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: _playback == PlaybackMode.sequential
+                      ? null
+                      : (value) => setState(() => _alternateCopies = value!),
+                ),
+              ),
+            ],
+          ),
+        if (_playback == PlaybackMode.block ||
+            (_extras && _variantMode == PlaybackMode.block))
+          CheckboxMenuButton(
+            value: _includeSpecials,
+            onChanged: (value) =>
+                setState(() => _includeSpecials = value ?? false),
+            child: const Text('Include specials'),
+          ),
+        if (_notice != null)
+          Text(
+            _notice!,
+            style: TextStyle(color: LineupTheme.of(context).secondaryText),
+          ),
+      ],
+    );
+  }
 
   Widget _playbackChoice(
     PlaybackMode mode,
@@ -905,39 +1175,82 @@ class _SetupState extends State<UpstreamChannelSetupView> {
     String description, {
     required double width,
   }) {
-    final roles = LineupTheme.of(context);
-    final selected = _playback == mode;
+    final expansion = _configurationExpansion(MediaQuery.sizeOf(context));
     return SizedBox(
       width: width,
-      child: Container(
-        constraints: BoxConstraints(
-          minHeight: 104 * LineupLayout.scaleFor(MediaQuery.sizeOf(context)),
-        ),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(roles.panelRadius),
-          border: Border.all(
-            color: selected
-                ? roles.progressFill.withValues(alpha: 0.7)
-                : roles.subtleBorder,
-          ),
-        ),
-        child: Material(
-          color: selected ? roles.selectedSurface : roles.primarySurface,
-          borderRadius: BorderRadius.circular(roles.panelRadius),
-          child: RadioListTile<PlaybackMode>(
+      child: Builder(
+        builder: (context) => MergeSemantics(
+          child: RawRadio<PlaybackMode>(
+            key: ValueKey('setup-playback-${mode.name}'),
             value: mode,
-            selected: selected,
-            activeColor: roles.progressFill,
-            controlAffinity: ListTileControlAffinity.leading,
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 12,
-              vertical: 8,
-            ),
-            title: Text(title, style: TextStyle(color: roles.primaryText)),
-            subtitle: Text(
-              description,
-              style: TextStyle(color: roles.secondaryText),
-            ),
+            mouseCursor: WidgetStateMouseCursor.clickable,
+            toggleable: false,
+            focusNode: _playbackFocus[mode]!,
+            autofocus: false,
+            groupRegistry: RadioGroup.maybeOf<PlaybackMode>(context),
+            enabled: true,
+            builder: (context, state) {
+              final roles = LineupTheme.of(context);
+              final selected = state.states.contains(WidgetState.selected);
+              final focused = state.states.contains(WidgetState.focused);
+              final hovered = state.states.contains(WidgetState.hovered);
+              final radius = BorderRadius.circular(roles.panelRadius);
+              final surface = selected
+                  ? roles.selectedSurface
+                  : roles.primarySurface;
+              return Container(
+                constraints: BoxConstraints(minHeight: 104 + 48 * expansion),
+                padding: EdgeInsets.all(16 + 8 * expansion),
+                decoration: BoxDecoration(
+                  color: hovered
+                      ? Color.alphaBlend(
+                          roles.primaryText.withValues(alpha: 0.04),
+                          surface,
+                        )
+                      : surface,
+                  borderRadius: radius,
+                  border: Border.all(
+                    color: selected ? roles.progressFill : roles.defaultBorder,
+                  ),
+                ),
+                foregroundDecoration: focused
+                    ? BoxDecoration(
+                        borderRadius: radius,
+                        border: Border.all(
+                          color: roles.focusBorder,
+                          width: roles.focusBorderWidth,
+                        ),
+                      )
+                    : null,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        color: roles.primaryText,
+                        fontSize: 16 + 6 * expansion,
+                        fontWeight: FontWeight.w600,
+                        height: 1.4,
+                        letterSpacing: 0,
+                      ),
+                    ),
+                    SizedBox(height: 8 + 4 * expansion),
+                    Text(
+                      description,
+                      style: TextStyle(
+                        color: roles.secondaryText,
+                        fontSize: 13 + 5 * expansion,
+                        height: 1.4,
+                        letterSpacing: 0,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
           ),
         ),
       ),
@@ -964,9 +1277,10 @@ class _SetupState extends State<UpstreamChannelSetupView> {
       ],
       PlaybackMode.block => _miniMarathonEpisodes(),
     };
+    final expansion = _configurationExpansion(MediaQuery.sizeOf(context));
     final roles = LineupTheme.of(context);
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 12),
+      padding: EdgeInsets.symmetric(vertical: 16 + 12 * expansion),
       decoration: BoxDecoration(
         border: Border.symmetric(
           horizontal: BorderSide(color: roles.subtleBorder),
@@ -983,16 +1297,20 @@ class _SetupState extends State<UpstreamChannelSetupView> {
               : effectiveWidth >= 320
               ? 2
               : 1;
-          final gap = 8.0;
+          final gap = 8 + 4 * expansion;
           final width = (constraints.maxWidth - gap * (columns - 1)) / columns;
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
                 'Illustrative schedule · Each tile is one episode',
-                style: TextStyle(color: roles.secondaryText),
+                style: TextStyle(
+                  color: roles.secondaryText,
+                  fontSize: 14 + 4 * expansion,
+                  height: 1.4,
+                ),
               ),
-              const SizedBox(height: 12),
+              SizedBox(height: 12 + 8 * expansion),
               Wrap(
                 spacing: gap,
                 runSpacing: gap,
@@ -1004,19 +1322,35 @@ class _SetupState extends State<UpstreamChannelSetupView> {
                         decoration: BoxDecoration(
                           color: roles.primarySurface,
                           border: Border(
-                            left: BorderSide(color: roles.defaultBorder),
+                            left: BorderSide(
+                              color: roles.defaultBorder,
+                              width: 2,
+                            ),
                           ),
                         ),
                         child: Padding(
-                          padding: const EdgeInsets.all(12),
+                          padding: EdgeInsets.symmetric(
+                            vertical: 12 + 10 * expansion,
+                            horizontal: 12 + 8 * expansion,
+                          ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(episode.$1),
-                              const SizedBox(height: 4),
+                              Text(
+                                episode.$1,
+                                style: TextStyle(
+                                  fontSize: 14 + 6 * expansion,
+                                  height: 1.4,
+                                ),
+                              ),
+                              SizedBox(height: 4 + 4 * expansion),
                               Text(
                                 'Episode ${episode.$2}',
-                                style: TextStyle(color: roles.secondaryText),
+                                style: TextStyle(
+                                  color: roles.secondaryText,
+                                  fontSize: 12 + 5 * expansion,
+                                  height: 1.4,
+                                ),
                               ),
                             ],
                           ),
@@ -1024,6 +1358,20 @@ class _SetupState extends State<UpstreamChannelSetupView> {
                       ),
                     ),
                 ],
+              ),
+              const SizedBox(height: 12),
+              Text(
+                switch (_playback) {
+                  PlaybackMode.shuffle => 'The example mixes episodes across shows. Tuning in joins the channel’s ongoing schedule.',
+                  PlaybackMode.sequential => 'This example source is already episode-ordered. In order preserves source order; it does not re-sort episodes.',
+                  PlaybackMode.block =>
+                    'Up to $_blockSize episodes from one show play before the next show. Episodes follow season and episode order within each show.',
+                },
+                style: TextStyle(
+                  color: roles.secondaryText,
+                  fontSize: 13 + 5 * expansion,
+                  height: 1.4,
+                ),
               ),
             ],
           );
@@ -1196,23 +1544,6 @@ class _SetupState extends State<UpstreamChannelSetupView> {
           target == _sourceOrder.length - 1 || (target > 0 && delta < 0);
       (earlier ? nodes.earlier : nodes.later).requestFocus();
     });
-  }
-
-  String _allocationSummary(ChannelPlanAllocation result) {
-    final total = result.channels.length;
-    final base = result.allocatedExtras == 0
-        ? '$total generated ${total == 1 ? 'channel' : 'channels'}'
-        : '$total generated channels · ${result.allocatedOriginals} originals + ${result.allocatedExtras} extra versions';
-    final excluded = [
-      if (result.excludedOriginals > 0)
-        '${result.excludedOriginals} ${result.excludedOriginals == 1 ? 'original' : 'originals'} excluded',
-      if (result.excludedExtras > 0)
-        '${result.excludedExtras} extra ${result.excludedExtras == 1 ? 'version' : 'versions'} excluded',
-    ];
-    final reason = result.numberLimitExcluded > 0
-        ? 'Channel numbers exhausted'
-        : 'Channel limit reached';
-    return excluded.isEmpty ? base : '$base\n$reason · ${excluded.join(' · ')}';
   }
 
   void _prepareReview() {
@@ -1905,10 +2236,15 @@ class _SetupState extends State<UpstreamChannelSetupView> {
 }
 
 class _Stage extends StatelessWidget {
-  const _Stage({required this.child, required this.footer});
+  const _Stage({
+    required this.child,
+    required this.footer,
+    this.footerGap = 12,
+  });
 
   final Widget child;
   final Widget footer;
+  final double footerGap;
 
   @override
   Widget build(BuildContext context) {
@@ -1925,7 +2261,7 @@ class _Stage extends StatelessWidget {
           child: Column(
             children: [
               Expanded(child: child),
-              const SizedBox(height: 12),
+              SizedBox(height: footerGap),
               footer,
             ],
           ),
@@ -1935,7 +2271,7 @@ class _Stage extends StatelessWidget {
     return Column(
       children: [
         Expanded(child: child),
-        const SizedBox(height: 12),
+        SizedBox(height: footerGap),
         footer,
       ],
     );
@@ -1943,34 +2279,84 @@ class _Stage extends StatelessWidget {
 }
 
 class _Footer extends StatelessWidget {
-  const _Footer({required this.leading, required this.trailing, this.summary});
+  const _Footer({
+    required this.leading,
+    required this.trailing,
+    this.summary,
+    this.configuration = false,
+  });
 
   final List<Widget> leading;
   final Widget trailing;
   final Widget? summary;
+  final bool configuration;
 
   @override
-  Widget build(BuildContext context) => DecoratedBox(
-    decoration: BoxDecoration(
-      border: Border(
-        top: BorderSide(color: LineupTheme.of(context).subtleBorder),
+  Widget build(BuildContext context) {
+    final roles = LineupTheme.of(context);
+    if (configuration) {
+      final expansion = _configurationExpansion(MediaQuery.sizeOf(context));
+      final footerTop = 16 + 8 * expansion;
+      final actionGroup = Wrap(
+        spacing: 12 + 8 * expansion,
+        runSpacing: 12,
+        alignment: WrapAlignment.end,
+        children: [...leading, trailing],
+      );
+      return DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border(top: BorderSide(color: roles.subtleBorder)),
+        ),
+        child: Padding(
+          padding: EdgeInsets.only(top: footerTop),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final narrow =
+                  constraints.maxWidth < 800 ||
+                  MediaQuery.textScalerOf(context).scale(1) >= 1.5;
+              if (narrow) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    ?summary,
+                    const SizedBox(height: 12),
+                    Align(alignment: Alignment.centerRight, child: actionGroup),
+                  ],
+                );
+              }
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  if (summary != null) Expanded(child: summary!),
+                  if (summary != null) const SizedBox(width: 24),
+                  actionGroup,
+                ],
+              );
+            },
+          ),
+        ),
+      );
+    }
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: roles.subtleBorder)),
       ),
-    ),
-    child: Padding(
-      padding: const EdgeInsets.only(top: 12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          if (leading.isNotEmpty) Wrap(spacing: 8, children: leading),
-          if (summary != null) ...[
+      child: Padding(
+        padding: const EdgeInsets.only(top: 12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            if (leading.isNotEmpty) Wrap(spacing: 8, children: leading),
+            if (summary != null) ...[
+              const SizedBox(width: 16),
+              Expanded(child: summary!),
+            ] else
+              const Spacer(),
             const SizedBox(width: 16),
-            Expanded(child: summary!),
-          ] else
-            const Spacer(),
-          const SizedBox(width: 16),
-          trailing,
-        ],
+            trailing,
+          ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 }

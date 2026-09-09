@@ -179,7 +179,7 @@ void main() {
     await tester.tap(find.byKey(const Key('scan-selected-libraries')));
     await tester.pumpAndSettle();
 
-    expect(find.text('Configure channels'), findsOneWidget);
+    expect(find.text('Shape your lineup'), findsOneWidget);
     final stage = tester.getRect(find.byKey(const Key('channel-setup-stage')));
     final header = tester.getRect(
       find.byKey(const Key('channel-setup-header')),
