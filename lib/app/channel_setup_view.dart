@@ -10,6 +10,7 @@ import '../ui/app_theme.dart';
 import '../ui/app_ui.dart';
 import 'form_error.dart';
 import 'lineup_controller.dart';
+import 'setup_result_atmosphere.dart';
 
 enum _BuildPhase { review, applying, failed, complete }
 
@@ -167,63 +168,65 @@ class _SetupState extends State<UpstreamChannelSetupView> {
   Widget build(BuildContext context) {
     final size = MediaQuery.sizeOf(context);
     final expansion = _configurationExpansion(size);
-    final refined =
-        _step == 1 ||
-        _step == 2 ||
-        (_step == 3 && _phase == _BuildPhase.review);
+    final resultState = _step == 3 && _phase != _BuildPhase.review;
+    final refined = _step == 1 || _step == 2 || _step == 3;
     final scale = refined
         ? (14 + 4 * expansion) / 14
         : LineupLayout.scaleFor(size);
+    final page = SafeArea(
+      child: Theme(
+        data: Theme.of(context).copyWith(
+          textTheme: Theme.of(context).textTheme.apply(fontSizeFactor: scale),
+        ),
+        child: Padding(
+          key: const ValueKey('channel-setup-content'),
+          padding: refined
+              ? EdgeInsets.symmetric(
+                  horizontal: 32 + 16 * expansion,
+                  vertical: 24 + 12 * expansion,
+                )
+              : LineupLayout.pageInsets(size),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (_step != 1) ...[
+                _header(),
+                SizedBox(height: refined ? 20 + 12 * expansion : 20 * scale),
+              ],
+              if (_error != null &&
+                  _phase != _BuildPhase.failed &&
+                  _step != 1) ...[
+                LineupNotice(message: _error!),
+                SizedBox(height: 12 * scale),
+              ],
+              Expanded(
+                child: KeyedSubtree(
+                  key: const ValueKey('channel-setup-stage'),
+                  child: switch (_step) {
+                    1 => _libraryStep(),
+                    2 => _configureStep(),
+                    _ =>
+                      _phase == _BuildPhase.review
+                          ? _reviewStep()
+                          : _resultStep(),
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
     return Scaffold(
       body: Material(
         color: LineupTheme.of(context).deepBackground,
-        child: SafeArea(
-          child: Theme(
-            data: Theme.of(context).copyWith(
-              textTheme: Theme.of(context).textTheme
-                  .apply(fontSizeFactor: scale),
-            ),
-            child: Padding(
-              key: const ValueKey('channel-setup-content'),
-              padding: refined
-                  ? EdgeInsets.symmetric(
-                      horizontal: 32 + 16 * expansion,
-                      vertical: 24 + 12 * expansion,
-                    )
-                  : LineupLayout.pageInsets(size),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (_step != 1) ...[
-                    _header(),
-                    SizedBox(
-                      height: refined ? 20 + 12 * expansion : 20 * scale,
-                    ),
-                  ],
-                  if (_error != null &&
-                      _phase != _BuildPhase.failed &&
-                      _step != 1) ...[
-                    LineupNotice(message: _error!),
-                    SizedBox(height: 12 * scale),
-                  ],
-                  Expanded(
-                    child: KeyedSubtree(
-                      key: const ValueKey('channel-setup-stage'),
-                      child: switch (_step) {
-                        1 => _libraryStep(),
-                        2 => _configureStep(),
-                        _ =>
-                          _phase == _BuildPhase.review
-                              ? _reviewStep()
-                              : _resultStep(),
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
+        child: resultState
+            ? SetupResultAtmosphere(
+                applying: _phase == _BuildPhase.applying,
+                failed: _phase == _BuildPhase.failed,
+                child: page,
+              )
+            : page,
       ),
     );
   }
@@ -253,78 +256,14 @@ class _SetupState extends State<UpstreamChannelSetupView> {
         activeStep: 3,
       );
     }
-    return LayoutBuilder(
-      key: const ValueKey('channel-setup-header'),
-      builder: (context, constraints) {
-        final title = Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Image.asset('assets/branding/lineup-logo-mark.png', height: 42),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Semantics(
-                    header: true,
-                    child: Text(switch (_step) {
-                      1 => 'Choose libraries',
-                      _ =>
-                        _phase == _BuildPhase.review
-                            ? (_firstSetup
-                                  ? 'Review your first lineup'
-                                  : 'Review your lineup')
-                            : 'Channel Setup',
-                    }, style: Theme.of(context).textTheme.headlineMedium),
-                  ),
-                  Text(
-                    switch (_step) {
-                      1 =>
-                        'Select the Plex libraries to scan for channel ideas.',
-                      _ =>
-                        _phase == _BuildPhase.review
-                            ? (_firstSetup
-                                  ? 'Check your channels before creating your lineup.'
-                                  : 'Check what changes and what stays.')
-                            : 'Your setup choices remain available.',
-                    },
-                    style: TextStyle(
-                      color: LineupTheme.of(context).secondaryText,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        );
-        final steps = Text(
-          '1 Libraries  /  2 Configure  /  3 Review',
-          key: const ValueKey('channel-setup-steps'),
-          style: TextStyle(color: LineupTheme.of(context).secondaryText),
-        );
-        if (constraints.maxWidth < 900 ||
-            MediaQuery.textScalerOf(context).scale(14) >= 21) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [title, const SizedBox(height: 8), steps],
-          );
-        }
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(child: title),
-            const SizedBox(width: 20),
-            steps,
-          ],
-        );
-      },
-    );
+    return _configurationHeader(showTitle: false, activeStep: 3);
   }
 
   Widget _configurationHeader({
     String titleText = 'Shape your lineup',
     String? subtitleText,
     int activeStep = 2,
+    bool showTitle = true,
   }) => LayoutBuilder(
     key: const ValueKey('channel-setup-header'),
     builder: (context, constraints) {
@@ -370,56 +309,60 @@ class _SetupState extends State<UpstreamChannelSetupView> {
         ),
         key: const ValueKey('channel-setup-steps'),
       );
-      final title = Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      final brand = Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Image.asset(
-                'assets/branding/lineup-logo-mark.png',
-                height: 18 + 6 * expansion,
-                excludeFromSemantics: true,
-              ),
-              SizedBox(width: 10 + 2 * expansion),
-              Text(
-                'LINEUP',
-                style: TextStyle(
-                  color: roles.progressFill,
-                  fontFamily: 'Arial',
-                  fontSize: 14 + 4 * expansion,
-                  fontWeight: FontWeight.normal,
-                  letterSpacing: 1.5,
-                  height: 1.4,
-                ),
-              ),
-            ],
+          Image.asset(
+            'assets/branding/lineup-logo-mark.png',
+            height: 18 + 6 * expansion,
+            excludeFromSemantics: true,
           ),
-          SizedBox(height: 6 + 4 * expansion),
-          Semantics(
-            header: true,
-            child: Text(
-              titleText,
-              style: TextStyle(
-                color: roles.primaryText,
-                fontSize: 28 + 10 * expansion,
-                fontWeight: FontWeight.w600,
-                height: 1.2,
-              ),
-            ),
-          ),
-          SizedBox(height: 6 + 4 * expansion),
+          SizedBox(width: 10 + 2 * expansion),
           Text(
-            subtitleText ??
-                switch (_configurationSection) {
-                  0 => 'Choose the channels you want from your libraries.',
-                  1 => 'Choose how your generated channels will play.',
-                  _ => 'Choose the size and balance of your generated lineup.',
-                },
-            style: textStyle.copyWith(height: 1.4),
+            'LINEUP',
+            style: TextStyle(
+              color: roles.progressFill,
+              fontFamily: 'Arial',
+              fontSize: 14 + 4 * expansion,
+              fontWeight: FontWeight.normal,
+              letterSpacing: 1.5,
+              height: 1.4,
+            ),
           ),
         ],
       );
+      final title = showTitle
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                brand,
+                SizedBox(height: 6 + 4 * expansion),
+                Semantics(
+                  header: true,
+                  child: Text(
+                    titleText,
+                    style: TextStyle(
+                      color: roles.primaryText,
+                      fontSize: 28 + 10 * expansion,
+                      fontWeight: FontWeight.w600,
+                      height: 1.2,
+                    ),
+                  ),
+                ),
+                SizedBox(height: 6 + 4 * expansion),
+                Text(
+                  subtitleText ??
+                      switch (_configurationSection) {
+                        0 =>
+                          'Choose the channels you want from your libraries.',
+                        1 => 'Choose how your generated channels will play.',
+                        _ => 'Choose the size and balance of your generated lineup.',
+                      },
+                  style: textStyle.copyWith(height: 1.4),
+                ),
+              ],
+            )
+          : brand;
       if (constraints.maxWidth < 900 ||
           MediaQuery.textScalerOf(context).scale(14) >= 21) {
         return Column(
@@ -2973,100 +2916,191 @@ class _SetupState extends State<UpstreamChannelSetupView> {
   Widget _resultStep() {
     final counts = _counts(_appliedEntries);
     final total = widget.controller.channels.length;
-    return _Stage(
-      footer: _phase == _BuildPhase.applying
-          ? const SizedBox.shrink()
-          : _Footer(
-              leading: [
-                if (_phase == _BuildPhase.complete)
+    final expansion = _configurationExpansion(MediaQuery.sizeOf(context));
+    final roles = LineupTheme.of(context);
+    final textTheme = Theme.of(context).textTheme;
+    final headingStyle = textTheme.headlineMedium!.copyWith(
+      color: roles.primaryText,
+      fontSize: 36 + 12 * expansion,
+      fontWeight: FontWeight.w600,
+      height: 1.18,
+      letterSpacing: -1.2,
+    );
+    final infoStyle = textTheme.bodyMedium!.copyWith(
+      color: roles.secondaryText,
+      fontSize: 20 + 4 * expansion,
+      height: 1.4,
+    );
+    final detailStyle = textTheme.bodyMedium!.copyWith(
+      color: roles.secondaryText,
+      fontSize: 14 + 4 * expansion,
+      height: 1.4,
+    );
+    final actionStyle = textTheme.labelLarge!.copyWith(
+      fontSize: 14 + 4 * expansion,
+      height: 1.4,
+      fontWeight: FontWeight.w600,
+    );
+    final failure = _phase == _BuildPhase.failed;
+    final applying = _phase == _BuildPhase.applying;
+    final changeSummary = _changeSummary(counts);
+    final headline = switch (_phase) {
+      _BuildPhase.applying =>
+        _firstSetup ? 'Creating your lineup…' : 'Updating your lineup…',
+      _BuildPhase.failed =>
+        _firstSetup
+            ? 'We couldn’t create your lineup'
+            : 'We couldn’t update your lineup',
+      _BuildPhase.complete =>
+        _firstSetup ? 'Your lineup is ready' : 'Your lineup is updated',
+      _ => '',
+    };
+    final copy = Semantics(
+      liveRegion: true,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          minHeight: _firstSetup ? 96 + 20 * expansion : 120 + 24 * expansion,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(headline, textAlign: TextAlign.center, style: headingStyle),
+            SizedBox(height: 16 + 8 * expansion),
+            if (_phase == _BuildPhase.complete) ...[
+              Text(
+                '$total ${total == 1 ? 'channel' : 'channels'} in your lineup',
+                textAlign: TextAlign.center,
+                style: infoStyle,
+              ),
+              if (!_firstSetup && changeSummary.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(
+                  changeSummary,
+                  textAlign: TextAlign.center,
+                  style: detailStyle,
+                ),
+              ],
+            ] else if (_phase == _BuildPhase.failed) ...[
+              Text(
+                _firstSetup
+                    ? 'Your lineup wasn’t saved.'
+                    : 'Your existing lineup hasn’t changed.',
+                textAlign: TextAlign.center,
+                style: detailStyle,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Your setup choices are still here.',
+                textAlign: TextAlign.center,
+                style: detailStyle,
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: 14),
+                Text(
+                  _error!,
+                  textAlign: TextAlign.center,
+                  style: detailStyle.copyWith(color: roles.liveAccent),
+                ),
+              ],
+            ],
+          ],
+        ),
+      ),
+    );
+    final actionHeight = 48 + 8 * expansion;
+    final actions = ConstrainedBox(
+      constraints: BoxConstraints(minHeight: 108 + 12 * expansion),
+      child: applying
+          ? SizedBox(height: 108 + 12 * expansion)
+          : Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                ConstrainedBox(
+                  constraints: BoxConstraints(minWidth: 170 + 20 * expansion),
+                  child: FilledButton(
+                    focusNode: _resultFocus,
+                    style: FilledButton.styleFrom(
+                      minimumSize: Size(0, actionHeight),
+                      textStyle: actionStyle,
+                    ),
+                    onPressed: failure
+                        ? () => setState(() => _phase = _BuildPhase.review)
+                        : _viewLineup,
+                    child: Text(failure ? 'Back to review' : 'View lineup'),
+                  ),
+                ),
+                if (!failure) ...[
+                  const SizedBox(height: 12),
                   TextButton(
+                    style: TextButton.styleFrom(
+                      foregroundColor: roles.secondaryText,
+                      minimumSize: Size(0, 44 + 4 * expansion),
+                      textStyle: actionStyle,
+                    ),
                     onPressed: _addCustom,
                     child: const Text('Add a custom channel'),
                   ),
+                ],
               ],
-              trailing: FilledButton(
-                focusNode: _resultFocus,
-                onPressed: _phase == _BuildPhase.failed
-                    ? () => setState(() => _phase = _BuildPhase.review)
-                    : _viewLineup,
-                child: Text(
-                  _phase == _BuildPhase.failed
-                      ? 'Back to review'
-                      : 'View lineup',
-                ),
+            ),
+    );
+    final group = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        SizedBox(
+          width: 42,
+          height: failure ? 42 : 0,
+          child: failure
+              ? Icon(
+                  Icons.error_outline,
+                  size: 42,
+                  color: Theme.of(context).colorScheme.error,
+                )
+              : null,
+        ),
+        SizedBox(height: 20 + 4 * expansion),
+        _revealResult(copy, slot: 'copy'),
+        SizedBox(height: 24 + 8 * expansion),
+        _revealResult(actions, slot: 'actions'),
+      ],
+    );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final minHeight = constraints.hasBoundedHeight
+            ? constraints.maxHeight
+            : 0.0;
+        return SingleChildScrollView(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: minHeight),
+            child: Align(
+              alignment: Alignment.center,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: 800 + 200 * expansion),
+                child: SizedBox(width: double.infinity, child: group),
               ),
             ),
-      child: Center(
-        child: Semantics(
-          liveRegion: true,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 820),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (_phase == _BuildPhase.applying)
-                  MediaQuery.disableAnimationsOf(context)
-                      ? const Icon(Icons.hourglass_top, size: 38)
-                      : const SizedBox(
-                          width: 38,
-                          height: 38,
-                          child: CircularProgressIndicator(),
-                        )
-                else
-                  Icon(
-                    _phase == _BuildPhase.failed
-                        ? Icons.error_outline
-                        : Icons.check_circle_outline,
-                    size: 42,
-                    color: _phase == _BuildPhase.failed
-                        ? Theme.of(context).colorScheme.error
-                        : LineupTheme.of(context).progressFill,
-                  ),
-                const SizedBox(width: 22),
-                Expanded(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(switch (_phase) {
-                        _BuildPhase.applying =>
-                          _firstSetup
-                              ? 'Creating your lineup…'
-                              : 'Updating your lineup…',
-                        _BuildPhase.failed =>
-                          _firstSetup
-                              ? 'We couldn’t create your lineup'
-                              : 'We couldn’t update your lineup',
-                        _BuildPhase.complete =>
-                          _firstSetup
-                              ? 'Your lineup is ready'
-                              : 'Your lineup is updated',
-                        _ => '',
-                      }, style: Theme.of(context).textTheme.headlineMedium),
-                      const SizedBox(height: 14),
-                      if (_phase == _BuildPhase.complete) ...[
-                        Text(
-                          '$total ${total == 1 ? 'channel' : 'channels'} in your lineup',
-                        ),
-                        if (!_firstSetup) Text(_changeSummary(counts)),
-                      ] else if (_phase == _BuildPhase.failed) ...[
-                        Text(
-                          _firstSetup
-                              ? 'Your lineup wasn’t saved.'
-                              : 'Your existing lineup hasn’t changed.',
-                        ),
-                        const Text('Your setup choices are still here.'),
-                        if (_error != null) ...[
-                          const SizedBox(height: 14),
-                          Text(_error!),
-                        ],
-                      ],
-                    ],
-                  ),
-                ),
-              ],
-            ),
           ),
+        );
+      },
+    );
+  }
+
+  Widget _revealResult(Widget child, {required String slot}) {
+    final reduced = MediaQuery.disableAnimationsOf(context);
+    return TweenAnimationBuilder<double>(
+      key: ValueKey('result-$slot-${_phase.name}'),
+      tween: Tween(begin: reduced ? 1 : .25, end: 1),
+      duration: reduced ? Duration.zero : const Duration(milliseconds: 420),
+      curve: Curves.easeOutCubic,
+      child: child,
+      builder: (context, value, child) => Opacity(
+        opacity: value,
+        child: Transform.translate(
+          offset: Offset(0, (1 - value) * 4),
+          child: child,
         ),
       ),
     );

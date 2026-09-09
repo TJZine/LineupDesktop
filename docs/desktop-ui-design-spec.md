@@ -597,9 +597,9 @@ physical Windows validation.
 
 ## Build results — wording, behavior and visual direction approved
 
-- Progress: “Creating your lineup…” or “Updating your lineup…” with a small
-  indeterminate indicator. No invented percentage, artificial delay or Cancel
-  during the noncancellable save. Avoid technical commit/atomic wording.
+- Progress: “Creating your lineup…” or “Updating your lineup…” with flowing
+  light conveying activity (September 9 refinement below). No invented percentage,
+  artificial delay or Cancel during the noncancellable save. Avoid technical commit/atomic wording.
 - First-time success: “Your lineup is ready” and “390 channels in your lineup”.
   Existing-lineup success: “Your lineup is updated”, final total, and a compact
   summary of nonzero additions, updates and removals. Counts describe saved
@@ -616,14 +616,24 @@ physical Windows validation.
   known. Do not claim rollback when persistence outcome is uncertain.
 - Back to review is the failure primary action, preserving choices and allowing
   inspection before retry. No competing direct retry action.
-- One stable headline area; a restrained completion mark replaces progress.
-  No celebration effect or lingering progress bar. Respect reduced motion.
+- One stable centered headline area; no progress spinner or success checkmark.
+  Keep the failure icon for meaningful error feedback. Respect reduced motion.
   Focus the resulting primary action without allowing a held Enter key to
   accidentally activate it.
 
-Approved synthetic visual direction: `setup-result-states.html` in task
-visualization evidence. Retain the minimal result treatment and familiar footer
-actions; final spacing and focus checks remain implementation acceptance work.
+September 9 approved refinement: [fluid-light result reference](design/desktop-ui/setup-result-fluid-light.html)
+supersedes the original minimal `setup-result-states.html` composition for build
+progress and completion. Broad overlapping bronze/amber/pale-gold light moves
+through the film-gate background in curved ribbons. Preserve the selected richer
+brightness, upward placement and 7.5/10/6.7 second sweep timings. Completion uses
+the same layers and positions, coasting to rest over about 1.3 seconds while
+softening to 38% intensity; do not swap to an unrelated background or delay the
+result actions. Reduce Motion settles immediately. Failure suppresses the light.
+The logo-first LINEUP brand remains top left, setup steps top right. Center a
+larger headline, final total, nonzero change summary when applicable, and stacked
+View lineup / Add a custom channel actions in one readable group. Failure retains
+its recovery copy and Back to review action. This is approved design direction;
+Flutter visual and motion acceptance remain separate.
 
 ## Channels — full-width directory and management refinements approved
 
