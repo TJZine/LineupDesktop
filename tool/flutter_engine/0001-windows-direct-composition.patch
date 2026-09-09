@@ -1,7 +1,7 @@
 From: Lineup Desktop contributors
 Subject: [PATCH] windows: require opt-in DirectComposition presentation
 
-Adapted for Flutter 3.47.0 / engine 5f77625673248ee5846fbcaf5d3e1a3878386fd7
+Adapted for Flutter 3.47.2 / engine a804b261645ef8c13eb3d5c44a5c2fb0340c5539
 from edde746/flutter-plezy commit e721699fd4857afcd5a3414dccc55edc24c6680f.
 See NOTICE for the applicable BSD-3-Clause terms.
 
@@ -57,7 +57,7 @@ diff --git a/engine/src/flutter/shell/platform/windows/egl/manager.cc b/engine/s
 +    // cannot silently fall back to opaque HWND presentation.
 +    ::SetEnvironmentVariableW(
 +        L"LINEUP_FLUTTER_DCOMP_ACTIVE",
-+        L"5f77625673248ee5846fbcaf5d3e1a3878386fd7");
++        L"a804b261645ef8c13eb3d5c44a5c2fb0340c5539");
    }
  
    return std::make_unique<WindowSurface>(display_, render_context_->GetHandle(),

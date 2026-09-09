@@ -18,7 +18,7 @@ namespace {
 
 constexpr char kChannelName[] = "lineup/native_player";
 constexpr wchar_t kCompositionMarker[] =
-    L"5f77625673248ee5846fbcaf5d3e1a3878386fd7";
+    L"a804b261645ef8c13eb3d5c44a5c2fb0340c5539";
 constexpr size_t kMaxQueuedEvents = 256;
 constexpr size_t kMaxQueuedCommands = 64;
 constexpr size_t kMaxQueuedCommandBytes = 128 * 1024;

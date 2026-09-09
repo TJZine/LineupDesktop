@@ -2,7 +2,7 @@
 
 Lineup requires Flutter's ANGLE surface to use a premultiplied-alpha
 DirectComposition swapchain so native mpv video can remain beneath Flutter in
-the same application window. Stock Flutter 3.47.0 does not request that
+the same application window. Stock Flutter 3.47.2 does not request that
 surface mode.
 
 The owned patch targets only the framework and engine revisions recorded in

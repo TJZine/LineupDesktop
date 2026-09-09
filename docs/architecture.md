@@ -56,7 +56,7 @@ regions reveal it. Frames do not cross the Dart boundary and are not copied
 through a Flutter texture. The native baseline explicitly requests
 `vo=gpu-next`, the D3D11 GPU API/context, and `hwdec=auto`.
 
-Stock Flutter 3.47.0 does not request ANGLE's DirectComposition EGL window
+Stock Flutter 3.47.2 does not request ANGLE's DirectComposition EGL window
 surface mode, so it cannot provide the required transparent composition
 reliably. Lineup therefore owns the single-file patch in
 `tool/flutter_engine`, targeting the exact framework and engine identities in
