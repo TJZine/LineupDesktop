@@ -12,7 +12,6 @@ void main() {
   testWidgets(
     'selection survives search and batch delete receives the reviewed channels',
     (tester) async {
-      final semantics = tester.ensureSemantics();
       final controller = _RecordingDirectoryController()
         ..stage = SetupStage.ready
         ..channels = [
@@ -73,8 +72,8 @@ void main() {
         'first',
         'second',
       ]);
-      semantics.dispose();
     },
+    semanticsEnabled: true,
   );
 
   testWidgets('reorder previews retained number gaps and saves one order', (

@@ -340,7 +340,7 @@ void main() {
       find.bySemanticsLabel(RegExp(r'Channel 4 .*B.*upcoming')),
       findsWidgets,
     );
-  });
+  }, semanticsEnabled: true);
 
   testWidgets('time labels show and announce local twelve-hour wall time', (
     tester,

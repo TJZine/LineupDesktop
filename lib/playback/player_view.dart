@@ -1963,7 +1963,7 @@ class _MiniGuideRow extends StatelessWidget {
       key: Key('mini-guide-row-${channel.id}'),
       selected: focused,
       label:
-          'Channel ${channel.number}, ${channel.name}. Now ${current?.scheduled.item.title ?? 'schedule loading'}.${next == null ? '' : ' Next ${next.scheduled.item.title}.'}${tuned ? ' Now watching.' : ''}',
+          'Channel ${channel.number}, ${channel.name}. Now $currentText.${next == null ? '' : ' Next ${next.scheduled.item.title}.'}${tuned ? ' Now watching.' : ''}',
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: focused ? roles.selectedSurface : Colors.transparent,

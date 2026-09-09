@@ -51,7 +51,6 @@ void main() {
     addTearDown(controller.dispose);
 
     await _showSettings(tester, controller);
-    final semantics = tester.ensureSemantics();
     final themeDropdown = find.byType(DropdownButton<LineupThemeName>);
     await tester.ensureVisible(themeDropdown);
     final theme = tester.widget<DropdownButton<LineupThemeName>>(themeDropdown);
@@ -83,8 +82,7 @@ void main() {
       }
     }
     expect(tester.takeException(), isNull);
-    semantics.dispose();
-  });
+  }, semanticsEnabled: true);
 }
 
 Future<void> _showSettings(

@@ -691,7 +691,8 @@ class _ProfileCard extends StatelessWidget {
       final availableWidth = constraints.maxWidth.isFinite
           ? constraints.maxWidth
           : width;
-      final groupWidth = width.clamp(1.0, availableWidth).toDouble();
+      final maxGroupWidth = availableWidth.clamp(1.0, double.infinity);
+      final groupWidth = width.clamp(1.0, maxGroupWidth).toDouble();
       final roles = LineupTheme.of(context);
       final buttonStyle = ButtonStyle(
         padding: const WidgetStatePropertyAll(EdgeInsets.zero),

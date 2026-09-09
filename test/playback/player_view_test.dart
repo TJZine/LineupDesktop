@@ -1060,7 +1060,6 @@ void main() {
   testWidgets('OSD uses official title artwork with a text fallback', (
     tester,
   ) async {
-    final semantics = tester.ensureSemantics();
     final cases = [
       (
         fixture: _Fixture(PlayerState.playing, richProgram: true),
@@ -1130,8 +1129,7 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
       item.fixture.dispose();
     }
-    semantics.dispose();
-  });
+  }, semanticsEnabled: true);
 
   testWidgets('OSD keeps its widescreen hierarchy at DPR2', (tester) async {
     final fixture = _Fixture(PlayerState.playing);
@@ -1171,7 +1169,6 @@ void main() {
   testWidgets('DVR seek target stays clear of OSD action buttons', (
     tester,
   ) async {
-    final semantics = tester.ensureSemantics();
     final fixture = _Fixture(PlayerState.playing, dvrControlsEnabled: true);
     for (final size in const [Size(1280, 720), Size(1920, 1080)]) {
       await tester.binding.setSurfaceSize(size);
@@ -1201,8 +1198,7 @@ void main() {
     fixture.player.closeOverlay();
     await tester.pump();
     fixture.dispose();
-    semantics.dispose();
-  });
+  }, semanticsEnabled: true);
 
   testWidgets('player overlays retain 1280x720 layout at DPR2', (tester) async {
     final fixture = _Fixture(PlayerState.playing);
@@ -1369,7 +1365,6 @@ void main() {
       );
       final rootFocus = FocusNode();
       addTearDown(rootFocus.dispose);
-      final semantics = tester.ensureSemantics();
       fixture.player.showOsd();
       await tester.pumpWidget(
         MaterialApp(
@@ -1418,10 +1413,10 @@ void main() {
       await tester.pump(const Duration(milliseconds: 2));
       expect(fixture.player.overlay, PlayerOverlay.none);
 
-      semantics.dispose();
       await tester.pumpWidget(const SizedBox.shrink());
       fixture.dispose();
     },
+    semanticsEnabled: true,
   );
 
   testWidgets('reopened mini Guide rejects outgoing descendant focus loss', (
@@ -1675,6 +1670,28 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     fixture.dispose();
   });
+
+  testWidgets('mini Guide announces unavailable schedules as shown', (
+    tester,
+  ) async {
+    final fixture = _Fixture(PlayerState.playing, failSchedule: true);
+    addTearDown(fixture.dispose);
+    fixture.player.showMiniGuide();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('Schedule unavailable'), findsOneWidget);
+    expect(
+      find.bySemanticsLabel(RegExp(r'Now Schedule unavailable\.')),
+      findsOneWidget,
+    );
+  }, semanticsEnabled: true);
 
   testWidgets(
     'Mini Guide single selects, double tunes, and outside dismisses',
@@ -2088,7 +2105,6 @@ void main() {
     final fixture = _Fixture(PlayerState.playing, richProgram: true);
     await tester.binding.setSurfaceSize(const Size(1280, 720));
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    final semantics = tester.ensureSemantics();
     await tester.pumpWidget(
       MaterialApp(
         home: MediaQuery(
@@ -2151,10 +2167,9 @@ void main() {
     expect(find.bySemanticsLabel(RegExp(r'^Now playing\.')), findsNothing);
     expect(find.bySemanticsLabel(RegExp('Playback controls')), findsOneWidget);
 
-    semantics.dispose();
     await tester.pumpWidget(const SizedBox.shrink());
     fixture.dispose();
-  });
+  }, semanticsEnabled: true);
 
   testWidgets(
     'Now Playing renders bounded cast portraits, fallbacks, names, and semantics',
@@ -2170,7 +2185,6 @@ void main() {
       );
       await tester.binding.setSurfaceSize(const Size(1280, 720));
       addTearDown(() => tester.binding.setSurfaceSize(null));
-      final semantics = tester.ensureSemantics();
       await tester.pumpWidget(
         MaterialApp(
           home: MediaQuery(
@@ -2214,10 +2228,10 @@ void main() {
       );
       expect(tester.takeException(), isNull);
 
-      semantics.dispose();
       await tester.pumpWidget(const SizedBox.shrink());
       fixture.dispose();
     },
+    semanticsEnabled: true,
   );
 
   testWidgets('failed cast portrait uses the neutral person fallback', (
@@ -3011,6 +3025,7 @@ class _Fixture {
     bool blockArtwork = false,
     bool shortPrograms = false,
     bool longNextTitle = false,
+    bool failSchedule = false,
     ChannelItem? richItemOverride,
     DateTime Function()? guideClock,
     Duration nativePosition = const Duration(minutes: 10),
@@ -3033,11 +3048,14 @@ class _Fixture {
     guide = GuideController(
       lineup: lineup,
       clock: guideClock,
-      loadSchedule: (channel) async => buildSchedule(
-        (channel.source as ManualSource).items,
-        mode: channel.playbackMode,
-        seed: channel.shuffleSeed,
-      ),
+      loadSchedule: (channel) async {
+        if (failSchedule) throw StateError('Synthetic schedule failure');
+        return buildSchedule(
+          (channel.source as ManualSource).items,
+          mode: channel.playbackMode,
+          seed: channel.shuffleSeed,
+        );
+      },
     )..requestViewport(0, 1);
     native = _Native(
       state,

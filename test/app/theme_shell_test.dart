@@ -71,7 +71,6 @@ void main() {
   testWidgets('theme dropdown exposes selection and keyboard traversal', (
     tester,
   ) async {
-    final semantics = tester.ensureSemantics();
     final fixture = UiFixture()..controller.stage = SetupStage.ready;
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
@@ -100,8 +99,7 @@ void main() {
       tester.widget<DropdownButton<LineupThemeName>>(dropdown).value,
       LineupThemeName.slatePine,
     );
-    semantics.dispose();
-  });
+  }, semanticsEnabled: true);
 
   testWidgets('theme dropdown applies every approved palette', (tester) async {
     final fixture = UiFixture()..controller.stage = SetupStage.ready;

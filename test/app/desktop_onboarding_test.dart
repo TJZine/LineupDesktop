@@ -37,7 +37,6 @@ void main() {
   testWidgets('returning profiles expose active selection and a Back action', (
     tester,
   ) async {
-    final semantics = tester.ensureSemantics();
     const active = PlexHomeUser(
       id: 'active',
       name: 'Active viewer',
@@ -67,7 +66,50 @@ void main() {
     }
     expect(find.widgetWithText(TextButton, 'Back'), findsOneWidget);
     expect(find.widgetWithText(TextButton, 'Cancel'), findsNothing);
-    semantics.dispose();
+  }, semanticsEnabled: true);
+
+  testWidgets('profile card clamp accepts a sub-pixel width constraint', (
+    tester,
+  ) async {
+    final controller = FixtureController()
+      ..stage = SetupStage.profiles
+      ..profiles = const [
+        PlexHomeUser(id: 'profile', name: 'Profile', protected: false),
+      ];
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Align(
+          alignment: Alignment.topLeft,
+          child: SizedBox(
+            width: 0.5,
+            child: UpstreamOnboardingView(
+              controller: controller,
+              onLogout: () async {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final errors = <Object>[];
+    Object? error = tester.takeException();
+    while (error != null) {
+      errors.add(error);
+      error = tester.takeException();
+    }
+    expect(
+      errors,
+      everyElement(
+        isA<FlutterError>().having(
+          (error) => error.toString(),
+          'message',
+          contains('overflowed'),
+        ),
+      ),
+    );
   });
 
   testWidgets('explicit browser failure retains complete code and QR', (
@@ -232,7 +274,6 @@ void main() {
       ..stage = SetupStage.servers
       ..servers = const [server];
     addTearDown(controller.dispose);
-    final semantics = tester.ensureSemantics();
     await show(tester, controller);
 
     expect(
@@ -267,8 +308,7 @@ void main() {
           .label,
       'Retry',
     );
-    semantics.dispose();
-  });
+  }, semanticsEnabled: true);
 
   testWidgets('refresh and profile switch clear stale server errors', (
     tester,
