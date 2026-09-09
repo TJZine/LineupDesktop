@@ -106,6 +106,19 @@ void main() {
     final calls = <MethodCall>[];
     messenger.setMockMethodCallHandler(channel, (call) async {
       calls.add(call);
+      if (call.method == 'selectTrack') {
+        final arguments = call.arguments as Map<Object?, Object?>;
+        scheduleMicrotask(() {
+          unawaited(
+            _sendNativeEvent(messenger, {
+              'type': 'trackResult',
+              'loadId': arguments['loadId'],
+              'requestId': arguments['requestId'],
+              'success': true,
+            }),
+          );
+        });
+      }
       return null;
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
@@ -113,6 +126,20 @@ void main() {
     final player = WindowsNativePlayer();
     addTearDown(player.dispose);
     await player.initialize();
+    final load = player.load(
+      Uri.parse('https://plex.example/media/sample.mp4'),
+    );
+    await Future<void>.delayed(Duration.zero);
+    final loadId = calls.last.arguments['loadId'] as int;
+    await _sendNativeEvent(messenger, {
+      'type': 'state',
+      'loadId': loadId,
+      'state': 'playing',
+      'message': 'Playing',
+    });
+    await load;
+    calls.clear();
+
     await player.play();
     await player.pause();
     await player.seek(const Duration(milliseconds: 1250));
@@ -139,7 +166,6 @@ void main() {
     await stop;
 
     expect(calls.map((call) => call.method), [
-      'initialize',
       'play',
       'pause',
       'seek',
@@ -150,18 +176,189 @@ void main() {
       'setVolume',
       'stop',
     ]);
-    expect(calls[3].arguments, {'seconds': 1.25});
-    expect(calls[4].arguments, {
+    expect(calls[2].arguments, {'seconds': 1.25});
+    expect(calls[3].arguments, {
       'left': 12.0,
       'top': 34.0,
       'width': 640.0,
       'height': 360.0,
       'scale': 2.0,
     });
-    expect(calls[5].arguments, {'fullscreen': true});
-    expect(calls[6].arguments, {'type': 'audio', 'id': 7});
-    expect(calls[7].arguments, {'type': 'subtitle', 'id': null});
-    expect(calls[8].arguments, {'volume': 42.5});
+    expect(calls[4].arguments, {'fullscreen': true});
+    expect(calls[5].arguments, {
+      'type': 'audio',
+      'id': 7,
+      'loadId': loadId,
+      'requestId': 1,
+    });
+    expect(calls[6].arguments, {
+      'type': 'subtitle',
+      'id': null,
+      'loadId': loadId,
+      'requestId': 2,
+    });
+    expect(calls[7].arguments, {'volume': 42.5});
+  });
+
+  test(
+    'reports native track execution failure without failing playback',
+    () async {
+      final calls = <MethodCall>[];
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        calls.add(call);
+        if (call.method == 'selectTrack') {
+          final arguments = call.arguments as Map<Object?, Object?>;
+          scheduleMicrotask(() {
+            unawaited(
+              _sendNativeEvent(messenger, {
+                'type': 'trackResult',
+                'loadId': arguments['loadId'],
+                'requestId': arguments['requestId'],
+                'success': false,
+              }),
+            );
+          });
+        }
+        return null;
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+      final player = WindowsNativePlayer();
+      addTearDown(player.dispose);
+      await player.initialize();
+      final load = player.load(
+        Uri.parse('https://plex.example/media/sample.mp4'),
+      );
+      await Future<void>.delayed(Duration.zero);
+      final loadId = calls.last.arguments['loadId'] as int;
+      await _sendNativeEvent(messenger, {
+        'type': 'state',
+        'loadId': loadId,
+        'state': 'playing',
+        'message': 'Playing',
+      });
+      await load;
+
+      await expectLater(
+        player.selectTrack(PlayerTrackType.audio, 7),
+        throwsA(
+          isA<PlayerUnavailable>().having(
+            (error) => error.failureCode,
+            'failureCode',
+            'command_error',
+          ),
+        ),
+      );
+      expect(player.status.state, PlayerState.playing);
+    },
+  );
+
+  test('correlates overlapping native track execution results', () async {
+    final calls = <MethodCall>[];
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      calls.add(call);
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+    final player = WindowsNativePlayer();
+    addTearDown(player.dispose);
+    await player.initialize();
+    final load = player.load(
+      Uri.parse('https://plex.example/media/sample.mp4'),
+    );
+    await Future<void>.delayed(Duration.zero);
+    final loadId = calls.last.arguments['loadId'] as int;
+    await _sendNativeEvent(messenger, {
+      'type': 'state',
+      'loadId': loadId,
+      'state': 'playing',
+      'message': 'Playing',
+    });
+    await load;
+
+    final first = player.selectTrack(PlayerTrackType.audio, 7);
+    final firstFailure = expectLater(
+      first,
+      throwsA(
+        isA<PlayerUnavailable>().having(
+          (error) => error.failureCode,
+          'failureCode',
+          'command_error',
+        ),
+      ),
+    );
+    await Future<void>.delayed(Duration.zero);
+    final second = player.selectTrack(PlayerTrackType.audio, 8);
+    var secondCompleted = false;
+    unawaited(
+      second.then<void>((_) {
+        secondCompleted = true;
+      }),
+    );
+    await Future<void>.delayed(Duration.zero);
+    final trackCalls = calls
+        .where((call) => call.method == 'selectTrack')
+        .toList(growable: false);
+
+    await _sendNativeEvent(messenger, {
+      'type': 'trackResult',
+      'loadId': loadId,
+      'requestId': trackCalls.first.arguments['requestId'],
+      'success': false,
+    });
+    await firstFailure;
+    await Future<void>.delayed(Duration.zero);
+    expect(secondCompleted, isFalse);
+
+    await _sendNativeEvent(messenger, {
+      'type': 'trackResult',
+      'loadId': loadId,
+      'requestId': trackCalls.last.arguments['requestId'],
+      'success': true,
+    });
+    await second;
+    expect(secondCompleted, isTrue);
+    expect(player.status.state, PlayerState.playing);
+  });
+
+  test('bounds missing native track execution results', () async {
+    final calls = <MethodCall>[];
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      calls.add(call);
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+    final player = WindowsNativePlayer(
+      trackTimeout: const Duration(milliseconds: 1),
+    );
+    addTearDown(player.dispose);
+    await player.initialize();
+    final load = player.load(
+      Uri.parse('https://plex.example/media/sample.mp4'),
+    );
+    await Future<void>.delayed(Duration.zero);
+    final loadId = calls.last.arguments['loadId'] as int;
+    await _sendNativeEvent(messenger, {
+      'type': 'state',
+      'loadId': loadId,
+      'state': 'playing',
+      'message': 'Playing',
+    });
+    await load;
+
+    await expectLater(
+      player.selectTrack(PlayerTrackType.audio, 7),
+      throwsA(
+        isA<PlayerUnavailable>().having(
+          (error) => error.failureCode,
+          'failureCode',
+          'wait_timeout',
+        ),
+      ),
+    );
+    expect(player.status.state, PlayerState.playing);
   });
 
   test(

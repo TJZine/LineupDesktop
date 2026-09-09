@@ -583,6 +583,105 @@ void main() {
     expect(coordinator.pendingTrackType, isNull);
   });
 
+  testWidgets('track selection fails when native confirmation never arrives', (
+    tester,
+  ) async {
+    final lineup = _TestLineup()..diagnostics.enabled = true;
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    final player = _Player();
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
+
+    await coordinator.selectTrack(PlayerTrackType.audio, 2);
+    expect(coordinator.pendingTrackId, 2);
+
+    await tester.pump(const Duration(seconds: 5));
+
+    expect(coordinator.pendingTrackType, isNull);
+    expect(coordinator.pendingTrackId, isNull);
+    expect(
+      coordinator.trackSelectionError,
+      'Could not change this track. Try again.',
+    );
+    expect(lineup.diagnostics.entries.single.context, {
+      'operation': 'audio_track',
+      'code': 'wait_timeout',
+    });
+  });
+
+  testWidgets('confirmed selection cancels its failure deadline', (
+    tester,
+  ) async {
+    final lineup = _TestLineup();
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    final player = _EventPlayer();
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(player.close);
+    addTearDown(coordinator.dispose);
+
+    await coordinator.selectTrack(PlayerTrackType.audio, 1);
+    player.tracks = const [
+      PlayerTrack(id: 1, type: PlayerTrackType.audio, selected: true),
+    ];
+    player.emitStatus(PlayerState.playing);
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 5));
+
+    expect(coordinator.pendingTrackType, isNull);
+    expect(coordinator.trackSelectionError, isNull);
+  });
+
+  testWidgets('new track selection receives a fresh confirmation deadline', (
+    tester,
+  ) async {
+    final lineup = _TestLineup();
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    final coordinator = PlayerCoordinator(
+      player: _Player(),
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
+
+    await coordinator.selectTrack(PlayerTrackType.audio, 1);
+    await tester.pump(const Duration(seconds: 4));
+    await coordinator.selectTrack(PlayerTrackType.audio, 2);
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(coordinator.pendingTrackId, 2);
+    expect(coordinator.trackSelectionError, isNull);
+
+    await tester.pump(const Duration(seconds: 4));
+    expect(coordinator.pendingTrackType, isNull);
+    expect(
+      coordinator.trackSelectionError,
+      'Could not change this track. Try again.',
+    );
+  });
+
   test('unrelated control does not strand a pending track failure', () async {
     final lineup = _TestLineup()..diagnostics.enabled = true;
     final guide = GuideController(

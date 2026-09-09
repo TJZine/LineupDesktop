@@ -552,10 +552,16 @@ void WindowsNativePlayer::HandleMethodCall(
       return;
     }
     auto command = ParseTrack(*arguments);
-    if (!command) {
-      result->Error("invalid_argument", "A valid track type and id are required.");
+    const auto load_id = AsInt(Find(*arguments, "loadId"));
+    const auto request_id = AsInt(Find(*arguments, "requestId"));
+    if (!command || !load_id || *load_id <= 0 || !request_id ||
+        *request_id <= 0) {
+      result->Error("invalid_argument",
+                    "A valid track, loadId, and requestId are required.");
       return;
     }
+    command->expected_load_id = *load_id;
+    command->request_id = *request_id;
     if (!QueueCommand(std::move(*command))) {
       result->Error("command_queue_full", "The native command queue is full.");
       return;
@@ -996,7 +1002,12 @@ void WindowsNativePlayer::RunCommand(QueuedCommand& command,
       // Stop failures belong to the stop request, even after load retirement.
       return;
     }
-    case CommandType::track:
+    case CommandType::track: {
+      if (!active_load_id_ || *active_load_id_ != command.expected_load_id) {
+        QueueTrackResult(generation, command.expected_load_id,
+                         command.request_id, false);
+        return;
+      }
       if (command.load_id == 0) {
         status = mpv_set_property_string(mpv_, command.text.c_str(), "no");
       } else {
@@ -1004,7 +1015,10 @@ void WindowsNativePlayer::RunCommand(QueuedCommand& command,
         status = mpv_set_property(mpv_, command.text.c_str(), MPV_FORMAT_INT64,
                                   &id);
       }
-      break;
+      QueueTrackResult(generation, command.expected_load_id, command.request_id,
+                       status >= 0);
+      return;
+    }
     case CommandType::volume: {
       double volume = command.number;
       status = mpv_set_property(mpv_, "volume", MPV_FORMAT_DOUBLE, &volume);
@@ -1291,6 +1305,17 @@ void WindowsNativePlayer::QueueStopResult(uint64_t generation,
   QueueEvent(generation, {
       {flutter::EncodableValue("type"), flutter::EncodableValue("stopResult")},
       {flutter::EncodableValue("stopId"), flutter::EncodableValue(stop_id)},
+      {flutter::EncodableValue("success"), flutter::EncodableValue(success)},
+  });
+}
+
+void WindowsNativePlayer::QueueTrackResult(uint64_t generation, int64_t load_id,
+                                           int64_t request_id, bool success) {
+  QueueEvent(generation, {
+      {flutter::EncodableValue("type"), flutter::EncodableValue("trackResult")},
+      {flutter::EncodableValue("loadId"), flutter::EncodableValue(load_id)},
+      {flutter::EncodableValue("requestId"),
+       flutter::EncodableValue(request_id)},
       {flutter::EncodableValue("success"), flutter::EncodableValue(success)},
   });
 }

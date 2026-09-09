@@ -31,6 +31,11 @@ abstract interface class NativePlayer {
   Future<void> seek(Duration position);
   Future<void> setVideoRect(PlayerVideoRect rect);
   Future<void> setFullscreen(bool fullscreen);
+
+  /// Requests a track change and completes after native command execution.
+  ///
+  /// Completion does not confirm the selected track. Callers must wait for the
+  /// matching state projected through [events].
   Future<void> selectTrack(PlayerTrackType type, int? id);
   Future<void> setVolume(double volume);
 

@@ -73,6 +73,8 @@ class WindowsNativePlayer {
 
     CommandType type;
     int64_t load_id = 0;
+    int64_t expected_load_id = 0;
+    int64_t request_id = 0;
     std::string text;
     double number = 0;
     PlexHeader plex_header;
@@ -96,6 +98,8 @@ class WindowsNativePlayer {
   void HandleMpvEvent(const mpv_event& event, uint64_t generation);
   void QueueEvent(uint64_t generation, flutter::EncodableMap value);
   void QueueStopResult(uint64_t generation, int64_t stop_id, bool success);
+  void QueueTrackResult(uint64_t generation, int64_t load_id,
+                        int64_t request_id, bool success);
   void PostPlatformWakeup();
   void DrainEvents();
   flutter::EncodableValue EncodeTrackList(const mpv_node& node) const;

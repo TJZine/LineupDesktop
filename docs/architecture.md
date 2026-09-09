@@ -75,7 +75,8 @@ executes queued media commands, reads mpv events, and copies bounded facts into
 the event queue. It posts a runner-window message; only the platform thread
 invokes the MethodChannel or changes runner-owned Windows objects. Native
 lifecycle generations reject events across dispose/recreate. Per-load IDs
-correlate media events across replacement loads; separate stop IDs correlate
+correlate media events across replacement loads; track request IDs correlate
+native command execution within the active load; separate stop IDs correlate
 idle confirmation. None substitutes for the others. Dart remains the owner of
 application playback coordination; Plex authentication, networking, channel
 policy, settings, Guide behavior, and navigation do not enter C++.

@@ -24,6 +24,7 @@ enum PlayerOverlay {
 
 class PlayerCoordinator extends ChangeNotifier {
   static const _nativeStopTimeout = Duration(seconds: 10);
+  static const _trackConfirmationTimeout = Duration(seconds: 5);
 
   PlayerCoordinator({
     required this.player,
@@ -59,6 +60,7 @@ class PlayerCoordinator extends ChangeNotifier {
   Timer? _sleepTimer;
   Timer? _numberTimer;
   Timer? _cursorTimer;
+  Timer? _trackConfirmationTimer;
   int _overlayEpoch = 0;
   int _overlayPresentationGeneration = 0;
   bool _overlayFocusSuspended = false;
@@ -255,9 +257,7 @@ class PlayerCoordinator extends ChangeNotifier {
                   track.selected,
             );
       if (confirmed) {
-        _pendingTrackType = null;
-        _pendingTrackId = null;
-        _trackSelectionError = null;
+        _clearTrackSelection();
       }
     }
     if (_nativeReplacementGeneration == event.generation &&
@@ -588,9 +588,7 @@ class PlayerCoordinator extends ChangeNotifier {
     _nativePosition = Duration.zero;
     _telemetry = const PlayerTelemetry();
     _tracks = const [];
-    _pendingTrackType = null;
-    _pendingTrackId = null;
-    _trackSelectionError = null;
+    _clearTrackSelection();
     final load = player.load(
       media,
       plexToken: plexToken,
@@ -1173,20 +1171,52 @@ class PlayerCoordinator extends ChangeNotifier {
     final trackSelectionGeneration = ++_trackSelectionGeneration;
     final tuneGeneration = _tuneGeneration;
     final loadGeneration = _activeLoadGeneration;
+    _clearTrackSelection();
     _pendingTrackType = type;
     _pendingTrackId = id;
-    _trackSelectionError = null;
     notifyListeners();
     try {
       await player.selectTrack(type, id);
+      if (!_ownsTrackSelection(
+            trackSelectionGeneration,
+            tuneGeneration,
+            loadGeneration,
+          ) ||
+          _pendingTrackType != type ||
+          _pendingTrackId != id) {
+        return;
+      }
+      _trackConfirmationTimer = Timer(_trackConfirmationTimeout, () {
+        if (!_ownsTrackSelection(
+              trackSelectionGeneration,
+              tuneGeneration,
+              loadGeneration,
+            ) ||
+            _pendingTrackType != type ||
+            _pendingTrackId != id) {
+          return;
+        }
+        _clearTrackSelection(error: 'Could not change this track. Try again.');
+        _recordPlaybackFailure(
+          const PlayerUnavailable(
+            'Track selection confirmation timed out.',
+            failureCode: 'wait_timeout',
+          ),
+          operation: type == PlayerTrackType.audio
+              ? 'audio_track'
+              : 'subtitle_track',
+        );
+        notifyListeners();
+      });
     } catch (error) {
-      if (!_disposed &&
-          trackSelectionGeneration == _trackSelectionGeneration &&
-          tuneGeneration == _tuneGeneration &&
-          loadGeneration == _activeLoadGeneration) {
-        _pendingTrackType = null;
-        _pendingTrackId = null;
-        _trackSelectionError = 'Could not change this track. Try again.';
+      if (_ownsTrackSelection(
+            trackSelectionGeneration,
+            tuneGeneration,
+            loadGeneration,
+          ) &&
+          _pendingTrackType == type &&
+          _pendingTrackId == id) {
+        _clearTrackSelection(error: 'Could not change this track. Try again.');
         _recordPlaybackFailure(
           error,
           operation: type == PlayerTrackType.audio
@@ -1196,6 +1226,24 @@ class PlayerCoordinator extends ChangeNotifier {
         notifyListeners();
       }
     }
+  }
+
+  bool _ownsTrackSelection(
+    int selectionGeneration,
+    int tuneGeneration,
+    int? loadGeneration,
+  ) =>
+      !_disposed &&
+      selectionGeneration == _trackSelectionGeneration &&
+      tuneGeneration == _tuneGeneration &&
+      loadGeneration == _activeLoadGeneration;
+
+  void _clearTrackSelection({String? error}) {
+    _trackConfirmationTimer?.cancel();
+    _trackConfirmationTimer = null;
+    _pendingTrackType = null;
+    _pendingTrackId = null;
+    _trackSelectionError = error;
   }
 
   Future<void> toggleFullscreen() {
@@ -1701,9 +1749,8 @@ class PlayerCoordinator extends ChangeNotifier {
 
   void _retirePlaybackIntent() {
     _pendingSeekPart = null;
-    _pendingTrackType = null;
-    _pendingTrackId = null;
-    _trackSelectionError = null;
+    ++_trackSelectionGeneration;
+    _clearTrackSelection();
     _activeLoadGeneration = null;
     _advancingGeneration = null;
     _nativeReplacementGeneration = null;
@@ -1764,6 +1811,7 @@ class PlayerCoordinator extends ChangeNotifier {
     _sleepTimer?.cancel();
     _numberTimer?.cancel();
     _cursorTimer?.cancel();
+    _clearTrackSelection();
     _activePlayback = null;
     _provisionalPlayback = null;
     unawaited(fullscreenReset.catchError((_) {}));
