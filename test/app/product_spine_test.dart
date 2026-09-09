@@ -54,12 +54,19 @@ void main() {
       expect(controller.connection?.relay, isFalse);
       expect(controller.connection?.latency, const Duration(milliseconds: 18));
 
-      expect(await controller.setLibraries({'movies'}), isTrue);
+      expect(await controller.scanLibraries({'movies'}), isTrue);
+      expect(controller.libraryScanReadyIds, {'movies'});
+      expect(await controller.commitLibraryScan({'movies'}), isTrue);
 
       final channel = _channel(1, anchor: _ProductPlex.now);
-      await controller.applyChannelPlan([
-        channel,
-      ], mode: ChannelBuildMode.replace);
+      expect(
+        await controller.applyReviewedChannelPlan(
+          [channel],
+          mode: ChannelBuildMode.replace,
+          expectedBase: const [],
+        ),
+        ChannelPlanApplyResult.applied,
+      );
       expect(controller.stage, SetupStage.channelSetup);
       controller.completeChannelSetup();
       expect(controller.stage, SetupStage.ready);
@@ -152,6 +159,8 @@ void main() {
       expect(controller.error, contains('network'));
       plex.offline = false;
       await controller.refreshServers();
+      expect(controller.stage, SetupStage.servers);
+      await controller.selectServer(plex.server);
       expect(controller.stage, SetupStage.ready);
 
       final largeLineup = List.generate(

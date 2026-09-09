@@ -7,6 +7,142 @@ import 'package:lineup_desktop/persistence/app_store.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 
 void main() {
+  test(
+    'first overwrite preserves exact bytes across queued saves and restart',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'lineup-backup-test',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      final stateFile = File('${directory.path}/state.json');
+      final original = utf8.encode('  ${_encodedState(_canonicalJson())}\n\n');
+      await stateFile.writeAsBytes(original);
+      final store = FileAppStore(directory);
+      await store.load();
+      await Future.wait([
+        store.save(const PersistedState(profileId: 'first')),
+        store.save(const PersistedState(profileId: 'second')),
+      ]);
+      final backup = File('${stateFile.path}.pre-desktop-ui');
+      expect(await backup.readAsBytes(), original);
+      final restarted = FileAppStore(directory);
+      expect((await restarted.load()).state.profileId, 'second');
+      await restarted.save(const PersistedState(profileId: 'third'));
+      expect(await backup.readAsBytes(), original);
+      expect((await restarted.load()).state.profileId, 'third');
+    },
+  );
+
+  test(
+    'backup failure blocks overwrite and the write queue remains usable',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'lineup-backup-test',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      final stateFile = File('${directory.path}/state.json');
+      final original = _encodedState(_canonicalJson());
+      await stateFile.writeAsString(original);
+      final obstruction = Directory('${stateFile.path}.pre-desktop-ui');
+      await obstruction.create();
+      final store = FileAppStore(directory);
+      await expectLater(
+        store.save(const PersistedState(profileId: 'replacement')),
+        throwsA(isA<FileSystemException>()),
+      );
+      expect(await stateFile.readAsString(), original);
+      expect(
+        await directory.list().where((f) => f.path.endsWith('.tmp')).isEmpty,
+        isTrue,
+      );
+      await obstruction.delete();
+      await store.save(const PersistedState(profileId: 'replacement'));
+      expect(await File(obstruction.path).readAsString(), original);
+      expect((await store.load()).state.profileId, 'replacement');
+    },
+  );
+
+  test(
+    'load backs up before artwork migration and never quarantines IO failure',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'lineup-backup-test',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      final stateFile = File('${directory.path}/state.json');
+      final original = _encodedState(
+        _canonicalJson()
+          ..['channelsByProfileServer'] = {
+            'profile': {
+              'server': [
+                _channelJson(
+                  artworkValue: '/library/metadata/1/thumb?secret=x',
+                ),
+              ],
+            },
+          },
+      );
+      await stateFile.writeAsString(original);
+      final obstruction = Directory('${stateFile.path}.pre-desktop-ui');
+      await obstruction.create();
+      await expectLater(
+        FileAppStore(directory).load(),
+        throwsA(isA<FileSystemException>()),
+      );
+      expect(await stateFile.readAsString(), original);
+      expect(
+        await directory
+            .list()
+            .where((f) => f.path.contains('.corrupt-'))
+            .isEmpty,
+        isTrue,
+      );
+      await obstruction.delete();
+      expect(
+        (await FileAppStore(directory).load()).recoveredCorruptState,
+        isFalse,
+      );
+      expect(await File(obstruction.path).readAsString(), original);
+      expect(await stateFile.readAsString(), isNot(contains('?secret=x')));
+    },
+  );
+
+  test(
+    'a rewrite FormatException is not mistaken for invalid saved data',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'lineup-backup-test',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      final stateFile = File('${directory.path}/state.json');
+      final original = _encodedState(
+        _canonicalJson()
+          ..['channelsByProfileServer'] = {
+            'profile': {
+              'server': [
+                _channelJson(
+                  artworkValue: '/library/metadata/1/thumb?secret=x',
+                ),
+              ],
+            },
+          },
+      );
+      await stateFile.writeAsString(original);
+      await expectLater(
+        _InvalidRewriteStore(directory).load(),
+        throwsA(isA<FormatException>()),
+      );
+      expect(await stateFile.readAsString(), original);
+      expect(
+        await directory
+            .list()
+            .where((f) => f.path.contains('.corrupt-'))
+            .isEmpty,
+        isTrue,
+      );
+    },
+  );
+
   test('persists safe state atomically and restores it', () async {
     final directory = await Directory.systemTemp.createTemp(
       'lineup-store-test',
@@ -20,12 +156,13 @@ void main() {
       source: MixedSource(
         interleave: true,
         sources: [
-          LibrarySource(
-            libraryId: '1',
-            libraryType: PlexLibraryType.movie,
-            includeWatched: false,
-            filters: {'genre': 'Comedy'},
-          ),
+          ContentSource.fromJson({
+            'type': 'library',
+            'libraryId': '1',
+            'libraryType': 'movie',
+            'includeWatched': false,
+            'filters': {'genre': 'Comedy'},
+          }),
           PlaylistSource('playlist-1'),
           ManualSource([
             ChannelItem(
@@ -735,4 +872,12 @@ class _FailingMigrationStore extends FileAppStore {
   Future<void> save(PersistedState state) => Future.error(
     const FileSystemException('Synthetic migration rewrite failure'),
   );
+}
+
+class _InvalidRewriteStore extends FileAppStore {
+  _InvalidRewriteStore(super.directory);
+
+  @override
+  Future<void> save(PersistedState state) =>
+      Future.error(const FormatException('Synthetic canonical write failure'));
 }

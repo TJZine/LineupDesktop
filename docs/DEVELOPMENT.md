@@ -115,15 +115,15 @@ portable work; report the specific unverified behavior and required scenario.
 
 ## Portable commands
 
-Flutter SDK `3.47.0` (revision
-`4cf24164269a5ebf0c16a028a00727d0e77bbb05`, Dart `3.13.0`) is the reproducible
+Flutter SDK `3.47.2` (revision
+`d3b14c876900e553bc736ca19295fc09e3853e8e`, Dart `3.13.2`) is the reproducible
 toolchain for macOS, Windows, and CI.
 
 Select the exact Flutter checkout rather than a different SDK already on PATH:
 
 ```sh
 git clone https://github.com/flutter/flutter.git /path/to/flutter
-git -C /path/to/flutter checkout 4cf24164269a5ebf0c16a028a00727d0e77bbb05
+git -C /path/to/flutter checkout d3b14c876900e553bc736ca19295fc09e3853e8e
 export PATH=/path/to/flutter/bin:$PATH
 flutter doctor -v
 ```

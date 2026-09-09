@@ -91,7 +91,9 @@ void main() {
 
     await tester.sendKeyDownEvent(LogicalKeyboardKey.keyS);
     await tester.sendKeyRepeatEvent(LogicalKeyboardKey.keyS);
-    expect(fixture.player.sleepDuration, const Duration(minutes: 30));
+    await tester.pump();
+    expect(fixture.player.overlay, PlayerOverlay.sleepTimer);
+    expect(find.byKey(const Key('sleep-timer-picker')), findsOneWidget);
 
     await tester.sendKeyUpEvent(LogicalKeyboardKey.keyI);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.f11);
@@ -130,6 +132,10 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.f11);
     expect(fixture.native.fullscreenValues, [true]);
     await tester.sendKeyEvent(LogicalKeyboardKey.keyS);
+    await tester.pump();
+    expect(fixture.player.overlay, PlayerOverlay.sleepTimer);
+    await tester.tap(find.text('30 minutes'));
+    await tester.pump();
     expect(fixture.player.sleepDuration, const Duration(minutes: 30));
     await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
     expect(fixture.player.overlay, PlayerOverlay.audioTracks);
@@ -560,7 +566,7 @@ void main() {
         size.width,
       );
       expect(fixture.player.miniGuideChannels, hasLength(5));
-      expect(find.textContaining('UP/DOWN Browse'), findsOneWidget);
+      expect(find.textContaining('Up / Down to browse'), findsOneWidget);
       final shelf = tester.getRect(find.byKey(const Key('mini-guide-shelf')));
       expect(
         MediaQuery.sizeOf(
@@ -576,8 +582,12 @@ void main() {
         expect(row.bottom, lessThanOrEqualTo(shelf.bottom), reason: '$size');
         if (LineupLayout.isCompactWidth(size.width) || size.height < 720) {
           expect(row.height, greaterThan(48), reason: '$size');
-        } else if (size.height >= 900) {
-          expect(row.height, 48, reason: '$size');
+        } else {
+          expect(
+            row.height,
+            closeTo(56 * LineupLayout.scaleFor(size), 0.01),
+            reason: '$size',
+          );
         }
         for (final fact in ['current', 'next']) {
           final factRect = tester.getRect(
@@ -588,7 +598,7 @@ void main() {
         }
       }
       if (size.height >= 900 && !LineupLayout.isCompactWidth(size.width)) {
-        expect(shelf.height / size.height, lessThan(0.34), reason: '$size');
+        expect(shelf.height / size.height, lessThan(0.55), reason: '$size');
       }
       expect(tester.takeException(), isNull, reason: '$size');
       fixture.player.closeOverlay();
@@ -815,6 +825,103 @@ void main() {
     fixture.dispose();
   });
 
+  testWidgets('Player menu supplies its exact button context and focus owner', (
+    tester,
+  ) async {
+    final fixture = _Fixture(PlayerState.playing);
+    BuildContext? invokerContext;
+    FocusNode? invokerFocus;
+    fixture.player.showOsd();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PlayerView(
+          controller: fixture.player,
+          openGuide: () {},
+          openMenu: (context, focus) {
+            invokerContext = context;
+            invokerFocus = focus;
+          },
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('player-app-menu')));
+
+    expect(invokerContext, isNotNull);
+    expect(invokerFocus?.debugLabel, 'Player Lineup menu');
+    expect(
+      find.descendant(
+        of: find.byWidget(invokerContext!.widget),
+        matching: find.byKey(const Key('player-app-menu')),
+      ),
+      findsOneWidget,
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
+  testWidgets('Player panels remain unclipped at text scale two', (
+    tester,
+  ) async {
+    final fixture = _Fixture(
+      PlayerState.playing,
+      channelCount: 5,
+      tracks: const [
+        PlayerTrack(
+          id: 1,
+          type: PlayerTrackType.audio,
+          selected: true,
+          title: 'A long descriptive English surround audio track label',
+          language: 'English',
+          codec: 'eac3',
+        ),
+      ],
+    );
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    for (final size in const [
+      Size(800, 600),
+      Size(1280, 720),
+      Size(1920, 1080),
+      Size(3840, 2160),
+    ]) {
+      await tester.binding.setSurfaceSize(size);
+      for (final (show, overlay) in <(VoidCallback, Finder)>[
+        (
+          fixture.player.showMiniGuide,
+          find.byKey(const Key('mini-guide-shelf')),
+        ),
+        (
+          () => fixture.player.showTracks(PlayerTrackType.audio),
+          find.byKey(const Key('playback-options-fade')),
+        ),
+        (
+          fixture.player.showSleepTimer,
+          find.byKey(const Key('sleep-timer-picker')),
+        ),
+      ]) {
+        fixture.player.closeOverlay();
+        show();
+        await tester.pumpWidget(
+          MaterialApp(
+            home: MediaQuery(
+              data: MediaQueryData(
+                size: size,
+                textScaler: const TextScaler.linear(2),
+              ),
+              child: PlayerView(controller: fixture.player, openGuide: () {}),
+            ),
+          ),
+        );
+        await tester.pump(const Duration(milliseconds: 350));
+        expect(overlay, findsOneWidget, reason: '$size');
+        expect(tester.takeException(), isNull, reason: '$size');
+      }
+    }
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
   testWidgets('OSD omits normal-state status and quality telemetry', (
     tester,
   ) async {
@@ -953,7 +1060,6 @@ void main() {
   testWidgets('OSD uses official title artwork with a text fallback', (
     tester,
   ) async {
-    final semantics = tester.ensureSemantics();
     final cases = [
       (
         fixture: _Fixture(PlayerState.playing, richProgram: true),
@@ -1023,8 +1129,7 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
       item.fixture.dispose();
     }
-    semantics.dispose();
-  });
+  }, semanticsEnabled: true);
 
   testWidgets('OSD keeps its widescreen hierarchy at DPR2', (tester) async {
     final fixture = _Fixture(PlayerState.playing);
@@ -1064,7 +1169,6 @@ void main() {
   testWidgets('DVR seek target stays clear of OSD action buttons', (
     tester,
   ) async {
-    final semantics = tester.ensureSemantics();
     final fixture = _Fixture(PlayerState.playing, dvrControlsEnabled: true);
     for (final size in const [Size(1280, 720), Size(1920, 1080)]) {
       await tester.binding.setSurfaceSize(size);
@@ -1094,8 +1198,7 @@ void main() {
     fixture.player.closeOverlay();
     await tester.pump();
     fixture.dispose();
-    semantics.dispose();
-  });
+  }, semanticsEnabled: true);
 
   testWidgets('player overlays retain 1280x720 layout at DPR2', (tester) async {
     final fixture = _Fixture(PlayerState.playing);
@@ -1140,7 +1243,7 @@ void main() {
     for (final channel in fixture.player.miniGuideChannels) {
       expect(
         tester.getSize(find.byKey(Key('mini-guide-row-${channel.id}'))).height,
-        48,
+        56,
       );
     }
     expect(tester.takeException(), isNull);
@@ -1262,7 +1365,6 @@ void main() {
       );
       final rootFocus = FocusNode();
       addTearDown(rootFocus.dispose);
-      final semantics = tester.ensureSemantics();
       fixture.player.showOsd();
       await tester.pumpWidget(
         MaterialApp(
@@ -1311,10 +1413,10 @@ void main() {
       await tester.pump(const Duration(milliseconds: 2));
       expect(fixture.player.overlay, PlayerOverlay.none);
 
-      semantics.dispose();
       await tester.pumpWidget(const SizedBox.shrink());
       fixture.dispose();
     },
+    semanticsEnabled: true,
   );
 
   testWidgets('reopened mini Guide rejects outgoing descendant focus loss', (
@@ -1362,7 +1464,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 7999));
     expect(fixture.player.overlay, PlayerOverlay.miniGuide);
     await tester.pump(const Duration(milliseconds: 2));
-    expect(fixture.player.overlay, PlayerOverlay.none);
+    expect(fixture.player.overlay, PlayerOverlay.miniGuide);
 
     await tester.pumpWidget(const SizedBox.shrink());
     fixture.dispose();
@@ -1499,6 +1601,8 @@ void main() {
     expect(Focus.of(tester.element(find.text('Stereo'))).hasFocus, isTrue);
     expect(focused.selected, isFalse);
     expect(selected.selected, isTrue);
+    expect(focused.shape, isNull);
+    expect(selected.shape, isNull);
     expect(focused.focusColor, isNot(selected.selectedTileColor));
     expect((selected.trailing! as Icon).semanticLabel, 'Selected');
 
@@ -1528,6 +1632,10 @@ void main() {
       tester.widget<ListTile>(find.widgetWithText(ListTile, 'Off')).selected,
       isTrue,
     );
+    expect(
+      tester.getTopLeft(find.text('Off')).dy,
+      lessThan(tester.getTopLeft(find.text('subtitle 3')).dy),
+    );
 
     await tester.pumpWidget(const SizedBox.shrink());
     fixture.dispose();
@@ -1555,13 +1663,84 @@ void main() {
     position.jumpTo(position.maxScrollExtent);
     await tester.pump();
 
-    final hint = find.textContaining('UP/DOWN Browse');
+    final hint = find.textContaining('Up / Down to browse');
     expect(tester.getRect(hint).bottom, lessThanOrEqualTo(240));
     expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(const SizedBox.shrink());
     fixture.dispose();
   });
+
+  testWidgets('mini Guide announces unavailable schedules as shown', (
+    tester,
+  ) async {
+    final fixture = _Fixture(PlayerState.playing, failSchedule: true);
+    addTearDown(fixture.dispose);
+    fixture.player.showMiniGuide();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('Schedule unavailable'), findsOneWidget);
+    expect(
+      find.bySemanticsLabel(RegExp(r'Now Schedule unavailable\.')),
+      findsOneWidget,
+    );
+  }, semanticsEnabled: true);
+
+  testWidgets(
+    'Mini Guide single selects, double tunes, and outside dismisses',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1280, 720));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final fixture = _Fixture(PlayerState.playing, channelCount: 7);
+      fixture.player.showMiniGuide();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      );
+      await tester.pump();
+      final visibleBefore = fixture.player.miniGuideChannels
+          .map((channel) => channel.id)
+          .toList();
+      final target = fixture.player.miniGuideChannels.last;
+      final row = find.byKey(Key('mini-guide-row-${target.id}'));
+
+      await tester.tap(row);
+      await tester.pump(const Duration(milliseconds: 350));
+      expect(fixture.player.miniGuideChannelId, target.id);
+      expect(fixture.native.loadCalls, 0);
+      expect(
+        fixture.player.miniGuideChannels.map((channel) => channel.id),
+        visibleBefore,
+      );
+
+      await tester.tap(row);
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.tap(row);
+      await tester.pump();
+      await tester.pump();
+      expect(fixture.native.loadCalls, greaterThan(0));
+
+      fixture.player.showMiniGuide();
+      await tester.pump();
+      final commands = fixture.native.transportCommands;
+      await tester.tapAt(const Offset(640, 700));
+      await tester.pump();
+      expect(fixture.player.overlay, PlayerOverlay.none);
+      expect(fixture.native.transportCommands, commands);
+      await tester.pump(const Duration(milliseconds: 50));
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    },
+  );
 
   testWidgets('playback options scroll through long native track lists', (
     tester,
@@ -1605,7 +1784,7 @@ void main() {
       position.jumpTo(position.maxScrollExtent);
       await tester.pump();
       expect(find.text('Audio track 29'), findsOneWidget);
-      expect(find.text('Back'), findsOneWidget);
+      expect(find.text('Close'), findsOneWidget);
       expect(tester.takeException(), isNull, reason: '$size');
     }
 
@@ -1648,36 +1827,79 @@ void main() {
     fixture.dispose();
   });
 
-  testWidgets('track rail keeps proportional bounds through 4K', (
+  testWidgets('track panel scales its reading rail and soft fade through 4K', (
     tester,
   ) async {
     final fixture = _Fixture(
       PlayerState.playing,
       tracks: const [
-        PlayerTrack(id: 1, type: PlayerTrackType.audio, selected: true),
+        PlayerTrack(
+          id: 1,
+          type: PlayerTrackType.audio,
+          selected: true,
+          title: 'A long descriptive English surround audio track label',
+          language: 'English',
+          codec: 'eac3',
+        ),
       ],
     );
-    addTearDown(() => tester.binding.setSurfaceSize(null));
+    addTearDown(() {
+      tester.binding.setSurfaceSize(null);
+      tester.view.resetDevicePixelRatio();
+    });
     for (final layout in const [
-      (viewport: Size(800, 600), width: 320.0),
-      (viewport: Size(1280, 720), width: 420.0),
-      (viewport: Size(3840, 2160), width: 420.0),
+      (
+        viewport: Size(1280, 720),
+        dpr: 1.0,
+        width: 420.0,
+        fade: 150.0,
+        scale: 1.0,
+      ),
+      (
+        viewport: Size(1920, 1080),
+        dpr: 1.25,
+        width: 420.0,
+        fade: 150.0,
+        scale: 1.0,
+      ),
+      (
+        viewport: Size(2560, 1440),
+        dpr: 1.5,
+        width: 560.0,
+        fade: 200.0,
+        scale: 4 / 3,
+      ),
+      (
+        viewport: Size(3840, 2160),
+        dpr: 2.0,
+        width: 567.0,
+        fade: 202.5,
+        scale: 1.35,
+      ),
     ]) {
       await tester.binding.setSurfaceSize(layout.viewport);
+      tester.view.devicePixelRatio = layout.dpr;
       fixture.player.showOsd();
       fixture.player.showTracks(PlayerTrackType.audio);
       await tester.pumpWidget(
         MaterialApp(
-          home: PlayerView(controller: fixture.player, openGuide: () {}),
+          home: MediaQuery(
+            data: MediaQueryData(
+              size: layout.viewport,
+              devicePixelRatio: layout.dpr,
+              textScaler: const TextScaler.linear(2),
+            ),
+            child: PlayerView(controller: fixture.player, openGuide: () {}),
+          ),
         ),
       );
       await tester.pumpAndSettle();
 
-      final rect = tester.getRect(
+      final rail = tester.getRect(
         find.byKey(const Key('playback-options-rail')),
       );
       expect(
-        rect,
+        rail,
         Rect.fromLTWH(
           layout.viewport.width - layout.width,
           0,
@@ -1685,6 +1907,40 @@ void main() {
           layout.viewport.height,
         ),
       );
+      final fade = tester.getRect(
+        find.byKey(const Key('playback-options-fade')),
+      );
+      expect(fade.right, layout.viewport.width);
+      expect(fade.left, closeTo(rail.left - layout.fade, 0.01));
+      final decoration =
+          tester
+                  .widget<Container>(
+                    find.byKey(const Key('playback-options-fade')),
+                  )
+                  .decoration!
+              as BoxDecoration;
+      final gradient = decoration.gradient! as LinearGradient;
+      expect(gradient.stops, const [0, 0.22, 0.4, 1]);
+      expect(gradient.colors.first.a, 0);
+      expect(gradient.colors.last.a, closeTo(0.84, 0.01));
+      expect(find.text('Audio'), findsOneWidget);
+      expect(find.text('Close'), findsOneWidget);
+      expect(find.text('PLAYBACK OPTIONS'), findsNothing);
+      expect(
+        tester
+            .widget<Text>(
+              find.text(
+                'A long descriptive English surround audio track label',
+              ),
+            )
+            .style
+            ?.fontSize,
+        closeTo(16 * layout.scale, 0.01),
+      );
+      final label = tester.getRect(
+        find.text('A long descriptive English surround audio track label'),
+      );
+      expect(rail.overlaps(label), isTrue);
       expect(tester.takeException(), isNull, reason: '${layout.viewport}');
     }
 
@@ -1792,7 +2048,9 @@ void main() {
     fixture.dispose();
   });
 
-  testWidgets('A and C do not open unavailable track rails', (tester) async {
+  testWidgets('audio requires a track and empty subtitles explains Off', (
+    tester,
+  ) async {
     final fixture = _Fixture(PlayerState.playing);
     await tester.pumpWidget(
       MaterialApp(
@@ -1805,8 +2063,11 @@ void main() {
 
     fixture.player.showOsd();
     await tester.sendKeyEvent(LogicalKeyboardKey.keyC);
-    expect(fixture.player.overlay, PlayerOverlay.osd);
-    expect(find.byKey(const Key('playback-options-rail')), findsNothing);
+    await tester.pump();
+    expect(fixture.player.overlay, PlayerOverlay.subtitleTracks);
+    expect(find.byKey(const Key('playback-options-rail')), findsOneWidget);
+    expect(find.text('No subtitle tracks available'), findsOneWidget);
+    expect(find.text('Off'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
     fixture.dispose();
@@ -1844,7 +2105,6 @@ void main() {
     final fixture = _Fixture(PlayerState.playing, richProgram: true);
     await tester.binding.setSurfaceSize(const Size(1280, 720));
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    final semantics = tester.ensureSemantics();
     await tester.pumpWidget(
       MaterialApp(
         home: MediaQuery(
@@ -1907,10 +2167,9 @@ void main() {
     expect(find.bySemanticsLabel(RegExp(r'^Now playing\.')), findsNothing);
     expect(find.bySemanticsLabel(RegExp('Playback controls')), findsOneWidget);
 
-    semantics.dispose();
     await tester.pumpWidget(const SizedBox.shrink());
     fixture.dispose();
-  });
+  }, semanticsEnabled: true);
 
   testWidgets(
     'Now Playing renders bounded cast portraits, fallbacks, names, and semantics',
@@ -1926,7 +2185,6 @@ void main() {
       );
       await tester.binding.setSurfaceSize(const Size(1280, 720));
       addTearDown(() => tester.binding.setSurfaceSize(null));
-      final semantics = tester.ensureSemantics();
       await tester.pumpWidget(
         MaterialApp(
           home: MediaQuery(
@@ -1970,10 +2228,10 @@ void main() {
       );
       expect(tester.takeException(), isNull);
 
-      semantics.dispose();
       await tester.pumpWidget(const SizedBox.shrink());
       fixture.dispose();
     },
+    semanticsEnabled: true,
   );
 
   testWidgets('failed cast portrait uses the neutral person fallback', (
@@ -2235,7 +2493,7 @@ void main() {
       expect(disabled.lineup.artworkRequests, hasLength(1));
       expect(
         disabled.lineup.artworkRequests,
-        isNot(contains(Uri.parse('test://logo'))),
+        isNot(contains(Uri.parse('/library/metadata/test/logo'))),
       );
       expect(find.byKey(const Key('player-now-playing-logo')), findsNothing);
       expect(find.byKey(const Key('player-now-playing-title')), findsOneWidget);
@@ -2351,7 +2609,10 @@ void main() {
 
     expect(
       fixture.lineup.artworkRequests.map((path) => path.toString()),
-      containsAll(['test://poster-replacement', 'test://logo-replacement']),
+      containsAll([
+        '/library/metadata/test/poster-replacement',
+        '/library/metadata/test/logo-replacement',
+      ]),
     );
     for (final entry in fixture.lineup.artworkCompletions.entries.where(
       (entry) => entry.key.toString().contains('replacement'),
@@ -2764,6 +3025,7 @@ class _Fixture {
     bool blockArtwork = false,
     bool shortPrograms = false,
     bool longNextTitle = false,
+    bool failSchedule = false,
     ChannelItem? richItemOverride,
     DateTime Function()? guideClock,
     Duration nativePosition = const Duration(minutes: 10),
@@ -2786,11 +3048,14 @@ class _Fixture {
     guide = GuideController(
       lineup: lineup,
       clock: guideClock,
-      loadSchedule: (channel) async => buildSchedule(
-        (channel.source as ManualSource).items,
-        mode: channel.playbackMode,
-        seed: channel.shuffleSeed,
-      ),
+      loadSchedule: (channel) async {
+        if (failSchedule) throw StateError('Synthetic schedule failure');
+        return buildSchedule(
+          (channel.source as ManualSource).items,
+          mode: channel.playbackMode,
+          seed: channel.shuffleSeed,
+        );
+      },
     )..requestViewport(0, 1);
     native = _Native(
       state,
@@ -2965,10 +3230,12 @@ ChannelItem _fixtureItem(
           : 'Replacement Program'),
   duration: duration,
   showTitle: rich ? 'Lineup Stories' : null,
-  poster: rich ? Uri.parse('test://poster$artworkTag') : null,
-  backdrop: rich ? Uri.parse('test://backdrop$artworkTag') : null,
+  poster: rich ? Uri.parse('/library/metadata/test/poster$artworkTag') : null,
+  backdrop: rich
+      ? Uri.parse('/library/metadata/test/backdrop$artworkTag')
+      : null,
   clearLogo: rich && includeClearLogo
-      ? Uri.parse('test://logo$artworkTag')
+      ? Uri.parse('/library/metadata/test/logo$artworkTag')
       : null,
   summary: rich
       ? summary ?? 'A synthetic synopsis for deterministic tests.'
@@ -3045,6 +3312,7 @@ class _Native implements NativePlayer {
   final loadStarted = Completer<void>();
   final _loadCompletion = Completer<void>();
   int transportCommands = 0;
+  int loadCalls = 0;
   final fullscreenValues = <bool>[];
 
   @override
@@ -3063,6 +3331,7 @@ class _Native implements NativePlayer {
   Future<void> initialize() async {}
   @override
   Future<void> load(Uri media, {String? plexToken, int? generation}) async {
+    loadCalls++;
     if (failLoad) throw StateError('synthetic load failure');
     if (blockLoad) {
       if (!loadStarted.isCompleted) loadStarted.complete();

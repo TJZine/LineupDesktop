@@ -26,6 +26,42 @@ foreach ($relative in $scripts) {
   }
 }
 
+$buildReleasePath = Join-Path $repository 'tool/windows/build-release.ps1'
+$buildReleaseSource = Get-Content -Raw -LiteralPath $buildReleasePath
+if ($buildReleaseSource -notmatch '(?ms)function\s+Get-PubspecVersion\b') {
+  throw 'build-release.ps1 must strictly parse the pubspec version.'
+}
+if ($buildReleaseSource -notmatch '\$versionLines\.Count\s+-ne\s+1' -or
+  $buildReleaseSource -notmatch '\(\?<name>\[\^\+\\s\]\+\)\\\+\(\?<build>\[0-9\]\+\)') {
+  throw 'build-release.ps1 must reject ambiguous or malformed pubspec versions.'
+}
+if ($buildReleaseSource -notmatch
+  '(?m)^\$sourceCommit\s*=\s*Get-GitValue\s+\$repository\s+@\(''rev-parse'',\s*''--verify'',\s*''HEAD''\)') {
+  throw 'build-release.ps1 must use the exact verified source commit for build provenance.'
+}
+if ($buildReleaseSource -notmatch
+  '(?m)^\$pubspecVersion\s*=\s*Get-PubspecVersion\s+-Path\s+\(Join-Path\s+\$repository\s+''pubspec\.yaml''\)') {
+  throw 'build-release.ps1 must derive diagnostics from the repository pubspec.yaml.'
+}
+if ($buildReleaseSource -notmatch
+  '(?m)^\$lineupVersion\s*=\s*\$pubspecVersion\.Name\s*$') {
+  throw 'build-release.ps1 must derive LINEUP_VERSION from the parsed pubspec version name.'
+}
+if ($buildReleaseSource -notmatch
+  '(?m)^\$lineupBuild\s*=\s*"\$\(\$pubspecVersion\.Build\)@\$sourceCommit"\s*$') {
+  throw 'build-release.ps1 must derive LINEUP_BUILD from the numeric pubspec build and source commit.'
+}
+if ($buildReleaseSource -notmatch
+  '(?m)^\s*"--dart-define=LINEUP_VERSION=\$lineupVersion"\s*$' -or
+  $buildReleaseSource -notmatch
+  '(?m)^\s*"--dart-define=LINEUP_BUILD=\$lineupBuild"\s*$') {
+  throw 'build-release.ps1 must pass both derived diagnostics defines to the build.'
+}
+if ($buildReleaseSource -notmatch
+  '(?ms)&\s*\$flutter\s+build\s+windows\s+@flutterBuildArguments') {
+  throw 'build-release.ps1 must pass the verified Dart defines to the canonical Flutter build.'
+}
+
 $metadataPath = Join-Path $repository 'tool/windows/build-metadata.psd1'
 $metadata = Import-PowerShellDataFile -LiteralPath $metadataPath
 $requiredMetadata = @(

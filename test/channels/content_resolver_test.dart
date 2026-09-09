@@ -51,13 +51,81 @@ void main() {
           libraryId: 'movies',
           libraryType: PlexLibraryType.movie,
           includeWatched: false,
-          filters: {'genre': 'Comedy'},
+          filters: {
+            LibraryFilter.genre: ['Comedy'],
+          },
         ),
         media,
       );
       expect(items.map((item) => item.id), ['a']);
     },
   );
+
+  test('multi-value filters are OR within and AND between with id dedup', () {
+    final comedy = PlexMediaItem(
+      id: 'a',
+      title: 'Comedy A',
+      type: 'movie',
+      duration: const Duration(minutes: 1),
+      libraryId: 'movies',
+      parts: [PlexMediaPart(path: '/parts/comedy-a')],
+      genres: const ['Comedy'],
+      collections: const ['Favorites'],
+    );
+    final drama = PlexMediaItem(
+      id: 'a',
+      title: 'Drama A',
+      type: 'movie',
+      duration: const Duration(minutes: 1),
+      libraryId: 'movies',
+      parts: [PlexMediaPart(path: '/parts/drama-a')],
+      genres: const ['Drama'],
+      collections: const ['Favorites'],
+    );
+    final resolved = resolveContent(
+      const LibrarySource(
+        libraryId: 'movies',
+        libraryType: PlexLibraryType.movie,
+        filters: {
+          LibraryFilter.genre: ['Drama', 'Comedy'],
+          LibraryFilter.collection: ['Favorites'],
+        },
+      ),
+      [comedy, drama, media[1]],
+    );
+
+    expect(resolved.map((item) => item.id), ['a']);
+  });
+
+  test('legacy filters normalize to canonical semantic identity', () {
+    final legacy = ContentSource.fromJson({
+      'type': 'library',
+      'libraryId': 'movies',
+      'libraryType': 'movie',
+      'includeWatched': true,
+      'filters': {'genre': 'Comedy', 'sort': 'added:desc'},
+    }) as LibrarySource;
+    const reordered = LibrarySource(
+      libraryId: 'movies',
+      libraryType: PlexLibraryType.movie,
+      filters: {
+        LibraryFilter.genre: ['Comedy', 'Comedy'],
+      },
+      order: LibraryOrder.addedDescending,
+    );
+
+    expect(legacy.filters, {
+      LibraryFilter.genre: ['Comedy'],
+    });
+    expect(legacy.order, LibraryOrder.addedDescending);
+    expect(canonicalSourceEquals(legacy, reordered), isTrue);
+    expect(
+      legacy.toJson(),
+      containsPair('filters', {
+        'genre': ['Comedy'],
+      }),
+    );
+  });
 
   test('supported filters and newest-first sorting remain strict', () {
     final dated = [
@@ -92,13 +160,13 @@ void main() {
         addedAt: DateTime.utc(2021),
       ),
     ];
-    for (final filter in const {
-      'genre': 'Comedy',
-      'collection': 'Favorites',
-      'studio': 'Studio',
-      'actor': 'Actor',
-      'director': 'Director',
-      'decade': '1990s',
+    for (final filter in const <LibraryFilter, List<String>>{
+      LibraryFilter.genre: ['Comedy'],
+      LibraryFilter.collection: ['Favorites'],
+      LibraryFilter.studio: ['Studio'],
+      LibraryFilter.actor: ['Actor'],
+      LibraryFilter.director: ['Director'],
+      LibraryFilter.decade: ['1990s'],
     }.entries) {
       expect(
         resolveContent(
@@ -117,20 +185,28 @@ void main() {
         const LibrarySource(
           libraryId: 'movies',
           libraryType: PlexLibraryType.movie,
-          filters: {'sort': 'added:desc'},
+          order: LibraryOrder.addedDescending,
         ),
         dated,
       ).map((item) => item.id),
       ['newer', 'older'],
     );
-    for (final filters in const [
-      {'future': 'anything'},
-      {'decade': '1995s'},
-      {'decade': '90s'},
-      {'decade': '990s'},
-      {'decade': '-10s'},
-      {'decade': '10000s'},
-      {'sort': 'title:asc'},
+    for (final filters in const <Map<LibraryFilter, List<String>>>[
+      {
+        LibraryFilter.decade: ['1995s'],
+      },
+      {
+        LibraryFilter.decade: ['90s'],
+      },
+      {
+        LibraryFilter.decade: ['990s'],
+      },
+      {
+        LibraryFilter.decade: ['-10s'],
+      },
+      {
+        LibraryFilter.decade: ['10000s'],
+      },
     ]) {
       expect(
         () => resolveContent(
@@ -164,9 +240,13 @@ void main() {
         ),
     ];
 
-    for (final filter in const [
-      {'actor': 'avery vale'},
-      {'director': 'AVERY VALE'},
+    for (final filter in const <Map<LibraryFilter, List<String>>>[
+      {
+        LibraryFilter.actor: ['avery vale'],
+      },
+      {
+        LibraryFilter.director: ['AVERY VALE'],
+      },
     ]) {
       expect(
         resolveContent(
@@ -341,7 +421,9 @@ void main() {
                 LibrarySource(
                   libraryId: 'movies',
                   libraryType: PlexLibraryType.movie,
-                  filters: {'future': 'value'},
+                  filters: {
+                    LibraryFilter.decade: ['invalid'],
+                  },
                 ),
               ],
             ),
@@ -604,7 +686,9 @@ void main() {
         libraryId: 'movies',
         libraryType: PlexLibraryType.movie,
         includeWatched: false,
-        filters: {'genre': 'Comedy'},
+        filters: {
+          LibraryFilter.genre: ['Comedy'],
+        },
       ),
       const PlaylistSource('playlist'),
       const ManualSource([
@@ -639,6 +723,16 @@ void main() {
         'includeWatched': true,
         'filters': null,
       },
+      for (final decade in ['invalid', '0000s', '0990s'])
+        {
+          'type': 'library',
+          'libraryId': 'movies',
+          'libraryType': 'movie',
+          'includeWatched': true,
+          'filters': {
+            'decade': [decade],
+          },
+        },
       {'type': 'manual', 'items': null},
       {'type': 'mixed', 'interleave': 1, 'sources': <Object?>[]},
       {'type': 'future'},
@@ -691,6 +785,73 @@ void main() {
       expect(() => Channel.fromJson(invalid), throwsFormatException);
     }
   });
+
+  test('non-block channels normalize specials in persistence and identity', () {
+    final requested = Channel(
+      id: 'channel',
+      number: 7,
+      name: 'Channel',
+      source: const PlaylistSource('playlist'),
+      playbackMode: PlaybackMode.shuffle,
+      anchor: DateTime.utc(2026, 8, 23),
+      shuffleSeed: 42,
+      includeSpecials: true,
+    );
+    final canonical = Channel(
+      id: 'channel',
+      number: 7,
+      name: 'Channel',
+      source: const PlaylistSource('playlist'),
+      playbackMode: PlaybackMode.shuffle,
+      anchor: DateTime.utc(2026, 8, 23),
+      shuffleSeed: 42,
+    );
+
+    expect(requested.includeSpecials, isFalse);
+    expect(requested.toJson(), isNot(contains('includeSpecials')));
+    expect(
+      canonicalScheduleIdentity(requested),
+      canonicalScheduleIdentity(canonical),
+    );
+  });
+
+  test(
+    'schedule transition requires an explicit offset and canonicalizes UTC',
+    () {
+      final channel = Channel(
+        id: 'transition',
+        number: 7,
+        name: 'Transition',
+        source: const PlaylistSource('playlist'),
+        playbackMode: PlaybackMode.shuffle,
+        anchor: DateTime.utc(2026, 8, 23),
+        shuffleSeed: 42,
+        scheduleTransition: ScheduleTransition(
+          boundary: DateTime.parse('2026-08-23T14:00:00+02:00'),
+          legacyCycleItems: const [
+            ChannelItem(
+              id: 'item',
+              title: 'Item',
+              duration: Duration(minutes: 1),
+            ),
+          ],
+        ),
+      );
+      final canonical = channel.toJson();
+      expect(
+        (canonical['scheduleTransition'] as Map)['boundary'],
+        '2026-08-23T12:00:00.000Z',
+      );
+      expect(Channel.fromJson(canonical).toJson(), canonical);
+
+      final offsetless = Map<String, Object?>.from(canonical);
+      offsetless['scheduleTransition'] = {
+        ...Map<String, Object?>.from(canonical['scheduleTransition']! as Map),
+        'boundary': '2026-08-23T12:00:00',
+      };
+      expect(() => Channel.fromJson(offsetless), throwsFormatException);
+    },
+  );
 
   test('bulk channel validation preserves identity semantics', () {
     Channel channel(String id, int number) => Channel(

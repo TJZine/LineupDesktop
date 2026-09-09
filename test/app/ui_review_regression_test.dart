@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/channel_air_check.dart';
 import 'package:lineup_desktop/app/channel_setup_view.dart';
@@ -185,12 +186,7 @@ void main() {
       findsOneWidget,
     );
     expect(controller.channels, hasLength(1));
-    expect(
-      FocusManager.instance.primaryFocus?.context
-          ?.findAncestorWidgetOfExactType<IconButton>()
-          ?.tooltip,
-      'Delete Newsroom',
-    );
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Open Newsroom');
 
     await _confirmDelete(tester);
     expect(controller.channels, isEmpty);
@@ -214,7 +210,7 @@ void main() {
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
     await openDestination(tester, 'Channels');
-    await tester.tap(find.text('New channel'));
+    await tester.tap(find.text('Create a custom channel'));
     await tester.pumpAndSettle();
 
     expect(find.text('Include watched items'), findsOneWidget);
@@ -252,7 +248,7 @@ void main() {
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
     await openDestination(tester, 'Channels');
-    await tester.tap(find.text('New channel'));
+    await tester.tap(find.text('Create a custom channel'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextFormField).first, 'Movies');
 
@@ -273,7 +269,7 @@ void main() {
     await tester.pump();
     await tester.pump();
     await openDestination(tester, 'Channels');
-    await tester.tap(find.text('New channel'));
+    await tester.tap(find.text('Create a custom channel'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const Key('studio-name')), 'Unsaved');
     await tester.pump();
@@ -380,7 +376,9 @@ void main() {
             libraryId: 'movies',
             libraryType: PlexLibraryType.movie,
             includeWatched: false,
-            filters: {'genre': 'Comedy'},
+            filters: {
+              LibraryFilter.genre: ['Comedy'],
+            },
           ),
           initialMode: PlaybackMode.block,
           initialBlockSize: 5,
@@ -403,7 +401,9 @@ void main() {
               LibrarySource(
                 libraryId: 'shows',
                 libraryType: PlexLibraryType.show,
-                filters: {'decade': '2020s'},
+                filters: {
+                  LibraryFilter.decade: ['2020s'],
+                },
               ),
               PlaylistSource('playlist-2'),
             ],
@@ -492,7 +492,9 @@ void main() {
       const LibrarySource(
         libraryId: 'movies',
         libraryType: PlexLibraryType.movie,
-        filters: {'genre': 'Comedy'},
+        filters: {
+          LibraryFilter.genre: ['Comedy'],
+        },
       ),
       const PlaylistSource('playlist-1'),
       const MixedSource(sources: [PlaylistSource('playlist-1')]),
@@ -529,17 +531,6 @@ void main() {
       final sourceChoices = find.byKey(const Key('studio-source-choices'));
       expect(
         find.descendant(of: sourceChoices, matching: find.text('Library')),
-        findsOneWidget,
-      );
-      expect(
-        find.descendant(of: sourceChoices, matching: find.text('Playlist')),
-        findsOneWidget,
-      );
-      expect(
-        find.descendant(
-          of: sourceChoices,
-          matching: find.text('Collection or filter'),
-        ),
         findsOneWidget,
       );
       expect(
@@ -620,19 +611,12 @@ void main() {
     await tester.pumpAndSettle();
     await openDestination(tester, 'Settings');
 
-    await tester.tap(find.widgetWithText(OutlinedButton, 'Guide'));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byType(DropdownButton<int>).at(1));
-    await tester.pumpAndSettle();
-    expect(find.text('Current half-hour slot'), findsOneWidget);
-    expect(find.text('At least 15 minutes'), findsOneWidget);
-    await tester.tapAt(const Offset(8, 8));
+    await tester.tap(find.widgetWithText(TextButton, 'Guide'));
     await tester.pumpAndSettle();
 
     await tester.tap(find.byType(DropdownButton<int>).first);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Desktop extended (6 hours)').last);
+    await tester.tap(find.text('Extended (4 hours)').last);
     await tester.pump();
 
     expect(
@@ -645,9 +629,7 @@ void main() {
     controller.failUpdate();
     await tester.pumpAndSettle();
     expect(
-      find.text(
-        'This setting could not be saved. Your previous value remains.',
-      ),
+      find.text('Could not save. The previous value was restored.'),
       findsOneWidget,
     );
     expect(
@@ -677,34 +659,14 @@ void main() {
     expect(keyboardOwner.focusNode!.hasFocus, isTrue);
   });
 
-  testWidgets('Channel Setup footer uses its available width', (tester) async {
-    await tester.binding.setSurfaceSize(const Size(1100, 800));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
-    final controller = FixtureController()
-      ..stage = SetupStage.channelSetup
-      ..libraries = const [
-        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
-      ];
-    addTearDown(controller.dispose);
-
-    await tester.pumpWidget(
-      MaterialApp(home: UpstreamChannelSetupView(controller: controller)),
-    );
-    await tester.pumpAndSettle();
-
-    expect(
-      tester.getTopLeft(find.text('Configure channels')).dy,
-      tester.getTopLeft(find.text('Select All')).dy,
-    );
-    expect(
-      tester.getTopLeft(find.text('Configure channels')).dx,
-      greaterThan(tester.getTopRight(find.text('Clear All')).dx),
-    );
-  });
-
   testWidgets('Channel Setup excludes descriptor-invalid inventory', (
     tester,
   ) async {
+    tester.view
+      ..physicalSize = const Size(1280, 720)
+      ..devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     final controller = _InvalidChannelSetupController()
       ..stage = SetupStage.channelSetup
       ..libraries = const [
@@ -716,13 +678,14 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Configure channels'));
+    await tester.ensureVisible(find.text('Scan selected libraries'));
+    await tester.tap(find.text('Scan selected libraries'));
     await tester.pumpAndSettle();
 
     expect(
       tester
           .widget<FilledButton>(
-            find.widgetWithText(FilledButton, 'Build Channels'),
+            find.widgetWithText(FilledButton, 'Review channels'),
           )
           .onPressed,
       isNull,
@@ -732,8 +695,11 @@ void main() {
   testWidgets('Channel Setup counts unique playlist-only programs', (
     tester,
   ) async {
-    await tester.binding.setSurfaceSize(const Size(1600, 900));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
+    tester.view
+      ..physicalSize = const Size(1600, 900)
+      ..devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     final controller = _PlaylistOnlyChannelSetupController()
       ..stage = SetupStage.channelSetup
       ..libraries = const [
@@ -745,72 +711,26 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Configure channels'));
+    await tester.tap(find.text('Scan selected libraries'));
     await tester.pumpAndSettle();
 
     expect(
-      find.text('2 channel ideas from 6 playable programs.'),
+      find.descendant(
+        of: find.widgetWithText(CheckboxListTile, 'Playlists'),
+        matching: find.textContaining('2 qualifying · 2 included'),
+      ),
       findsOneWidget,
     );
-  });
-
-  testWidgets('Channel Setup append review stays exact after apply failure', (
-    tester,
-  ) async {
-    await tester.binding.setSurfaceSize(const Size(1600, 900));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
-    final controller = _FailingChannelSetupController()
-      ..stage = SetupStage.channelSetup
-      ..libraries = const [
-        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
-      ]
-      ..channels = [_channel];
-    final originalChannels = controller.channels;
-    addTearDown(controller.dispose);
-    await tester.pumpWidget(
-      MaterialApp(home: UpstreamChannelSetupView(controller: controller)),
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Configure channels'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Build Options'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Add generated channels'));
-    await tester.pump();
-    await tester.tap(find.text('Review'));
-    await tester.pumpAndSettle();
-
-    expect(find.bySemanticsLabel('Create: 2'), findsOneWidget);
-    expect(find.bySemanticsLabel('Update: 0'), findsOneWidget);
-    expect(find.bySemanticsLabel('Unchanged: 1'), findsOneWidget);
-    expect(find.bySemanticsLabel('Generated removed: 0'), findsOneWidget);
-    expect(find.bySemanticsLabel('Final: 3'), findsOneWidget);
-
-    await tester.tap(find.text('Confirm & Build'));
-    await tester.pumpAndSettle();
-    expect(find.text('The channel plan could not be applied.'), findsOneWidget);
-    expect(controller.channels, same(originalChannels));
-    expect(find.text('Lineup update failed'), findsOneWidget);
-    expect(find.text('Review expected changes'), findsNothing);
-    expect(
-      tester
-          .widget<LinearProgressIndicator>(find.byType(LinearProgressIndicator))
-          .value,
-      0,
-    );
-
-    await tester.tap(find.text('Back to Review'));
-    await tester.pumpAndSettle();
-    expect(find.text('Review expected changes'), findsOneWidget);
-    expect(find.bySemanticsLabel('Final: 3'), findsOneWidget);
-    expect(Focus.of(tester.element(find.text('Back'))).hasFocus, isTrue);
   });
 
   testWidgets('Channel Setup apply is non-cancellable and waits on Complete', (
     tester,
   ) async {
-    await tester.binding.setSurfaceSize(const Size(1600, 900));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
+    tester.view
+      ..physicalSize = const Size(1600, 900)
+      ..devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     final controller = _PendingChannelSetupController()
       ..stage = SetupStage.channelSetup
       ..libraries = const [
@@ -821,16 +741,24 @@ void main() {
       MaterialApp(home: UpstreamChannelSetupView(controller: controller)),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Configure channels'));
+    await tester.tap(find.text('Scan selected libraries'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Build Channels'));
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('review-channels')),
+      500,
+      scrollable: find.descendant(
+        of: find.byKey(const ValueKey('channel-configuration')),
+        matching: find.byType(Scrollable),
+      ),
+    );
+    await tester.tap(find.byKey(const ValueKey('review-channels')));
     await tester.pumpAndSettle();
-    expect(find.text('Remove 0 generated channels'), findsNothing);
-    await tester.tap(find.text('Confirm & Replace'));
+    Focus.of(tester.element(find.text('Create lineup'))).requestFocus();
+    await tester.pump();
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.enter);
     await tester.pump();
 
-    expect(find.bySemanticsLabel('Applying channels'), findsOneWidget);
-    expect(find.text('Back'), findsNothing);
+    expect(find.text('Creating your lineup…'), findsOneWidget);
     expect(find.text('Cancel'), findsNothing);
     expect(find.text('View lineup'), findsNothing);
     expect(controller.stage, SetupStage.channelSetup);
@@ -838,18 +766,15 @@ void main() {
     controller.finishApply();
     await tester.pumpAndSettle();
 
-    expect(find.bySemanticsLabel('Channel update complete'), findsOneWidget);
-    expect(find.text('channel ready'), findsOneWidget);
-    expect(find.bySemanticsLabel('Final: 1'), findsOneWidget);
-    expect(
-      tester
-          .widget<LinearProgressIndicator>(find.byType(LinearProgressIndicator))
-          .value,
-      1,
-    );
+    expect(find.text('Your lineup is ready'), findsOneWidget);
+    expect(find.text('1 channel in your lineup'), findsOneWidget);
     expect(controller.stage, SetupStage.channelSetup);
     expect(Focus.of(tester.element(find.text('View lineup'))).hasFocus, isTrue);
-    await tester.tap(find.text('View lineup'));
+    await tester.sendKeyRepeatEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+    expect(controller.stage, SetupStage.channelSetup);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.enter);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pumpAndSettle();
     expect(controller.stage, SetupStage.ready);
   });
@@ -857,8 +782,11 @@ void main() {
   testWidgets(
     'Channel Setup autofocus does not reclaim focus after scrolling',
     (tester) async {
-      await tester.binding.setSurfaceSize(const Size(700, 500));
-      addTearDown(() => tester.binding.setSurfaceSize(null));
+      tester.view
+        ..physicalSize = const Size(700, 500)
+        ..devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
       final controller = FixtureController()
         ..stage = SetupStage.channelSetup
         ..libraries = List.generate(
@@ -875,14 +803,14 @@ void main() {
         MaterialApp(home: UpstreamChannelSetupView(controller: controller)),
       );
       await tester.pumpAndSettle();
-      Focus.of(tester.element(find.text('Select All'))).requestFocus();
+      Focus.of(tester.element(find.text('Select all'))).requestFocus();
       await tester.pump();
       final intendedFocus = FocusManager.instance.primaryFocus;
       expect(intendedFocus, isNotNull);
 
-      await tester.drag(find.byType(CustomScrollView), const Offset(0, -2400));
+      await tester.dragFrom(const Offset(350, 450), const Offset(0, -2400));
       await tester.pumpAndSettle();
-      await tester.drag(find.byType(CustomScrollView), const Offset(0, 2400));
+      await tester.dragFrom(const Offset(350, 450), const Offset(0, 2400));
       await tester.pumpAndSettle();
 
       expect(FocusManager.instance.primaryFocus, same(intendedFocus));
@@ -924,7 +852,9 @@ void main() {
 }
 
 Future<void> _confirmDelete(WidgetTester tester) async {
-  await tester.tap(find.byTooltip('Delete Newsroom'));
+  await tester.tap(find.byTooltip('Actions for Newsroom'));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('Delete'));
   await tester.pumpAndSettle();
   await tester.tap(find.text('Delete channel'));
   await tester.pumpAndSettle();
@@ -1047,14 +977,56 @@ class _ProfileFixtureController extends FixtureController {
       true;
 }
 
-class _FailingChannelSetupController extends FixtureController {
-  _FailingChannelSetupController({this.includeGenre = true});
+abstract class _SetupScanFixtureController extends FixtureController {
+  Set<String> _readyIds = const {};
+  Map<String, LibraryScanFact> _scanFacts = const {};
+
+  @override
+  Set<String> get libraryScanReadyIds => _readyIds;
+
+  @override
+  Set<String> get libraryScanRetryIds => const {};
+
+  @override
+  Map<String, LibraryScanFact> get libraryScanFacts => _scanFacts;
+
+  @override
+  Future<bool> scanLibraries(
+    Set<String> ids, {
+    bool retryFailedOnly = false,
+  }) async {
+    installInventory(ids);
+    _readyIds = Set.unmodifiable(ids);
+    _scanFacts = {
+      for (final id in ids)
+        id: const LibraryScanFact(
+          status: LibraryScanStatus.complete,
+          completedPages: 1,
+          completedItems: 6,
+          totalItems: 6,
+        ),
+    };
+    libraryScanStatus = LibraryScanStatus.complete;
+    notifyListeners();
+    return true;
+  }
+
+  @override
+  Future<bool> commitLibraryScan(Set<String> readyIds) async {
+    selectedLibraryIds = Set.unmodifiable(readyIds);
+    return true;
+  }
+
+  void installInventory(Set<String> ids);
+}
+
+class _MediaChannelSetupController extends _SetupScanFixtureController {
+  _MediaChannelSetupController({this.includeGenre = true});
 
   final bool includeGenre;
 
   @override
-  Future<bool> setLibraries(Set<String> ids) async {
-    selectedLibraryIds = Set.unmodifiable(ids);
+  void installInventory(Set<String> ids) {
     availableMedia = [
       for (var index = 0; index < 6; index++)
         PlexMediaItem(
@@ -1067,35 +1039,35 @@ class _FailingChannelSetupController extends FixtureController {
           genres: includeGenre ? const ['Drama'] : const [],
         ),
     ];
-    libraryScanStatus = LibraryScanStatus.complete;
-    return true;
   }
-
-  @override
-  Future<void> applyChannelPlan(
-    List<Channel> planned, {
-    required ChannelBuildMode mode,
-  }) async => throw StateError('synthetic apply failure');
 }
 
-class _PendingChannelSetupController extends _FailingChannelSetupController {
+class _PendingChannelSetupController extends _MediaChannelSetupController {
   _PendingChannelSetupController() : super(includeGenre: false);
 
   final _apply = Completer<void>();
 
   @override
-  Future<void> applyChannelPlan(
+  Future<ChannelPlanApplyResult> applyReviewedChannelPlan(
     List<Channel> planned, {
     required ChannelBuildMode mode,
-  }) => _apply.future;
+    required List<Channel> expectedBase,
+  }) async {
+    await _apply.future;
+    channels = composeChannelPlan(
+      existing: channels,
+      planned: planned,
+      mode: mode,
+    );
+    return ChannelPlanApplyResult.applied;
+  }
 
   void finishApply() => _apply.complete();
 }
 
-class _InvalidChannelSetupController extends FixtureController {
+class _InvalidChannelSetupController extends _SetupScanFixtureController {
   @override
-  Future<bool> setLibraries(Set<String> ids) async {
-    selectedLibraryIds = Set.unmodifiable(ids);
+  void installInventory(Set<String> ids) {
     availableMedia = [
       for (var index = 0; index < 6; index++)
         PlexMediaItem(
@@ -1107,15 +1079,12 @@ class _InvalidChannelSetupController extends FixtureController {
           genres: const ['Drama'],
         ),
     ];
-    libraryScanStatus = LibraryScanStatus.complete;
-    return true;
   }
 }
 
-class _PlaylistOnlyChannelSetupController extends FixtureController {
+class _PlaylistOnlyChannelSetupController extends _SetupScanFixtureController {
   @override
-  Future<bool> setLibraries(Set<String> ids) async {
-    selectedLibraryIds = Set.unmodifiable(ids);
+  void installInventory(Set<String> ids) {
     final items = [
       for (var index = 0; index < 6; index++)
         PlexMediaItem(
@@ -1134,8 +1103,6 @@ class _PlaylistOnlyChannelSetupController extends FixtureController {
         items: items.take(5).toList(),
       ),
     ];
-    libraryScanStatus = LibraryScanStatus.complete;
-    return true;
   }
 }
 

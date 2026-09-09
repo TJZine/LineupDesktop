@@ -5,6 +5,14 @@ enum PlexLibraryType { movie, show }
 
 enum PlaybackMode { sequential, shuffle, block }
 
+enum LibraryFilter { genre, collection, studio, actor, director, decade }
+
+enum LibraryOrder { supplied, title, addedDescending }
+
+enum ChannelMediaKind { movie, episode, unknown }
+
+const currentScheduleVersion = 2;
+
 const maxRichCastMembers = 20;
 
 sealed class ContentSource {
@@ -20,8 +28,9 @@ sealed class ContentSource {
           _requireFields(
             json,
             const {'type', 'libraryId', 'libraryType', 'includeWatched'},
-            const {'filters'},
+            const {'filters', 'order'},
           );
+          final decoded = _libraryFields(json);
           return LibrarySource(
             libraryId: _string(json['libraryId']),
             libraryType: _enumValue(
@@ -29,9 +38,8 @@ sealed class ContentSource {
               json['libraryType'],
             ),
             includeWatched: _boolean(json['includeWatched']),
-            filters: json.containsKey('filters')
-                ? Map<String, String>.from(_nonNull(json, 'filters') as Map)
-                : const {},
+            filters: decoded.filters,
+            order: decoded.order,
           );
         }(),
         'manual' => () {
@@ -83,21 +91,32 @@ class LibrarySource extends ContentSource {
     required this.libraryType,
     this.includeWatched = true,
     this.filters = const {},
+    this.order = LibraryOrder.supplied,
   });
 
   final String libraryId;
   final PlexLibraryType libraryType;
   final bool includeWatched;
-  final Map<String, String> filters;
+  final Map<LibraryFilter, List<String>> filters;
+  final LibraryOrder order;
 
   @override
-  Map<String, Object?> toJson() => {
-    'type': 'library',
-    'libraryId': libraryId,
-    'libraryType': libraryType.name,
-    'includeWatched': includeWatched,
-    if (filters.isNotEmpty) 'filters': filters,
-  };
+  Map<String, Object?> toJson() {
+    final canonicalFilters = {
+      for (final key in LibraryFilter.values)
+        if (_canonicalFilterValues(key, filters[key] ?? const [])
+            case final values when values.isNotEmpty)
+          key.name: values,
+    };
+    return {
+      'type': 'library',
+      'libraryId': libraryId,
+      'libraryType': libraryType.name,
+      'includeWatched': includeWatched,
+      if (canonicalFilters.isNotEmpty) 'filters': canonicalFilters,
+      if (order != LibraryOrder.supplied) 'order': order.name,
+    };
+  }
 }
 
 class ManualSource extends ContentSource {
@@ -154,6 +173,8 @@ class ChannelItem {
     this.audioChannels,
     this.dynamicRange,
     this.cast = const [],
+    this.mediaKind = ChannelMediaKind.unknown,
+    this.seriesId,
   });
 
   final String id;
@@ -177,6 +198,8 @@ class ChannelItem {
   final int? audioChannels;
   final String? dynamicRange;
   final List<ChannelCastMember> cast;
+  final ChannelMediaKind mediaKind;
+  final String? seriesId;
 
   Map<String, Object?> toJson() => {
     'id': id,
@@ -200,6 +223,8 @@ class ChannelItem {
     if (dynamicRange != null) 'dynamicRange': dynamicRange,
     if (cast.isNotEmpty)
       'cast': cast.map((member) => member.toJson()).toList(growable: false),
+    if (mediaKind != ChannelMediaKind.unknown) 'mediaKind': mediaKind.name,
+    if (seriesId != null) 'seriesId': seriesId,
   };
 
   factory ChannelItem.fromJson(Object? value) {
@@ -226,6 +251,8 @@ class ChannelItem {
           'audioChannels',
           'dynamicRange',
           'cast',
+          'mediaKind',
+          'seriesId',
         },
       );
       final duration = Duration(milliseconds: _integer(json['durationMs']));
@@ -257,12 +284,52 @@ class ChannelItem {
         cast: json.containsKey('cast')
             ? _persistedCastMembers(_nonNull(json, 'cast'))
             : const [],
+        mediaKind: json.containsKey('mediaKind')
+            ? _enumValue(ChannelMediaKind.values, json['mediaKind'])
+            : ChannelMediaKind.unknown,
+        seriesId: _optionalString(json, 'seriesId'),
       );
     } on FormatException {
       rethrow;
     } catch (error) {
       throw FormatException('Invalid channel item', error);
     }
+  }
+}
+
+class ScheduleTransition {
+  const ScheduleTransition({
+    required this.boundary,
+    required this.legacyCycleItems,
+  });
+
+  final DateTime boundary;
+  final List<ChannelItem> legacyCycleItems;
+
+  Map<String, Object?> toJson() => {
+    'boundary': boundary.toUtc().toIso8601String(),
+    'legacyCycleItems': legacyCycleItems
+        .map((item) => item.toJson())
+        .toList(growable: false),
+  };
+
+  factory ScheduleTransition.fromJson(Object? value) {
+    final json = _object(value, 'schedule transition');
+    _requireFields(json, const {'boundary', 'legacyCycleItems'});
+    final items = List<Object?>.from(_nonNull(json, 'legacyCycleItems') as List)
+        .map(ChannelItem.fromJson)
+        .toList(growable: false);
+    if (items.isEmpty) {
+      throw const FormatException('Invalid schedule transition');
+    }
+    final boundaryValue = _string(json['boundary']);
+    if (!RegExp(r'(?:Z|[+-]\d{2}:\d{2})$').hasMatch(boundaryValue)) {
+      throw const FormatException('Invalid schedule transition boundary');
+    }
+    return ScheduleTransition(
+      boundary: DateTime.parse(boundaryValue).toUtc(),
+      legacyCycleItems: List.unmodifiable(items),
+    );
   }
 }
 
@@ -364,7 +431,10 @@ class Channel {
     required this.shuffleSeed,
     this.blockSize,
     this.builderKey,
-  });
+    bool includeSpecials = false,
+    this.scheduleVersion = currentScheduleVersion,
+    this.scheduleTransition,
+  }) : includeSpecials = playbackMode == PlaybackMode.block && includeSpecials;
 
   final String id;
   final int number;
@@ -375,6 +445,9 @@ class Channel {
   final int shuffleSeed;
   final int? blockSize;
   final String? builderKey;
+  final bool includeSpecials;
+  final int scheduleVersion;
+  final ScheduleTransition? scheduleTransition;
 
   void validate(Iterable<Channel> existing) {
     _validateStructure();
@@ -397,6 +470,20 @@ class Channel {
       throw const FormatException('Block size must be positive');
     }
     _validateSource(source, 0);
+    if (scheduleVersion < 1 ||
+        scheduleVersion > currentScheduleVersion ||
+        (scheduleTransition != null &&
+            scheduleVersion != currentScheduleVersion)) {
+      throw const FormatException('Invalid schedule version');
+    }
+    final transition = scheduleTransition;
+    if (transition != null &&
+        (transition.legacyCycleItems.isEmpty ||
+            transition.legacyCycleItems.any(
+              (item) => item.duration <= Duration.zero,
+            ))) {
+      throw const FormatException('Invalid schedule transition');
+    }
   }
 
   Map<String, Object?> toJson() => {
@@ -409,6 +496,10 @@ class Channel {
     'shuffleSeed': shuffleSeed,
     if (blockSize != null) 'blockSize': blockSize,
     if (builderKey != null) 'builderKey': builderKey,
+    if (playbackMode == PlaybackMode.block) 'includeSpecials': includeSpecials,
+    'scheduleVersion': scheduleVersion,
+    if (scheduleTransition != null)
+      'scheduleTransition': scheduleTransition!.toJson(),
   };
 
   factory Channel.fromJson(Object? value) {
@@ -425,18 +516,35 @@ class Channel {
           'anchor',
           'shuffleSeed',
         },
-        const {'blockSize', 'builderKey'},
+        const {
+          'blockSize',
+          'builderKey',
+          'includeSpecials',
+          'scheduleVersion',
+          'scheduleTransition',
+        },
       );
+      final mode = _enumValue(PlaybackMode.values, json['playbackMode']);
+      final version = json.containsKey('scheduleVersion')
+          ? _integer(json['scheduleVersion'])
+          : 1;
       return Channel(
         id: _string(json['id']),
         number: _integer(json['number']),
         name: _string(json['name']),
         source: ContentSource.fromJson(json['source']),
-        playbackMode: _enumValue(PlaybackMode.values, json['playbackMode']),
+        playbackMode: mode,
         anchor: DateTime.parse(_string(json['anchor'])).toUtc(),
         shuffleSeed: _integer(json['shuffleSeed']),
         blockSize: _optionalInteger(json, 'blockSize'),
         builderKey: _optionalString(json, 'builderKey'),
+        includeSpecials: json.containsKey('includeSpecials')
+            ? _boolean(json['includeSpecials'])
+            : mode == PlaybackMode.block,
+        scheduleVersion: version,
+        scheduleTransition: json.containsKey('scheduleTransition')
+            ? ScheduleTransition.fromJson(json['scheduleTransition'])
+            : null,
       );
     } on FormatException {
       rethrow;
@@ -479,6 +587,41 @@ bool canonicalChannelValueEquals(Object? left, Object? right) {
         );
   }
   return left == right;
+}
+
+String canonicalSourceIdentity(ContentSource source) =>
+    jsonEncode(source.toJson());
+
+String canonicalScheduleIdentity(Channel channel) => jsonEncode({
+  'source': channel.source.toJson(),
+  'mode': channel.playbackMode.name,
+  'anchor': channel.anchor.toUtc().toIso8601String(),
+  'seed': channel.shuffleSeed,
+  'blockSize': channel.playbackMode == PlaybackMode.block
+      ? channel.blockSize
+      : null,
+  'includeSpecials':
+      channel.playbackMode == PlaybackMode.block && channel.includeSpecials,
+  'scheduleVersion': channel.scheduleVersion,
+  'scheduleTransition': channel.scheduleTransition?.toJson(),
+});
+
+bool canonicalSourceEquals(ContentSource left, ContentSource right) =>
+    canonicalSourceIdentity(left) == canonicalSourceIdentity(right);
+
+String canonicalFilterIdentity(LibraryFilter filter, String value) {
+  final trimmed = value.trim();
+  return filter == LibraryFilter.actor || filter == LibraryFilter.director
+      ? trimmed.toLowerCase()
+      : trimmed;
+}
+
+int stableChannelSeed(String value) {
+  var hash = 0x811c9dc5;
+  for (final byte in utf8.encode(value)) {
+    hash = ((hash ^ byte) * 0x01000193) & 0xffffffff;
+  }
+  return hash;
 }
 
 String createChannelId() {
@@ -542,6 +685,62 @@ T _enumValue<T extends Enum>(List<T> values, Object? value) {
   if (value is! String) throw const FormatException('Invalid enum');
   return values.where((candidate) => candidate.name == value).firstOrNull ??
       (throw const FormatException('Invalid enum'));
+}
+
+({Map<LibraryFilter, List<String>> filters, LibraryOrder order}) _libraryFields(
+  Map<String, Object?> json,
+) {
+  var order = json.containsKey('order')
+      ? _enumValue(LibraryOrder.values, json['order'])
+      : LibraryOrder.supplied;
+  final output = <LibraryFilter, List<String>>{};
+  if (!json.containsKey('filters')) return (filters: output, order: order);
+  final raw = _object(_nonNull(json, 'filters'), 'filters');
+  for (final entry in raw.entries) {
+    if (entry.key == 'sort') {
+      if (entry.value != 'added:desc' || order != LibraryOrder.supplied) {
+        throw const FormatException('Unsupported content filter');
+      }
+      order = LibraryOrder.addedDescending;
+      continue;
+    }
+    final key = _enumValue(LibraryFilter.values, entry.key);
+    final values = entry.value is String
+        ? <String>[entry.value as String]
+        : List<Object?>.from(entry.value as List).map(_string).toList();
+    final canonical = _canonicalFilterValues(key, values);
+    if (canonical.isEmpty) {
+      throw const FormatException('Invalid content filter');
+    }
+    if (key == LibraryFilter.decade &&
+        canonical.any((value) => !RegExp(r'^[1-9]\d{2}0s$').hasMatch(value))) {
+      throw const FormatException('Invalid decade filter');
+    }
+    output[key] = canonical;
+  }
+  return (filters: Map.unmodifiable(output), order: order);
+}
+
+List<String> _canonicalFilterValues(
+  LibraryFilter key,
+  Iterable<String> values,
+) {
+  final normalized = <String, String>{};
+  for (final raw in values) {
+    final value = canonicalFilterIdentity(key, raw);
+    if (value.isEmpty) continue;
+    if (key == LibraryFilter.actor || key == LibraryFilter.director) {
+      normalized[value] = value;
+      continue;
+    }
+    normalized.update(
+      value,
+      (current) => current.compareTo(value) <= 0 ? current : value,
+      ifAbsent: () => value,
+    );
+  }
+  final output = normalized.values.toList()..sort();
+  return List.unmodifiable(output);
 }
 
 Uri? _optionalArtworkUri(Map<String, Object?> json, String key) {

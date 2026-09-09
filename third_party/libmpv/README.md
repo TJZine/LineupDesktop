@@ -4,7 +4,7 @@ These immutable license texts are copied into the Windows package. `tool/windows
 
 When updating the pinned runtime, update the corresponding source text and hash together:
 
-- `licenses/mpv-LICENSE.LGPL`: <https://github.com/mpv-player/mpv/blob/7b8915bc1d04c7e1b61184e00c7fbfaab1911e75/LICENSE.LGPL>
-- `licenses/FFmpeg-COPYING.LGPLv3`: <https://github.com/FFmpeg/FFmpeg/blob/8b4fad11acfc958dfde29fb0799d3ca1818bbbf7/COPYING.LGPLv3>
-- `licenses/FFmpeg-COPYING.GPLv3`: <https://github.com/FFmpeg/FFmpeg/blob/8b4fad11acfc958dfde29fb0799d3ca1818bbbf7/COPYING.GPLv3>
-- `licenses/libplacebo-LICENSE`: <https://github.com/haasn/libplacebo/blob/22ee762e8e0890fc54068beb670310f0edce7263/LICENSE>
+- `licenses/mpv-LICENSE.LGPL`: <https://github.com/mpv-player/mpv/blob/7e4cb538a3f30d25920ad8e87ba6571540fb729f/LICENSE.LGPL>
+- `licenses/FFmpeg-COPYING.LGPLv3`: <https://github.com/FFmpeg/FFmpeg/blob/1de77bb8987e2c7364302c91b9f13958e419124e/COPYING.LGPLv3>
+- `licenses/FFmpeg-COPYING.GPLv3`: <https://github.com/FFmpeg/FFmpeg/blob/1de77bb8987e2c7364302c91b9f13958e419124e/COPYING.GPLv3>
+- `licenses/libplacebo-LICENSE`: <https://github.com/haasn/libplacebo/blob/3330a515d62139259c26239014f286e233bd3a5c/LICENSE>

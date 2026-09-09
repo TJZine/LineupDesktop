@@ -1,7 +1,3 @@
-enum GuideDensity { comfortable, compact }
-
-enum GuideLayoutMode { pictureInPicture, overlay }
-
 enum GuideInfoBackgroundMode { bleed, themeDefault, artwork }
 
 enum LineupThemeName {
@@ -18,20 +14,15 @@ enum LineupThemeName {
 }
 
 class LineupSettings {
-  static const guideHoursOptions = [2, 3, 4, 6, 8, 12];
-  static const pastMinutesOptions = [0, 15, 30, 60, 120, 180];
+  static const guideHoursOptions = [2, 3, 4];
   static const osdAutoHideSecondsOptions = [2, 4, 6, 8, 10, 15];
 
   const LineupSettings({
     this.theme = LineupThemeName.emberSteel,
     this.guideHours = 2,
-    this.pastMinutes = 30,
-    this.guideDensity = GuideDensity.comfortable,
-    this.guideLayoutMode = GuideLayoutMode.pictureInPicture,
     this.guideInfoBackgroundMode = GuideInfoBackgroundMode.bleed,
     this.preferClearLogos = true,
     this.dvrControlsEnabled = false,
-    this.libraryTabsEnabled = true,
     this.nowWatchingBanner = true,
     this.osdAutoHideSeconds = 4,
     this.reduceMotion = false,
@@ -42,13 +33,9 @@ class LineupSettings {
 
   final LineupThemeName theme;
   final int guideHours;
-  final int pastMinutes;
-  final GuideDensity guideDensity;
-  final GuideLayoutMode guideLayoutMode;
   final GuideInfoBackgroundMode guideInfoBackgroundMode;
   final bool preferClearLogos;
   final bool dvrControlsEnabled;
-  final bool libraryTabsEnabled;
   final bool nowWatchingBanner;
   final int osdAutoHideSeconds;
   final bool reduceMotion;
@@ -59,13 +46,9 @@ class LineupSettings {
   LineupSettings copyWith({
     LineupThemeName? theme,
     int? guideHours,
-    int? pastMinutes,
-    GuideDensity? guideDensity,
-    GuideLayoutMode? guideLayoutMode,
     GuideInfoBackgroundMode? guideInfoBackgroundMode,
     bool? preferClearLogos,
     bool? dvrControlsEnabled,
-    bool? libraryTabsEnabled,
     bool? nowWatchingBanner,
     int? osdAutoHideSeconds,
     bool? reduceMotion,
@@ -75,14 +58,10 @@ class LineupSettings {
   }) => LineupSettings(
     theme: theme ?? this.theme,
     guideHours: guideHours ?? this.guideHours,
-    pastMinutes: pastMinutes ?? this.pastMinutes,
-    guideDensity: guideDensity ?? this.guideDensity,
-    guideLayoutMode: guideLayoutMode ?? this.guideLayoutMode,
     guideInfoBackgroundMode:
         guideInfoBackgroundMode ?? this.guideInfoBackgroundMode,
     preferClearLogos: preferClearLogos ?? this.preferClearLogos,
     dvrControlsEnabled: dvrControlsEnabled ?? this.dvrControlsEnabled,
-    libraryTabsEnabled: libraryTabsEnabled ?? this.libraryTabsEnabled,
     nowWatchingBanner: nowWatchingBanner ?? this.nowWatchingBanner,
     osdAutoHideSeconds: osdAutoHideSeconds ?? this.osdAutoHideSeconds,
     reduceMotion: reduceMotion ?? this.reduceMotion,
@@ -95,13 +74,9 @@ class LineupSettings {
   Map<String, Object?> toJson() => {
     'theme': theme.storageKey,
     'guideHours': guideHours,
-    'pastMinutes': pastMinutes,
-    'guideDensity': guideDensity.name,
-    'guideLayoutMode': guideLayoutMode.name,
     'guideInfoBackgroundMode': guideInfoBackgroundMode.name,
     'preferClearLogos': preferClearLogos,
     'dvrControlsEnabled': dvrControlsEnabled,
-    'libraryTabsEnabled': libraryTabsEnabled,
     'nowWatchingBanner': nowWatchingBanner,
     'osdAutoHideSeconds': osdAutoHideSeconds,
     // Retain the legacy canonical key so existing settings continue to load.
@@ -140,7 +115,16 @@ class LineupSettings {
       'diagnosticsEnabled',
     };
     final keys = json.keys.toSet();
-    final requiredFields = fields.difference({'dvrControlsEnabled'});
+    const retiredFields = {
+      'pastMinutes',
+      'guideDensity',
+      'guideLayoutMode',
+      'libraryTabsEnabled',
+    };
+    final requiredFields = fields.difference({
+      'dvrControlsEnabled',
+      ...retiredFields,
+    });
     if (!keys.containsAll(requiredFields) ||
         keys.difference(fields).isNotEmpty) {
       throw const FormatException('Settings fields are not canonical');
@@ -172,26 +156,40 @@ class LineupSettings {
       return boolean(key);
     }
 
-    // Validate and discard the retired onboarding flag.
+    void retiredString(String key, Set<String> values) {
+      final persisted = json[key];
+      if (persisted is! String || !values.contains(persisted)) {
+        throw FormatException('Invalid $key');
+      }
+    }
+
+    if (json.containsKey('pastMinutes')) {
+      option('pastMinutes', [0, 15, 30, 60, 120, 180]);
+    }
+    if (json.containsKey('guideDensity')) {
+      retiredString('guideDensity', {'comfortable', 'compact'});
+    }
+    if (json.containsKey('guideLayoutMode')) {
+      retiredString('guideLayoutMode', {'pictureInPicture', 'overlay'});
+    }
+    if (json.containsKey('libraryTabsEnabled')) {
+      boolean('libraryTabsEnabled');
+    }
+    // Validate and discard retired fields and the onboarding flag.
     boolean('audioSetupComplete');
+    final persistedGuideHours = option('guideHours', [
+      ...guideHoursOptions,
+      6,
+      8,
+      12,
+    ]);
     return LineupSettings(
       theme: enumValue(
         LineupThemeName.values,
         'theme',
         (theme) => theme.storageKey,
       ),
-      guideHours: option('guideHours', guideHoursOptions),
-      pastMinutes: option('pastMinutes', pastMinutesOptions),
-      guideDensity: enumValue(
-        GuideDensity.values,
-        'guideDensity',
-        (density) => density.name,
-      ),
-      guideLayoutMode: enumValue(
-        GuideLayoutMode.values,
-        'guideLayoutMode',
-        (mode) => mode.name,
-      ),
+      guideHours: persistedGuideHours > 4 ? 4 : persistedGuideHours,
       guideInfoBackgroundMode: enumValue(
         GuideInfoBackgroundMode.values,
         'guideInfoBackgroundMode',
@@ -202,7 +200,6 @@ class LineupSettings {
         'dvrControlsEnabled',
         fallback: false,
       ),
-      libraryTabsEnabled: boolean('libraryTabsEnabled'),
       nowWatchingBanner: boolean('nowWatchingBanner'),
       osdAutoHideSeconds: option(
         'osdAutoHideSeconds',

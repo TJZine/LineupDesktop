@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import '../app/lineup_controller.dart';
 import '../channels/channel.dart';
+import '../diagnostics/diagnostics.dart';
 import '../guide/guide_controller.dart';
 import '../plex/plex_models.dart';
 import 'native_player.dart';
@@ -16,12 +17,14 @@ enum PlayerOverlay {
   fullGuide,
   audioTracks,
   subtitleTracks,
+  sleepTimer,
   channelNumber,
   error,
 }
 
 class PlayerCoordinator extends ChangeNotifier {
   static const _nativeStopTimeout = Duration(seconds: 10);
+  static const _trackConfirmationTimeout = Duration(seconds: 5);
 
   PlayerCoordinator({
     required this.player,
@@ -57,6 +60,7 @@ class PlayerCoordinator extends ChangeNotifier {
   Timer? _sleepTimer;
   Timer? _numberTimer;
   Timer? _cursorTimer;
+  Timer? _trackConfirmationTimer;
   int _overlayEpoch = 0;
   int _overlayPresentationGeneration = 0;
   bool _overlayFocusSuspended = false;
@@ -64,14 +68,20 @@ class PlayerCoordinator extends ChangeNotifier {
   PlayerOverlay _overlay = PlayerOverlay.none;
   String _channelNumber = '';
   String? _miniGuideChannelId;
+  int? _miniGuideWindowStart;
   String? _error;
   bool _fullscreen = false;
   bool _cursorVisible = true;
   bool _tuning = false;
   bool _canRetry = false;
   Duration? _sleepDuration;
+  DateTime? _sleepDeadline;
+  PlayerTrackType? _pendingTrackType;
+  int? _pendingTrackId;
+  String? _trackSelectionError;
   int _tuneGeneration = 0;
   int _controlGeneration = 0;
+  int _trackSelectionGeneration = 0;
   int _seekGeneration = 0;
   int _fullscreenEpoch = 0;
   int _nativeLoadGeneration = 0;
@@ -111,6 +121,22 @@ class PlayerCoordinator extends ChangeNotifier {
   Duration get position => _position;
   Duration get duration => _duration;
   PlayerTelemetry get telemetry => _telemetry;
+  PlaybackDiagnosticSnapshot get diagnosticPlaybackSnapshot =>
+      PlaybackDiagnosticSnapshot(
+        state: _status.state,
+        receivedTelemetry:
+            _activeLoadGeneration != null &&
+                const {
+                  PlayerState.ready,
+                  PlayerState.playing,
+                  PlayerState.paused,
+                  PlayerState.buffering,
+                  PlayerState.seeking,
+                  PlayerState.error,
+                }.contains(_status.state)
+            ? _telemetry
+            : null,
+      );
   List<PlayerTrack> get tracks => _tracks;
   PlayerOverlay get overlay => _overlay;
   int get overlayPresentationGeneration => _overlayPresentationGeneration;
@@ -129,7 +155,8 @@ class PlayerCoordinator extends ChangeNotifier {
     final count = channels.length.clamp(0, 5);
     final start = channels.length <= 5
         ? 0
-        : (selected - 2 + channels.length) % channels.length;
+        : _miniGuideWindowStart ??
+              (selected - 2 + channels.length) % channels.length;
     return List.generate(
       count,
       (offset) => channels[(start + offset) % channels.length],
@@ -155,6 +182,17 @@ class PlayerCoordinator extends ChangeNotifier {
         _ => false,
       };
   Duration? get sleepDuration => _sleepDuration;
+  DateTime? get sleepDeadline => _sleepDeadline;
+  Duration? get sleepRemaining {
+    final deadline = _sleepDeadline;
+    if (deadline == null) return null;
+    final remaining = deadline.difference(DateTime.now());
+    return remaining.isNegative ? Duration.zero : remaining;
+  }
+
+  PlayerTrackType? get pendingTrackType => _pendingTrackType;
+  int? get pendingTrackId => _pendingTrackId;
+  String? get trackSelectionError => _trackSelectionError;
   Channel? get currentChannel {
     final index = _channelIndexById[lineup.currentChannelId];
     return index == null ? null : _indexedChannels[index];
@@ -199,6 +237,29 @@ class PlayerCoordinator extends ChangeNotifier {
     }
     _telemetry = event.telemetry;
     _tracks = event.tracks;
+    if (const {
+      PlayerState.idle,
+      PlayerState.ended,
+      PlayerState.stopped,
+      PlayerState.unsupported,
+    }.contains(event.status.state)) {
+      _telemetry = const PlayerTelemetry();
+      _tracks = const [];
+    }
+    if (_pendingTrackType case final type?) {
+      final confirmed =
+          type == PlayerTrackType.subtitle && _pendingTrackId == null
+          ? !_tracks.any((track) => track.type == type && track.selected)
+          : _tracks.any(
+              (track) =>
+                  track.type == type &&
+                  track.id == _pendingTrackId &&
+                  track.selected,
+            );
+      if (confirmed) {
+        _clearTrackSelection();
+      }
+    }
     if (_nativeReplacementGeneration == event.generation &&
         const {
           PlayerState.ready,
@@ -336,6 +397,10 @@ class PlayerCoordinator extends ChangeNotifier {
   }
 
   Future<bool> tune(String channelId) {
+    final deadline = _sleepDeadline;
+    if (deadline != null && !DateTime.now().isBefore(deadline)) {
+      return _expireSleepTimer(_sleepEpoch).then((_) => false);
+    }
     final generation = ++_tuneGeneration;
     ++_controlGeneration;
     _invalidateAuthorizationRecovery();
@@ -357,6 +422,7 @@ class PlayerCoordinator extends ChangeNotifier {
   Future<void> loadInitialMedia(Uri media) async {
     if (_initialMediaRequested) return;
     _initialMediaRequested = true;
+    if (await _expireSleepIfNeeded()) return;
     final generation = ++_tuneGeneration;
     ++_controlGeneration;
     try {
@@ -520,6 +586,9 @@ class PlayerCoordinator extends ChangeNotifier {
     _knownTargetGeneration = knownLocalTarget == null ? null : generation;
     _knownLocalTarget = knownLocalTarget;
     _nativePosition = Duration.zero;
+    _telemetry = const PlayerTelemetry();
+    _tracks = const [];
+    _clearTrackSelection();
     final load = player.load(
       media,
       plexToken: plexToken,
@@ -887,11 +956,15 @@ class PlayerCoordinator extends ChangeNotifier {
   Future<void> togglePlayback() =>
       _status.state == PlayerState.playing ? pause() : play();
 
-  Future<void> play() => _runPlaybackControl('play', player.play);
+  Future<void> play() async {
+    if (await _expireSleepIfNeeded()) return;
+    await _runPlaybackControl('play', player.play);
+  }
 
   Future<void> pause() => _runPlaybackControl('pause', player.pause);
 
   Future<void> stop() async {
+    _clearSleepTimer();
     ++_tuneGeneration;
     ++_controlGeneration;
     _tuning = false;
@@ -1094,12 +1167,84 @@ class PlayerCoordinator extends ChangeNotifier {
     return request;
   }
 
-  Future<void> selectTrack(PlayerTrackType type, int? id) =>
-      _runPlaybackControl(switch (type) {
-        PlayerTrackType.video => 'video_track',
-        PlayerTrackType.audio => 'audio_track',
-        PlayerTrackType.subtitle => 'subtitle_track',
-      }, () => player.selectTrack(type, id));
+  Future<void> selectTrack(PlayerTrackType type, int? id) async {
+    final trackSelectionGeneration = ++_trackSelectionGeneration;
+    final tuneGeneration = _tuneGeneration;
+    final loadGeneration = _activeLoadGeneration;
+    _clearTrackSelection();
+    _pendingTrackType = type;
+    _pendingTrackId = id;
+    notifyListeners();
+    try {
+      await player.selectTrack(type, id);
+      if (!_ownsTrackSelection(
+            trackSelectionGeneration,
+            tuneGeneration,
+            loadGeneration,
+          ) ||
+          _pendingTrackType != type ||
+          _pendingTrackId != id) {
+        return;
+      }
+      _trackConfirmationTimer = Timer(_trackConfirmationTimeout, () {
+        if (!_ownsTrackSelection(
+              trackSelectionGeneration,
+              tuneGeneration,
+              loadGeneration,
+            ) ||
+            _pendingTrackType != type ||
+            _pendingTrackId != id) {
+          return;
+        }
+        _clearTrackSelection(error: 'Could not change this track. Try again.');
+        _recordPlaybackFailure(
+          const PlayerUnavailable(
+            'Track selection confirmation timed out.',
+            failureCode: 'wait_timeout',
+          ),
+          operation: type == PlayerTrackType.audio
+              ? 'audio_track'
+              : 'subtitle_track',
+        );
+        notifyListeners();
+      });
+    } catch (error) {
+      if (_ownsTrackSelection(
+            trackSelectionGeneration,
+            tuneGeneration,
+            loadGeneration,
+          ) &&
+          _pendingTrackType == type &&
+          _pendingTrackId == id) {
+        _clearTrackSelection(error: 'Could not change this track. Try again.');
+        _recordPlaybackFailure(
+          error,
+          operation: type == PlayerTrackType.audio
+              ? 'audio_track'
+              : 'subtitle_track',
+        );
+        notifyListeners();
+      }
+    }
+  }
+
+  bool _ownsTrackSelection(
+    int selectionGeneration,
+    int tuneGeneration,
+    int? loadGeneration,
+  ) =>
+      !_disposed &&
+      selectionGeneration == _trackSelectionGeneration &&
+      tuneGeneration == _tuneGeneration &&
+      loadGeneration == _activeLoadGeneration;
+
+  void _clearTrackSelection({String? error}) {
+    _trackConfirmationTimer?.cancel();
+    _trackConfirmationTimer = null;
+    _pendingTrackType = null;
+    _pendingTrackId = null;
+    _trackSelectionError = error;
+  }
 
   Future<void> toggleFullscreen() {
     final controlGeneration = ++_controlGeneration;
@@ -1169,11 +1314,26 @@ class PlayerCoordinator extends ChangeNotifier {
   void showMiniGuide() {
     _miniGuideChannelId =
         lineup.currentChannelId ?? lineup.channels.firstOrNull?.id;
+    final selected = miniGuideChannelIndex;
+    _miniGuideWindowStart = _indexedChannels.length <= 5 || selected < 0
+        ? 0
+        : (selected - 2 + _indexedChannels.length) % _indexedChannels.length;
     _requestMiniGuideRows();
-    _setOverlay(PlayerOverlay.miniGuide, timeout: const Duration(seconds: 8));
+    _setOverlay(PlayerOverlay.miniGuide, timed: false);
   }
 
-  void showFullGuide() => _setOverlay(PlayerOverlay.fullGuide, timed: false);
+  void showFullGuide() {
+    final selected = miniGuideChannelId;
+    if (_overlay == PlayerOverlay.miniGuide && selected != null) {
+      final target = guide.channels.indexWhere(
+        (channel) => channel.id == selected,
+      );
+      if (target >= 0) guide.moveVertical(target - guide.focusedChannelIndex);
+    }
+    _setOverlay(PlayerOverlay.fullGuide, timed: false);
+  }
+
+  void showSleepTimer() => _setOverlay(PlayerOverlay.sleepTimer, timed: false);
 
   void showTracks(PlayerTrackType type) {
     if (_overlay != PlayerOverlay.none &&
@@ -1181,7 +1341,10 @@ class PlayerCoordinator extends ChangeNotifier {
         _overlay != PlayerOverlay.nowPlaying) {
       return;
     }
-    if (!_tracks.any((track) => track.type == type)) return;
+    if (type != PlayerTrackType.subtitle &&
+        !_tracks.any((track) => track.type == type)) {
+      return;
+    }
     _setOverlay(
       type == PlayerTrackType.audio
           ? PlayerOverlay.audioTracks
@@ -1197,15 +1360,20 @@ class PlayerCoordinator extends ChangeNotifier {
     final raw = (index < 0 ? 0 : index) + offset;
     final next = ((raw % channels.length) + channels.length) % channels.length;
     _miniGuideChannelId = channels[next].id;
+    if (!miniGuideChannels.any(
+      (channel) => channel.id == _miniGuideChannelId,
+    )) {
+      _miniGuideWindowStart = (next - 2 + channels.length) % channels.length;
+    }
     _requestMiniGuideRows();
-    _setOverlay(PlayerOverlay.miniGuide, timeout: const Duration(seconds: 8));
+    _setOverlay(PlayerOverlay.miniGuide, timed: false);
   }
 
   void focusMiniGuideChannel(String channelId) {
     if (!_channelIndexById.containsKey(channelId)) return;
     _miniGuideChannelId = channelId;
     _requestMiniGuideRows();
-    _setOverlay(PlayerOverlay.miniGuide, timeout: const Duration(seconds: 8));
+    _setOverlay(PlayerOverlay.miniGuide, timed: false);
   }
 
   Future<void> tuneMiniGuideSelection() async {
@@ -1215,7 +1383,8 @@ class PlayerCoordinator extends ChangeNotifier {
 
   void closeOverlay() {
     if (_overlay == PlayerOverlay.audioTracks ||
-        _overlay == PlayerOverlay.subtitleTracks) {
+        _overlay == PlayerOverlay.subtitleTracks ||
+        _overlay == PlayerOverlay.sleepTimer) {
       showOsd();
       return;
     }
@@ -1231,7 +1400,7 @@ class PlayerCoordinator extends ChangeNotifier {
   ) {
     if (_overlay != overlay ||
         _overlayPresentationGeneration != presentationGeneration ||
-        (overlay != PlayerOverlay.osd && overlay != PlayerOverlay.miniGuide)) {
+        overlay != PlayerOverlay.osd) {
       return;
     }
     if (focused) {
@@ -1241,12 +1410,7 @@ class PlayerCoordinator extends ChangeNotifier {
     }
     if (!_overlayFocusSuspended) return;
     _overlayFocusSuspended = false;
-    _scheduleOverlayHide(
-      overlay,
-      timeout: overlay == PlayerOverlay.miniGuide
-          ? const Duration(seconds: 8)
-          : null,
-    );
+    _scheduleOverlayHide(overlay);
   }
 
   void appendChannelDigit(String digit) {
@@ -1271,37 +1435,77 @@ class PlayerCoordinator extends ChangeNotifier {
     await tune(channel.id);
   }
 
-  void cycleSleepTimer() {
+  void setSleepTimer(Duration? duration) {
     final epoch = ++_sleepEpoch;
     _sleepTimer?.cancel();
-    _sleepDuration = switch (_sleepDuration?.inMinutes) {
-      null => const Duration(minutes: 30),
-      30 => const Duration(minutes: 60),
-      60 => const Duration(minutes: 90),
-      _ => null,
-    };
-    final duration = _sleepDuration;
+    _sleepDuration = duration;
+    _sleepDeadline = duration == null ? null : DateTime.now().add(duration);
     if (duration != null) {
-      _sleepTimer = Timer(duration, () async {
-        try {
-          await stop();
-        } catch (error) {
-          if (_disposed || epoch != _sleepEpoch) return;
-          _sleepTimer = null;
-          _sleepDuration = null;
-          _recordPlaybackFailure(error);
-          _error =
-              'Playback could not be stopped when the sleep timer expired.';
-          _setOverlay(PlayerOverlay.error, timed: false);
-          return;
-        }
-        if (_disposed || epoch != _sleepEpoch) return;
-        _sleepTimer = null;
-        _sleepDuration = null;
-        notifyListeners();
-      });
+      _sleepTimer = Timer(duration, () => _expireSleepTimer(epoch));
     }
     showOsd();
+  }
+
+  Future<bool> _expireSleepIfNeeded() async {
+    final deadline = _sleepDeadline;
+    if (deadline == null || DateTime.now().isBefore(deadline)) return false;
+    await _expireSleepTimer(_sleepEpoch);
+    return true;
+  }
+
+  Future<void> checkSleepDeadline() async {
+    await _expireSleepIfNeeded();
+  }
+
+  Future<void> _expireSleepTimer(int epoch) async {
+    if (_disposed || epoch != _sleepEpoch) return;
+    _sleepTimer?.cancel();
+    _sleepTimer = null;
+    _sleepDuration = null;
+    _sleepDeadline = null;
+    final tuneGeneration = ++_tuneGeneration;
+    ++_controlGeneration;
+    _tuning = false;
+    _canRetry = false;
+    _invalidateAuthorizationRecovery();
+    final nativeStop = _beginNativeStop(force: true)!;
+    try {
+      await nativeStop;
+    } catch (error) {
+      if (_disposed ||
+          epoch != _sleepEpoch ||
+          tuneGeneration != _tuneGeneration) {
+        return;
+      }
+      _recordPlaybackFailure(error);
+      _error = 'Playback could not be stopped when the sleep timer expired.';
+      _setOverlay(PlayerOverlay.error, timed: false);
+      return;
+    }
+    if (_disposed ||
+        epoch != _sleepEpoch ||
+        tuneGeneration != _tuneGeneration) {
+      return;
+    }
+    _activePlayback = null;
+    _provisionalPlayback = null;
+    _activeChannel = null;
+    _telemetry = const PlayerTelemetry();
+    _tracks = const [];
+    _status = const PlayerStatus(
+      state: PlayerState.stopped,
+      message: 'Playback stopped by timer',
+    );
+    _presentOverlay(PlayerOverlay.none);
+    notifyListeners();
+  }
+
+  void _clearSleepTimer() {
+    ++_sleepEpoch;
+    _sleepTimer?.cancel();
+    _sleepTimer = null;
+    _sleepDuration = null;
+    _sleepDeadline = null;
   }
 
   void showCursor() {
@@ -1373,9 +1577,20 @@ class PlayerCoordinator extends ChangeNotifier {
   }
 
   void _lineupChanged() {
+    final activeChannel = _activeChannel;
+    final replacement = activeChannel == null
+        ? null
+        : lineup.channels
+              .where((channel) => channel.id == activeChannel.id)
+              .firstOrNull;
     final activeChannelChanged =
-        _activeChannel != null &&
-        !lineup.channels.any((channel) => identical(channel, _activeChannel));
+        activeChannel != null &&
+        (replacement == null ||
+            canonicalScheduleIdentity(replacement) !=
+                canonicalScheduleIdentity(activeChannel));
+    if (activeChannel != null && replacement != null && !activeChannelChanged) {
+      _activeChannel = replacement;
+    }
     if (_contentGeneration != lineup.contentGeneration ||
         activeChannelChanged) {
       _contentGeneration = lineup.contentGeneration;
@@ -1485,10 +1700,7 @@ class PlayerCoordinator extends ChangeNotifier {
 
   void _resetScopeState() {
     _cancelOverlayTimer();
-    ++_sleepEpoch;
-    _sleepTimer?.cancel();
-    _sleepTimer = null;
-    _sleepDuration = null;
+    _clearSleepTimer();
     _numberTimer?.cancel();
     _numberTimer = null;
     _channelNumber = '';
@@ -1497,6 +1709,7 @@ class PlayerCoordinator extends ChangeNotifier {
     _cursorVisible = true;
     _presentOverlay(PlayerOverlay.none);
     _miniGuideChannelId = null;
+    _miniGuideWindowStart = null;
     _retryChannelId = null;
     _activeChannel = null;
     _error = null;
@@ -1547,6 +1760,8 @@ class PlayerCoordinator extends ChangeNotifier {
 
   void _retirePlaybackIntent() {
     _pendingSeekPart = null;
+    ++_trackSelectionGeneration;
+    _clearTrackSelection();
     _activeLoadGeneration = null;
     _advancingGeneration = null;
     _nativeReplacementGeneration = null;
@@ -1607,6 +1822,7 @@ class PlayerCoordinator extends ChangeNotifier {
     _sleepTimer?.cancel();
     _numberTimer?.cancel();
     _cursorTimer?.cancel();
+    _clearTrackSelection();
     _activePlayback = null;
     _provisionalPlayback = null;
     unawaited(fullscreenReset.catchError((_) {}));

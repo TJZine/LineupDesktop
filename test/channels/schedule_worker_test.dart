@@ -2,6 +2,7 @@ import 'dart:isolate';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/channels/channel.dart';
+import 'package:lineup_desktop/channels/content_resolver.dart';
 import 'package:lineup_desktop/channels/schedule_worker.dart';
 import 'package:lineup_desktop/channels/scheduler.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
@@ -64,7 +65,13 @@ void main() {
         ),
       );
       await expectLater(
-        worker.build(_libraryChannel(filters: const {'future': 'anything'})),
+        worker.build(
+          _libraryChannel(
+            filters: const {
+              LibraryFilter.decade: ['invalid'],
+            },
+          ),
+        ),
         throwsA(
           isA<ScheduleBuildException>().having(
             (error) => error.reason,
@@ -93,13 +100,81 @@ void main() {
       expect(schedule.items.single.id, _mediaItem.id);
     },
   );
+
+  test(
+    'worker and sync schedules agree around a transition boundary',
+    () async {
+      final media = [
+        _mediaItem,
+        PlexMediaItem(
+          id: 'second',
+          title: 'Second',
+          type: 'movie',
+          duration: const Duration(minutes: 17),
+          libraryId: 'library',
+          parts: [PlexMediaPart(path: '/library/parts/second')],
+        ),
+      ];
+      final boundary = DateTime.utc(2026, 1, 1, 1);
+      final channel = Channel(
+        id: 'transition',
+        number: 1,
+        name: 'Transition',
+        source: const LibrarySource(
+          libraryId: 'library',
+          libraryType: PlexLibraryType.movie,
+          order: LibraryOrder.title,
+        ),
+        playbackMode: PlaybackMode.shuffle,
+        anchor: DateTime.utc(2026),
+        shuffleSeed: 19,
+        scheduleTransition: ScheduleTransition(
+          boundary: boundary,
+          legacyCycleItems: const [
+            ChannelItem(
+              id: 'second',
+              title: 'Second',
+              duration: Duration(minutes: 17),
+            ),
+            ChannelItem(
+              id: 'item',
+              title: 'Item',
+              duration: Duration(minutes: 30),
+            ),
+          ],
+        ),
+      );
+      final worker = ScheduleWorker(media, const []);
+      addTearDown(worker.dispose);
+
+      final isolated = await worker.build(channel);
+      final sync = buildChannelSchedule(
+        channel,
+        resolveContent(channel.source, media),
+      );
+
+      for (final time in [
+        boundary.subtract(const Duration(microseconds: 1)),
+        boundary,
+        boundary.add(const Duration(minutes: 31)),
+      ]) {
+        final expected = programAt(time, channel.anchor, sync);
+        final actual = programAt(time, channel.anchor, isolated);
+        expect(actual.item.id, expected.item.id);
+        expect(actual.start, expected.start);
+        expect(actual.end, expected.end);
+        expect(actual.elapsed, expected.elapsed);
+        expect(actual.loop, expected.loop);
+      }
+    },
+  );
 }
 
 final _channel = _libraryChannel();
 
 Channel _libraryChannel({
   String libraryId = 'library',
-  Map<String, String> filters = const {},
+  Map<LibraryFilter, List<String>> filters = const {},
 }) => Channel(
   id: 'channel',
   number: 1,

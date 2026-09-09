@@ -32,15 +32,22 @@ class WindowsNativePlayer implements NativePlayer {
   };
   static WindowsNativePlayer? _handlerOwner;
 
-  WindowsNativePlayer({Duration? loadTimeout, Duration? stopTimeout})
-    : _loadTimeout = loadTimeout ?? const Duration(seconds: 30),
-      _stopTimeout = stopTimeout ?? const Duration(seconds: 10);
+  WindowsNativePlayer({
+    Duration? loadTimeout,
+    Duration? stopTimeout,
+    Duration? trackTimeout,
+  }) : _loadTimeout = loadTimeout ?? const Duration(seconds: 30),
+       _stopTimeout = stopTimeout ?? const Duration(seconds: 10),
+       _trackTimeout = trackTimeout ?? const Duration(seconds: 5);
 
   final _events = StreamController<PlayerEvent>.broadcast(sync: true);
   final Duration _loadTimeout;
   final Duration _stopTimeout;
+  final Duration _trackTimeout;
   int _nextStopId = 0;
+  int _nextTrackRequestId = 0;
   (int, Completer<void>)? _pendingStop;
+  final Map<int, (int, Completer<void>)> _pendingTrackSelections = {};
   Future<void>? _stopOperation;
   PlayerStatus _status = const PlayerStatus(
     state: PlayerState.idle,
@@ -114,6 +121,11 @@ class WindowsNativePlayer implements NativePlayer {
     _requireInitialized();
     final loadId = ++_nextLoadId;
     final pending = Completer<void>();
+    _completePendingTrackSelectionErrors(
+      const PlayerUnavailable(
+        'A newer media load replaced this track request.',
+      ),
+    );
     _completePendingLoadError(
       const PlayerUnavailable('A newer media load replaced this request.'),
     );
@@ -192,8 +204,48 @@ class WindowsNativePlayer implements NativePlayer {
       _invoke('setFullscreen', {'fullscreen': fullscreen});
 
   @override
-  Future<void> selectTrack(PlayerTrackType type, int? id) =>
-      _invoke('selectTrack', {'type': type.name, 'id': id});
+  Future<void> selectTrack(PlayerTrackType type, int? id) async {
+    await _lifecycle;
+    _requireInitialized();
+    final loadId = _activeLoadId;
+    if (loadId == null) {
+      throw const PlayerUnavailable('No active media is available.');
+    }
+    final requestId = ++_nextTrackRequestId;
+    final pending = Completer<void>();
+    _pendingTrackSelections[requestId] = (loadId, pending);
+    final completion = pending.future
+        .timeout(
+          _trackTimeout,
+          onTimeout: () => throw const PlayerUnavailable(
+            'Native track selection did not complete in time.',
+            failureCode: 'wait_timeout',
+          ),
+        )
+        .then<(Object, StackTrace)?>(
+          (_) => null,
+          onError: (Object error, StackTrace stackTrace) => (error, stackTrace),
+        );
+    try {
+      await _invokeNative<void>('selectTrack', {
+        'type': type.name,
+        'id': id,
+        'loadId': loadId,
+        'requestId': requestId,
+      });
+      final failure = await completion;
+      if (failure != null) {
+        Error.throwWithStackTrace(failure.$1, failure.$2);
+      }
+    } catch (error, stackTrace) {
+      if (!pending.isCompleted) pending.completeError(error, stackTrace);
+      rethrow;
+    } finally {
+      if (identical(_pendingTrackSelections[requestId]?.$2, pending)) {
+        _pendingTrackSelections.remove(requestId);
+      }
+    }
+  }
 
   @override
   Future<void> setVolume(double volume) =>
@@ -207,6 +259,9 @@ class WindowsNativePlayer implements NativePlayer {
     final pending = Completer<void>();
     _pendingStop = (stopId, pending);
     _completePendingLoadError(
+      const PlayerUnavailable('The media load was stopped.'),
+    );
+    _completePendingTrackSelectionErrors(
       const PlayerUnavailable('The media load was stopped.'),
     );
     _pendingLoad = null;
@@ -255,6 +310,9 @@ class WindowsNativePlayer implements NativePlayer {
     }
     _pendingStop = null;
     _completePendingLoadError(
+      const PlayerUnavailable('The native player was disposed.'),
+    );
+    _completePendingTrackSelectionErrors(
       const PlayerUnavailable('The native player was disposed.'),
     );
     _pendingLoad = null;
@@ -327,6 +385,28 @@ class WindowsNativePlayer implements NativePlayer {
           const PlayerUnavailable(
             'Native playback could not be stopped.',
             failureCode: 'stop_failed',
+          ),
+        );
+      }
+      return;
+    }
+    if (event['type'] == 'trackResult') {
+      final requestId = event['requestId'];
+      final pending = requestId is int
+          ? _pendingTrackSelections[requestId]
+          : null;
+      if (pending == null ||
+          event['loadId'] != pending.$1 ||
+          pending.$2.isCompleted) {
+        return;
+      }
+      if (event['success'] == true) {
+        pending.$2.complete();
+      } else {
+        pending.$2.completeError(
+          const PlayerUnavailable(
+            'Native track selection failed.',
+            failureCode: 'command_error',
           ),
         );
       }
@@ -585,6 +665,14 @@ class WindowsNativePlayer implements NativePlayer {
   void _completePendingLoadError(Object error) {
     final pending = _pendingLoad;
     if (pending != null && !pending.isCompleted) pending.completeError(error);
+  }
+
+  void _completePendingTrackSelectionErrors(Object error) {
+    final pending = _pendingTrackSelections.values.toList(growable: false);
+    _pendingTrackSelections.clear();
+    for (final selection in pending) {
+      if (!selection.$2.isCompleted) selection.$2.completeError(error);
+    }
   }
 
   void _resetMediaState() {

@@ -23,7 +23,7 @@ void main() {
     );
     addTearDown(guide.dispose);
 
-    expect(guide.windowStart, DateTime.utc(2026, 1, 15, 2, 30));
+    expect(guide.windowStart, DateTime.utc(2026, 1, 15, 3));
     expect(guide.windowStart.isUtc, isTrue);
   });
 
@@ -919,7 +919,7 @@ void main() {
       expect(started, ['channel-0']);
 
       guide.requestChannels([lineup.channels[6]]);
-      await guide.retry('channel-5');
+      final focusedDemand = guide.ensureCurrentProgram('channel-5');
       guide.requestViewport(10, 1);
 
       for (final id in [
@@ -949,6 +949,7 @@ void main() {
         'channel-8',
         'channel-7',
       ]);
+      await focusedDemand;
 
       guide.dispose();
       lineup.dispose();
@@ -989,13 +990,10 @@ void main() {
 
     now = DateTime(2026, 8, 13, 12, 40);
     expect(guide.currentProgram('stable')?.scheduled.item.id, 'second');
-    lineup.setSettings(
-      const LineupSettings(guideHours: 8, guideDensity: GuideDensity.compact),
-    );
+    lineup.setSettings(const LineupSettings(guideHours: 3));
 
     expect(guide.focusedChannelId, 'stable');
-    expect(guide.guideHours, 8);
-    expect(guide.density, GuideDensity.compact);
+    expect(guide.guideHours, 3);
 
     guide.dispose();
     lineup.dispose();
@@ -1030,7 +1028,7 @@ void main() {
       expect(guide.channels.map((channel) => channel.id), contains('mixed'));
       expect(guide.channels.map((channel) => channel.number), contains(900));
 
-      lineup.setSettings(lineup.settings.copyWith(libraryTabsEnabled: false));
+      guide.setLibraryFilter(null);
       expect(guide.libraryFilterId, isNull);
       expect(guide.channels, hasLength(3));
 
@@ -1112,6 +1110,56 @@ void main() {
     lineup.dispose();
   });
 
+  test(
+    'right navigation focuses the first program before moving time',
+    () async {
+      final now = DateTime(2026, 8, 13, 12);
+      final lineup = _TestLineup(_channels(1));
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => _schedule(channel),
+        clock: () => now,
+      )..requestViewport(0, 1);
+      await _settle();
+      guide.moveHorizontal(-1);
+      final windowStart = guide.windowStart;
+      final focusTime = guide.focusTime;
+
+      guide.moveHorizontal(1);
+
+      expect(guide.focusedProgramId, guide.row('channel-0').programs.first.id);
+      expect(guide.windowStart, windowStart);
+      expect(guide.focusTime, focusTime);
+      guide.dispose();
+      lineup.dispose();
+    },
+  );
+
+  test('window paging keeps focus on the nearest visible program', () async {
+    final lineup = _TestLineup(_channels(1));
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+      clock: () => DateTime(2026, 8, 13, 12),
+    )..requestViewport(0, 1);
+    await _settle();
+
+    guide.moveWindow(2);
+
+    expect(guide.focusedProgram, isNotNull);
+    expect(
+      guide.focusedProgram!.scheduled.end.isAfter(guide.windowStart),
+      isTrue,
+    );
+    expect(
+      guide.focusedProgram!.scheduled.start.isBefore(guide.windowEnd),
+      isTrue,
+    );
+
+    guide.dispose();
+    lineup.dispose();
+  });
+
   test('focus movement does not silently select a program', () async {
     final lineup = _TestLineup(_channels(2));
     final guide = GuideController(
@@ -1159,7 +1207,7 @@ void main() {
         shuffleSeed: 1,
       );
       final lineup = _TestLineup([channel])
-        ..settings = const LineupSettings(guideHours: 8, pastMinutes: 0);
+        ..settings = const LineupSettings(guideHours: 4);
       final guide = GuideController(
         lineup: lineup,
         loadSchedule: (channel) async => buildSchedule(
@@ -1171,12 +1219,246 @@ void main() {
       )..requestViewport(0, 1);
       await _settle();
 
-      expect(guide.row(channel.id).programs, hasLength(480));
+      expect(guide.row(channel.id).programs, hasLength(240));
 
       guide.dispose();
       lineup.dispose();
     },
   );
+
+  test(
+    'search preserves inspection through an empty result interval',
+    () async {
+      final lineup = _TestLineup(_channels(3));
+      final guide = GuideController(
+        lineup: lineup,
+        clock: () => DateTime(2026, 8, 13, 12, 17),
+        loadSchedule: (channel) async => _schedule(channel),
+      )..requestViewport(0, 3);
+      await _settle();
+      guide.moveVertical(2);
+      final inspected = guide.focusedProgramId;
+
+      guide.setSearchQuery('Custom 2');
+      expect(guide.channels.single.id, 'channel-2');
+      expect(guide.focusedProgramId, inspected);
+
+      guide.setSearchQuery('no such channel');
+      expect(guide.channels, isEmpty);
+      expect(guide.focusedChannelId, isNull);
+
+      guide.setSearchQuery('');
+      expect(guide.focusedChannelId, 'channel-2');
+      expect(guide.focusedProgramId, inspected);
+
+      guide.dispose();
+      lineup.dispose();
+    },
+  );
+
+  test(
+    'restored inspection can be replaced by a later filter session',
+    () async {
+      final lineup = _TestLineup(_channels(3));
+      final guide = GuideController(
+        lineup: lineup,
+        clock: () => DateTime(2026, 8, 13, 12, 17),
+        loadSchedule: (channel) async => _schedule(channel),
+      )..requestViewport(0, 3);
+      await _settle();
+      guide.moveVertical(2);
+
+      guide.setSearchQuery('Custom 0');
+      guide.setSearchQuery('no such channel');
+      guide.setSearchQuery('');
+      expect(guide.focusedChannelId, 'channel-2');
+
+      guide.moveVertical(-1);
+      guide.setSearchQuery('Custom 0');
+      guide.setSearchQuery('no such channel');
+      guide.setSearchQuery('');
+      expect(guide.focusedChannelId, 'channel-1');
+
+      guide.setSearchQuery('Custom 1');
+      guide.setSearchQuery('');
+      guide.moveVertical(-1);
+      guide.setSearchQuery('no such channel');
+      guide.setSearchQuery('');
+      expect(guide.focusedChannelId, 'channel-0');
+
+      guide.dispose();
+      lineup.dispose();
+    },
+  );
+
+  test('Guide hours absorb save failure after owner rollback', () async {
+    final lineup = _TestLineup(_channels(1), store: _FailingStore());
+    lineup.diagnostics.enabled = true;
+    final guide = GuideController(lineup: lineup);
+
+    await guide.setGuideHours(2);
+
+    expect(lineup.settings.guideHours, 4);
+    expect(guide.guideHours, 4);
+    expect(lineup.diagnostics.entries, hasLength(1));
+    expect(lineup.diagnostics.entries.single.message, 'State save failed');
+    expect(lineup.diagnostics.entries.single.context, {'code': 'write-failed'});
+    guide.dispose();
+    lineup.dispose();
+  });
+
+  test('future return is preserved until its visible window elapses', () {
+    var now = DateTime(2026, 8, 13, 12, 47);
+    final lineup = _TestLineup(_channels(1))
+      ..settings = const LineupSettings(guideHours: 2);
+    final guide = GuideController(lineup: lineup, clock: () => now);
+
+    expect(guide.windowStart, DateTime(2026, 8, 13, 12, 30));
+    guide.moveWindow(2);
+    expect(guide.windowStart, DateTime(2026, 8, 13, 13, 30));
+    now = DateTime(2026, 8, 13, 14);
+    guide.refreshForPresentation();
+    expect(guide.windowStart, DateTime(2026, 8, 13, 13, 30));
+
+    now = DateTime(2026, 8, 13, 15, 31);
+    guide.refreshForPresentation();
+    expect(guide.windowStart, DateTime(2026, 8, 13, 15, 30));
+
+    guide.dispose();
+    lineup.dispose();
+  });
+
+  test('retry is row-local and repeated activation is coalesced', () async {
+    final lineup = _TestLineup(_channels(1));
+    final retryLoad = Completer<ScheduleIndex>();
+    var attempts = 0;
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) {
+        attempts++;
+        if (attempts == 1) return Future.error(StateError('offline'));
+        return retryLoad.future;
+      },
+    )..requestViewport(0, 1);
+    await _settle();
+    expect(guide.row('channel-0').state, GuideLoadState.error);
+
+    await guide.retry('channel-0');
+    await guide.retry('channel-0');
+    expect(attempts, 2);
+    expect(guide.row('channel-0').state, GuideLoadState.retrying);
+
+    retryLoad.complete(_schedule(lineup.channels.single));
+    await _settle();
+    expect(guide.row('channel-0').state, GuideLoadState.ready);
+
+    guide.dispose();
+    lineup.dispose();
+  });
+
+  test('current program waits for a successful retry', () async {
+    final lineup = _TestLineup(_channels(2));
+    final retryLoad = Completer<ScheduleIndex>();
+    var attempts = 0;
+    final guide = GuideController(
+      lineup: lineup,
+      maximumCachedRows: 1,
+      loadSchedule: (channel) {
+        if (channel.id == 'channel-1') {
+          return Future.value(_schedule(channel));
+        }
+        attempts++;
+        return attempts == 1
+            ? Future.error(StateError('offline'))
+            : retryLoad.future;
+      },
+    );
+    expect(await guide.ensureCurrentProgram('channel-0'), isNull);
+
+    await guide.retry('channel-0');
+    lineup.setSettings(const LineupSettings(guideHours: 2));
+    guide.requestChannels([lineup.channels.last]);
+    await _settle();
+    final current = guide.ensureCurrentProgram('channel-0');
+    var completed = false;
+    current.whenComplete(() => completed = true);
+    await _settle();
+
+    expect(guide.row('channel-0').state, GuideLoadState.retrying);
+    expect(completed, isFalse);
+
+    retryLoad.complete(_schedule(lineup.channels.first));
+    expect(await current, isNotNull);
+
+    guide.dispose();
+    lineup.dispose();
+  });
+
+  test('current program settles after retry failure', () async {
+    final lineup = _TestLineup(_channels(1));
+    final retryLoad = Completer<ScheduleIndex>();
+    var attempts = 0;
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (_) {
+        attempts++;
+        return attempts == 1
+            ? Future.error(StateError('offline'))
+            : retryLoad.future;
+      },
+    );
+    expect(await guide.ensureCurrentProgram('channel-0'), isNull);
+
+    await guide.retry('channel-0');
+    final current = expectLater(
+      guide.ensureCurrentProgram('channel-0'),
+      completion(isNull),
+    );
+    retryLoad.completeError(StateError('still offline'));
+
+    await current;
+    expect(guide.row('channel-0').state, GuideLoadState.error);
+
+    guide.dispose();
+    lineup.dispose();
+  });
+
+  test('current program retry wait settles on removal and disposal', () async {
+    for (final disposeDuringRetry in [false, true]) {
+      final lineup = _TestLineup(_channels(1));
+      final retryLoad = Completer<ScheduleIndex>();
+      var attempts = 0;
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (_) {
+          attempts++;
+          return attempts == 1
+              ? Future.error(StateError('offline'))
+              : retryLoad.future;
+        },
+      );
+      expect(await guide.ensureCurrentProgram('channel-0'), isNull);
+
+      await guide.retry('channel-0');
+      final current = guide.ensureCurrentProgram('channel-0');
+      if (disposeDuringRetry) {
+        guide.dispose();
+      } else {
+        lineup.setChannels(const []);
+      }
+
+      expect(
+        await current.timeout(const Duration(milliseconds: 500)),
+        isNull,
+        reason: disposeDuringRetry ? 'disposal' : 'removal',
+      );
+
+      if (!disposeDuringRetry) guide.dispose();
+      retryLoad.complete(_schedule(_channels(1).single));
+      await _settle();
+      lineup.dispose();
+    }
+  });
 }
 
 List<Channel> _channels(
@@ -1232,14 +1514,17 @@ ScheduleIndex _schedule(Channel channel) {
 Future<void> _settle() => Future<void>.delayed(Duration.zero);
 
 class _TestLineup extends LineupController {
-  _TestLineup(List<Channel> value, {super.scheduleWorkerFactory})
-    : super(
-        store: _MemoryStore(),
-        credentials: _MemoryCredentials(),
-        plex: PlexClient(
-          clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
-        ),
-      ) {
+  _TestLineup(
+    List<Channel> value, {
+    AppStore? store,
+    super.scheduleWorkerFactory,
+  }) : super(
+         store: store ?? _MemoryStore(),
+         credentials: _MemoryCredentials(),
+         plex: PlexClient(
+           clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+         ),
+       ) {
     connection = PlexConnection(
       uri: Uri.parse('https://synthetic.invalid'),
       local: true,
@@ -1268,7 +1553,7 @@ class _TestLineup extends LineupController {
     ];
     channels = value;
     stage = SetupStage.ready;
-    settings = const LineupSettings(guideHours: 4, pastMinutes: 30);
+    settings = const LineupSettings(guideHours: 4);
   }
 
   int _testContentGeneration = 0;
@@ -1323,6 +1608,13 @@ class _MemoryStore implements AppStore {
       const AppStoreLoadResult(PersistedState());
   @override
   Future<void> save(PersistedState state) async {}
+}
+
+class _FailingStore extends _MemoryStore {
+  @override
+  Future<void> save(PersistedState state) async {
+    throw StateError('Synthetic save failure');
+  }
 }
 
 class _MemoryCredentials implements CredentialStore {

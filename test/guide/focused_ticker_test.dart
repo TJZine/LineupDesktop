@@ -67,15 +67,87 @@ void main() {
     expect(tester.getTopLeft(textFinder).dx, initialX);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('unchanged rebuild does not restart an active reveal', (
+    tester,
+  ) async {
+    final ticker = FocusedTicker(
+      key: ValueKey('ticker'),
+      text: 'A very long title whose reveal survives ordinary rebuilds',
+      focused: true,
+    );
+    await tester.pumpWidget(_Harness(child: ticker));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 900));
+    await tester.pump(const Duration(milliseconds: 400));
+    final finder = find.text(ticker.text);
+    final before = tester.getTopLeft(finder).dx;
+
+    await tester.pumpWidget(
+      _Harness(
+        child: FocusedTicker(
+          key: const ValueKey('ticker'),
+          text: ticker.text,
+          focused: ticker.focused,
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(tester.getTopLeft(finder).dx, lessThan(before));
+  });
+
+  testWidgets('RTL overflow travels toward the exposed leading text', (
+    tester,
+  ) async {
+    const text = 'عنوان طويل جدًا يجب أن يتحرك ليكشف النص بالكامل';
+    await tester.pumpWidget(
+      const _Harness(
+        direction: TextDirection.rtl,
+        child: FocusedTicker(text: text, focused: true),
+      ),
+    );
+    await tester.pump();
+    final initialX = tester.getTopLeft(find.text(text)).dx;
+    await tester.pump(const Duration(milliseconds: 900));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(tester.getTopLeft(find.text(text)).dx, greaterThan(initialX));
+  });
+
+  testWidgets('deactivation resets and stops obsolete motion', (tester) async {
+    const text = 'A very long title that stops when its surface is inactive';
+    await tester.pumpWidget(
+      const _Harness(child: FocusedTicker(text: text, focused: true)),
+    );
+    await tester.pump();
+    final initialX = tester.getTopLeft(find.text(text)).dx;
+    await tester.pump(const Duration(milliseconds: 900));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(tester.getTopLeft(find.text(text)).dx, lessThan(initialX));
+
+    await tester.pumpWidget(
+      const _Harness(
+        child: FocusedTicker(text: text, focused: true, active: false),
+      ),
+    );
+    final resetX = tester.getTopLeft(find.text(text)).dx;
+    expect(resetX, initialX);
+    await tester.pump(const Duration(seconds: 3));
+    expect(tester.getTopLeft(find.text(text)).dx, resetX);
+  });
 }
 
 class _Harness extends StatelessWidget {
-  const _Harness({required this.child});
+  const _Harness({required this.child, this.direction = TextDirection.ltr});
 
   final Widget child;
+  final TextDirection direction;
 
   @override
   Widget build(BuildContext context) => MaterialApp(
-    home: Center(child: SizedBox(width: 140, child: child)),
+    home: Directionality(
+      textDirection: direction,
+      child: Center(child: SizedBox(width: 140, child: child)),
+    ),
   );
 }

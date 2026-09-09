@@ -68,6 +68,26 @@ function Get-NormalizedTextSha256 {
   [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes))
 }
 
+function Get-PubspecVersion {
+  param([Parameter(Mandatory)] [string] $Path)
+
+  $versionLines = @(
+    Get-Content -LiteralPath $Path | Where-Object { $_ -match '^version\s*:' }
+  )
+  if ($versionLines.Count -ne 1) {
+    throw 'pubspec.yaml must contain exactly one top-level version entry.'
+  }
+  if ($versionLines[0] -notmatch
+    '^version\s*:\s*(?<name>[^+\s]+)\+(?<build>[0-9]+)\s*(?:#.*)?$') {
+    throw 'pubspec.yaml version must have a name and numeric build number (name+build).'
+  }
+
+  [pscustomobject]@{
+    Name = $Matches.name
+    Build = $Matches.build
+  }
+}
+
 function Assert-PinnedFlutterCheckout {
   param([Parameter(Mandatory)] [string] $Root)
 
@@ -104,6 +124,9 @@ if (Test-SourceDirty $repository) {
 }
 Assert-NoTrackedSymlinks -Repository $repository
 $sourceCommit = Get-GitValue $repository @('rev-parse', '--verify', 'HEAD')
+$pubspecVersion = Get-PubspecVersion -Path (Join-Path $repository 'pubspec.yaml')
+$lineupVersion = $pubspecVersion.Name
+$lineupBuild = "$($pubspecVersion.Build)@$sourceCommit"
 
 $EngineSource = (Resolve-Path -LiteralPath $EngineSource).Path
 $flutterRoot = Split-Path -Parent (Split-Path -Parent $EngineSource)
@@ -144,12 +167,16 @@ if (Test-Path -LiteralPath $buildMarkerPath -PathType Leaf) {
   Remove-Item -LiteralPath $buildMarkerPath
 }
 Set-Location $repository
+$flutterBuildArguments = @(
+  '--local-engine=host_release'
+  '--local-engine-host=host_release'
+  "--local-engine-src-path=$EngineSource"
+  "--dart-define=LINEUP_VERSION=$lineupVersion"
+  "--dart-define=LINEUP_BUILD=$lineupBuild"
+)
 & {
   $PSNativeCommandUseErrorActionPreference = $false
-  & $flutter build windows `
-    --local-engine=host_release `
-    --local-engine-host=host_release `
-    --local-engine-src-path=$EngineSource
+  & $flutter build windows @flutterBuildArguments
   if ($LASTEXITCODE) { throw 'Flutter Windows release build failed.' }
 }
 

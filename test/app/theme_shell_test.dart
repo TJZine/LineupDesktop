@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
@@ -28,14 +30,15 @@ void main() {
     );
 
     await openDestination(tester, 'Settings');
-    await tester.tap(find.byKey(const Key('theme-option-slate-pine')));
+    final themeDropdown = find.byType(DropdownButton<LineupThemeName>);
+    await tester.tap(themeDropdown);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(LineupThemeName.slatePine.label).last);
     await tester.pumpAndSettle();
 
     expect(fixture.controller.settings.theme, LineupThemeName.slatePine);
     expect(
-      Theme.of(tester.element(find.byKey(const Key('theme-option-slate-pine'))))
-          .colorScheme
-          .primary,
+      Theme.of(tester.element(themeDropdown)).colorScheme.primary,
       slatePine.colorScheme.primary,
     );
     await tester.runAsync(() => Future<void>.delayed(Duration.zero));
@@ -65,69 +68,61 @@ void main() {
     );
   });
 
-  testWidgets('theme chooser exposes selection and remote-style traversal', (
+  testWidgets('theme dropdown exposes selection and keyboard traversal', (
     tester,
   ) async {
-    final semantics = tester.ensureSemantics();
     final fixture = UiFixture()..controller.stage = SetupStage.ready;
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
     await openDestination(tester, 'Settings');
 
-    final emberSemantics = tester.widget<Semantics>(
-      find.byKey(const Key('theme-option-semantics-ember-steel')),
-    );
-    final slateSemantics = tester.widget<Semantics>(
-      find.byKey(const Key('theme-option-semantics-slate-pine')),
-    );
-    expect(emberSemantics.properties.button, isTrue);
-    expect(emberSemantics.properties.selected, isTrue);
-    expect(slateSemantics.properties.selected, isFalse);
+    final dropdown = find.byType(DropdownButton<LineupThemeName>);
+    final widget = tester.widget<DropdownButton<LineupThemeName>>(dropdown);
+    expect(widget.value, LineupThemeName.emberSteel);
+    expect(widget.onChanged, isNotNull);
     expect(
       tester
-          .getSemantics(
-            find.byKey(const Key('theme-option-semantics-ember-steel')),
-          )
+          .getSemantics(dropdown)
           .getSemanticsData()
           .hasAction(SemanticsAction.tap),
       isTrue,
     );
 
-    await tester.tap(find.byKey(const Key('theme-option-ember-steel')));
+    await tester.tap(dropdown);
+    await tester.pumpAndSettle();
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
     await tester.pumpAndSettle();
 
     expect(fixture.controller.settings.theme, LineupThemeName.slatePine);
     expect(
-      Focus.of(tester.element(find.byKey(const Key('theme-option-slate-pine'))))
-          .hasFocus,
-      isTrue,
+      tester.widget<DropdownButton<LineupThemeName>>(dropdown).value,
+      LineupThemeName.slatePine,
     );
-    semantics.dispose();
-  });
+  }, semanticsEnabled: true);
 
-  testWidgets('theme chooser applies every approved palette', (tester) async {
+  testWidgets('theme dropdown applies every approved palette', (tester) async {
     final fixture = UiFixture()..controller.stage = SetupStage.ready;
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
     await openDestination(tester, 'Settings');
 
     for (final theme in LineupThemeName.values.skip(1)) {
-      final option = find.byKey(Key('theme-option-${theme.storageKey}'));
-      await tester.ensureVisible(option);
-      await tester.tap(option);
+      final dropdown = find.byType(DropdownButton<LineupThemeName>);
+      await tester.tap(dropdown);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(theme.label).last);
       await tester.pumpAndSettle();
 
       expect(fixture.controller.settings.theme, theme);
-      final semantics = tester.widget<Semantics>(
-        find.byKey(Key('theme-option-semantics-${theme.storageKey}')),
+      expect(
+        tester.widget<DropdownButton<LineupThemeName>>(dropdown).value,
+        theme,
       );
-      expect(semantics.properties.selected, isTrue);
     }
   });
 
-  testWidgets('theme chooser remains reachable at accessible text scale', (
+  testWidgets('theme dropdown remains reachable at accessible text scale', (
     tester,
   ) async {
     tester.view
@@ -142,18 +137,73 @@ void main() {
     await tester.pumpAndSettle();
     await openDestination(tester, 'Settings');
 
-    final lastTheme = find.byKey(const Key('theme-option-glass'));
-    await tester.ensureVisible(lastTheme);
+    expect(find.byType(DropdownButton<LineupThemeName>), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Settings refreshes from controller setting changes', (
+    tester,
+  ) async {
+    final fixture = UiFixture()..controller.stage = SetupStage.ready;
+    await tester.pumpWidget(fixture.build());
+    await tester.pumpAndSettle();
+    await openDestination(tester, 'Settings');
+    await tester.tap(find.widgetWithText(TextButton, 'Guide'));
     await tester.pumpAndSettle();
 
-    expect(lastTheme, findsOneWidget);
-    expect(tester.takeException(), isNull);
+    final guideHours = find.byType(DropdownButton<int>);
+    expect(tester.widget<DropdownButton<int>>(guideHours).value, 2);
+
+    await fixture.controller.updateSettings(
+      fixture.controller.settings.copyWith(guideHours: 4),
+    );
+    await tester.pumpAndSettle();
+
+    expect(tester.widget<DropdownButton<int>>(guideHours).value, 4);
+  });
+
+  testWidgets('failed setting save restores value without moving focus', (
+    tester,
+  ) async {
+    final controller = _DelayedSettingsController()..stage = SetupStage.ready;
+    await tester.pumpWidget(UiFixture(controller: controller).build());
+    await tester.pumpAndSettle();
+    await openDestination(tester, 'Settings');
+
+    final dropdown = find.byType(DropdownButton<LineupThemeName>);
+    await tester.tap(dropdown);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(LineupThemeName.slatePine.label).last);
+    await tester.pump(const Duration(milliseconds: 350));
+
+    final focused = FocusManager.instance.primaryFocus;
+    expect(focused, isNotNull);
+    expect(find.text('Saving…'), findsOneWidget);
+    expect(
+      tester
+          .widget<TextButton>(find.widgetWithText(TextButton, 'Playback'))
+          .onPressed,
+      isNotNull,
+    );
+
+    controller.fail();
+    await tester.pumpAndSettle();
+    expect(controller.settings.theme, LineupThemeName.emberSteel);
+    expect(find.byKey(const Key('setting-error-theme')), findsOneWidget);
+    expect(FocusManager.instance.primaryFocus, same(focused));
+    expect(
+      tester.widget<DropdownButton<LineupThemeName>>(dropdown).value,
+      LineupThemeName.emberSteel,
+    );
   });
 
   testWidgets('Guide and player use the immersive shell policy', (
     tester,
   ) async {
-    final fixture = UiFixture()..controller.stage = SetupStage.ready;
+    final player = FixturePlayer()
+      ..emit(const PlayerStatus(state: PlayerState.ready, message: 'Ready'));
+    final fixture = UiFixture(player: player)
+      ..controller.stage = SetupStage.ready;
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
 
@@ -185,9 +235,7 @@ void main() {
     expect(find.byKey(const Key('settings-detail-pane')), findsOneWidget);
   });
 
-  testWidgets('Settings mounts one player surface behind its immersive rail', (
-    tester,
-  ) async {
+  testWidgets('Settings retains one mounted player surface', (tester) async {
     final player = FixturePlayer()
       ..emit(const PlayerStatus(state: PlayerState.ready, message: 'Ready'));
     final fixture = UiFixture(player: player)
@@ -200,35 +248,25 @@ void main() {
     expect(find.byType(NavigationRail), findsNothing);
     expect(find.byType(PlayerSurface), findsOneWidget);
     expect(find.byType(PlayerView), findsNothing);
-    expect(find.byKey(const Key('settings-immersive-scrim')), findsOneWidget);
-    final decoration =
-        tester
-                .widget<DecoratedBox>(
-                  find.byKey(const Key('settings-immersive-scrim')),
-                )
-                .decoration
-            as BoxDecoration;
-    expect(
-      (decoration.gradient! as LinearGradient).colors,
-      everyElement(predicate<Color>((color) => color.a < 1)),
-    );
   });
 
-  testWidgets('overlay Guide is secondary and keeps playback behind it', (
+  testWidgets('legacy overlay preference still presents the PiP Guide', (
     tester,
   ) async {
     final player = FixturePlayer()
       ..emit(const PlayerStatus(state: PlayerState.ready, message: 'Ready'));
     final fixture = UiFixture(player: player)
       ..controller.stage = SetupStage.ready
-      ..controller.settings = const LineupSettings(
-        guideLayoutMode: GuideLayoutMode.overlay,
-      );
+      ..controller.settings = LineupSettings.fromJson({
+        ...const LineupSettings().toJson(),
+        'guideLayoutMode': 'overlay',
+      });
     await tester.pumpWidget(fixture.build());
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('overlay-guide')), findsOneWidget);
-    expect(find.byType(PlayerSurface), findsOneWidget);
+    expect(find.byKey(const Key('classic-guide')), findsOneWidget);
+    expect(find.byKey(const Key('overlay-guide')), findsNothing);
+    expect(find.byKey(const Key('guide-picture-in-picture')), findsOneWidget);
     expect(find.byType(NavigationRail), findsNothing);
   });
 
@@ -255,4 +293,15 @@ void main() {
       expectedTheme.extension<LineupThemeRoles>()!.focusBorderWidth,
     );
   });
+}
+
+class _DelayedSettingsController extends FixtureController {
+  final _update = Completer<void>();
+
+  @override
+  Future<void> updateSettings(LineupSettings value) async {
+    await _update.future;
+  }
+
+  void fail() => _update.completeError(StateError('synthetic save failure'));
 }

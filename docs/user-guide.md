@@ -67,9 +67,8 @@ reuse another profile's server or lineup.
 ### 3. Select a Plex Media Server
 
 Choose a discovered server. Lineup prioritizes usable direct connections before
-relay connections. Each card distinguishes an owned server from a shared one
-and lists the secure direct-local, direct-remote, and relay connection types
-currently available. Only the selected server shows its measured path and
+relay connections. Each row distinguishes an owned server from a shared one. **Current** marks
+the connected server, while **Previously used** identifies a saved selection. Only the selected server shows its measured path and
 latency; 100–499 ms is labeled **Slow**, 500 ms or more is **Very slow**, and a
 relay is labeled **Limited** rather than failed.
 
@@ -89,36 +88,33 @@ When no server appears:
 
 Channel Setup has three stages:
 
-1. Select the movie and TV libraries Lineup may use.
-2. Configure channel strategies, ordering, build mode, and limits.
-3. Review the proposed changes before applying them.
+1. **Choose libraries** and scan their media. You can cancel a running scan,
+   retry only failed libraries, or continue with the ready subset.
+2. **Configure channels** using playlists, collections, recently added content,
+   genres, studios, actors, decades, and directors. Select per-library or grouped
+   sources, playback order, minimum programs, and the generated-channel limit.
+3. **Review** the complete roster and explicitly apply the plan.
 
-Available strategy families include Plex playlists, collections, recently added
-content, genres, decades, studios, actors, and directors. Depending on the
-strategy, channels can be generated per library or across selected libraries.
-Alternate copies and playback-mode variants apply to eligible series channels;
-actor and director channels are not expanded into those high-cardinality
-alternatives.
+Scans report pages, items, and ready, empty, unsupported, cancelled, or failed
+outcomes. Continuing commits the selected ready libraries; cancelled or failed
+scans preserve the previous committed selection. Successful libraries remain
+available when retrying failures in the same profile/server scope.
 
-The review step applies the accepted plan atomically. Cancelling or a failed
-save preserves the previous lineup.
+Allocation takes one eligible original from each enabled source in order,
+repeats, and skips exhausted sources. Additional versions are off by default
+and are allocated only after originals. Mini-marathons can include specials
+when enabled, including additional Mini-marathon versions. Exclusions distinguish
+the configured channel limit from exhausted channel numbers.
 
-Scanning selected libraries reports completed pages and items on each library
-card, including the Plex total when supplied, and can be cancelled while it is
-running. Each card distinguishes not scanned, scanning, complete, empty,
-unsupported, failed, and cancelled outcomes. Cancellation or failure preserves
-the previous selection and media; retry repeats the one atomic selected-library
-scan. Playable media requires both a positive duration and a usable media part.
-
-The strategy step reports the accepted proposal count or **No matches** for
-each enabled source family and **Off** for disabled families. The review step
-separates **Create**, **Update**, **Unchanged**, **Remove**, and **Final** counts
-using the selected replace, append, or merge behavior. It presents the current
-lineup changing to the final lineup, a proportional composition bar, and sample
-channels. When Replace mode will remove one or more generated channels, it
-requires an explicit confirmation before building; a zero-removal plan omits
-that inapplicable gate. A limit warning appears only when ideas were actually
-omitted by the channel cap or available channel numbers.
+For an existing lineup, **Update and add** preserves matching generated
+identities, **Replace generated channels** replaces generated programming while
+keeping custom channels, and **Add as new channels** appends new identities.
+Review shows current/final counts and unchanged, updated, added, and removed
+entries; search by name or number and filter the change categories. Removals
+require confirmation. A changed lineup invalidates the review and requires a
+fresh explicit apply. Saving is atomic: failure preserves the previous lineup
+and review choices. An unchanged plan offers **View lineup** without saving.
+Success offers **View lineup** and **Add a custom channel**.
 
 ## Main destinations
 
@@ -126,7 +122,7 @@ omitted by the channel cap or available channel numbers.
 | --- | --- |
 | Guide | Browse the schedule, inspect focused programs, filter by library, jump to now, tune current programs, and open the Player |
 | Channels | Generate a lineup or create, inspect, duplicate, edit, and delete individual channels |
-| Settings | Configure themes, Guide behavior, accessibility, Plex profile/server selection, and diagnostics |
+| Settings | Configure appearance, Guide, playback, accessibility, account, and support preferences |
 | Diagnostics | Review bounded, redacted support events from the current session |
 | Player | Watch the tuned channel and use playback, track, channel, sleep, and fullscreen controls |
 
@@ -135,10 +131,13 @@ PiP/Overlay, and fullscreen work at a surface level. The complete exact-commit
 physical matrix is still pending, so broad format/HDR/device/package wording
 remains provisional rather than unsupported-by-design.
 
-Guide and Player use an immersive layout. Open the **Lineup** menu from either
-surface to reach the other destinations. Channels and Diagnostics use the
-persistent management rail. Settings uses one immersive category rail and,
-when playback is active, keeps the same Player surface behind it.
+Guide, Player, Settings, and Diagnostics use immersive surfaces. Activate the
+visible **Open Lineup menu** control on one of those surfaces to open the
+anchored **Lineup** menu. It offers Guide, Player when playback exists, Channels,
+Settings, and **Account**; Account opens Settings with its Account category
+selected. Channels uses the persistent management rail. Settings uses one
+immersive category rail and, when playback is active, keeps the same Player
+surface behind it.
 
 ## Guide
 
@@ -153,20 +152,20 @@ Lineup distinguishes four identities that may be visible at the same time:
 Moving focus does not retune playback. Activating a currently airing program
 tunes its channel and closes the Guide to the Player.
 
-The default **Classic with PiP** layout keeps the schedule primary and displays
-the active video in a responsive picture-in-picture area. The optional
-**Overlay** layout keeps the Guide over full video. Both layouts retain a
-single Player and playback session.
+The full Guide uses **Classic with PiP**: the schedule remains primary and the
+active video appears in a responsive picture-in-picture area. PiP is the sole
+full Guide presentation; the retired full-screen Overlay layout is not
+available. The Guide and Player share one playback session.
 
-Use the library selector in the Guide toolbar when **Library filters** are
-enabled. **Jump to now** returns the time window and focus to the current
-schedule.
+The Guide toolbar always shows a library picker and channel search. The picker
+offers **All libraries** or one library, and search accepts a channel name or
+number within that scope. **Jump to now** returns the time window and focus to
+the current schedule.
 
-The default Guide uses a detailed two-hour window and comfortable rows so its
-visual scale stays close to the webOS Guide. A three-hour **Wide** option and
-the preserved 4, 6, 8, and 12-hour desktop ranges are available when more of
-the schedule matters than cell detail. Compact rows remain available as a
-desktop override.
+The Guide uses a detailed two-hour window by default, with three- and
+four-hour options. Its standard layout targets five comfortable channel rows;
+the rows reflow when the window or text scale requires more room. There is no
+configurable past window or row-density preference.
 
 Focused program cells reveal long titles with a slow ticker; unfocused cells
 remain stable and ellipsized. Reduce Motion disables the ticker. The program
@@ -205,12 +204,22 @@ native or libmpv behavior. It provides:
 - sleep timer state;
 - fullscreen entry and exit.
 
+The sleep timer choices are **Off**, **30 minutes**, **60 minutes**, and **90
+minutes**. A selected deadline continues while playback is paused and across
+channel or program changes, Guide browsing, and other overlays; selecting a
+duration starts that countdown again. Manual stop, sign-out, and app exit
+cancel the timer.
+
 Unavailable tracks or unsupported native actions remain disabled rather than
 showing controls that cannot work. The Guide retains the catalog media facts it
 displays, including resolution, dynamic range, and audio facts. Rich Now
 Playing retains detailed source/runtime resolution, video codec, HDR, and
 hardware-decoder facts when available rather than repeating those facts in the
 default OSD.
+
+Track panels show the selection confirmed by native playback. A requested
+change remains marked pending until that confirmation arrives; a failed change
+keeps the prior confirmed selection and shows an inline error.
 
 Press `I` for persistent rich Now Playing details without leaving playback.
 The details surface keeps the shared top-right channel bug, then uses the
@@ -244,12 +253,14 @@ cross-part seeking use aggregate timing only when the required part durations
 are known; otherwise the Player shows the current part's timing rather than
 estimating missing boundaries.
 
-The timed OSD and mini Guide remain open while keyboard focus is inside their
-controls. Leaving the active overlay restarts its full timeout. Reduce Motion
-removes Player overlay transition time, and audio/subtitle panels initially
-focus the selected track (or **Off** when no subtitle is selected). These
-behaviors are deterministically tested in Flutter; physical Windows
-screen-reader and assistive-technology validation remains pending.
+The timed OSD remains open while keyboard focus is inside its controls. Leaving
+the active OSD restarts its full timeout. The Mini Guide has no inactivity
+timeout: it stays open while browsing or reading until you tune a row, open the
+full Guide, or close it explicitly. Reduce Motion removes Player overlay
+transition time, and audio/subtitle panels initially focus the selected track
+(or **Off** when no subtitle is selected). These behaviors are deterministically
+tested in Flutter; physical Windows screen-reader and assistive-technology
+validation remains pending.
 
 The committed macOS goldens cover Flutter composition at compact, 1280×720,
 and 1920×1080 sizes, including the rich Now Playing surface, the theme chooser,
@@ -313,16 +324,16 @@ added/updated, or removed entries. Replace keeps its protection confirmation
 visible while you inspect the roster. Completion offers **View lineup** or the
 separate **Add a custom channel** action.
 
-**New channel** opens the full-page Channel Studio for one custom channel.
+**Add a custom channel** opens the full-page Channel Studio for one custom channel.
 Studio also opens when you edit a custom channel, inspect a generated channel,
 or choose **Duplicate as custom** from generated inspection. Generated
 programming remains read-only, but its name and number can be saved with **Save
 identity**. Duplication creates a separate custom draft with a new identity and
 the lowest available channel number; it does not alter the generated source.
 
-Custom Studio programming can use one selected library, one Plex video
-playlist, a collection or supported metadata filter, or an explicitly ordered
-hand-picked list. Hand-picked programming has separate **Browse** and
+Custom Studio programming uses **Library** with metadata filters or an
+explicitly ordered **Hand-picked** list. Existing playlist and mixed sources
+remain inspectable and preserved until deliberately replaced. Hand-picked programming has separate **Browse** and
 **Rundown** stages; matching and selected counts stay visible, and search and
 filter state is preserved when you switch between them. Search, local facets,
 visible-result bulk selection, and Move earlier/Move later controls keep large
@@ -357,11 +368,12 @@ channel also warns that a later Generate lineup refresh may propose it again.
 
 | Category | Current controls |
 | --- | --- |
-| Appearance | A labeled palette chooser for Ember & Steel, Slate & Pine, Swiss Minimal, DirecTV Classic, and Glassmorphism; the selected theme is identified in text and applies immediately |
-| Guide | Classic with PiP or Overlay presentation; detailed 2-hour, wide 3-hour, or desktop-extended 4/6/8/12-hour windows; 0-180 minute past window; comfortable or compact rows; color-bleed/theme/artwork information backgrounds; official title artwork preference; library filters; Now Playing context; 2-15 second OSD auto-hide; optional DVR playback controls |
+| Appearance | A labeled palette chooser for Ember & Steel, Slate & Pine, Swiss Minimal, DirecTV Classic, and Glassmorphism; Guide information background (artwork colors, theme, or backdrop); and title artwork preference |
+| Guide | Visible hours of 2, 3, or 4; and whether to show the now-playing channel and program in Guide |
+| Playback | Player controls auto-hide after 2, 4, 6, 8, 10, or 15 seconds; and optional DVR playback controls |
 | Accessibility | Reduce motion across management, Guide, and Player transitions; larger keyboard/controller focus indicators |
-| Account | Switch Plex Home profile, switch or clear Plex server selection, and optionally show the profile picker at startup |
-| Support | Enable or disable bounded redacted diagnostic recording |
+| Account | Switch Plex Home profile, show the profile picker on startup, switch the Plex Media Server, and sign out of Plex |
+| Support | Enable or disable bounded redacted diagnostic recording and open Diagnostics |
 
 Settings save immediately. When persistence fails, the previous value remains
 active and the screen shows an error.

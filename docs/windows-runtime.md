@@ -9,11 +9,11 @@ binaries; `tool/windows/prepare-mpv.ps1` downloads and verifies them.
 
 | Component | Exact source/build | License and distribution decision |
 | --- | --- | --- |
-| libmpv | mpv `v0.41.0-923-g7b8915bc1`, full commit `7b8915bc1d04c7e1b61184e00c7fbfaab1911e75`; configured with `-Dgpl=false`; DLL SHA-256 `353D527E569F69D822A9D679B28D2E975C6B22A82AB9924D533110E1C21C8508` | LGPL-2.1-or-later; selected for dynamic bundling with license, source/build links, and replacement permitted. |
-| FFmpeg | `N-126123-g8b4fad11a`, full commit `8b4fad11acfc958dfde29fb0799d3ca1818bbbf7`; builder removes `--enable-gpl` and GPL dependencies and retains `--enable-version3` | LGPLv3; statically combined into the replaceable libmpv DLL. Package the LGPLv3 and GPLv3 texts plus the exact source/build recipe. |
-| libplacebo | Embedded build version `v7.371.0 (v7.360.0-111-g22ee762-dirty)`; full source commit `22ee762e8e0890fc54068beb670310f0edce7263` | LGPL-2.1-or-later; statically combined into the replaceable libmpv DLL. Package its license and exact source/build link. |
-| Windows build | zhongfly/mpv-winbuild commit `a237017af09e72a689882afdf0adf6108c33c0fd`, successful run `31738744791`, LGPL x86-64 job `94576668176` | Reproducible public build recipe. Its LGPL patch disables x264, x265, Rubber Band, DVD navigation, and other incompatible components while retaining decode, D3D11, gpu-next, hardware decode, HDR/tone mapping, and subtitles. |
-| Release asset | `mpv-dev-lgpl-x86_64-20260813-git-7b8915bc1d.7z` | SHA-256 `13723530C3A719577A27EA19E0127175CE6A047071F8D988ADC1B0DD400B3D18`; pinned acquisition. |
+| libmpv | mpv `v0.41.0-1042-g7e4cb538a`, full commit `7e4cb538a3f30d25920ad8e87ba6571540fb729f`; configured with `-Dgpl=false`; DLL SHA-256 `EFB4A2D7960E9EE636D826B73AF11DD39D4F70F064EB8643D3FC8590B90564BE` | LGPL-2.1-or-later; selected for dynamic bundling with license, source/build links, and replacement permitted. |
+| FFmpeg | `N-126474-g1de77bb89`, full commit `1de77bb8987e2c7364302c91b9f13958e419124e`; builder removes `--enable-gpl` and GPL dependencies and retains `--enable-version3` | LGPLv3; statically combined into the replaceable libmpv DLL. Package the LGPLv3 and GPLv3 texts plus the exact source/build recipe. |
+| libplacebo | Embedded build version `v7.371.0 (v7.360.0-124-g3330a51-dirty)`; full source commit `3330a515d62139259c26239014f286e233bd3a5c` | LGPL-2.1-or-later; statically combined into the replaceable libmpv DLL. Package its license and exact source/build link. |
+| Windows build | zhongfly/mpv-winbuild commit `423ffd555dddc9b7fceae22eb303eebc2dc47574`, successful run `34223679174`, LGPL x86-64 job `102052561393` | Reproducible public build recipe. Its LGPL patch disables x264, x265, Rubber Band, DVD navigation, and other incompatible components while retaining decode, D3D11, gpu-next, hardware decode, HDR/tone mapping, and subtitles. |
+| Release asset | `mpv-dev-lgpl-x86_64-20260908-git-7e4cb538a3.7z` | SHA-256 `96C44CD41475AB753BCA1AE55F3946896BEFD6AB68865114CCBFC883C58E5883`; pinned acquisition. |
 
 The release asset is monolithic. Its maintained build recipe includes the
 remaining permissive/LGPL codec, subtitle, color, archive, font, crypto, and
@@ -32,7 +32,7 @@ a rebuilt archive under the existing provenance identity.
 
 | Component | Provenance | Package policy |
 | --- | --- | --- |
-| Flutter Windows engine | Flutter 3.47.0 framework `4cf24164269a5ebf0c16a028a00727d0e77bbb05`, engine `5f77625673248ee5846fbcaf5d3e1a3878386fd7`, plus the repository-owned DirectComposition patch | BSD-3-Clause and upstream third-party notices. Include Flutter's generated `NOTICES.Z` and `tool/flutter_engine/NOTICE`. |
+| Flutter Windows engine | Flutter 3.47.2 framework `d3b14c876900e553bc736ca19295fc09e3853e8e`, engine `a804b261645ef8c13eb3d5c44a5c2fb0340c5539`, plus the repository-owned DirectComposition patch | BSD-3-Clause and upstream third-party notices. Include Flutter's generated `NOTICES.Z` and `tool/flutter_engine/NOTICE`. |
 | flutter_secure_storage_windows | Version 4.2.2 from the locked Dart dependency graph | BSD-3-Clause; its notice is generated into Flutter `NOTICES.Z`. |
 | Microsoft Visual C++ runtime | Retail x64 VC143 runtime matching the build toolset | Microsoft redistributable code. A portable package uses unmodified app-local retail DLLs from `VC/Redist`; never include debug/nonredistributable files. |
 | Khronos Vulkan loader | `vulkan-1.dll` supplied by the installed GPU driver or Vulkan Runtime | System prerequisite. The selected libmpv DLL imports the loader even though Lineup selects D3D11. The portable package records this requirement instead of copying a machine-specific display-driver file. |
@@ -77,9 +77,9 @@ package excludes it.
 
 ## Source and license locations
 
-- mpv source and LGPL text: <https://github.com/mpv-player/mpv/tree/7b8915bc1d04c7e1b61184e00c7fbfaab1911e75>
-- FFmpeg source, LGPLv3 text, and GPLv3 text: <https://github.com/FFmpeg/FFmpeg/tree/8b4fad11acfc958dfde29fb0799d3ca1818bbbf7>
-- libplacebo source and LGPL text: <https://github.com/haasn/libplacebo/tree/22ee762e8e0890fc54068beb670310f0edce7263>
-- exact builder and LGPL patch: <https://github.com/zhongfly/mpv-winbuild/tree/a237017af09e72a689882afdf0adf6108c33c0fd>
-- exact successful build: <https://github.com/zhongfly/mpv-winbuild/actions/runs/31738744791>
+- mpv source and LGPL text: <https://github.com/mpv-player/mpv/tree/7e4cb538a3f30d25920ad8e87ba6571540fb729f>
+- FFmpeg source, LGPLv3 text, and GPLv3 text: <https://github.com/FFmpeg/FFmpeg/tree/1de77bb8987e2c7364302c91b9f13958e419124e>
+- libplacebo source and LGPL text: <https://github.com/haasn/libplacebo/tree/3330a515d62139259c26239014f286e233bd3a5c>
+- exact builder and LGPL patch: <https://github.com/zhongfly/mpv-winbuild/tree/423ffd555dddc9b7fceae22eb303eebc2dc47574>
+- exact successful build: <https://github.com/zhongfly/mpv-winbuild/actions/runs/34223679174>
 - Microsoft VC runtime redistribution terms: <https://learn.microsoft.com/en-us/visualstudio/releases/2022/redistribution>

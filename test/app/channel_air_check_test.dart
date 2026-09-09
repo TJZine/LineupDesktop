@@ -1,7 +1,7 @@
 import 'dart:async';
+import 'dart:ui' show SemanticsAction;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/channel_air_check.dart';
 import 'package:lineup_desktop/channels/channel.dart';
@@ -24,6 +24,12 @@ void main() {
           ChannelItem(id: 'two', title: 'Two', duration: Duration(minutes: 30)),
         ],
       );
+      final schedule = buildSchedule(
+        (channel.source as ManualSource).items,
+        mode: channel.playbackMode,
+        seed: channel.shuffleSeed,
+        blockSize: 3,
+      );
 
       await tester.pumpWidget(_airCheck(controller, channel, clock: () => now));
       await tester.pumpAndSettle();
@@ -37,36 +43,47 @@ void main() {
         find.byWidgetPredicate(
           (widget) =>
               widget is Semantics &&
-              widget.properties.label == 'ON AIR, Air Check',
+              widget.properties.label == 'Schedule preview',
         ),
       );
       expect(heading.properties.header, isTrue);
-      expect(find.byKey(const Key('air-check-now-line')), findsOneWidget);
-      expect(find.textContaining('One •'), findsOneWidget);
-
-      final firstLineX = tester
-          .getTopLeft(find.byKey(const Key('air-check-now-line')))
-          .dx;
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('air-check-selection')),
+          matching: find.text('One'),
+        ),
+        findsOneWidget,
+      );
       now = DateTime.utc(2026, 1, 1, 0, 29, 59, 500);
       await tester.pump(const Duration(seconds: 30));
-      expect(
-        tester.getTopLeft(find.byKey(const Key('air-check-now-line'))).dx,
-        greaterThan(firstLineX),
-      );
 
       now = DateTime.utc(2026, 1, 1, 0, 30);
       await tester.pump(const Duration(seconds: 30));
 
       expect(controller.requests, 1);
       expect(find.text('Two'), findsWidgets);
-      expect(find.textContaining('Two •'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('air-check-selection')),
+          matching: find.text('Two'),
+        ),
+        findsOneWidget,
+      );
       expect(
         find.bySemanticsLabel(RegExp(r'Channel 4 .*Two.*current')),
         findsOneWidget,
       );
       expect(
-        find.bySemanticsLabel(RegExp(r'Channel 4 .*One.*future')),
+        find.bySemanticsLabel(RegExp(r'Channel 4 .*One.*upcoming')),
         findsWidgets,
+      );
+      final ended = GuideProgram(
+        channelId: 'air-check',
+        scheduled: programAt(channel.anchor, channel.anchor, schedule),
+      );
+      expect(
+        find.byKey(ValueKey('air-check-program-${ended.id}')),
+        findsNothing,
       );
     },
   );
@@ -273,7 +290,7 @@ void main() {
     },
   );
 
-  testWidgets('compact Air Check retains now and next semantic entries', (
+  testWidgets('compact Air Check retains projected semantic entries', (
     tester,
   ) async {
     final controller = _AirController();
@@ -288,15 +305,182 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('One'), findsWidgets);
     expect(find.text('Two'), findsWidgets);
-    expect(find.text('Three'), findsNothing);
-    expect(find.byKey(const Key('air-check-now-line')), findsNothing);
+    expect(find.text('Three'), findsWidgets);
     expect(
       find.bySemanticsLabel(RegExp(r'Channel 4 .*One.*current')),
       findsOneWidget,
     );
   });
 
-  testWidgets('narrow programs support keyboard selection and visible state', (
+  testWidgets(
+    'Air Check hides ended retained entries and preserves a future inspection',
+    (tester) async {
+      var now = DateTime.utc(2026, 1, 1, 0, 10);
+      final controller = _AirController();
+      addTearDown(controller.dispose);
+      final channel = _channel(
+        items: [_item('one'), _item('two'), _item('three')],
+      );
+      final schedule = buildSchedule(
+        (channel.source as ManualSource).items,
+        mode: channel.playbackMode,
+        seed: channel.shuffleSeed,
+        blockSize: 3,
+      );
+      final future = GuideProgram(
+        channelId: 'air-check',
+        scheduled: programAt(
+          DateTime.utc(2026, 1, 1, 3),
+          channel.anchor,
+          schedule,
+        ),
+      );
+
+      await tester.pumpWidget(_airCheck(controller, channel, clock: () => now));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Show next 6 hours'));
+      await tester.tap(find.text('Show next 6 hours'));
+      await tester.pump();
+      final futureRow = find.byKey(ValueKey('air-check-program-${future.id}'));
+      await tester.scrollUntilVisible(
+        futureRow,
+        240,
+        scrollable: find.descendant(
+          of: find.byKey(const Key('air-check-schedule-list')),
+          matching: find.byType(Scrollable),
+        ),
+      );
+      await tester.tap(futureRow);
+      await tester.pump();
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('air-check-selection')),
+          matching: find.text('One'),
+        ),
+        findsOneWidget,
+      );
+
+      now = DateTime.utc(2026, 1, 1, 2, 10);
+      await tester.pump(const Duration(seconds: 30));
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('air-check-selection')),
+          matching: find.text('One'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.bySemanticsLabel(RegExp(r'Channel 4 .*One.*upcoming')),
+        findsWidgets,
+      );
+      expect(
+        find.bySemanticsLabel(RegExp(r'Channel 4 .*Two.*upcoming')),
+        findsWidgets,
+      );
+    },
+    semanticsEnabled: true,
+  );
+
+  testWidgets('Air Check falls back to now when an inspection ends', (
+    tester,
+  ) async {
+    var now = DateTime.utc(2026, 1, 1, 0, 10);
+    final controller = _AirController();
+    addTearDown(controller.dispose);
+    final channel = _channel(items: [_item('one'), _item('two')]);
+    final schedule = buildSchedule(
+      (channel.source as ManualSource).items,
+      mode: channel.playbackMode,
+      seed: channel.shuffleSeed,
+      blockSize: 3,
+    );
+    final future = GuideProgram(
+      channelId: 'air-check',
+      scheduled: programAt(
+        DateTime.utc(2026, 1, 1, 1),
+        channel.anchor,
+        schedule,
+      ),
+    );
+
+    await tester.pumpWidget(_airCheck(controller, channel, clock: () => now));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(ValueKey('air-check-program-${future.id}')));
+    await tester.pump();
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('air-check-selection')),
+        matching: find.text('One'),
+      ),
+      findsOneWidget,
+    );
+
+    now = DateTime.utc(2026, 1, 1, 1, 40);
+    await tester.pump(const Duration(seconds: 30));
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('air-check-selection')),
+        matching: find.text('Two'),
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('Air Check preserves inspection after successful recalculation', (
+    tester,
+  ) async {
+    var now = DateTime.utc(2026, 1, 1, 0, 10);
+    final controller = _AirController();
+    addTearDown(controller.dispose);
+    final key = GlobalKey<ChannelAirCheckState>();
+    final channel = _channel(items: [_item('one'), _item('two')]);
+    final schedule = buildSchedule(
+      (channel.source as ManualSource).items,
+      mode: channel.playbackMode,
+      seed: channel.shuffleSeed,
+      blockSize: 3,
+    );
+    final future = GuideProgram(
+      channelId: 'air-check',
+      scheduled: programAt(
+        DateTime.utc(2026, 1, 1, 1),
+        channel.anchor,
+        schedule,
+      ),
+    );
+
+    await tester.pumpWidget(
+      _airCheck(controller, channel, key: key, clock: () => now),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(ValueKey('air-check-program-${future.id}')));
+    await tester.pump();
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('air-check-selection')),
+        matching: find.text('One'),
+      ),
+      findsOneWidget,
+    );
+
+    controller.generation++;
+    await tester.pumpWidget(
+      _airCheck(controller, channel, key: key, clock: () => now),
+    );
+    await tester.pump(
+      channelAirCheckDebounce + const Duration(milliseconds: 1),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('air-check-selection')),
+        matching: find.text('One'),
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('program rows expose selection detail and semantics', (
     tester,
   ) async {
     final controller = _AirController();
@@ -309,20 +493,36 @@ void main() {
     );
     await tester.pumpWidget(_airCheck(controller, channel));
     await tester.pumpAndSettle();
-    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
-    await tester.pump();
-    expect(FocusManager.instance.primaryFocus, isNotNull);
-    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
-    await tester.pump();
-    expect(
-      tester.widget<Text>(find.byKey(const Key('air-check-selection'))).data,
-      contains('past'),
+    final firstProgram = find.bySemanticsLabel(
+      RegExp(r'Channel 4 .*A.*current'),
     );
+    final firstSemantics = tester.getSemantics(firstProgram);
+    firstSemantics.owner!.performAction(firstSemantics.id, SemanticsAction.tap);
+    await tester.pump();
     expect(
-      find.bySemanticsLabel(RegExp(r'Channel 4 .*past, selected')),
+      find.descendant(
+        of: find.byKey(const Key('air-check-selection')),
+        matching: find.text('A'),
+      ),
       findsOneWidget,
     );
-  });
+    final secondProgram = find.byType(OutlinedButton).at(1);
+    await tester.tap(
+      find.byKey(tester.widget<OutlinedButton>(secondProgram).key!),
+    );
+    await tester.pump();
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('air-check-selection')),
+        matching: find.text('B'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.bySemanticsLabel(RegExp(r'Channel 4 .*B.*upcoming')),
+      findsWidgets,
+    );
+  }, semanticsEnabled: true);
 
   testWidgets('time labels show and announce local twelve-hour wall time', (
     tester,
@@ -345,7 +545,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text(twelveHourStart), findsWidgets);
+    expect(find.textContaining(twelveHourStart), findsWidgets);
     expect(
       find.bySemanticsLabel(
         RegExp(
@@ -388,6 +588,20 @@ void main() {
         ),
         findsOneWidget,
       );
+      if (instant == channel.anchor) {
+        final ended = GuideProgram(
+          channelId: 'air-check',
+          scheduled: programAt(
+            channel.anchor.subtract(const Duration(microseconds: 1)),
+            channel.anchor,
+            schedule,
+          ),
+        );
+        expect(
+          find.byKey(ValueKey('air-check-program-${ended.id}')),
+          findsNothing,
+        );
+      }
     }
     expect(controller.requests, 1);
   });
@@ -620,7 +834,12 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('air-check-on-now-warning')), findsNothing);
 
-    final renamed = Channel.fromJson({...original.toJson(), 'name': 'Renamed'});
+    final requestsBeforeRename = controller.requests;
+    final renamed = Channel.fromJson({
+      ...original.toJson(),
+      'name': 'Renamed',
+      'number': 9,
+    });
     await tester.pumpWidget(
       _airCheck(
         controller,
@@ -631,6 +850,12 @@ void main() {
     );
     await tester.pump();
     expect(find.byKey(const Key('air-check-on-now-warning')), findsNothing);
+    expect(find.textContaining('CH 9 · RENAMED'), findsOneWidget);
+    expect(
+      find.bySemanticsLabel(RegExp(r'Channel 9 Renamed, .*current')),
+      findsOneWidget,
+    );
+    expect(controller.requests, requestsBeforeRename);
 
     final changed = Channel.fromJson({
       ...original.toJson(),
@@ -738,6 +963,7 @@ void main() {
       expect(key.currentState!.activeRequestCount, 0);
       expect(key.currentState!.pendingRequestCount, 0);
 
+      await tester.ensureVisible(find.text('Retry comparison'));
       await tester.tap(find.text('Retry comparison'));
       await tester.pump(
         channelAirCheckDebounce + const Duration(milliseconds: 1),
@@ -857,14 +1083,13 @@ void main() {
       await tester.pump(const Duration(seconds: 30));
 
       expect(controller.requests, 1);
-      expect(find.textContaining('Three •'), findsOneWidget);
-      final nowLine = tester.widget<ExcludeSemantics>(
-        find.ancestor(
-          of: find.byKey(const Key('air-check-now-line')),
-          matching: find.byType(ExcludeSemantics),
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('air-check-selection')),
+          matching: find.text('Three'),
         ),
+        findsOneWidget,
       );
-      expect(nowLine.excluding, isTrue);
       expect(
         find.byWidgetPredicate(
           (widget) =>
@@ -892,16 +1117,25 @@ Widget _airCheck(
     child: child!,
   ),
   home: Scaffold(
-    body: ChannelAirCheck(
-      key: key,
-      controller: controller,
-      channel: channel,
-      originalChannel: originalChannel,
-      clock: clock ?? () => DateTime.utc(2026, 1, 1, 0, 10),
-      compact: compact,
-      inclusionReason: 'Hand-picked programming',
-      sourceIssue: sourceIssue,
-      onValidityChanged: (status) => onValidityChanged?.call(status.validity),
+    body: SingleChildScrollView(
+      child: Align(
+        alignment: Alignment.topCenter,
+        child: SizedBox(
+          width: 520,
+          child: ChannelAirCheck(
+            key: key,
+            controller: controller,
+            channel: channel,
+            originalChannel: originalChannel,
+            clock: clock ?? () => DateTime.utc(2026, 1, 1, 0, 10),
+            compact: compact,
+            inclusionReason: 'Hand-picked programming',
+            sourceIssue: sourceIssue,
+            onValidityChanged: (status) =>
+                onValidityChanged?.call(status.validity),
+          ),
+        ),
+      ),
     ),
   ),
 );

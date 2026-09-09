@@ -6,8 +6,6 @@ String? channelDecadeForYear(int? year) {
   return '${year ~/ 10 * 10}s';
 }
 
-String normalizePersonName(String value) => value.trim().toLowerCase();
-
 List<ChannelItem> resolveContent(
   ContentSource source,
   List<PlexMediaItem> media, [
@@ -42,39 +40,86 @@ List<ChannelItem> _library(LibrarySource source, List<PlexMediaItem> media) {
   var items = media.where((item) => item.libraryId == source.libraryId);
   if (!source.includeWatched) items = items.where((item) => !item.viewed);
   for (final filter in source.filters.entries) {
+    if (filter.value.isEmpty) continue;
     items = switch (filter.key) {
-      'genre' => items.where((item) => item.genres.contains(filter.value)),
-      'collection' => items.where(
-        (item) => item.collections.contains(filter.value),
+      LibraryFilter.genre => items.where(
+        (item) => item.genres.any(filter.value.contains),
       ),
-      'studio' => items.where((item) => item.studio == filter.value),
-      'actor' => items.where(
+      LibraryFilter.collection => items.where(
+        (item) => item.collections.any(filter.value.contains),
+      ),
+      LibraryFilter.studio => items.where(
+        (item) => filter.value.contains(item.studio),
+      ),
+      LibraryFilter.actor => items.where(
         (item) => item.actors.any(
-          (actor) =>
-              normalizePersonName(actor) == normalizePersonName(filter.value),
+          (actor) => filter.value.any(
+            (value) =>
+                canonicalFilterIdentity(LibraryFilter.actor, actor) ==
+                canonicalFilterIdentity(LibraryFilter.actor, value),
+          ),
         ),
       ),
-      'director' => items.where(
+      LibraryFilter.director => items.where(
         (item) => item.directors.any(
-          (director) =>
-              normalizePersonName(director) ==
-              normalizePersonName(filter.value),
+          (director) => filter.value.any(
+            (value) =>
+                canonicalFilterIdentity(LibraryFilter.director, director) ==
+                canonicalFilterIdentity(LibraryFilter.director, value),
+          ),
         ),
       ),
-      'decade' when RegExp(r'^\d{3}0s$').hasMatch(filter.value) => items.where(
-        (item) => channelDecadeForYear(item.year) == filter.value,
-      ),
-      'sort' when filter.value == 'added:desc' =>
-        items.toList()..sort(
-          (a, b) => (b.addedAt ?? DateTime.fromMillisecondsSinceEpoch(0))
-              .compareTo(a.addedAt ?? DateTime.fromMillisecondsSinceEpoch(0)),
+      LibraryFilter.decade
+          when filter.value.every(RegExp(r'^\d{3}0s$').hasMatch) =>
+        items.where(
+          (item) => filter.value.contains(channelDecadeForYear(item.year)),
         ),
-      'decade' => throw const FormatException('Unsupported content filter'),
-      'sort' => throw const FormatException('Unsupported content filter'),
-      _ => throw const FormatException('Unsupported content filter'),
+      LibraryFilter.decade => throw const FormatException(
+        'Unsupported content filter',
+      ),
     };
   }
-  return items.where((item) => item.isPlayable).map(channelItemFor).toList();
+  final unique = <String, PlexMediaItem>{};
+  for (final item in items.where((item) => item.isPlayable)) {
+    unique.putIfAbsent(item.id, () => item);
+  }
+  final ordered = unique.values.toList();
+  switch (source.order) {
+    case LibraryOrder.supplied:
+      break;
+    case LibraryOrder.addedDescending:
+      ordered.sort((a, b) {
+        final compared = _addedAt(b).compareTo(_addedAt(a));
+        return compared != 0 ? compared : a.id.compareTo(b.id);
+      });
+    case LibraryOrder.title:
+      ordered.sort(_libraryTitleOrder);
+  }
+  return ordered.map(channelItemFor).toList();
+}
+
+DateTime _addedAt(PlexMediaItem item) =>
+    item.addedAt ?? DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
+
+int _libraryTitleOrder(PlexMediaItem left, PlexMediaItem right) {
+  final leftShow = left.grandparentTitle?.trim().toLowerCase();
+  final rightShow = right.grandparentTitle?.trim().toLowerCase();
+  final leftTitle = (leftShow?.isNotEmpty == true ? leftShow! : left.title)
+      .toLowerCase();
+  final rightTitle = (rightShow?.isNotEmpty == true ? rightShow! : right.title)
+      .toLowerCase();
+  var compared = leftTitle.compareTo(rightTitle);
+  if (compared != 0) return compared;
+  compared = (left.seasonNumber ?? 0x7fffffff).compareTo(
+    right.seasonNumber ?? 0x7fffffff,
+  );
+  if (compared != 0) return compared;
+  compared = (left.episodeNumber ?? 0x7fffffff).compareTo(
+    right.episodeNumber ?? 0x7fffffff,
+  );
+  if (compared != 0) return compared;
+  compared = left.title.toLowerCase().compareTo(right.title.toLowerCase());
+  return compared != 0 ? compared : left.id.compareTo(right.id);
 }
 
 List<ChannelItem> _manual(
@@ -136,7 +181,20 @@ ChannelItem channelItemFor(PlexMediaItem item) => ChannelItem(
       ),
     ),
   ),
+  mediaKind: switch (item.type) {
+    'movie' => ChannelMediaKind.movie,
+    'episode' => ChannelMediaKind.episode,
+    _ => ChannelMediaKind.unknown,
+  },
+  seriesId: item.type == 'episode' ? _seriesIdentity(item) : null,
 );
+
+String? _seriesIdentity(PlexMediaItem item) {
+  final key = item.grandparentRatingKey?.trim();
+  if (key?.isNotEmpty == true) return 'key:$key';
+  final title = item.grandparentTitle?.trim();
+  return title?.isNotEmpty == true ? 'title:${title!.toLowerCase()}' : null;
+}
 
 Uri? _artworkPath(String? path) =>
     canonicalPlexArtworkPath(path == null ? null : Uri.tryParse(path));

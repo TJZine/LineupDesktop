@@ -56,7 +56,7 @@ List<ChannelProposal> buildChannelProposals({
   List<BuilderStrategy> strategyOrder = BuilderStrategy.values,
   Set<BuilderStrategy> crossLibraryStrategies = const {},
   int minimumItems = 5,
-  int maximumChannels = 200,
+  int? maximumChannels = 200,
 }) {
   final proposals = <ChannelProposal>[];
   final sourceLibraries = libraries.toList();
@@ -83,7 +83,7 @@ List<ChannelProposal> buildChannelProposals({
           final label = value.trim();
           if (label.isEmpty) continue;
           final tag = requiresSeriesBreadth
-              ? normalizePersonName(label)
+              ? canonicalFilterIdentity(LibraryFilter.actor, label)
               : label;
           selectedTags.putIfAbsent(tag, () => label);
           tagLabels.update(
@@ -130,7 +130,9 @@ List<ChannelProposal> buildChannelProposals({
             LibrarySource(
               libraryId: library.id,
               libraryType: library.type,
-              filters: {filterKey: tag},
+              filters: {
+                _libraryFilter(filterKey): [tag],
+              },
             ),
           );
         }
@@ -162,7 +164,9 @@ List<ChannelProposal> buildChannelProposals({
             source: LibrarySource(
               libraryId: library.id,
               libraryType: library.type,
-              filters: {filterKey: entry.key},
+              filters: {
+                _libraryFilter(filterKey): [entry.key],
+              },
             ),
             mode: PlaybackMode.shuffle,
             itemCount: entry.value,
@@ -205,7 +209,7 @@ List<ChannelProposal> buildChannelProposals({
             source: LibrarySource(
               libraryId: library.id,
               libraryType: library.type,
-              filters: const {'sort': 'added:desc'},
+              order: LibraryOrder.addedDescending,
             ),
             mode: PlaybackMode.sequential,
             itemCount: itemCount,
@@ -247,7 +251,7 @@ List<ChannelProposal> buildChannelProposals({
   final balanced = <ChannelProposal>[];
   for (
     var index = 0;
-    balanced.length < maximumChannels &&
+    (maximumChannels == null || balanced.length < maximumChannels) &&
         buckets.any((bucket) => index < bucket.length);
     index++
   ) {
@@ -273,12 +277,25 @@ String? _peopleSeriesKey(String libraryId, PlexMediaItem item) {
   if (ratingKey?.isNotEmpty == true) return '$libraryId:key:$ratingKey';
   final title = item.grandparentTitle?.trim();
   if (title?.isNotEmpty == true) {
-    return '$libraryId:title:${normalizePersonName(title!)}';
+    return '$libraryId:title:${title!.toLowerCase()}';
   }
   return null;
 }
 
-({List<Channel> channels, bool truncated}) materializeChannelPlan({
+typedef ChannelPlanAllocation = ({
+  List<Channel> channels,
+  int allocatedOriginals,
+  int excludedOriginals,
+  int allocatedExtras,
+  int excludedExtras,
+  int numberLimitExcluded,
+  Map<BuilderStrategy, int> eligibleOriginalsByStrategy,
+  Map<BuilderStrategy, int> allocatedOriginalsByStrategy,
+  Map<BuilderStrategy, int> allocatedChannelsByStrategy,
+  bool truncated,
+});
+
+ChannelPlanAllocation materializeChannelPlan({
   required List<ChannelProposal> proposals,
   required List<Channel> existing,
   required ChannelBuildMode mode,
@@ -287,10 +304,11 @@ String? _peopleSeriesKey(String libraryId, PlexMediaItem item) {
   int alternateCopies = 0,
   PlaybackMode? variantMode,
   int variantBlockSize = 3,
-  int maximumChannels = 1000,
+  bool includeSpecials = false,
+  int maximumChannels = 200,
   DateTime? anchor,
 }) {
-  final expanded =
+  final originals =
       <
         ({
           ChannelProposal proposal,
@@ -305,45 +323,12 @@ String? _peopleSeriesKey(String libraryId, PlexMediaItem item) {
     final baseBlockSize = baseMode == PlaybackMode.block
         ? seriesBlockSize
         : null;
-    expanded.add((
+    originals.add((
       proposal: proposal,
       suffix: '',
       mode: baseMode,
       blockSize: baseBlockSize,
     ));
-    final replicable =
-        isSeries &&
-        !{
-          BuilderStrategy.actors,
-          BuilderStrategy.directors,
-        }.contains(proposal.strategy);
-    if (replicable && baseMode != PlaybackMode.sequential) {
-      for (var copy = 1; copy <= alternateCopies; copy++) {
-        expanded.add((
-          proposal: proposal,
-          suffix: ' Alt $copy',
-          mode: baseMode,
-          blockSize: baseBlockSize,
-        ));
-      }
-    }
-    if (replicable && variantMode != null) {
-      final candidateBlockSize = variantMode == PlaybackMode.block
-          ? variantBlockSize
-          : null;
-      final isDuplicate =
-          variantMode == baseMode &&
-          (variantMode != PlaybackMode.block ||
-              candidateBlockSize == baseBlockSize);
-      if (!isDuplicate) {
-        expanded.add((
-          proposal: proposal,
-          suffix: ' ${variantMode.name}',
-          mode: variantMode,
-          blockSize: candidateBlockSize,
-        ));
-      }
-    }
   }
   final used = mode == ChannelBuildMode.replace
       ? existing
@@ -352,15 +337,33 @@ String? _peopleSeriesKey(String libraryId, PlexMediaItem item) {
             .toSet()
       : existing.map((channel) => channel.number).toSet();
   final output = <Channel>[];
+  final allocatedOriginalsByStrategy = <BuilderStrategy, int>{};
+  final allocatedChannelsByStrategy = <BuilderStrategy, int>{};
+  final selectedOriginals =
+      <
+        ({
+          ChannelProposal proposal,
+          String suffix,
+          PlaybackMode mode,
+          int? blockSize,
+        })
+      >[];
   var next = 1;
-  var truncated = false;
-  for (final entry in expanded) {
-    if (output.length == maximumChannels) {
-      truncated = true;
-      break;
-    }
+  var numberLimitExcluded = 0;
+
+  Channel? materialize(
+    ({
+      ChannelProposal proposal,
+      String suffix,
+      PlaybackMode mode,
+      int? blockSize,
+    })
+    entry,
+  ) {
     final name = '${entry.proposal.name}${entry.suffix}';
     final builderKey = _builderKey(entry.proposal, entry.suffix);
+    final normalizedIncludeSpecials =
+        entry.mode == PlaybackMode.block && includeSpecials;
     final matched = mode == ChannelBuildMode.merge
         ? existing
               .where(
@@ -374,39 +377,179 @@ String? _peopleSeriesKey(String libraryId, PlexMediaItem item) {
       next++;
     }
     if (matched == null && next > 1000) {
-      truncated = true;
-      break;
+      return null;
     }
     if (matched != null &&
-        canonicalChannelValueEquals(
-          matched.source.toJson(),
-          entry.proposal.source.toJson(),
-        ) &&
+        canonicalSourceEquals(matched.source, entry.proposal.source) &&
         matched.playbackMode == entry.mode &&
-        matched.blockSize == entry.blockSize) {
-      output.add(matched);
-      continue;
+        matched.blockSize == entry.blockSize &&
+        matched.includeSpecials == normalizedIncludeSpecials) {
+      return matched;
     }
     final id = matched?.id ?? createChannelId();
     final number = matched?.number ?? next;
-    output.add(
-      Channel(
-        id: id,
-        number: number,
-        name: matched?.name ?? name,
-        source: entry.proposal.source,
-        playbackMode: entry.mode,
-        anchor: matched?.anchor ?? anchor ?? DateTime.now().toUtc(),
-        shuffleSeed: matched?.shuffleSeed ?? id.hashCode,
-        blockSize: entry.blockSize,
-        builderKey: builderKey,
-      ),
+    final channel = Channel(
+      id: id,
+      number: number,
+      name: matched?.name ?? name,
+      source: entry.proposal.source,
+      playbackMode: entry.mode,
+      anchor: matched?.anchor ?? anchor ?? DateTime.now().toUtc(),
+      shuffleSeed: matched?.shuffleSeed ?? stableChannelSeed(id),
+      blockSize: entry.blockSize,
+      builderKey: builderKey,
+      includeSpecials: normalizedIncludeSpecials,
     );
     used.add(number);
     if (matched == null) next++;
+    return channel;
   }
-  return (channels: List.unmodifiable(output), truncated: truncated);
+
+  for (final entry in originals) {
+    if (output.length == maximumChannels) break;
+    final channel = materialize(entry);
+    if (channel == null) {
+      numberLimitExcluded = originals.length - selectedOriginals.length;
+      break;
+    }
+    output.add(channel);
+    allocatedChannelsByStrategy.update(
+      entry.proposal.strategy,
+      (count) => count + 1,
+      ifAbsent: () => 1,
+    );
+    selectedOriginals.add(entry);
+    allocatedOriginalsByStrategy.update(
+      entry.proposal.strategy,
+      (count) => count + 1,
+      ifAbsent: () => 1,
+    );
+  }
+
+  final extrasByOriginal = [
+    for (final original in selectedOriginals)
+      _extraVersions(
+        original,
+        alternateCopies: alternateCopies,
+        variantMode: variantMode,
+        variantBlockSize: variantBlockSize,
+      ),
+  ];
+  final eligibleExtras = extrasByOriginal.fold<int>(
+    0,
+    (total, extras) => total + extras.length,
+  );
+  var allocatedExtras = 0;
+  for (
+    var round = 0;
+    output.length < maximumChannels &&
+        extrasByOriginal.any((extras) => round < extras.length);
+    round++
+  ) {
+    for (final extras in extrasByOriginal) {
+      if (round >= extras.length) continue;
+      final channel = materialize(extras[round]);
+      if (channel == null) {
+        numberLimitExcluded += eligibleExtras - allocatedExtras;
+        round = eligibleExtras;
+        break;
+      }
+      output.add(channel);
+      allocatedChannelsByStrategy.update(
+        extras[round].proposal.strategy,
+        (count) => count + 1,
+        ifAbsent: () => 1,
+      );
+      allocatedExtras++;
+      if (output.length == maximumChannels) break;
+    }
+  }
+  final excludedOriginals = originals.length - selectedOriginals.length;
+  final excludedExtras = eligibleExtras - allocatedExtras;
+  return (
+    channels: List.unmodifiable(output),
+    allocatedOriginals: selectedOriginals.length,
+    excludedOriginals: excludedOriginals,
+    allocatedExtras: allocatedExtras,
+    excludedExtras: excludedExtras,
+    numberLimitExcluded: numberLimitExcluded,
+    eligibleOriginalsByStrategy: Map.unmodifiable({
+      for (final strategy in BuilderStrategy.values)
+        strategy: proposals
+            .where((proposal) => proposal.strategy == strategy)
+            .length,
+    }),
+    allocatedOriginalsByStrategy: Map.unmodifiable({
+      for (final strategy in BuilderStrategy.values)
+        strategy: allocatedOriginalsByStrategy[strategy] ?? 0,
+    }),
+    allocatedChannelsByStrategy: Map.unmodifiable({
+      for (final strategy in BuilderStrategy.values)
+        strategy: allocatedChannelsByStrategy[strategy] ?? 0,
+    }),
+    truncated: excludedOriginals > 0 || excludedExtras > 0,
+  );
 }
+
+List<
+  ({ChannelProposal proposal, String suffix, PlaybackMode mode, int? blockSize})
+>
+_extraVersions(
+  ({ChannelProposal proposal, String suffix, PlaybackMode mode, int? blockSize})
+  original, {
+  required int alternateCopies,
+  required PlaybackMode? variantMode,
+  required int variantBlockSize,
+}) {
+  final proposal = original.proposal;
+  final replicable =
+      (proposal.series || _containsShows(proposal.source)) &&
+      !{
+        BuilderStrategy.actors,
+        BuilderStrategy.directors,
+      }.contains(proposal.strategy);
+  if (!replicable) return const [];
+  final extras =
+      <
+        ({
+          ChannelProposal proposal,
+          String suffix,
+          PlaybackMode mode,
+          int? blockSize,
+        })
+      >[];
+  if (variantMode != null) {
+    final blockSize = variantMode == PlaybackMode.block
+        ? variantBlockSize
+        : null;
+    final duplicate =
+        variantMode == original.mode &&
+        (variantMode != PlaybackMode.block || blockSize == original.blockSize);
+    if (!duplicate) {
+      extras.add((
+        proposal: proposal,
+        suffix: ' ${variantMode.name}',
+        mode: variantMode,
+        blockSize: blockSize,
+      ));
+    }
+  }
+  if (original.mode != PlaybackMode.sequential) {
+    for (var copy = 1; copy <= alternateCopies; copy++) {
+      extras.add((
+        proposal: proposal,
+        suffix: ' Alt $copy',
+        mode: original.mode,
+        blockSize: original.blockSize,
+      ));
+    }
+  }
+  return extras;
+}
+
+LibraryFilter _libraryFilter(String value) =>
+    LibraryFilter.values.where((filter) => filter.name == value).firstOrNull ??
+    (throw const FormatException('Unsupported content filter'));
 
 List<Channel> composeChannelPlan({
   required List<Channel> existing,

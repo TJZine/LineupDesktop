@@ -254,18 +254,54 @@ abstract final class LineupTheme {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: palette.elevatedSurface,
+        fillColor: palette.deepBackground,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(palette.panelRadius),
+          borderSide: BorderSide(color: palette.defaultBorder),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(palette.panelRadius),
+          borderSide: BorderSide(color: palette.defaultBorder),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(palette.panelRadius),
           borderSide: BorderSide(
             color: palette.focusBorder,
-            width: palette.focusBorderWidth,
+            width: largeFocusIndicators ? palette.focusBorderWidth : 2,
           ),
         ),
         errorMaxLines: 2,
+      ),
+      segmentedButtonTheme: SegmentedButtonThemeData(
+        style: ButtonStyle(
+          backgroundColor: WidgetStateProperty.resolveWith(
+            (states) => states.contains(WidgetState.selected)
+                ? palette.selectedSurface
+                : Colors.transparent,
+          ),
+          foregroundColor: WidgetStateProperty.resolveWith(
+            (states) => states.contains(WidgetState.disabled)
+                ? palette.mutedText
+                : states.contains(WidgetState.selected)
+                ? palette.primaryText
+                : palette.secondaryText,
+          ),
+          side: WidgetStateProperty.resolveWith(
+            (states) => BorderSide(
+              color: states.contains(WidgetState.focused)
+                  ? palette.focusBorder
+                  : palette.subtleBorder,
+              width: states.contains(WidgetState.focused)
+                  ? (largeFocusIndicators ? palette.focusBorderWidth : 2)
+                  : 1,
+            ),
+          ),
+          shape: WidgetStatePropertyAll(
+            RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(palette.panelRadius),
+            ),
+          ),
+        ),
       ),
       dialogTheme: DialogThemeData(
         backgroundColor: palette.overlaySurface,
@@ -276,6 +312,13 @@ abstract final class LineupTheme {
       ),
       chipTheme: ChipThemeData(
         backgroundColor: palette.elevatedSurface,
+        selectedColor: palette.selectedSurface,
+        secondarySelectedColor: palette.selectedSurface,
+        checkmarkColor: palette.primaryText,
+        labelStyle: textTheme.labelLarge!.copyWith(color: palette.primaryText),
+        secondaryLabelStyle: textTheme.labelLarge!.copyWith(
+          color: palette.primaryText,
+        ),
         side: BorderSide(color: palette.defaultBorder),
         shape: const StadiumBorder(),
       ),

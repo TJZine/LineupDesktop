@@ -1,4 +1,7 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../channels/channel.dart';
 import '../channels/channel_builder.dart';
@@ -8,29 +11,13 @@ import '../ui/app_ui.dart';
 import 'form_error.dart';
 import 'lineup_controller.dart';
 
-enum _SetupCategory {
-  contentSources,
-  advancedSources,
-  buildOptions,
-  seriesOrdering,
-  limits,
-  guideOrder,
-}
-
 enum _BuildPhase { review, applying, failed, complete }
 
-enum _ReviewKind { protected, added, updated, retained, removed }
+enum _ReviewKind { unchanged, updated, added, removed }
 
-enum _ReviewFilter { all, protected, changed, removed }
+enum _ReviewFilter { all, unchanged, updated, added, removed }
 
-typedef _PlanImpact = ({
-  int create,
-  int update,
-  int unchanged,
-  int remove,
-  int finalCount,
-  int customKept,
-});
+typedef _ReviewEntry = ({Channel channel, Channel? before, _ReviewKind kind});
 
 class UpstreamChannelSetupView extends StatefulWidget {
   const UpstreamChannelSetupView({
@@ -40,147 +27,170 @@ class UpstreamChannelSetupView extends StatefulWidget {
     super.key,
   });
 
-  static const maxContentWidth = 1440.0;
-
   final LineupController controller;
   final VoidCallback? onViewLineup;
   final VoidCallback? onAddCustomChannel;
 
   @override
-  State<UpstreamChannelSetupView> createState() =>
-      _UpstreamChannelSetupViewState();
+  State<UpstreamChannelSetupView> createState() => _SetupState();
 }
 
-class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
+class _SetupState extends State<UpstreamChannelSetupView> {
   int _step = 1;
+  int _configurationSection = 0;
   final _selectedLibraries = <String>{};
   final _strategies = <BuilderStrategy>{...BuilderStrategy.values};
-  final _crossLibraryStrategies = <BuilderStrategy>{};
-  final _strategyOrder = <BuilderStrategy>[...BuilderStrategy.values];
-  _SetupCategory _category = _SetupCategory.contentSources;
-  ChannelBuildMode _mode = ChannelBuildMode.replace;
-  PlaybackMode _seriesOrdering = PlaybackMode.shuffle;
-  int _seriesBlockSize = 3;
-  int _maximumChannels = 200;
-  int _minimumItems = 5;
-  bool _alternateLineups = false;
+  final _grouped = <BuilderStrategy>{};
+  final _sourceOrder = <BuilderStrategy>[...BuilderStrategy.values];
+  final _orderFocus = {
+    for (final strategy in BuilderStrategy.values)
+      strategy: (earlier: FocusNode(), later: FocusNode()),
+  };
+  late ChannelBuildMode _mode;
+  PlaybackMode _playback = PlaybackMode.shuffle;
+  int _blockSize = 3;
+  bool _includeSpecials = false;
+  bool _extras = false;
   int _alternateCopies = 1;
   PlaybackMode? _variantMode;
   int _variantBlockSize = 3;
-  bool _replaceConfirmed = false;
-  _BuildPhase _buildPhase = _BuildPhase.review;
-  bool _libraryFocusPlaced = false;
-  bool _strategyFocusPlaced = false;
-  final _phaseActionFocus = FocusNode(debugLabel: 'Channel Setup phase action');
-  final _reviewSearch = TextEditingController();
-  _ReviewFilter _reviewFilter = _ReviewFilter.all;
+  int _maximum = 200;
+  int _minimum = 5;
+  bool _removalConfirmed = false;
+  _BuildPhase _phase = _BuildPhase.review;
+  _ReviewFilter _filter = _ReviewFilter.all;
+  final _search = TextEditingController();
+  final _resultFocus = FocusNode(
+    debugLabel: 'Setup result',
+    onKeyEvent: (_, event) =>
+        event is KeyRepeatEvent &&
+            const [
+              LogicalKeyboardKey.enter,
+              LogicalKeyboardKey.numpadEnter,
+              LogicalKeyboardKey.space,
+              LogicalKeyboardKey.select,
+              LogicalKeyboardKey.gameButtonA,
+            ].contains(event.logicalKey)
+        ? KeyEventResult.handled
+        : KeyEventResult.ignored,
+  );
+  ChannelPlanAllocation? _plan;
+  final _reviewStrategyBySource = <String, BuilderStrategy>{};
+  List<Channel> _reviewBase = const [];
+  List<_ReviewEntry> _appliedEntries = const [];
+  String? _notice;
   String? _error;
-  ({List<Channel> channels, bool truncated})? _planned;
-  _PlanImpact? _appliedImpact;
+
+  bool get _firstSetup => _reviewBase.isEmpty;
 
   @override
   void initState() {
     super.initState();
+    _mode = widget.controller.channels.isEmpty
+        ? ChannelBuildMode.replace
+        : ChannelBuildMode.merge;
     _selectedLibraries.addAll(
       widget.controller.selectedLibraryIds.isEmpty
           ? widget.controller.libraries.map((library) => library.id)
           : widget.controller.selectedLibraryIds,
     );
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _libraryFocusPlaced = true;
-    });
   }
 
   @override
   void dispose() {
-    _phaseActionFocus.dispose();
-    _reviewSearch.dispose();
+    for (final nodes in _orderFocus.values) {
+      nodes.earlier.dispose();
+      nodes.later.dispose();
+    }
+    _search.dispose();
+    _resultFocus.dispose();
     super.dispose();
   }
 
-  List<PlexLibrary> get _libraries => widget.controller.libraries
-      .where((library) => _selectedLibraries.contains(library.id))
-      .toList();
-
-  ({List<ChannelProposal> proposals, int itemCount}) get _proposalSnapshot {
+  List<ChannelProposal> get _proposals {
     final inventory = widget.controller.playableInventory;
-    return (
-      proposals: buildChannelProposals(
-        libraries: _libraries,
-        items: inventory.media,
-        playlists: inventory.playlists,
-        strategies: _strategies,
-        strategyOrder: _strategyOrder,
-        crossLibraryStrategies: _crossLibraryStrategies,
-        minimumItems: _minimumItems,
-        maximumChannels: _maximumChannels + 1,
-      ),
-      itemCount: inventory.byId.length,
+    return buildChannelProposals(
+      libraries: widget.controller.libraries
+          .where((library) => _selectedLibraries.contains(library.id))
+          .toList(),
+      items: inventory.media,
+      playlists: inventory.playlists,
+      strategies: _strategies,
+      strategyOrder: _sourceOrder,
+      crossLibraryStrategies: _grouped,
+      minimumItems: _minimum,
+      maximumChannels: null,
     );
+  }
+
+  ChannelPlanAllocation _allocate(
+    List<Channel> existing, {
+    List<ChannelProposal>? proposals,
+  }) => materializeChannelPlan(
+    proposals: proposals ?? _proposals,
+    existing: existing,
+    mode: _mode,
+    seriesMode: _playback,
+    seriesBlockSize: _blockSize,
+    alternateCopies: _extras ? _alternateCopies : 0,
+    variantMode: _extras ? _variantMode : null,
+    variantBlockSize: _variantBlockSize,
+    includeSpecials: _includeSpecials,
+    maximumChannels: _maximum,
+    anchor: DateTime.now().toUtc(),
+  );
+
+  ChannelPlanAllocation _allocateReview(List<Channel> existing) {
+    final proposals = _proposals;
+    _reviewStrategyBySource.clear();
+    for (final proposal in proposals) {
+      _reviewStrategyBySource.putIfAbsent(
+        canonicalSourceIdentity(proposal.source),
+        () => proposal.strategy,
+      );
+    }
+    return _allocate(existing, proposals: proposals);
   }
 
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.sizeOf(context);
-    final compact = size.width < 900 || size.height < 700;
+    final scale = LineupLayout.scaleFor(size);
     return Scaffold(
-      body: DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: RadialGradient(
-            center: Alignment(-0.65, -0.75),
-            radius: 1.35,
-            colors: [
-              LineupTheme.of(context).progressFill.withValues(alpha: 0.07),
-              LineupTheme.of(context).deepBackground,
-            ],
-          ),
-        ),
+      body: Material(
+        color: LineupTheme.of(context).deepBackground,
         child: SafeArea(
-          child: Center(
-            child: ConstrainedBox(
+          child: Theme(
+            data: Theme.of(context).copyWith(
+              textTheme: Theme.of(context).textTheme
+                  .apply(fontSizeFactor: scale),
+            ),
+            child: Padding(
               key: const ValueKey('channel-setup-content'),
-              constraints: const BoxConstraints(
-                maxWidth: UpstreamChannelSetupView.maxContentWidth,
-              ),
-              child: Padding(
-                padding: EdgeInsets.all(compact ? 16 : 28),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _header(),
-                    const SizedBox(height: 18),
-                    Expanded(
-                      child: Material(
-                        key: const ValueKey('channel-setup-shell'),
-                        color: LineupTheme.of(context).primarySurface,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(
-                            LineupTheme.of(context).panelRadius,
-                          ),
-                          side: BorderSide(
-                            color: LineupTheme.of(context).defaultBorder,
-                          ),
-                        ),
-                        child: Padding(
-                          key: const ValueKey('channel-setup-stage'),
-                          padding: EdgeInsets.all(compact ? 18 : 26),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              if (_error != null &&
-                                  _buildPhase != _BuildPhase.failed)
-                                _errorBanner(),
-                              if (_error != null &&
-                                  _buildPhase != _BuildPhase.failed)
-                                const SizedBox(height: 18),
-                              Expanded(child: _body()),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
+              padding: LineupLayout.pageInsets(size),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _header(),
+                  SizedBox(height: 20 * scale),
+                  if (_error != null && _phase != _BuildPhase.failed) ...[
+                    LineupNotice(message: _error!),
+                    SizedBox(height: 12 * scale),
                   ],
-                ),
+                  Expanded(
+                    child: KeyedSubtree(
+                      key: const ValueKey('channel-setup-stage'),
+                      child: switch (_step) {
+                        1 => _libraryStep(),
+                        2 => _configureStep(),
+                        _ =>
+                          _phase == _BuildPhase.review
+                              ? _reviewStep()
+                              : _resultStep(),
+                      },
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -193,23 +203,38 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
     key: const ValueKey('channel-setup-header'),
     builder: (context, constraints) {
       final title = Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Image.asset('assets/branding/lineup-logo-mark.png', height: 50),
-          const SizedBox(width: 16),
+          Image.asset('assets/branding/lineup-logo-mark.png', height: 42),
+          const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Semantics(
                   header: true,
-                  child: Text(
-                    'Channel Setup',
-                    style: Theme.of(context).textTheme.headlineMedium
-                        ?.copyWith(fontWeight: FontWeight.w800),
-                  ),
+                  child: Text(switch (_step) {
+                    1 => 'Choose libraries',
+                    2 => 'Configure channels',
+                    _ =>
+                      _phase == _BuildPhase.review
+                          ? (_firstSetup
+                                ? 'Review your first lineup'
+                                : 'Review your lineup')
+                          : 'Channel Setup',
+                  }, style: Theme.of(context).textTheme.headlineMedium),
                 ),
                 Text(
-                  'Build a clean, remote-first channel lineup for this server.',
+                  switch (_step) {
+                    1 => 'Select the Plex libraries to scan for channel ideas.',
+                    2 => 'Choose sources, playback order and lineup rules.',
+                    _ =>
+                      _phase == _BuildPhase.review
+                          ? (_firstSetup
+                                ? 'Check your channels before creating your lineup.'
+                                : 'Check what changes and what stays.')
+                          : 'Your setup choices remain available.',
+                  },
                   style: TextStyle(
                     color: LineupTheme.of(context).secondaryText,
                   ),
@@ -219,292 +244,228 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
           ),
         ],
       );
-      if (LineupLayout.isCompactWidth(constraints.maxWidth)) {
+      final steps = Text(
+        '1 Libraries  /  2 Configure  /  3 Review',
+        key: const ValueKey('channel-setup-steps'),
+        style: TextStyle(color: LineupTheme.of(context).secondaryText),
+      );
+      if (constraints.maxWidth < 900 ||
+          MediaQuery.textScalerOf(context).scale(14) >= 21) {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            title,
-            const SizedBox(height: 8),
-            Align(
-              alignment: Alignment.centerRight,
-              child: _StepPill(step: _step),
-            ),
-          ],
+          children: [title, const SizedBox(height: 8), steps],
         );
       }
       return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Expanded(child: title),
-          _StepPill(step: _step),
+          const SizedBox(width: 20),
+          steps,
         ],
       );
     },
   );
 
-  Widget _errorBanner() => Padding(
-    padding: const EdgeInsets.only(top: 14),
-    child: LineupNotice(message: _error!),
-  );
-
-  Widget _body() => switch (_step) {
-    1 => _libraryStep(),
-    2 => _strategyStep(),
-    _ => _reviewStep(),
-  };
-
-  Widget _libraryStep() => _SetupSurface(
-    title: 'Select Plex libraries',
-    subtitle: 'Lineup will scan the selected movie and show libraries for channel ideas.',
-    footer: _SetupFooter(
-      secondary: [
-        if (widget.controller.libraryScanStatus == LibraryScanStatus.scanning)
-          OutlinedButton.icon(
-            onPressed: widget.controller.cancelLibraryScan,
-            icon: const Icon(Icons.stop_circle_outlined),
-            label: const Text('Cancel scan'),
-          ),
-        if (widget.controller.channelSetupCanCancel)
-          OutlinedButton(
-            onPressed: widget.controller.cancelChannelSetup,
-            child: const Text('Cancel'),
-          ),
-        if (widget.controller.libraries.isEmpty &&
-            !widget.controller.channelSetupCanCancel)
-          OutlinedButton.icon(
-            onPressed: widget.controller.busy
-                ? null
-                : widget.controller.showServers,
-            icon: const Icon(Icons.dns_outlined),
-            label: const Text('Choose another server'),
-          ),
-        OutlinedButton(
-          onPressed: () => setState(
-            () => _selectedLibraries.addAll(
-              widget.controller.libraries.map((library) => library.id),
+  Widget _libraryStep() {
+    final controller = widget.controller;
+    final ready = controller.libraryScanReadyIds.intersection(
+      _selectedLibraries,
+    );
+    final retry = controller.libraryScanRetryIds.intersection(
+      _selectedLibraries,
+    );
+    final scanning = controller.libraryScanStatus == LibraryScanStatus.scanning;
+    final mixed =
+        ready.isNotEmpty &&
+        ready.length != _selectedLibraries.length &&
+        !scanning;
+    final canRetry =
+        !scanning &&
+        (retry.isNotEmpty || (controller.error != null && ready.isNotEmpty));
+    return _Stage(
+      footer: _Footer(
+        leading: [
+          if (scanning)
+            TextButton(
+              onPressed: controller.cancelLibraryScan,
+              child: const Text('Cancel scan'),
+            )
+          else if (controller.channelSetupCanCancel)
+            TextButton(
+              onPressed: controller.cancelChannelSetup,
+              child: const Text('Cancel'),
             ),
-          ),
-          child: const Text('Select All'),
-        ),
-        OutlinedButton(
-          onPressed: () => setState(_selectedLibraries.clear),
-          child: const Text('Clear All'),
-        ),
-      ],
-      primary: FilledButton.icon(
-        onPressed: _selectedLibraries.isEmpty || widget.controller.busy
-            ? null
-            : _continueFromLibraries,
-        icon: const Icon(Icons.arrow_forward),
-        label: const Text('Configure channels'),
+          if (canRetry)
+            OutlinedButton(
+              onPressed: controller.busy
+                  ? null
+                  : () => _scan(retryFailedOnly: true),
+              child: Text(
+                retry.isEmpty ? 'Retry scan' : 'Retry ${retry.length} failed',
+              ),
+            ),
+        ],
+        trailing: mixed
+            ? FilledButton(
+                key: const ValueKey('continue-ready-libraries'),
+                onPressed: controller.busy
+                    ? null
+                    : () => _commitLibraries(ready),
+                child: Text('Continue with ${ready.length} ready'),
+              )
+            : FilledButton(
+                key: const ValueKey('scan-selected-libraries'),
+                onPressed: _selectedLibraries.isEmpty || controller.busy
+                    ? null
+                    : _scan,
+                child: const Text('Scan selected libraries'),
+              ),
       ),
-    ),
-    child: widget.controller.libraries.isEmpty
-        ? const SingleChildScrollView(
-            child: LineupEmptyState(
-              icon: Icons.video_library_outlined,
-              title: 'No movie or show libraries found',
-              message: 'Choose another Plex server with accessible movie or show libraries.',
-            ),
-          )
-        : LayoutBuilder(
-            builder: (context, constraints) => CustomScrollView(
-              slivers: [
-                if (widget.controller.libraryScanStatus !=
-                    LibraryScanStatus.idle)
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.only(bottom: 14),
-                      child: _scanStatus(),
-                    ),
-                  ),
-                SliverGrid(
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: constraints.maxWidth >= 680 ? 2 : 1,
-                    mainAxisExtent: 132,
-                    crossAxisSpacing: 14,
-                    mainAxisSpacing: 14,
-                  ),
-                  delegate: SliverChildBuilderDelegate((_, index) {
-                    final library = widget.controller.libraries[index];
-                    final selected = _selectedLibraries.contains(library.id);
-                    final scanFact =
-                        widget.controller.libraryScanFacts[library.id];
-                    return LineupSelectionCard(
-                      selected: selected,
-                      autofocus: index == 0 && !_libraryFocusPlaced,
-                      onPressed: () => setState(
-                        () => selected
-                            ? _selectedLibraries.remove(library.id)
-                            : _selectedLibraries.add(library.id),
+      child: controller.libraries.isEmpty
+          ? const Center(
+              child: LineupEmptyState(
+                icon: Icons.video_library_outlined,
+                title: 'No movie or show libraries found',
+                message:
+                    'Choose another Plex server with accessible libraries.',
+              ),
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _selectionSummary(),
+                if (controller.error != null && !scanning) ...[
+                  const SizedBox(height: 8),
+                  LineupNotice(message: controller.error!),
+                ],
+                if (mixed) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        Icons.info_outline,
+                        size: 18,
+                        color: LineupTheme.of(context).secondaryText,
                       ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(14),
-                        child: Row(
-                          children: [
-                            Icon(
-                              library.type == PlexLibraryType.show
-                                  ? Icons.tv
-                                  : Icons.movie_outlined,
-                              size: 38,
-                            ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    library.title,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                  Text(
-                                    library.type == PlexLibraryType.show
-                                        ? 'TV Shows'
-                                        : 'Movies',
-                                    style: TextStyle(
-                                      color: LineupTheme.of(context).mutedText,
-                                    ),
-                                  ),
-                                  Text(
-                                    _libraryScanStatusLabel(scanFact),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      color: LineupTheme.of(context).mutedText,
-                                    ),
-                                  ),
-                                  if (scanFact != null &&
-                                      scanFact.status != LibraryScanStatus.idle)
-                                    Text(
-                                      _libraryScanProgressLabel(scanFact),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        color: LineupTheme.of(context)
-                                            .mutedText,
-                                        fontSize: 13,
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ),
-                            Icon(
-                              selected
-                                  ? Icons.check_circle
-                                  : Icons.circle_outlined,
-                              color: selected
-                                  ? LineupTheme.of(context).progressFill
-                                  : LineupTheme.of(context).mutedText,
-                            ),
-                          ],
+                      const SizedBox(width: 7),
+                      Expanded(
+                        child: Text(
+                          '${ready.length} ${ready.length == 1 ? 'library is' : 'libraries are'} ready. Libraries that are empty, unsupported or failed will be excluded.',
+                          style: TextStyle(
+                            color: LineupTheme.of(context).secondaryText,
+                          ),
                         ),
                       ),
-                    );
-                  }, childCount: widget.controller.libraries.length),
+                    ],
+                  ),
+                ],
+                const SizedBox(height: 10),
+                Expanded(
+                  child: ListView.separated(
+                    key: const ValueKey('library-selection-list'),
+                    itemCount: controller.libraries.length,
+                    separatorBuilder: (_, _) => const Divider(height: 1),
+                    itemBuilder: (_, index) =>
+                        _libraryRow(controller.libraries[index]),
+                  ),
                 ),
               ],
             ),
-          ),
-  );
-
-  String _libraryScanStatusLabel(LibraryScanFact? fact) {
-    if (fact == null) return 'Count available after scan';
-    return switch (fact.status) {
-      LibraryScanStatus.idle => 'Not scanned',
-      LibraryScanStatus.scanning => 'Scanning',
-      LibraryScanStatus.complete => 'Complete',
-      LibraryScanStatus.empty => 'Empty',
-      LibraryScanStatus.unsupported => 'Unsupported',
-      LibraryScanStatus.transientFailure => 'Scan failed',
-      LibraryScanStatus.cancelled => 'Cancelled',
-    };
+    );
   }
 
-  String _libraryScanProgressLabel(LibraryScanFact fact) => [
-    fact.totalItems == null
-        ? '${fact.completedItems} ${fact.completedItems == 1 ? 'item' : 'items'}'
-        : '${fact.completedItems}/${fact.totalItems} ${fact.totalItems == 1 ? 'item' : 'items'}',
-    '${fact.completedPages} ${fact.completedPages == 1 ? 'page' : 'pages'}',
-  ].join(' · ');
+  Widget _selectionSummary() {
+    final libraries = widget.controller.libraries;
+    final selected = _selectedLibraries.length;
+    final all = selected == libraries.length;
+    final value = all
+        ? true
+        : selected == 0
+        ? false
+        : null;
+    return Row(
+      children: [
+        if (libraries.length > 1) ...[
+          Checkbox(
+            key: const ValueKey('select-all-libraries'),
+            tristate: true,
+            value: value,
+            onChanged: (_) => _toggleAllLibraries(),
+          ),
+          TextButton(
+            onPressed: _toggleAllLibraries,
+            child: const Text('Select all'),
+          ),
+        ],
+        const Spacer(),
+        Text('$selected of ${libraries.length} selected'),
+      ],
+    );
+  }
 
-  Widget _scanStatus() {
-    final controller = widget.controller;
-    final status = controller.libraryScanStatus;
-    final (label, message) = switch (status) {
-      LibraryScanStatus.scanning => (
-        'Scanning selected libraries',
-        'Pages scanned: ${controller.libraryScanCompletedPages} · Items scanned: ${controller.libraryScanCompletedItems}',
-      ),
-      LibraryScanStatus.complete => (
-        'Library scan complete',
-        'Pages scanned: ${controller.libraryScanCompletedPages} · Items scanned: ${controller.libraryScanCompletedItems}',
-      ),
-      LibraryScanStatus.empty => (
-        'Selected libraries are empty',
-        'Plex returned no media metadata for the selected libraries.',
-      ),
-      LibraryScanStatus.unsupported => (
-        'No playable media found',
-        'Plex returned media, but none has a positive duration and usable media part.',
-      ),
-      LibraryScanStatus.transientFailure => (
-        'Library scan failed',
-        controller.error ?? 'Plex could not complete the library scan.',
-      ),
-      LibraryScanStatus.cancelled => (
-        'Library scan cancelled',
-        'Your previous library selection and media remain unchanged.',
-      ),
-      LibraryScanStatus.idle => ('', ''),
-    };
-    final total = controller.libraryScanTotalItems;
+  void _toggleAllLibraries() => setState(() {
+    final libraries = widget.controller.libraries;
+    if (_selectedLibraries.length == libraries.length) {
+      _selectedLibraries.clear();
+    } else {
+      _selectedLibraries
+        ..clear()
+        ..addAll(libraries.map((library) => library.id));
+    }
+  });
+
+  Widget _libraryRow(PlexLibrary library) {
+    final selected = _selectedLibraries.contains(library.id);
+    final fact = widget.controller.libraryScanFacts[library.id];
+    void toggle() => setState(() {
+      if (selected) {
+        _selectedLibraries.remove(library.id);
+      } else {
+        _selectedLibraries.add(library.id);
+      }
+    });
+
     return Semantics(
-      container: true,
-      liveRegion: true,
-      label: label,
-      child: Card(
+      button: true,
+      selected: selected,
+      label: '${library.title}, ${_libraryType(library)}, ${_scanStatus(fact)}',
+      child: InkWell(
+        onTap: widget.controller.busy ? null : toggle,
         child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              ExcludeSemantics(
-                child: Text(
-                  label,
-                  style: const TextStyle(fontWeight: FontWeight.w700),
+              Checkbox(
+                value: selected,
+                onChanged: widget.controller.busy ? null : (_) => toggle(),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      library.title,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    if (fact != null) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        _scanDetail(fact),
+                        style: TextStyle(color: _scanColor(fact.status)),
+                      ),
+                    ],
+                  ],
                 ),
               ),
-              const SizedBox(height: 4),
-              Text(message),
-              if (status == LibraryScanStatus.scanning) ...[
-                const SizedBox(height: 10),
-                LinearProgressIndicator(
-                  value: total != null && total > 0
-                      ? (controller.libraryScanCompletedItems / total).clamp(
-                          0.0,
-                          1.0,
-                        )
-                      : null,
-                ),
-              ],
-              if ({
-                LibraryScanStatus.empty,
-                LibraryScanStatus.unsupported,
-                LibraryScanStatus.transientFailure,
-                LibraryScanStatus.cancelled,
-              }.contains(status))
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: TextButton(
-                    onPressed: controller.busy ? null : _continueFromLibraries,
-                    child: const Text('Retry scan'),
-                  ),
-                ),
+              const SizedBox(width: 16),
+              Text(
+                _libraryType(library),
+                style: TextStyle(color: LineupTheme.of(context).mutedText),
+              ),
             ],
           ),
         ),
@@ -512,275 +473,651 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
     );
   }
 
-  Future<void> _continueFromLibraries() async {
-    setState(() => _error = null);
+  Future<void> _scan({bool retryFailedOnly = false}) async {
+    setState(() {
+      _error = null;
+      _notice = null;
+    });
     try {
-      final loaded = await widget.controller.setLibraries(_selectedLibraries);
+      final settled = await widget.controller.scanLibraries(
+        Set.of(_selectedLibraries),
+        retryFailedOnly: retryFailedOnly,
+      );
       if (!mounted) return;
-      setState(() {
-        if (loaded &&
-            widget.controller.libraryScanStatus == LibraryScanStatus.complete) {
-          _step = 2;
-        } else if (!loaded &&
-            widget.controller.libraryScanStatus !=
-                LibraryScanStatus.cancelled) {
-          _error = widget.controller.error ?? 'Library loading failed.';
-        }
-      });
-      if (loaded &&
-          widget.controller.libraryScanStatus == LibraryScanStatus.complete) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) _strategyFocusPlaced = true;
-        });
+      if (!settled) {
+        setState(() {});
+        return;
       }
+      final ready = widget.controller.libraryScanReadyIds.intersection(
+        _selectedLibraries,
+      );
+      if (ready.length == _selectedLibraries.length) {
+        await _commitLibraries(ready);
+      } else {
+        setState(() {});
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(
+          () => _error = safeFormError(error, 'The library scan failed.'),
+        );
+      }
+    }
+  }
+
+  Future<void> _commitLibraries(Set<String> ready) async {
+    try {
+      final saved = await widget.controller.commitLibraryScan(ready);
+      if (!mounted) return;
+      if (!saved) {
+        setState(() => _error = 'The ready libraries could not be saved.');
+        return;
+      }
+      setState(() {
+        _selectedLibraries
+          ..clear()
+          ..addAll(ready);
+        _step = 2;
+        _error = null;
+      });
     } catch (error) {
       if (mounted) {
         setState(
           () => _error = safeFormError(
             error,
-            'Channel Setup could not complete that request.',
+            'The ready libraries could not be saved.',
           ),
         );
       }
     }
   }
 
-  Widget _strategyStep() => _strategyStepFor(_proposalSnapshot);
-
-  Widget _strategyStepFor(
-    ({List<ChannelProposal> proposals, int itemCount}) proposalSnapshot,
-  ) => _SetupSurface(
-    title: 'Configure the lineup',
-    subtitle: 'Choose source families, ordering and limits. Estimates update from loaded Plex metadata.',
-    footer: _SetupFooter(
-      secondary: [
-        OutlinedButton(
-          onPressed: () => setState(() => _step = 1),
-          child: const Text('Back'),
-        ),
-      ],
-      primary: FilledButton.icon(
-        onPressed: proposalSnapshot.proposals.isEmpty ? null : _prepareReview,
-        icon: const Icon(Icons.preview_outlined),
-        label: Text(
-          widget.controller.channels.isEmpty ? 'Build Channels' : 'Review',
+  Widget _configureStep() {
+    final allocation = _allocate(widget.controller.channels);
+    return _Stage(
+      footer: _Footer(
+        leading: [
+          TextButton(
+            onPressed: () => setState(() => _step = 1),
+            child: const Text('Back to libraries'),
+          ),
+        ],
+        summary: Text(_allocationSummary(allocation)),
+        trailing: FilledButton(
+          key: const ValueKey('review-channels'),
+          onPressed: allocation.channels.isEmpty ? null : _prepareReview,
+          child: const Text('Review channels'),
         ),
       ),
-    ),
-    child: LayoutBuilder(
-      builder: (_, constraints) {
-        final compact = LineupLayout.isCompactWidth(constraints.maxWidth);
-        final rail = _categoryRail(compact);
-        final details = _categoryDetails();
-        if (compact) {
-          return ListView(
-            children: [
-              rail,
-              const SizedBox(height: 12),
-              SizedBox(
-                height: constraints.maxHeight.clamp(280, 520).toDouble(),
-                child: details,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          const labels = ['Channel sources', 'Playback order', 'Lineup rules'];
+          final roles = LineupTheme.of(context);
+          final compact =
+              constraints.maxWidth < 900 ||
+              MediaQuery.textScalerOf(context).scale(1) >= 1.6;
+          final navigation = [
+            for (var index = 0; index < labels.length; index++)
+              Semantics(
+                selected: _configurationSection == index,
+                child: TextButton(
+                  key: ValueKey('configure-section-$index'),
+                  style: TextButton.styleFrom(
+                    alignment: Alignment.centerLeft,
+                    foregroundColor: roles.primaryText,
+                    backgroundColor: _configurationSection == index
+                        ? roles.selectedSurface
+                        : Colors.transparent,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 14,
+                    ),
+                  ),
+                  onPressed: () =>
+                      setState(() => _configurationSection = index),
+                  child: Text(labels[index]),
+                ),
               ),
-              const SizedBox(height: 12),
-              _previewStrip(proposalSnapshot),
-            ],
-          );
-        }
-        return Column(
-          children: [
-            Expanded(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  SizedBox(width: 280, child: rail),
-                  const SizedBox(width: 18),
-                  Expanded(child: details),
-                ],
-              ),
+          ];
+          final content = KeyedSubtree(
+            key: const ValueKey('channel-configuration'),
+            child: ListView(
+              key: ValueKey(_configurationSection),
+              children: [
+                _heading(
+                  labels[_configurationSection],
+                  switch (_configurationSection) {
+                    0 => 'Choose which kinds of generated channels to include.',
+                    1 =>
+                      'Choose how programs are arranged on generated channels.',
+                    _ => 'Set limits and the priority used by balanced source rotation.',
+                  },
+                ),
+                if (_configurationSection == 0)
+                  LayoutBuilder(
+                    builder: (_, constraints) {
+                      final width = constraints.maxWidth >= 840
+                          ? (constraints.maxWidth - 16) / 2
+                          : constraints.maxWidth;
+                      return Wrap(
+                        spacing: 16,
+                        runSpacing: 8,
+                        children: [
+                          for (final strategy in BuilderStrategy.values)
+                            SizedBox(
+                              width: width,
+                              child: _sourceControl(strategy, allocation),
+                            ),
+                        ],
+                      );
+                    },
+                  ),
+                if (_configurationSection == 1) _playbackControls(),
+                if (_configurationSection == 2)
+                  LayoutBuilder(
+                    builder: (_, constraints) {
+                      if (constraints.maxWidth < 840) {
+                        return Column(
+                          children: [
+                            _limitControls(),
+                            const SizedBox(height: 20),
+                            _orderControls(),
+                          ],
+                        );
+                      }
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(child: _limitControls()),
+                          const SizedBox(width: 32),
+                          Expanded(child: _orderControls()),
+                        ],
+                      );
+                    },
+                  ),
+              ],
             ),
-            const SizedBox(height: 12),
-            _previewStrip(proposalSnapshot),
-          ],
-        );
-      },
-    ),
-  );
-
-  Widget _categoryRail(bool compact) {
-    final children = [
-      for (final category in _SetupCategory.values)
-        Padding(
-          padding: EdgeInsets.only(right: compact ? 8 : 0, bottom: 8),
-          child: _RailButton(
-            label: _categoryLabel(category),
-            selected: category == _category,
-            autofocus: category == _category && !_strategyFocusPlaced,
-            onPressed: () => setState(() => _category = category),
-          ),
-        ),
-    ];
-    return KeyedSubtree(
-      key: const ValueKey('channel-setup-strategy-rail'),
-      child: compact
-          ? SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(children: children),
-            )
-          : ListView(children: children),
+          );
+          return compact
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Wrap(spacing: 8, runSpacing: 4, children: navigation),
+                    const SizedBox(height: 16),
+                    Expanded(child: content),
+                  ],
+                )
+              : Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(
+                      width:
+                          176 *
+                          LineupLayout.scaleFor(MediaQuery.sizeOf(context)),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          for (final item in navigation) ...[
+                            item,
+                            const SizedBox(height: 8),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 28),
+                    Expanded(child: content),
+                  ],
+                );
+        },
+      ),
     );
   }
 
-  Widget _categoryDetails() => Card(
-    key: const ValueKey('channel-setup-strategy-details'),
-    child: Padding(
-      padding: const EdgeInsets.all(22),
-      child: ListView(children: _detailControls()),
+  Widget _heading(String title, String description) => Padding(
+    padding: const EdgeInsets.only(bottom: 12),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: Theme.of(context).textTheme.titleLarge),
+        Text(
+          description,
+          style: TextStyle(color: LineupTheme.of(context).secondaryText),
+        ),
+      ],
     ),
   );
 
-  List<Widget> _detailControls() => switch (_category) {
-    _SetupCategory.contentSources => [
-      _sectionTitle('Content Sources', 'Core library-driven channel families.'),
-      _strategyToggle(BuilderStrategy.playlists),
-      _strategyToggle(BuilderStrategy.collections),
-      _strategyToggle(BuilderStrategy.recentlyAdded),
-      _strategyToggle(BuilderStrategy.genres, allowCrossLibrary: true),
-      _strategyToggle(BuilderStrategy.decades),
-    ],
-    _SetupCategory.advancedSources => [
-      _sectionTitle(
-        'Advanced Sources',
-        'People and studio channels from Plex metadata.',
+  Widget _sourceControl(
+    BuilderStrategy strategy,
+    ChannelPlanAllocation allocation,
+  ) {
+    final enabled = _strategies.contains(strategy);
+    final canGroup =
+        _supportsGrouping(strategy) && _selectedLibraries.length > 1;
+    final eligible = allocation.eligibleOriginalsByStrategy[strategy] ?? 0;
+    final included = allocation.allocatedOriginalsByStrategy[strategy] ?? 0;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(color: LineupTheme.of(context).subtleBorder),
+        ),
       ),
-      _strategyToggle(BuilderStrategy.studios, allowCrossLibrary: true),
-      _strategyToggle(BuilderStrategy.actors, allowCrossLibrary: true),
-      _strategyToggle(BuilderStrategy.directors, allowCrossLibrary: true),
-    ],
-    _SetupCategory.buildOptions => [
-      _sectionTitle(
-        'Build Options',
-        'Choose how this plan changes the lineup.',
-      ),
-      RadioGroup<ChannelBuildMode>(
-        groupValue: _mode,
-        onChanged: (value) => setState(() => _mode = value!),
-        child: Column(
-          children: [
-            for (final mode in ChannelBuildMode.values)
-              RadioListTile<ChannelBuildMode>(
-                value: mode,
-                title: Text(_modeLabel(mode)),
-                subtitle: Text(_modeDescription(mode)),
+      child: Column(
+        children: [
+          CheckboxListTile(
+            value: enabled,
+            controlAffinity: ListTileControlAffinity.leading,
+            contentPadding: EdgeInsets.zero,
+            title: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: Text(builderStrategyLabels[strategy]!)),
+                const SizedBox(width: 12),
+                Flexible(
+                  child: Text(
+                    '$eligible qualifying · $included included',
+                    textAlign: TextAlign.end,
+                    style: TextStyle(
+                      color: LineupTheme.of(context).secondaryText,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            subtitle: Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(_strategyDescription(strategy)),
+            ),
+            onChanged: (value) => setState(() {
+              if (value == true) {
+                _strategies.add(strategy);
+              } else {
+                _strategies.remove(strategy);
+              }
+            }),
+          ),
+          if (canGroup)
+            CheckboxListTile(
+              dense: true,
+              controlAffinity: ListTileControlAffinity.leading,
+              contentPadding: const EdgeInsets.only(left: 40, right: 16),
+              value: enabled && _grouped.contains(strategy),
+              title: const Text('Group matching values across libraries'),
+              subtitle: const Text(
+                'One channel combines the same value from every selected library.',
               ),
-          ],
-        ),
-      ),
-    ],
-    _SetupCategory.seriesOrdering => [
-      _sectionTitle(
-        'Series Ordering',
-        'Base playback order for generated channels.',
-      ),
-      SegmentedButton<PlaybackMode>(
-        segments: const [
-          ButtonSegment(value: PlaybackMode.shuffle, label: Text('Shuffle')),
-          ButtonSegment(
-            value: PlaybackMode.sequential,
-            label: Text('Sequential'),
-          ),
-          ButtonSegment(value: PlaybackMode.block, label: Text('Blocks')),
+              onChanged: enabled
+                  ? (value) => setState(() {
+                      if (value == true) {
+                        _grouped.add(strategy);
+                      } else {
+                        _grouped.remove(strategy);
+                      }
+                    })
+                  : null,
+            ),
         ],
-        selected: {_seriesOrdering},
-        onSelectionChanged: (value) =>
-            setState(() => _seriesOrdering = value.single),
       ),
-      if (_seriesOrdering == PlaybackMode.block) ...[
-        const SizedBox(height: 16),
-        DropdownButtonFormField<int>(
-          initialValue: _seriesBlockSize,
-          decoration: const InputDecoration(labelText: 'Episodes per block'),
-          items: const [2, 3, 4, 5]
-              .map(
-                (value) =>
-                    DropdownMenuItem(value: value, child: Text('$value')),
-              )
-              .toList(),
-          onChanged: (value) => setState(() => _seriesBlockSize = value!),
+    );
+  }
+
+  Widget _playbackControls() => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      LayoutBuilder(
+        builder: (context, constraints) {
+          final effectiveWidth =
+              constraints.maxWidth / MediaQuery.textScalerOf(context).scale(1);
+          final columns = effectiveWidth >= 780
+              ? 3
+              : effectiveWidth >= 520
+              ? 2
+              : 1;
+          final gap = 12.0;
+          final width = (constraints.maxWidth - gap * (columns - 1)) / columns;
+          return RadioGroup<PlaybackMode>(
+            groupValue: _playback,
+            onChanged: (mode) => _setPlaybackMode(mode!),
+            child: Wrap(
+              spacing: gap,
+              runSpacing: 8,
+              children: [
+                _playbackChoice(
+                  PlaybackMode.shuffle,
+                  'Shuffle',
+                  'A stable shuffled schedule.',
+                  width: width,
+                ),
+                _playbackChoice(
+                  PlaybackMode.sequential,
+                  'In order',
+                  'Preserve the source order.',
+                  width: width,
+                ),
+                _playbackChoice(
+                  PlaybackMode.block,
+                  'Mini-marathons',
+                  'Rotate shows in short chronological blocks.',
+                  width: width,
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+      const SizedBox(height: 16),
+      _episodeStrip(),
+      if (_playback == PlaybackMode.block)
+        Wrap(
+          spacing: 20,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [SizedBox(width: 220, child: _blockField(main: true))],
         ),
-      ],
-      const SizedBox(height: 18),
       SwitchListTile(
-        value: _alternateLineups,
-        onChanged: (value) => setState(() => _alternateLineups = value),
-        title: Text('Alternate lineups and variants'),
-        subtitle: const Text(
-          'Create deterministic alternatives for series channels.',
+        value: _extras,
+        title: const Text('Additional channel versions'),
+        subtitle: Text(
+          _playback == PlaybackMode.sequential
+              ? 'Alternate schedules are not available with In order. A different playback mode can still be added.'
+              : 'Add alternate schedules after every eligible original channel is included.',
         ),
+        onChanged: (value) => setState(() {
+          _extras = value;
+          _clearIncludeSpecialsIfUnused();
+        }),
       ),
-      if (_alternateLineups) ...[
-        DropdownButtonFormField<int>(
-          initialValue: _alternateCopies,
-          decoration: const InputDecoration(labelText: 'Alternate copies'),
-          items: const [1, 2, 3]
-              .map(
-                (value) =>
-                    DropdownMenuItem(value: value, child: Text('$value')),
-              )
-              .toList(),
-          onChanged: (value) => setState(() => _alternateCopies = value!),
-        ),
-        const SizedBox(height: 16),
-        DropdownButtonFormField<PlaybackMode?>(
-          initialValue: _variantMode,
-          decoration: const InputDecoration(labelText: 'Additional variant'),
-          items: const [
-            DropdownMenuItem(value: null, child: Text('None')),
-            DropdownMenuItem(
-              value: PlaybackMode.shuffle,
-              child: Text('Shuffle'),
+      if (_extras)
+        Wrap(
+          spacing: 16,
+          runSpacing: 12,
+          children: [
+            SizedBox(
+              width: 240,
+              child: DropdownButtonFormField<PlaybackMode?>(
+                isExpanded: true,
+                initialValue: _variantMode,
+                decoration: const InputDecoration(
+                  labelText: 'Different playback mode',
+                ),
+                items: const [
+                  DropdownMenuItem(value: null, child: Text('None')),
+                  DropdownMenuItem(
+                    value: PlaybackMode.shuffle,
+                    child: Text('Shuffle'),
+                  ),
+                  DropdownMenuItem(
+                    value: PlaybackMode.sequential,
+                    child: Text('In order'),
+                  ),
+                  DropdownMenuItem(
+                    value: PlaybackMode.block,
+                    child: Text('Mini-marathons'),
+                  ),
+                ],
+                onChanged: (value) => setState(() {
+                  _variantMode = value;
+                  _clearDuplicateVariant();
+                  _clearIncludeSpecialsIfUnused();
+                }),
+              ),
             ),
-            DropdownMenuItem(
-              value: PlaybackMode.sequential,
-              child: Text('Sequential'),
+            if (_variantMode == PlaybackMode.block)
+              SizedBox(width: 210, child: _blockField(main: false)),
+            SizedBox(
+              width: 220,
+              child: DropdownButtonFormField<int>(
+                initialValue: _alternateCopies,
+                decoration: const InputDecoration(
+                  labelText: 'Alternate schedules',
+                ),
+                items: const [0, 1, 2, 3]
+                    .map(
+                      (value) =>
+                          DropdownMenuItem(value: value, child: Text('$value')),
+                    )
+                    .toList(),
+                onChanged: _playback == PlaybackMode.sequential
+                    ? null
+                    : (value) => setState(() => _alternateCopies = value!),
+              ),
             ),
-            DropdownMenuItem(value: PlaybackMode.block, child: Text('Blocks')),
           ],
-          onChanged: (value) => setState(() => _variantMode = value),
         ),
-        if (_variantMode == PlaybackMode.block) ...[
-          const SizedBox(height: 16),
-          DropdownButtonFormField<int>(
-            initialValue: _variantBlockSize,
-            decoration: const InputDecoration(labelText: 'Variant block size'),
-            items: const [2, 3, 4, 5]
-                .map(
-                  (value) =>
-                      DropdownMenuItem(value: value, child: Text('$value')),
-                )
-                .toList(),
-            onChanged: (value) => setState(() => _variantBlockSize = value!),
-          ),
-        ],
-      ],
+      if (_playback == PlaybackMode.block ||
+          (_extras && _variantMode == PlaybackMode.block))
+        CheckboxMenuButton(
+          value: _includeSpecials,
+          onChanged: (value) =>
+              setState(() => _includeSpecials = value ?? false),
+          child: const Text('Include specials'),
+        ),
+      if (_notice != null)
+        Text(
+          _notice!,
+          style: TextStyle(color: LineupTheme.of(context).secondaryText),
+        ),
     ],
-    _SetupCategory.limits => [
-      _sectionTitle(
-        'Limits',
-        'Bound the lineup while keeping large channel collections practical.',
+  );
+
+  Widget _playbackChoice(
+    PlaybackMode mode,
+    String title,
+    String description, {
+    required double width,
+  }) {
+    final roles = LineupTheme.of(context);
+    final selected = _playback == mode;
+    return SizedBox(
+      width: width,
+      child: Container(
+        constraints: BoxConstraints(
+          minHeight: 104 * LineupLayout.scaleFor(MediaQuery.sizeOf(context)),
+        ),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(roles.panelRadius),
+          border: Border.all(
+            color: selected
+                ? roles.progressFill.withValues(alpha: 0.7)
+                : roles.subtleBorder,
+          ),
+        ),
+        child: Material(
+          color: selected ? roles.selectedSurface : roles.primarySurface,
+          borderRadius: BorderRadius.circular(roles.panelRadius),
+          child: RadioListTile<PlaybackMode>(
+            value: mode,
+            selected: selected,
+            activeColor: roles.progressFill,
+            controlAffinity: ListTileControlAffinity.leading,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 8,
+            ),
+            title: Text(title, style: TextStyle(color: roles.primaryText)),
+            subtitle: Text(
+              description,
+              style: TextStyle(color: roles.secondaryText),
+            ),
+          ),
+        ),
       ),
+    );
+  }
+
+  Widget _episodeStrip() {
+    final episodes = switch (_playback) {
+      PlaybackMode.shuffle => const [
+        ('Summit', '02'),
+        ('Harbor', '01'),
+        ('Summit', '03'),
+        ('Harbor', '02'),
+        ('Harbor', '03'),
+        ('Summit', '01'),
+      ],
+      PlaybackMode.sequential => const [
+        ('Harbor', '01'),
+        ('Harbor', '02'),
+        ('Harbor', '03'),
+        ('Summit', '01'),
+        ('Summit', '02'),
+        ('Summit', '03'),
+      ],
+      PlaybackMode.block => _miniMarathonEpisodes(),
+    };
+    final roles = LineupTheme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      decoration: BoxDecoration(
+        border: Border.symmetric(
+          horizontal: BorderSide(color: roles.subtleBorder),
+        ),
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final effectiveWidth =
+              constraints.maxWidth / MediaQuery.textScalerOf(context).scale(1);
+          final columns = effectiveWidth >= 900
+              ? 6
+              : effectiveWidth >= 560
+              ? 3
+              : effectiveWidth >= 320
+              ? 2
+              : 1;
+          final gap = 8.0;
+          final width = (constraints.maxWidth - gap * (columns - 1)) / columns;
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Illustrative schedule · Each tile is one episode',
+                style: TextStyle(color: roles.secondaryText),
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: gap,
+                runSpacing: gap,
+                children: [
+                  for (final episode in episodes)
+                    SizedBox(
+                      width: width,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: roles.primarySurface,
+                          border: Border(
+                            left: BorderSide(color: roles.defaultBorder),
+                          ),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(episode.$1),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Episode ${episode.$2}',
+                                style: TextStyle(color: roles.secondaryText),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  List<(String, String)> _miniMarathonEpisodes() {
+    final blockSize = _blockSize.clamp(2, 5).toInt();
+    return List.generate(6, (index) {
+      final block = index ~/ blockSize;
+      final episode = index % blockSize + 1;
+      final seasonBlock = block ~/ 2;
+      return (
+        block.isEven ? 'Harbor' : 'Summit',
+        '${seasonBlock * blockSize + episode}'.padLeft(2, '0'),
+      );
+    });
+  }
+
+  Widget _blockField({required bool main}) => DropdownButtonFormField<int>(
+    initialValue: main ? _blockSize : _variantBlockSize,
+    decoration: InputDecoration(
+      labelText: main ? 'Episodes per block' : 'Extra block size',
+    ),
+    items: const [2, 3, 4, 5]
+        .map((value) => DropdownMenuItem(value: value, child: Text('$value')))
+        .toList(),
+    onChanged: (value) => setState(() {
+      if (main) {
+        _blockSize = value!;
+      } else {
+        _variantBlockSize = value!;
+      }
+      _clearDuplicateVariant();
+    }),
+  );
+
+  void _setPlaybackMode(PlaybackMode mode) {
+    if (mode == _playback) return;
+    setState(() {
+      _playback = mode;
+      _notice = null;
+      final enteringInOrder = mode == PlaybackMode.sequential;
+      final removedAlternateSchedules = enteringInOrder && _alternateCopies > 0;
+      if (removedAlternateSchedules) _alternateCopies = 0;
+      _clearDuplicateVariant();
+      if (removedAlternateSchedules && _notice == null) {
+        _notice = 'Alternate schedules aren’t available with In order.';
+      }
+      _clearIncludeSpecialsIfUnused();
+    });
+  }
+
+  void _clearIncludeSpecialsIfUnused() {
+    final hasBlockOutput =
+        _playback == PlaybackMode.block ||
+        (_extras && _variantMode == PlaybackMode.block);
+    if (!hasBlockOutput) _includeSpecials = false;
+  }
+
+  void _clearDuplicateVariant() {
+    final duplicate =
+        _variantMode == _playback &&
+        (_variantMode != PlaybackMode.block || _variantBlockSize == _blockSize);
+    if (!duplicate) return;
+    final removed = _variantMode;
+    _variantMode = null;
+    _notice = removed == PlaybackMode.sequential
+        ? 'Extra In order version removed—it now matches your main playback order.'
+        : 'The duplicate extra version was removed because it matches your main playback order.';
+  }
+
+  Widget _limitControls() => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Text('Limits', style: Theme.of(context).textTheme.titleMedium),
+      const SizedBox(height: 10),
       DropdownButtonFormField<int>(
-        initialValue: _maximumChannels,
-        decoration: const InputDecoration(labelText: 'Maximum channels'),
+        initialValue: _maximum,
+        decoration: const InputDecoration(
+          labelText: 'Maximum generated channels',
+        ),
         items: const [50, 100, 200, 300, 500, 750, 1000]
             .map(
               (value) => DropdownMenuItem(value: value, child: Text('$value')),
             )
             .toList(),
-        onChanged: (value) => setState(() => _maximumChannels = value!),
+        onChanged: (value) => setState(() => _maximum = value!),
       ),
-      const SizedBox(height: 16),
+      const SizedBox(height: 12),
       DropdownButtonFormField<int>(
-        initialValue: _minimumItems,
+        initialValue: _minimum,
         decoration: const InputDecoration(
           labelText: 'Minimum programs per channel',
         ),
@@ -789,759 +1126,828 @@ class _UpstreamChannelSetupViewState extends State<UpstreamChannelSetupView> {
               (value) => DropdownMenuItem(value: value, child: Text('$value')),
             )
             .toList(),
-        onChanged: (value) => setState(() => _minimumItems = value!),
+        onChanged: (value) => setState(() => _minimum = value!),
+      ),
+      const SizedBox(height: 8),
+      Text(
+        'Movies and individual episodes count as programs. Extra versions count toward the generated limit.',
+        style: TextStyle(color: LineupTheme.of(context).secondaryText),
       ),
     ],
-    _SetupCategory.guideOrder => [
-      _sectionTitle(
-        'Guide Order',
-        'Enabled source families are evaluated in this deterministic order.',
-      ),
-      for (var index = 0; index < _strategyOrder.length; index++)
-        ListTile(
-          leading: CircleAvatar(child: Text('${index + 1}')),
-          title: Text(builderStrategyLabels[_strategyOrder[index]]!),
-          trailing: _strategies.contains(_strategyOrder[index])
-              ? Wrap(
-                  children: [
-                    IconButton(
-                      tooltip: 'Move earlier',
-                      onPressed: index == 0
-                          ? null
-                          : () => _moveStrategy(index, -1),
-                      icon: const Icon(Icons.arrow_upward),
-                    ),
-                    IconButton(
-                      tooltip: 'Move later',
-                      onPressed: index == _strategyOrder.length - 1
-                          ? null
-                          : () => _moveStrategy(index, 1),
-                      icon: const Icon(Icons.arrow_downward),
-                    ),
-                  ],
-                )
-              : const Text('Off'),
-        ),
-    ],
-  };
+  );
 
-  Widget _sectionTitle(String title, String subtitle) => Padding(
-    padding: const EdgeInsets.only(bottom: 16),
-    child: Column(
+  Widget _orderControls() => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Text('Source order', style: Theme.of(context).textTheme.titleMedium),
+      for (var index = 0; index < _sourceOrder.length; index++)
+        DecoratedBox(
+          key: ValueKey('source-order-${_sourceOrder[index].name}'),
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(color: LineupTheme.of(context).subtleBorder),
+            ),
+          ),
+          child: ListTile(
+            contentPadding: EdgeInsets.zero,
+            title: Text(builderStrategyLabels[_sourceOrder[index]]!),
+            subtitle: _strategies.contains(_sourceOrder[index])
+                ? null
+                : const Text('Off'),
+            trailing: Wrap(
+              children: [
+                IconButton(
+                  focusNode: _orderFocus[_sourceOrder[index]]!.earlier,
+                  tooltip: 'Move earlier',
+                  onPressed: index == 0 ? null : () => _moveSource(index, -1),
+                  icon: const Icon(Icons.arrow_upward),
+                ),
+                IconButton(
+                  focusNode: _orderFocus[_sourceOrder[index]]!.later,
+                  tooltip: 'Move later',
+                  onPressed: index == _sourceOrder.length - 1
+                      ? null
+                      : () => _moveSource(index, 1),
+                  icon: const Icon(Icons.arrow_downward),
+                ),
+              ],
+            ),
+          ),
+        ),
+      const SizedBox(height: 8),
+      Text(
+        'Lineup takes one eligible original from each source in order, repeats, and skips exhausted sources.',
+        style: TextStyle(color: LineupTheme.of(context).secondaryText),
+      ),
+    ],
+  );
+
+  void _moveSource(int index, int delta) {
+    final strategy = _sourceOrder[index];
+    final target = index + delta;
+    setState(() {
+      _sourceOrder.removeAt(index);
+      _sourceOrder.insert(target, strategy);
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final nodes = _orderFocus[strategy]!;
+      final earlier =
+          target == _sourceOrder.length - 1 || (target > 0 && delta < 0);
+      (earlier ? nodes.earlier : nodes.later).requestFocus();
+    });
+  }
+
+  String _allocationSummary(ChannelPlanAllocation result) {
+    final total = result.channels.length;
+    final base = result.allocatedExtras == 0
+        ? '$total generated ${total == 1 ? 'channel' : 'channels'}'
+        : '$total generated channels · ${result.allocatedOriginals} originals + ${result.allocatedExtras} extra versions';
+    final excluded = [
+      if (result.excludedOriginals > 0)
+        '${result.excludedOriginals} ${result.excludedOriginals == 1 ? 'original' : 'originals'} excluded',
+      if (result.excludedExtras > 0)
+        '${result.excludedExtras} extra ${result.excludedExtras == 1 ? 'version' : 'versions'} excluded',
+    ];
+    final reason = result.numberLimitExcluded > 0
+        ? 'Channel numbers exhausted'
+        : 'Channel limit reached';
+    return excluded.isEmpty ? base : '$base\n$reason · ${excluded.join(' · ')}';
+  }
+
+  void _prepareReview() {
+    final base = List<Channel>.of(widget.controller.channels);
+    setState(() {
+      _reviewBase = base;
+      _plan = _allocateReview(base);
+      _removalConfirmed = false;
+      _phase = _BuildPhase.review;
+      _error = null;
+      _notice = null;
+      _step = 3;
+    });
+  }
+
+  Widget _reviewStep() {
+    final entries = _reviewEntries(_plan!.channels);
+    final counts = _counts(entries);
+    final finalChannels = composeChannelPlan(
+      existing: _reviewBase,
+      planned: _plan!.channels,
+      mode: _mode,
+    );
+    final noChanges =
+        counts.added == 0 && counts.updated == 0 && counts.removed == 0;
+    return _Stage(
+      footer: _Footer(
+        leading: [
+          TextButton(
+            onPressed: () => setState(() => _step = 2),
+            child: const Text('Back to configure'),
+          ),
+        ],
+        summary: _methodDecision(),
+        trailing: noChanges
+            ? FilledButton(
+                onPressed: _viewLineup,
+                child: const Text('View lineup'),
+              )
+            : FilledButton(
+                key: const ValueKey('apply-reviewed-lineup'),
+                onPressed: counts.removed > 0 && !_removalConfirmed
+                    ? null
+                    : _applyReview,
+                child: Text(switch (_mode) {
+                  ChannelBuildMode.replace =>
+                    _firstSetup
+                        ? 'Create lineup'
+                        : 'Replace generated channels',
+                  ChannelBuildMode.append => 'Add channels',
+                  ChannelBuildMode.merge => 'Apply changes',
+                }),
+              ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (_notice != null) ...[
+            LineupNotice(message: _notice!),
+            const SizedBox(height: 8),
+          ],
+          if (noChanges) ...[
+            Text(
+              'Your lineup is already up to date',
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
+            const Text('No changes needed.'),
+            const SizedBox(height: 8),
+          ],
+          _reviewOverview(entries, finalChannels, counts),
+          const SizedBox(height: 8),
+          Expanded(child: _roster(entries)),
+          if (counts.removed > 0)
+            CheckboxListTile(
+              key: const ValueKey('channel-setup-replace-confirmation'),
+              contentPadding: EdgeInsets.zero,
+              value: _removalConfirmed,
+              title: Text(
+                'I understand that ${counts.removed} existing generated ${counts.removed == 1 ? 'channel' : 'channels'} will be removed.',
+              ),
+              onChanged: (value) =>
+                  setState(() => _removalConfirmed = value == true),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _methodDecision() {
+    if (_firstSetup) {
+      return Text('${_plan!.channels.length} channels ready to create');
+    }
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(title, style: Theme.of(context).textTheme.titleLarge),
-        const SizedBox(height: 4),
+        SizedBox(
+          width: 310,
+          child: DropdownButtonFormField<ChannelBuildMode>(
+            key: const ValueKey('review-build-method'),
+            initialValue: _mode,
+            isExpanded: true,
+            decoration: const InputDecoration(labelText: 'Build method'),
+            items: const [
+              DropdownMenuItem(
+                value: ChannelBuildMode.merge,
+                child: Text('Update and add'),
+              ),
+              DropdownMenuItem(
+                value: ChannelBuildMode.replace,
+                child: Text('Replace generated channels'),
+              ),
+              DropdownMenuItem(
+                value: ChannelBuildMode.append,
+                child: Text('Add as new channels'),
+              ),
+            ],
+            onChanged: (mode) {
+              setState(() {
+                _mode = mode!;
+                _removalConfirmed = false;
+                _notice = 'Updating review…';
+                _plan = _allocateReview(_reviewBase);
+              });
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted) setState(() => _notice = null);
+              });
+            },
+          ),
+        ),
+        const SizedBox(height: 5),
         Text(
-          subtitle,
-          style: TextStyle(color: LineupTheme.of(context).mutedText),
+          _modeDescription(_mode),
+          style: TextStyle(color: LineupTheme.of(context).secondaryText),
+        ),
+      ],
+    );
+  }
+
+  Widget _reviewOverview(
+    List<_ReviewEntry> entries,
+    List<Channel> finalChannels,
+    ({int unchanged, int updated, int added, int removed}) counts,
+  ) {
+    final finalCount = finalChannels.length;
+    final generated = _finalGeneratedCounts(finalChannels);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (_firstSetup)
+          Text(
+            '$finalCount channels ready to create',
+            style: Theme.of(context).textTheme.headlineSmall,
+          )
+        else
+          Semantics(
+            label: '${_reviewBase.length} current to $finalCount final',
+            child: ExcludeSemantics(
+              child: Wrap(
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 8,
+                children: [
+                  Text(
+                    '${_reviewBase.length} current',
+                    style: Theme.of(context).textTheme.headlineSmall,
+                  ),
+                  Icon(
+                    Icons.arrow_forward,
+                    size: Theme.of(context).textTheme.headlineSmall?.fontSize,
+                  ),
+                  Text(
+                    '$finalCount final',
+                    style: Theme.of(context).textTheme.headlineSmall,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        if (!_firstSetup) ...[
+          Text(
+            'Changes in this review${counts.removed > 0 ? ' · Includes channels being removed' : ''}',
+            style: TextStyle(color: LineupTheme.of(context).secondaryText),
+          ),
+          const SizedBox(height: 5),
+          if (entries.isNotEmpty)
+            Semantics(
+              label:
+                  '${counts.unchanged} unchanged, ${counts.updated} updated, ${counts.added} added, ${counts.removed} removed. ${entries.length} review entries including outgoing channels.',
+              child: ExcludeSemantics(
+                child: Row(
+                  children: [
+                    _segment(
+                      counts.unchanged,
+                      LineupTheme.of(context).mutedText,
+                    ),
+                    _segment(
+                      counts.updated,
+                      LineupTheme.of(context).focusBorder,
+                    ),
+                    _segment(
+                      counts.added,
+                      LineupTheme.of(context).progressFill,
+                    ),
+                    _segment(
+                      counts.removed,
+                      Theme.of(context).colorScheme.error,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          Wrap(
+            spacing: 8,
+            children: [
+              _filterChip(_ReviewFilter.unchanged, counts.unchanged),
+              _filterChip(_ReviewFilter.updated, counts.updated),
+              _filterChip(_ReviewFilter.added, counts.added),
+              _filterChip(_ReviewFilter.removed, counts.removed),
+              TextButton(
+                onPressed: () => setState(() => _filter = _ReviewFilter.all),
+                child: const Text('Show all'),
+              ),
+            ],
+          ),
+        ],
+        const Divider(),
+        Wrap(
+          spacing: 18,
+          runSpacing: 4,
+          children: [
+            const Text('Final generated channels'),
+            for (final strategy in _sourceOrder)
+              if ((generated.byStrategy[strategy] ?? 0) > 0)
+                Text(
+                  '${builderStrategyLabels[strategy]} ${generated.byStrategy[strategy]}',
+                ),
+            if (generated.other > 0) Text('Other generated ${generated.other}'),
+          ],
+        ),
+        if (_reviewBase.any((channel) => channel.builderKey == null))
+          Text(
+            '${_reviewBase.where((channel) => channel.builderKey == null).length} custom channels will be kept.',
+            style: TextStyle(color: LineupTheme.of(context).secondaryText),
+          ),
+      ],
+    );
+  }
+
+  Widget _segment(int count, Color color) => count == 0
+      ? const SizedBox.shrink()
+      : Expanded(
+          flex: count,
+          child: Container(height: 10, color: color),
+        );
+
+  ({Map<BuilderStrategy, int> byStrategy, int other}) _finalGeneratedCounts(
+    List<Channel> channels,
+  ) {
+    final byStrategy = <BuilderStrategy, int>{};
+    var other = 0;
+    for (final channel in channels.where(
+      (candidate) => candidate.builderKey != null,
+    )) {
+      final strategy =
+          _reviewStrategyBySource[canonicalSourceIdentity(channel.source)];
+      if (strategy == null) {
+        other++;
+      } else {
+        byStrategy.update(strategy, (count) => count + 1, ifAbsent: () => 1);
+      }
+    }
+    return (byStrategy: byStrategy, other: other);
+  }
+
+  Widget _filterChip(_ReviewFilter filter, int count) => FilterChip(
+    selected: _filter == filter,
+    label: Text('$count ${_capitalized(filter.name)}'),
+    onSelected: (_) => setState(() => _filter = filter),
+  );
+
+  Widget _roster(List<_ReviewEntry> all) {
+    final query = _search.text.trim().toLowerCase();
+    final entries = all.where((entry) {
+      final found =
+          query.isEmpty ||
+          entry.channel.name.toLowerCase().contains(query) ||
+          '${entry.channel.number}'.contains(query);
+      return found &&
+          (_filter == _ReviewFilter.all || entry.kind.name == _filter.name);
+    }).toList();
+    final filtered = _filter != _ReviewFilter.all;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TextField(
+          key: const ValueKey('channel-setup-review-search'),
+          controller: _search,
+          decoration: const InputDecoration(
+            hintText: 'Search channels by name or number',
+            prefixIcon: Icon(Icons.search),
+          ),
+          onChanged: (_) => setState(() {}),
+        ),
+        Text(
+          filtered
+              ? '${_capitalized(_filter.name)} · ${entries.length} matching ${entries.length == 1 ? 'channel' : 'channels'}'
+              : '${entries.length} of ${all.length} review entries',
+        ),
+        _rosterHeader(),
+        Expanded(
+          child: entries.isEmpty
+              ? _emptyRoster(query, filtered)
+              : ListView.builder(
+                  key: const ValueKey('channel-setup-review-roster'),
+                  itemCount: entries.length,
+                  itemBuilder: (_, index) => _reviewRow(entries[index]),
+                ),
+        ),
+      ],
+    );
+  }
+
+  Widget _rosterHeader() => Container(
+    key: const ValueKey('review-roster-header'),
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+    color: LineupTheme.of(context).primarySurface,
+    child: const Row(
+      children: [
+        SizedBox(width: 58, child: Text('No.')),
+        Expanded(flex: 3, child: Text('Channel')),
+        Expanded(flex: 2, child: Text('Source')),
+        Expanded(flex: 2, child: Text('Playback')),
+        SizedBox(width: 92, child: Text('Change', textAlign: TextAlign.end)),
+      ],
+    ),
+  );
+
+  Widget _emptyRoster(String query, bool filtered) => Center(
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          query.isNotEmpty
+              ? 'No matching channels'
+              : 'No channels in this filter',
+        ),
+        TextButton(
+          onPressed: () => setState(() {
+            if (query.isNotEmpty) _search.clear();
+            if (filtered) _filter = _ReviewFilter.all;
+          }),
+          child: Text(query.isNotEmpty ? 'Clear search' : 'Show all'),
         ),
       ],
     ),
   );
 
-  Widget _strategyToggle(
-    BuilderStrategy strategy, {
-    bool allowCrossLibrary = false,
-  }) => Column(
-    children: [
-      SwitchListTile(
-        value: _strategies.contains(strategy),
-        title: Text(builderStrategyLabels[strategy]!),
-        subtitle: Text(
-          allowCrossLibrary && _crossLibraryStrategies.contains(strategy)
-              ? 'Combined across selected libraries'
-              : 'Per-library channels',
+  Widget _reviewRow(_ReviewEntry entry) {
+    final content = Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(width: 58, child: Text('${entry.channel.number}')),
+        Expanded(flex: 3, child: Text(entry.channel.name)),
+        Expanded(flex: 2, child: Text(_sourceLabel(entry.channel.source))),
+        Expanded(flex: 2, child: Text(_playbackLabel(entry.channel))),
+        SizedBox(
+          width: 92,
+          child: Text(_capitalized(entry.kind.name), textAlign: TextAlign.end),
         ),
-        onChanged: (enabled) => setState(
-          () => enabled
-              ? _strategies.add(strategy)
-              : _strategies.remove(strategy),
+      ],
+    );
+    final changes = _changedFields(entry.before, entry.channel);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(color: LineupTheme.of(context).subtleBorder),
         ),
       ),
-      if (allowCrossLibrary && _strategies.contains(strategy))
-        Padding(
-          padding: const EdgeInsets.only(left: 56),
-          child: SwitchListTile(
-            dense: true,
-            value: _crossLibraryStrategies.contains(strategy),
-            title: const Text('Combine matching tags across libraries'),
-            onChanged: (enabled) => setState(
-              () => enabled
-                  ? _crossLibraryStrategies.add(strategy)
-                  : _crossLibraryStrategies.remove(strategy),
+      child: entry.kind == _ReviewKind.updated && changes.isNotEmpty
+          ? ExpansionTile(
+              tilePadding: const EdgeInsets.symmetric(horizontal: 12),
+              title: content,
+              childrenPadding: const EdgeInsets.fromLTRB(70, 0, 12, 12),
+              children: [
+                for (final change in changes)
+                  Align(alignment: Alignment.centerLeft, child: Text(change)),
+              ],
+            )
+          : Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
+              child: content,
+            ),
+    );
+  }
+
+  Future<void> _applyReview() async {
+    final planned = _plan!;
+    setState(() {
+      _phase = _BuildPhase.applying;
+      _appliedEntries = _reviewEntries(planned.channels);
+      _error = null;
+    });
+    try {
+      final result = await widget.controller.applyReviewedChannelPlan(
+        planned.channels,
+        mode: _mode,
+        expectedBase: _reviewBase,
+      );
+      if (!mounted) return;
+      if (result == ChannelPlanApplyResult.stale) {
+        final base = List<Channel>.of(widget.controller.channels);
+        setState(() {
+          _reviewBase = base;
+          _plan = _allocateReview(base);
+          _removalConfirmed = false;
+          _notice = 'Your lineup changed. Review the updated changes before applying.';
+          _phase = _BuildPhase.review;
+        });
+        return;
+      }
+      setState(() => _phase = _BuildPhase.complete);
+      _focusResult();
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _phase = _BuildPhase.failed;
+        _error = safeFormError(error, 'The lineup could not be saved.');
+      });
+      _focusResult();
+    }
+  }
+
+  Widget _resultStep() {
+    final counts = _counts(_appliedEntries);
+    final total = widget.controller.channels.length;
+    return _Stage(
+      footer: _phase == _BuildPhase.applying
+          ? const SizedBox.shrink()
+          : _Footer(
+              leading: [
+                if (_phase == _BuildPhase.complete)
+                  TextButton(
+                    onPressed: _addCustom,
+                    child: const Text('Add a custom channel'),
+                  ),
+              ],
+              trailing: FilledButton(
+                focusNode: _resultFocus,
+                onPressed: _phase == _BuildPhase.failed
+                    ? () => setState(() => _phase = _BuildPhase.review)
+                    : _viewLineup,
+                child: Text(
+                  _phase == _BuildPhase.failed
+                      ? 'Back to review'
+                      : 'View lineup',
+                ),
+              ),
+            ),
+      child: Center(
+        child: Semantics(
+          liveRegion: true,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 820),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (_phase == _BuildPhase.applying)
+                  MediaQuery.disableAnimationsOf(context)
+                      ? const Icon(Icons.hourglass_top, size: 38)
+                      : const SizedBox(
+                          width: 38,
+                          height: 38,
+                          child: CircularProgressIndicator(),
+                        )
+                else
+                  Icon(
+                    _phase == _BuildPhase.failed
+                        ? Icons.error_outline
+                        : Icons.check_circle_outline,
+                    size: 42,
+                    color: _phase == _BuildPhase.failed
+                        ? Theme.of(context).colorScheme.error
+                        : LineupTheme.of(context).progressFill,
+                  ),
+                const SizedBox(width: 22),
+                Expanded(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(switch (_phase) {
+                        _BuildPhase.applying =>
+                          _firstSetup
+                              ? 'Creating your lineup…'
+                              : 'Updating your lineup…',
+                        _BuildPhase.failed =>
+                          _firstSetup
+                              ? 'We couldn’t create your lineup'
+                              : 'We couldn’t update your lineup',
+                        _BuildPhase.complete =>
+                          _firstSetup
+                              ? 'Your lineup is ready'
+                              : 'Your lineup is updated',
+                        _ => '',
+                      }, style: Theme.of(context).textTheme.headlineMedium),
+                      const SizedBox(height: 14),
+                      if (_phase == _BuildPhase.complete) ...[
+                        Text(
+                          '$total ${total == 1 ? 'channel' : 'channels'} in your lineup',
+                        ),
+                        if (!_firstSetup) Text(_changeSummary(counts)),
+                      ] else if (_phase == _BuildPhase.failed) ...[
+                        Text(
+                          _firstSetup
+                              ? 'Your lineup wasn’t saved.'
+                              : 'Your existing lineup hasn’t changed.',
+                        ),
+                        const Text('Your setup choices are still here.'),
+                        if (_error != null) ...[
+                          const SizedBox(height: 14),
+                          Text(_error!),
+                        ],
+                      ],
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
         ),
-    ],
-  );
+      ),
+    );
+  }
 
-  void _moveStrategy(int index, int delta) => setState(() {
-    final strategy = _strategyOrder.removeAt(index);
-    _strategyOrder.insert(index + delta, strategy);
+  void _focusResult() => WidgetsBinding.instance.addPostFrameCallback((_) {
+    if (mounted) _resultFocus.requestFocus();
   });
 
-  Widget _previewStrip(
-    ({List<ChannelProposal> proposals, int itemCount}) proposalSnapshot,
-  ) {
-    final proposals = proposalSnapshot.proposals;
-    final displayed = proposals.take(_maximumChannels).toList();
-    final summary = displayed.isEmpty
-        ? 'No channel ideas meet the current minimum. Adjust sources or limits.'
-        : '${displayed.length} channel ideas from ${proposalSnapshot.itemCount} playable programs.';
-    final statuses = [
-      for (final strategy in _strategyOrder)
-        '${builderStrategyLabels[strategy]}: ${_strategyStatus(strategy, displayed)}',
-    ];
-    return Semantics(
-      container: true,
-      liveRegion: true,
-      label:
-          '$summary ${statuses.join('. ')}${proposals.length > _maximumChannels ? '. More ideas omitted' : ''}',
-      child: ExcludeSemantics(
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-          decoration: BoxDecoration(
-            color: LineupTheme.of(context).selectedSurface,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: LineupTheme.of(context).defaultBorder),
-          ),
-          child: Row(
-            children: [
-              Icon(
-                Icons.auto_awesome,
-                color: LineupTheme.of(context).progressFill,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      Text(summary),
-                      const SizedBox(width: 12),
-                      for (final status in statuses)
-                        Padding(
-                          padding: const EdgeInsets.only(right: 8),
-                          child: Chip(
-                            visualDensity: VisualDensity.compact,
-                            label: Text(status),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-              if (proposals.length > _maximumChannels)
-                const Chip(label: Text('More ideas omitted')),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+  void _viewLineup() =>
+      (widget.onViewLineup ?? widget.controller.completeChannelSetup)();
+  void _addCustom() =>
+      (widget.onAddCustomChannel ?? widget.controller.completeChannelSetup)();
 
-  String _strategyStatus(
-    BuilderStrategy strategy,
-    List<ChannelProposal> proposals,
-  ) {
-    if (!_strategies.contains(strategy)) return 'Off';
-    final count = proposals
-        .where((proposal) => proposal.strategy == strategy)
-        .length;
-    return count == 0 ? 'No matches' : '$count';
-  }
-
-  Widget _reviewStep() {
-    final result = _planned;
-    final planned = result?.channels ?? const <Channel>[];
-    final impact = _planImpact(planned);
-    final phase = _buildPhase;
-    return _SetupSurface(
-      title: switch (phase) {
-        _BuildPhase.review => 'Review expected changes',
-        _BuildPhase.applying => 'Applying your lineup',
-        _BuildPhase.failed => 'Lineup update failed',
-        _BuildPhase.complete => 'Your lineup is ready',
-      },
-      subtitle: switch (phase) {
-        _BuildPhase.review =>
-          '${_modeLabel(_mode)} • ${_strategies.length} enabled source families',
-        _BuildPhase.applying =>
-          'Lineup is committing the accepted plan as one atomic update.',
-        _BuildPhase.failed =>
-          'The previous lineup is unchanged. Return to Review to try again.',
-        _BuildPhase.complete => 'The accepted plan was saved. Continue when you are ready to review Channels.',
-      },
-      footer: switch (phase) {
-        _BuildPhase.applying => const SizedBox.shrink(),
-        _BuildPhase.failed => _SetupFooter(
-          secondary: [
-            OutlinedButton(
-              focusNode: _phaseActionFocus,
-              onPressed: () {
-                setState(() {
-                  _buildPhase = _BuildPhase.review;
-                  _error = null;
-                });
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (mounted) _phaseActionFocus.requestFocus();
-                });
-              },
-              child: const Text('Back to Review'),
-            ),
-          ],
-          primary: const SizedBox.shrink(),
-        ),
-        _BuildPhase.complete => _SetupFooter(
-          secondary: [
-            OutlinedButton.icon(
-              onPressed:
-                  widget.onAddCustomChannel ??
-                  widget.controller.completeChannelSetup,
-              icon: const Icon(Icons.add),
-              label: const Text('Add a custom channel'),
-            ),
-          ],
-          primary: FilledButton.icon(
-            focusNode: _phaseActionFocus,
-            onPressed:
-                widget.onViewLineup ?? widget.controller.completeChannelSetup,
-            icon: const Icon(Icons.arrow_forward),
-            label: const Text('View lineup'),
-          ),
-        ),
-        _BuildPhase.review => _SetupFooter(
-          secondary: [
-            OutlinedButton(
-              focusNode: _phaseActionFocus,
-              onPressed: () => setState(() => _step = 2),
-              child: const Text('Back'),
-            ),
-          ],
-          primary: FilledButton.icon(
-            onPressed:
-                planned.isEmpty ||
-                    (_mode == ChannelBuildMode.replace &&
-                        impact.remove > 0 &&
-                        !_replaceConfirmed)
-                ? null
-                : () => _build(planned, impact),
-            icon: const Icon(Icons.auto_awesome),
-            label: Text(
-              _mode == ChannelBuildMode.replace
-                  ? 'Confirm & Replace'
-                  : 'Confirm & Build',
-            ),
-          ),
-        ),
-      },
-      child: phase == _BuildPhase.review
-          ? _reviewRoster(
-              planned,
-              impact,
-              truncated: result?.truncated ?? false,
-            )
-          : _BuildProgress(
-              phase: phase,
-              error: _error,
-              impact: _appliedImpact ?? impact,
-            ),
-    );
-  }
-
-  Widget _reviewRoster(
-    List<Channel> planned,
-    _PlanImpact impact, {
-    required bool truncated,
-  }) {
-    final allEntries = _reviewEntries(planned);
-    final query = _reviewSearch.text.trim().toLowerCase();
-    final entries = allEntries
-        .where((entry) {
-          final matchesQuery =
-              query.isEmpty ||
-              entry.channel.name.toLowerCase().contains(query) ||
-              '${entry.channel.number}'.contains(query);
-          final matchesFilter = switch (_reviewFilter) {
-            _ReviewFilter.all => true,
-            _ReviewFilter.protected => entry.kind == _ReviewKind.protected,
-            _ReviewFilter.changed =>
-              entry.kind == _ReviewKind.added ||
-                  entry.kind == _ReviewKind.updated,
-            _ReviewFilter.removed => entry.kind == _ReviewKind.removed,
-          };
-          return matchesQuery && matchesFilter;
-        })
-        .toList(growable: false);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Expanded(
-          child: CustomScrollView(
-            key: const Key('channel-setup-review-roster'),
-            slivers: [
-              SliverToBoxAdapter(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (truncated) ...[
-                      const LineupNotice(
-                        message: 'The channel limit or available channel numbers omitted some ideas.',
-                      ),
-                      const SizedBox(height: 12),
-                    ],
-                    _reviewSummary(impact),
-                    const SizedBox(height: 12),
-                    LayoutBuilder(
-                      builder: (context, constraints) =>
-                          _reviewSearchAndFilter(constraints),
-                    ),
-                    const SizedBox(height: 10),
-                    Text(
-                      '${entries.length} of ${allEntries.length} review entries',
-                      style: TextStyle(
-                        color: LineupTheme.of(context).secondaryText,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                  ],
-                ),
-              ),
-              if (entries.isEmpty)
-                const SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: Center(child: Text('No channels match this review.')),
-                )
-              else
-                SliverList.builder(
-                  itemCount: entries.length,
-                  itemBuilder: (context, index) => Column(
-                    children: [_reviewRow(entries[index]), const Divider()],
-                  ),
-                ),
-            ],
-          ),
-        ),
-        if (_mode == ChannelBuildMode.replace && impact.remove > 0) ...[
-          const SizedBox(height: 10),
-          Material(
-            color: Theme.of(context).colorScheme.error.withValues(alpha: 0.06),
-            shape: RoundedRectangleBorder(
-              side: BorderSide(
-                color: Theme.of(context).colorScheme.error
-                    .withValues(alpha: 0.35),
-              ),
-              borderRadius: BorderRadius.circular(
-                LineupTheme.of(context).panelRadius,
-              ),
-            ),
-            clipBehavior: Clip.antiAlias,
-            child: CheckboxListTile(
-              key: const Key('channel-setup-replace-confirmation'),
-              value: _replaceConfirmed,
-              title: Text(
-                'Remove ${impact.remove} generated ${impact.remove == 1 ? 'channel' : 'channels'}',
-              ),
-              subtitle: Text(
-                '${impact.customKept} custom ${impact.customKept == 1 ? 'channel is' : 'channels are'} protected and will remain unchanged.',
-              ),
-              onChanged: (value) =>
-                  setState(() => _replaceConfirmed = value == true),
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-
-  Widget _reviewSearchAndFilter(BoxConstraints constraints) {
-    final search = TextField(
-      key: const Key('channel-setup-review-search'),
-      controller: _reviewSearch,
-      decoration: const InputDecoration(
-        labelText: 'Search proposed lineup',
-        prefixIcon: Icon(Icons.search),
-      ),
-      onChanged: (_) => setState(() {}),
-    );
-    final filter = DropdownButtonFormField<_ReviewFilter>(
-      key: const Key('channel-setup-review-filter'),
-      isExpanded: true,
-      initialValue: _reviewFilter,
-      decoration: const InputDecoration(labelText: 'Show'),
-      items: const [
-        DropdownMenuItem(
-          value: _ReviewFilter.all,
-          child: Text('Entire review'),
-        ),
-        DropdownMenuItem(
-          value: _ReviewFilter.protected,
-          child: Text('Protected custom'),
-        ),
-        DropdownMenuItem(
-          value: _ReviewFilter.changed,
-          child: Text('Added or updated'),
-        ),
-        DropdownMenuItem(value: _ReviewFilter.removed, child: Text('Removed')),
-      ],
-      onChanged: (value) => setState(() => _reviewFilter = value!),
-    );
-    if (constraints.maxWidth < 680 ||
-        MediaQuery.textScalerOf(context).scale(14) > 21) {
-      return Column(children: [search, const SizedBox(height: 8), filter]);
-    }
-    return Row(
-      children: [
-        Expanded(child: search),
-        const SizedBox(width: 10),
-        SizedBox(width: 210, child: filter),
-      ],
-    );
-  }
-
-  List<({Channel channel, _ReviewKind kind})> _reviewEntries(
-    List<Channel> planned,
-  ) {
-    final existing = widget.controller.channels;
-    final existingById = {for (final channel in existing) channel.id: channel};
-    final plannedIds = planned.map((channel) => channel.id).toSet();
+  List<_ReviewEntry> _reviewEntries(List<Channel> planned) {
     final finalChannels = composeChannelPlan(
-      existing: existing,
+      existing: _reviewBase,
       planned: planned,
       mode: _mode,
     );
-    final entries = <({Channel channel, _ReviewKind kind})>[
+    final before = {for (final channel in _reviewBase) channel.id: channel};
+    final finalIds = finalChannels.map((channel) => channel.id).toSet();
+    final plannedIds = planned.map((channel) => channel.id).toSet();
+    final entries = <_ReviewEntry>[
       for (final channel in finalChannels)
         (
           channel: channel,
-          kind: channel.builderKey == null
-              ? _ReviewKind.protected
-              : plannedIds.contains(channel.id)
-              ? existingById[channel.id] == null
-                    ? _ReviewKind.added
-                    : identical(existingById[channel.id], channel)
-                    ? _ReviewKind.retained
-                    : _ReviewKind.updated
-              : _ReviewKind.retained,
+          before: before[channel.id],
+          kind: before[channel.id] == null
+              ? _ReviewKind.added
+              : plannedIds.contains(channel.id) &&
+                    !canonicalChannelValueEquals(
+                      before[channel.id]!.toJson(),
+                      channel.toJson(),
+                    )
+              ? _ReviewKind.updated
+              : _ReviewKind.unchanged,
         ),
-      for (final channel in existing.where(
-        (channel) => !finalChannels.any((next) => next.id == channel.id),
+      for (final channel in _reviewBase.where(
+        (channel) => !finalIds.contains(channel.id),
       ))
-        (channel: channel, kind: _ReviewKind.removed),
+        (channel: channel, before: channel, kind: _ReviewKind.removed),
     ];
     entries.sort((left, right) {
-      final byNumber = left.channel.number.compareTo(right.channel.number);
-      return byNumber != 0
-          ? byNumber
-          : left.kind.index.compareTo(right.kind.index);
+      final number = left.channel.number.compareTo(right.channel.number);
+      return number != 0 ? number : left.kind.index.compareTo(right.kind.index);
     });
     return entries;
   }
 
-  Widget _reviewSummary(_PlanImpact impact) {
-    final roles = LineupTheme.of(context);
-    return Semantics(
-      container: true,
-      explicitChildNodes: true,
-      label:
-          'Channel composition. Create: ${impact.create}, Update: ${impact.update}, Unchanged: ${impact.unchanged}, Generated removed: ${impact.remove}.',
-      child: Container(
-        key: const ValueKey('channel-setup-impact-hero'),
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: roles.selectedSurface.withValues(alpha: 0.28),
-          border: Border.all(color: roles.defaultBorder),
-          borderRadius: BorderRadius.circular(roles.panelRadius),
-        ),
-        child: Wrap(
-          spacing: 16,
-          runSpacing: 8,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            Semantics(
-              label: 'Final: ${impact.finalCount}',
-              child: ExcludeSemantics(
-                child: Text(
-                  '${widget.controller.channels.length} CURRENT  ·  ${impact.finalCount} FINAL',
-                  style: const TextStyle(fontWeight: FontWeight.w900),
-                ),
-              ),
-            ),
-            _summaryFact('Create', impact.create, '${impact.create} added'),
-            _summaryFact('Update', impact.update, '${impact.update} updated'),
-            _summaryFact(
-              'Unchanged',
-              impact.unchanged,
-              '${impact.unchanged} retained',
-            ),
-            _summaryFact(
-              'Generated removed',
-              impact.remove,
-              '${impact.remove} removed',
-            ),
-            _summaryFact(
-              'Custom kept',
-              impact.customKept,
-              '${impact.customKept} protected',
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _summaryFact(String label, int value, String text) => Semantics(
-    label: '$label: $value',
-    child: ExcludeSemantics(child: Text(text)),
+  ({int unchanged, int updated, int added, int removed}) _counts(
+    List<_ReviewEntry> entries,
+  ) => (
+    unchanged: entries
+        .where((entry) => entry.kind == _ReviewKind.unchanged)
+        .length,
+    updated: entries.where((entry) => entry.kind == _ReviewKind.updated).length,
+    added: entries.where((entry) => entry.kind == _ReviewKind.added).length,
+    removed: entries.where((entry) => entry.kind == _ReviewKind.removed).length,
   );
 
-  Widget _reviewRow(({Channel channel, _ReviewKind kind}) entry) {
-    final roles = LineupTheme.of(context);
-    final (label, icon, color) = switch (entry.kind) {
-      _ReviewKind.protected => (
-        'PROTECTED CUSTOM',
-        Icons.lock_outline,
-        roles.secondaryText,
-      ),
-      _ReviewKind.added => (
-        'ADDED',
-        Icons.add_circle_outline,
-        roles.progressFill,
-      ),
-      _ReviewKind.updated => (
-        'UPDATED',
-        Icons.edit_outlined,
-        roles.focusBorder,
-      ),
-      _ReviewKind.retained => (
-        'RETAINED',
-        Icons.check_circle_outline,
-        roles.tunedSurface,
-      ),
-      _ReviewKind.removed => (
-        'REMOVED',
-        Icons.remove_circle_outline,
-        Theme.of(context).colorScheme.error,
-      ),
-    };
-    return Semantics(
-      container: true,
-      label:
-          '$label, channel ${entry.channel.number}, ${entry.channel.name}, ${_reviewRhythm(entry.channel)}',
-      child: ExcludeSemantics(
-        child: ListTile(
-          leading: Container(
-            width: 46,
-            height: 46,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: roles.elevatedSurface,
-              border: Border.all(color: roles.subtleBorder),
-              borderRadius: BorderRadius.circular(roles.panelRadius),
-            ),
-            child: Text(
-              '${entry.channel.number}',
-              style: const TextStyle(fontWeight: FontWeight.w900),
-            ),
-          ),
-          title: Text(
-            entry.channel.name,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-          subtitle: Text(
-            '$label · ${_reviewRhythm(entry.channel)}',
-            style: TextStyle(color: color, fontWeight: FontWeight.w700),
-          ),
-          trailing: Icon(icon, color: color),
-        ),
-      ),
-    );
+  List<String> _changedFields(Channel? before, Channel after) {
+    if (before == null) return const [];
+    return [
+      if (before.name != after.name) 'Name: ${before.name} → ${after.name}',
+      if (before.number != after.number)
+        'Number: ${before.number} → ${after.number}',
+      if (!canonicalSourceEquals(before.source, after.source))
+        'Source: ${_sourceLabel(before.source)} → ${_sourceLabel(after.source)}',
+      if (before.playbackMode != after.playbackMode ||
+          before.blockSize != after.blockSize ||
+          before.includeSpecials != after.includeSpecials)
+        'Playback: ${_playbackLabel(before)} → ${_playbackLabel(after)}',
+    ];
   }
 
-  void _prepareReview() {
-    final proposalSnapshot = _proposalSnapshot;
-    setState(() {
-      _planned = materializeChannelPlan(
-        proposals: proposalSnapshot.proposals,
-        existing: widget.controller.channels,
-        mode: _mode,
-        seriesMode: _seriesOrdering,
-        seriesBlockSize: _seriesBlockSize,
-        alternateCopies: _alternateLineups ? _alternateCopies : 0,
-        variantMode: _alternateLineups ? _variantMode : null,
-        variantBlockSize: _variantBlockSize,
-        maximumChannels: _maximumChannels,
-        anchor: DateTime.now().toUtc(),
-      );
-      _replaceConfirmed = false;
-      _step = 3;
-    });
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _phaseActionFocus.requestFocus();
-    });
-  }
-
-  _PlanImpact _planImpact(List<Channel> planned) {
-    final existing = widget.controller.channels;
-    final customCount = existing
-        .where((channel) => channel.builderKey == null)
-        .length;
-    return switch (_mode) {
-      ChannelBuildMode.replace => (
-        create: planned.length,
-        update: 0,
-        unchanged: customCount,
-        remove: existing.length - customCount,
-        finalCount: customCount + planned.length,
-        customKept: customCount,
-      ),
-      ChannelBuildMode.append => (
-        create: planned.length,
-        update: 0,
-        unchanged: existing.length,
-        remove: 0,
-        finalCount: existing.length + planned.length,
-        customKept: customCount,
-      ),
-      ChannelBuildMode.merge => () {
-        var create = 0;
-        var update = 0;
-        var unchanged = 0;
-        for (final candidate in planned) {
-          final matched = existing
-              .where(
-                (channel) =>
-                    candidate.builderKey != null &&
-                    channel.builderKey == candidate.builderKey,
-              )
-              .firstOrNull;
-          if (matched == null) {
-            create++;
-          } else if (identical(candidate, matched)) {
-            unchanged++;
-          } else {
-            update++;
-          }
-        }
-        unchanged += existing
-            .where(
-              (channel) => !planned.any(
-                (candidate) =>
-                    candidate.builderKey != null &&
-                    candidate.builderKey == channel.builderKey,
-              ),
-            )
-            .length;
-        return (
-          create: create,
-          update: update,
-          unchanged: unchanged,
-          remove: 0,
-          finalCount: existing.length + create,
-          customKept: customCount,
-        );
-      }(),
-    };
-  }
-
-  Future<void> _build(List<Channel> planned, _PlanImpact impact) async {
-    FocusManager.instance.primaryFocus?.unfocus();
-    setState(() {
-      _buildPhase = _BuildPhase.applying;
-      _appliedImpact = impact;
-      _error = null;
-    });
-    try {
-      await widget.controller.applyChannelPlan(planned, mode: _mode);
-      if (mounted) {
-        setState(() => _buildPhase = _BuildPhase.complete);
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) _phaseActionFocus.requestFocus();
-        });
-      }
-    } catch (error) {
-      if (mounted) {
-        setState(() {
-          _buildPhase = _BuildPhase.failed;
-          _error = safeFormError(
-            error,
-            'The channel plan could not be applied.',
-          );
-        });
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) _phaseActionFocus.requestFocus();
-        });
-      }
-    }
-  }
-
-  static String _categoryLabel(_SetupCategory category) => switch (category) {
-    _SetupCategory.contentSources => 'Content Sources',
-    _SetupCategory.advancedSources => 'Advanced Sources',
-    _SetupCategory.buildOptions => 'Build Options',
-    _SetupCategory.seriesOrdering => 'Series Ordering',
-    _SetupCategory.limits => 'Limits',
-    _SetupCategory.guideOrder => 'Guide Order',
+  Color _scanColor(LibraryScanStatus status) => switch (status) {
+    LibraryScanStatus.transientFailure => Theme.of(context).colorScheme.error,
+    LibraryScanStatus.complete => LineupTheme.of(context).progressFill,
+    _ => LineupTheme.of(context).secondaryText,
   };
 
-  static String _modeLabel(ChannelBuildMode mode) => switch (mode) {
-    ChannelBuildMode.replace => 'Replace generated channels',
-    ChannelBuildMode.append => 'Add generated channels',
-    ChannelBuildMode.merge => 'Refresh generated channels',
+  String _scanStatus(LibraryScanFact? fact) => fact == null
+      ? 'Not scanned'
+      : switch (fact.status) {
+          LibraryScanStatus.idle => 'Not scanned',
+          LibraryScanStatus.scanning => 'Scanning',
+          LibraryScanStatus.complete => 'Ready',
+          LibraryScanStatus.empty => 'Empty',
+          LibraryScanStatus.unsupported => 'No playable media',
+          LibraryScanStatus.transientFailure => 'Scan failed',
+          LibraryScanStatus.cancelled => 'Cancelled',
+        };
+
+  String _scanDetail(LibraryScanFact fact) {
+    final status = _scanStatus(fact);
+    if (fact.status == LibraryScanStatus.idle) return status;
+    final items = fact.totalItems == null
+        ? '${fact.completedItems} scanned'
+        : '${fact.completedItems}/${fact.totalItems} items';
+    return '$status · $items · ${fact.completedPages} ${fact.completedPages == 1 ? 'page' : 'pages'}';
+  }
+
+  String _libraryType(PlexLibrary library) =>
+      library.type == PlexLibraryType.show ? 'TV Shows' : 'Movies';
+
+  String _sourceLabel(ContentSource source) => switch (source) {
+    PlaylistSource() => 'Playlist',
+    LibrarySource(:final libraryId) =>
+      widget.controller.libraries
+              .where((library) => library.id == libraryId)
+              .firstOrNull
+              ?.title ??
+          'Library',
+    MixedSource() => 'Grouped libraries',
+    ManualSource() => 'Custom',
   };
 
-  static String _modeDescription(ChannelBuildMode mode) => switch (mode) {
-    ChannelBuildMode.replace =>
-      'Keep custom channels and replace only generated channels.',
-    ChannelBuildMode.append =>
-      'Keep all channels and add generated channels at free numbers.',
+  String _playbackLabel(Channel channel) => switch (channel.playbackMode) {
+    PlaybackMode.shuffle => 'Shuffle',
+    PlaybackMode.sequential => 'In order',
+    PlaybackMode.block =>
+      'Mini-marathons · ${channel.blockSize ?? 3}${channel.includeSpecials ? ' · specials' : ''}',
+  };
+
+  String _changeSummary(
+    ({int unchanged, int updated, int added, int removed}) counts,
+  ) => [
+    if (counts.added > 0) '${counts.added} Added',
+    if (counts.updated > 0) '${counts.updated} Updated',
+    if (counts.removed > 0) '${counts.removed} Removed',
+  ].join(' · ');
+
+  String _modeDescription(ChannelBuildMode mode) => switch (mode) {
     ChannelBuildMode.merge =>
-      'Refresh matching generated channels and keep all others.',
+      'Update matching generated channels, add new ones, and keep the rest.',
+    ChannelBuildMode.replace => 'Replace all generated channels with this selection. Custom channels will be kept.',
+    ChannelBuildMode.append => 'Keep your existing lineup and add every channel in this selection as a new channel.',
   };
 
-  static String _reviewRhythm(Channel channel) =>
-      switch (channel.playbackMode) {
-        PlaybackMode.sequential => 'In order',
-        PlaybackMode.shuffle => 'Mix it up',
-        PlaybackMode.block => 'Mini-marathons of ${channel.blockSize ?? 3}',
-      };
+  bool _supportsGrouping(BuilderStrategy strategy) => const {
+    BuilderStrategy.genres,
+    BuilderStrategy.studios,
+    BuilderStrategy.actors,
+    BuilderStrategy.directors,
+  }.contains(strategy);
+
+  String _strategyDescription(BuilderStrategy strategy) => switch (strategy) {
+    BuilderStrategy.playlists => 'Channels from Plex playlists.',
+    BuilderStrategy.collections => 'Channels from collection tags.',
+    BuilderStrategy.recentlyAdded => 'One newest-first channel per library.',
+    BuilderStrategy.genres =>
+      'Examples include drama, comedy and science fiction.',
+    BuilderStrategy.studios => 'Channels grouped by studio metadata.',
+    BuilderStrategy.actors => 'Channels for actors with enough programs.',
+    BuilderStrategy.decades => 'Channels such as 1980s and 1990s.',
+    BuilderStrategy.directors => 'Channels for directors with enough programs.',
+  };
+
+  String _capitalized(String value) =>
+      '${value[0].toUpperCase()}${value.substring(1)}';
 }
 
-class _SetupSurface extends StatelessWidget {
-  const _SetupSurface({
-    required this.title,
-    required this.subtitle,
-    required this.child,
-    required this.footer,
-  });
-  final String title;
-  final String subtitle;
+class _Stage extends StatelessWidget {
+  const _Stage({required this.child, required this.footer});
+
   final Widget child;
   final Widget footer;
+
   @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      Text(title, style: Theme.of(context).textTheme.headlineSmall),
-      const SizedBox(height: 5),
-      Text(
-        subtitle,
-        style: TextStyle(color: LineupTheme.of(context).secondaryText),
-      ),
-      const SizedBox(height: 18),
-      Expanded(child: child),
-      const SizedBox(height: 14),
-      footer,
-    ],
-  );
+  Widget build(BuildContext context) {
+    final media = MediaQuery.of(context);
+    final singleScroll =
+        media.size.width < 900 ||
+        media.size.height < 720 ||
+        media.textScaler.scale(14) >= 24;
+    if (singleScroll) {
+      return SingleChildScrollView(
+        key: const ValueKey('channel-setup-single-scroll'),
+        child: SizedBox(
+          height: math.max(760, media.size.height - 120),
+          child: Column(
+            children: [
+              Expanded(child: child),
+              const SizedBox(height: 12),
+              footer,
+            ],
+          ),
+        ),
+      );
+    }
+    return Column(
+      children: [
+        Expanded(child: child),
+        const SizedBox(height: 12),
+        footer,
+      ],
+    );
+  }
 }
 
-class _SetupFooter extends StatelessWidget {
-  const _SetupFooter({required this.secondary, required this.primary});
-  final List<Widget> secondary;
-  final Widget primary;
+class _Footer extends StatelessWidget {
+  const _Footer({required this.leading, required this.trailing, this.summary});
+
+  final List<Widget> leading;
+  final Widget trailing;
+  final Widget? summary;
 
   @override
   Widget build(BuildContext context) => DecoratedBox(
@@ -1551,301 +1957,19 @@ class _SetupFooter extends StatelessWidget {
       ),
     ),
     child: Padding(
-      padding: const EdgeInsets.only(top: 14),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final secondaryActions = Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: secondary,
-          );
-          if (LineupLayout.isCompactWidth(constraints.maxWidth)) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                secondaryActions,
-                const SizedBox(height: 10),
-                Align(alignment: Alignment.centerRight, child: primary),
-              ],
-            );
-          }
-          return Row(
-            children: [
-              Expanded(child: secondaryActions),
-              const SizedBox(width: 16),
-              primary,
-            ],
-          );
-        },
-      ),
-    ),
-  );
-}
-
-class _StepPill extends StatelessWidget {
-  const _StepPill({required this.step});
-  final int step;
-  @override
-  Widget build(BuildContext context) => Chip(
-    avatar: const Icon(Icons.tune, size: 18),
-    label: Text('Step $step of 3'),
-  );
-}
-
-class _RailButton extends StatelessWidget {
-  const _RailButton({
-    required this.label,
-    required this.selected,
-    required this.onPressed,
-    this.autofocus = false,
-  });
-  final String label;
-  final bool selected;
-  final VoidCallback onPressed;
-  final bool autofocus;
-  @override
-  Widget build(BuildContext context) => SizedBox(
-    width: 260,
-    child: OutlinedButton(
-      autofocus: autofocus,
-      style: OutlinedButton.styleFrom(
-        alignment: Alignment.centerLeft,
-        backgroundColor: selected
-            ? LineupTheme.of(context).selectedSurface
-            : null,
-        side: BorderSide(
-          color: selected
-              ? LineupTheme.of(context).focusBorder
-              : LineupTheme.of(context).subtleBorder,
-        ),
-      ),
-      onPressed: onPressed,
-      child: Text(label),
-    ),
-  );
-}
-
-class _ImpactCount extends StatelessWidget {
-  const _ImpactCount({
-    required this.value,
-    required this.label,
-    this.emphasized = false,
-  });
-
-  final int value;
-  final String label;
-  final bool emphasized;
-
-  @override
-  Widget build(BuildContext context) => Row(
-    mainAxisSize: MainAxisSize.min,
-    crossAxisAlignment: CrossAxisAlignment.end,
-    children: [
-      Text(
-        '$value',
-        style: Theme.of(context).textTheme.displaySmall?.copyWith(
-          color: emphasized ? LineupTheme.of(context).progressFill : null,
-          fontWeight: FontWeight.w800,
-          fontFeatures: const [FontFeature.tabularFigures()],
-          height: 1,
-        ),
-      ),
-      const SizedBox(width: 8),
-      Padding(
-        padding: const EdgeInsets.only(bottom: 3),
-        child: Text(
-          label,
-          style: TextStyle(color: LineupTheme.of(context).secondaryText),
-        ),
-      ),
-    ],
-  );
-}
-
-class _ImpactCard extends StatelessWidget {
-  const _ImpactCard({
-    required this.label,
-    required this.value,
-    required this.icon,
-  });
-
-  final String label;
-  final int value;
-  final IconData icon;
-
-  @override
-  Widget build(BuildContext context) => Semantics(
-    container: true,
-    label: '$label: $value',
-    child: ExcludeSemantics(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: LineupTheme.of(context).selectedSurface.withValues(alpha: 0.3),
-          borderRadius: BorderRadius.circular(999),
-          border: Border.all(color: LineupTheme.of(context).subtleBorder),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 17, color: LineupTheme.of(context).secondaryText),
-            const SizedBox(width: 7),
-            Text(
-              '$value',
-              style: const TextStyle(
-                fontWeight: FontWeight.w800,
-                fontFeatures: [FontFeature.tabularFigures()],
-              ),
-            ),
-            const SizedBox(width: 5),
-            Text(
-              label,
-              style: TextStyle(color: LineupTheme.of(context).secondaryText),
-            ),
-          ],
-        ),
-      ),
-    ),
-  );
-}
-
-class _BuildProgress extends StatelessWidget {
-  const _BuildProgress({
-    required this.phase,
-    required this.error,
-    required this.impact,
-  });
-
-  final _BuildPhase phase;
-  final String? error;
-  final _PlanImpact impact;
-
-  @override
-  Widget build(BuildContext context) => Semantics(
-    liveRegion: true,
-    label: switch (phase) {
-      _BuildPhase.applying => 'Applying channels',
-      _BuildPhase.failed => 'Channel update failed',
-      _BuildPhase.complete => 'Channel update complete',
-      _BuildPhase.review => null,
-    },
-    child: LayoutBuilder(
-      builder: (context, constraints) => SingleChildScrollView(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(minHeight: constraints.maxHeight),
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 640),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    switch (phase) {
-                      _BuildPhase.applying => Icons.auto_awesome,
-                      _BuildPhase.failed => Icons.error_outline,
-                      _BuildPhase.complete => Icons.check_circle_outline,
-                      _BuildPhase.review => Icons.live_tv_outlined,
-                    },
-                    size: 42,
-                    color: phase == _BuildPhase.failed
-                        ? Theme.of(context).colorScheme.error
-                        : LineupTheme.of(context).progressFill,
-                  ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: 420,
-                    child: LinearProgressIndicator(
-                      value: switch (phase) {
-                        _BuildPhase.applying => null,
-                        _BuildPhase.failed => 0,
-                        _BuildPhase.complete => 1,
-                        _BuildPhase.review => 0,
-                      },
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-                  Text(
-                    switch (phase) {
-                      _BuildPhase.applying => 'Applying channels…',
-                      _BuildPhase.failed => 'No changes were saved',
-                      _BuildPhase.complete => 'Channel setup complete',
-                      _BuildPhase.review => '',
-                    },
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 7),
-                  Text(
-                    switch (phase) {
-                      _BuildPhase.applying => 'The lineup is being committed atomically. This step cannot be cancelled.',
-                      _BuildPhase.failed =>
-                        error ?? 'The channel plan could not be applied.',
-                      _BuildPhase.complete =>
-                        'The atomic lineup update completed successfully.',
-                      _BuildPhase.review => '',
-                    },
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: LineupTheme.of(context).secondaryText,
-                    ),
-                  ),
-                  if (phase == _BuildPhase.complete) ...[
-                    const SizedBox(height: 18),
-                    Semantics(
-                      container: true,
-                      label: 'Final: ${impact.finalCount}',
-                      child: ExcludeSemantics(
-                        child: _ImpactCount(
-                          value: impact.finalCount,
-                          label: impact.finalCount == 1
-                              ? 'channel ready'
-                              : 'channels ready',
-                          emphasized: true,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                    Wrap(
-                      alignment: WrapAlignment.center,
-                      spacing: 10,
-                      runSpacing: 10,
-                      children: [
-                        _ImpactCard(
-                          label: 'Create',
-                          value: impact.create,
-                          icon: Icons.add_circle_outline,
-                        ),
-                        _ImpactCard(
-                          label: 'Update',
-                          value: impact.update,
-                          icon: Icons.edit_outlined,
-                        ),
-                        _ImpactCard(
-                          label: 'Unchanged',
-                          value: impact.unchanged,
-                          icon: Icons.check_circle_outline,
-                        ),
-                        _ImpactCard(
-                          label: 'Generated removed',
-                          value: impact.remove,
-                          icon: Icons.remove_circle_outline,
-                        ),
-                        _ImpactCard(
-                          label: 'Custom kept',
-                          value: impact.customKept,
-                          icon: Icons.lock_outline,
-                        ),
-                      ],
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-        ),
+      padding: const EdgeInsets.only(top: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          if (leading.isNotEmpty) Wrap(spacing: 8, children: leading),
+          if (summary != null) ...[
+            const SizedBox(width: 16),
+            Expanded(child: summary!),
+          ] else
+            const Spacer(),
+          const SizedBox(width: 16),
+          trailing,
+        ],
       ),
     ),
   );

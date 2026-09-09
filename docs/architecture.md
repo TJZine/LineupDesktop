@@ -56,7 +56,7 @@ regions reveal it. Frames do not cross the Dart boundary and are not copied
 through a Flutter texture. The native baseline explicitly requests
 `vo=gpu-next`, the D3D11 GPU API/context, and `hwdec=auto`.
 
-Stock Flutter 3.47.0 does not request ANGLE's DirectComposition EGL window
+Stock Flutter 3.47.2 does not request ANGLE's DirectComposition EGL window
 surface mode, so it cannot provide the required transparent composition
 reliably. Lineup therefore owns the single-file patch in
 `tool/flutter_engine`, targeting the exact framework and engine identities in
@@ -75,7 +75,8 @@ executes queued media commands, reads mpv events, and copies bounded facts into
 the event queue. It posts a runner-window message; only the platform thread
 invokes the MethodChannel or changes runner-owned Windows objects. Native
 lifecycle generations reject events across dispose/recreate. Per-load IDs
-correlate media events across replacement loads; separate stop IDs correlate
+correlate media events across replacement loads; track request IDs correlate
+native command execution within the active load; separate stop IDs correlate
 idle confirmation. None substitutes for the others. Dart remains the owner of
 application playback coordination; Plex authentication, networking, channel
 policy, settings, Guide behavior, and navigation do not enter C++.
@@ -136,8 +137,9 @@ is emergency cleanup, not the normal path. See
   intent is retired. Windows stop completion uses a separate request identity
   and confirms libmpv is idle with an empty playlist; failed or timed-out stops
   remain retryable and replacement playback waits for cleanup.
-  Keyboard focus in the active timed OSD or mini Guide suspends dismissal;
-  presentation generations reject stale focus callbacks. Player transitions
+  Keyboard focus in the active timed OSD suspends dismissal; the Mini Guide and
+  track panels remain open until explicitly dismissed or an action closes them.
+  Presentation generations reject stale focus callbacks. Player transitions
   use Flutter's effective Reduce Motion setting, and track rails initially
   focus the selected track. Product state does not move into the native player.
 - The Player OSD defaults to classic-TV behavior: transport buttons and
@@ -222,10 +224,13 @@ is emergency cleanup, not the normal path. See
   enable and validate the data-protection Keychain. Tokens remain outside
   ordinary application state and durable JSON; selected-server persistence
   stores only profile-scoped server identity.
-- Persisted Guide preferences own library-filter visibility, the Now Playing
-  context banner, and player-control auto-hide duration. Their existing Guide
-  and player coordinators consume updates directly; there is no second
-  settings or overlay owner.
+- Persisted Guide preferences own the two-, three- or four-hour span, information
+  background, the Now Playing context banner, and player-control auto-hide
+  duration. The full Guide is PiP-only with permanent search/library controls;
+  retired layout, density, past-window and library-visibility keys are validated
+  on legacy reads and omitted from canonical writes. Existing Guide and player
+  coordinators consume updates directly; there is no second settings or overlay
+  owner.
 - A pinned, repository-owned Flutter Windows DirectComposition patch with the
   adapted BSD notice and an exact runtime compatibility check.
 - Flutter format, analysis, tests, focused macOS golden verification and
@@ -251,6 +256,15 @@ have their own ordered queue. Preserve these responsibilities when adding a
 mutation; see the delayed/failing state and credential tests in
 [lineup_controller_test.dart](../test/app/lineup_controller_test.dart).
 
+Library scans stage per-library results outside the committed inventory. Retrying
+the same profile/server/selection reuses completed libraries; an explicit ready
+subset commit persists selection and schedule migration before publishing it.
+Reviewed setup application and reorder compare the complete captured lineup
+inside the state-operation queue. Batch deletion compares only its confirmed
+targets, so unrelated changes do not invalidate the confirmation. A mismatch
+returns a distinct stale result without writing; the UI retains its draft and
+refreshes the consequences for renewed confirmation.
+
 [PersistedState](../lib/persistence/app_store.dart) requires an exact structural
 field set. Adding a required field can make previously valid state enter the
 corruption/quarantine path. For a schema change, choose compatible defaults or
@@ -259,6 +273,13 @@ decision. Exercise existing serialized state and failure/recovery behavior in
 [app_store_test.dart](../test/persistence/app_store_test.dart). Preserve strict
 validation of malformed data and the original bytes on recovery; do not add a
 generic migration framework without a current need.
+
+Before the first refinement-schema rewrite, the store retains the original bytes
+in a sibling backup. Backup or migration IO failures propagate without classifying
+valid legacy state as corrupt. Schedule migration embeds the resolved legacy cycle
+and a UTC boundary before publishing the revised algorithm; pre-boundary lookup
+uses that frozen cycle, and explicit programming edits retire the transition.
+The private backup and embedded media snapshot never belong in diagnostic reports.
 
 ## Integration and acceptance status
 
