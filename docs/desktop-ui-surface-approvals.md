@@ -20,9 +20,9 @@ may cover multiple listed states only when that scope is clear to the user.
 | surface-04 | Lineup rules · corrected | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Feedback refinement approved `2924057b`; logo-first `d4126b59`; previous September 9: all-fit and limit-reached/Off states; `f535a365` |
 | surface-05 | Review lineup · corrected labels | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | First-time candidate05; `25467fe3` |
 | surface-06 | Review removals · corrected labels | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Removal, populated and expanded-update candidate05; `25467fe3` |
-| surface-07 | Linking · corrected | Unreviewed | Not assessed in this pass | — |
-| surface-08 | Linking expired · corrected | Unreviewed | Not assessed in this pass | — |
-| surface-09 | Terminal linking failure | Unreviewed | Not assessed in this pass | — |
+| surface-07 | Linking · corrected | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Candidate01; `3a9d6b7e` |
+| surface-08 | Linking expired · corrected | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Candidate01; `3a9d6b7e` |
+| surface-09 | Terminal linking failure | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Candidate01; `3a9d6b7e` |
 | surface-10 | Profile selection | Unreviewed | Not assessed in this pass | — |
 | surface-11 | Profile PIN | Unreviewed | Not assessed in this pass | — |
 | surface-12 | Server selection | Unreviewed | Not assessed in this pass | — |
@@ -829,3 +829,68 @@ linking states before agreeing refinements, with a compact first review and fina
 lock confirmation to conserve usage. Assigned `linking_visual_audit`, exposed
 worker_luna / GPT-5.6 Luna / xhigh, read-only except ignored local evidence.
 Root reviews its evidence and proposed brief; no implementation is approved yet.
+
+
+Surfaces07–09 audit completed read-only by worker_luna; root personally inspected
+rendered plex-linking-hybrid HTML and fresh normal, expired, browser-launch failure
+and terminal-failure Flutter images. Evidence is local under
+`build/desktop-ui/surface-07-09/fresh/`, 1920×1080/DPR1/text100%. The reference is a
+736px natural-size component, not an authored full-screen 1080p mock. Initial
+capture logo decode and standalone DEBUG-banner artifacts were identified as
+harness issues, not production defects. Secure-cancellation and pending-request
+states were considered from contracts/source but not separately visually captured.
+
+Worker recommends compact wrapper correction while retaining existing inner
+geometry. Root agrees with compactness and preserved state behavior, but proposes
+modest desktop readability enlargement: approximately900px maximum centered group,
+36px heading,18px instructions/actions,40px code and200px QR at1080p. Use logo-first
+LINEUP branding aligned above the group, remove the nearly full-width panel border,
+and constrain errors/status to the local group. Keep a shorter no-code recovery
+composition for terminal failure, expired placeholder only for expired codes,
+quiet Cancel, existing theme, responsive stacking/scroll fallback. These are
+proposals awaiting user agreement, not approved implementation or visual lock.
+No tracked implementation files were changed during the audit. Existing onboarding
+and controller behavior checks will be reused; no new UI layout tests proposed.
+
+User approved the compact linking brief: “yes approved, lets make the changes
+and do one quick visual check after”. Root assigned the existing worker_luna
+exclusive `lib/app/onboarding_view.dart` presentation changes, preserving shared
+onboarding surfaces and all linking contracts. Root owns the reused ignored
+capture harness and existing onboarding checks. No extra visual refinement loop
+is planned before presenting candidate01 for explicit approval.
+
+### Surfaces07–09 — candidate01 awaiting approval
+
+Luna implemented linking-only presentation in `lib/app/onboarding_view.dart`.
+Root made bounded integration fixes for group alignment, quiet Cancel/status and
+inheritance of the existing text font. No shared onboarding surface was changed.
+The actual inner group is736px wide within a900px cap, increased from the previous
+560px body, with aligned branding above and a200px QR. No border surrounds it.
+Root briefly inspected all four final captures under
+`build/desktop-ui/surface-07-09/candidate-01/`; 1920×1080/DPR1/text100%.
+Source base `e9d4411982a052ce5283b2a17e81b0a787fbaf0e`, source SHA-256
+`3b40cb913f5761ced6d8f6a8d555151cf433df4574b1ebf5ad7bf22b317e1f60`. Capture hashes:
+
+- `surface-07-linking-browser-failure.png`: `904f861fd20ace2d9000a9261f2f134d537b2256595ec95d52680bdfe6cef1d6`
+- `surface-07-linking-normal.png`: `68d1d7897c661d9e3da320b22bd2c63728cb06d07a67f2a5d2283701fa81b945`
+- `surface-08-linking-expired.png`: `465eff4c81c4c50b81d72467c0ea06c6522eddf4d2a453fd5d47ddf9fac70094`
+- `surface-09-linking-terminal-failure.png`: `e0e18ca408545bc0ddc4dfb9df8038f4859eaaa5d28ed6e2887cbdb3f6fa9b7a`
+
+All9 existing desktop onboarding behavior checks and the temporary four-state
+capture run passed (10 total). No new layout tests. Candidate remains unlocked
+until explicit user visual approval. Adaptive/enlarged-text/accessibility and
+physical Windows checks remain grouped and outstanding. No additional independent
+review recommended for this bounded presentation change.
+
+### Linking approved; profiles and servers next
+
+User explicitly locked linking: “locked. time for profile selection, profile pin,
+and server selection.” Implementation `3a9d6b7e860172d9426dc1d278ed6a48f2f073af`;
+[durable evidence](design/desktop-ui/approved/2026-09-09-surface-07-09/evidence.json)
+retains the reviewed four-state candidate01 PNGs and source hashes. Final file
+analysis passed. Adaptive/accessibility and physical Windows checks remain open.
+
+User authorizes the same compact styling for profile and server selection, with
+more horizontal room for two profile rows and sensible refinements at root
+discretion. PIN is explicitly deferred, untouched and not visually locked. The
+ledger IDs are10 profiles,11 PIN,12 servers (user used11/12/13; names govern scope).
