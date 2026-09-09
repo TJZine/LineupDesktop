@@ -128,8 +128,6 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
   Set<String> _activeAvailableFilterValues = const {};
   final LinkedHashSet<String> _pendingFilterValues = LinkedHashSet();
   bool _showPendingFilterValues = false;
-  LibraryOrder _filterOrder = LibraryOrder.supplied;
-  bool _filterOrderExplicit = false;
   String? _manualLibraryId;
   String? _manualMediaType;
   final _manualFilters = <String, String>{};
@@ -275,11 +273,6 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
         LibrarySource(:final filters) => filters,
         _ => const {},
       });
-    _filterOrder = switch (source) {
-      LibrarySource(:final order) => order,
-      _ => LibraryOrder.supplied,
-    };
-    _filterOrderExplicit = false;
     _manualLibraryId = null;
     _manualMediaType = null;
     _manualFilters.clear();
@@ -380,7 +373,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
         for (final entry in _filters.entries)
           entry.key.name: [...entry.value]..sort(),
       },
-      'order': _filterDraftOrder(
+      'order': _libraryDraftOrder(
         _filterLibraryId,
         includeWatched: _filterIncludeWatched,
         filters: _filters,
@@ -2362,7 +2355,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
       libraryType: library.type,
       includeWatched: _filterIncludeWatched,
       filters: filters,
-      order: _filterDraftOrder(
+      order: _libraryDraftOrder(
         library.id,
         includeWatched: _filterIncludeWatched,
         filters: filters,
@@ -2408,27 +2401,6 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     return _playbackMode == PlaybackMode.sequential
         ? LibraryOrder.title
         : LibraryOrder.supplied;
-  }
-
-  LibraryOrder _filterDraftOrder(
-    String? libraryId, {
-    required bool includeWatched,
-    required Map<LibraryFilter, List<String>> filters,
-    PlexLibraryType? libraryType,
-  }) {
-    if (_filterOrderExplicit) {
-      return _filterOrder == LibraryOrder.addedDescending
-          ? LibraryOrder.addedDescending
-          : _playbackMode == PlaybackMode.sequential
-          ? LibraryOrder.title
-          : LibraryOrder.supplied;
-    }
-    return _libraryDraftOrder(
-      libraryId,
-      includeWatched: includeWatched,
-      filters: filters,
-      libraryType: libraryType,
-    );
   }
 
   _DraftResolution _resolveDraftContent() {
