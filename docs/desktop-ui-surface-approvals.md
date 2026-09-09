@@ -18,8 +18,8 @@ may cover multiple listed states only when that scope is clear to the user.
 | surface-02 | Mini-marathons · corrected | Unreviewed | User skipped separate review; adaptive/Windows checks pending | September 9: proceed to surface-03; no separate state lock |
 | surface-03 | Channel sources · corrected | Approved at 1080p | Behavior checks passed; adaptive/Windows checks pending | Logo-first approved `d4126b59`; previous September 9: one and two libraries, grouping separate; `8e972785` |
 | surface-04 | Lineup rules · corrected | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Feedback refinement approved `2924057b`; logo-first `d4126b59`; previous September 9: all-fit and limit-reached/Off states; `f535a365` |
-| surface-05 | Review lineup · corrected labels | Unreviewed | Not assessed in this pass | — |
-| surface-06 | Review removals · corrected labels | Unreviewed | Not assessed in this pass | — |
+| surface-05 | Review lineup · corrected labels | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | First-time candidate05; `25467fe3` |
+| surface-06 | Review removals · corrected labels | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Removal, populated and expanded-update candidate05; `25467fe3` |
 | surface-07 | Linking · corrected | Unreviewed | Not assessed in this pass | — |
 | surface-08 | Linking expired · corrected | Unreviewed | Not assessed in this pass | — |
 | surface-09 | Terminal linking failure | Unreviewed | Not assessed in this pass | — |
@@ -489,3 +489,85 @@ with their candidate-03 hashes recorded above. Empty-state capture remains root
 verification, not a separate user visual lock. Adaptive/accessibility/Windows
 checks remain outstanding; no independent review specifically recommended or
 launched. The user selected surfaces05/06 for joint review next.
+
+### Surfaces 05/06 first correction pass — September 9, 2026
+
+User approved the proposed starting corrections and requested to see the first
+pass before further feedback. Both states remain in review; no visual lock.
+Root personally inspected the original polished first-time and edge-case
+one-removal fragments in the browser, and fresh real Flutter captures at source
+`404c14bfc3823095dadd95292818690d645d5287` (production file SHA-256
+`253baf5b21bf13c5809d4d885b17b9c22e6f0b0f0ebbe680d0dd23721b46c954`).
+The frozen packet's surface05 reference defaults to existing lineup while its
+actual fixture is first-time; root selected the matching first-time mock state.
+
+- First-time baseline: `build/desktop-ui/surface-05/current-404c14bf.png`, SHA-256
+  `7d33049fcad7cfda73021ae8119b87513dee31c6eb0c04d5ff5ece3267fa0595`.
+- One-removal baseline: `build/desktop-ui/surface-06/current-404c14bf.png`, SHA-256
+  `9b2f04713aa8fa0ca7c83495bd56596b5e641611abb9d3b909666518008e0b66`.
+
+Both are 1920×1080/DPR1/text100%, pinned Roboto body and Arial wordmark.
+The fixture has two new channels and one removal, unlike the mock's hundreds.
+Windows Segoe UI validation remains outstanding.
+
+Agreed brief: carry forward approved branding/header hierarchy and spacing;
+contained overview with prominent final total and quiet source counts; readable
+full-width roster favoring channel names; restrained selectable change counts;
+method and explanation left with Back/primary right; leading removal checkbox
+beside warning; omit duplicate first-time footer count. Preserve build methods,
+allocation, custom protection, stale-review safeguards, search/filter, lazy
+roster and expanded changed-field behavior. Root also inspects a populated roster.
+Actual assignment: existing `worker_luna` (GPT-5.6 Luna/xhigh), exclusive
+`lib/app/channel_setup_view.dart` presentation lease; root owns tests, capture,
+contracts and personal review. No new layout tests or independent reviewers.
+
+### Surfaces 05/06 candidate and explicit approval — September 9, 2026
+
+Root integrated the Luna presentation unit and personally reviewed fresh real
+Flutter candidates. Root completed the Review-only page margins/text sizing,
+entry-count spacing, primary-button font inheritance, native total arrow,
+expanded-row arrow font fallback and reserved disclosure column alignment.
+The existing 720p method-switch check exposed a transient overflow from inserting
+“Updating review…” above the roster. That status now temporarily replaces the
+method explanation in the footer and disables Apply while shown, preserving the
+roster position and the existing synchronous calculation/reset-confirmation flow.
+No allocation, persistence, channel-composition or result-screen changes.
+
+The user requested larger Back text and more vertical spacing around the entry
+count; both are included in the final candidate. The user also asked about the
+selected Unchanged count. Root explained that its background indicates the active
+roster filter and Show all restores the full list. The user accepted this meaning.
+
+Final production source SHA-256:
+`4a899426d1b42906b597eb91eac47aee553edd249041ae67c46089466ddb5c9f`.
+Implementation commit: `25467fe37bbdfd1bbdbf3238a71694cee55f1e5a`
+(`fix(ui): refine lineup review presentation`). Final candidate captures below
+match that source and are preserved without resizing or retouching:
+
+- [First-time, two channels](design/desktop-ui/approved/2026-09-09-surface-05/candidate-05.png):
+  `56c8e6e66dc2780f9cd2a312577fbb38d131a999c305f0da4c2a9bd6f7c54e63`.
+- [Replacement, two new and one removed](design/desktop-ui/approved/2026-09-09-surface-06/candidate-05.png):
+  `3934f0605c34dba86d0c6cf54ab88f99ebef476a35fd27a19a57436fadba5b7e`.
+- [Populated replacement, 19 new, eight custom kept and one removed](design/desktop-ui/approved/2026-09-09-surface-06/candidate-05-populated.png):
+  `74ed4d2a0d293b98cb13ad7a707c127cbbcc7fd79975a2a5bb136bfe016d0f43`.
+- [Update and add, expanded playback change](design/desktop-ui/approved/2026-09-09-surface-06/candidate-05-updated.png):
+  `7469ee5588a6a2b1c774a361f2f021774e541ffb37531caff2ed59632ee64b25`.
+
+All captures are 1920×1080/DPR1/text100%, pinned Roboto body and Arial wordmark.
+Root additionally inspected the filtered custom-channel long-name state and
+exercised Unchanged/Removed filters and Show all in the temporary capture harness.
+All 75 existing focused behavior tests passed on the final production source;
+full Flutter analysis, formatting and diff checks passed. No new layout tests or
+permanent capture tests were added. The original golden harness was restored.
+
+The user explicitly approved: “okay that makes sense and sounds good. i think we
+are ready to lock then if you dont have any more critiques or refinements”. Root
+had no remaining critique blocking this pass. This locks the presented 1080p
+first-time, replacement (small/populated) and expanded-update states. It does not
+claim separate visual approval for unpresented no-change, stale/error, Add as new,
+or enlarged-text states. The frozen comparison archive remains unchanged.
+
+Grouped adaptive/resolution/accessibility checks and physical Windows Segoe UI,
+input/focus validation remain outstanding at the eventual tested commit. No
+independent review is specifically recommended for this bounded pass; none was
+launched. No push, deployment or publication.
