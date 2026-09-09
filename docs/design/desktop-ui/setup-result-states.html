@@ -1,0 +1,65 @@
+<div class="viz-controls">
+  <label class="form-label">State<select class="form-select" id="result-state"><option value="success">Success</option><option value="progress">Saving</option><option value="failure">Failure · confirmed rollback</option><option value="unchanged">No changes</option></select></label>
+  <label class="form-label">Setup<select class="form-select" id="result-context"><option value="first">First-time setup</option><option value="existing">Existing lineup</option></select></label>
+  <label class="form-label">Desktop size<select class="form-select" id="result-size"><option value="1280">1280 × 720</option><option value="1920">1920 × 1080</option></select></label>
+</div>
+<div id="setup-result">
+ <div class="rs-frame"><section class="rs-screen">
+  <header><div class="rs-brand">LINEUP</div><div class="rs-steps">1 Libraries &nbsp; / &nbsp; 2 Configure &nbsp; / &nbsp; <strong>3 Review</strong></div></header>
+  <main aria-live="polite"><div class="rs-result"><div class="rs-mark" aria-hidden="true"><i data-lucide="circle-check"></i></div><div class="rs-copy"><h2>Your lineup is ready</h2><p class="rs-total">390 channels in your lineup</p><p class="rs-detail" hidden></p><p class="rs-reason" hidden></p></div></div></main>
+  <footer><p class="rs-notice" role="status"></p><div class="rs-actions"><button class="rs-secondary">Add a custom channel</button><button class="rs-primary">View lineup</button></div></footer>
+ </section></div>
+</div>
+<style>
+#setup-result{margin-top:12px;color-scheme:dark;--film:#090806;--paper:#f3e8d2;--support:#c7b99f;--amber:#cc9f5b;--quiet:#2b261e}
+#setup-result *{box-sizing:border-box}
+#setup-result .rs-frame{background:var(--film);overflow:hidden;border-radius:8px}
+#setup-result .rs-screen{background:var(--film);color:var(--paper);width:1280px;height:720px;padding:24px 32px;transform-origin:top left;display:flex;flex-direction:column;font:16px/1.45 Arial,sans-serif}
+#setup-result header{display:flex;justify-content:space-between;align-items:center;gap:24px;min-height:64px}
+#setup-result .rs-brand{font-size:14px;letter-spacing:1.5px;color:var(--amber)}
+#setup-result .rs-steps{font-size:14px;color:var(--support)}
+#setup-result strong{color:var(--paper);font-weight:600}
+#setup-result main{flex:1;display:flex;align-items:center;justify-content:center;padding-bottom:32px}
+#setup-result .rs-result{width:78%;display:grid;grid-template-columns:48px 1fr;gap:24px;align-items:start}
+#setup-result .rs-mark{width:40px;height:40px;color:var(--amber);margin-top:4px;display:grid;place-items:center}
+#setup-result .rs-mark svg{width:36px;height:36px}
+#setup-result h2{font-size:36px;line-height:1.18;letter-spacing:-.5px;font-weight:600;margin:0 0 20px}
+#setup-result p{margin:0;color:var(--support)}
+#setup-result .rs-total{font-size:22px}
+#setup-result .rs-detail{font-size:16px;margin-top:14px}
+#setup-result .rs-reason{font-size:16px;margin-top:24px;padding-top:20px;border-top:1px solid var(--quiet)}
+#setup-result footer{min-height:72px;border-top:1px solid var(--quiet);padding-top:16px;display:flex;justify-content:space-between;align-items:center;gap:24px}
+#setup-result .rs-actions{display:flex;gap:16px;margin-left:auto}
+#setup-result button{font:inherit;font-size:14px;min-height:44px;padding:10px 18px;border:1px solid transparent;border-radius:6px;cursor:pointer}
+#setup-result .rs-secondary{background:transparent;color:var(--support)}
+#setup-result .rs-secondary:hover{background:#1a1712;color:var(--paper)}
+#setup-result .rs-primary{background:var(--amber);color:#060504;font-weight:600}
+#setup-result .rs-primary:hover{background:#dfb472}
+#setup-result .rs-notice{font-size:13px}
+#setup-result [hidden]{display:none!important}
+#setup-result[data-state="failure"] .rs-mark{color:#ff7768}
+#setup-result[data-state="progress"] .rs-mark{border:2px solid var(--quiet);border-top-color:var(--amber);border-right-color:var(--amber);border-radius:50%}
+#setup-result[data-state="progress"] footer{border-color:transparent}
+#setup-result[data-large="true"] .rs-screen{padding:36px 48px;font-size:20px}
+#setup-result[data-large="true"] header{min-height:88px}
+#setup-result[data-large="true"] .rs-brand,#setup-result[data-large="true"] .rs-steps{font-size:20px}
+#setup-result[data-large="true"] .rs-result{grid-template-columns:64px 1fr;gap:32px}
+#setup-result[data-large="true"] h2{font-size:48px;margin-bottom:28px}
+#setup-result[data-large="true"] .rs-total{font-size:30px}
+#setup-result[data-large="true"] .rs-detail,#setup-result[data-large="true"] .rs-reason{font-size:22px}
+#setup-result[data-large="true"] .rs-mark{width:48px;height:48px;margin-top:6px}
+#setup-result[data-large="true"] .rs-mark svg{width:44px;height:44px}
+#setup-result[data-large="true"] button{font-size:20px;min-height:60px;padding:14px 24px}
+#setup-result[data-large="true"] footer{min-height:96px;padding-top:24px}
+</style>
+<script>
+(()=>{const root=document.getElementById('setup-result'),state=document.getElementById('result-state'),context=document.getElementById('result-context'),size=document.getElementById('result-size'),screen=root.querySelector('.rs-screen'),frame=root.querySelector('.rs-frame'),heading=root.querySelector('h2'),total=root.querySelector('.rs-total'),detail=root.querySelector('.rs-detail'),reason=root.querySelector('.rs-reason'),mark=root.querySelector('.rs-mark'),primary=root.querySelector('.rs-primary'),secondary=root.querySelector('.rs-secondary'),notice=root.querySelector('.rs-notice');
+function resize(){const width=Number(size.value),height=width*9/16,scale=root.clientWidth/width;root.dataset.large=String(width===1920);screen.style.width=width+'px';screen.style.height=height+'px';screen.style.transform='scale('+scale+')';frame.style.height=height*scale+'px';}
+function draw(){const s=state.value,first=context.value==='first';root.dataset.state=s;notice.textContent='';detail.hidden=true;reason.hidden=true;total.hidden=false;primary.hidden=false;secondary.hidden=false;primary.textContent='View lineup';secondary.textContent='Add a custom channel';total.textContent='390 channels in your lineup';mark.replaceChildren();if(s!=='progress'){const icon=document.createElement('i');icon.dataset.lucide=s==='failure'?'circle-alert':'circle-check';mark.append(icon);if(typeof lucide!=='undefined')lucide.createIcons();}
+if(s==='success'){heading.textContent=first?'Your lineup is ready':'Your lineup is updated';if(!first){detail.textContent='30 added · 60 updated';detail.hidden=false;}}
+if(s==='progress'){heading.textContent=first?'Creating your lineup…':'Updating your lineup…';total.hidden=true;primary.hidden=true;secondary.hidden=true;}
+if(s==='failure'){heading.textContent=first?'We couldn’t create your lineup':'We couldn’t update your lineup';total.textContent=first?'Your lineup wasn’t saved.':'Your existing lineup hasn’t changed.';detail.hidden=false;detail.textContent='Your setup choices are still here.';primary.textContent='Back to review';secondary.hidden=true;}
+if(s==='unchanged'){heading.textContent='Your lineup is already up to date';total.textContent='No changes needed.';secondary.textContent='Back to configure';}
+resize();}
+primary.onclick=()=>notice.textContent='Preview destination: '+(state.value==='failure'?'Review':'Channels');secondary.onclick=()=>notice.textContent='Preview destination: '+(state.value==='unchanged'?'Configure':'Channel studio');state.onchange=()=>{if(state.value==='unchanged')context.value='existing';draw();};context.onchange=()=>{if(context.value==='first'&&state.value==='unchanged')state.value='success';draw();};size.onchange=resize;new ResizeObserver(resize).observe(root);draw();})();
+</script>

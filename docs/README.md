@@ -13,12 +13,12 @@ audience and purpose.
 | Product, parity, or release planning | [Product Parity](product-parity.md) | [Architecture](architecture.md) and [Portable UI Parity](ui-parity.md) |
 | Application or UI work | [Architecture](architecture.md) | [Approved interface system](../.interface-design/system.md), [Product Parity](product-parity.md), and the affected source/tests; historical parity records only when relevant |
 | Async, persistence, or credential work | [Architecture](architecture.md#changing-asynchronous-and-persisted-state) | Credential/diagnostic contracts in [Implemented now](architecture.md#implemented-now) and the linked owner tests |
-| Channel Studio implementation or investigation | [Channel Studio Specification](channel-studio-spec.md) | [Architecture](architecture.md) and current source/tests; the [completed plan](channel-studio-implementation-plan.md) only for historical evidence |
+| Channel Studio implementation or investigation | [Desktop UI target specification](desktop-ui-design-spec.md) | [Architecture](architecture.md), current source/tests and the design-only [delivery plan](desktop-ui-implementation-plan.md); historical Studio documents are absent from this checkout |
 | Windows media, runner, or packaging work | [Development verification map](DEVELOPMENT.md#verification-by-task) | [Architecture](architecture.md#windows-presentation-and-ownership), [Windows Runtime Provenance](windows-runtime.md), and relevant [physical acceptance](windows-native-validation.md) scenarios |
-| Planned audio passthrough work | [Audio Passthrough Specification](audio-passthrough-spec.md) | [Windows Native Acceptance](windows-native-validation.md), [Architecture](architecture.md), and the current source |
+| Planned audio passthrough work | [Architecture](architecture.md) and current source | [Windows Native Acceptance](windows-native-validation.md); the previously indexed passthrough specification is absent, so do not infer an approved plan from this index |
 | Planned automatic fullscreen HDR work | [Fullscreen HDR Presentation Specification](fullscreen-hdr-spec.md) | [Windows Native Acceptance](windows-native-validation.md), [Architecture](architecture.md), and the current source |
 | Deferred Guide freshness / collection investigation | [Guide Freshness and Collection Revalidation Investigation](guide-freshness-collection-investigation.md) | [Architecture](architecture.md), the current source, and its cited upstream evidence |
-| Guide/PiP implementation or investigation | [Guide PiP Specification](guide-pip-composition-spec.md) | [Architecture](architecture.md) and the current source |
+| Guide/PiP implementation or investigation | [Desktop UI target specification](desktop-ui-design-spec.md) | [Architecture](architecture.md), [interface system](../.interface-design/system.md) and current source; target design is not implemented evidence |
 | Security report | [Security Policy](../SECURITY.md) | Use the private reporting route; never open a public issue containing secrets |
 
 ## Current operational documents
@@ -46,11 +46,18 @@ audience and purpose.
 
 ### Evidence and design records
 
-- [Desktop UI Design Specification](desktop-ui-design-spec.md) records the
-  current refinement campaign's locked decisions and remaining design work.
-  The full package is not yet locked or authorized for implementation.
-- [Desktop UI Implementation Plan](desktop-ui-implementation-plan.md) is the
-  associated planning scaffold and future worker/reviewer handoff contract.
+- [Desktop UI Design Specification](desktop-ui-design-spec.md) contains the
+  consolidated approved target. It does not authorize implementation or claim
+  that the design has been implemented.
+- [Desktop UI Implementation Plan](desktop-ui-implementation-plan.md) maps the
+  delivery packages, owners, migration safeguards and worker/reviewer verification.
+- [Desktop UI orchestration handoff](desktop-ui-orchestration-handoff.md) supplies
+  worker/Luna assignment rules, grouped reviews and the new-session start prompt.
+- [Desktop UI readiness review](desktop-ui-readiness-review.md) records the
+  independent reviewer findings, corrections and P0-ready/P1-gated verdict.
+- [Desktop UI visual evidence](design/desktop-ui/README.md) identifies approved
+  synthetic compositions and later refinements; [design history](desktop-ui-design-history.md)
+  preserves superseded discussion separately from active requirements.
 
 - [Product Parity](product-parity.md) is the authoritative current
   bidirectional product-parity, UX/UI, evidence-gap, and release-readiness
@@ -58,24 +65,17 @@ audience and purpose.
 - [Portable UI Parity](ui-parity.md) is a detailed historical evidence record
   for the portable UI campaigns. Its classifications belong to the named
   campaign sections and must not be generalized into Windows support claims.
-- [Guide PiP Specification](guide-pip-composition-spec.md) records the
-  implemented responsive composition, ownership boundaries, and physical
-  Windows proof still required for Guide/PiP behavior.
-- [Channel Studio Specification](channel-studio-spec.md) records the locked
-  product direction, ownership semantics, authoring UX, Air Check contract,
-  implementation boundaries, acceptance criteria, and deterministic evidence
-  for the implemented Desktop-specific channel workspace.
-- [Channel Studio Implementation Plan](channel-studio-implementation-plan.md)
-  is a historical record of the completed implementation campaign. Its agent
-  assignments, review gates, and handoffs applied to that campaign only; use
-  the current specification and source for new work.
+- Historical `guide-pip-composition-spec.md`, `channel-studio-spec.md` and
+  `channel-studio-implementation-plan.md` were previously indexed but are absent
+  from this checkout. Use current source and architecture for baseline behavior,
+  and the Desktop UI specification for the approved future direction. Do not
+  treat missing documents as evidence of implementation or validation.
 - [Windows Runtime Provenance](windows-runtime.md) records exact native runtime
   sources, hashes, licenses, package policy, and unresolved redistribution
   gates.
-- [Audio Passthrough Specification](audio-passthrough-spec.md) records the
-  deferred default-off Settings feature, native ownership boundary, discovery
-  gate, implementation checklist, and physical Windows evidence required before
-  compressed bitstream output can be claimed.
+- Historical `audio-passthrough-spec.md` is also absent. Its former index entry
+  is not an executable plan or proof of compressed-bitstream support; investigate
+  current source and physical Windows evidence before any such work.
 - [Fullscreen HDR Presentation Specification](fullscreen-hdr-spec.md) records
   the planned automatic HDR/SDR fullscreen contract, composition decision gate,
   ownership boundary, and required physical Windows evidence.

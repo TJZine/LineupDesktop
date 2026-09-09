@@ -1,0 +1,239 @@
+<div class="viz-controls"><label class="form-label">Scenario<select class="form-select" id="gc-state"><option value="partial">One channel unavailable</option><option value="loading">Opening · schedules loading</option><option value="progressive" selected>Some channels still loading</option><option value="retrying">Manual retry in progress</option><option value="cached">Refresh failed · valid listings retained</option><option value="ready">Recovered</option></select></label></div>
+<div id="guide-row-comp"><div class="gr-frame"><section class="gr-screen upstream" aria-label="Refined Guide rows with synthetic programming">
+<header><span class="gr-brand">LINEUP <span>⌄</span></span><span class="gr-guide">Guide</span><span class="gr-right">Tuesday, September 8 &nbsp; · &nbsp; 8:47 PM</span></header>
+<section class="gr-showcase"><div class="gr-video" aria-label="Synthetic picture-in-picture scene"><div class="gr-mountains"></div><span>WATCHING &nbsp; 12 · Evening television</span></div><div class="gr-info"><span id="gr-channel">12 · Evening television</span><h1 id="gr-title">Harbor lights</h1><p class="gr-episode" id="gr-episode">S1 E3 · The northern breakwater</p><p class="gr-facts" id="gr-facts">8:30–9:00 PM · 30 min</p><p class="gr-description" id="gr-description">An unexpected arrival at the harbor brings an old friendship into question as the town prepares for its annual celebration.</p><div class="gr-progress"><span id="gr-fill"></span></div><p class="gr-progress-label" id="gr-progress-label">17 min elapsed · 13 min remaining</p></div></section>
+<div class="gr-tools">
+  <div class="gc-library">
+    <button type="button" id="gc-library-button" aria-expanded="false" aria-controls="gc-library-list"><span id="gc-library-caption">All libraries</span><i data-lucide="chevron-down" aria-hidden="true"></i></button>
+    <div id="gc-library-list" hidden aria-label="Choose a library">
+      <button type="button" data-library="all">All libraries</button>
+      <button type="button" data-library="tv">Television</button>
+      <button type="button" data-library="long">International television, documentaries and limited series</button>
+      <button type="button" data-library="movies">Movies</button>
+    </div>
+  </div>
+  <div class="gc-scope" id="gc-scope" hidden><span id="gc-scope-name"></span><button type="button" id="gc-remove" aria-label="Remove library filter"><i data-lucide="x" aria-hidden="true"></i></button></div>
+  <div class="gc-actions">
+    <div id="gc-search-field"><i data-lucide="search" aria-hidden="true"></i><input id="gc-query" type="search" aria-label="Search channels by name or number" placeholder="Channel name or number"><button type="button" id="gc-clear" aria-label="Clear search" hidden><i data-lucide="x" aria-hidden="true"></i></button></div>
+    <div class="gt-navigation" role="group" aria-label="Browse schedule"><button type="button" id="gt-earlier" aria-label="Earlier by 30 minutes"><i data-lucide="chevron-left" aria-hidden="true"></i></button><button type="button" id="gc-now">Now</button><button type="button" id="gt-later" aria-label="Later by 30 minutes"><i data-lucide="chevron-right" aria-hidden="true"></i></button></div>
+    <select id="gr-hours" aria-label="Hours shown"><option value="2">2 hours</option><option value="3">3 hours</option><option value="4">4 hours</option></select>
+  </div>
+</div>
+<div class="gr-grid"><div class="gr-ruler"><span id="gt-date" aria-live="polite">Tue, Sep 8</span><div id="gr-times"></div></div><div class="gr-rows" id="gr-rows"></div></div>
+<footer><span id="gr-channel-count" aria-live="polite">5 of 48 channels</span><span id="gr-feedback">Select to inspect · Double-click or Enter to tune</span></footer>
+</section></div></div>
+<style>
+#guide-row-comp{color:#f3e8d2;color-scheme:dark;font:16px/1.4 Arial,sans-serif;margin-top:12px;--gr-film:#090806;--gr-booth:#12100d;--gr-raised:#1a1712;--gr-paper:#f3e8d2;--gr-support:#c7b99f;--gr-line:#2b261e;--gr-focus:#f0d39a;--gr-amber:#cc9f5b}
+#guide-row-comp *{box-sizing:border-box}
+#guide-row-comp .gr-frame{background:var(--gr-film);overflow:hidden}
+#guide-row-comp .gr-screen{width:1280px;height:720px;padding:0 24px 12px;transform-origin:top left;background:var(--gr-film)}
+#guide-row-comp header{height:48px;display:flex;align-items:center;gap:28px;border-bottom:1px solid var(--gr-line);font-size:14px;color:var(--gr-support)}
+#guide-row-comp .gr-brand{font-size:20px;letter-spacing:3px;color:var(--gr-paper)}
+#guide-row-comp .gr-brand span{letter-spacing:0;color:var(--gr-support)}
+#guide-row-comp .gr-right{margin-left:auto}
+#guide-row-comp .gr-showcase{height:246px;display:grid;grid-template-columns:404px 1fr;gap:28px;align-items:center;background:radial-gradient(ellipse at 77% 45%,#29312b80,transparent 75%)}
+#guide-row-comp .gr-video{height:227px;position:relative;overflow:hidden;background:linear-gradient(#91a4a1,#c8c5ac 58%,#5c8284 59%,#36585e)}
+#guide-row-comp .gr-mountains{position:absolute;inset:0;background:#304d4c;clip-path:polygon(0 58%,17% 34%,29% 50%,50% 18%,67% 49%,83% 31%,100% 58%,100% 73%,0 73%)}
+#guide-row-comp .gr-video>span{position:absolute;bottom:0;left:0;right:0;padding:28px 14px 12px;background:linear-gradient(transparent,#090806e6);font-size:12px}
+#guide-row-comp .gr-info{min-width:0;padding-right:20px}
+#guide-row-comp #gr-channel{font-size:13px;color:var(--gr-amber)}
+#guide-row-comp h1{font-size:29px;font-weight:500;line-height:1.15;margin:7px 0 7px}
+#guide-row-comp p{margin:0}
+#guide-row-comp .gr-episode{font-size:17px;margin-bottom:6px}
+#guide-row-comp .gr-facts{color:var(--gr-support);font-size:13px}
+#guide-row-comp .gr-description{font-size:15px;color:var(--gr-support);margin:11px 0;max-width:750px;line-height:1.45}
+#guide-row-comp .gr-progress{height:3px;background:#494031;max-width:490px}
+#guide-row-comp .gr-progress span{display:block;width:56.67%;height:100%;background:var(--gr-amber)}
+#guide-row-comp .gr-progress-label{font-size:12px;color:var(--gr-support);margin-top:5px}
+#guide-row-comp .gr-tools{height:42px;display:flex;align-items:center;gap:22px;font-size:14px;color:var(--gr-support)}
+#guide-row-comp .gr-library{width:196px;color:var(--gr-paper)}
+#guide-row-comp .gr-tool-right{margin-left:auto}
+#guide-row-comp .gr-ruler{display:grid;grid-template-columns:208px 1fr;height:34px;font-size:13px;color:var(--gr-support)}
+#guide-row-comp .gr-ruler>span{padding:7px 10px}
+#guide-row-comp #gr-times{position:relative;display:flex;align-items:center}
+#guide-row-comp #gr-times>span{padding-left:9px;flex:1;border-left:1px solid var(--gr-line)}
+#guide-row-comp .gr-row{display:grid;grid-template-columns:208px 1fr;height:65px}
+#guide-row-comp .gr-station{display:flex;align-items:center;gap:14px;padding:8px 12px 8px 8px;font-size:14px;border-bottom:1px solid var(--gr-line)}
+#guide-row-comp .gr-number{font-size:19px;color:var(--gr-support);width:27px;flex-shrink:0}
+#guide-row-comp .gr-station small{display:block;color:var(--gr-support);font-size:11px;margin-top:3px}
+#guide-row-comp .gr-station.watching{background:#3b302055}
+#guide-row-comp .gr-cells{position:relative;overflow:hidden}
+#guide-row-comp .gr-now{position:absolute;left:var(--gr-now);top:0;bottom:0;width:1.5px;background:#ff7768;pointer-events:none;z-index:3}
+#guide-row-comp .gr-cell{position:absolute;top:3px;bottom:3px;background:#f3e8d20d;border:1px solid transparent;border-radius:4px;padding:8px 10px;text-align:left;color:var(--gr-paper);font:inherit;cursor:pointer;display:flex;align-items:center;gap:12px;overflow:hidden}
+#guide-row-comp .gr-cell:hover{background:#2b261e}
+#guide-row-comp .gr-cell.selected{border-color:var(--gr-focus);background:#2b2419}
+#guide-row-comp .gr-main{flex:1;min-width:0}
+#guide-row-comp .gr-title{font-size:16px;font-weight:500}
+#guide-row-comp .gr-subtitle{font-size:13px;color:var(--gr-support);margin-top:4px}
+#guide-row-comp .gr-line{overflow:hidden;white-space:nowrap;text-overflow:ellipsis;display:block;max-width:100%}
+#guide-row-comp .gr-line>span{display:inline-block}
+#guide-row-comp .gr-rail{font-size:11px;color:var(--gr-support);display:flex;flex-direction:column;justify-content:space-between;align-self:stretch;text-align:right;flex-shrink:0}
+#guide-row-comp .gr-episode-tag{color:var(--gr-paper)}
+#guide-row-comp .upstream .gr-cell.selected .gr-time{visibility:hidden}
+#guide-row-comp .upstream .gr-cell.narrow:not(.selected) .gr-subtitle,#guide-row-comp .upstream .gr-cell.narrow .gr-time{display:none}
+#guide-row-comp .ground .gr-rail{display:none}
+#guide-row-comp .ground .gr-cell{background:var(--gr-booth);border-radius:3px;padding:8px 12px}
+#guide-row-comp .ground .gr-cell.selected{background:#2b2419}
+#guide-row-comp .ground .gr-cell:hover{background:#2b261e}
+#guide-row-comp .gr-line.running{text-overflow:clip}
+#guide-row-comp .gr-line.running>span{animation:gr-ticker var(--gr-duration) linear infinite}
+@keyframes gr-ticker{0%,15%{transform:translateX(0)}75%,100%{transform:translateX(calc(-1 * var(--gr-distance)))}}
+@media(prefers-reduced-motion:reduce){#guide-row-comp .gr-line.running>span{animation:none}}
+#guide-row-comp footer{height:25px;display:flex;align-items:end;justify-content:space-between;color:var(--gr-support);font-size:12px}
+#guide-row-comp .refined .gr-cell{display:flex;flex-direction:column;align-items:stretch;justify-content:center;gap:5px;padding:8px 10px;background:#12100d}
+#guide-row-comp .refined .gr-cell.selected{background:#2b2419}
+#guide-row-comp .refined .gr-cell:hover{background:#2b261e}
+#guide-row-comp .refined .gr-top,#guide-row-comp .refined .gr-bottom{display:flex;align-items:baseline;gap:12px;min-width:0;width:100%}
+#guide-row-comp .refined .gr-title,#guide-row-comp .refined .gr-subtitle{flex:1;min-width:0;margin:0}
+#guide-row-comp .refined .gr-episode-tag{font-size:11px;color:#c7b99f;flex-shrink:0;white-space:nowrap}
+#guide-row-comp .refined .gr-time{font-size:11px;color:#c7b99f;flex-shrink:0;white-space:nowrap;margin-left:auto}
+#guide-row-comp .refined .gr-bottom{min-height:18px}
+#guide-row-comp .refined .movie .gr-title{flex:1}
+#guide-row-comp .refined [hidden]{display:none!important}
+#guide-row-comp .refined .gr-line.running>span{animation-delay:900ms}
+#guide-row-comp .gr-line:not(.running)>span{max-width:100%;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom}
+#guide-row-comp .gr-showcase{height:240px;grid-template-columns:384px 1fr}
+#guide-row-comp .gr-video{height:216px}
+#guide-row-comp .gr-tools{height:40px}
+#guide-row-comp .gr-ruler{height:32px}
+#guide-row-comp .gr-row{height:64px}
+#guide-row-comp footer{height:28px}
+#guide-row-comp .refined .gr-cell{gap:4px;padding:6px 10px}
+#guide-row-comp .gr-title{line-height:20px}
+#guide-row-comp .gr-subtitle{line-height:16px}
+#guide-row-comp .refined .gr-bottom{min-height:16px}
+#guide-row-comp #gr-channel{line-height:16px;display:block}
+#guide-row-comp h1{line-height:32px;margin:6px 0}
+#guide-row-comp .gr-episode{line-height:22px;margin-bottom:4px}
+#guide-row-comp .gr-facts{line-height:16px}
+#guide-row-comp .gr-description{line-height:20px;margin:8px 0}
+#guide-row-comp .gr-progress-label{line-height:16px;margin-top:4px}
+#guide-row-comp .six .gr-row{height:53.333333px}
+#guide-row-comp .six .gr-cell{padding-top:2px;padding-bottom:2px;gap:3px}
+#guide-row-comp .balanced .gr-showcase{height:216px;grid-template-columns:341.333333px 1fr}
+#guide-row-comp .balanced .gr-video{height:192px}
+#guide-row-comp .balanced .gr-row{height:57.333333px}
+#guide-row-comp .balanced .gr-cell{padding-top:4px;padding-bottom:4px;gap:3px}
+#guide-row-comp .gr-screen{display:flex;flex-direction:column}
+#guide-row-comp header,#guide-row-comp .gr-showcase,#guide-row-comp footer{flex-shrink:0}
+#guide-row-comp .gr-grid{flex:1;min-height:0;display:flex;flex-direction:column}
+#guide-row-comp .gr-ruler{flex-shrink:0}
+#guide-row-comp .gr-rows{flex:1;min-height:0;overflow-y:auto}
+#guide-row-comp .gr-tools{height:auto;min-height:40px;flex-shrink:0;gap:0;position:relative;z-index:5;align-items:center}
+#guide-row-comp .gr-tools button,#guide-row-comp .gr-tools select{font:14px/20px Arial,sans-serif;color:var(--gr-paper);background:transparent;border:1px solid transparent;border-radius:4px;min-height:32px;padding:5px 10px;cursor:pointer;display:inline-flex;align-items:center;gap:8px}
+#guide-row-comp .gr-tools button:hover,#guide-row-comp .gr-tools select:hover{background:var(--gr-raised)}
+#guide-row-comp .gr-tools select{border-color:var(--gr-line);background:var(--gr-booth);padding-right:4px}
+#guide-row-comp .gr-tools select option{background:var(--gr-booth)}
+#guide-row-comp .gr-tools svg{width:16px;height:16px;flex-shrink:0}
+#guide-row-comp .gc-library{width:208px;flex-shrink:0;position:relative}
+#guide-row-comp #gc-library-button{padding-left:8px}
+#guide-row-comp .gc-scope{display:flex;align-items:center;min-width:0;gap:6px;margin-right:20px;color:var(--gr-support);font-size:13px;line-height:16px;padding:3px 0}
+#guide-row-comp #gc-scope-name{overflow-wrap:anywhere}
+#guide-row-comp #gc-remove{padding:5px;flex-shrink:0;color:var(--gr-support)}
+#guide-row-comp .gc-actions{display:flex;align-items:center;gap:12px;margin-left:auto;flex-shrink:0;padding-left:16px}
+#guide-row-comp #gc-library-list{position:absolute;top:36px;left:0;width:356px;padding:6px;background:var(--gr-raised);border:1px solid var(--gr-line);border-radius:6px}
+#guide-row-comp #gc-library-list button{display:flex;width:100%;text-align:left;white-space:normal;padding:10px 12px}
+#guide-row-comp #gc-library-list button[aria-pressed=true]{background:#2b2419;color:var(--gr-focus)}
+#guide-row-comp #gc-search-field{display:flex;align-items:center;gap:8px;width:284px;height:32px;padding:0 8px;background:#060504;border:1px solid var(--gr-line);border-radius:4px}
+#guide-row-comp #gc-search-field:focus-within{border-color:var(--gr-focus)}
+#guide-row-comp #gc-query{font:14px/20px Arial,sans-serif;background:transparent;color:var(--gr-paper);border:0;width:100%;min-width:0;height:30px;padding:0}
+#guide-row-comp #gc-query::-webkit-search-cancel-button{display:none}
+#guide-row-comp #gc-clear{padding:0;min-height:28px}
+#guide-row-comp [hidden]{display:none!important}
+#guide-row-comp .gc-empty{padding:48px 20px 20px 228px;color:var(--gr-support);font-size:15px}
+#guide-row-comp .gt-navigation{display:flex;align-items:center;gap:0}
+#guide-row-comp .gt-navigation button{min-width:32px;justify-content:center}
+#guide-row-comp .gt-navigation button:disabled{color:#978b76;opacity:.45;cursor:default;background:transparent}
+#guide-row-comp .future .gr-now{display:none}
+#guide-row-comp #gr-times>span{position:relative;font-size:12px;line-height:14px}
+#guide-row-comp #gr-times small{display:block;font-size:11px;color:var(--gr-amber);line-height:13px}
+#guide-row-comp #gt-date{color:var(--gr-support);font-size:13px;line-height:18px}
+#guide-row-comp .refined .gr-top{min-height:20px;flex-shrink:0}
+</style>
+<script>
+(()=>{const root=document.getElementById('guide-row-comp'),screen=root.querySelector('.gr-screen'),frame=root.querySelector('.gr-frame'),rows=root.querySelector('#gr-rows'),direction={value:'refined'},count={value:'5'},resolution={value:'720'},hours=document.getElementById('gr-hours');let chosen='0-0',library='all',windowStart=0;const query=root.querySelector('#gc-query');
+const channels=[['12','Evening television','Watching',[['Harbor lights','The northern breakwater','S1 E3',0,30],['Harbor lights','The letter nobody expected','S1 E4',30,60],['The quiet station','Last train through the valley','S2 E8',60,120]]],['18','Comedy','',[['The apartment upstairs','An exceptionally inconvenient dinner party','S2 E12',0,30],['The apartment upstairs','The spare key','S2 E13',30,60],['Small town hours','A change of plans','S3 E5',60,90],['Small town hours','The second invitation','S3 E6',90,120]]],['24','Cinema','',[['Beyond the northern horizon','','',-45,75],['A place among the stars','','',75,190]]],['31','Documentaries','',[['Wild coast','Where the ocean meets the forest','S1 E2',0,60],['Hidden worlds','Life beneath the winter ice','S2 E1',60,120]]],['42','Short stories','',[['Brief encounters','The missing postcard','S1 E7',0,15],['Brief encounters','A familiar stranger','S1 E8',15,30],['The clockmaker','A minute to spare','S1 E1',30,75],['The clockmaker','The hours between','S1 E2',75,120]]]];
+channels.push(['56','Adventure','',[['Across the divide','The old mountain road','S3 E2',0,60],['Across the divide','A crossing at dawn','S3 E3',60,120]]]);
+channels.forEach((c,ci)=>{let start=c[3].at(-1)[4],i=0;while(start<3600){const duration=ci===2?105:30,seed=c[3][i%2];c[3].push([seed[0],ci===2?'':['The unexpected visitor','A different perspective','The road home','A new beginning'][i%4],ci===2?'':'S1 E'+(10+i),start,start+duration]);start+=duration;i++;}});
+function dateLabel(m){return new Date(Date.UTC(2026,8,8,20,30+m)).toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',timeZone:'UTC'});}
+function clockLabel(m){const t=20*60+30+m;return time(m)+(Math.floor(t/60)%24<12?' AM':' PM');}
+function time(m){let t=20*60+30+m;return (Math.floor(t/60)%12||12)+':'+String(t%60).padStart(2,'0');}
+function detail(c,p){root.querySelector('#gr-channel').textContent=c[0]+' · '+c[1];root.querySelector('#gr-title').textContent=p[0];root.querySelector('#gr-episode').textContent=[p[2],p[1]].filter(Boolean).join(' · ');root.querySelector('#gr-facts').textContent=dateLabel(p[3])+' · '+clockLabel(p[3])+'–'+clockLabel(p[4])+' · '+(p[4]-p[3])+' min';root.querySelector('#gr-description').textContent=p[0]==='Harbor lights'?'An unexpected arrival at the harbor brings an old friendship into question as the town prepares for its annual celebration.':'A chance encounter opens an unexpected chapter in this story of discovery, friendship and finding a place to belong.';let live=p[3]<=17&&p[4]>17;root.querySelector('#gr-fill').style.width=(live?(17-p[3])/(p[4]-p[3])*100:0)+'%';root.querySelector('#gr-progress-label').textContent=live?(17-p[3])+' min elapsed · '+(p[4]-17)+' min remaining':p[4]<=17?'Previously aired':'Upcoming';}
+const measureContext=document.createElement('canvas').getContext('2d');function textWidth(el){measureContext.font=getComputedStyle(el).font;return measureContext.measureText(el.textContent).width;}
+function tick(){root.querySelectorAll('.gr-line').forEach(line=>{line.classList.remove('running');if(!line.closest('.selected'))return;let span=line.firstElementChild,dist=textWidth(span)-line.clientWidth;if(dist>2){line.style.setProperty('--gr-distance',dist+'px');line.style.setProperty('--gr-duration',(dist/34+2.4)+'s');line.classList.add('running');}});}
+function render(){let span=Number(hours.value)*60,ground=false;screen.className='gr-screen refined '+(count.value==='6'?'six':count.value==='balanced'?'balanced':'');root.querySelector('#gr-channel-count').textContent=(count.value==='5'?'5':'6')+' of 48 channels';screen.classList.toggle('future',windowStart>17);screen.style.setProperty('--gr-now',(17-windowStart)/span*100+'%');root.querySelector('#gt-earlier').disabled=windowStart===0;root.querySelector('#gt-date').textContent=dateLabel(windowStart);root.querySelector('#gr-times').innerHTML=Array.from({length:span/30},(_,i)=>'<span>'+clockLabel(windowStart+i*30)+((1230+windowStart+i*30)%1440===0?'<small>'+dateLabel(windowStart+i*30)+'</small>':'')+'</span>').join('')+'<i class="gr-now" aria-hidden="true"></i>';rows.innerHTML='';visibleChannels().forEach(({c,ci})=>{let row=document.createElement('div');row.className='gr-row';row.innerHTML='<div class="gr-station '+(ci===0?'watching':'')+'"><span class="gr-number">'+c[0]+'</span><span>'+c[1]+(c[2]?'<small>'+c[2]+'</small>':'')+'</span></div><div class="gr-cells"><i class="gr-now" aria-hidden="true"></i></div>';let cells=row.lastElementChild;let programs=c[3];programs.forEach((p,pi)=>{if(p[3]>=windowStart+span||p[4]<=windowStart)return;let start=Math.max(windowStart,p[3])-windowStart,end=Math.min(windowStart+span,p[4])-windowStart,width=(end-start)/span*1024;let b=document.createElement('button');b.className='gr-cell'+(chosen===ci+'-'+pi?' selected':'')+(width<200?' narrow':'');b.style.left=start/span*100+'%';b.style.width='calc('+(end-start)/span*100+'% - 4px)';let subtitle=ground?[p[2],p[1]].filter(Boolean).join(' · '):p[1];b.innerHTML='<span class="gr-main"><span class="gr-line gr-title"><span>'+p[0]+'</span></span>'+(subtitle?'<span class="gr-line gr-subtitle"><span>'+subtitle+'</span></span>':'')+'</span><span class="gr-rail"><span class="gr-episode-tag">'+p[2].replaceAll(' ','')+'</span><span class="gr-time">'+time(p[3])+'–'+time(p[4])+'</span></span>';b.dataset.episode=p[2];b.dataset.subtitle=p[1];b.dataset.title=p[0];b.dataset.time=time(p[3])+'–'+time(p[4]);b.dataset.key=ci+'-'+pi;b.setAttribute('aria-label',[p[0],p[2],p[1],time(p[3])+' to '+time(p[4])].filter(Boolean).join(', '));b.onclick=()=>{chosen=ci+'-'+pi;root.querySelectorAll('.selected').forEach(x=>x.classList.remove('selected'));b.classList.add('selected');detail(c,p);tick();};const tune=()=>{root.querySelector('#gr-feedback').textContent=p[3]<=17&&p[4]>17?'Preview · tune selected airing program':'Inspection only · not currently airing';};b.ondblclick=tune;b.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();b.click();tune();}};cells.appendChild(b);});rows.appendChild(row);});root.querySelector('#gr-channel-count').textContent=visibleChannels().length+(visibleChannels().length===1?' channel':' channels');if(!visibleChannels().length){rows.innerHTML='<div class="gc-empty">No channels match this search.</div>';}requestAnimationFrame(()=>{refine();tick();root.dispatchEvent(new Event('recovery-ready'));});}
+function refine(){if(direction.value!=='refined')return;root.querySelectorAll('.gr-cell').forEach(b=>{const title=b.querySelector('.gr-title'),subtitle=b.querySelector('.gr-subtitle'),tag=b.querySelector('.gr-episode-tag'),timing=b.querySelector('.gr-time');const top=document.createElement('span');top.className='gr-top';top.appendChild(title);if(tag.textContent)top.appendChild(tag);const bottom=document.createElement('span');bottom.className='gr-bottom';if(subtitle)bottom.appendChild(subtitle);bottom.appendChild(timing);b.replaceChildren(top,bottom);if(!subtitle)b.classList.add('movie');const available=b.clientWidth-22;const tagWidth=tag.textContent?tag.scrollWidth:0;if(tagWidth&&textWidth(title.firstElementChild)+tagWidth+12>available)tag.hidden=true;const subtitleWidth=subtitle?textWidth(subtitle.firstElementChild):0;const timeWidth=timing.scrollWidth;timing.hidden=subtitle?subtitleWidth+timeWidth+20>available:timeWidth>available;});}
+function visibleChannels(){return channels.map((c,ci)=>({c,ci})).filter(({c,ci})=>(library==='all'||(library==='movies'?ci===2:ci!==2))&&(!query.value.trim()||(c[0]+' '+c[1]).toLowerCase().includes(query.value.trim().toLowerCase())));}
+function fit(){screen.style.transform='scale('+frame.clientWidth/1280+')';frame.style.height=frame.clientWidth*720/1280+'px';}
+function libraryMenu(open){root.querySelector('#gc-library-list').hidden=!open;root.querySelector('#gc-library-button').setAttribute('aria-expanded',String(open));}
+function setLibrary(value){library=value;const names={tv:'Television',long:'International television, documentaries and limited series',movies:'Movies'};root.querySelector('#gc-library-caption').textContent=library==='all'?'All libraries':'Libraries';root.querySelector('#gc-scope').hidden=library==='all';root.querySelector('#gc-scope-name').textContent=names[library]||'';root.querySelectorAll('[data-library]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.library===library)));libraryMenu(false);render();}
+function focusSearch(){query.focus();}
+function searchChanged(){root.querySelector('#gc-clear').hidden=!query.value;render();}
+root.querySelector('#gc-library-button').onclick=()=>libraryMenu(root.querySelector('#gc-library-list').hidden);
+root.querySelectorAll('[data-library]').forEach(b=>b.onclick=()=>{setLibrary(b.dataset.library);root.querySelector('#gc-library-button').focus();});
+root.querySelector('#gc-remove').onclick=()=>{setLibrary('all');root.querySelector('#gc-library-button').focus();};
+query.oninput=searchChanged;
+query.onkeydown=e=>{if(e.key==='Escape'){e.preventDefault();e.stopPropagation();if(query.value){query.value='';searchChanged();}else{(root.querySelector('.gr-cell.selected')||root.querySelector('.gr-cell')||root.querySelector('#gc-library-button')).focus();}}};
+root.querySelector('#gc-clear').onclick=()=>{query.value='';searchChanged();query.focus();};
+function moveTimeline(destination,toNow=false){const scroll=rows.scrollTop;windowStart=Math.max(0,destination);const visible=visibleChannels();if(visible.length){const ci=visible.find(x=>x.ci===Number(chosen.split('-')[0]))?.ci??visible[0].ci,c=channels[ci];let pi=Number(chosen.split('-')[1]),p=c[3][pi];if(toNow)pi=c[3].findIndex(x=>x[3]<=17&&x[4]>17);else if(!p||p[4]<=windowStart||p[3]>=windowStart+Number(hours.value)*60)pi=c[3].findIndex(x=>x[4]>windowStart);chosen=ci+'-'+pi;detail(c,c[3][pi]);}render();rows.scrollTop=scroll;}
+root.querySelector('#gc-now').onclick=()=>moveTimeline(0,true);
+root.querySelector('#gt-earlier').onclick=()=>moveTimeline(windowStart-30);
+root.querySelector('#gt-later').onclick=()=>moveTimeline(windowStart+30);
+root.addEventListener('keydown',e=>{if(e.key==='Escape'&&!root.querySelector('#gc-library-list').hidden){libraryMenu(false);root.querySelector('#gc-library-button').focus();}if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='f'){e.preventDefault();focusSearch();}});
+root.addEventListener('click',e=>{if(!e.target.closest('.gc-library'))libraryMenu(false);});
+root.addEventListener('recovery-render',render);
+hours.onchange=()=>moveTimeline(windowStart);new ResizeObserver(fit).observe(frame);setLibrary('all');detail(channels[0],channels[0][3][0]);fit();})();
+</script>
+<style>
+#guide-row-comp .recovery-row{position:absolute;inset:3px 4px 3px 0;display:flex;align-items:center;gap:12px;padding:10px 16px;background:#12100d;color:#c7b99f;border:1px solid transparent;border-radius:4px;text-align:left;font:15px/20px Arial,sans-serif;width:calc(100% - 4px)}
+#guide-row-comp button.recovery-row{cursor:pointer}
+#guide-row-comp button.recovery-row:hover{background:#1a1712}
+#guide-row-comp button.recovery-row:focus-visible{outline:2px solid #f0d39a;outline-offset:-2px}
+#guide-row-comp .recovery-action{margin-left:auto;padding:4px 12px;border:1px solid #494031;border-radius:4px;color:#f3e8d2;font-size:14px}
+#guide-row-comp .recovery-row[aria-disabled=true]{cursor:default}
+#guide-row-comp .recovery-skeleton{background:#f3e8d20a}
+#guide-row-comp .recovery-skeleton::before,#guide-row-comp .recovery-skeleton::after{content:'';position:absolute;left:12px;height:12px;top:10px;right:12px;border-radius:3px;background:linear-gradient(90deg,#f3e8d20a,#f3e8d221,#f3e8d20a);background-size:200% 100%;animation:recovery-sheen 1.2s ease-in-out infinite}
+#guide-row-comp .recovery-skeleton::after{top:32px;height:9px;width:40%;right:auto}
+#guide-row-comp .recovery-dot{width:5px;height:5px;border-radius:50%;background:#c7b99f;flex-shrink:0}
+@keyframes recovery-sheen{0%{background-position:100% 0}100%{background-position:-100% 0}}
+@media(prefers-reduced-motion:reduce){#guide-row-comp .recovery-skeleton::before,#guide-row-comp .recovery-skeleton::after{animation:none}}
+</style>
+<script>
+(()=>{
+const root=document.getElementById('guide-row-comp'),design={value:'b'},scenario=document.getElementById('gc-state');
+let inspectedRecovery=false;const pulseEpoch=document.timeline.currentTime,reduceMotion=matchMedia('(prefers-reduced-motion: reduce)');
+function statusInfo(channel,status){
+ root.querySelector('#gr-channel').textContent=channel;
+ root.querySelector('#gr-title').textContent=status;
+ root.querySelector('#gr-episode').textContent='';root.querySelector('#gr-facts').textContent='';
+ root.querySelector('#gr-description').textContent=status==='Schedule unavailable'?'Retry this channel’s schedule, or continue browsing other channels.':'';
+ root.querySelector('.gr-progress').hidden=true;root.querySelector('#gr-progress-label').textContent='';
+}
+function apply(){
+ const state=scenario.value,a=design.value==='a';
+ root.querySelector('.gr-progress').hidden=false;
+ if(state==='loading')statusInfo('Guide','Loading schedule…');
+ else if(inspectedRecovery&&state==='retrying')statusInfo('18 · Comedy','Retrying…');
+ else if(!inspectedRecovery||state==='ready'||state==='cached')root.querySelector('[data-key="0-0"]')?.click();
+ for(const row of root.querySelectorAll('.gr-row')){
+  const number=row.querySelector('.gr-number').textContent,cells=row.querySelector('.gr-cells');
+  const failed=number==='18'&&state==='partial',retrying=number==='18'&&state==='retrying';
+  const loading=state==='loading'||(state==='progressive'&&['18','31','42'].includes(number));
+  if(!failed&&!retrying&&!loading)continue;
+  const el=document.createElement(failed||retrying?'button':'div');el.className='recovery-row';
+  if(failed||retrying){el.type='button';el.setAttribute('aria-label',failed?'Retry schedule for Comedy':'Retrying schedule for Comedy');el.setAttribute('aria-disabled',String(retrying));}
+  else{el.setAttribute('role','status');el.setAttribute('aria-label','Loading schedule for '+row.querySelector('.gr-station').textContent);}
+  if(a&&(loading||retrying)){el.classList.add('recovery-skeleton');}
+  else if(a){el.textContent='Unavailable — OK to retry';}
+  else if(failed){const label=document.createElement('span');label.textContent='Schedule unavailable';const retry=document.createElement('span');retry.className='recovery-action';retry.textContent='Retry';el.append(label,retry);}
+  else {const dot=document.createElement('span');dot.className='recovery-dot';dot.setAttribute('aria-hidden','true');const label=document.createElement('span');label.textContent=retrying?'Retrying…':'Loading schedule…';el.append(dot,label);if(!reduceMotion.matches){const pulse=dot.animate([{opacity:.5},{opacity:.9},{opacity:.5}],{duration:1800,iterations:Infinity,easing:'ease-in-out'});pulse.startTime=pulseEpoch;}}
+  if(failed){el.onclick=()=>{inspectedRecovery=true;scenario.value='retrying';root.dispatchEvent(new Event('recovery-render'));};}
+  const marker=document.createElement('i');marker.className='gr-now';marker.setAttribute('aria-hidden','true');cells.replaceChildren(el,marker);
+  if(retrying&&inspectedRecovery)el.focus();
+ }
+}
+root.addEventListener('recovery-ready',apply);
+reduceMotion.addEventListener('change',()=>root.dispatchEvent(new Event('recovery-render')));
+scenario.onchange=()=>{inspectedRecovery=false;root.dispatchEvent(new Event('recovery-render'));};
+})();
+</script>

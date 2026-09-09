@@ -7,6 +7,14 @@ multi_agent_v2 = false
 max_threads = 6
 max_depth = 1
 
+[agents.worker]
+description = "Implement a bounded approved unit, including substantive logic and risk-matched verification."
+config_file = "agents/worker.toml"
+
+[agents.worker_luna]
+description = "Implement a tightly specified bounded unit using Luna after contracts and acceptance criteria are settled."
+config_file = "agents/worker-luna.toml"
+
 [agents.reviewer]
 description = "Read-only reviewer focused on correctness, regressions, security, architecture fit, maintainability, performance, and missing tests."
 config_file = "agents/reviewer.toml"

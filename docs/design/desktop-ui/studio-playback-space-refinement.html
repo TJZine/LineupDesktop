@@ -1,0 +1,248 @@
+<div class="viz-controls"><label class="form-label">Preview treatment<select class="form-select" id="st-layout"><option value="above">A · Artwork-led</option><option value="beside">B · Schedule-led</option></select></label><label class="form-label">Channel type<select class="form-select" id="st-example"><option value="playlist">Custom · Playlist</option><option value="manual">Custom · Hand-picked</option><option value="generated">Generated · Collection</option></select></label><label class="form-label">Desktop size<select class="form-select" id="st-size"><option value="1280">1280 × 720</option><option value="1920">1920 × 1080</option></select></label></div>
+<div id="studio-directions"><div class="st-frame"><section class="st-screen">
+<header><button id="st-back">← Channels</button><span>LINEUP <span class="st-divider">/</span> CHANNEL STUDIO</span></header>
+<div class="st-heading"><div><h2>Evening cinema</h2><p id="st-status">Custom channel · Saved</p></div><div class="st-actions"><button id="st-duplicate" hidden>Duplicate as custom</button><button id="st-tune">Tune in</button><button id="st-save" class="st-primary" disabled>Save changes</button></div></div>
+<div class="st-workspace">
+<section class="st-station"><div class="st-station-fields"><label>Channel name<input id="st-name" value="Evening cinema"></label><label>Number<input id="st-number" type="number" value="12" min="1" max="1000"></label></div><div class="st-order"><label>Playback order<select id="st-playback"><option>Shuffle</option><option>In order</option><option>Mini-marathons</option></select></label><p id="st-order-help">A stable shuffled rotation of your programs.</p></div></section>
+<section class="st-programming"><div class="st-section-title"><h3>Programming</h3><span id="st-source-summary">Playlist · 42 programs</span></div><div class="st-source-tabs"><button data-source="Library">Library</button><button data-source="Playlist" aria-pressed="true">Playlist</button><button data-source="Collection or filter">Collection or filter</button><button data-source="Hand-picked">Hand-picked</button></div><div class="st-source-body"></div></section>
+<section class="st-preview"><div class="st-section-title"><h3>Schedule preview</h3><span id="st-preview-status">Saved channel</span></div><p class="st-facts">42 programs <span>·</span> 68h 24m cycle</p><div class="st-monitor"><div class="st-on-now"><span>ON NOW · 8:00–9:42 PM</span><h4>The last observatory</h4><p>Science fiction · 1h 42m</p><p class="st-synopsis">An astronomer follows a mysterious signal beyond the edge of the familiar sky.</p></div><div class="st-next"><button data-program="The last observatory" aria-pressed="true"><span>8:00 PM</span><strong>The last observatory</strong></button><button data-program="A summer elsewhere"><span>9:42 PM</span><strong>A summer elsewhere</strong></button><button data-program="The quiet expedition"><span>11:18 PM</span><strong>The quiet expedition</strong></button></div></div><p class="st-preview-note" hidden>Unsaved preview · Saving may change what is on now.</p></section>
+</div><p id="st-message" role="status" hidden></p>
+</section></div></div>
+<style>
+#studio-directions{--film:#090806;--booth:#12100d;--raised:#1a1712;--paper:#f3e8d2;--support:#c7b99f;--amber:#cc9f5b;--quiet:#2b261e;--strong:#494031;margin-top:12px;color-scheme:dark}
+#studio-directions *{box-sizing:border-box}
+#studio-directions .st-frame{background:var(--film);overflow:hidden;border-radius:8px}
+#studio-directions .st-screen{font:16px/1.4 Arial,sans-serif;width:1280px;height:720px;padding:20px 32px;display:flex;flex-direction:column;background:var(--film);color:var(--paper);transform-origin:top left}
+#studio-directions header{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--quiet);padding-bottom:12px;color:var(--support);font-size:12px;letter-spacing:1px}
+#studio-directions .st-divider{padding:0 12px;color:var(--strong)}
+#studio-directions button{font:inherit;font-size:14px;min-height:40px;padding:8px 14px;background:transparent;border:1px solid var(--strong);color:var(--paper);border-radius:6px;cursor:pointer}
+#studio-directions button:hover{background:var(--raised)}
+#studio-directions button:disabled{opacity:.4;cursor:default}
+#studio-directions #st-back{border:0;padding-left:0}
+#studio-directions .st-primary{background:var(--amber);color:#060504;font-weight:600;border-color:var(--amber)}
+#studio-directions .st-primary:hover{background:#dfb472}
+#studio-directions .st-heading{display:flex;align-items:center;justify-content:space-between;gap:24px;padding:20px 0}
+#studio-directions h2{font-size:28px;font-weight:600;line-height:1.2;margin:0 0 6px;overflow-wrap:anywhere}
+#studio-directions p{font-size:13px;color:var(--support);margin:0}
+#studio-directions .st-actions{display:flex;gap:12px;flex:none}
+#studio-directions .st-workspace{display:grid;grid-template-columns:minmax(0,1fr) 320px;grid-template-rows:auto minmax(0,1fr);gap:20px 24px;flex:1;min-height:0}
+#studio-directions .st-preview{grid-column:1/-1;grid-row:1;background:var(--booth);border:1px solid var(--quiet);border-radius:8px;padding:16px 20px;overflow:auto}
+#studio-directions .st-programming{grid-column:1;grid-row:2;min-height:0;overflow:auto;padding-right:8px}
+#studio-directions .st-station{grid-column:2;grid-row:2;border-left:1px solid var(--quiet);padding-left:24px;overflow:auto}
+#studio-directions .st-station-fields{display:grid;grid-template-columns:1fr 90px;gap:12px}
+#studio-directions label{font-size:13px;display:block;color:var(--support)}
+#studio-directions input,#studio-directions select{font:inherit;font-size:14px;min-height:40px;width:100%;background:#060504;color:var(--paper);border:1px solid var(--strong);border-radius:6px;padding:8px 10px;margin-top:6px}
+#studio-directions .st-order{margin-top:20px}
+#studio-directions .st-order p{margin-top:8px;font-size:12px}
+#studio-directions .st-section-title{display:flex;align-items:baseline;justify-content:space-between;gap:16px;margin-bottom:8px}
+#studio-directions h3{font-size:17px;font-weight:600;margin:0}
+#studio-directions .st-section-title>span{font-size:12px;color:var(--support)}
+#studio-directions .st-facts{font-size:12px;margin-bottom:12px}
+#studio-directions .st-facts span{padding:0 8px}
+#studio-directions .st-monitor{display:grid;grid-template-columns:1fr 1.3fr;gap:24px;align-items:start}
+#studio-directions .st-on-now>span{font-size:11px;letter-spacing:.8px;color:var(--support)}
+#studio-directions h4{font-size:24px;font-weight:500;margin:6px 0}
+#studio-directions .st-synopsis{margin-top:10px;max-width:530px}
+#studio-directions .st-next{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+#studio-directions .st-next button{text-align:left;min-height:98px;background:var(--raised);border-color:var(--quiet);padding:12px}
+#studio-directions .st-next span{display:block;font-size:12px;color:var(--support);margin-bottom:10px}
+#studio-directions .st-next strong{font-size:14px;font-weight:500}
+#studio-directions .st-next button[aria-pressed="true"]{border-color:var(--amber);background:#2b2419}
+#studio-directions .st-preview-note{margin-top:12px;color:var(--amber);font-size:12px}
+#studio-directions .st-source-tabs{display:flex;gap:4px;flex-wrap:wrap;margin:12px 0 16px}
+#studio-directions .st-source-tabs button{border-color:transparent;font-size:13px;padding:8px 10px}
+#studio-directions button[aria-pressed="true"]{background:#2b2419;border-color:var(--amber)}
+#studio-directions .st-source-body>p{margin:12px 0}
+#studio-directions .st-check{display:flex;align-items:center;gap:8px;margin:12px 0}
+#studio-directions input[type="checkbox"]{width:18px;height:18px;min-height:0;margin:0;accent-color:var(--amber)}
+#studio-directions .st-list{margin-top:12px;border-top:1px solid var(--quiet)}
+#studio-directions .st-list-row{display:flex;gap:12px;align-items:center;padding:12px 0;border-bottom:1px solid var(--quiet);font-size:14px}
+#studio-directions .st-list-row>span:first-child{color:var(--support);width:24px}
+#studio-directions .st-list-row small{margin-left:auto;color:var(--support)}
+#studio-directions .st-manual-tabs{display:flex;gap:8px;margin-bottom:12px}
+#studio-directions .st-manual-tabs button{font-size:13px}
+#studio-directions #st-message{padding-top:10px}
+#studio-directions [hidden]{display:none!important}
+#studio-directions[data-layout="beside"] .st-workspace{grid-template-columns:minmax(0,1.55fr) minmax(0,1fr);grid-template-rows:auto minmax(0,1fr)}
+#studio-directions[data-layout="beside"] .st-station{grid-column:1/-1;grid-row:1;padding:0 0 16px;border:0;border-bottom:1px solid var(--quiet);display:grid;grid-template-columns:1.55fr 1fr;gap:32px;overflow:visible}
+#studio-directions[data-layout="beside"] .st-station-fields{grid-template-columns:1fr 110px}
+#studio-directions[data-layout="beside"] .st-order{margin:0}
+#studio-directions[data-layout="beside"] .st-order p{display:none}
+#studio-directions[data-layout="beside"] .st-preview{grid-column:2;grid-row:2}
+#studio-directions[data-layout="beside"] .st-monitor{display:block}
+#studio-directions[data-layout="beside"] .st-next{display:block;margin-top:20px}
+#studio-directions[data-layout="beside"] .st-next button{display:grid;grid-template-columns:85px 1fr;gap:12px;width:100%;min-height:52px;margin-top:6px;align-items:center}
+#studio-directions[data-layout="beside"] .st-next span{margin:0}
+#studio-directions[data-large="true"] .st-screen{padding:30px 48px;font-size:20px}
+#studio-directions[data-large="true"] header{font-size:17px;padding-bottom:18px}
+#studio-directions[data-large="true"] .st-heading{padding:28px 0}
+#studio-directions[data-large="true"] h2{font-size:38px}
+#studio-directions[data-large="true"] button,#studio-directions[data-large="true"] input,#studio-directions[data-large="true"] select{font-size:18px;min-height:48px}
+#studio-directions[data-large="true"] label,#studio-directions[data-large="true"] p,#studio-directions[data-large="true"] .st-section-title>span{font-size:17px}
+#studio-directions[data-large="true"] h3{font-size:23px}
+#studio-directions[data-large="true"] h4{font-size:32px}
+#studio-directions[data-large="true"] .st-workspace{grid-template-columns:minmax(0,1fr) 460px;gap:28px 36px}
+#studio-directions[data-large="true"] .st-preview{padding:24px 28px}
+#studio-directions[data-large="true"] .st-on-now>span,#studio-directions[data-large="true"] .st-next span{font-size:16px}
+#studio-directions[data-large="true"] .st-next strong,#studio-directions[data-large="true"] .st-list-row{font-size:19px}
+#studio-directions[data-large="true"] .st-station-fields{grid-template-columns:1fr 130px}
+#studio-directions[data-large="true"] .st-next button{min-height:130px}
+#studio-directions[data-large="true"][data-layout="beside"] .st-workspace{grid-template-columns:minmax(0,1.55fr) minmax(0,1fr)}
+#studio-directions[data-large="true"][data-layout="beside"] .st-next button{min-height:70px;grid-template-columns:110px 1fr}
+</style>
+<script>
+(()=>{const root=document.getElementById('studio-directions'),layout=document.getElementById('st-layout'),example=document.getElementById('st-example'),size=document.getElementById('st-size'),body=root.querySelector('.st-source-body'),name=document.getElementById('st-name'),number=document.getElementById('st-number'),order=document.getElementById('st-playback'),save=document.getElementById('st-save'),tune=document.getElementById('st-tune'),status=document.getElementById('st-status'),previewStatus=document.getElementById('st-preview-status'),note=root.querySelector('.st-preview-note');let manualTab='browse';
+const films=['The last observatory','A summer elsewhere','The quiet expedition','Letters from the coast','Beyond the valley','The midnight archive','A distant morning','The lantern maker','The long way home','Days of silver'];function button(text,fn){const b=document.createElement('button');b.textContent=text;b.onclick=fn;return b;}function message(text){const p=document.getElementById('st-message');p.hidden=false;p.textContent=text;}
+function dirty(){status.textContent=(example.value==='generated'?'Generated':'Custom')+' channel · Unsaved changes';save.disabled=false;tune.disabled=true;previewStatus.textContent=example.value==='generated'?'Saved programming':'Draft schedule';note.hidden=example.value==='generated';}
+function list(manual=false){const l=document.createElement('div');l.className='st-list';films.forEach((title,i)=>{const r=document.createElement('div');r.className='st-list-row';if(manual&&manualTab==='browse'){const c=document.createElement('input');c.type='checkbox';c.checked=i<3;c.setAttribute('aria-label','Include '+title);c.onchange=dirty;r.append(c);}else{const n=document.createElement('span');n.textContent=i+1;r.append(n);}const text=document.createElement('span');text.textContent=title;const duration=document.createElement('small');duration.textContent=[102,96,108,89][i%4]+' min';r.append(text,duration);l.append(r);});return l;}
+function content(){body.replaceChildren();const generated=example.value==='generated',manual=example.value==='manual';root.querySelector('.st-source-tabs').hidden=generated;root.querySelectorAll('[data-source]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.source===(manual?'Hand-picked':'Playlist'))));document.getElementById('st-source-summary').textContent=(generated?'Collection':manual?'Hand-picked':'Playlist')+' · 42 programs';if(generated){const p=document.createElement('p');p.textContent='Classic cinema · Movies';const expl=document.createElement('p');expl.textContent='Programming and playback order are managed by Generate lineup. You can edit this channel’s name and number here.';body.append(p,expl,list());return;}
+if(manual){const tabs=document.createElement('div');tabs.className='st-manual-tabs';['browse','rundown'].forEach(t=>{const b=button(t==='browse'?'Browse library':'Channel programs · 42',()=>{manualTab=t;content();});b.setAttribute('aria-pressed',String(t===manualTab));tabs.append(b);});body.append(tabs);if(manualTab==='browse'){const input=document.createElement('input');input.placeholder='Search title or show';input.setAttribute('aria-label','Search title or show');input.oninput=()=>{body.querySelectorAll('.st-list-row').forEach(r=>r.hidden=!r.textContent.toLowerCase().includes(input.value.toLowerCase()));};body.append(input);}const p=document.createElement('p');p.textContent=manualTab==='browse'?'Browse programs to include in this channel.':'Your source order · Playback order determines the schedule.';body.append(p,list(true));}else{const label=document.createElement('label');label.textContent='Video playlist';const select=document.createElement('select');['Evening cinema','Weekend discoveries'].forEach(v=>{const o=document.createElement('option');o.textContent=v;select.append(o);});select.onchange=dirty;label.append(select);const checkLabel=document.createElement('label');checkLabel.className='st-check';const check=document.createElement('input');check.type='checkbox';check.checked=true;check.onchange=dirty;checkLabel.append(check,document.createTextNode('Include watched items'));body.append(label,checkLabel,list());}}
+function reset(){const generated=example.value==='generated';name.value=generated?'Classic cinema':'Evening cinema';root.querySelector('h2').textContent=name.value;status.textContent=(generated?'Generated':'Custom')+' channel · Saved';save.disabled=true;tune.disabled=false;order.disabled=generated;previewStatus.textContent='Saved channel';note.hidden=true;document.getElementById('st-duplicate').hidden=!generated;content();}
+function resize(){const w=Number(size.value),screen=root.querySelector('.st-screen');root.dataset.layout="beside";root.dataset.large=String(w===1920);screen.style.width=w+'px';screen.style.height=w*9/16+'px';screen.style.transform='scale('+root.clientWidth/w+')';root.querySelector('.st-frame').style.height=root.clientWidth*9/16+'px';}
+name.oninput=()=>{root.querySelector('h2').textContent=name.value||'New channel';dirty();};number.oninput=dirty;order.onchange=()=>{dirty();message('Composition preview: production recalculates the schedule when playback order changes.');};save.onclick=()=>{status.textContent=(example.value==='generated'?'Generated':'Custom')+' channel · Saved';save.disabled=true;tune.disabled=false;note.hidden=true;previewStatus.textContent='Saved channel';message('Synthetic preview only — no application changes saved.');};tune.onclick=()=>message('Preview destination: Player, after a successful tune.');document.getElementById('st-back').onclick=()=>message(save.disabled?'Preview destination: Channels, with list position restored.':'Preview: unsaved changes require the existing discard-or-keep-editing flow.');document.getElementById('st-duplicate').onclick=()=>message('Preview destination: a separate editable custom draft.');root.querySelectorAll('[data-source]').forEach(b=>b.onclick=()=>{if(b.dataset.source==='Hand-picked'){example.value='manual';content();dirty();}else if(b.dataset.source==='Playlist'){example.value='playlist';content();dirty();}else message('This comparison focuses on playlist and hand-picked layouts; '+b.dataset.source+' controls will be refined next.');});root.querySelectorAll('[data-program]').forEach(b=>b.onclick=()=>{root.querySelectorAll('[data-program]').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));root.querySelector('.st-on-now h4').textContent=b.dataset.program;const details={'The last observatory':['Science fiction · 1h 42m','An astronomer follows a mysterious signal beyond the edge of the familiar sky.'],'A summer elsewhere':['Drama · 1h 36m','Two old friends reunite in a seaside town for an unexpected summer.'],'The quiet expedition':['Adventure · 1h 48m','A small expedition follows a forgotten route through a remote mountain valley.']}[b.dataset.program];root.querySelector('.st-on-now>p').textContent=details[0];root.querySelector('.st-synopsis').textContent=details[1];root.querySelector('.st-on-now>span').textContent=b===root.querySelector('[data-program]')?'ON NOW · 8:00–9:42 PM':'UPCOMING · '+b.querySelector('span').textContent;});example.onchange=reset;layout.onchange=resize;size.onchange=resize;new ResizeObserver(resize).observe(root);reset();resize();})();
+</script>
+<style>
+/* Intent: inspect a channel's programming without losing its cinematic identity.
+   Existing cinema palette, quiet surface depth, Arial preview type, 4/8 spacing. */
+#studio-directions .st-preview{display:flex;flex-direction:column;gap:0;min-height:0}
+#studio-directions .st-list-row>span:first-child{flex:0 0 28px}
+#studio-directions .st-monitor{display:flex!important;flex-direction:column;align-items:stretch;min-height:0;flex:1;gap:0}
+#studio-directions .st-on-now{display:grid;grid-template-columns:128px 1fr;column-gap:16px;flex:none;padding:4px 0 16px}
+#studio-directions .st-on-now>span,#studio-directions .st-on-now>h4,#studio-directions .st-on-now>p{grid-column:2}
+#studio-directions .st-on-now>h4{font-size:21px;margin:5px 0;line-height:1.18}
+#studio-directions .st-on-now .st-synopsis{grid-column:1/-1;max-width:none;margin-top:12px}
+#studio-directions .sp-art{grid-row:1/4;grid-column:1;position:relative;overflow:hidden;min-height:100px;border-radius:4px;background:radial-gradient(ellipse at 65% 22%,#d4b677 0 7%,transparent 7.5%),linear-gradient(165deg,#202b34,#56666b 58%,#ae8b60);isolation:isolate}
+#studio-directions .sp-art:before{content:'';position:absolute;inset:40% -10% -20%;background:#202c2e;clip-path:polygon(0 60%,35% 3%,64% 62%,85% 26%,100% 40%,100% 100%,0 100%)}
+#studio-directions .sp-art:after{content:'';position:absolute;inset:64% -5% -10%;background:#111b1e;clip-path:polygon(0 30%,20% 10%,50% 58%,80% 14%,100% 38%,100% 100%,0 100%)}
+#studio-directions .sp-art[data-scene="1"]{background:radial-gradient(ellipse at 30% 30%,#e8c893 0 8%,transparent 8.5%),linear-gradient(#647d81,#c1b394 70%,#76775f)}
+#studio-directions .sp-art[data-scene="2"]{background:linear-gradient(160deg,#485653,#94a09a 55%,#b3a17c)}
+#studio-directions .sp-art[hidden]{display:none!important}
+#studio-directions .st-next{margin:0!important;overflow:auto;min-height:0;border-top:1px solid var(--quiet);flex:1}
+#studio-directions .st-next button{border:0!important;border-bottom:1px solid var(--quiet)!important;border-radius:0!important;background:transparent!important;min-height:58px!important;margin:0!important;padding:10px 8px!important;grid-template-columns:82px 1fr!important}
+#studio-directions .st-next button[aria-pressed="true"]{background:#2b2419!important;box-shadow:inset 3px 0 var(--amber)}
+#studio-directions .st-next button strong{display:block}
+#studio-directions .st-next button small{display:block;margin-top:4px;color:var(--support);font-size:11px}
+#studio-directions .sp-preview-tools{display:flex;justify-content:space-between;align-items:center;padding:8px 0;color:var(--support);font-size:12px}
+#studio-directions .sp-preview-tools button{min-height:28px;padding:4px 8px;font-size:12px}
+#studio-directions .st-preview-note{order:0;margin:0 0 12px;padding:8px 0;border-bottom:1px solid var(--quiet)}
+#studio-directions[data-treatment="art"] .st-on-now{display:block}
+#studio-directions[data-treatment="art"] .sp-art{height:104px;min-height:104px;margin-bottom:12px}
+#studio-directions[data-treatment="art"] .st-next{min-height:96px}
+#studio-directions[data-large="true"][data-treatment="art"] .sp-art{height:156px;min-height:156px}
+#studio-directions[data-treatment="art"] .st-on-now h4{font-size:24px}
+#studio-directions[data-art="off"] .st-on-now{display:block}
+#studio-directions[data-large="true"] .sp-art{min-height:140px}
+#studio-directions[data-large="true"] .st-on-now{grid-template-columns:180px 1fr;gap:0 20px;padding-bottom:20px}
+#studio-directions[data-large="true"] .st-on-now h4{font-size:29px}
+#studio-directions[data-large="true"] .st-next button{min-height:76px!important;grid-template-columns:110px 1fr!important}
+#studio-directions[data-large="true"] .st-next button small,#studio-directions[data-large="true"] .sp-preview-tools{font-size:16px}
+#studio-directions[data-large="true"] .sp-preview-tools button{font-size:16px;min-height:36px}
+</style>
+<script>
+(()=>{
+const root=document.getElementById('studio-directions'),layout=document.getElementById('st-layout'),example=document.getElementById('st-example');
+const controls=layout.closest('.viz-controls');
+example.closest('label').hidden=true;
+const stateLabel=document.createElement('label');stateLabel.className='form-label';stateLabel.textContent='Preview state';
+const state=document.createElement('select');state.className='form-select';state.id='sp-state';
+[['saved','Saved'],['draft','Programming changed'],['noart','No artwork']].forEach(([v,t])=>{const o=document.createElement('option');o.value=v;o.textContent=t;state.append(o)});stateLabel.append(state);controls.append(stateLabel);
+const detail=root.querySelector('.st-on-now'),art=document.createElement('div');art.className='sp-art';art.setAttribute('role','img');art.setAttribute('aria-label','Illustrative mountain artwork');detail.prepend(art);
+const preview=root.querySelector('.st-preview'),note=root.querySelector('.st-preview-note');preview.insertBefore(note,root.querySelector('.st-monitor'));
+const monitor=root.querySelector('.st-monitor'),next=root.querySelector('.st-next'),tools=document.createElement('div');tools.className='sp-preview-tools';
+const day=document.createElement('span');day.textContent='Tuesday, September 8';const now=document.createElement('button');now.textContent='Back to now';now.hidden=true;tools.append(day,now);monitor.insertBefore(tools,next);
+const programs=[['The last observatory','8:00–9:42 PM','Science fiction · 1h 42m','An astronomer follows a mysterious signal beyond the edge of the familiar sky.'],['A summer elsewhere','9:42–11:18 PM','Drama · 1h 36m','Two old friends reunite in a seaside town for an unexpected summer.'],['The quiet expedition','11:18 PM–1:06 AM','Adventure · 1h 48m','A small expedition follows a forgotten route through a remote mountain valley.'],['Letters from the coast','1:06–2:35 AM','Drama · 1h 29m','A forgotten letter brings a writer back to the coast where she grew up.'],['Beyond the valley','2:35–4:17 AM','Adventure · 1h 42m','A journey beyond familiar mountains changes the course of a quiet life.']];
+let active=0;next.replaceChildren();
+function select(i){active=i;const p=programs[i];detail.querySelector('h4').textContent=p[0];detail.querySelector('span').textContent=(i===0?'ON NOW':'UPCOMING')+' · '+p[1];detail.querySelector('p').textContent=p[2];detail.querySelector('.st-synopsis').textContent=p[3];art.dataset.scene=String(i%3);art.setAttribute('aria-label','Illustrative artwork for '+p[0]);next.querySelectorAll('button').forEach((b,j)=>b.setAttribute('aria-pressed',String(i===j)));now.hidden=i===0;}
+programs.forEach((p,i)=>{const b=document.createElement('button'),time=document.createElement('span'),text=document.createElement('div'),title=document.createElement('strong'),meta=document.createElement('small');time.textContent=p[1].split('–')[0]+(i<2?' PM':i===2?'':' AM');title.textContent=p[0];meta.textContent=(i===0?'On now · ':i>2?'Wed · ':'')+p[2].split(' · ')[1];text.append(title,meta);b.append(time,text);b.onclick=()=>select(i);next.append(b)});
+now.onclick=()=>select(0);
+function treatment(){root.dataset.treatment=layout.value==='above'?'art':'schedule'}
+function setState(){const draft=state.value==='draft';root.dataset.art=state.value==='noart'?'off':'on';art.hidden=state.value==='noart';document.getElementById('st-preview-status').textContent=draft?'Draft schedule':'Saved channel';document.getElementById('st-status').textContent='Custom channel · '+(draft?'Unsaved changes':'Saved');note.hidden=!draft;note.textContent='Saving these programming changes may change what is on now.';document.getElementById('st-save').disabled=!draft;document.getElementById('st-tune').disabled=draft;}
+layout.addEventListener('change',treatment);state.onchange=setState;example.addEventListener('change',setState);
+example.value='manual';example.dispatchEvent(new Event('change'));root.querySelectorAll('.st-manual-tabs button')[1].click();layout.value='beside';layout.dispatchEvent(new Event('change'));select(0);setState();
+})();
+</script>
+<style>
+#studio-directions .st-order .pb-details{display:flex;gap:20px;align-items:flex-end;margin-top:12px;flex-wrap:wrap}
+#studio-directions .pb-details>label:first-child{width:148px;flex:none}
+#studio-directions .pb-specials{display:flex;align-items:center;gap:8px;min-height:40px;padding-bottom:6px}
+#studio-directions .st-order .pb-helper{display:block!important;font-size:12px;margin-top:8px;color:var(--support);line-height:1.4}
+#studio-directions #st-order-help{display:none!important}
+#studio-directions .st-order #pb-block{width:100%}
+#studio-directions .pb-info{font-size:12px;color:var(--support);margin-top:12px}
+#studio-directions .pb-row{display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--quiet);padding:12px 0}
+#studio-directions .pb-row>span{flex:1;overflow-wrap:anywhere;font-size:14px}
+#studio-directions .pb-row small{color:var(--support);font-size:12px}
+#studio-directions .pb-season{font-size:12px;color:var(--support);padding-top:12px}
+#studio-directions[data-large="true"] .pb-details>label:first-child{width:205px}
+#studio-directions[data-large="true"] .pb-specials{min-height:48px}
+#studio-directions[data-large="true"] .st-order .pb-helper,#studio-directions[data-large="true"] .pb-info,#studio-directions[data-large="true"] .pb-row small,#studio-directions[data-large="true"] .pb-season{font-size:16px}
+#studio-directions[data-large="true"] .pb-row>span{font-size:19px}
+</style>
+<script>
+(()=>{
+const root=document.getElementById('studio-directions'),mode=document.getElementById('st-playback'),size=document.getElementById('st-size');
+document.getElementById('st-layout').closest('label').style.display='none';document.getElementById('st-example').closest('label').style.display='none';document.getElementById('sp-state').closest('label').style.display='none';
+[['2560','2560 × 1440'],['3840','3840 × 2160']].forEach(([v,t])=>{const o=document.createElement('option');o.value=v;o.textContent=t;size.append(o)});
+mode.value='Mini-marathons';mode.onchange=null;root.querySelector('h2').textContent='Evening television';document.getElementById('st-name').value='Evening television';document.getElementById('st-name').readOnly=true;document.getElementById('st-number').readOnly=true;
+document.getElementById('st-status').textContent='Custom channel · Draft';document.getElementById('st-save').disabled=true;document.getElementById('st-tune').disabled=true;
+const order=root.querySelector('.st-order'),details=document.createElement('div');details.className='pb-details';
+const blockLabel=document.createElement('label');blockLabel.textContent='Episodes per block';const block=document.createElement('select');block.id='pb-block';[2,3,4,5].forEach(n=>{const o=document.createElement('option');o.value=String(n);o.textContent=String(n);block.append(o)});block.value='3';blockLabel.append(block);
+const specialLabel=document.createElement('label');specialLabel.className='pb-specials';const specials=document.createElement('input');specials.type='checkbox';specials.id='pb-specials';specialLabel.append(specials,document.createTextNode('Include specials'));details.append(blockLabel,specialLabel);const helper=document.createElement('p');helper.className='pb-helper';helper.setAttribute('role','status');order.append(details,helper);
+const body=root.querySelector('.st-source-body');body.replaceChildren();root.querySelector('.st-source-tabs').replaceChildren();['Library','Plex playlist','Hand-picked'].forEach((t,i)=>{const b=document.createElement('button');b.textContent=t;b.setAttribute('aria-pressed',String(i===0));b.disabled=i!==0;root.querySelector('.st-source-tabs').append(b)});
+const libLabel=document.createElement('label');libLabel.textContent='Library';const lib=document.createElement('select');const libOption=document.createElement('option');libOption.textContent='TV shows';lib.append(libOption);libLabel.append(lib);body.append(libLabel);const sourceInfo=document.createElement('p');sourceInfo.className='pb-info';sourceInfo.textContent='All shows · Include watched items';body.append(sourceInfo);
+const list=document.createElement('div');list.className='st-list';body.append(list);
+const showNames=['Harbor lights','The quiet station','Beyond the ridge'];const programs=[];for(let show=0;show<3;show++){for(let season=1;season<=2;season++){for(let ep=1;ep<=5;ep++)programs.push({show,season,ep,title:showNames[show],minutes:30});}}const specialPrograms=[{show:0,season:0,ep:1,title:showNames[0],minutes:30},{show:1,season:0,ep:1,title:showNames[1],minutes:30}];
+for(let i=0;i<9;i++){const p=programs[i],row=document.createElement('div');row.className='pb-row';const name=document.createElement('span');name.textContent=p.title+' · S'+p.season+' E'+p.ep;const d=document.createElement('small');d.textContent='30 min';row.append(name,d);list.append(row)}
+const next=root.querySelector('.st-next'),detail=root.querySelector('.st-on-now'),back=root.querySelector('.sp-preview-tools button');let active=0,current=[];
+function sequence(){const all=(mode.value!=='Mini-marathons'||specials.checked)?[...programs,...specialPrograms]:programs;if(mode.value==='In order')return [...all].sort((a,b)=>a.show-b.show||a.season-b.season||a.ep-b.ep);if(mode.value==='Shuffle'){return [...all].sort((a,b)=>((a.show*17+a.season*11+a.ep*7)%37)-((b.show*17+b.season*11+b.ep*7)%37));}const queues=showNames.map((_,i)=>all.filter(p=>p.show===i).sort((a,b)=>(a.season===0?99:a.season)-(b.season===0?99:b.season)||a.ep-b.ep)),out=[];while(queues.some(q=>q.length)){for(const q of queues){if(!q.length)continue;const season=q[0].season;let n=0;while(q.length&&q[0].season===season&&n<Number(block.value)){out.push(q.shift());n++;}}}return out;}
+function time(i){const minutes=20*60+i*30,h=Math.floor(minutes/60)%24;return (h%12||12)+':'+(minutes%60?'30':'00')+' '+(h>=12?'PM':'AM');}
+function inspect(i){active=i;const p=current[i];detail.querySelector('.sp-art').setAttribute('aria-label','Illustrative artwork for '+p.title);detail.querySelector('span').textContent=(i===0?'ON NOW':'UPCOMING')+' · '+time(i)+'–'+time(i+1);detail.querySelector('h4').textContent=p.title;detail.querySelector('p').textContent=(p.season===0?'Special '+p.ep:'Season '+p.season+' · Episode '+p.ep)+' · 30 min';detail.querySelector('.st-synopsis').textContent=['Life in a small harbor town brings familiar faces and unexpected decisions.','The crew of a remote station faces a new mystery each day.','A mountain community navigates change beyond the familiar ridge.'][p.show];next.querySelectorAll('button').forEach((b,j)=>b.setAttribute('aria-pressed',String(i===j)));back.hidden=i===0;}
+function render(){const mini=mode.value==='Mini-marathons';details.hidden=!mini;helper.textContent=mini?(specials.checked?'Specials play after regular seasons.':'2 specials excluded.'):(mode.value==='Shuffle'?'Plays programs in a stable shuffled rotation.':'Follows show, season and episode order.');current=sequence();document.getElementById('st-source-summary').textContent='Library · '+current.length+' programs';root.querySelector('.st-facts').textContent=current.length+' programs · '+(current.length/2)+'h cycle';document.getElementById('st-preview-status').textContent='Draft schedule';root.querySelector('.st-preview-note').hidden=true;next.replaceChildren();current.forEach((p,i)=>{const b=document.createElement('button'),t=document.createElement('span'),name=document.createElement('div'),strong=document.createElement('strong'),meta=document.createElement('small');t.textContent=time(i);strong.textContent=p.title;meta.textContent=(i===0?'On now · ':i>=8?'Wed · ':'')+(p.season===0?'Special '+p.ep:'S'+p.season+' E'+p.ep);name.append(strong,meta);b.append(t,name);b.onclick=()=>inspect(i);next.append(b)});inspect(0);next.scrollTop=0;}
+mode.addEventListener('change',render);block.onchange=render;specials.onchange=render;back.onclick=()=>{inspect(0);next.scrollTop=0};
+function scale(){const physical=Number(size.value),design=physical===1280?1280:1920;root.dataset.layout='beside';root.dataset.large=String(design===1920);root.dataset.treatment='schedule';const screen=root.querySelector('.st-screen');screen.style.width=design+'px';screen.style.height=design*9/16+'px';screen.style.transform='scale('+root.clientWidth/design+')';root.querySelector('.st-frame').style.height=root.clientWidth*9/16+'px';}
+size.addEventListener('change',scale);new ResizeObserver(scale).observe(root);render();scale();
+})();
+</script>
+<style>
+/* Reclaim height through alignment and hierarchy, not smaller interaction targets. */
+#studio-directions header{padding-bottom:8px}
+#studio-directions .st-heading{padding:12px 0}
+#studio-directions h2{font-size:25px}
+#studio-directions .st-heading p{margin-top:2px}
+#studio-directions[data-layout="beside"] .st-station{grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr);gap:24px;padding-bottom:12px}
+#studio-directions[data-layout="beside"] .st-station-fields{grid-template-columns:minmax(0,1fr) 80px;align-items:start}
+#studio-directions .st-order{display:flex;flex-wrap:wrap;align-items:flex-start;column-gap:16px;row-gap:4px}
+#studio-directions .st-order>label{width:180px;flex:1 1 160px}
+#studio-directions .st-order .pb-details{display:contents;margin:0}
+#studio-directions .pb-details>label:first-child{width:128px;flex:0 0 128px}
+#studio-directions .pb-specials{padding:22px 0 0;min-height:0;height:62px;font-size:13px;white-space:nowrap}
+#studio-directions .st-order .pb-helper{flex:0 0 100%;margin-top:0;font-size:11px}
+#studio-directions .st-workspace{row-gap:12px}
+#studio-directions .st-preview{padding:12px 16px}
+#studio-directions .st-facts{margin:4px 0 8px;font-size:12px}
+#studio-directions .st-on-now{grid-template-columns:96px 1fr;column-gap:12px;padding:0 0 8px}
+#studio-directions .sp-art{min-height:72px;max-height:72px}
+#studio-directions .st-on-now>h4{font-size:20px;margin:4px 0;line-height:1.2}
+#studio-directions .st-on-now .st-synopsis{margin-top:8px;font-size:12px}
+#studio-directions .sp-preview-tools{padding:8px 0;font-size:12px}
+#studio-directions .st-next button{min-height:44px!important;padding:6px 8px!important;grid-template-columns:72px 1fr!important}
+#studio-directions .st-next button small{margin-top:2px}
+#studio-directions .st-next strong{font-size:13px}
+#studio-directions[data-large="true"] header{padding-bottom:12px}
+#studio-directions[data-large="true"] .st-heading{padding:18px 0}
+#studio-directions[data-large="true"] h2{font-size:35px}
+#studio-directions[data-large="true"][data-layout="beside"] .st-station{gap:32px;padding-bottom:16px}
+#studio-directions[data-large="true"] .st-order>label{flex:1 1 220px;width:250px}
+#studio-directions[data-large="true"] .pb-details>label:first-child{flex:0 0 180px;width:180px}
+#studio-directions[data-large="true"] .pb-specials{padding-top:30px;height:78px;font-size:18px}
+#studio-directions[data-large="true"] .st-order .pb-helper{font-size:15px}
+#studio-directions[data-large="true"] .st-workspace{row-gap:18px}
+#studio-directions[data-large="true"] .st-preview{padding:18px 24px}
+#studio-directions[data-large="true"] .st-facts{margin:6px 0 12px;font-size:16px}
+#studio-directions[data-large="true"] .st-on-now{grid-template-columns:140px 1fr;gap:0 16px;padding-bottom:12px}
+#studio-directions[data-large="true"] .sp-art{min-height:104px;max-height:104px}
+#studio-directions[data-large="true"] .st-on-now>h4{font-size:28px}
+#studio-directions[data-large="true"] .st-on-now .st-synopsis{font-size:16px;margin-top:10px}
+#studio-directions[data-large="true"] .st-next button{min-height:60px!important;padding:8px 12px!important;grid-template-columns:100px 1fr!important}
+#studio-directions[data-large="true"] .st-next strong{font-size:18px}
+</style>

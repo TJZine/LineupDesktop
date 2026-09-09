@@ -19,13 +19,30 @@ procedure, not proof. A result is valid only for the exact commit, machine,
 display configuration, runtime identity, and observations recorded in its
 report.
 
+## Target-design applicability
+
+For commits implementing the [Desktop UI refinement](desktop-ui-design-spec.md),
+the full Guide is PiP-only: mark alternate Overlay Guide scenarios N/A (retired),
+and verify that no presentation selector or dormant alternate path remains.
+Continue testing real Player/Mini Guide/track-panel transparency and PiP aperture
+bounds; those shared overlays are not removed. For older commits that still offer
+both Guide modes, test both. Preserve dated historical observations as originally
+reported; they do not establish evidence for the new target.
+
+The implementation sequence is portable review/checks, coherent candidate commit,
+then exact-commit packaging and physical acceptance. A required fix creates a new
+reviewed commit and affected retesting; no physical pass is inferred from the
+preceding portable gate. Use the current [implementation plan](desktop-ui-implementation-plan.md)
+for this campaign's extended 720p/1080p/1440p/2160p, display/text-scale, ticker,
+track-confirmation and timer suspend/wake requirements.
+
 ## Exit criteria
 
 Windows native acceptance is complete only when:
 
 - the pinned patched Flutter engine is active at runtime;
 - real Plex video is visible beneath Flutter in Player, Classic Guide PiP, and
-  Overlay Guide;
+  Overlay Guide when supported by the target commit;
 - replacement tuning leaves one current player with no stale audio, video,
   events, or presentation lease;
 - mandatory SDR, HDR, track, windowing, focus, recovery, and lifecycle scenarios
@@ -242,7 +259,7 @@ Classify every row as **Pass**, **Fail — blocker**, **Fail — non-blocking**,
 | Authenticated redirects | Using a dedicated test credential and controlled endpoints, an authenticated HTTPS response redirects first to a different HTTPS origin and then, in a separate run, to HTTP; neither redirect target receives a request or token, and no credential appears in output | |
 | Channels | Initial Builder review/apply is atomic; custom create/edit/delete validates and confirms destructive action; representative large lineup remains responsive | |
 | Classic Guide | Focused/selected/tuned/airing identities remain distinct; time/paging/filter/now behavior works; real video occupies only the PiP aperture | |
-| Overlay Guide | Real video remains beneath legible, interactive Flutter artwork, text, focus, and schedule | |
+| Alternate Overlay Guide (only older targets retaining it) | Real video remains beneath legible, interactive Flutter artwork, text, focus, and schedule; PiP-only target: N/A, retired | |
 | Continuity | Player -> Guide -> Player preserves one session and restores focus | |
 | Replacement tune | Guide and mini-Guide replacement leave no stale audio/frame/event, duplicate player, or retained lease | |
 | Failure cleanup | Delay a controlled media response beyond the load deadline, then sign out or switch profile/server; no late audio/video may appear. Repeat with an asynchronous native control failure and a replacement tune while cleanup is pending. A failed stop must remain retryable and must not be reported as completed cleanup | |
@@ -343,7 +360,7 @@ package then launches.
 Before changing source for black/hidden/stale video or stacking failure, record:
 
 - whether audio continues;
-- Player, Classic PiP, or Overlay Guide;
+- Player, PiP Guide, a shared player overlay, or alternate Overlay Guide only when supported by the target;
 - client size, monitor, resolution, scaling, fullscreen/window state, and the
   transition that preceded failure;
 - intended logical and observed physical video rectangles when available;
@@ -356,7 +373,7 @@ For crashes/hangs, record the Windows event entry, exception code, faulting
 module, and minimal redacted reproduction. Do not commit a dump before review.
 
 Treat these as release blockers unless stronger evidence proves otherwise:
-stock-engine fallback; invisible real video in Player/PiP/Overlay; persistent
+stock-engine fallback; invisible real video in Player/PiP or another supported presentation; persistent
 black frame; duplicate/stale playback or events; crash/deadlock/orphan/lifetime
 corruption; secret or cross-profile leakage; unusable fullscreen/DPI/focus;
 package failure on the supported baseline; incorrect provenance/licenses; or
@@ -401,7 +418,7 @@ copy only the safe summary into the repository or pull request.
 | --- | --- | --- |
 | Local SDR smoke | | |
 | Plex authentication/recovery | | |
-| Classic PiP / Overlay Guide | | |
+| PiP Guide / alternate Overlay only if supported | | |
 | Replacement tune / lifecycle | | |
 | Window / DPI / fullscreen | | |
 | Input / focus | | |
@@ -435,7 +452,9 @@ separate implementation task explicitly authorizes them.
 
 Read AGENTS.md and the relevant sections of docs/DEVELOPMENT.md,
 docs/architecture.md, docs/windows-runtime.md, and
-docs/guide-pip-composition-spec.md. Use docs/README.md for authority questions.
+docs/desktop-ui-design-spec.md and docs/desktop-ui-implementation-plan.md.
+Distinguish the approved target from implemented behavior at the tested commit.
+Use docs/README.md for authority questions.
 
 Require a clean worktree and verify HEAD equals the requested target SHA before
 testing. Do not silently replace it with the latest flutter-mvp or another
@@ -447,7 +466,7 @@ Execute docs/windows-native-validation.md in order. Capture the redacted
 machine/build baseline; establish target-commit deterministic checks and verify
 patched debug/release engines, reusing only still-current results as allowed by
 the procedure; run local SDR smoke; complete Plex,
-channels, Guide/PiP/Overlay, Player, replacement, window/DPI/fullscreen,
+channels, PiP Guide (alternate Overlay only if supported), Player, replacement, window/DPI/fullscreen,
 focus/input, media/HDR/tracks, and lifecycle scenarios; build and validate the
 portable package; then produce the exact-commit acceptance report.
 

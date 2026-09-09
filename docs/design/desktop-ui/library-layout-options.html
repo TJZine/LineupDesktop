@@ -1,0 +1,45 @@
+<div class="viz-controls"><label class="form-label">Design<select class="form-select" id="library-layout"><option value="rows">A · Compact rows</option><option value="tiles">B · Selection tiles</option></select></label><label class="form-label">Width<select class="form-select" id="library-width"><option value="736">Normal · 736 px</option><option value="440">Narrow · 440 px</option></select></label></div>
+<style>
+#library-options{--film:#090806;--booth:#12100d;--raised:#1a1712;--paper:#f3e8d2;--support:#c7b99f;--amber:#cc9f5b;--quiet:#2b261e;--strong:#494031;color:var(--paper);font:16px/1.45 Arial,sans-serif;color-scheme:dark;max-width:736px;margin:16px auto}
+#library-options *{box-sizing:border-box}
+#library-options .lb-screen{background:var(--film);border:1px solid var(--quiet);border-radius:8px;padding:28px;container-type:inline-size}
+#library-options .lb-brand{font-size:14px;color:var(--amber);letter-spacing:1.3px;font-weight:600}
+#library-options .lb-content{max-width:576px;margin:24px auto 0}
+#library-options .lb-step{color:var(--support);font-size:12px;margin:0 0 8px}
+#library-options h2{font-size:26px;line-height:1.2;margin:0 0 8px;font-weight:600}
+#library-options .lb-intro{font-size:14px;color:var(--support);margin:0 0 24px}
+#library-options .lb-toolbar{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;padding-bottom:12px;border-bottom:1px solid var(--quiet)}
+#library-options label{cursor:pointer}
+#library-options .lb-all{display:flex;align-items:center;gap:12px;font-size:14px;min-height:44px}
+#library-options input{width:18px;height:18px;accent-color:var(--amber);flex:none;margin:0}
+#library-options .lb-count{font-size:13px;color:var(--support)}
+#library-options .lb-grid{display:grid;grid-template-columns:1fr}
+#library-options .lb-item{display:flex;align-items:center;gap:16px;padding:16px 4px;border-bottom:1px solid var(--quiet);min-width:0}
+#library-options .lb-item:hover{background:var(--booth)}
+#library-options .lb-copy{display:flex;flex-direction:column;gap:4px;min-width:0}
+#library-options .lb-name{font-size:16px;font-weight:600;overflow-wrap:anywhere}
+#library-options .lb-kind{font-size:13px;color:var(--support)}
+#library-options .lb-footer{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-top:24px}
+#library-options button{font:inherit;font-size:14px;min-height:44px;padding:10px 16px;border-radius:8px;border:1px solid var(--strong);background:var(--booth);color:var(--paper);cursor:pointer;max-width:100%}
+#library-options button:hover{background:var(--raised)}
+#library-options button:disabled{opacity:.5;cursor:default}
+#library-options .lb-primary{background:var(--amber);border-color:var(--amber);color:#060504;font-weight:600}
+#library-options .lb-primary:hover{background:#f0d39a}
+#library-options .lb-back{border-color:transparent;background:transparent;color:var(--support);padding-left:0}
+#library-options .lb-status{font-size:14px;color:var(--support);margin:16px 0 0}
+#library-options .lb-status:empty{display:none}
+#library-options[data-layout="tiles"] .lb-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:16px}
+#library-options[data-layout="tiles"] .lb-item{background:var(--booth);border:1px solid var(--quiet);border-radius:8px;padding:16px;min-height:108px;align-items:flex-start}
+#library-options[data-layout="tiles"] .lb-item input{margin-top:3px}
+#library-options[data-layout="tiles"] .lb-item:has(input:checked){background:#2b2419;border-color:var(--strong)}
+@container(max-width:470px){#library-options[data-layout="tiles"] .lb-grid{grid-template-columns:1fr}}
+</style>
+<div id="library-options" data-layout="rows"><section class="lb-screen" aria-label="Library selection design proposal"><div class="lb-brand">LINEUP</div><div class="lb-content"><p class="lb-step">CHANNEL SETUP · 1 OF 3</p><h2>Choose your libraries</h2><p class="lb-intro">Choose the movie and TV libraries Lineup will scan for your channels.</p><div class="lb-toolbar"><label class="lb-all"><input type="checkbox" id="library-all" checked>All libraries</label><span class="lb-count" role="status">4 selected</span></div><div class="lb-grid">
+<label class="lb-item"><input type="checkbox" data-library checked><span class="lb-copy"><span class="lb-name">Movies</span><span class="lb-kind">Movies</span></span></label>
+<label class="lb-item"><input type="checkbox" data-library checked><span class="lb-copy"><span class="lb-name">TV Shows</span><span class="lb-kind">TV shows</span></span></label>
+<label class="lb-item"><input type="checkbox" data-library checked><span class="lb-copy"><span class="lb-name">International Cinema and Restored Classics</span><span class="lb-kind">Movies</span></span></label>
+<label class="lb-item"><input type="checkbox" data-library checked><span class="lb-copy"><span class="lb-name">Documentaries and Natural History</span><span class="lb-kind">TV shows</span></span></label>
+</div><footer class="lb-footer"><button class="lb-back" data-back>Back</button><button class="lb-primary" data-scan>Scan selected libraries</button></footer><p class="lb-status" role="status"></p></div></section></div>
+<script>
+(()=>{const root=document.getElementById('library-options'),all=document.getElementById('library-all'),items=[...root.querySelectorAll('[data-library]')],scan=root.querySelector('[data-scan]'),status=root.querySelector('.lb-status');function update(){const count=items.filter(i=>i.checked).length;all.checked=count===items.length;all.indeterminate=count>0&&count<items.length;root.querySelector('.lb-count').textContent=count+' selected';scan.disabled=count===0;status.textContent='';}all.onchange=()=>{items.forEach(i=>i.checked=all.checked);update();};items.forEach(i=>i.onchange=update);scan.onclick=()=>status.textContent='Preview: scan '+items.filter(i=>i.checked).length+' selected libraries, then continue to channel configuration when usable media is found.';root.querySelector('[data-back]').onclick=()=>status.textContent='Preview: return to the previous setup screen.';document.getElementById('library-layout').onchange=e=>root.dataset.layout=e.target.value;document.getElementById('library-width').onchange=e=>root.style.maxWidth=e.target.value+'px';update();})();
+</script>
