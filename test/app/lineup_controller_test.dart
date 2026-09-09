@@ -571,6 +571,11 @@ void main() {
       );
       final plex = _FakePlex()
         ..serversResult = [selected]
+        ..pinResult = PlexPin(
+          id: 5,
+          code: 'ABCD',
+          expiresAt: DateTime.utc(2026, 1, 1, 0, 5),
+        )
         ..librariesResult = const [
           PlexLibrary(
             id: 'movies',

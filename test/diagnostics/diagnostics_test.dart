@@ -109,6 +109,14 @@ void main() {
     diagnostics.enabled = false;
     expect(notifications, 3);
     diagnostics.dispose();
+
+    diagnostics.enabled = true;
+    expect(diagnostics.enabled, isFalse);
+    expect(notifications, 3);
+
+    diagnostics.add('plex', 'ignored after disposal');
+    expect(diagnostics.entries, isEmpty);
+    expect(notifications, 3);
   });
 
   test('retention remains bounded', () {
