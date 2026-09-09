@@ -1827,25 +1827,15 @@ class _SetupState extends State<UpstreamChannelSetupView> {
   Widget _rulesAllocationFeedback(ChannelPlanAllocation allocation) {
     final expansion = _configurationExpansion(MediaQuery.sizeOf(context));
     final roles = LineupTheme.of(context);
-    final included = allocation.channels.length;
     final excluded = allocation.excludedOriginals + allocation.excludedExtras;
-    final numberExcluded = allocation.numberLimitExcluded;
-    final capExcluded = excluded - numberExcluded;
-    final title = excluded > 0
-        ? '$included included · $excluded excluded'
-        : included == 0
-        ? 'No generated channels qualify'
-        : 'All $included generated channels fit';
-    final description = excluded > 0
-        ? [
-            if (capExcluded > 0)
-              '$capExcluded excluded by the $_maximum-channel limit.',
-            if (numberExcluded > 0)
-              '$numberExcluded excluded because channel numbers are exhausted.',
-          ].join(' ')
-        : included == 0
-        ? 'Choose more sources or lower the minimum programs per channel.'
-        : 'Your current selection fits within the $_maximum-channel limit.';
+    if (excluded == 0 && allocation.channels.isNotEmpty) {
+      return const SizedBox.shrink();
+    }
+    final guidance = allocation.numberLimitExcluded > 0
+        ? 'Free up channel numbers to make room for more generated channels.'
+        : excluded > 0
+        ? 'Increase the maximum to include more channels, or adjust source order to change which channels fit.'
+        : 'Choose more sources or lower the minimum programs per channel.';
     return Semantics(
       liveRegion: true,
       child: Container(
@@ -1859,28 +1849,13 @@ class _SetupState extends State<UpstreamChannelSetupView> {
             ),
           ),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              title,
-              style: TextStyle(
-                color: excluded > 0 ? roles.progressFill : roles.primaryText,
-                fontSize: 15 + 6 * expansion,
-                fontWeight: FontWeight.w600,
-                height: 1.4,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              description,
-              style: TextStyle(
-                color: roles.secondaryText,
-                fontSize: 13 + 5 * expansion,
-                height: 1.4,
-              ),
-            ),
-          ],
+        child: Text(
+          guidance,
+          style: TextStyle(
+            color: roles.secondaryText,
+            fontSize: 13 + 5 * expansion,
+            height: 1.4,
+          ),
         ),
       ),
     );

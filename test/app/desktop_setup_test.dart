@@ -193,7 +193,19 @@ void main() {
       find.text('Take one channel from each source, then repeat.'),
       findsOneWidget,
     );
-    expect(find.text('All 6 generated channels fit'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('configuration-allocation-summary')),
+        matching: find.text('6'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.text(
+        'Choose more sources or lower the minimum programs per channel.',
+      ),
+      findsNothing,
+    );
     final minimum = find.byKey(const ValueKey('rules-minimum'));
     await tester.ensureVisible(minimum);
     await tester.pumpAndSettle();
@@ -201,7 +213,19 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('10').last);
     await tester.pumpAndSettle();
-    expect(find.text('No generated channels qualify'), findsOneWidget);
+    expect(
+      find.text(
+        'Choose more sources or lower the minimum programs per channel.',
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('configuration-allocation-summary')),
+        matching: find.text('0'),
+      ),
+      findsOneWidget,
+    );
     expect(
       tester
           .widget<FilledButton>(find.byKey(const ValueKey('review-channels')))
@@ -212,7 +236,19 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('5').last);
     await tester.pumpAndSettle();
-    expect(find.text('All 6 generated channels fit'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('configuration-allocation-summary')),
+        matching: find.text('6'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.text(
+        'Choose more sources or lower the minimum programs per channel.',
+      ),
+      findsNothing,
+    );
   });
 
   testWidgets(
