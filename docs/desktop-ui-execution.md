@@ -353,3 +353,57 @@ Channels, parity, Settings, Setup, onboarding and Diagnostics behavior checks:
 Physical Windows checks remain unperformed at this implementation commit; the
 next action is the user's manual visual audit, not a declaration of completion
 of the full platform acceptance campaign.
+
+### Project-wide mock comparison and correction — September 9
+
+Implementation commit: `bc0c907e` (`refactor(ui): align desktop surfaces with
+approved compositions`). This supersedes the two-surface visual checkpoint as the
+current review candidate. Root personally compared fresh Flutter surface families
+with the approved archive and final specification, then dispatched bounded fixes.
+Historical mock behavior was not implemented. Normal captures use 100% text;
+200% text captures are explicitly separate stress evidence.
+
+| Surface family | Comparison/correction outcome |
+| --- | --- |
+| Linking, profiles, PIN, servers | Flat film surfaces, neutral avatars, restrained focus; compact approved PIN keypad and left-aligned server rows. Welcome unchanged. |
+| Setup libraries, scan states, sources, playback order, rules, review, results | Rechecked open rows, shared playback controls, two-column rules, full-width roster and minimal results; lower scrolled configuration sections included. |
+| Channels directory, selection, deletion, reorder | Rechecked current columnar directory and quiet selections; shared input/segmented styling corrected. |
+| Studio Programming, browse, Library/filter picker, schedule preview | Removed enclosing Programming card and decorative preview stripe; selected details above schedule; explicit time/title gap; bounded picker list keeps Cancel/Done visible at 720p. |
+| Guide and Mini Guide | Flat five-row normal Guide, quieter focus, title-first details and three aligned Mini Guide columns. Restored the required optional playing-channel/program header summary after root caught its erroneous removal; original setting behavior tests retained. |
+| Settings, menu, Diagnostics | Open Settings rail/detail composition, compact Account menu group, paper-colored navigation, four-group diagnostic summary and aligned event columns. |
+| Player OSD, Now Playing, tracks, timer | OSD/Now Playing geometry untouched; all four protected baseline images byte-identical. Track panels unchanged; timer freshly captured. |
+
+Actual assignments: root owned visual adjudication, shared theme and final
+verification; existing `worker`/Sol-medium owners handled Guide/Mini Guide/Studio
+and Settings/Diagnostics/menu; named `worker_luna`/Luna-xhigh handled only settled
+onboarding presentation. Exclusive ownership was released between packages. No
+new independent reviewer round ran; all workers are finished. No permanent layout
+or matrix tests were added. Removed an obsolete Settings gradient assertion while
+retaining the mounted-player resource check; adapted existing semantic/control
+selectors without replacing behavior coverage with layout assertions.
+
+Verification at this source: Guide 25 passed; Mini Guide 3 passed; onboarding 6
+passed; Settings 1 passed; Diagnostics/navigation 9 passed; Studio/Air Check 86
+cases covered (84 combined passes plus two repaired selector reruns); filter
+behavior 3 passed. Theme/shell check had 14 passes and two obsolete UI assertions,
+then both repaired cases passed. Final repository Flutter analysis and diff check
+were clean. Full repository tests and native builds were not repeated.
+
+A fresh temporary capture run passed all 33 scenarios and produced 55 PNGs under
+`build/desktop-ui/bc0c907e-visual-audit/`, with an index, hashes, capture harness and
+logs. Eighteen existing provisional golden images were refreshed; no new golden
+cases were added. The tracked harness was restored after capture. Additional
+Guide spot captures used physical size/DPR 1280×720/1, 1920×1080/1.25,
+2560×1440/1.5 and 3840×2160/2, all at text scale 2. Root inspected those renders;
+these are portable spot checks, not an all-surface Windows acceptance matrix.
+The filter-picker capture is an empty fixture state, not populated-list visual
+acceptance. Synthetic video/telemetry are not native playback evidence.
+
+Next: collaborative manual visual audit of this candidate. Physical Windows
+checks remain unperformed at `bc0c907e`: all four resolutions with required DPI
+and text scales across touched surfaces; keyboard/controller focus and invocation
+restoration; fullscreen and native video layering/contrast; protected OSD/Now
+Playing over real footage; HDR/DirectComposition and packaging. Independent
+review is specifically recommended after user visual feedback is incorporated,
+not another automated review cycle before that feedback. No push, deployment or
+publication occurred.
