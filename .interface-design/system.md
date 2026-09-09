@@ -95,3 +95,17 @@ Any future Player structure proposal requires matched before/after renders from
 the real Flutter widgets at 1280x720 and 1920x1080, using identical content,
 clock, playback state, artwork state, and focused control. Change one variable
 at a time and obtain separate approval before implementation.
+
+## Approved desktop refinement campaign — design only
+
+The [Desktop UI specification](../docs/desktop-ui-design-spec.md) records the
+September 8, 2026 consolidated target and explicitly supersedes older corresponding
+choices: PiP-only full Guide, five comfortable rows, current-and-upcoming timeline,
+persistent search/library control, unified compact Lineup menu and the approved
+onboarding/management/player-panel refinements. Use its
+[visual manifest](../docs/design/desktop-ui/README.md) for selected compositions and
+later prose refinements. These are approved designs, not implemented/validated claims.
+
+Cinema Continuity tokens remain authoritative. The protected OSD/Now Playing
+structural baseline above still applies; the small approved timer invocation and
+shared edge-blending principle do not authorize a broader Player redesign.

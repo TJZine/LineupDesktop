@@ -1,0 +1,115 @@
+<div class="viz-controls"><label class="form-label">Composition<select class="form-select" id="gr-count"><option value="5">A · Five rows — spacious</option><option value="6">B · Six rows — same information area</option><option value="balanced">C · Six rows — smaller information area</option></select></label><label class="form-label">Proportional canvas<select class="form-select" id="gr-resolution"><option value="720">1280 × 720</option><option value="1080">1920 × 1080</option></select></label><label class="form-label">Hours shown<select class="form-select" id="gr-hours"><option value="2" selected>2 hours</option><option value="3">3 hours</option><option value="4">4 hours</option></select></label></div>
+<p class="text-small" id="gr-dimensions" aria-live="polite"></p>
+<div id="guide-row-comp"><div class="gr-frame"><section class="gr-screen upstream" aria-label="Refined Guide rows with synthetic programming">
+<header><span class="gr-brand">LINEUP <span>⌄</span></span><span class="gr-guide">Guide</span><span class="gr-right">Tuesday, September 8 &nbsp; · &nbsp; 8:47 PM</span></header>
+<section class="gr-showcase"><div class="gr-video" aria-label="Synthetic picture-in-picture scene"><div class="gr-mountains"></div><span>WATCHING &nbsp; 12 · Evening television</span></div><div class="gr-info"><span id="gr-channel">12 · Evening television</span><h1 id="gr-title">Harbor lights</h1><p class="gr-episode" id="gr-episode">S1 E3 · The northern breakwater</p><p class="gr-facts" id="gr-facts">8:30–9:00 PM · 30 min</p><p class="gr-description" id="gr-description">An unexpected arrival at the harbor brings an old friendship into question as the town prepares for its annual celebration.</p><div class="gr-progress"><span id="gr-fill"></span></div><p class="gr-progress-label" id="gr-progress-label">17 min elapsed · 13 min remaining</p></div></section>
+<div class="gr-tools"><span class="gr-library">All libraries ⌄</span><span>All channels</span><span class="gr-tool-right">Search &nbsp; · &nbsp; Now &nbsp; · &nbsp; Options</span></div>
+<div class="gr-grid"><div class="gr-ruler"><span>CHANNEL</span><div id="gr-times"></div></div><div class="gr-rows" id="gr-rows"></div></div>
+<footer><span id="gr-channel-count">5 of 48 channels</span><span id="gr-feedback">Select to inspect · Double-click or Enter to tune</span></footer>
+</section></div></div>
+<style>
+#guide-row-comp{color:#f3e8d2;color-scheme:dark;font:16px/1.4 Arial,sans-serif;margin-top:12px;--gr-film:#090806;--gr-booth:#12100d;--gr-raised:#1a1712;--gr-paper:#f3e8d2;--gr-support:#c7b99f;--gr-line:#2b261e;--gr-focus:#f0d39a;--gr-amber:#cc9f5b}
+#guide-row-comp *{box-sizing:border-box}
+#guide-row-comp .gr-frame{background:var(--gr-film);overflow:hidden}
+#guide-row-comp .gr-screen{width:1280px;height:720px;padding:0 24px 12px;transform-origin:top left;background:var(--gr-film)}
+#guide-row-comp header{height:48px;display:flex;align-items:center;gap:28px;border-bottom:1px solid var(--gr-line);font-size:14px;color:var(--gr-support)}
+#guide-row-comp .gr-brand{font-size:20px;letter-spacing:3px;color:var(--gr-paper)}
+#guide-row-comp .gr-brand span{letter-spacing:0;color:var(--gr-support)}
+#guide-row-comp .gr-right{margin-left:auto}
+#guide-row-comp .gr-showcase{height:246px;display:grid;grid-template-columns:404px 1fr;gap:28px;align-items:center;background:radial-gradient(ellipse at 77% 45%,#29312b80,transparent 75%)}
+#guide-row-comp .gr-video{height:227px;position:relative;overflow:hidden;background:linear-gradient(#91a4a1,#c8c5ac 58%,#5c8284 59%,#36585e)}
+#guide-row-comp .gr-mountains{position:absolute;inset:0;background:#304d4c;clip-path:polygon(0 58%,17% 34%,29% 50%,50% 18%,67% 49%,83% 31%,100% 58%,100% 73%,0 73%)}
+#guide-row-comp .gr-video>span{position:absolute;bottom:0;left:0;right:0;padding:28px 14px 12px;background:linear-gradient(transparent,#090806e6);font-size:12px}
+#guide-row-comp .gr-info{min-width:0;padding-right:20px}
+#guide-row-comp #gr-channel{font-size:13px;color:var(--gr-amber)}
+#guide-row-comp h1{font-size:29px;font-weight:500;line-height:1.15;margin:7px 0 7px}
+#guide-row-comp p{margin:0}
+#guide-row-comp .gr-episode{font-size:17px;margin-bottom:6px}
+#guide-row-comp .gr-facts{color:var(--gr-support);font-size:13px}
+#guide-row-comp .gr-description{font-size:15px;color:var(--gr-support);margin:11px 0;max-width:750px;line-height:1.45}
+#guide-row-comp .gr-progress{height:3px;background:#494031;max-width:490px}
+#guide-row-comp .gr-progress span{display:block;width:56.67%;height:100%;background:var(--gr-amber)}
+#guide-row-comp .gr-progress-label{font-size:12px;color:var(--gr-support);margin-top:5px}
+#guide-row-comp .gr-tools{height:42px;display:flex;align-items:center;gap:22px;font-size:14px;color:var(--gr-support)}
+#guide-row-comp .gr-library{width:196px;color:var(--gr-paper)}
+#guide-row-comp .gr-tool-right{margin-left:auto}
+#guide-row-comp .gr-ruler{display:grid;grid-template-columns:208px 1fr;height:34px;font-size:13px;color:var(--gr-support)}
+#guide-row-comp .gr-ruler>span{padding:7px 10px}
+#guide-row-comp #gr-times{position:relative;display:flex;align-items:center}
+#guide-row-comp #gr-times>span{padding-left:9px;flex:1;border-left:1px solid var(--gr-line)}
+#guide-row-comp .gr-row{display:grid;grid-template-columns:208px 1fr;height:65px}
+#guide-row-comp .gr-station{display:flex;align-items:center;gap:14px;padding:8px 12px 8px 8px;font-size:14px;border-bottom:1px solid var(--gr-line)}
+#guide-row-comp .gr-number{font-size:19px;color:var(--gr-support);width:27px;flex-shrink:0}
+#guide-row-comp .gr-station small{display:block;color:var(--gr-support);font-size:11px;margin-top:3px}
+#guide-row-comp .gr-station.watching{background:#3b302055}
+#guide-row-comp .gr-cells{position:relative;overflow:hidden}
+#guide-row-comp .gr-now{position:absolute;left:var(--gr-now);top:0;bottom:0;width:1.5px;background:#ff7768;pointer-events:none;z-index:3}
+#guide-row-comp .gr-cell{position:absolute;top:3px;bottom:3px;background:#f3e8d20d;border:1px solid transparent;border-radius:4px;padding:8px 10px;text-align:left;color:var(--gr-paper);font:inherit;cursor:pointer;display:flex;align-items:center;gap:12px;overflow:hidden}
+#guide-row-comp .gr-cell:hover{background:#2b261e}
+#guide-row-comp .gr-cell.selected{border-color:var(--gr-focus);background:#2b2419}
+#guide-row-comp .gr-main{flex:1;min-width:0}
+#guide-row-comp .gr-title{font-size:16px;font-weight:500}
+#guide-row-comp .gr-subtitle{font-size:13px;color:var(--gr-support);margin-top:4px}
+#guide-row-comp .gr-line{overflow:hidden;white-space:nowrap;text-overflow:ellipsis;display:block;max-width:100%}
+#guide-row-comp .gr-line>span{display:inline-block}
+#guide-row-comp .gr-rail{font-size:11px;color:var(--gr-support);display:flex;flex-direction:column;justify-content:space-between;align-self:stretch;text-align:right;flex-shrink:0}
+#guide-row-comp .gr-episode-tag{color:var(--gr-paper)}
+#guide-row-comp .upstream .gr-cell.selected .gr-time{visibility:hidden}
+#guide-row-comp .upstream .gr-cell.narrow:not(.selected) .gr-subtitle,#guide-row-comp .upstream .gr-cell.narrow .gr-time{display:none}
+#guide-row-comp .ground .gr-rail{display:none}
+#guide-row-comp .ground .gr-cell{background:var(--gr-booth);border-radius:3px;padding:8px 12px}
+#guide-row-comp .ground .gr-cell.selected{background:#2b2419}
+#guide-row-comp .ground .gr-cell:hover{background:#2b261e}
+#guide-row-comp .gr-line.running{text-overflow:clip}
+#guide-row-comp .gr-line.running>span{animation:gr-ticker var(--gr-duration) linear infinite}
+@keyframes gr-ticker{0%,15%{transform:translateX(0)}75%,100%{transform:translateX(calc(-1 * var(--gr-distance)))}}
+@media(prefers-reduced-motion:reduce){#guide-row-comp .gr-line.running>span{animation:none}}
+#guide-row-comp footer{height:25px;display:flex;align-items:end;justify-content:space-between;color:var(--gr-support);font-size:12px}
+#guide-row-comp .refined .gr-cell{display:flex;flex-direction:column;align-items:stretch;justify-content:center;gap:5px;padding:8px 10px;background:#12100d}
+#guide-row-comp .refined .gr-cell.selected{background:#2b2419}
+#guide-row-comp .refined .gr-cell:hover{background:#2b261e}
+#guide-row-comp .refined .gr-top,#guide-row-comp .refined .gr-bottom{display:flex;align-items:baseline;gap:12px;min-width:0;width:100%}
+#guide-row-comp .refined .gr-title,#guide-row-comp .refined .gr-subtitle{flex:1;min-width:0;margin:0}
+#guide-row-comp .refined .gr-episode-tag{font-size:11px;color:#c7b99f;flex-shrink:0;white-space:nowrap}
+#guide-row-comp .refined .gr-time{font-size:11px;color:#c7b99f;flex-shrink:0;white-space:nowrap;margin-left:auto}
+#guide-row-comp .refined .gr-bottom{min-height:18px}
+#guide-row-comp .refined .movie .gr-title{flex:1}
+#guide-row-comp .refined [hidden]{display:none!important}
+#guide-row-comp .refined .gr-line.running>span{animation-delay:900ms}
+#guide-row-comp .gr-line:not(.running)>span{max-width:100%;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom}
+#guide-row-comp .gr-showcase{height:240px;grid-template-columns:384px 1fr}
+#guide-row-comp .gr-video{height:216px}
+#guide-row-comp .gr-tools{height:40px}
+#guide-row-comp .gr-ruler{height:32px}
+#guide-row-comp .gr-row{height:64px}
+#guide-row-comp footer{height:28px}
+#guide-row-comp .refined .gr-cell{gap:4px;padding:6px 10px}
+#guide-row-comp .gr-title{line-height:20px}
+#guide-row-comp .gr-subtitle{line-height:16px}
+#guide-row-comp .refined .gr-bottom{min-height:16px}
+#guide-row-comp #gr-channel{line-height:16px;display:block}
+#guide-row-comp h1{line-height:32px;margin:6px 0}
+#guide-row-comp .gr-episode{line-height:22px;margin-bottom:4px}
+#guide-row-comp .gr-facts{line-height:16px}
+#guide-row-comp .gr-description{line-height:20px;margin:8px 0}
+#guide-row-comp .gr-progress-label{line-height:16px;margin-top:4px}
+#guide-row-comp .six .gr-row{height:53.333333px}
+#guide-row-comp .six .gr-cell{padding-top:2px;padding-bottom:2px;gap:3px}
+#guide-row-comp .balanced .gr-showcase{height:216px;grid-template-columns:341.333333px 1fr}
+#guide-row-comp .balanced .gr-video{height:192px}
+#guide-row-comp .balanced .gr-row{height:57.333333px}
+#guide-row-comp .balanced .gr-cell{padding-top:4px;padding-bottom:4px;gap:3px}
+</style>
+<script>
+(()=>{const root=document.getElementById('guide-row-comp'),screen=root.querySelector('.gr-screen'),frame=root.querySelector('.gr-frame'),rows=root.querySelector('#gr-rows'),direction={value:'refined'},count=document.getElementById('gr-count'),resolution=document.getElementById('gr-resolution'),hours=document.getElementById('gr-hours');let chosen='0-0';
+const channels=[['12','Evening television','Watching',[['Harbor lights','The northern breakwater','S1 E3',0,30],['Harbor lights','The letter nobody expected','S1 E4',30,60],['The quiet station','Last train through the valley','S2 E8',60,120]]],['18','Comedy','',[['The apartment upstairs','An exceptionally inconvenient dinner party','S2 E12',0,30],['The apartment upstairs','The spare key','S2 E13',30,60],['Small town hours','A change of plans','S3 E5',60,90],['Small town hours','The second invitation','S3 E6',90,120]]],['24','Cinema','',[['Beyond the northern horizon','','',-45,75],['A place among the stars','','',75,190]]],['31','Documentaries','',[['Wild coast','Where the ocean meets the forest','S1 E2',0,60],['Hidden worlds','Life beneath the winter ice','S2 E1',60,120]]],['42','Short stories','',[['Brief encounters','The missing postcard','S1 E7',0,15],['Brief encounters','A familiar stranger','S1 E8',15,30],['The clockmaker','A minute to spare','S1 E1',30,75],['The clockmaker','The hours between','S1 E2',75,120]]]];
+channels.push(['56','Adventure','',[['Across the divide','The old mountain road','S3 E2',0,60],['Across the divide','A crossing at dawn','S3 E3',60,120]]]);
+function time(m){let t=20*60+30+m;return (Math.floor(t/60)%12||12)+':'+String(t%60).padStart(2,'0');}
+function detail(c,p){root.querySelector('#gr-channel').textContent=c[0]+' · '+c[1];root.querySelector('#gr-title').textContent=p[0];root.querySelector('#gr-episode').textContent=[p[2],p[1]].filter(Boolean).join(' · ');root.querySelector('#gr-facts').textContent=time(p[3])+'–'+time(p[4])+' PM · '+(p[4]-p[3])+' min';root.querySelector('#gr-description').textContent=p[0]==='Harbor lights'?'An unexpected arrival at the harbor brings an old friendship into question as the town prepares for its annual celebration.':'A chance encounter opens an unexpected chapter in this story of discovery, friendship and finding a place to belong.';let live=p[3]<=17&&p[4]>17;root.querySelector('#gr-fill').style.width=(live?(17-p[3])/(p[4]-p[3])*100:0)+'%';root.querySelector('#gr-progress-label').textContent=live?(17-p[3])+' min elapsed · '+(p[4]-17)+' min remaining':p[4]<=17?'Previously aired':'Upcoming';}
+const measureContext=document.createElement('canvas').getContext('2d');function textWidth(el){measureContext.font=getComputedStyle(el).font;return measureContext.measureText(el.textContent).width;}
+function tick(){root.querySelectorAll('.gr-line').forEach(line=>{line.classList.remove('running');if(!line.closest('.selected'))return;let span=line.firstElementChild,dist=textWidth(span)-line.clientWidth;if(dist>2){line.style.setProperty('--gr-distance',dist+'px');line.style.setProperty('--gr-duration',(dist/34+2.4)+'s');line.classList.add('running');}});}
+function render(){let span=Number(hours.value)*60,ground=false;screen.className='gr-screen refined '+(count.value==='6'?'six':count.value==='balanced'?'balanced':'');root.querySelector('#gr-channel-count').textContent=(count.value==='5'?'5':'6')+' of 48 channels';screen.style.setProperty('--gr-now',17/span*100+'%');root.querySelector('#gr-times').innerHTML=Array.from({length:span/30},(_,i)=>'<span>'+time(i*30)+'</span>').join('')+'<i class="gr-now" aria-hidden="true"></i>';rows.innerHTML='';channels.slice(0,count.value==='5'?5:6).forEach((c,ci)=>{let row=document.createElement('div');row.className='gr-row';row.innerHTML='<div class="gr-station '+(ci===0?'watching':'')+'"><span class="gr-number">'+c[0]+'</span><span>'+c[1]+(c[2]?'<small>'+c[2]+'</small>':'')+'</span></div><div class="gr-cells"><i class="gr-now" aria-hidden="true"></i></div>';let cells=row.lastElementChild;let programs=c[3].slice();if(span>120)programs.push(['Evening collection','The journey continues','S1 E9',Math.max(120,programs.at(-1)[4]),span+60]);programs.forEach((p,pi)=>{if(p[3]>=span)return;let start=Math.max(0,p[3]),end=Math.min(span,p[4]),width=(end-start)/span*1024;let b=document.createElement('button');b.className='gr-cell'+(chosen===ci+'-'+pi?' selected':'')+(width<200?' narrow':'');b.style.left=start/span*100+'%';b.style.width='calc('+(end-start)/span*100+'% - 4px)';let subtitle=ground?[p[2],p[1]].filter(Boolean).join(' · '):p[1];b.innerHTML='<span class="gr-main"><span class="gr-line gr-title"><span>'+p[0]+'</span></span>'+(subtitle?'<span class="gr-line gr-subtitle"><span>'+subtitle+'</span></span>':'')+'</span><span class="gr-rail"><span class="gr-episode-tag">'+p[2].replaceAll(' ','')+'</span><span class="gr-time">'+time(p[3])+'–'+time(p[4])+'</span></span>';b.dataset.episode=p[2];b.dataset.subtitle=p[1];b.dataset.title=p[0];b.dataset.time=time(p[3])+'–'+time(p[4]);b.dataset.key=ci+'-'+pi;b.setAttribute('aria-label',[p[0],p[2],p[1],time(p[3])+' to '+time(p[4])].filter(Boolean).join(', '));b.onclick=()=>{chosen=ci+'-'+pi;root.querySelectorAll('.selected').forEach(x=>x.classList.remove('selected'));b.classList.add('selected');detail(c,p);tick();};const tune=()=>{root.querySelector('#gr-feedback').textContent=p[3]<=17&&p[4]>17?'Preview · tune selected airing program':'Inspection only · not currently airing';};b.ondblclick=tune;b.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();b.click();tune();}};cells.appendChild(b);});rows.appendChild(row);});requestAnimationFrame(()=>{refine();tick();});}
+function refine(){if(direction.value!=='refined')return;root.querySelectorAll('.gr-cell').forEach(b=>{const title=b.querySelector('.gr-title'),subtitle=b.querySelector('.gr-subtitle'),tag=b.querySelector('.gr-episode-tag'),timing=b.querySelector('.gr-time');const top=document.createElement('span');top.className='gr-top';top.appendChild(title);if(tag.textContent)top.appendChild(tag);const bottom=document.createElement('span');bottom.className='gr-bottom';if(subtitle)bottom.appendChild(subtitle);bottom.appendChild(timing);b.replaceChildren(top,bottom);if(!subtitle)b.classList.add('movie');const available=b.clientWidth-22;const tagWidth=tag.textContent?tag.scrollWidth:0;if(tagWidth&&textWidth(title.firstElementChild)+tagWidth+12>available)tag.hidden=true;const subtitleWidth=subtitle?textWidth(subtitle.firstElementChild):0;const timeWidth=timing.scrollWidth;timing.hidden=subtitle?subtitleWidth+timeWidth+20>available:timeWidth>available;});}
+function fit(){const scale=Number(resolution.value)/720,preview=frame.clientWidth/(1280*scale);screen.style.zoom=String(scale);screen.style.transform='scale('+preview+')';frame.style.height=frame.clientWidth*720/1280+'px';const row=count.value==='5'?64:count.value==='6'?320/6:344/6;const hero=count.value==='balanced'?216:240;document.getElementById('gr-dimensions').textContent='Fitted preview · Row '+(row*scale).toFixed(1)+' px · Information area '+Math.round(hero*scale)+' px · Same type size across A/B/C';}
+count.onchange=()=>{if(count.value==='5'&&chosen.startsWith('5-')){chosen='0-0';detail(channels[0],channels[0][3][0]);}render();fit();};resolution.onchange=()=>{fit();render();};hours.onchange=render;new ResizeObserver(fit).observe(frame);render();detail(channels[0],channels[0][3][0]);fit();})();
+</script>

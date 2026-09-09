@@ -1,0 +1,178 @@
+<style>
+#setup-wide{--film:#090806;--booth:#12100d;--paper:#f3e8d2;--support:#c7b99f;--amber:#cc9f5b;--quiet:#2b261e;--strong:#494031;width:100%;margin:12px auto;color-scheme:dark}
+#setup-wide *{box-sizing:border-box}
+#setup-wide .wd-frame{position:relative;overflow:hidden;background:var(--film);border-radius:8px}
+#setup-wide .wd-screen{width:1280px;height:720px;transform-origin:top left;background:var(--film);color:var(--paper);font:16px/1.4 Arial,sans-serif;display:flex;flex-direction:column;padding:24px 32px}
+#setup-wide .wd-header{display:flex;align-items:center;justify-content:space-between;gap:32px;padding-bottom:20px}
+#setup-wide .wd-brand{color:var(--amber);font-size:14px;letter-spacing:1.5px;margin:0 0 6px}
+#setup-wide h2{font-size:28px;line-height:1.2;margin:0 0 6px;font-weight:600}
+#setup-wide p{margin:0;color:var(--support);font-size:14px}
+#setup-wide .wd-steps{font-size:14px;color:var(--support);white-space:nowrap}
+#setup-wide .wd-steps strong{color:var(--paper);font-weight:600}
+#setup-wide .wd-body{display:grid;grid-template-columns:176px minmax(0,1fr);gap:28px;flex:1;min-height:0}
+#setup-wide nav{display:flex;flex-direction:column;gap:8px}
+#setup-wide button,#setup-wide select{font:inherit;font-size:14px;color:var(--paper);background:var(--booth);border:1px solid var(--strong);border-radius:6px;padding:8px 12px;min-height:36px;cursor:pointer}
+#setup-wide button:hover{background:var(--quiet)}
+#setup-wide nav button{background:transparent;border-color:transparent;text-align:left;min-height:44px}
+#setup-wide nav button[aria-pressed="true"]{background:#2b2419}
+#setup-wide .wd-content{display:flex;flex-direction:column;min-height:0}
+#setup-wide .wd-intro{display:flex;justify-content:space-between;align-items:baseline;gap:16px;margin-bottom:8px}
+#setup-wide h3{font-size:18px;margin:0;font-weight:600}
+#setup-wide .wd-scroll{overflow-y:auto;min-height:0;flex:1;padding-right:8px;scrollbar-color:var(--strong) var(--film);scrollbar-width:thin}
+#setup-wide .wd-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:28px}
+#setup-wide .wd-source{padding:12px 0;border-bottom:1px solid var(--quiet);min-width:0}
+#setup-wide .wd-label{display:flex;align-items:center;gap:10px;cursor:pointer}
+#setup-wide input{width:18px;height:18px;accent-color:var(--amber);margin:0;flex:none}
+#setup-wide .wd-name{font-size:16px;font-weight:600;flex:1}
+#setup-wide .wd-count{font-size:13px;color:var(--support);white-space:nowrap}
+#setup-wide .wd-desc{margin:6px 0 0 28px;font-size:13px}
+#setup-wide .wd-examples{margin:4px 0 0 28px;font-size:13px;color:var(--paper);overflow-wrap:anywhere}
+#setup-wide .wd-group{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:8px 0 0 28px;font-size:13px;color:var(--support)}
+#setup-wide .wd-group select{font-size:13px;padding:4px 8px;min-height:32px}
+#setup-wide .wd-shared{display:none;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 28px;padding:12px 0;border-bottom:1px solid var(--quiet);margin-bottom:4px}
+#setup-wide .wd-shared .wd-group{margin:0}
+#setup-wide .wd-shared-title{grid-column:1/-1;font-size:13px;color:var(--support)}
+#setup-wide[data-design="shared"] .wd-shared{display:grid}
+#setup-wide[data-design="shared"] .wd-source .wd-group{display:none}
+#setup-wide .wd-footer{display:flex;align-items:center;justify-content:space-between;gap:24px;padding-top:16px;margin-top:16px;border-top:1px solid var(--quiet)}
+#setup-wide .wd-total strong{font-size:22px;color:var(--paper)}
+#setup-wide .wd-actions{display:flex;gap:12px}
+#setup-wide .wd-actions button{min-height:44px}
+#setup-wide .wd-primary{background:var(--amber);color:#060504;border-color:var(--amber);font-weight:600}
+#setup-wide .wd-back{background:transparent;border-color:transparent;color:var(--support)}
+#setup-wide .wd-message{color:var(--support);font-size:13px;max-width:540px}
+</style>
+<div class="viz-controls"><label class="form-label">Review state<select class="form-select" id="large-layout"><option value="hybrid">Existing lineup</option><option value="first">First-time setup</option></select></label><label class="form-label">Final lineup<select class="form-select" id="large-count"><option>390</option><option>1000</option></select></label><label class="form-label">Desktop size<select class="form-select" id="large-size"><option value="1280">1280 × 720</option><option value="1920">1920 × 1080</option></select></label></div>
+<style>
+#setup-wide .lr-body{display:flex;flex-direction:column;flex:1;min-height:0;gap:16px}
+#setup-wide .lr-overview{order:0;flex:none;padding:16px 20px;background:var(--booth);border:1px solid var(--quiet);border-radius:8px}
+#setup-wide .lr-headline{display:flex;align-items:center;justify-content:space-between;gap:24px}
+#setup-wide .lr-total{font-size:26px;font-weight:600;white-space:nowrap}
+#setup-wide .lr-total small{font-size:13px;font-weight:400;color:var(--support)}
+#setup-wide .lr-facts{display:flex;gap:24px;font-size:14px;color:var(--support)}
+#setup-wide .lr-facts strong{color:var(--paper);font-weight:600;margin-right:5px}
+#setup-wide .lr-facts .lr-removed strong{color:#ff7768}
+#setup-wide .lr-sources{font-size:12px;color:var(--support);margin-top:10px;line-height:1.6}
+#setup-wide .lr-list-area{order:1;display:flex;flex-direction:column;min-height:0;flex:1}
+#setup-wide .lr-toolbar{display:flex;gap:12px;align-items:center;margin-bottom:8px}
+#setup-wide .lr-search{flex:1}
+#setup-wide input[type="search"]{width:100%;height:38px;background:#060504;color:var(--paper);border:1px solid var(--strong);border-radius:6px;font:14px Arial,sans-serif;padding:8px 12px}
+#setup-wide .lr-list-info{display:flex;justify-content:space-between;gap:16px;color:var(--support);font-size:12px;margin-bottom:8px}
+#setup-wide .lr-list{flex:1;min-height:0;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--strong) var(--film)}
+#setup-wide .lr-row,#setup-wide .lr-columns{display:grid;grid-template-columns:52px minmax(0,1fr) 180px 140px 106px;gap:16px;align-items:center;padding:12px 8px;border-bottom:1px solid var(--quiet);font-size:15px}
+#setup-wide .lr-row{min-height:46px}
+#setup-wide .lr-row:hover{background:var(--booth)}
+#setup-wide .lr-columns{padding:6px 8px;font-size:12px;color:var(--support);background:var(--booth)}
+#setup-wide .lr-row span{overflow-wrap:anywhere}
+#setup-wide .lr-meta{color:var(--support);font-size:13px}
+#setup-wide .lr-change{font-size:13px;text-align:right}
+#setup-wide .lr-change[data-kind="Added"],#setup-wide .lr-change[data-kind="Updated"]{color:var(--amber)}
+#setup-wide .lr-change[data-kind="Removed"]{color:#ff7768}
+#setup-wide .lr-footer{display:flex;flex-direction:column;gap:12px;margin-top:16px;border-top:1px solid var(--strong);padding-top:12px}
+#setup-wide .lr-decision{display:flex;align-items:center;gap:20px}
+#setup-wide .lr-method{font-size:12px;color:var(--support);flex:none}
+#setup-wide .lr-method select{display:block;margin-top:4px;width:240px}
+#setup-wide .lr-help{flex:1;font-size:13px;color:var(--support);max-width:480px}
+#setup-wide .wd-actions{margin-left:auto;flex:none}
+#setup-wide .lr-confirm{font-size:13px;color:#ff7768;display:flex;align-items:center;gap:10px}
+#setup-wide [hidden]{display:none!important}
+#setup-wide button:disabled{opacity:.4;cursor:default}
+#setup-wide[data-layout="bottom"] .lr-overview{order:2;background:transparent;border:0;border-top:1px solid var(--strong);border-radius:0;padding:20px 0}
+#setup-wide[data-layout="bottom"] .lr-headline{display:block}
+#setup-wide[data-layout="bottom"] .lr-facts{margin-top:14px;justify-content:space-between}
+#setup-wide[data-layout="bottom"] .lr-footer{margin-top:0;padding-top:0;border:0}
+#setup-wide[data-large="true"] .wd-screen{padding:36px 48px}
+#setup-wide[data-large="true"] .wd-header{padding-bottom:28px}
+#setup-wide[data-large="true"] .wd-brand{font-size:18px;margin-bottom:10px}
+#setup-wide[data-large="true"] h2{font-size:38px;margin-bottom:10px}
+#setup-wide[data-large="true"] p,#setup-wide[data-large="true"] .wd-steps{font-size:18px}
+#setup-wide[data-large="true"] .lr-body{gap:24px}
+#setup-wide[data-large="true"] .lr-overview{padding:24px 28px}
+#setup-wide[data-large="true"] .lr-total{font-size:36px}
+#setup-wide[data-large="true"] .lr-total small{font-size:18px}
+#setup-wide[data-large="true"] .lr-facts{font-size:20px;gap:36px}
+#setup-wide[data-large="true"] .lr-sources{font-size:17px;margin-top:14px}
+#setup-wide[data-large="true"] input[type="search"]{height:52px;font-size:18px}
+#setup-wide[data-large="true"] button,#setup-wide[data-large="true"] select{font-size:18px;min-height:48px;padding:10px 16px}
+#setup-wide[data-large="true"] .lr-row,#setup-wide[data-large="true"] .lr-columns{grid-template-columns:72px minmax(0,1fr) 260px 210px 150px;gap:24px;padding:16px 12px;font-size:21px;min-height:64px}
+#setup-wide[data-large="true"] .lr-meta,#setup-wide[data-large="true"] .lr-change{font-size:18px}
+#setup-wide[data-large="true"] .lr-columns{font-size:17px;padding:8px 12px;min-height:0}
+#setup-wide[data-large="true"] .lr-list-info{font-size:17px;margin-bottom:12px}
+#setup-wide[data-large="true"] .lr-footer{margin-top:24px;padding-top:20px;gap:16px}
+#setup-wide[data-large="true"] .lr-method{font-size:17px}
+#setup-wide[data-large="true"] .lr-method select{width:330px;margin-top:6px}
+#setup-wide[data-large="true"] .lr-help{font-size:18px;max-width:680px}
+#setup-wide[data-large="true"] .lr-confirm{font-size:18px}
+</style>
+<div id="setup-wide"><div class="wd-frame"><section class="wd-screen" aria-label="Large lineup review proposal">
+<header class="wd-header"><div><div class="wd-brand">LINEUP</div><h2>Review your lineup</h2><p>Check what changes and what stays.</p></div><div class="wd-steps">1 Libraries &nbsp; / &nbsp; 2 Configure &nbsp; / &nbsp; <strong>3 Review</strong></div></header>
+<div class="lr-body"><section class="lr-overview" aria-label="Lineup impact"><div class="lr-headline"><div class="lr-total"></div><div class="lr-facts"></div></div><div class="lr-sources"></div></section>
+<section class="lr-list-area" aria-label="Channel changes"><div class="lr-toolbar"><label class="lr-search"><input type="search" id="lr-search" aria-label="Search channels by name or number" placeholder="Search channels by name or number"></label><label><select id="lr-filter" aria-label="Show changes"><option value="All">All entries</option><option>Added</option><option>Updated</option><option>Removed</option><option>Unchanged</option></select></label></div><div class="lr-list-info"><span id="lr-count" aria-live="polite"></span><span>10 custom channels stay unchanged</span></div><div class="lr-columns" aria-hidden="true"><span>No.</span><span>Channel</span><span>Source</span><span>Playback</span><span style="text-align:right">Change</span></div><div class="lr-list" role="list" aria-label="Review entries"></div></section></div>
+<footer class="lr-footer"><label class="lr-confirm" hidden><input type="checkbox" id="lr-confirm"><span id="lr-confirm-copy"></span></label><div class="lr-decision"><label class="lr-method">Build method<select id="lr-method"><option value="merge">Update and add</option><option value="replace">Replace generated channels</option></select></label><div class="lr-help"></div><div class="wd-actions"><button class="wd-back">Back to configure</button><button class="wd-primary" id="lr-apply">Apply changes</button></div></div><div id="lr-message" role="status" hidden></div></footer>
+</section></div></div>
+<script>
+(()=>{const root=document.getElementById('setup-wide'),screen=root.querySelector('.wd-screen'),frame=root.querySelector('.wd-frame'),layout=document.getElementById('large-layout'),size=document.getElementById('large-size'),count=document.getElementById('large-count'),method=document.getElementById('lr-method'),search=document.getElementById('lr-search'),filter=document.getElementById('lr-filter'),confirm=document.getElementById('lr-confirm'),apply=document.getElementById('lr-apply'),list=root.querySelector('.lr-list');const families=['Playlists','Collections','Genres','Decades','Studios','Actors','Directors','Recently added'],themes=['Adventure','Mystery','Comedy','Drama','Animation','Documentaries','Science fiction','Classic cinema','Family favorites','Late-night discoveries'];let entries=[];
+function resize(){const w=Number(size.value);root.dataset.large=String(w===1920);root.dataset.layout=layout.value;screen.style.width=w+'px';screen.style.height=w*9/16+'px';screen.style.transform='scale('+root.clientWidth/w+')';frame.style.height=root.clientWidth*9/16+'px';}
+function make(i,kind){return {number:i+1,name:i<10?'Custom collection '+(i+1):themes[(i-10)%themes.length]+' · Collection '+String(Math.floor((i-10)/themes.length)+1).padStart(2,'0'),source:i<10?'Custom':families[(i-10)%8],play:i%3===0?'In order':i%3===1?'Shuffle':'Mini-marathons',kind};}
+function rows(reset){const scroll=list.scrollTop,q=search.value.trim().toLowerCase(),shown=entries.filter(r=>(filter.value==='All'||r.kind===filter.value)&&(r.name.toLowerCase().includes(q)||String(r.number).includes(q)));list.replaceChildren();const batch=document.createDocumentFragment();shown.forEach(r=>{const row=document.createElement('div');row.className='lr-row';row.setAttribute('role','listitem');[r.number,r.name,r.source,r.play,r.kind].forEach((value,i)=>{const cell=document.createElement('span');cell.textContent=value;if(i===0||i===2||i===3)cell.className='lr-meta';if(i===4){cell.className='lr-change';cell.dataset.kind=r.kind;}row.append(cell);});batch.append(row);});if(!shown.length){const empty=document.createElement('p');empty.textContent='No matching channels. Adjust your search or change filter.';batch.append(empty);}list.append(batch);document.getElementById('lr-count').textContent=shown.length+' of '+entries.length+' review entries';list.scrollTop=reset?0:scroll;}
+function plan(){const final=Number(count.value),first=method.value==='first',current=first?0:final-30,replacing=method.value==='replace';entries=Array.from({length:final},(_,i)=>make(i,i<10?'Unchanged':replacing?'Added':i>=current?'Added':i<70?'Updated':'Unchanged'));if(replacing)entries.push(...Array.from({length:current-10},(_,i)=>make(i+10,'Removed')));if(first)entries=Array.from({length:final},(_,i)=>({...make(i+10,'Added'),number:i+1}));entries.sort((a,b)=>a.number-b.number||(a.kind==='Removed'?-1:1));const counts={Added:0,Updated:0,Unchanged:0,Removed:0};entries.forEach(r=>counts[r.kind]++);const total=root.querySelector('.lr-total');total.replaceChildren();const old=document.createElement('small');old.textContent=current+' current';const next=document.createElement('small');next.textContent=' final';total.append(old,document.createTextNode(' → '+final),next);const facts=root.querySelector('.lr-facts');facts.replaceChildren();Object.entries(counts).forEach(([key,n])=>{const fact=document.createElement('span');if(key==='Removed'&&n)fact.className='lr-removed';const value=document.createElement('strong');value.textContent=n;fact.append(value,document.createTextNode(key.toLowerCase()));facts.append(fact);});const totals=new Map(families.map(f=>[f,0]));entries.filter(r=>r.kind!=='Removed'&&r.source!=='Custom').forEach(r=>totals.set(r.source,totals.get(r.source)+1));root.querySelector('.lr-sources').textContent='Final generated channels: '+[...totals].map(([family,n])=>family+' '+n).join(' · ');root.querySelector('.lr-confirm').hidden=!replacing;document.getElementById('lr-confirm-copy').textContent='Remove '+counts.Removed+' existing generated channels. Your 10 custom channels stay.';root.querySelector('.lr-help').textContent=replacing?'Replace generated channels with this selection.':'Update matching generated channels, add new ones, and keep the rest.';apply.textContent=replacing?'Replace generated channels':'Apply changes';apply.disabled=replacing&&!confirm.checked;rows(true);}
+layout.onchange=resize;size.onchange=resize;count.onchange=()=>{confirm.checked=false;plan();};method.onchange=()=>{confirm.checked=false;plan();};search.oninput=()=>rows(true);filter.onchange=()=>rows(true);confirm.onchange=()=>apply.disabled=method.value==='replace'&&!confirm.checked;apply.onclick=()=>{const msg=document.getElementById('lr-message');msg.hidden=false;msg.textContent='Synthetic preview only — no changes applied.';};root.querySelector('.wd-back').onclick=()=>{const msg=document.getElementById('lr-message');msg.hidden=false;msg.textContent='Preview: return to Configure with choices preserved.';};new ResizeObserver(resize).observe(root);plan();resize();})();
+</script>
+<style>
+#setup-wide .rp-disclosure{display:inline-block;margin-left:6px}
+#setup-wide details[open] .rp-disclosure{transform:rotate(180deg)}
+#setup-wide .lr-decision{display:grid;grid-template-columns:240px minmax(0,1fr) auto;gap:20px;min-height:66px}
+#setup-wide .lr-help{max-width:none}
+#setup-wide .lr-sources{margin-top:8px;padding-top:8px}
+#setup-wide[data-large="true"] .lr-sources{margin-top:12px;padding-top:10px}
+#setup-wide[data-large="true"] .lr-decision{grid-template-columns:330px minmax(0,1fr) auto;min-height:86px;gap:28px}
+#setup-wide[data-layout="first"] .lr-method,#setup-wide[data-layout="first"] .lr-help,#setup-wide[data-layout="first"] .lr-facts,#setup-wide[data-layout="first"] .rf-bar-block,#setup-wide[data-layout="first"] .rf-all,#setup-wide[data-layout="first"] .lr-list-info>span:last-child{display:none}
+#setup-wide[data-layout="first"] .lr-decision{display:flex;justify-content:flex-end}
+#setup-wide[data-layout="first"] .lr-overview{padding-top:20px;padding-bottom:20px}
+</style>
+<style>
+#setup-wide .rf-bar-block{margin-top:8px}
+#setup-wide .rf-bar-label{color:var(--support);font-size:12px;margin-bottom:6px}
+#setup-wide .rf-bar{display:flex;height:10px;overflow:hidden;border-radius:2px;background:var(--quiet)}
+#setup-wide .rf-segment{height:100%;min-width:1px}
+#setup-wide[data-layout="plain"] .rf-bar-block{display:none}
+#setup-wide .lr-facts{gap:12px}
+#setup-wide .lr-facts button{display:flex;gap:8px;align-items:center;min-height:32px;font-size:14px;padding:6px 8px;border-color:transparent;background:transparent}
+#setup-wide .lr-facts button:hover{background:var(--quiet)}
+#setup-wide .lr-facts button[aria-pressed="true"]{border-color:var(--amber);background:#2b2419}
+#setup-wide .rf-swatch{width:8px;height:8px;flex:none}
+#setup-wide .lr-sources{display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;border-top:1px solid var(--quiet);padding-top:10px;margin-top:12px;font-size:12px}
+#setup-wide .rf-source{display:flex;gap:8px;align-items:baseline}
+#setup-wide .rf-source b{font-weight:600;color:var(--paper);font-variant-numeric:tabular-nums}
+#setup-wide .lr-toolbar #lr-filter{display:none}
+#setup-wide .rf-all{white-space:nowrap}
+#setup-wide .rf-all[aria-pressed="true"]{border-color:var(--amber);background:#2b2419}
+#setup-wide .rf-detail{border-bottom:1px solid var(--quiet)}
+#setup-wide .rf-detail .lr-row{border:0;cursor:pointer;list-style:none}
+#setup-wide .rf-detail summary::-webkit-details-marker{display:none}
+#setup-wide .rf-detail summary::marker{content:''}
+#setup-wide .rf-detail[open]{background:var(--booth)}
+#setup-wide .rf-before-after{margin:0 8px 12px 76px;font-size:13px;color:var(--support)}
+#setup-wide .rf-before-after strong{font-weight:500;color:var(--paper)}
+#setup-wide[data-large="true"] .lr-facts button{font-size:20px;padding:8px 12px;min-height:44px}
+#setup-wide[data-large="true"] .rf-bar-block{margin-top:12px}
+#setup-wide[data-large="true"] .rf-bar-label{font-size:17px;margin-bottom:8px}
+#setup-wide[data-large="true"] .rf-bar{height:14px}
+#setup-wide[data-large="true"] .lr-sources{font-size:17px;gap:24px;margin-top:16px;padding-top:14px}
+#setup-wide[data-large="true"] .rf-before-after{margin:0 12px 16px 108px;font-size:18px}
+</style>
+<script>
+(()=>{const root=document.getElementById('setup-wide'),filter=document.getElementById('lr-filter'),list=root.querySelector('.lr-list'),colors={Unchanged:'#6c6252',Updated:'#f0d39a',Added:'#cc9f5b',Removed:'#ff7768'};let previousSource='';
+const all=document.createElement('button');all.className='rf-all';all.textContent='Show all';all.onclick=()=>{filter.value='All';filter.dispatchEvent(new Event('change'));};root.querySelector('.lr-toolbar').append(all);
+const block=document.createElement('div');block.className='rf-bar-block';const label=document.createElement('div');label.className='rf-bar-label';label.textContent='Changes in this review';const bar=document.createElement('div');bar.className='rf-bar';bar.setAttribute('role','img');block.append(label,bar);root.querySelector('.lr-headline').after(block);
+function enhance(){const facts=root.querySelector('.lr-facts');let counts={};facts.querySelectorAll('span').forEach(f=>{const n=f.querySelector('strong');if(n){const raw=f.textContent.slice(n.textContent.length).trim();const key=raw.charAt(0).toUpperCase()+raw.slice(1);counts[key]=Number(n.textContent);}});if(Object.keys(counts).length){facts.replaceChildren();['Unchanged','Updated','Added','Removed'].forEach(kind=>{const button=document.createElement('button');button.dataset.kind=kind;button.setAttribute('aria-label','Show '+counts[kind]+' '+kind.toLowerCase()+' channels');const swatch=document.createElement('span');swatch.className='rf-swatch';swatch.style.background=counts[kind]===0?'var(--strong)':colors[kind];swatch.setAttribute('aria-hidden','true');button.append(swatch,document.createTextNode(counts[kind]+' '+kind.toLowerCase()));button.onclick=()=>{filter.value=kind;filter.dispatchEvent(new Event('change'));};facts.append(button);});bar.replaceChildren();const total=Object.values(counts).reduce((a,b)=>a+b,0);Object.entries(counts).sort(([a],[b])=>['Unchanged','Updated','Added','Removed'].indexOf(a)-['Unchanged','Updated','Added','Removed'].indexOf(b)).forEach(([kind,n])=>{if(!n)return;const segment=document.createElement('div');segment.className='rf-segment';segment.style.width=n/total*100+'%';segment.style.background=colors[kind];bar.append(segment);});bar.setAttribute('aria-label',Object.entries(counts).map(([kind,n])=>n+' '+kind.toLowerCase()).join(', ')+'. Includes outgoing channels; this is not the final lineup composition.');}
+facts.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.kind===filter.value)));all.setAttribute('aria-pressed',String(filter.value==='All'));
+const sources=root.querySelector('.lr-sources');if(sources.textContent.startsWith('Final generated channels:')){previousSource=sources.textContent;const entries=previousSource.replace('Final generated channels: ','').split(' · ');sources.replaceChildren();const heading=document.createElement('span');heading.textContent='Final generated channels';sources.append(heading);entries.forEach(entry=>{const match=entry.match(/^(.*) (\d+)$/);if(!match)return;const pair=document.createElement('span');pair.className='rf-source';const n=document.createElement('b');n.textContent=match[2];pair.append(document.createTextNode(match[1]),n);sources.append(pair);});}
+list.querySelectorAll(':scope > .lr-row').forEach(row=>{if(row.lastElementChild.dataset.kind!=='Updated')return;const details=document.createElement('details');details.className='rf-detail';details.setAttribute('role','listitem');const summary=document.createElement('summary');summary.className='lr-row';while(row.firstChild)summary.append(row.firstChild);summary.lastElementChild.textContent='Updated';const disclosure=document.createElement('span');disclosure.className='rp-disclosure';disclosure.textContent='⌄';disclosure.setAttribute('aria-hidden','true');summary.lastElementChild.append(disclosure);const next=summary.children[3].textContent;const before=next==='Shuffle'?'In order':'Shuffle';const detail=document.createElement('div');detail.className='rf-before-after';detail.textContent='Playback: '+before+' → '+next;details.append(summary,detail);row.replaceWith(details);});}
+['lr-filter','lr-method','large-count'].forEach(id=>document.getElementById(id).addEventListener('change',enhance));document.getElementById('lr-search').addEventListener('input',enhance);enhance();})();
+</script>
+<script>
+(()=>{const root=document.getElementById('setup-wide'),state=document.getElementById('large-layout'),method=document.getElementById('lr-method'),filter=document.getElementById('lr-filter'),count=document.getElementById('large-count'),search=document.getElementById('lr-search');const firstOption=document.createElement('option');firstOption.value='first';firstOption.textContent='Create lineup';firstOption.hidden=true;method.append(firstOption);let savedMethod='merge';
+function polish(){const first=state.value==='first';root.querySelector('h2').textContent=first?'Review your first lineup':'Review your lineup';root.querySelector('.wd-header p').textContent=first?'Check your channels before creating your lineup.':'Check what changes and what stays.';const label=root.querySelector('.rf-bar-label');if(label){label.textContent='Changes in this review'+(method.value==='replace'?' · Includes channels being removed':'');}const shown=root.querySelectorAll('.lr-list > .lr-row, .lr-list > .rf-detail').length;const total=method.value==='replace'?Number(count.value)*2-40:Number(count.value);document.getElementById('lr-count').textContent=filter.value==='All'?shown+' of '+total+' '+(first?'channels':'review entries'):filter.value+' · '+shown+' matching channels';if(first){const headline=root.querySelector('.lr-total');headline.textContent=count.value+' channels ready to create';document.getElementById('lr-apply').textContent='Create lineup';root.querySelectorAll('.lr-change').forEach(c=>c.textContent='New');}}
+state.addEventListener('change',()=>{if(state.value==='first'){savedMethod=method.value;method.value='first';}else method.value=savedMethod;filter.value='All';search.value='';method.dispatchEvent(new Event('change'));polish();});['lr-method','lr-filter','large-count'].forEach(id=>document.getElementById(id).addEventListener('change',polish));search.addEventListener('input',polish);polish();})();
+</script>

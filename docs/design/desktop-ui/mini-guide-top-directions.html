@@ -1,0 +1,72 @@
+<div class="viz-controls"><label class="form-label">Top treatment<select id="mg-treatment" class="form-select"><option value="5">A · Five-channel shelf</option><option value="3">B · Three-channel shelf</option></select></label><label class="form-label">Desktop size<select id="mg-size" class="form-select"><option value="1280">1280 × 720</option><option value="1920">1920 × 1080</option><option value="2560">2560 × 1440</option><option value="3840">3840 × 2160</option></select></label></div>
+<div id="mini-guide-top"><div class="mg-frame"><section class="mg-screen" aria-label="Mini Guide design comparison">
+<div class="mg-picture" aria-label="Illustrative playing-video background"><div class="mg-hill mg-far"></div><div class="mg-hill mg-near"></div><div class="mg-water"></div><div class="mg-film-caption">HARBOR LIGHTS</div></div>
+<section class="mg-shelf" aria-label="Mini Guide"><header><div><h2>Mini Guide</h2><span id="mg-clock">8:14 PM</span></div><nav><button id="mg-full">Full Guide <span>→</span></button><button id="mg-close" aria-label="Close Mini Guide">Close <span>×</span></button></nav></header>
+<div class="mg-column-labels"><span>Channel</span><span>On now</span><span>Up next</span></div>
+<div id="mg-rows"></div><footer><span id="mg-help">↑ ↓ Browse · Enter Tune · Esc Close</span><div><button id="mg-up" aria-label="Previous channel">↑</button><button id="mg-down" aria-label="Next channel">↓</button></div></footer></section>
+<button id="mg-open" hidden>Mini Guide</button><div id="mg-notice" role="status" hidden></div>
+</section></div></div>
+<style>
+#mini-guide-top{--film:#090806;--booth:#12100d;--raised:#1a1712;--paper:#f3e8d2;--support:#c7b99f;--amber:#cc9f5b;--focus:#f0d39a;--quiet:#2b261e;margin-top:12px;color-scheme:dark}
+#mini-guide-top *{box-sizing:border-box}
+#mini-guide-top .mg-frame{overflow:hidden;border-radius:8px;background:var(--film)}
+#mini-guide-top .mg-screen{position:relative;width:1280px;height:720px;transform-origin:top left;font:14px/1.35 Arial,sans-serif;color:var(--paper);overflow:hidden}
+#mini-guide-top .mg-picture{position:absolute;inset:0;background:linear-gradient(#657b80,#b5b0a0 60%,#778588);overflow:hidden}
+#mini-guide-top .mg-hill{position:absolute;inset:20% -5% 0;clip-path:polygon(0 56%,18% 38%,35% 51%,54% 6%,75% 41%,100% 16%,100% 100%,0 100%)}
+#mini-guide-top .mg-far{background:#3f595b;opacity:.7}
+#mini-guide-top .mg-near{inset:40% -10% 0;background:#243d3e;transform:scaleX(-1)}
+#mini-guide-top .mg-water{position:absolute;inset:78% 0 0;background:linear-gradient(#859491,#41595c);opacity:.95}
+#mini-guide-top .mg-film-caption{position:absolute;left:48px;bottom:52px;font:500 32px/1.1 Georgia,serif;letter-spacing:5px;color:#efe7d4;text-shadow:0 1px 5px #111}
+#mini-guide-top .mg-shelf{position:absolute;inset:0 0 auto;padding:8px 32px 4px;background:linear-gradient(#090806fa,#090806f2);border-bottom:1px solid #494031;box-shadow:0 16px 36px #09080660}
+#mini-guide-top header{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
+#mini-guide-top header>div{display:flex;align-items:center;gap:20px}
+#mini-guide-top h2{font-size:18px;font-weight:500;margin:0}
+#mini-guide-top #mg-clock{color:var(--support);font-size:12px;font-variant-numeric:tabular-nums}
+#mini-guide-top button{font:inherit;background:transparent;color:var(--paper);border:1px solid transparent;border-radius:4px;min-height:32px;cursor:pointer;padding:5px 10px}
+#mini-guide-top button:hover{background:#2b261e}
+#mini-guide-top button:focus-visible{outline:2px solid var(--focus);outline-offset:-2px}
+#mini-guide-top nav{display:flex;gap:12px}
+#mini-guide-top nav button{font-size:13px}
+#mini-guide-top nav span{margin-left:10px;color:var(--support)}
+#mini-guide-top .mg-column-labels,#mini-guide-top .mg-row{display:grid;grid-template-columns:250px minmax(0,1.15fr) minmax(0,1fr);gap:24px}
+#mini-guide-top .mg-column-labels{padding:0 12px 6px;font-size:11px;color:var(--support)}
+#mini-guide-top .mg-row{position:relative;width:100%;min-height:48px;text-align:left;border-radius:0;padding:4px 12px;border-bottom:1px solid var(--quiet);align-items:center}
+#mini-guide-top .mg-row[aria-pressed="true"]{background:#2b2419;box-shadow:inset 3px 0 var(--amber)}
+#mini-guide-top .mg-channel{display:flex;gap:12px;align-items:center;min-width:0}
+#mini-guide-top .mg-number{font-size:14px;color:var(--support);flex:0 0 32px;font-variant-numeric:tabular-nums}
+#mini-guide-top .mg-name{overflow-wrap:anywhere;font-weight:500;line-height:1.25}
+#mini-guide-top .mg-watching{display:block;font-size:10px;color:var(--amber);font-weight:400;margin-top:2px}
+#mini-guide-top .mg-title{display:block;overflow-wrap:anywhere;line-height:1.25;font-size:14px}
+#mini-guide-top .mg-next .mg-title{color:var(--support)}
+#mini-guide-top .mg-meta{display:block;font-size:11px;color:var(--support);margin-top:3px;font-variant-numeric:tabular-nums}
+#mini-guide-top .mg-now{position:relative;padding-bottom:3px}
+#mini-guide-top .mg-progress{position:absolute;bottom:0;left:0;right:0;height:2px;background:#494031}
+#mini-guide-top .mg-progress i{display:block;height:100%;background:var(--amber)}
+#mini-guide-top footer{display:flex;align-items:center;justify-content:space-between;padding:6px 0 0;min-height:30px;color:var(--support);font-size:11px}
+#mini-guide-top footer button{min-height:28px;min-width:32px}
+#mini-guide-top #mg-open{position:absolute;top:20px;left:32px;background:var(--booth);border-color:#494031}
+#mini-guide-top #mg-notice{position:absolute;bottom:24px;left:50%;transform:translateX(-50%);background:var(--booth);padding:12px 20px;border:1px solid #494031;border-radius:6px;font-size:13px}
+#mini-guide-top [hidden]{display:none!important}
+#mini-guide-top[data-large="true"] .mg-shelf{padding:12px 48px 6px}
+#mini-guide-top[data-large="true"] header{margin-bottom:6px}
+#mini-guide-top[data-large="true"] h2{font-size:26px}
+#mini-guide-top[data-large="true"] #mg-clock,#mini-guide-top[data-large="true"] nav button{font-size:18px}
+#mini-guide-top[data-large="true"] .mg-column-labels,#mini-guide-top[data-large="true"] .mg-row{grid-template-columns:365px minmax(0,1.15fr) minmax(0,1fr);gap:36px}
+#mini-guide-top[data-large="true"] .mg-column-labels{font-size:16px;padding:0 18px 8px}
+#mini-guide-top[data-large="true"] .mg-row{min-height:70px;padding:6px 18px}
+#mini-guide-top[data-large="true"] .mg-title,#mini-guide-top[data-large="true"] .mg-name,#mini-guide-top[data-large="true"] .mg-number{font-size:20px}
+#mini-guide-top[data-large="true"] .mg-number{flex-basis:46px}
+#mini-guide-top[data-large="true"] .mg-meta,#mini-guide-top[data-large="true"] footer{font-size:16px}
+#mini-guide-top[data-large="true"] .mg-watching{font-size:14px}
+#mini-guide-top[data-large="true"] .mg-film-caption{font-size:46px;left:72px;bottom:78px}
+</style>
+<script>
+(()=>{const root=document.getElementById('mini-guide-top'),rows=document.getElementById('mg-rows'),treatment=document.getElementById('mg-treatment'),size=document.getElementById('mg-size');
+const channels=[['10','Classic cinema','The last observatory','8:00–9:42 PM','A summer elsewhere','9:42 PM',14],['11','Mystery nights','The midnight archive','8:00–9:00 PM','A letter without a name','9:00 PM',23],['12','Evening television','Harbor lights','S1 E3 · 8:00–8:30 PM','The quiet station','8:30 PM',47],['13','Weekend discoveries','Beyond the ridge','8:10–9:00 PM','The long way home','9:00 PM',8],['14','Documentary collection','A coastline in motion','8:00–9:00 PM','The night sky','9:00 PM',23],['15','Family favorites','The lantern maker','7:45–9:15 PM','Days of silver','9:15 PM',32],['16','Late night comedy','Another ordinary Tuesday','8:00–8:30 PM','Neighbors upstairs','8:30 PM',47]];let selected=2,tuned=2;
+function render(){rows.replaceChildren();const n=Number(treatment.value);for(let offset=-Math.floor(n/2);offset<=Math.floor(n/2);offset++){const index=(selected+offset+channels.length)%channels.length,c=channels[index],b=document.createElement('button');b.className='mg-row';b.setAttribute('aria-pressed',String(index===selected));b.setAttribute('aria-label','Channel '+c[0]+', '+c[1]+'. Now '+c[2]+'. Next '+c[4]+'.'+(index===tuned?' Now watching.':''));const identity=document.createElement('div');identity.className='mg-channel';const number=document.createElement('span');number.className='mg-number';number.textContent=c[0];const name=document.createElement('span');name.className='mg-name';name.textContent=c[1];if(index===tuned){const watching=document.createElement('span');watching.className='mg-watching';watching.textContent='Watching';name.append(watching)}identity.append(number,name);const now=document.createElement('div');now.className='mg-now';const title=document.createElement('span');title.className='mg-title';title.textContent=c[2];const meta=document.createElement('span');meta.className='mg-meta';meta.textContent=c[3];const progress=document.createElement('div');progress.className='mg-progress';progress.setAttribute('aria-hidden','true');const fill=document.createElement('i');fill.style.width=c[6]+'%';progress.append(fill);now.append(title,meta,progress);const next=document.createElement('div');next.className='mg-next';const nt=document.createElement('span');nt.className='mg-title';nt.textContent=c[4];const nm=document.createElement('span');nm.className='mg-meta';nm.textContent=c[5];next.append(nt,nm);b.append(identity,now,next);b.onclick=()=>{selected=index;for(const row of rows.children)row.setAttribute('aria-pressed',String(row===b))};b.ondblclick=()=>{selected=index;tune()};b.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();selected=index;tune()}};rows.append(b)}}
+function notice(t){const n=document.getElementById('mg-notice');n.textContent=t;n.hidden=false}
+function close(){root.querySelector('.mg-shelf').hidden=true;document.getElementById('mg-open').hidden=false}
+function tune(){tuned=selected;render();root.querySelector('.mg-film-caption').textContent=channels[tuned][2].toUpperCase();close();notice('Synthetic tune · Channel '+channels[tuned][0])}
+document.getElementById('mg-close').onclick=close;document.getElementById('mg-open').onclick=()=>{selected=tuned;render();root.querySelector('.mg-shelf').hidden=false;document.getElementById('mg-open').hidden=true;document.getElementById('mg-notice').hidden=true};document.getElementById('mg-full').onclick=()=>notice('Full Guide would open with Channel '+channels[selected][0]+' focused.');document.getElementById('mg-up').onclick=()=>{selected=(selected+channels.length-1)%channels.length;render()};document.getElementById('mg-down').onclick=()=>{selected=(selected+1)%channels.length;render()};root.onkeydown=e=>{if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();selected=(selected+(e.key==='ArrowDown'?1:-1)+channels.length)%channels.length;render();rows.querySelector('[aria-pressed="true"]').focus()}else if(e.key==='Escape')close()};treatment.onchange=render;
+function scale(){const w=Number(size.value)===1280?1280:1920,s=root.querySelector('.mg-screen');root.dataset.large=String(w===1920);s.style.width=w+'px';s.style.height=w*9/16+'px';s.style.transform='scale('+root.clientWidth/w+')';root.querySelector('.mg-frame').style.height=root.clientWidth*9/16+'px'}size.onchange=scale;new ResizeObserver(scale).observe(root);render();scale();})();
+</script>

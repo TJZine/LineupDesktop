@@ -1,0 +1,64 @@
+<div class="viz-controls">
+<label class="form-label">Treatment<select class="form-select" id="tp-treatment"><option value="light">A · Open gradient</option><option value="strong" selected>B · Protected reading area</option></select></label>
+<label class="form-label">Panel<select class="form-select" id="tp-kind"><option value="audio">Audio</option><option value="subtitles">Subtitles</option></select></label>
+<label class="form-label">Scene<select class="form-select" id="tp-scene"><option value="bright">Bright coast</option><option value="dark">Dark coast</option></select></label>
+<label class="form-label">Desktop size<select class="form-select" id="tp-size"><option>1280 × 720</option><option>1920 × 1080</option><option>2560 × 1440</option><option>3840 × 2160</option></select></label>
+</div>
+<div id="track-directions" data-treatment="strong" data-scene="bright"><div class="tp-frame"><section class="tp-screen" aria-label="Playback track design comparison">
+<div class="tp-picture" aria-label="Synthetic coastal scene"><div class="tp-mountains"></div><div class="tp-near"></div><div class="tp-water"></div><span class="tp-film">HARBOR LIGHTS</span></div>
+<aside class="tp-panel" aria-labelledby="tp-heading"><header><h2 id="tp-heading">Audio</h2><button id="tp-close">Close ×</button></header><div class="tp-list" id="tp-list"></div><footer><span>↑ ↓ Browse · Enter Select · Esc Close</span><span id="tp-status" role="status"></span></footer></aside><button id="tp-open" hidden>Audio</button>
+</section></div></div>
+<style>
+#track-directions{--paper:#f3e8d2;--support:#d2c5ad;--amber:#cc9f5b;--focus:#f0d39a;margin-top:12px;color-scheme:dark}
+#track-directions *{box-sizing:border-box}
+#track-directions .tp-frame{overflow:hidden;background:#090806}
+#track-directions .tp-screen{position:relative;width:1280px;height:720px;transform-origin:top left;font:16px/1.4 Arial,sans-serif;color:var(--paper);overflow:hidden}
+#track-directions .tp-picture{position:absolute;inset:0;background:linear-gradient(#b8d0da,#eee6d1 65%,#8aa6aa)}
+#track-directions .tp-mountains{position:absolute;inset:12% -10% 0;background:#78918e;clip-path:polygon(0 65%,20% 36%,35% 50%,56% 3%,72% 39%,88% 24%,100% 52%,100% 100%,0 100%)}
+#track-directions .tp-near{position:absolute;inset:43% -5% 0;background:#2f4b4d;clip-path:polygon(0 20%,20% 45%,40% 10%,60% 65%,80% 47%,100% 72%,100% 100%,0 100%)}
+#track-directions .tp-water{position:absolute;inset:78% 0 0;background:linear-gradient(#879e9e,#49686e)}
+#track-directions .tp-film{position:absolute;bottom:52px;left:48px;font:30px Georgia,serif;letter-spacing:5px;text-shadow:0 2px 5px #090806}
+#track-directions[data-scene="dark"] .tp-picture{background:linear-gradient(#101a2b,#334650 65%,#122730)}
+#track-directions[data-scene="dark"] .tp-mountains{background:#263a40}
+#track-directions[data-scene="dark"] .tp-near{background:#132930}
+#track-directions[data-scene="dark"] .tp-water{background:linear-gradient(#314f58,#142a36)}
+#track-directions .tp-panel{position:absolute;inset:0 0 0 auto;width:400px;padding:32px 32px 24px 24px;display:flex;flex-direction:column;isolation:isolate;text-shadow:0 1px 3px #09080699}
+#track-directions .tp-panel::before{content:"";position:absolute;inset:0 0 0 -150px;z-index:-1;background:linear-gradient(90deg,#09080600,#09080655 25%,#09080694 53%,#090806b8 100%);pointer-events:none}
+#track-directions[data-treatment="strong"] .tp-panel::before{background:linear-gradient(90deg,#09080600,#09080670 22%,#090806c2 40%,#090806d6 100%)}
+#track-directions header{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px}
+#track-directions h2{font-size:26px;font-weight:500;margin:0}
+#track-directions button{font:inherit;color:inherit;cursor:pointer;border:0;background:transparent;text-align:left}
+#track-directions button:focus-visible{outline:2px solid var(--focus);outline-offset:-2px;background:#f3e8d21a}
+#track-directions #tp-close{padding:8px 0 8px 12px;font-size:13px;color:var(--support)}
+#track-directions .tp-list{flex:1;min-height:0;overflow:auto;scrollbar-width:thin;scrollbar-color:#c7b99f66 transparent}
+#track-directions .tp-row{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px 12px;width:100%;border-bottom:1px solid #f3e8d219;min-height:68px}
+#track-directions .tp-row:hover{background:#f3e8d210}
+#track-directions .tp-row[aria-pressed="true"]{background:#cc9f5b15}
+#track-directions .tp-row span:first-child{min-width:0;overflow-wrap:anywhere}
+#track-directions .tp-row strong{display:block;font-size:16px;font-weight:500}
+#track-directions .tp-row small{display:block;font-size:13px;color:var(--support);margin-top:4px}
+#track-directions .tp-check{flex:0 0 20px;color:var(--focus);font-size:19px}
+#track-directions footer{font-size:11px;color:var(--support);padding-top:20px;display:flex;flex-direction:column;gap:8px}
+#track-directions #tp-status:empty{display:none}
+#track-directions #tp-open{position:absolute;right:32px;top:32px;background:#090806bb;padding:10px 18px}
+#track-directions [hidden]{display:none!important}
+#track-directions[data-large="true"] .tp-panel{width:600px;padding:48px 48px 36px 36px}
+#track-directions[data-large="true"] .tp-panel::before{left:-225px}
+#track-directions[data-large="true"] header{margin-bottom:36px}
+#track-directions[data-large="true"] h2{font-size:39px}
+#track-directions[data-large="true"] #tp-close{font-size:19px}
+#track-directions[data-large="true"] .tp-row{min-height:102px;padding:24px 18px;gap:24px}
+#track-directions[data-large="true"] .tp-row strong{font-size:24px}
+#track-directions[data-large="true"] .tp-row small{font-size:19px;margin-top:6px}
+#track-directions[data-large="true"] .tp-check{font-size:28px;flex-basis:30px}
+#track-directions[data-large="true"] footer{font-size:16px;padding-top:30px}
+#track-directions[data-large="true"] .tp-film{font-size:45px;left:72px;bottom:78px}
+</style>
+<script>
+(()=>{const root=document.getElementById('track-directions'),list=document.getElementById('tp-list'),kind=document.getElementById('tp-kind'),panel=root.querySelector('.tp-panel'),open=document.getElementById('tp-open'),heading=document.getElementById('tp-heading');
+const tracks={audio:[['English','Original · 5.1 surround'],['English','Stereo'],['English','Audio description'],['English','Commentary with the director and cinematographer'],['Español','Stereo'],['Français','Stereo']],subtitles:[['Off',''],['English',''],['English','SDH · includes dialogue and sound descriptions'],['English','Forced · foreign-language dialogue only'],['Español',''],['Français',''],['Deutsch',''],['Italiano',''],['Português (Brasil)','']]};let selected={audio:0,subtitles:2};
+function render(){heading.textContent=kind.value==='audio'?'Audio':'Subtitles';open.textContent=heading.textContent;list.replaceChildren();document.getElementById('tp-status').textContent='';tracks[kind.value].forEach(([title,meta],i)=>{const row=document.createElement('button');row.className='tp-row';row.setAttribute('aria-pressed',String(i===selected[kind.value]));const text=document.createElement('span'),name=document.createElement('strong'),description=document.createElement('small'),check=document.createElement('span');name.textContent=title;description.textContent=meta;check.className='tp-check';check.setAttribute('aria-hidden','true');check.textContent=i===selected[kind.value]?'✓':'';text.append(name);if(meta)text.append(description);row.append(text,check);row.onclick=()=>{selected[kind.value]=i;for(const [j,b] of [...list.children].entries()){b.setAttribute('aria-pressed',String(j===i));b.querySelector('.tp-check').textContent=j===i?'✓':''}document.getElementById('tp-status').textContent='Preview selection: '+title+(meta?' · '+meta:'')};row.onkeydown=e=>{if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();const next=Math.max(0,Math.min(list.children.length-1,i+(e.key==='ArrowDown'?1:-1)));list.children[next].focus()}};list.append(row)});panel.hidden=false;open.hidden=true;list.scrollTop=0}
+function close(){panel.hidden=true;open.hidden=false;open.focus()}
+document.getElementById('tp-close').onclick=close;open.onclick=()=>{panel.hidden=false;open.hidden=true;list.children[selected[kind.value]].focus()};root.onkeydown=e=>{if(e.key==='Escape')close()};kind.onchange=render;document.getElementById('tp-treatment').onchange=e=>root.dataset.treatment=e.target.value;document.getElementById('tp-scene').onchange=e=>root.dataset.scene=e.target.value;
+function scale(){const w=document.getElementById('tp-size').selectedIndex===0?1280:1920,s=root.querySelector('.tp-screen');root.dataset.large=String(w===1920);s.style.width=w+'px';s.style.height=w*9/16+'px';s.style.transform='scale('+root.clientWidth/w+')';root.querySelector('.tp-frame').style.height=root.clientWidth*9/16+'px'}document.getElementById('tp-size').onchange=scale;new ResizeObserver(scale).observe(root);render();scale();})();
+</script>
