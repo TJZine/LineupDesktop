@@ -1479,15 +1479,16 @@ void main() {
     await tester.pump();
     await tester.enterText(find.byKey(const Key('studio-name')), 'Ungrouped');
     await tester.pump();
-    await tester.ensureVisible(find.text('Mini-marathons'));
     expect(
       tester
-          .widget<RadioListTile<PlaybackMode>>(
-            find.ancestor(
-              of: find.text('Mini-marathons'),
-              matching: find.byType(RadioListTile<PlaybackMode>),
+          .widget<DropdownButton<PlaybackMode>>(
+            find.descendant(
+              of: find.byKey(const Key('studio-playback-order')),
+              matching: find.byType(DropdownButton<PlaybackMode>),
             ),
           )
+          .items!
+          .singleWhere((item) => item.value == PlaybackMode.block)
           .enabled,
       isFalse,
     );
@@ -1526,9 +1527,7 @@ void main() {
         _studio(controller, ChannelStudioMode.editCustom, channel: original),
       );
       await tester.pumpAndSettle();
-      await tester.ensureVisible(find.text('Mini-marathons'));
-      await tester.tap(find.text('Mini-marathons'));
-      await tester.pump();
+      await _choosePlayback(tester, 'Mini-marathons');
       await tester.ensureVisible(find.byKey(const Key('studio-block-size')));
       await tester.tap(find.byKey(const Key('studio-block-size')));
       await tester.pumpAndSettle();
@@ -1574,12 +1573,14 @@ void main() {
         );
         await tester.pumpAndSettle();
         return tester
-            .widget<RadioListTile<PlaybackMode>>(
-              find.ancestor(
-                of: find.text('Mini-marathons'),
-                matching: find.byType(RadioListTile<PlaybackMode>),
+            .widget<DropdownButton<PlaybackMode>>(
+              find.descendant(
+                of: find.byKey(const Key('studio-playback-order')),
+                matching: find.byType(DropdownButton<PlaybackMode>),
               ),
             )
+            .items!
+            .singleWhere((item) => item.value == PlaybackMode.block)
             .enabled;
       }
 
@@ -1806,8 +1807,7 @@ void main() {
         canonicalScheduleIdentity(original),
       );
 
-      await tester.ensureVisible(find.text('In order'));
-      await tester.tap(find.text('In order'));
+      await _choosePlayback(tester, 'In order');
       await _settleAirCheck(tester);
       await tester.tap(find.text('Save changes'));
       await tester.pumpAndSettle();
@@ -1920,16 +1920,8 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.ensureVisible(find.text('Mini-marathons'));
-      await tester.tap(find.text('Mini-marathons'));
-      await tester.pump();
-      await tester.tap(
-        find.ancestor(
-          of: find.text('Mix it up').first,
-          matching: find.byType(RadioListTile<PlaybackMode>),
-        ),
-      );
-      await tester.pump();
+      await _choosePlayback(tester, 'Mini-marathons');
+      await _choosePlayback(tester, 'Shuffle');
       await tester.enterText(find.byKey(const Key('studio-name')), 'First');
       await _settleAirCheck(tester);
       await tester.tap(find.text('Save changes'));
@@ -4194,7 +4186,7 @@ void main() {
     await tester.tap(
       find.descendant(
         of: find.byKey(const Key('studio-filter-genre')),
-        matching: find.text('Choose'),
+        matching: find.byType(OutlinedButton),
       ),
     );
     await tester.pumpAndSettle();
@@ -4222,7 +4214,7 @@ void main() {
     await tester.tap(
       find.descendant(
         of: find.byKey(const Key('studio-filter-genre')),
-        matching: find.text('Choose'),
+        matching: find.byType(OutlinedButton),
       ),
     );
     await tester.pumpAndSettle();
@@ -4837,4 +4829,13 @@ class _RecoveryHarnessState extends State<_RecoveryHarness> {
           : const SizedBox.shrink(),
     ),
   );
+}
+
+Future<void> _choosePlayback(WidgetTester tester, String label) async {
+  final field = find.byKey(const Key('studio-playback-order'));
+  await tester.ensureVisible(field);
+  await tester.tap(field);
+  await tester.pumpAndSettle();
+  await tester.tap(find.text(label).last);
+  await tester.pumpAndSettle();
 }

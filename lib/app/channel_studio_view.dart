@@ -461,151 +461,174 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
         false;
     final confirmedMovieOnly = _confirmedMovieOnly(draftResolution);
     _stageScheduleIdentity(programmingError);
-    return LineupPage(
-      traversalPolicy: OrderedTraversalPolicy(),
-      title: _name.text.trim().isEmpty ? 'New channel' : _name.text.trim(),
-      titleWidget: Builder(
-        builder: (_) => _studioTitle(validNumber ? number : null, saved),
-      ),
-      actions: Builder(
-        builder: (_) => _studioActions(
-          persisted: persisted,
-          saved: saved,
-          noNumber: noNumber,
-          identityLooksValid: identityLooksValid,
-          programmingError: programmingError,
+    final theme = Theme.of(context);
+    final fontSize = _studioSize(18, 14);
+    return Theme(
+      data: theme.copyWith(
+        inputDecorationTheme: theme.inputDecorationTheme.copyWith(
+          floatingLabelStyle: TextStyle(
+            fontSize: _studioSize(24, 18),
+            color: LineupTheme.of(context).secondaryText,
+          ),
+        ),
+        textTheme: theme.textTheme.copyWith(
+          bodyMedium: theme.textTheme.bodyMedium?.copyWith(fontSize: fontSize),
+          bodyLarge: theme.textTheme.bodyLarge?.copyWith(fontSize: fontSize),
+          titleMedium: theme.textTheme.titleMedium?.copyWith(
+            fontSize: fontSize,
+          ),
         ),
       ),
-      child: Builder(
-        builder: (context) => SingleChildScrollView(
-          key: const Key('studio-scroll'),
-          child: AbsorbPointer(
-            absorbing: _busy,
-            child: Form(
-              key: _form,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (_error != null && !_conflict && !_baseDeleted) ...[
-                    LineupNotice(message: _error!),
-                  ],
-                  if (_success != null) ...[
-                    const SizedBox(height: 12),
-                    Semantics(liveRegion: true, child: Text(_success!)),
-                  ],
-                  if (_saving) ...[
-                    const SizedBox(height: 12),
-                    Semantics(
-                      liveRegion: true,
-                      container: true,
-                      label: 'Saving channel',
-                      child: const Text('Saving channel…'),
-                    ),
-                  ],
-                  if (noNumber) ...[
-                    const SizedBox(height: 12),
-                    const LineupNotice(
-                      message: 'No channel numbers are available. Free or renumber a channel from Channels before saving.',
-                    ),
-                  ],
-                  if (_conflict || _baseDeleted) ...[_recoveryInterlock()],
-                  if (_error != null ||
-                      _success != null ||
-                      _saving ||
-                      noNumber ||
-                      _conflict ||
-                      _baseDeleted)
-                    const SizedBox(height: 12),
-                  if (_hasPendingProgrammingChoice) ...[
-                    Semantics(
-                      liveRegion: true,
-                      child: Text(
-                        _activeFilterKey != null
-                            ? 'Finish this filter with Done, or cancel it, before saving or tuning.'
-                            : 'Add the selected programs, or cancel selection, before saving or tuning.',
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                  ],
-                  LayoutBuilder(
-                    builder: (context, constraints) {
-                      final programming = _programmingCard();
-                      final station = _stationCard(
-                        hasShowGrouping: hasShowGrouping,
-                        confirmedMovieOnly: confirmedMovieOnly,
-                      );
-                      final preview = ChannelAirCheck(
-                        controller: widget.controller,
-                        channel: _previewDraft,
-                        originalChannel: _expectedBase,
-                        clock: _clock,
-                        compact: constraints.maxWidth < LineupLayout.compact,
-                        inclusionReason: _sourceLabel(
-                          _displaySource,
-                          widget.controller,
+      child: Material(
+        type: MaterialType.transparency,
+        child: LineupPage(
+          traversalPolicy: OrderedTraversalPolicy(),
+          title: _name.text.trim().isEmpty ? 'New channel' : _name.text.trim(),
+          titleWidget: Builder(
+            builder: (_) => _studioTitle(
+              validNumber ? number : null,
+              saved,
+              persisted: persisted,
+              noNumber: noNumber,
+              identityLooksValid: identityLooksValid,
+              programmingError: programmingError,
+            ),
+          ),
+          child: Builder(
+            builder: (context) => SingleChildScrollView(
+              key: const Key('studio-scroll'),
+              child: AbsorbPointer(
+                absorbing: _busy,
+                child: Form(
+                  key: _form,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (_error != null && !_conflict && !_baseDeleted) ...[
+                        LineupNotice(message: _error!),
+                      ],
+                      if (_success != null) ...[
+                        const SizedBox(height: 12),
+                        Semantics(liveRegion: true, child: Text(_success!)),
+                      ],
+                      if (_saving) ...[
+                        const SizedBox(height: 12),
+                        Semantics(
+                          liveRegion: true,
+                          container: true,
+                          label: 'Saving channel',
+                          child: const Text('Saving channel…'),
                         ),
-                        sourceIssue: programmingError,
-                        playableById: _playableInventory.byId,
-                        onValidityChanged: (status) {
-                          if (!mounted || _airCheckStatus == status) return;
-                          setState(() => _airCheckStatus = status);
-                          if (_isCurrentAirCheckStatus(status)) {
-                            _commitScheduleIdentity();
-                          }
-                        },
-                      );
-                      return constraints.maxWidth < LineupLayout.compact
-                          ? Column(
-                              children: [
-                                FocusTraversalOrder(
-                                  order: const NumericFocusOrder(1),
-                                  child: station,
-                                ),
-                                const SizedBox(height: 16),
-                                FocusTraversalOrder(
-                                  order: const NumericFocusOrder(2),
-                                  child: programming,
-                                ),
-                                const SizedBox(height: 16),
-                                FocusTraversalOrder(
-                                  order: const NumericFocusOrder(3),
-                                  child: preview,
-                                ),
-                              ],
-                            )
-                          : Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                FocusTraversalOrder(
-                                  order: const NumericFocusOrder(1),
-                                  child: station,
-                                ),
-                                const SizedBox(height: 16),
-                                Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
+                      ],
+                      if (noNumber) ...[
+                        const SizedBox(height: 12),
+                        const LineupNotice(
+                          message: 'No channel numbers are available. Free or renumber a channel from Channels before saving.',
+                        ),
+                      ],
+                      if (_conflict || _baseDeleted) ...[_recoveryInterlock()],
+                      if (_error != null ||
+                          _success != null ||
+                          _saving ||
+                          noNumber ||
+                          _conflict ||
+                          _baseDeleted)
+                        const SizedBox(height: 12),
+                      if (_hasPendingProgrammingChoice) ...[
+                        Semantics(
+                          liveRegion: true,
+                          child: Text(
+                            _activeFilterKey != null
+                                ? 'Finish this filter with Done, or cancel it, before saving or tuning.'
+                                : 'Add the selected programs, or cancel selection, before saving or tuning.',
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          final programming = _programmingCard();
+                          final station = _stationCard(
+                            hasShowGrouping: hasShowGrouping,
+                            confirmedMovieOnly: confirmedMovieOnly,
+                          );
+                          final preview = ChannelAirCheck(
+                            controller: widget.controller,
+                            channel: _previewDraft,
+                            originalChannel: _expectedBase,
+                            clock: _clock,
+                            compact:
+                                constraints.maxWidth < LineupLayout.compact,
+                            inclusionReason: _sourceLabel(
+                              _displaySource,
+                              widget.controller,
+                            ),
+                            sourceIssue: programmingError,
+                            playableById: _playableInventory.byId,
+                            onValidityChanged: (status) {
+                              if (!mounted || _airCheckStatus == status) return;
+                              setState(() => _airCheckStatus = status);
+                              if (_isCurrentAirCheckStatus(status)) {
+                                _commitScheduleIdentity();
+                              }
+                            },
+                          );
+                          return constraints.maxWidth < LineupLayout.compact
+                              ? Column(
                                   children: [
-                                    Expanded(
-                                      flex: 5,
-                                      child: FocusTraversalOrder(
-                                        order: const NumericFocusOrder(2),
-                                        child: programming,
-                                      ),
+                                    FocusTraversalOrder(
+                                      order: const NumericFocusOrder(1),
+                                      child: station,
                                     ),
-                                    const SizedBox(width: 16),
-                                    Expanded(
-                                      flex: 4,
-                                      child: FocusTraversalOrder(
-                                        order: const NumericFocusOrder(3),
-                                        child: preview,
-                                      ),
+                                    const SizedBox(height: 16),
+                                    FocusTraversalOrder(
+                                      order: const NumericFocusOrder(2),
+                                      child: programming,
+                                    ),
+                                    const SizedBox(height: 16),
+                                    FocusTraversalOrder(
+                                      order: const NumericFocusOrder(3),
+                                      child: preview,
                                     ),
                                   ],
-                                ),
-                              ],
-                            );
-                    },
+                                )
+                              : Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    FocusTraversalOrder(
+                                      order: const NumericFocusOrder(1),
+                                      child: station,
+                                    ),
+                                    const SizedBox(height: 16),
+                                    Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Expanded(
+                                          flex: 5,
+                                          child: FocusTraversalOrder(
+                                            order: const NumericFocusOrder(2),
+                                            child: programming,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 16),
+                                        Expanded(
+                                          flex: 4,
+                                          child: FocusTraversalOrder(
+                                            order: const NumericFocusOrder(3),
+                                            child: preview,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                );
+                        },
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
           ),
@@ -614,8 +637,18 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     );
   }
 
-  Widget _studioTitle(int? number, bool saved) {
+  Widget _studioTitle(
+    int? number,
+    bool saved, {
+    required bool persisted,
+    required bool noNumber,
+    required bool identityLooksValid,
+    required String? programmingError,
+  }) {
     final roles = LineupTheme.of(context);
+    final compact = LineupLayout.isCompactWidth(
+      MediaQuery.sizeOf(context).width,
+    );
     final name = _name.text.trim().isEmpty ? 'New channel' : _name.text.trim();
     final status = _conflict
         ? 'My draft retained'
@@ -627,64 +660,219 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
         ? 'Saved'
         : 'Draft';
     final mode = _modeLabel(_effectiveMode);
-    return Semantics(
-      header: true,
-      label:
-          '${number == null ? 'No channel number' : 'Channel $number'}, $name, ${_modeHeaderLabel(_effectiveMode)}, $mode, $status',
-      child: ExcludeSemantics(
-        child: Row(
-          children: [
-            Container(
-              width: 52,
-              height: 52,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: roles.progressFill,
-                borderRadius: BorderRadius.circular(roles.panelRadius),
-              ),
-              child: Text(
-                number?.toString() ?? '—',
-                style: TextStyle(
-                  color: roles.onFocus,
-                  fontSize: 21 * _uiScale,
-                  fontWeight: FontWeight.w900,
-                  fontFeatures: const [FontFeature.tabularFigures()],
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+    final titleStyle = Theme.of(context).textTheme.headlineMedium?.copyWith(
+      fontSize: (compact ? 24 : 36) * _uiScale,
+      fontWeight: FontWeight.w600,
+    );
+    final statusStyle = _studioBodyStyle(
+      color: _conflict || _baseDeleted
+          ? Theme.of(context).colorScheme.error
+          : roles.secondaryText,
+    );
+    final wordmarkStyle = TextStyle(
+      color: roles.primaryText,
+      fontFamily: 'Arial',
+      fontSize: (compact ? 14 : 18) * _uiScale,
+      fontWeight: FontWeight.w400,
+      letterSpacing: 1.5,
+    );
+    final contextStyle = _studioSupportStyle(fontWeight: FontWeight.w600);
+    final back = FocusTraversalOrder(
+      order: const NumericFocusOrder(0),
+      child: TextButton.icon(
+        focusNode: _backFocus,
+        autofocus: true,
+        onPressed: _busy ? null : () => unawaited(_leave()),
+        style: _studioTextButtonStyle(),
+        icon: const Icon(Icons.arrow_back),
+        label: const Text('Back to Channels'),
+      ),
+    );
+    final actions = Align(
+      widthFactor: 1,
+      alignment: Alignment.centerRight,
+      child: _studioActions(
+        persisted: persisted,
+        saved: saved,
+        noNumber: noNumber,
+        identityLooksValid: identityLooksValid,
+        programmingError: programmingError,
+      ),
+    );
+    final titleAndActions = LayoutBuilder(
+      builder: (context, constraints) {
+        final narrow = compact || constraints.maxWidth < 1000;
+        final title = Semantics(
+          header: true,
+          excludeSemantics: true,
+          label:
+              '${number == null ? 'No channel number' : 'Channel $number'}, $name, ${_modeHeaderLabel(_effectiveMode)}, $mode, $status',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(name, softWrap: true, style: titleStyle),
+              SizedBox(height: 4 * _uiScale),
+              Wrap(
+                spacing: 8 * _uiScale,
+                runSpacing: 2 * _uiScale,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  Text(
-                    name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.headlineSmall
-                        ?.apply(fontSizeFactor: _uiScale)
-                        .copyWith(fontWeight: FontWeight.w800),
-                  ),
-                  DefaultTextStyle.merge(
-                    style: TextStyle(
-                      color: _conflict || _baseDeleted
-                          ? Theme.of(context).colorScheme.error
-                          : roles.secondaryText,
-                      fontSize: 12 * _uiScale,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.8,
-                    ),
-                    child: Wrap(
-                      spacing: 6,
-                      runSpacing: 2,
-                      children: [Text(mode), const Text('·'), Text(status)],
-                    ),
-                  ),
+                  Text(mode, style: statusStyle),
+                  Text('·', style: statusStyle),
+                  Text(status, style: statusStyle),
                 ],
               ),
+            ],
+          ),
+        );
+        if (narrow) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              title,
+              SizedBox(height: 12 * _uiScale),
+              actions,
+            ],
+          );
+        }
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: title),
+            SizedBox(width: 24 * _uiScale),
+            actions,
+          ],
+        );
+      },
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 24,
+          runSpacing: 8,
+          children: [
+            back,
+            Wrap(
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 16 * _uiScale,
+              children: [
+                Text('LINEUP', style: wordmarkStyle),
+                Text(
+                  '/',
+                  style: _studioBodyStyle(color: roles.secondaryText)
+                      .copyWith(fontSize: (compact ? 14 : 18) * _uiScale),
+                ),
+                Text('CHANNEL STUDIO', style: contextStyle),
+              ],
             ),
           ],
         ),
+        Divider(height: 1, color: roles.subtleBorder),
+        SizedBox(height: 20 * _uiScale),
+        titleAndActions,
+      ],
+    );
+  }
+
+  double _studioSize(double wide, double compact) =>
+      (LineupLayout.isCompactWidth(MediaQuery.sizeOf(context).width)
+          ? compact
+          : wide) *
+      _uiScale;
+
+  TextStyle _studioBodyStyle({Color? color, FontWeight? fontWeight}) =>
+      Theme.of(context).textTheme.bodyMedium?.copyWith(
+        fontSize: _studioSize(18, 14),
+        color: color,
+        fontWeight: fontWeight,
+      ) ??
+      TextStyle(
+        fontSize: _studioSize(18, 14),
+        color: color,
+        fontWeight: fontWeight,
+      );
+
+  TextStyle _studioSupportStyle({Color? color, FontWeight? fontWeight}) =>
+      Theme.of(context).textTheme.bodyMedium?.copyWith(
+        fontSize: _studioSize(16, 14),
+        color: color ?? LineupTheme.of(context).secondaryText,
+        fontWeight: fontWeight,
+      ) ??
+      TextStyle(
+        fontSize: _studioSize(16, 14),
+        color: color ?? LineupTheme.of(context).secondaryText,
+        fontWeight: fontWeight,
+      );
+
+  TextStyle _studioSectionHeadingStyle() =>
+      Theme.of(context).textTheme.titleLarge?.copyWith(
+        fontSize: _studioSize(24, 20),
+        fontWeight: FontWeight.w600,
+      ) ??
+      TextStyle(fontSize: _studioSize(24, 20), fontWeight: FontWeight.w600);
+
+  TextStyle _studioControlStyle() =>
+      Theme.of(context).textTheme.labelLarge
+          ?.copyWith(fontSize: _studioSize(18, 14)) ??
+      TextStyle(fontSize: _studioSize(18, 14));
+
+  ButtonStyle _studioTextButtonStyle() => TextButton.styleFrom(
+    minimumSize: Size(0, 48 * _uiScale),
+    padding: EdgeInsets.symmetric(
+      horizontal: 16 * _uiScale,
+      vertical: 12 * _uiScale,
+    ),
+    textStyle: _studioControlStyle(),
+  );
+
+  ButtonStyle _studioOutlinedButtonStyle() => OutlinedButton.styleFrom(
+    minimumSize: Size(0, 48 * _uiScale),
+    padding: EdgeInsets.symmetric(
+      horizontal: 16 * _uiScale,
+      vertical: 12 * _uiScale,
+    ),
+    textStyle: _studioControlStyle(),
+  );
+
+  ButtonStyle _studioFilledButtonStyle() => FilledButton.styleFrom(
+    minimumSize: Size(0, 48 * _uiScale),
+    padding: EdgeInsets.symmetric(
+      horizontal: 16 * _uiScale,
+      vertical: 12 * _uiScale,
+    ),
+    textStyle: _studioControlStyle(),
+  );
+
+  ButtonStyle _studioSourceStyle() {
+    final roles = LineupTheme.of(context);
+    return ButtonStyle(
+      minimumSize: WidgetStatePropertyAll(Size(0, 48 * _uiScale)),
+      padding: WidgetStatePropertyAll(
+        EdgeInsets.symmetric(horizontal: 16 * _uiScale),
+      ),
+      textStyle: WidgetStatePropertyAll(_studioControlStyle()),
+      foregroundColor: WidgetStateProperty.resolveWith(
+        (states) => states.contains(WidgetState.disabled)
+            ? roles.mutedText
+            : states.contains(WidgetState.selected)
+            ? roles.primaryText
+            : roles.secondaryText,
+      ),
+      backgroundColor: WidgetStateProperty.resolveWith(
+        (states) => states.contains(WidgetState.selected)
+            ? roles.selectedSurface
+            : Colors.transparent,
+      ),
+      side: WidgetStateProperty.resolveWith(
+        (states) => states.contains(WidgetState.focused)
+            ? BorderSide(
+                color: roles.focusBorder,
+                width: roles.focusBorderWidth,
+              )
+            : BorderSide.none,
       ),
     );
   }
@@ -707,24 +895,17 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
         !(identityLooksValid && programmingError != null) &&
         !(identityLooksValid && !_airCheckCanSave);
     return Wrap(
+      alignment: WrapAlignment.end,
       spacing: 8,
       runSpacing: 8,
+      crossAxisAlignment: WrapCrossAlignment.center,
       children: [
-        FocusTraversalOrder(
-          order: const NumericFocusOrder(0),
-          child: TextButton.icon(
-            focusNode: _backFocus,
-            autofocus: true,
-            onPressed: _busy ? null : () => unawaited(_leave()),
-            icon: const Icon(Icons.arrow_back),
-            label: const Text('Back to Channels'),
-          ),
-        ),
         if (_generated && !recovering)
           FocusTraversalOrder(
             order: const NumericFocusOrder(4),
             child: OutlinedButton(
               onPressed: _busy ? null : _duplicate,
+              style: _studioOutlinedButtonStyle(),
               child: const Text('Duplicate as custom'),
             ),
           ),
@@ -735,12 +916,14 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                 ? FilledButton.icon(
                     key: const Key('studio-tune'),
                     onPressed: _busy ? null : _tune,
+                    style: _studioFilledButtonStyle(),
                     icon: const Icon(Icons.play_arrow),
                     label: const Text('Tune in'),
                   )
                 : OutlinedButton.icon(
                     key: const Key('studio-tune'),
                     onPressed: canSave ? _confirmSaveAndTune : null,
+                    style: _studioOutlinedButtonStyle(),
                     icon: const Icon(Icons.play_arrow),
                     label: const Text('Tune in'),
                   ),
@@ -751,6 +934,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
             child: FilledButton(
               focusNode: _saveFocus,
               onPressed: canSave ? _save : null,
+              style: _studioFilledButtonStyle(),
               child: Text(
                 _saving
                     ? 'Saving…'
@@ -903,72 +1087,86 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     ),
   );
 
-  Widget _programmingCard() => Column(
-    key: const Key('studio-programming'),
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      Wrap(
-        alignment: WrapAlignment.spaceBetween,
-        crossAxisAlignment: WrapCrossAlignment.end,
-        spacing: 16,
-        runSpacing: 4,
+  Widget _programmingCard() {
+    final roles = LineupTheme.of(context);
+    return DefaultTextStyle.merge(
+      style: _studioBodyStyle(),
+      child: Column(
+        key: const Key('studio-programming'),
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('Programming', style: Theme.of(context).textTheme.titleLarge),
-          Text(_sourceLabel(_displaySource, widget.controller)),
-        ],
-      ),
-      const SizedBox(height: 10),
-      if (_sourceReadOnly)
-        const Text('Programming is read-only and will be preserved exactly.')
-      else ...[
-        if (_source is MixedSource && _sourceChoice == null) ...[
-          _inventoryStatus(),
-          const Text(
-            'This mixed source is preserved exactly. Choose a source below only if you want to replace it.',
-          ),
-          const SizedBox(height: 8),
-        ],
-        LayoutBuilder(
-          builder: (context, constraints) => SegmentedButton<_SourceChoice>(
-            key: const Key('studio-source-choices'),
-            direction:
-                MediaQuery.textScalerOf(context).scale(14) > 21 ||
-                    constraints.maxWidth < 480
-                ? Axis.vertical
-                : Axis.horizontal,
-            multiSelectionEnabled: false,
-            emptySelectionAllowed: _source is MixedSource,
-            segments: const [
-              ButtonSegment(
-                value: _SourceChoice.library,
-                label: Text('Library'),
-              ),
-              ButtonSegment(
-                value: _SourceChoice.playlist,
-                label: Text('Plex playlist'),
-              ),
-              ButtonSegment(
-                value: _SourceChoice.handPicked,
-                label: Text('Hand-picked'),
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.end,
+            spacing: 16,
+            runSpacing: 4,
+            children: [
+              Text('Programming', style: _studioSectionHeadingStyle()),
+              Text(
+                _sourceLabel(_displaySource, widget.controller),
+                style: _studioSupportStyle(color: roles.secondaryText),
               ),
             ],
-            selected: {?_sourceChoice},
-            onSelectionChanged: _saving
-                ? null
-                : (value) => _changed(() => _sourceChoice = value.singleOrNull),
           ),
-        ),
-        const SizedBox(height: 8),
-        switch (_sourceChoice) {
-          _SourceChoice.library => _filterEditor(),
-          _SourceChoice.playlist => _playlistEditor(),
-          _SourceChoice.filter => _filterEditor(),
-          _SourceChoice.handPicked => _manualEditor(),
-          null => const SizedBox.shrink(),
-        },
-      ],
-    ],
-  );
+          const SizedBox(height: 16),
+          if (_sourceReadOnly)
+            const Text(
+              'Programming is read-only and will be preserved exactly.',
+            )
+          else ...[
+            if (_source is MixedSource && _sourceChoice == null) ...[
+              _inventoryStatus(),
+              const Text(
+                'This mixed source is preserved exactly. Choose a source below only if you want to replace it.',
+              ),
+              const SizedBox(height: 8),
+            ],
+            LayoutBuilder(
+              builder: (context, constraints) => SegmentedButton<_SourceChoice>(
+                key: const Key('studio-source-choices'),
+                direction:
+                    MediaQuery.textScalerOf(context).scale(14) > 21 ||
+                        constraints.maxWidth < 480
+                    ? Axis.vertical
+                    : Axis.horizontal,
+                multiSelectionEnabled: false,
+                emptySelectionAllowed: _source is MixedSource,
+                segments: const [
+                  ButtonSegment(
+                    value: _SourceChoice.library,
+                    label: Text('Library'),
+                  ),
+                  ButtonSegment(
+                    value: _SourceChoice.playlist,
+                    label: Text('Plex playlist'),
+                  ),
+                  ButtonSegment(
+                    value: _SourceChoice.handPicked,
+                    label: Text('Hand-picked'),
+                  ),
+                ],
+                selected: {?_sourceChoice},
+                showSelectedIcon: false,
+                style: _studioSourceStyle(),
+                onSelectionChanged: _saving
+                    ? null
+                    : (value) =>
+                          _changed(() => _sourceChoice = value.singleOrNull),
+              ),
+            ),
+            const SizedBox(height: 8),
+            switch (_sourceChoice) {
+              _SourceChoice.library => _filterEditor(),
+              _SourceChoice.playlist => _playlistEditor(),
+              _SourceChoice.filter => _filterEditor(),
+              _SourceChoice.handPicked => _manualEditor(),
+              null => const SizedBox.shrink(),
+            },
+          ],
+        ],
+      ),
+    );
+  }
 
   Widget _playlistEditor() {
     final available = _playableInventory.playlists;
@@ -1023,6 +1221,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
   }
 
   Widget _filterEditor() {
+    final roles = LineupTheme.of(context);
     final facets = _facetOptions(_filterLibraryId);
     final matches = _filteredInventory(
       libraryId: _filterLibraryId,
@@ -1036,48 +1235,129 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _inventoryStatus(),
-        _libraryDropdown(
-          key: const Key('studio-filter-library'),
-          value: _filterLibraryId,
-          onChanged: (value) => _filterChanged(() => _filterLibraryId = value),
-        ),
-        const SizedBox(height: 8),
-        _filterControl(
-          'collection',
-          facets.values['collection'] ?? const [],
-          facets.labels['collection'] ?? const {},
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final width = constraints.maxWidth >= 700
+                ? (constraints.maxWidth - 16) / 2
+                : constraints.maxWidth;
+            return Wrap(
+              spacing: 16,
+              runSpacing: 12,
+              children: [
+                SizedBox(
+                  width: width,
+                  child: _libraryDropdown(
+                    key: const Key('studio-filter-library'),
+                    value: _filterLibraryId,
+                    onChanged: (value) =>
+                        _filterChanged(() => _filterLibraryId = value),
+                  ),
+                ),
+                SizedBox(
+                  width: width,
+                  child: _filterControl(
+                    'collection',
+                    facets.values['collection'] ?? const [],
+                    facets.labels['collection'] ?? const {},
+                  ),
+                ),
+              ],
+            );
+          },
         ),
         if ((facets.values['collection'] ?? const []).isEmpty)
-          const Text(
+          Text(
             'This library has no collections. Other filters remain available.',
+            style: _studioSupportStyle(),
           ),
-        const SizedBox(height: 8),
-        const Text('Filters'),
-        for (final key in _facetKeys.where((key) => key != 'collection'))
-          _filterControl(
-            key,
-            facets.values[key] ?? const [],
-            facets.labels[key] ?? const {},
-          ),
-        const Text(
+        const SizedBox(height: 16),
+        Text('Filters', style: _studioBodyStyle(fontWeight: FontWeight.w600)),
+        const SizedBox(height: 16),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final textScale = MediaQuery.textScalerOf(context).scale(1);
+            final columns = textScale > 1.4
+                ? 1
+                : constraints.maxWidth >= 960
+                ? 3
+                : constraints.maxWidth >= 640
+                ? 2
+                : 1;
+            final width = (constraints.maxWidth - 16 * (columns - 1)) / columns;
+            return Wrap(
+              spacing: 16,
+              runSpacing: 12,
+              children: [
+                for (final key in _facetKeys.where(
+                  (key) => key != 'collection',
+                ))
+                  SizedBox(
+                    width: width,
+                    child: _filterControl(
+                      key,
+                      facets.values[key] ?? const [],
+                      facets.labels[key] ?? const {},
+                    ),
+                  ),
+              ],
+            );
+          },
+        ),
+        const SizedBox(height: 12),
+        Text(
           'Any selected value within each filter; all filters together.',
+          style: _studioSupportStyle(),
         ),
-        Material(
-          color: Theme.of(context).colorScheme.surface,
-          child: SwitchListTile(
-            key: const Key('studio-filter-include-watched'),
-            value: _filterIncludeWatched,
-            title: const Text('Include watched items'),
-            onChanged: _saving
-                ? null
-                : (value) =>
-                      _filterChanged(() => _filterIncludeWatched = value),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 330),
+            child: Material(
+              type: MaterialType.transparency,
+              child: SwitchListTile(
+                key: const Key('studio-filter-include-watched'),
+                contentPadding: EdgeInsets.zero,
+                value: _filterIncludeWatched,
+                title: Text('Include watched items', style: _studioBodyStyle()),
+                onChanged: _saving
+                    ? null
+                    : (value) =>
+                          _filterChanged(() => _filterIncludeWatched = value),
+              ),
+            ),
           ),
         ),
-        Text('${matches.length} matching programs'),
-        for (final item in matches.take(5)) Text(item.title),
+        const SizedBox(height: 16),
+        Divider(height: 1, color: roles.subtleBorder),
+        const SizedBox(height: 16),
+        Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 16,
+          runSpacing: 4,
+          children: [
+            Text('Matching programs', style: _studioSectionHeadingStyle()),
+            Text(
+              '${matches.length} matching programs',
+              style: _studioSupportStyle(),
+            ),
+          ],
+        ),
+        for (final item in matches.take(5))
+          DecoratedBox(
+            decoration: BoxDecoration(
+              border: Border(bottom: BorderSide(color: roles.subtleBorder)),
+            ),
+            child: Padding(
+              padding: EdgeInsets.symmetric(vertical: 8 * _uiScale),
+              child: Text(item.title, style: _studioBodyStyle()),
+            ),
+          ),
         if (matches.length > 5)
-          Text('Showing 5 of ${matches.length} matching programs.'),
+          Text(
+            'Showing 5 of ${matches.length} matching programs.',
+            style: _studioSupportStyle(),
+          ),
       ],
     );
   }
@@ -1095,26 +1375,52 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     final unavailable = selected
         .where((value) => !values.contains(value))
         .length;
-    return ListTile(
+    final focus = _filterControlFocus.putIfAbsent(
+      key,
+      () => FocusNode(debugLabel: 'Edit ${_facetLabel(key)} filter'),
+    );
+    final summary = selected.isEmpty
+        ? key == 'collection'
+              ? 'Any collection'
+              : 'Any'
+        : '${selectedLabels.take(3).join(', ')}${selected.length > 3 ? ' · +${selected.length - 3} more' : ''}${unavailable > 0 ? ' · $unavailable unavailable' : ''}';
+    final roles = LineupTheme.of(context);
+    return ListenableBuilder(
       key: Key('studio-filter-$key'),
-      contentPadding: EdgeInsets.zero,
-      title: Text(_facetLabel(key)),
-      subtitle: Text(
-        selected.isEmpty
-            ? key == 'collection'
-                  ? 'Any collection'
-                  : 'Any'
-            : '${selectedLabels.take(3).join(', ')}${selected.length > 3 ? ' · +${selected.length - 3} more' : ''}${unavailable > 0 ? ' · $unavailable unavailable' : ''}',
-      ),
-      trailing: OutlinedButton(
-        focusNode: _filterControlFocus.putIfAbsent(
-          key,
-          () => FocusNode(debugLabel: 'Edit ${_facetLabel(key)} filter'),
-        ),
+      listenable: focus,
+      builder: (context, _) => OutlinedButton(
+        focusNode: focus,
         onPressed: _saving
             ? null
             : () => _openFilterPicker(key, values, labels),
-        child: Text(selected.isEmpty ? 'Choose' : 'Edit'),
+        style: OutlinedButton.styleFrom(
+          minimumSize: Size.zero,
+          padding: EdgeInsets.zero,
+          alignment: Alignment.centerLeft,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          foregroundColor: roles.primaryText,
+          textStyle: _studioBodyStyle(),
+          side: BorderSide.none,
+        ),
+        child: InputDecorator(
+          isEmpty: false,
+          isFocused: focus.hasFocus,
+          decoration: InputDecoration(
+            labelText: _facetLabel(key),
+            floatingLabelBehavior: FloatingLabelBehavior.always,
+            enabled: !_saving,
+            contentPadding: EdgeInsets.symmetric(
+              horizontal: 16 * _uiScale,
+              vertical: 16 * _uiScale,
+            ),
+          ),
+          child: Row(
+            children: [
+              Expanded(child: Text(summary, softWrap: true)),
+              Icon(Icons.expand_more, color: roles.secondaryText),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -1164,6 +1470,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
         .where((value) => !_activeAvailableFilterValues.contains(value))
         .toSet();
     Widget valueTile(String value) => CheckboxListTile(
+      controlAffinity: ListTileControlAffinity.leading,
       value: _pendingFilterValues.contains(value),
       title: Text(
         _activeAvailableFilterValues.contains(value)
@@ -1180,91 +1487,116 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     final independentlyScrollable =
         media.size.width >= LineupLayout.compact &&
         media.textScaler.scale(14) <= 21;
-    return CallbackShortcuts(
-      bindings: {
-        const SingleActivator(LogicalKeyboardKey.escape): () =>
-            _closeFilterPicker(key),
-      },
-      child: Focus(
-        autofocus: true,
-        child: Column(
-          key: Key('studio-filter-picker-$key'),
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text('${_libraryTitle(_filterLibraryId)} · ${_facetLabel(key)}'),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _filterPickerSearch,
-              autofocus: true,
-              decoration: const InputDecoration(
-                labelText: 'Search values',
-                prefixIcon: Icon(Icons.search),
+    return Material(
+      type: MaterialType.transparency,
+      child: CallbackShortcuts(
+        bindings: {
+          const SingleActivator(LogicalKeyboardKey.escape): () =>
+              _closeFilterPicker(key),
+        },
+        child: Focus(
+          autofocus: true,
+          child: Column(
+            key: Key('studio-filter-picker-$key'),
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Choose ${_facetLabel(key).toLowerCase()} values',
+                style: _studioSectionHeadingStyle(),
               ),
-              onChanged: (_) => setState(() {}),
-            ),
-            Wrap(
-              spacing: 8,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                TextButton(
-                  onPressed: () => setState(
-                    () => _showPendingFilterValues = !_showPendingFilterValues,
-                  ),
-                  child: Text('${_pendingFilterValues.length} selected'),
+              const SizedBox(height: 4),
+              Text(
+                _libraryTitle(_filterLibraryId),
+                style: _studioSupportStyle(),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _filterPickerSearch,
+                autofocus: true,
+                style: _studioBodyStyle(),
+                decoration: const InputDecoration(
+                  labelText: 'Search values',
+                  floatingLabelBehavior: FloatingLabelBehavior.always,
                 ),
-                TextButton(
-                  onPressed: _pendingFilterValues.isEmpty
-                      ? null
-                      : () => setState(_pendingFilterValues.clear),
-                  child: const Text('Clear selection'),
-                ),
-                if (unavailable.isNotEmpty)
+                onChanged: (_) => setState(() {}),
+              ),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
                   TextButton(
                     onPressed: () => setState(
-                      () => _pendingFilterValues.removeAll(unavailable),
+                      () =>
+                          _showPendingFilterValues = !_showPendingFilterValues,
                     ),
-                    child: Text('Remove ${unavailable.length} unavailable'),
+                    style: _studioTextButtonStyle(),
+                    child: Text('${_pendingFilterValues.length} selected'),
                   ),
-                Text('$count matching programs'),
-              ],
-            ),
-            if (independentlyScrollable)
-              SizedBox(
-                height: (media.size.height * .17).clamp(120, 240),
-                child: ListView.builder(
-                  itemCount: visible.length,
-                  itemBuilder: (context, index) => valueTile(visible[index]),
-                ),
-              )
-            else
-              for (final value in visible) valueTile(value),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                TextButton(
-                  onPressed: () => _closeFilterPicker(key),
-                  child: const Text('Cancel'),
-                ),
-                const SizedBox(width: 8),
-                FilledButton(
-                  onPressed: () {
-                    final result = _pendingFilterValues.toList();
-                    final filter = _libraryFilter(key);
-                    _filterChanged(() {
-                      if (result.isEmpty) {
-                        _filters.remove(filter);
-                      } else {
-                        _filters[filter] = List.unmodifiable(result);
-                      }
-                      _activeFilterKey = null;
-                    });
-                    _restoreFilterFocus(key);
-                  },
-                  child: const Text('Done'),
-                ),
-              ],
-            ),
-          ],
+                  TextButton(
+                    onPressed: _pendingFilterValues.isEmpty
+                        ? null
+                        : () => setState(_pendingFilterValues.clear),
+                    style: _studioTextButtonStyle(),
+                    child: const Text('Clear selection'),
+                  ),
+                  if (unavailable.isNotEmpty)
+                    TextButton(
+                      onPressed: () => setState(
+                        () => _pendingFilterValues.removeAll(unavailable),
+                      ),
+                      style: _studioTextButtonStyle(),
+                      child: Text('Remove ${unavailable.length} unavailable'),
+                    ),
+                  Text(
+                    '$count matching programs',
+                    style: _studioSupportStyle(),
+                  ),
+                ],
+              ),
+              if (independentlyScrollable)
+                SizedBox(
+                  height: (media.size.height * .29).clamp(180, 460),
+                  child: ListView.builder(
+                    itemCount: visible.length,
+                    itemBuilder: (context, index) => valueTile(visible[index]),
+                  ),
+                )
+              else
+                for (final value in visible) valueTile(value),
+              const SizedBox(height: 12),
+              Wrap(
+                alignment: WrapAlignment.end,
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  TextButton(
+                    onPressed: () => _closeFilterPicker(key),
+                    style: _studioTextButtonStyle(),
+                    child: const Text('Cancel'),
+                  ),
+                  FilledButton(
+                    onPressed: () {
+                      final result = _pendingFilterValues.toList();
+                      final filter = _libraryFilter(key);
+                      _filterChanged(() {
+                        if (result.isEmpty) {
+                          _filters.remove(filter);
+                        } else {
+                          _filters[filter] = List.unmodifiable(result);
+                        }
+                        _activeFilterKey = null;
+                      });
+                      _restoreFilterFocus(key);
+                    },
+                    style: _studioFilledButtonStyle(),
+                    child: const Text('Done'),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1324,6 +1656,40 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     ];
     final countLabel =
         '${visible.length} matching, ${_manualEntries.length} selected';
+    final roles = LineupTheme.of(context);
+    Widget stageTab({
+      required Key key,
+      required bool selected,
+      required String label,
+      required VoidCallback? onPressed,
+    }) => Semantics(
+      selected: selected,
+      button: true,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border(
+            bottom: BorderSide(
+              color: selected ? roles.progressFill : Colors.transparent,
+              width: 2,
+            ),
+          ),
+        ),
+        child: TextButton(
+          key: key,
+          onPressed: onPressed,
+          style: _studioTextButtonStyle().copyWith(
+            foregroundColor: WidgetStateProperty.resolveWith(
+              (states) => states.contains(WidgetState.disabled)
+                  ? roles.mutedText
+                  : selected
+                  ? roles.primaryText
+                  : roles.secondaryText,
+            ),
+          ),
+          child: Text(label),
+        ),
+      ),
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -1332,26 +1698,26 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
           spacing: 8,
           runSpacing: 8,
           children: [
-            ChoiceChip(
+            stageTab(
               key: const Key('studio-manual-browse-stage'),
               selected: !_manualRundown,
-              label: Text('Browse library · ${visible.length}'),
-              onSelected: _saving
+              label: 'Browse library · ${visible.length}',
+              onPressed: _saving
                   ? null
-                  : (_) => setState(() => _manualRundown = false),
+                  : () => setState(() => _manualRundown = false),
             ),
-            ChoiceChip(
+            stageTab(
               key: const Key('studio-manual-rundown-stage'),
               selected: _manualRundown,
-              label: Text('Channel programs · ${_manualEntries.length}'),
-              onSelected: _saving
+              label: 'Channel programs · ${_manualEntries.length}',
+              onPressed: _saving
                   ? null
-                  : (_) => setState(() => _manualRundown = true),
+                  : () => setState(() => _manualRundown = true),
             ),
           ],
         ),
         const SizedBox(height: 6),
-        Text(countLabel),
+        Text(countLabel, style: _studioSupportStyle()),
         if (_settledCountLabel.isNotEmpty)
           Semantics(
             liveRegion: true,
@@ -1372,58 +1738,83 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
             onChanged: (_) => _browseChanged(),
           ),
           const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              SizedBox(
-                width: 220,
-                child: _libraryDropdown(
-                  key: const Key('studio-manual-library'),
-                  value: _manualLibraryId,
-                  allowAll: true,
-                  onChanged: (value) =>
-                      _browseChanged(() => _manualLibraryId = value),
-                ),
-              ),
-              SizedBox(
-                width: 180,
-                child: DropdownButtonFormField<String>(
-                  key: const Key('studio-media-type'),
-                  isExpanded: true,
-                  initialValue: _manualMediaType,
-                  decoration: const InputDecoration(labelText: 'Media type'),
-                  items: [
-                    const DropdownMenuItem(value: '', child: Text('All types')),
-                    for (final type
-                        in inventory.map((item) => item.type).toSet())
-                      DropdownMenuItem(value: type, child: Text(type)),
-                  ],
-                  onChanged: _saving
-                      ? null
-                      : (value) => _browseChanged(
-                          () => _manualMediaType = value?.isEmpty == true
-                              ? null
-                              : value,
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final columns = constraints.maxWidth >= 960
+                  ? 4
+                  : constraints.maxWidth >= 700
+                  ? 3
+                  : constraints.maxWidth >= 480
+                  ? 2
+                  : 1;
+              final width =
+                  (constraints.maxWidth - 12 * (columns - 1)) / columns;
+              return Wrap(
+                spacing: 12,
+                runSpacing: 16,
+                children: [
+                  SizedBox(
+                    width: width,
+                    child: _libraryDropdown(
+                      key: const Key('studio-manual-library'),
+                      value: _manualLibraryId,
+                      allowAll: true,
+                      onChanged: (value) =>
+                          _browseChanged(() => _manualLibraryId = value),
+                    ),
+                  ),
+                  SizedBox(
+                    width: width,
+                    child: DropdownButtonFormField<String>(
+                      key: const Key('studio-media-type'),
+                      isExpanded: true,
+                      initialValue: _manualMediaType ?? '',
+                      style: _studioBodyStyle(),
+                      decoration: const InputDecoration(
+                        labelText: 'Media type',
+                        hintText: 'All types',
+                        floatingLabelBehavior: FloatingLabelBehavior.always,
+                      ),
+                      items: [
+                        const DropdownMenuItem(
+                          value: '',
+                          child: Text('All types'),
                         ),
-                ),
-              ),
-            ],
+                        for (final type
+                            in inventory.map((item) => item.type).toSet())
+                          DropdownMenuItem(value: type, child: Text(type)),
+                      ],
+                      onChanged: _saving
+                          ? null
+                          : (value) => _browseChanged(
+                              () => _manualMediaType = value?.isEmpty == true
+                                  ? null
+                                  : value,
+                            ),
+                    ),
+                  ),
+                  for (final key in _facetKeys)
+                    SizedBox(
+                      width: width,
+                      child: _facetDropdown(
+                        key: key,
+                        values: facets.values[key] ?? const [],
+                        labels: facets.labels[key] ?? const {},
+                        selected: _manualFilters[key],
+                        onChanged: (value) => _browseChanged(() {
+                          if (value == null) {
+                            _manualFilters.remove(key);
+                          } else {
+                            _manualFilters[key] = value;
+                          }
+                        }),
+                      ),
+                    ),
+                ],
+              );
+            },
           ),
-          for (final key in _facetKeys)
-            _facetDropdown(
-              key: key,
-              values: facets.values[key] ?? const [],
-              labels: facets.labels[key] ?? const {},
-              selected: _manualFilters[key],
-              onChanged: (value) => _browseChanged(() {
-                if (value == null) {
-                  _manualFilters.remove(key);
-                } else {
-                  _manualFilters[key] = value;
-                }
-              }),
-            ),
+          const SizedBox(height: 12),
           Wrap(
             spacing: 8,
             runSpacing: 8,
@@ -1472,7 +1863,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                   ],
           ),
           SizedBox(
-            height: 300,
+            height: _studioSize(300, 300),
             child: ListView.builder(
               key: const Key('studio-results'),
               controller: _browseScroll,
@@ -2136,9 +2527,11 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                       controller: _name,
                       focusNode: _nameFocus,
                       enabled: !_saving,
+                      style: _studioBodyStyle(),
                       decoration: const InputDecoration(
-                        labelText: 'Station name',
+                        labelText: 'Channel name',
                         hintText: 'Required',
+                        floatingLabelBehavior: FloatingLabelBehavior.always,
                       ),
                       onChanged: (_) => _changed(),
                       validator: (value) =>
@@ -2156,7 +2549,11 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                       focusNode: _numberFocus,
                       enabled: !_saving,
                       keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(labelText: 'Number'),
+                      style: _studioBodyStyle(),
+                      decoration: const InputDecoration(
+                        labelText: 'Number',
+                        floatingLabelBehavior: FloatingLabelBehavior.always,
+                      ),
                       onChanged: (_) => _changed(),
                       validator: _validateNumber,
                     ),
@@ -2166,62 +2563,18 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
               final playback = Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text(
-                    _generated
-                        ? 'PLAYBACK RHYTHM · READ-ONLY'
-                        : 'PLAYBACK RHYTHM',
-                    style: TextStyle(
-                      color: roles.secondaryText,
-                      fontSize: 11 * _uiScale,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 1,
+                  if (_generated) ...[
+                    Text(
+                      'Playback order · Read-only',
+                      style: _studioSupportStyle(),
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  if (_generated)
+                    const SizedBox(height: 12),
                     Text(
                       _rhythmLabel(_playbackMode, _blockSize),
-                      style: const TextStyle(fontWeight: FontWeight.w700),
-                    )
-                  else
-                    RadioGroup<PlaybackMode>(
-                      groupValue: _playbackMode,
-                      onChanged: (value) {
-                        if (_busy || value == null) return;
-                        _changed(() {
-                          _playbackMode = value;
-                          _blockSize ??= 3;
-                        });
-                      },
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: _rhythmChoice(
-                              PlaybackMode.sequential,
-                              'In order',
-                              enabled: true,
-                            ),
-                          ),
-                          Expanded(
-                            child: _rhythmChoice(
-                              PlaybackMode.shuffle,
-                              'Mix it up',
-                              enabled: true,
-                            ),
-                          ),
-                          Expanded(
-                            child: _rhythmChoice(
-                              PlaybackMode.block,
-                              'Mini-marathons',
-                              enabled:
-                                  !confirmedMovieOnly ||
-                                  _playbackMode == PlaybackMode.block,
-                            ),
-                          ),
-                        ],
-                      ),
+                      style: _studioBodyStyle(),
                     ),
-                  Text(_rhythmHelp(_playbackMode)),
+                  ] else
+                    _playbackEditor(confirmedMovieOnly),
                 ],
               );
               if (constraints.maxWidth < 760) {
@@ -2267,38 +2620,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
               'Generator recipe: ${_sourceLabel(_source, widget.controller)}. Schedule timing stays the same.',
             ),
           ] else if (_playbackMode == PlaybackMode.block) ...[
-            const SizedBox(height: 12),
-            DropdownButtonFormField<int>(
-              key: const Key('studio-block-size'),
-              isExpanded: true,
-              initialValue: (_blockSize ?? 3) >= 2 && (_blockSize ?? 3) <= 5
-                  ? _blockSize ?? 3
-                  : null,
-              decoration: const InputDecoration(labelText: 'Episodes per show'),
-              items: [
-                for (var size = 2; size <= 5; size++)
-                  DropdownMenuItem(value: size, child: Text('$size')),
-              ],
-              onChanged: _saving
-                  ? null
-                  : (value) => _changed(() => _blockSize = value),
-            ),
-            Material(
-              color: Theme.of(context).colorScheme.surface,
-              child: SwitchListTile(
-                key: const Key('studio-include-specials'),
-                value: _includeSpecials,
-                title: const Text('Include specials'),
-                subtitle: _includeSpecials
-                    ? const Text(
-                        'Season 0 specials play after regular seasons.',
-                      )
-                    : null,
-                onChanged: _saving
-                    ? null
-                    : (value) => _changed(() => _includeSpecials = value),
-              ),
-            ),
+            if (!hasShowGrouping) const SizedBox(height: 12),
             if (!hasShowGrouping)
               Focus(
                 child: Semantics(
@@ -2315,37 +2637,97 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     );
   }
 
-  Widget _rhythmChoice(
-    PlaybackMode value,
-    String title, {
-    bool enabled = true,
-  }) {
-    final roles = LineupTheme.of(context);
-    final selected = _playbackMode == value;
-    return Padding(
-      padding: const EdgeInsets.only(top: 6),
-      child: Material(
-        color: selected ? roles.selectedSurface : roles.primarySurface,
-        child: RadioListTile<PlaybackMode>(
-          value: value,
-          enabled: !_busy && enabled,
-          dense: true,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-          title: Text(
-            title,
-            maxLines: 2,
-            style: const TextStyle(fontWeight: FontWeight.w700),
+  Widget _playbackEditor(bool confirmedMovieOnly) => LayoutBuilder(
+    builder: (context, constraints) {
+      final block = _playbackMode == PlaybackMode.block;
+      final inline =
+          block &&
+          constraints.maxWidth >= 740 &&
+          MediaQuery.textScalerOf(context).scale(14) <= 21;
+      return Wrap(
+        spacing: 12,
+        runSpacing: 16,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          SizedBox(
+            width: inline ? constraints.maxWidth - 474 : constraints.maxWidth,
+            child: DropdownButtonFormField<PlaybackMode>(
+              key: const Key('studio-playback-order'),
+              initialValue: _playbackMode,
+              isExpanded: true,
+              decoration: const InputDecoration(
+                labelText: 'Playback order',
+                floatingLabelBehavior: FloatingLabelBehavior.always,
+              ),
+              items: [
+                const DropdownMenuItem(
+                  value: PlaybackMode.shuffle,
+                  child: Text('Shuffle'),
+                ),
+                const DropdownMenuItem(
+                  value: PlaybackMode.sequential,
+                  child: Text('In order'),
+                ),
+                DropdownMenuItem(
+                  value: PlaybackMode.block,
+                  enabled:
+                      !confirmedMovieOnly ||
+                      _playbackMode == PlaybackMode.block,
+                  child: const Text('Mini-marathons'),
+                ),
+              ],
+              onChanged: _busy
+                  ? null
+                  : (value) {
+                      if (value == null) return;
+                      _changed(() {
+                        _playbackMode = value;
+                        _blockSize ??= 3;
+                      });
+                    },
+            ),
           ),
-        ),
-      ),
-    );
-  }
-
-  String _rhythmHelp(PlaybackMode mode) => switch (mode) {
-    PlaybackMode.sequential => 'Plays the lineup from top to bottom.',
-    PlaybackMode.shuffle => 'Uses a stable shuffle for this station.',
-    PlaybackMode.block => 'Keeps small groups from the same series together.',
-  };
+          if (block) ...[
+            SizedBox(
+              width: inline ? 220 : constraints.maxWidth,
+              child: DropdownButtonFormField<int>(
+                key: const Key('studio-block-size'),
+                isExpanded: true,
+                initialValue: (_blockSize ?? 3) >= 2 && (_blockSize ?? 3) <= 5
+                    ? _blockSize ?? 3
+                    : null,
+                decoration: const InputDecoration(
+                  labelText: 'Episodes per block',
+                  floatingLabelBehavior: FloatingLabelBehavior.always,
+                ),
+                items: [
+                  for (var size = 2; size <= 5; size++)
+                    DropdownMenuItem(value: size, child: Text('$size')),
+                ],
+                onChanged: _saving
+                    ? null
+                    : (value) => _changed(() => _blockSize = value),
+              ),
+            ),
+            SizedBox(
+              width: inline ? 230 : constraints.maxWidth,
+              child: SwitchListTile(
+                key: const Key('studio-include-specials'),
+                contentPadding: EdgeInsets.zero,
+                value: _includeSpecials,
+                title: const Text('Include specials'),
+                onChanged: _saving
+                    ? null
+                    : (value) => _changed(() => _includeSpecials = value),
+              ),
+            ),
+            if (_includeSpecials)
+              const Text('Season 0 specials play after regular seasons.'),
+          ],
+        ],
+      );
+    },
+  );
 
   Channel? get _conflictingChannel {
     final number = int.tryParse(_number.text);
@@ -3034,7 +3416,7 @@ String channelRhythmLabel(PlaybackMode mode, int? blockSize) =>
 
 String _rhythmLabel(PlaybackMode mode, [int? blockSize]) => switch (mode) {
   PlaybackMode.sequential => 'In order',
-  PlaybackMode.shuffle => 'Mix it up',
+  PlaybackMode.shuffle => 'Shuffle',
   PlaybackMode.block => 'Mini-marathons of ${blockSize ?? 3}',
 };
 
