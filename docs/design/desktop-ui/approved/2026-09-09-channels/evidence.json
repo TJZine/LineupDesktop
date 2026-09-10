@@ -1,0 +1,26 @@
+{
+  "status": "Approved at 1080p",
+  "approval": "locked. now for 19",
+  "implementation_commit": "d98e97617fc01b1c947d96326af931d022d07e86",
+  "source_sha256": "e140c51bca21f87928685368227e07a969dc9413a42969989cdb84e6ed018bb2",
+  "viewport": [
+    1920,
+    1080
+  ],
+  "dpr": 1,
+  "text_scale": 1,
+  "images": {
+    "selection.png": "4cc873992879db56dadbef8f15307befbfc2a7ef73423d54e5c2cd91da6c6285",
+    "directory.png": "64d213023ce0c21c67dcdc37578d8dd2e5f40cda4087f166d1286da3aac00bf9",
+    "reorder.png": "b5c50857560492029c70822f0534b72294837653c41f351f723312ddf3bb3b2c"
+  },
+  "provenance": "Directory candidate05 unaffected by later Cancel-only adjustment; selection/reorder candidate06",
+  "checks": "73 existing Channels/Studio tests; 6 Channels tests after alignment refinement",
+  "pending": [
+    "1440p/2160p",
+    "DPI/enlarged text",
+    "grouped accessibility",
+    "physical Windows"
+  ],
+  "independent_review": "not specifically recommended"
+}

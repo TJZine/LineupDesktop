@@ -29,9 +29,9 @@ may cover multiple listed states only when that scope is clear to the user.
 | surface-13 | Library scan outcomes · corrected | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Candidate03 state family; `692083fc` |
 | surface-14 | Setup progress | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Candidate02 family; `22743fd6` |
 | surface-15 | Setup complete | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Candidate02 family; `22743fd6` |
-| surface-16 | Channel directory | Unreviewed | Not assessed in this pass | — |
-| surface-17 | Channel selection | Unreviewed | Not assessed in this pass | — |
-| surface-18 | Channel reorder | Unreviewed | Not assessed in this pass | — |
+| surface-16 | Channel directory | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Candidate05/06; `d98e9761` |
+| surface-17 | Channel selection | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Candidate05/06; `d98e9761` |
+| surface-18 | Channel reorder | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Candidate05/06; `d98e9761` |
 | surface-19 | Delete confirmation | Unreviewed | Not assessed in this pass | — |
 | surface-20 | Studio · hand-picked | Unreviewed | Not assessed in this pass | — |
 | surface-21 | Studio · full authoring | Unreviewed | Not assessed in this pass | — |
@@ -961,3 +961,86 @@ records the approved PNG hashes, implementation commit and verification.
 PIN (surface11) remains untouched and unreviewed, explicitly excluded by user.
 Grouped adaptive/accessibility and physical Windows checks remain outstanding;
 no additional independent review specifically recommended. No push/deploy/publication.
+
+
+## September 9, 2026 — surfaces 16/17/18 correction brief
+
+The user approved the proposed first pass: “yes lets do that”. This approves
+implementation, not a visual lock. Root personally inspected the three rendered
+states of `channels-management-refined.html` at its authored 1920 variant and the
+frozen Flutter packet; a fresh affected-state baseline was also captured from
+`bc124be413ae928ed02c4109f8be335a476c0059` before edits.
+
+- Add the thin LINEUP/Channels header divider. Use a 36px heading and adjacent
+  baseline-aligned 28px quieter count, with no dot; identify reorder in the heading.
+- Remove the search magnifier and use 48px minimum toolbar controls, 18px labels,
+  borderless filters/actions and a subtle selected fill, preserving keyboard focus.
+- Target 80px minimum rows with 22px names and 18px supporting values. Preserve
+  wrapping and content growth, quiet separators and consistent column alignment.
+- Put selection checkboxes near channel identity at the left; separate selection
+  tools from Cancel/Delete at the right and give deletion a destructive treatment.
+- Give reorder the directory's number/name/source/playback structure, drag handles
+  and existing move controls, with Cancel/Save at the right. Preserve number gaps,
+  old-to-new previews, identity, draft persistence boundaries and stale validation.
+- Keep all existing search/filter, selection, focus, health and mutation behavior.
+  No UI layout tests, independent reviewers or unrelated surfaces are included.
+
+Local iteration captures use real Flutter widgets at 1920×1080/DPR1/text100%,
+with 12 synthetic channels to judge density. The original packet remains frozen.
+Adaptive resolutions, DPI/enlarged text, grouped accessibility and physical
+Windows validation remain outstanding; pinned-font captures are not Windows
+font-rendering evidence.
+
+### Candidate05 — awaiting visual approval
+
+Luna implemented the presentation changes in `lib/app/channels_view.dart`; root
+reviewed and corrected selection-mode action visibility, compact spacing, toolbar
+height/focus styling and reorder glyph fallback. Existing Channels/Studio checks
+passed (73 tests); final expanded-only filter sizing was captured with real widgets.
+Targeted analysis and formatting passed. No new UI layout tests or independent
+review were added. Independent review is not specifically recommended for this
+presentation change.
+
+Source SHA-256: `aed854332dab44933a3bfc2ec6637221d6132e890a4765e4478dfe017decafdb`. Local affected-state evidence:
+`build/desktop-ui/surface-16-18/candidate-05/`, 1920×1080/DPR1/text100%.
+
+- `directory.png`: `64d213023ce0c21c67dcdc37578d8dd2e5f40cda4087f166d1286da3aac00bf9`
+- `reorder.png`: `81c41786431de87d67007660fd6fa6040bc37012ccaf6df0e06e34d447e92c60`
+- `selection.png`: `7bf927c3405af7e0dd72efbb417698d8c54a25310b2e2de6d5c0fff94852e53c`
+
+States: directory with twelve synthetic channels; selection with two checked;
+reorder with the first two channels swapped and number gaps retained. Captures use
+pinned Roboto with Arial fallback for the arrow glyph, not physical Windows fonts.
+No visual lock or implementation commit yet; adaptive and Windows checks remain
+outstanding as described above.
+
+
+### Candidate06 — Cancel alignment refinement
+
+User accepted the general candidate05 treatment and requested one correction:
+“in 17 and 18 the cancel text next to the delete button in 17 and save order
+button in 18 looks wonky and off not being aligned with the button.”
+
+Only the two action groups changed: center the Wrap cross-axis and give Cancel
+matching vertical padding while retaining its quiet text styling. Luna made the
+bounded edit; root reviewed both fresh affected-state captures. Six existing
+Channels behavior checks, formatting and diff checks passed. No directory
+recapture or new tests were needed. Final visual confirmation remains pending.
+
+Source SHA-256: `e140c51bca21f87928685368227e07a969dc9413a42969989cdb84e6ed018bb2`. Evidence:
+`build/desktop-ui/surface-16-18/candidate-06/`, 1920×1080/DPR1/text100%.
+
+- `reorder.png`: `b5c50857560492029c70822f0534b72294837653c41f351f723312ddf3bb3b2c`
+- `selection.png`: `4cc873992879db56dadbef8f15307befbfc2a7ef73423d54e5c2cd91da6c6285`
+
+Adaptive, grouped accessibility and physical Windows checks remain outstanding.
+No independent review is specifically recommended for this alignment adjustment.
+
+### September 9 — surfaces16/17/18 locked
+
+User explicitly approved: “locked. now for 19”. Directory candidate05 and
+selection/reorder candidate06 are approved at1080p. Implementation `d98e97617fc01b1c947d96326af931d022d07e86`;
+source and capture hashes are bound in
+[durable evidence](design/desktop-ui/approved/2026-09-09-channels/evidence.json).
+Adaptive, grouped accessibility and physical Windows validation remain pending.
+Independent review is not specifically recommended.
