@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../channels/channel.dart';
 import '../playback/player_coordinator.dart';
+import '../ui/app_theme.dart';
 import '../ui/app_ui.dart';
 import 'channel_studio_view.dart';
 import 'lineup_controller.dart';
@@ -266,6 +267,19 @@ class ChannelsViewState extends State<ChannelsView> {
     }
     _pruneHealth(liveIds);
     _scheduleFocusPrune(liveIds);
+    final headingStyle = Theme.of(context).textTheme.headlineMedium?.copyWith(
+      fontSize: _directorySize(36, 28) * scale,
+      fontWeight: FontWeight.w600,
+    );
+    final countStyle = Theme.of(context).textTheme.headlineMedium?.copyWith(
+      fontSize: _directorySize(28, 24) * scale,
+      fontWeight: FontWeight.w400,
+      color: LineupTheme.of(context).secondaryText,
+    );
+    final bodyStyle = Theme.of(context).textTheme.bodyMedium
+        ?.copyWith(fontSize: _directorySize(18, 14) * scale);
+    final labelStyle = Theme.of(context).textTheme.labelLarge
+        ?.copyWith(fontSize: _directorySize(18, 14) * scale);
     return LineupPage(
       title: 'Channels',
       titleWidget: Row(
@@ -283,27 +297,48 @@ class ChannelsViewState extends State<ChannelsView> {
               ),
             ),
           ),
-          const SizedBox(width: 24),
-          const Text('Channels'),
+          const SizedBox(width: 16),
+          const SizedBox(height: 24, child: VerticalDivider(width: 1)),
+          const SizedBox(width: 16),
+          Text('Channels', style: Theme.of(context).textTheme.bodyMedium),
         ],
       ),
       child: Column(
         children: [
           const Divider(height: 1),
           Padding(
-            padding: EdgeInsets.symmetric(vertical: 24 * scale),
+            padding: EdgeInsets.symmetric(
+              vertical: _directorySize(24, 16) * scale,
+            ),
             child: Row(
               children: [
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        'Channels · ${channels.length}',
-                        style: Theme.of(context).textTheme.headlineMedium,
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.baseline,
+                        textBaseline: TextBaseline.alphabetic,
+                        children: [
+                          Text(
+                            _mode == _DirectoryMode.reorder
+                                ? 'Reorder channels'
+                                : 'Channels',
+                            style: headingStyle,
+                          ),
+                          const SizedBox(width: 12),
+                          Text('${channels.length}', style: countStyle),
+                        ],
                       ),
                       const SizedBox(height: 6),
-                      const Text('Your lineup, in channel order.'),
+                      Text(
+                        _mode == _DirectoryMode.reorder
+                            ? 'Channels appear in number order. Reordering changes channel numbers.'
+                            : 'Your lineup, in channel order.',
+                        style: bodyStyle?.copyWith(
+                          color: LineupTheme.of(context).secondaryText,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -321,10 +356,18 @@ class ChannelsViewState extends State<ChannelsView> {
                             onPressed: _saving
                                 ? null
                                 : widget.controller.enterChannelSetup,
+                            style: OutlinedButton.styleFrom(
+                              minimumSize: Size(0, 48 * scale),
+                              textStyle: labelStyle,
+                            ),
                             child: const Text('Generate lineup'),
                           ),
                           FilledButton(
                             onPressed: _saving ? null : openNew,
+                            style: FilledButton.styleFrom(
+                              minimumSize: Size(0, 48 * scale),
+                              textStyle: labelStyle,
+                            ),
                             child: const Text('Add a custom channel'),
                           ),
                         ],
@@ -341,20 +384,36 @@ class ChannelsViewState extends State<ChannelsView> {
           if (channels.isNotEmpty) ...[
             _directoryControls(matching),
             const SizedBox(height: 20),
-            if (_mode != _DirectoryMode.reorder)
-              DefaultTextStyle.merge(
-                style: Theme.of(context).textTheme.bodySmall,
-                child: _directoryColumns(
-                  scale: scale,
-                  number: const Text('No.'),
-                  name: const Text('Channel'),
-                  source: const Text('Source'),
-                  playback: const Text('Playback'),
-                  type: const Text('Type'),
-                  action: const SizedBox.shrink(),
-                  heading: true,
-                ),
+            DefaultTextStyle.merge(
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                fontSize: _directorySize(18, 14) * scale,
+                color: LineupTheme.of(context).secondaryText,
               ),
+              child: _mode == _DirectoryMode.reorder
+                  ? _reorderColumns(
+                      scale: scale,
+                      drag: const SizedBox.shrink(),
+                      number: const Text('Number'),
+                      name: const Text('Channel'),
+                      source: const Text('Source'),
+                      playback: const Text('Playback'),
+                      action: const Text('Move'),
+                      heading: true,
+                    )
+                  : _directoryColumns(
+                      scale: scale,
+                      leading: _mode == _DirectoryMode.selection
+                          ? const SizedBox.shrink()
+                          : null,
+                      number: const Text('No.'),
+                      name: const Text('Channel'),
+                      source: const Text('Source'),
+                      playback: const Text('Playback'),
+                      type: const Text('Type'),
+                      action: const SizedBox.shrink(),
+                      heading: true,
+                    ),
+            ),
             const Divider(height: 1),
           ],
           Expanded(
@@ -403,6 +462,20 @@ class ChannelsViewState extends State<ChannelsView> {
                     itemBuilder: (context, index) {
                       final channel = visible[index];
                       _requestHealth(channel);
+                      final rowNameStyle = Theme.of(context)
+                          .textTheme
+                          .titleMedium
+                          ?.copyWith(
+                            fontSize: _directorySize(22, 16) * scale,
+                            fontWeight: FontWeight.w500,
+                          );
+                      final rowSupportStyle = Theme.of(context)
+                          .textTheme
+                          .bodyMedium
+                          ?.copyWith(
+                            fontSize: _directorySize(18, 14) * scale,
+                            color: LineupTheme.of(context).secondaryText,
+                          );
                       final ownership = channel.builderKey == null
                           ? 'Custom'
                           : 'Generated';
@@ -430,20 +503,32 @@ class ChannelsViewState extends State<ChannelsView> {
                                 : () => _open(channel),
                             child: _directoryColumns(
                               scale: scale,
-                              number: Text('${channel.number}'),
+                              leading: _mode == _DirectoryMode.selection
+                                  ? Checkbox(
+                                      semanticLabel: 'Select ${channel.name}',
+                                      value: _selectedIds.contains(channel.id),
+                                      onChanged: _saving
+                                          ? null
+                                          : (_) => _toggleSelected(channel.id),
+                                    )
+                                  : null,
+                              number: Text(
+                                '${channel.number}',
+                                style: rowSupportStyle,
+                              ),
                               name: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Text(
-                                    channel.name,
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .titleMedium,
-                                  ),
+                                  Text(channel.name, style: rowNameStyle),
                                   if (_health[channel.id]?.issue == true)
-                                    const Text(
+                                    Text(
                                       'Schedule issue — open this channel to recover',
+                                      style: rowSupportStyle?.copyWith(
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .error,
+                                      ),
                                     ),
                                 ],
                               ),
@@ -452,22 +537,18 @@ class ChannelsViewState extends State<ChannelsView> {
                                   channel.source,
                                   widget.controller,
                                 ),
+                                style: rowSupportStyle,
                               ),
                               playback: Text(
                                 channelRhythmLabel(
                                   channel.playbackMode,
                                   channel.blockSize,
                                 ),
+                                style: rowSupportStyle,
                               ),
-                              type: Text(ownership),
+                              type: Text(ownership, style: rowSupportStyle),
                               action: _mode == _DirectoryMode.selection
-                                  ? Checkbox(
-                                      semanticLabel: 'Select ${channel.name}',
-                                      value: _selectedIds.contains(channel.id),
-                                      onChanged: _saving
-                                          ? null
-                                          : (_) => _toggleSelected(channel.id),
-                                    )
+                                  ? const SizedBox.shrink()
                                   : PopupMenuButton<_RowAction>(
                                       enabled: !_saving,
                                       tooltip: 'Actions for ${channel.name}',
@@ -509,28 +590,253 @@ class ChannelsViewState extends State<ChannelsView> {
     required Widget playback,
     required Widget type,
     required Widget action,
+    Widget? leading,
     bool heading = false,
-  }) => Padding(
-    padding: EdgeInsets.symmetric(
-      horizontal: 12 * scale,
-      vertical: (heading ? 8 : 10) * scale,
-    ),
-    child: Row(
-      children: [
-        SizedBox(width: 52 * scale, child: number),
-        SizedBox(width: 16 * scale),
-        Expanded(flex: 4, child: name),
-        SizedBox(width: 16 * scale),
-        Expanded(flex: 2, child: source),
-        SizedBox(width: 16 * scale),
-        Expanded(flex: 2, child: playback),
-        SizedBox(width: 16 * scale),
-        Expanded(child: type),
-        SizedBox(width: 16 * scale),
-        SizedBox(width: 44 * scale, child: action),
-      ],
+  }) => ConstrainedBox(
+    constraints: heading
+        ? const BoxConstraints()
+        : BoxConstraints(minHeight: _directorySize(80, 68) * scale),
+    child: Padding(
+      padding: EdgeInsets.symmetric(
+        horizontal: 12 * scale,
+        vertical: (heading ? 8 : 10) * scale,
+      ),
+      child: Row(
+        children: [
+          if (leading != null) ...[
+            SizedBox(width: 36 * scale, child: leading),
+            SizedBox(width: 16 * scale),
+          ],
+          SizedBox(width: 52 * scale, child: number),
+          SizedBox(width: 16 * scale),
+          Expanded(flex: 4, child: name),
+          SizedBox(width: 16 * scale),
+          Expanded(flex: 2, child: source),
+          SizedBox(width: 16 * scale),
+          Expanded(flex: 2, child: playback),
+          SizedBox(width: 16 * scale),
+          Expanded(child: type),
+          SizedBox(width: 16 * scale),
+          SizedBox(width: 44 * scale, child: action),
+        ],
+      ),
     ),
   );
+
+  Widget _reorderColumns({
+    required double scale,
+    required Widget drag,
+    required Widget number,
+    required Widget name,
+    required Widget source,
+    required Widget playback,
+    required Widget action,
+    bool heading = false,
+  }) => DecoratedBox(
+    decoration: heading
+        ? const BoxDecoration()
+        : BoxDecoration(
+            border: Border(
+              bottom: BorderSide(color: LineupTheme.of(context).subtleBorder),
+            ),
+          ),
+    child: ConstrainedBox(
+      constraints: heading
+          ? const BoxConstraints()
+          : BoxConstraints(minHeight: _directorySize(80, 68) * scale),
+      child: Padding(
+        padding: EdgeInsets.symmetric(
+          horizontal: 12 * scale,
+          vertical: (heading ? 8 : 10) * scale,
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            SizedBox(width: 36 * scale, child: drag),
+            SizedBox(width: 16 * scale),
+            SizedBox(width: 76 * scale, child: number),
+            SizedBox(width: 16 * scale),
+            Expanded(flex: 4, child: name),
+            SizedBox(width: 16 * scale),
+            Expanded(flex: 2, child: source),
+            SizedBox(width: 16 * scale),
+            Expanded(flex: 2, child: playback),
+            SizedBox(width: 16 * scale),
+            SizedBox(width: 144 * scale, child: action),
+          ],
+        ),
+      ),
+    ),
+  );
+
+  double _directorySize(double expanded, double compact) =>
+      LineupLayout.isCompactWidth(MediaQuery.sizeOf(context).width)
+      ? compact
+      : expanded;
+
+  TextStyle _channelBodyStyle(BuildContext context) {
+    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
+    return Theme.of(context).textTheme.bodyMedium
+            ?.copyWith(fontSize: _directorySize(18, 14) * scale) ??
+        TextStyle(fontSize: _directorySize(18, 14) * scale);
+  }
+
+  TextStyle _channelControlStyle(BuildContext context) {
+    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
+    return Theme.of(context).textTheme.labelLarge
+            ?.copyWith(fontSize: _directorySize(18, 14) * scale) ??
+        TextStyle(fontSize: _directorySize(18, 14) * scale);
+  }
+
+  ButtonStyle _channelQuietButtonStyle(BuildContext context) {
+    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
+    return TextButton.styleFrom(
+      minimumSize: Size(0, 48 * scale),
+      padding: EdgeInsets.symmetric(
+        horizontal: 16 * scale,
+        vertical: 10 * scale,
+      ),
+      visualDensity: VisualDensity.standard,
+      foregroundColor: LineupTheme.of(context).secondaryText,
+      textStyle: _channelControlStyle(context),
+    );
+  }
+
+  ButtonStyle _channelFilterStyle(BuildContext context) {
+    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
+    final roles = LineupTheme.of(context);
+    return ButtonStyle(
+      padding: LineupLayout.isCompactWidth(MediaQuery.sizeOf(context).width)
+          ? null
+          : WidgetStatePropertyAll(
+              EdgeInsets.symmetric(
+                horizontal: 16 * scale,
+                vertical: 11 * scale,
+              ),
+            ),
+      visualDensity: VisualDensity.standard,
+      tapTargetSize:
+          LineupLayout.isCompactWidth(MediaQuery.sizeOf(context).width)
+          ? null
+          : MaterialTapTargetSize.shrinkWrap,
+      textStyle: WidgetStatePropertyAll(_channelControlStyle(context)),
+      foregroundColor: WidgetStateProperty.resolveWith(
+        (states) => states.contains(WidgetState.disabled)
+            ? roles.mutedText
+            : states.contains(WidgetState.selected)
+            ? roles.primaryText
+            : roles.secondaryText,
+      ),
+      backgroundColor: WidgetStateProperty.resolveWith(
+        (states) => states.contains(WidgetState.selected)
+            ? roles.selectedSurface
+            : Colors.transparent,
+      ),
+      side: WidgetStateProperty.resolveWith(
+        (states) => states.contains(WidgetState.focused)
+            ? BorderSide(
+                color: roles.focusBorder,
+                width: roles.focusBorderWidth,
+              )
+            : BorderSide.none,
+      ),
+    );
+  }
+
+  Widget _directoryToolbar() {
+    final textScale = MediaQuery.textScalerOf(context).scale(1);
+    final filters = ConstrainedBox(
+      constraints: BoxConstraints(
+        minHeight: LineupLayout.isCompactWidth(MediaQuery.sizeOf(context).width)
+            ? 0
+            : 48 * LineupLayout.scaleFor(MediaQuery.sizeOf(context)),
+      ),
+      child: SegmentedButton<_DirectoryFilter>(
+        segments: const [
+          ButtonSegment(value: _DirectoryFilter.all, label: Text('All')),
+          ButtonSegment(value: _DirectoryFilter.custom, label: Text('Custom')),
+          ButtonSegment(
+            value: _DirectoryFilter.generated,
+            label: Text('Generated'),
+          ),
+        ],
+        selected: {_filter},
+        showSelectedIcon: false,
+        style: _channelFilterStyle(context),
+        onSelectionChanged: _saving
+            ? null
+            : (value) => setState(() {
+                _filter = value.single;
+                _showSelected = false;
+              }),
+      ),
+    );
+    final actions = [
+      TextButton(
+        onPressed: _saving
+            ? null
+            : () => setState(() {
+                _mode = _DirectoryMode.selection;
+                _selectedIds.clear();
+              }),
+        style: _channelQuietButtonStyle(context),
+        child: const Text('Select'),
+      ),
+      TextButton(
+        onPressed: _saving ? null : _beginReorder,
+        style: _channelQuietButtonStyle(context),
+        child: const Text('Reorder channels'),
+      ),
+    ];
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
+        final search = TextField(
+          key: const Key('channels-search'),
+          enabled: !_saving,
+          controller: _search,
+          focusNode: _searchFocus,
+          style: _channelBodyStyle(context),
+          decoration: InputDecoration(
+            hintText: 'Search by name or number',
+            isDense: true,
+            contentPadding: EdgeInsets.symmetric(
+              horizontal: 16 * scale,
+              vertical: 11 * scale,
+            ),
+            constraints: BoxConstraints(minHeight: 48 * scale),
+          ),
+          onChanged: (_) => setState(() {}),
+        );
+        final wide = constraints.maxWidth >= 1200 * scale && textScale < 1.4;
+        if (wide) {
+          return Row(
+            children: [
+              Expanded(child: search),
+              const SizedBox(width: 8),
+              filters,
+              const SizedBox(width: 8),
+              if (_mode == _DirectoryMode.normal) ...actions,
+            ],
+          );
+        }
+        final desiredWidth = constraints.maxWidth - 530 * textScale;
+        final searchWidth = constraints.maxWidth < 280
+            ? constraints.maxWidth
+            : desiredWidth.clamp(280.0, constraints.maxWidth).toDouble();
+        return Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            SizedBox(width: searchWidth, child: search),
+            filters,
+            if (_mode == _DirectoryMode.normal) ...actions,
+          ],
+        );
+      },
+    );
+  }
 
   Widget _directoryControls(List<Channel> matching) {
     if (_mode == _DirectoryMode.reorder) {
@@ -538,26 +844,42 @@ class ChannelsViewState extends State<ChannelsView> {
         _reorderBase.map((channel) => channel.id),
         _reorderIds,
       );
+      final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text(
-            'Channels appear in number order. Reordering changes channel numbers.',
-          ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              OutlinedButton(
-                onPressed: _saving ? null : _cancelReorder,
-                child: const Text('Cancel'),
-              ),
-              FilledButton(
-                onPressed: changed && !_saving ? _saveOrder : null,
-                child: Text(_saving ? 'Saving…' : 'Save order'),
-              ),
-            ],
+          Align(
+            alignment: Alignment.centerRight,
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                TextButton(
+                  onPressed: _saving ? null : _cancelReorder,
+                  style: _channelQuietButtonStyle(context).copyWith(
+                    padding: WidgetStatePropertyAll(
+                      EdgeInsets.symmetric(
+                        horizontal: 16 * scale,
+                        vertical: 16 * scale,
+                      ),
+                    ),
+                  ),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: changed && !_saving ? _saveOrder : null,
+                  style: FilledButton.styleFrom(
+                    minimumSize: Size(
+                      0,
+                      48 * LineupLayout.scaleFor(MediaQuery.sizeOf(context)),
+                    ),
+                    textStyle: _channelControlStyle(context),
+                  ),
+                  child: Text(_saving ? 'Saving…' : 'Save order'),
+                ),
+              ],
+            ),
           ),
         ],
       );
@@ -566,123 +888,110 @@ class ChannelsViewState extends State<ChannelsView> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (_showSelected)
-          const Text('Selected channels')
+          Text('Selected channels', style: _channelBodyStyle(context))
         else
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              SizedBox(
-                width:
-                    (MediaQuery.sizeOf(context).width -
-                            64 -
-                            530 * MediaQuery.textScalerOf(context).scale(1))
-                        .clamp(280.0, double.infinity),
-                child: TextField(
-                  key: const Key('channels-search'),
-                  enabled: !_saving,
-                  controller: _search,
-                  focusNode: _searchFocus,
-                  decoration: const InputDecoration(
-                    labelText: 'Search by name or number',
-                    prefixIcon: Icon(Icons.search),
-                  ),
-                  onChanged: (_) => setState(() {}),
-                ),
-              ),
-              SegmentedButton<_DirectoryFilter>(
-                segments: const [
-                  ButtonSegment(
-                    value: _DirectoryFilter.all,
-                    label: Text('All'),
-                  ),
-                  ButtonSegment(
-                    value: _DirectoryFilter.custom,
-                    label: Text('Custom'),
-                  ),
-                  ButtonSegment(
-                    value: _DirectoryFilter.generated,
-                    label: Text('Generated'),
-                  ),
-                ],
-                selected: {_filter},
-                onSelectionChanged: _saving
-                    ? null
-                    : (value) => setState(() {
-                        _filter = value.single;
-                        _showSelected = false;
-                      }),
-              ),
-              if (_mode == _DirectoryMode.normal) ...[
-                TextButton(
-                  onPressed: _saving
-                      ? null
-                      : () => setState(() {
-                          _mode = _DirectoryMode.selection;
-                          _selectedIds.clear();
-                        }),
-                  child: const Text('Select'),
-                ),
-                TextButton(
-                  onPressed: _saving ? null : _beginReorder,
-                  child: const Text('Reorder channels'),
-                ),
-              ],
-            ],
-          ),
+          _directoryToolbar(),
         if (_mode == _DirectoryMode.selection) ...[
           const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              TextButton(
-                onPressed: _saving || _selectedIds.isEmpty
-                    ? null
-                    : () => setState(() => _showSelected = true),
-                child: Text(
-                  _showSelected
-                      ? '${_selectedIds.length} selected'
-                      : _selectionSummary(matching),
-                ),
-              ),
-              if (_showSelected)
-                TextButton(
-                  onPressed: _saving
-                      ? null
-                      : () => setState(() => _showSelected = false),
-                  child: const Text('Back to results'),
-                ),
-              if (!_showSelected)
-                TextButton(
-                  onPressed: _saving || matching.isEmpty
-                      ? null
-                      : () => setState(
-                          () => _selectedIds.addAll(
-                            matching.map((channel) => channel.id),
-                          ),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
+              final leading = Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  TextButton(
+                    onPressed: _saving || _selectedIds.isEmpty
+                        ? null
+                        : () => setState(() => _showSelected = true),
+                    style: _channelQuietButtonStyle(context),
+                    child: Text(
+                      _showSelected
+                          ? '${_selectedIds.length} selected'
+                          : _selectionSummary(matching),
+                    ),
+                  ),
+                  if (_showSelected)
+                    TextButton(
+                      onPressed: _saving
+                          ? null
+                          : () => setState(() => _showSelected = false),
+                      style: _channelQuietButtonStyle(context),
+                      child: const Text('Back to results'),
+                    ),
+                  if (!_showSelected)
+                    TextButton(
+                      onPressed: _saving || matching.isEmpty
+                          ? null
+                          : () => setState(
+                              () => _selectedIds.addAll(
+                                matching.map((channel) => channel.id),
+                              ),
+                            ),
+                      style: _channelQuietButtonStyle(context),
+                      child: const Text('Select all matching'),
+                    ),
+                  TextButton(
+                    onPressed: _saving || _selectedIds.isEmpty
+                        ? null
+                        : () => setState(_selectedIds.clear),
+                    style: _channelQuietButtonStyle(context),
+                    child: const Text('Clear selection'),
+                  ),
+                ],
+              );
+              final trailing = Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  TextButton(
+                    onPressed: _saving ? null : _cancelSelection,
+                    style: _channelQuietButtonStyle(context).copyWith(
+                      padding: WidgetStatePropertyAll(
+                        EdgeInsets.symmetric(
+                          horizontal: 16 * scale,
+                          vertical: 16 * scale,
                         ),
-                  child: const Text('Select all matching'),
-                ),
-              TextButton(
-                onPressed: _saving || _selectedIds.isEmpty
-                    ? null
-                    : () => setState(_selectedIds.clear),
-                child: const Text('Clear selection'),
-              ),
-              TextButton(
-                onPressed: _saving ? null : _cancelSelection,
-                child: const Text('Cancel'),
-              ),
-              FilledButton(
-                onPressed: _selectedIds.isEmpty || _saving
-                    ? null
-                    : _deleteSelected,
-                child: Text(_saving ? 'Deleting…' : 'Delete selected'),
-              ),
-            ],
+                      ),
+                    ),
+                    child: const Text('Cancel'),
+                  ),
+                  OutlinedButton(
+                    onPressed: _selectedIds.isEmpty || _saving
+                        ? null
+                        : _deleteSelected,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Theme.of(context).colorScheme.error,
+                      minimumSize: Size(
+                        0,
+                        48 * LineupLayout.scaleFor(MediaQuery.sizeOf(context)),
+                      ),
+                      textStyle: _channelControlStyle(context),
+                    ),
+                    child: Text(_saving ? 'Deleting…' : 'Delete selected'),
+                  ),
+                ],
+              );
+              if (constraints.maxWidth < 760) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    leading,
+                    const SizedBox(height: 8),
+                    Align(alignment: Alignment.centerRight, child: trailing),
+                  ],
+                );
+              }
+              return Row(
+                children: [
+                  Expanded(child: leading),
+                  const SizedBox(width: 12),
+                  trailing,
+                ],
+              );
+            },
           ),
         ],
       ],
@@ -824,46 +1133,66 @@ class ChannelsViewState extends State<ChannelsView> {
             byId[_reorderIds[index]] ??
             _reorderBase.firstWhere((item) => item.id == _reorderIds[index]);
         final nextNumber = positions[index];
-        return ListTile(
+        final rowNameStyle = Theme.of(context).textTheme.titleMedium?.copyWith(
+          fontSize: _directorySize(22, 16) * scale,
+          fontWeight: FontWeight.w500,
+        );
+        final rowSupportStyle = Theme.of(context).textTheme.bodyMedium
+            ?.copyWith(
+              fontSize: _directorySize(18, 14) * scale,
+              color: LineupTheme.of(context).secondaryText,
+            );
+        final moves = Wrap(
+          alignment: WrapAlignment.end,
+          children: [
+            IconButton(
+              tooltip: 'Move ${channel.name} up',
+              onPressed: _saving || index == 0
+                  ? null
+                  : () => _moveReorder(index, index - 1),
+              icon: const Icon(Icons.arrow_upward),
+            ),
+            IconButton(
+              tooltip: 'Move ${channel.name} down',
+              onPressed: _saving || index == _reorderIds.length - 1
+                  ? null
+                  : () => _moveReorder(index, index + 1),
+              icon: const Icon(Icons.arrow_downward),
+            ),
+            IconButton(
+              tooltip: 'Move ${channel.name} before or after another channel',
+              onPressed: _saving ? null : () => _moveTo(index, byId),
+              icon: const Icon(Icons.low_priority),
+            ),
+          ],
+        );
+        return KeyedSubtree(
           key: ValueKey('reorder-${channel.id}'),
-          minTileHeight: 56 * scale,
-          contentPadding: EdgeInsets.symmetric(
-            horizontal: 16 * scale,
-            vertical: 4 * scale,
-          ),
-          leading: ReorderableDragStartListener(
-            enabled: !_saving,
-            index: index,
-            child: const Icon(Icons.drag_handle),
-          ),
-          title: Text(channel.name),
-          subtitle: Text(
-            channel.number == nextNumber
-                ? 'Channel ${channel.number}'
-                : '${channel.number} → $nextNumber',
-          ),
-          trailing: Wrap(
-            children: [
-              IconButton(
-                tooltip: 'Move ${channel.name} up',
-                onPressed: _saving || index == 0
-                    ? null
-                    : () => _moveReorder(index, index - 1),
-                icon: const Icon(Icons.arrow_upward),
+          child: _reorderColumns(
+            scale: scale,
+            drag: ReorderableDragStartListener(
+              enabled: !_saving,
+              index: index,
+              child: const Icon(Icons.drag_handle),
+            ),
+            number: Text(
+              channel.number == nextNumber
+                  ? '${channel.number}'
+                  : '${channel.number} → $nextNumber',
+              style: rowSupportStyle?.copyWith(
+                fontFamilyFallback: const ['Arial'],
               ),
-              IconButton(
-                tooltip: 'Move ${channel.name} down',
-                onPressed: _saving || index == _reorderIds.length - 1
-                    ? null
-                    : () => _moveReorder(index, index + 1),
-                icon: const Icon(Icons.arrow_downward),
-              ),
-              IconButton(
-                tooltip: 'Move ${channel.name} before or after another channel',
-                onPressed: _saving ? null : () => _moveTo(index, byId),
-                icon: const Icon(Icons.low_priority),
-              ),
-            ],
+            ),
+            name: Text(channel.name, style: rowNameStyle, softWrap: true),
+            source: Text(
+              channelSourceLabel(channel.source, widget.controller),
+              style: rowSupportStyle,
+            ),
+            playback: Text(
+              channelRhythmLabel(channel.playbackMode, channel.blockSize),
+              style: rowSupportStyle,
+            ),
+            action: moves,
           ),
         );
       },
