@@ -1014,64 +1014,28 @@ class ChannelsViewState extends State<ChannelsView> {
     _showSelected = false;
   });
 
+  Future<bool> _confirmChannelDeletion(
+    List<Channel> channels,
+    String confirmLabel,
+  ) async =>
+      await showDialog<bool>(
+        context: context,
+        builder: (context) => _ChannelDeletionDialog(
+          channels: channels,
+          confirmLabel: confirmLabel,
+        ),
+      ) ??
+      false;
+
   Future<void> _deleteSelected() async {
     if (_saving || _selectedIds.isEmpty) return;
     var selected = widget.controller.channels
         .where((channel) => _selectedIds.contains(channel.id))
         .toList(growable: false);
-    final custom = selected
-        .where((channel) => channel.builderKey == null)
-        .length;
-    final generated = selected.length - custom;
-    final confirmed =
-        await showDialog<bool>(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: Text(
-              'Delete ${selected.length} ${selected.length == 1 ? 'channel' : 'channels'}?',
-            ),
-            content: SizedBox(
-              width: 520,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text('$custom custom · $generated generated'),
-                  const Text('Your Plex media won’t be deleted.'),
-                  if (generated > 0)
-                    const Text(
-                      'Generated channels may be proposed again by Generate lineup.',
-                    ),
-                  const SizedBox(height: 8),
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(maxHeight: 260),
-                    child: ListView(
-                      shrinkWrap: true,
-                      children: [
-                        for (final channel in selected)
-                          Text('${channel.number} · ${channel.name}'),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                autofocus: true,
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('Cancel'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: Text(
-                  'Delete ${selected.length} ${selected.length == 1 ? 'channel' : 'channels'}',
-                ),
-              ),
-            ],
-          ),
-        ) ??
-        false;
+    final confirmed = await _confirmChannelDeletion(
+      selected,
+      'Delete ${selected.length} ${selected.length == 1 ? 'channel' : 'channels'}',
+    );
     if (!confirmed || !mounted) return;
     setState(() => _saving = true);
     try {
@@ -1415,15 +1379,9 @@ class ChannelsViewState extends State<ChannelsView> {
 
   Future<void> _delete(Channel channel) async {
     if (_saving) return;
-    final generated = channel.builderKey != null;
-    final confirmed = await confirmDestructiveAction(
-      context,
-      title: 'Delete ${channel.name}?',
-      message: generated
-          ? 'This removes channel ${channel.number}. A future Generate lineup refresh may propose it again.'
-          : 'This removes channel ${channel.number} from the lineup. This action cannot be undone.',
-      confirmLabel: 'Delete channel',
-    );
+    final confirmed = await _confirmChannelDeletion([
+      channel,
+    ], 'Delete channel');
     if (!mounted) return;
     if (!confirmed) {
       _openFocus[channel.id]?.requestFocus();
@@ -1544,6 +1502,191 @@ class _MoveChannelDialogState extends State<_MoveChannelDialog> {
           child: const Text('Cancel'),
         ),
       ],
+    );
+  }
+}
+
+class _ChannelDeletionDialog extends StatefulWidget {
+  const _ChannelDeletionDialog({
+    required this.channels,
+    required this.confirmLabel,
+  });
+
+  final List<Channel> channels;
+  final String confirmLabel;
+
+  @override
+  State<_ChannelDeletionDialog> createState() => _ChannelDeletionDialogState();
+}
+
+class _ChannelDeletionDialogState extends State<_ChannelDeletionDialog> {
+  final _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final channels = widget.channels;
+    final size = MediaQuery.sizeOf(context);
+    final viewInsets = MediaQuery.viewInsetsOf(context);
+    final scale = LineupLayout.scaleFor(size);
+    final compact = LineupLayout.isCompactWidth(size.width);
+    final roles = LineupTheme.of(context);
+    final theme = Theme.of(context);
+    final count = channels.length;
+    final headingStyle = theme.textTheme.headlineSmall?.copyWith(
+      fontSize: (compact ? 24 : 32) * scale,
+      fontWeight: FontWeight.w600,
+    );
+    final supportStyle = theme.textTheme.bodyLarge?.copyWith(
+      fontSize: (compact ? 14 : 18) * scale,
+      color: roles.secondaryText,
+    );
+    final nameStyle = theme.textTheme.titleMedium?.copyWith(
+      fontSize: (compact ? 16 : 20) * scale,
+      fontWeight: FontWeight.w500,
+    );
+    final numberStyle = theme.textTheme.bodyMedium?.copyWith(
+      fontSize: (compact ? 14 : 18) * scale,
+      color: roles.secondaryText,
+    );
+    final actionStyle = theme.textTheme.labelLarge?.copyWith(
+      fontSize: (compact ? 14 : 18) * scale,
+    );
+    final actionPadding = EdgeInsets.symmetric(
+      horizontal: 16 * scale,
+      vertical: 16 * scale,
+    );
+    final availableWidth = (size.width - (48 * scale))
+        .clamp(0.0, 680 * scale)
+        .toDouble();
+    final availableHeight = (size.height - viewInsets.vertical - (48 * scale))
+        .clamp(0.0, 720 * scale)
+        .toDouble();
+
+    return Dialog(
+      backgroundColor: roles.primarySurface,
+      surfaceTintColor: Colors.transparent,
+      insetPadding: EdgeInsets.symmetric(
+        horizontal: 24 * scale,
+        vertical: 24 * scale,
+      ),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(roles.panelRadius),
+        side: BorderSide(color: roles.subtleBorder),
+      ),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: availableWidth,
+          maxHeight: availableHeight,
+        ),
+        child: Padding(
+          padding: EdgeInsets.all((compact ? 24 : 32) * scale),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Semantics(
+                namesRoute: true,
+                container: true,
+                child: Text(
+                  'Delete $count ${count == 1 ? 'channel' : 'channels'}?',
+                  style: headingStyle,
+                ),
+              ),
+              SizedBox(height: 8 * scale),
+              Text(
+                count == 1
+                    ? 'This removes this channel from your lineup. This action cannot be undone.'
+                    : 'This removes these channels from your lineup. This action cannot be undone.',
+                style: supportStyle,
+              ),
+              SizedBox(height: 16 * scale),
+              Divider(height: 1, color: roles.subtleBorder),
+              SizedBox(height: 8 * scale),
+              Flexible(
+                fit: FlexFit.loose,
+                child: Scrollbar(
+                  controller: _scrollController,
+                  thumbVisibility: true,
+                  child: ListView.separated(
+                    controller: _scrollController,
+                    shrinkWrap: true,
+                    padding: EdgeInsets.only(right: 12 * scale),
+                    itemCount: channels.length,
+                    separatorBuilder: (_, _) =>
+                        Divider(height: 1, color: roles.subtleBorder),
+                    itemBuilder: (context, index) {
+                      final channel = channels[index];
+                      return ConstrainedBox(
+                        constraints: BoxConstraints(minHeight: 52 * scale),
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(vertical: 10 * scale),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              SizedBox(
+                                width: 56 * scale,
+                                child: Text(
+                                  '${channel.number}',
+                                  style: numberStyle,
+                                ),
+                              ),
+                              SizedBox(width: 16 * scale),
+                              Expanded(
+                                child: Text(
+                                  channel.name,
+                                  softWrap: true,
+                                  style: nameStyle,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+              SizedBox(height: 16 * scale),
+              Wrap(
+                alignment: WrapAlignment.end,
+                spacing: 8 * scale,
+                runSpacing: 8 * scale,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  TextButton(
+                    autofocus: true,
+                    onPressed: () => Navigator.pop(context, false),
+                    style: TextButton.styleFrom(
+                      foregroundColor: roles.secondaryText,
+                      minimumSize: Size(0, 48 * scale),
+                      padding: actionPadding,
+                      textStyle: actionStyle,
+                    ),
+                    child: const Text('Cancel'),
+                  ),
+                  FilledButton(
+                    onPressed: () => Navigator.pop(context, true),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: theme.colorScheme.error,
+                      foregroundColor: theme.colorScheme.onError,
+                      minimumSize: Size(0, 48 * scale),
+                      padding: actionPadding,
+                      textStyle: actionStyle,
+                    ),
+                    child: Text(widget.confirmLabel),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

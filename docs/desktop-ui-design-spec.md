@@ -652,16 +652,18 @@ unsaved-draft behavior.
   lineup. Empty state reverses that emphasis and avoids duplicate header actions.
 - Approved bulk management: quiet Select control reveals checkboxes, selected
   count and Delete selected. Select all matching means current search/filter
-  results. Confirmation gives the count and states Plex media is unaffected.
+  results. Confirmation gives the count and explains removal from the lineup.
   Selection controls disappear when finished.
 - Preserve selection by channel identity across search/filter changes. Show
   “12 selected · 4 outside this view” when appropriate. Select all matching adds
   current results; Clear selection clears all; Cancel exits selection mode.
   Row activation toggles selection while in this mode instead of opening Studio.
-- Delete selected opens one confirmation containing total, Custom/Generated
-  breakdown and a scrollable list of full names/numbers. State “Your Plex media
-  won’t be deleted.” Explain possible regeneration when generated channels are
-  included. No bulk save before confirmation.
+- Delete selected opens one confirmation containing the total and a scrollable
+  list of full names/numbers. The September 9 surface19 refinement keeps only
+  the lineup-removal/irreversibility explanation; omit the Custom/Generated
+  breakdown, Plex-media reassurance and regeneration note from this panel.
+  This copy simplification does not change deletion or regeneration behavior.
+  No bulk save before confirmation.
 - Delete as one validated batch. On failure preserve selection for retry and use
   outcome-accurate copy; on success exit selection mode, preserve search/filter,
   and restore focus to a nearby surviving row or relevant empty-state control.
