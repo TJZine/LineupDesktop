@@ -33,11 +33,11 @@ may cover multiple listed states only when that scope is clear to the user.
 | surface-17 | Channel selection | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Candidate05/06; `d98e9761` |
 | surface-18 | Channel reorder | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Candidate05/06; `d98e9761` |
 | surface-19 | Delete confirmation | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Text-only final amendment; recapture waived; `aa25168f` |
-| surface-20 | Studio · hand-picked | Unreviewed | Not assessed in this pass | — |
-| surface-21 | Studio · full authoring | Unreviewed | Not assessed in this pass | — |
-| surface-22 | Studio · browse sources | Unreviewed | Not assessed in this pass | — |
-| surface-23 | Studio · library programming | Unreviewed | Not assessed in this pass | — |
-| surface-24 | Studio · filter picker | Unreviewed | Not assessed in this pass | — |
+| surface-20 | Studio · hand-picked | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Candidate07; `8c0617c7` |
+| surface-21 | Studio · full authoring | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Candidate07; `8c0617c7` |
+| surface-22 | Studio · browse sources | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Candidate07; `8c0617c7` |
+| surface-23 | Studio · library programming | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Candidate07; `8c0617c7` |
+| surface-24 | Studio · filter picker | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Candidate07; `8c0617c7` |
 | surface-25 | Guide · no playback | Unreviewed | Not assessed in this pass | — |
 | surface-26 | Guide · PiP | Unreviewed | Not assessed in this pass | — |
 | surface-27 | Mini Guide | Unreviewed | Not assessed in this pass | — |
@@ -1114,3 +1114,139 @@ Implementation `aa25168f267655bf9b76311c1fa8307e70f604f3`; source hashes, prior-
 user waiver are recorded in [durable evidence](design/desktop-ui/approved/2026-09-09-delete-confirmation/evidence.json).
 Adaptive, grouped accessibility and physical Windows checks remain outstanding.
 Independent review is not specifically recommended.
+
+
+## September 9, 2026 — surfaces 20–24 correction brief
+
+The user grouped all five Studio surfaces for shared header/spacing corrections,
+with root-recommended refinements for browse sources (22), which has no standalone
+mock. Base `abde710564aa201b2f7289c905203ea04632b64c`, clean before this work.
+Astra inspected the rendered final playback-space HTML, filter-picker B and
+Library editor references, and fresh production-widget Studio captures. Frozen
+comparison entries 20 and 21 share the same image; the portable packet remains
+unchanged.
+
+- Separate back navigation/context from the channel title/status and save/tune
+  actions. Remove the oversized amber number tile; retain the editable number
+  and accessible channel identity.
+- Increase local Studio typography and use the mock's compact playback dropdown
+  and shared settings hierarchy without changing scheduling or save contracts.
+- Group browse filters horizontally, preserve Add/Added and bulk selection, and
+  provide more room for program results. Align Library/Collection and filter
+  controls with the same editing workspace.
+- Enlarge schedule-preview headings, selected-program details and rows, and use
+  more available height. Preserve loading/stale/error and selection behavior.
+- Give filter picker B a clear heading, readable choices and stable Done/Cancel
+  actions. Preserve pending choices, cancellation and focus restoration.
+
+Worker assignment: existing `worker_luna` / GPT-5.6 Luna / xhigh, exclusive
+`lib/app/channel_studio_view.dart`; Astra owns schedule-preview presentation,
+capture harness, integration and documentation. No new UI layout tests.
+This is an implementation brief, not visual approval.
+
+
+### Studio first candidate — awaiting visual approval
+
+Astra integrated the initial Luna presentation work and completed the dropdown,
+Mini-marathon shared row, local typography/Material host, browse filter grid and
+preview geometry. Existing Library five-result sample behavior is preserved.
+Only existing playback-control selectors changed in the behavior suite; no new
+layout tests were added. All 67 Studio and 24 Air Check behavior checks passed,
+including existing reflow/enlarged-text checks; this is not a physical Windows
+or complete adaptive visual acceptance claim. Fresh affected-state capture runs
+also passed. Analysis of the two production files and updated test file passed.
+
+Local evidence: `build/desktop-ui/surface-20-24/review-evidence.json`, candidate04
+hand-picked, browse, populated Library, populated filter picker and empty playlist;
+candidate05 Mini-marathons corrects the block-size label width. All images are
+1920×1080/DPR1/text100%, with synthetic content. Non-Mini-marathon candidate04
+images remain visually current after the isolated Mini-marathon correction.
+Subsequent Shuffle wording cleanup does not affect the captured modes.
+
+Current source hashes:
+
+- `lib/app/channel_studio_view.dart`: `9e256683e2a13b07698471581b5d76fe8a93194c22dc3f30d3b506ccdda344b8`
+
+- `lib/app/channel_air_check.dart`: `24a9587cee7aa6c2d34983d29711feebbb67ede0d00b5cd982b947868bca722f`
+
+No surface is locked or committed yet. User visual feedback is the next step.
+Remaining checks: grouped adaptive visual review (including1440p/2160p and
+enlarged text), accessibility checkpoint and physical Windows input/rendering
+validation. Independent review is not specifically recommended for this
+presentation-only pass.
+
+
+### Studio second-pass brief — changes requested
+
+The user requested another critical pass: remove the playback helper, replace
+the Browse library/Channel programs pills, fix the Media type field's missing
+persistent label, and organize Library programming into aligned controls and a
+clear results section. The user also prefers the mock's slash between LINEUP
+and CHANNEL STUDIO. None of the first-pass candidates is approved.
+
+Astra re-inspected the rendered Library mock and candidate04. The second pass
+uses flat underlined view tabs, a persistent Media type label with All types,
+unified labeled Library/Collection/filter fields, a quieter watched-items control
+and a separated Matching programs section. Required validation explanations,
+filter pending-state/focus behavior and five-item sample remain unchanged.
+Existing worker_luna / GPT-5.6 Luna / xhigh owns only the Studio view file for
+this bounded correction; root retains tests, capture and acceptance review.
+
+
+Worker-context preference recorded during the Studio second pass: use a fresh
+Luna worker per new surface family/type, then reuse it only within that family.
+The user explicitly permits continuing with the current worker for Studio; the
+[collaborative handoff](desktop-ui-collaborative-handoff.md) now carries this
+standing preference.
+
+
+### Studio second-pass candidate07 — awaiting approval
+
+Applied the requested slash separator, removed redundant playback helpers,
+replaced pills with underlined view tabs, and made Media type an always-labeled
+field showing the existing All types choice. Library/Collection and filter
+controls now share field styling, full-field click targets and visible keyboard
+focus. The watched-items setting is quiet and bounded; Matching programs has a
+separate heading and aligned row dividers. Astra also softened schedule metadata.
+
+Astra inspected the fresh candidate07 hand-picked, browse, Library, multi-value
+Library, filter-picker and Mini-marathon captures. The 67 Studio and24 Air Check
+existing behavior checks pass; only the two obsolete Choose-button selectors
+changed in this pass. Captures and targeted analysis pass. No layout tests added.
+Local source/capture hashes and reproduction metadata are recorded in
+`build/desktop-ui/surface-20-24/second-pass-evidence.json`. All captures use real
+Flutter widgets at1920×1080/DPR1/text100% with synthetic content.
+
+This candidate is not locked. Prior Studio candidates are superseded. Grouped
+adaptive visual/accessibility and physical Windows checks remain pending; no
+independent review is specifically recommended for this presentation pass.
+
+- Candidate07 `lib/app/channel_studio_view.dart` SHA-256: `44fd569e9c4c1dc3774132e9e4cc984b50640a2a8c8e8bbb07f73b018801e18a`
+
+- Candidate07 `lib/app/channel_air_check.dart` SHA-256: `51db45d939275c52c6a6d439298c6585c36e85fb3f65bcc43c7b51d7b6aa51ae`
+
+
+## September 9, 2026 — Studio surfaces 20–24 approved
+
+User approval: “looks good. we can lock it”. This approves the presented
+candidate07 Studio family at 1920×1080/DPR1/text100%: shared hand-picked/full
+authoring (20/21), browse sources (22), Library programming including populated
+filters (23), and filter picker (24). This supersedes the awaiting-approval
+status above. Mini-marathon and empty-playlist captures are supplemental family
+evidence, not separately presented state approvals.
+
+Implementation commit: `8c0617c78ed8fd922447571b871f354be8a7ec85`.
+The [versioned evidence manifest](design/desktop-ui/approved/2026-09-09-channel-studio/evidence.json)
+records the exact source and seven unmodified capture hashes, approval, state
+scope and checks. Captures use synthetic content without supplied artwork.
+The frozen comparison packet remains unchanged.
+
+All 67 existing Studio and 24 Air Check behavior checks passed, as did targeted
+analysis and capture checks. No UI layout tests were added. Existing deterministic
+reflow/enlarged-text checks passed; qualitative 720p/1440p/2160p, DPI/enlarged-text,
+grouped accessibility and physical Windows validation remain pending. This is
+a 1080p visual lock, not complete adaptive or platform acceptance.
+
+Independent review is not specifically recommended for this presentation-only
+pass. No push, deployment or publishing is authorized. Future surface families
+start with a fresh Luna worker; reuse is limited to the same family.

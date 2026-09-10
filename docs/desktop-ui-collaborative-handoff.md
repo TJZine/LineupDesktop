@@ -73,9 +73,12 @@ instruction to recapture all surfaces on every iteration.
    Player structure, behavior/ownership conflicts or missing reference intent.
    Give the user a concrete comparison for such choices, not an abstract question.
 3. **Dispatch bounded Luna work.** Default to one active worker and one surface
-   owner. Two workers are reasonable only for explicitly settled independent
-   files while root has useful work to do. Give exclusive file leases and the
-   detailed brief below. Reuse a worker for related follow-ups. Do not delegate
+   owner. Start a fresh Luna worker for each new surface family/type so unrelated
+   surfaces do not accumulate in its context. Reuse that worker only for follow-ups
+   within the same family. Studio surfaces 20–24 completed under the user’s
+   explicit exception allowing the existing worker. Two workers are reasonable only for
+   explicitly settled independent files while root has useful work to do. Give
+   exclusive file leases and the detailed brief below. Do not delegate
    root's personal visual audit or launch reviewer agents for small tasks.
 4. **Astra integrates and reviews.** Inspect the returned diff and behavior
    evidence. Capture only changed surfaces/states at 1080p/DPR1/text1 using real
