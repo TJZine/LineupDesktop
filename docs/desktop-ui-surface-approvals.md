@@ -32,7 +32,7 @@ may cover multiple listed states only when that scope is clear to the user.
 | surface-16 | Channel directory | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Candidate05/06; `d98e9761` |
 | surface-17 | Channel selection | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Candidate05/06; `d98e9761` |
 | surface-18 | Channel reorder | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Candidate05/06; `d98e9761` |
-| surface-19 | Delete confirmation | Unreviewed | Not assessed in this pass | — |
+| surface-19 | Delete confirmation | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Text-only final amendment; recapture waived; `aa25168f` |
 | surface-20 | Studio · hand-picked | Unreviewed | Not assessed in this pass | — |
 | surface-21 | Studio · full authoring | Unreviewed | Not assessed in this pass | — |
 | surface-22 | Studio · browse sources | Unreviewed | Not assessed in this pass | — |
@@ -1043,4 +1043,74 @@ selection/reorder candidate06 are approved at1080p. Implementation `d98e97617fc0
 source and capture hashes are bound in
 [durable evidence](design/desktop-ui/approved/2026-09-09-channels/evidence.json).
 Adaptive, grouped accessibility and physical Windows validation remain pending.
+Independent review is not specifically recommended.
+
+
+## September 9 — surface19 delegated correction brief
+
+User: “we dont have a mock, id just like you to consider its purpose and create
+ youre recommended ground up panel for this function ... ill defer to your recs
+totally on this panel.” This authorizes the proposed implementation direction;
+visual approval of the result remains pending.
+
+Root inspected current real 1080p one-channel and twelve-channel mixed deletion
+confirmations. Use the accepted Ember & Steel language for a compact opaque
+centered panel, approximately680px wide: clear deletion count, readable
+custom/generated summary, explicit Plex-media preservation and generated-channel
+recurrence copy, and a scrollable roster with aligned numbers/full wrapping names.
+No decorative warning icon or duplicated checkbox list. Content determines short
+panel height; long content scrolls within viewport bounds. Match Cancel/Delete
+alignment, initially focus Cancel, use a clearly labeled destructive-color action.
+
+Luna owns only the private panel widget in `channels_view.dart`. Root wires both
+single-row and batch deletion to it while preserving callbacks, snapshot validation,
+retry/focus behavior and mutation boundaries. Existing regression checks are reused;
+no UI layout tests or independent reviewer are added.
+
+
+### Surface19 candidate02 — awaiting visual approval
+
+Root integrated the shared panel into single-row and batch confirmation, retaining
+transaction, selected-snapshot, currentness, retry and focus behavior. The panel
+has an owned/disposed scroll controller with visible thumb, route-title semantics,
+opaque primary surface, 680px maximum width and720px maximum height at1080p.
+Short selections determine their own smaller height; larger rosters scroll while
+consequences and Cancel/Delete remain visible. Cancel retains initial focus.
+
+Six existing Channels behavior tests, targeted analysis, formatting and diff
+checks passed. Root inspected fresh single-row deletion and mixed twelve-channel
+batch captures, including the bottom of the scrollable roster. No UI layout tests
+or independent reviewer were added; independent review is not specifically
+recommended. Adaptive/DPI/enlarged-text, grouped accessibility and physical Windows
+checks remain pending.
+
+Source SHA-256: `2318f34d3f4f7bc7b58cd1970fdb89a5e01b3498306e564ef33e6ce2c0c95adf`. Local evidence:
+`build/desktop-ui/surface-19/candidate-02/`, 1920×1080/DPR1/text100%.
+
+- `mixed-scrolled.png`: `f22e85b37f63fa12f3f10110ef7738b990058e897b3ebc161eac9efd1e922493`
+- `mixed.png`: `f3785b4559735fb275df9e46215c93b32f3b2a41f0210b549d5399a5667e4019`
+- `single.png`: `785c1917b6a916a83c9df87307f1075285ee13927197e718a5c02a98d5d2f93a`
+
+Surface19 is not visually locked or committed pending user confirmation.
+
+
+### September 9 — surface19 locked with final text-only amendment
+
+User approved: “remove the rest and its locked. you dont need to inspect the
+visual or show me a visual after this small change we are only removing text”.
+Keep the heading, lineup-removal/irreversibility explanation, channel roster and
+actions. Remove the Custom/Generated breakdown, Plex-media reassurance and
+regeneration note. Deletion and generation behavior are unchanged. The active
+specification now reflects this later user decision.
+
+No final visual inspection or recapture was performed, as explicitly requested.
+The durable PNGs are clearly labeled **before-final-copy**: they establish the
+reviewed panel design before the approved text removal, not an exact rendering of
+the final commit. Six existing Channels behavior tests, targeted analysis,
+formatting and diff checks passed; the existing scope assertion now checks selected
+channel identities rather than removed summary text. No new UI layout tests.
+
+Implementation `aa25168f267655bf9b76311c1fa8307e70f604f3`; source hashes, prior-capture boundary and
+user waiver are recorded in [durable evidence](design/desktop-ui/approved/2026-09-09-delete-confirmation/evidence.json).
+Adaptive, grouped accessibility and physical Windows checks remain outstanding.
 Independent review is not specifically recommended.
