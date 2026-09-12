@@ -48,3 +48,29 @@ require physical Windows evidence at the tested commit.
 
 Independent review has not been requested or run. No separate review is
 specifically recommended for this presentation-only group.
+
+## Group 2a — channel setup
+
+Luna task `01a0972b-e577-7652-be45-d820ba1ed032` completed the initial pass and
+a bounded follow-up, then released its lease. Setup now interpolates its existing
+720p and 1080p dimensions only within that interval, then scales the 1080p endpoint
+using the shared reference. Controls, spacing and adaptive thresholds follow the
+same rule. Enlarged dropdown labels receive sufficient width and row height;
+the compact configuration/review layout keeps its footer outside the scrolling
+content. Scan, allocation, review and apply behavior remains with existing owners.
+
+The 15 existing setup behavior checks passed. Analysis, format and diff checks
+passed. Initial portable captures covered five states at 1080p, 1440p, 2160p
+and 2160p/DPR2/text200%. Final follow-up captures covered those five states at
+1080p, 2160p, 2160p/DPR2/text200% and 720p/text200%, plus enlarged open/closed
+numeric and grouping dropdowns and a native-4K switch with whole-row activation.
+All five final normal-text 1080p captures are byte-identical to their preserved
+pre-change references, independently confirmed by Astra. Astra inspected the
+final native-4K Sources, enlarged open dropdowns and compact enlarged Review.
+[Source and capture hashes](design/desktop-ui/scaling/group-2a-evidence.json)
+identify the final evidence. Earlier 1440p captures precede the control follow-up.
+
+This completes portable setup scaling integration, not physical Windows
+validation or a new approval of the skipped Mini-marathons design. Independent
+review was not run; no separate review is specifically recommended for this
+presentation-only group. The existing Windows evidence boundary still applies.
