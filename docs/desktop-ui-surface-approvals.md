@@ -46,13 +46,13 @@ may cover multiple listed states only when that scope is clear to the user.
 | surface-30 | Audio tracks | Approved at 1080p | Portable checks passed; adaptive/Windows pending | September12 conditional lock completed; `baec2d04` |
 | surface-31 | Subtitles · long names | Approved at 1080p | Portable checks passed; adaptive/Windows pending | September12 conditional lock completed; `baec2d04` |
 | surface-32 | Sleep timer | Approved at 1080p | Portable checks passed; adaptive/Windows pending | September12 conditional lock completed; `baec2d04` |
-| surface-33 | Settings · Appearance | Unreviewed | Not assessed in this pass | — |
-| surface-34 | Settings · Guide | Unreviewed | Not assessed in this pass | — |
-| surface-35 | Settings · Playback | Unreviewed | Not assessed in this pass | — |
-| surface-36 | Settings · Accessibility | Unreviewed | Not assessed in this pass | — |
-| surface-37 | Settings · Account | Unreviewed | Not assessed in this pass | — |
-| surface-38 | Settings · Support | Unreviewed | Not assessed in this pass | — |
-| surface-39 | Settings over playback | Unreviewed | Not assessed in this pass | — |
+| surface-33 | Settings · Appearance | Approved at 1080p (shared treatment) | Behavior checks passed; adaptive/Windows pending | Account representative review; `6baa7a9b` |
+| surface-34 | Settings · Guide | Approved at 1080p (shared treatment) | Behavior checks passed; adaptive/Windows pending | Account representative review; `6baa7a9b` |
+| surface-35 | Settings · Playback | Approved at 1080p (shared treatment) | Behavior checks passed; adaptive/Windows pending | Account representative review; `6baa7a9b` |
+| surface-36 | Settings · Accessibility | Approved at 1080p (shared treatment) | Behavior checks passed; adaptive/Windows pending | Account representative review; `6baa7a9b` |
+| surface-37 | Settings · Account | Approved at 1080p (shared treatment) | Behavior checks passed; adaptive/Windows pending | Account representative review; `6baa7a9b` |
+| surface-38 | Settings · Support | Approved at 1080p (shared treatment) | Behavior checks passed; adaptive/Windows pending | Account representative review; `6baa7a9b` |
+| surface-39 | Settings over playback | Approved at 1080p (shared treatment) | Behavior checks passed; adaptive/Windows pending | Account representative review; `6baa7a9b` |
 | surface-40 | Alternate theme · current only | Unreviewed | Not assessed in this pass | — |
 | surface-41 | Lineup menu | Unreviewed | Not assessed in this pass | — |
 | surface-42 | Diagnostics · recording off | Unreviewed | Not assessed in this pass | — |
@@ -1684,3 +1684,45 @@ cases passed. Grouped adaptive/DPI/text/accessibility and exact-commit physical
 Windows moving-video/input checks remain pending. Independent review not
 specifically recommended. No push or remote publication. Next surface:33,
 Settings Appearance; do not reopen30–32.
+
+## September 12 — Settings surfaces33–39 locked
+
+User requested one representative Account review for the shared Settings family,
+with structural/dead-space correction, removal of decorative rail/action icons,
+restrained accent text, and refinement of the Lineup menu. Root personally
+inspected the original Settings A mock and real Account capture, then audited
+Account ordering, signed-out routing, profile/server pickers and sign-out.
+The later specification's profile → startup preference → server → separated
+signed-in account/sign-out order remains authoritative over the older mock.
+
+The user approved the proposed direction and authorized a fresh GPT-5.6 Luna/xhigh
+implementation task on the shared checkout. Root integrated its Settings-only
+diff, corrected inherited theme/font contexts and the old half-width description
+allocation, and personally inspected three real Flutter1920×1080/DPR1/text1
+captures: normal Account, long-name Account and Appearance. The normal Account
+capture was displayed and the other two linked for the user's review.
+
+Shared treatment:96px header,48px outer insets,312px rail,48px detail inset,
+32px section heading,20px row labels,16px supporting/action text, content-driven
+132px minimum rows, native controls and subtle separators. Category/action icons
+are removed; Back retains its arrow, LINEUP uses a small horizontal ellipsis,
+and selection fields use small downward triangles. Theme accents remain on
+ordinary action labels and selection; sign-out is a quiet neutral outlined action.
+No shared theme changes or earlier locked-surface changes. Settings-over-playback
+retains its existing94% scrim.
+
+User approval: “yes i think so, any further adjustments /refinements on top of the
+concerns i presented? if you are sure theres nothing else we can lock”. Root found
+no further adjustment worth adding and completed this conditional lock without
+changing the presented candidate. The lock covers the common treatment across
+33–39 by the user's representative-review choice, not separately inspected images
+for every category or state. Signed-out users route to Welcome/linking; the old
+capture's missing identity fixture is not a signed-out Settings design.
+
+Implementation `6baa7a9b`. Durable capture/source hashes and exact approval:
+`docs/design/desktop-ui/approved/2026-09-12-settings/evidence.json`.
+44 existing focused behavior tests and3 capture cases passed; focused analyzer,
+formatting and diff checks passed. Grouped adaptive/DPI/enlarged-text/accessibility
+visual checks and exact-commit physical Windows input/native-video validation
+remain pending. Independent review is not specifically recommended. No push.
+Next surface:40. Do not reopen33–39 without a new user request.

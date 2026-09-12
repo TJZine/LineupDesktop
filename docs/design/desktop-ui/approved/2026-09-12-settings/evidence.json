@@ -1,0 +1,36 @@
+{
+  "status": "Shared Settings treatment locked at 1080p; root found no further refinements",
+  "implementation_commit": "6baa7a9b4f3ee472f65bdd8858faf237d82afe42",
+  "approval_message": "yes i think so, any further adjustments /refinements on top of the concerns i presented? if you are sure theres nothing else we can lock",
+  "surface_ids": [
+    33,
+    34,
+    35,
+    36,
+    37,
+    38,
+    39
+  ],
+  "acceptance_scope": "User requested representative Account review for the shared Settings family. Account normal and long-name captures and Appearance dropdown capture support the shared treatment; no claim that every page/state was separately visually reviewed. Settings-over-playback backing is unchanged.",
+  "sources": {
+    "lib/app/lineup_shell.dart": "b28e25506a4f63967781a3132d009734275a93cb110a047bdbcb5ce475f6d7ce"
+  },
+  "images": {
+    "account-1920x1080.png": "c2e8b7aac64c2844eccb5095bf4a15953ead9d433961a07518ecf229258d2843",
+    "appearance-1920x1080.png": "5ca94e99f7c4bf075cc902433ed4f9f725334e4fe8e6d82613676f5519e749f3",
+    "account-long-1920x1080.png": "a8416e081ed61251fdf386094ad72ee2455527e06b63d585f2f59c858cca87bd"
+  },
+  "viewport": [
+    1920,
+    1080
+  ],
+  "dpr": 1,
+  "text_scale": 1,
+  "fixture": "Real Flutter SettingsView with pinned fonts, synthetic distinct account/profile/server identities; callbacks supplied for presentation. Signed-out routing is source-audited and covered by existing app behavior tests, not a signed-out Settings capture.",
+  "checks": "44 existing focused behavior tests passed (desktop_settings_test, lineup_app_test and two Settings ui_review regressions); 3 capture cases passed; focused analyzer, formatter and diff checks passed. Source/image hashes reverified before committing.",
+  "pending": [
+    "Grouped adaptive/DPI/enlarged-text/accessibility visual checks",
+    "Exact-commit physical Windows input/focus and Settings-over-native-video validation"
+  ],
+  "independent_review": "Not specifically recommended"
+}
