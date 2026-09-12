@@ -114,3 +114,25 @@ later prose refinements. These are approved designs, not implemented/validated c
 Cinema Continuity tokens remain authoritative. The protected OSD/Now Playing
 structural baseline above still applies; the small approved timer invocation and
 shared edge-blending principle do not authorize a broader Player redesign.
+
+
+## September 12 collaborative Diagnostics refinement
+
+Diagnostics42–45 use a local96px header and48px horizontal margins at1080p,
+32px heading and16px supporting/action text. Keep one filled accent action for
+Copy redacted report, with stable feedback space. Present the four summary groups
+Playback, Video, Media signal and Plex before optional grouped technical details
+and recent events. Reported media facts do not establish physical HDR output;
+unavailable method/stream decisions must remain explicit.
+
+Use one quiet inline “Per-stream handling · Unavailable” while those facts are
+not supplied. Expanded events align beneath the message and lay out labeled facts
+horizontally with24px gaps/8px wrap spacing, muted labels and brighter16px values.
+Keep event times local with seconds and accessible dates; arriving events must
+not displace the user's current reading before explicit refresh.
+
+The user replaced the Settings LINEUP ellipsis with a small18px hamburger;
+Diagnostics uses the same neutral indicator. This amendment does not change other
+menu content or unrelated dropdown chevrons. Evidence and exact conditional lock:
+[Diagnostics approval](../docs/design/desktop-ui/approved/2026-09-12-diagnostics/evidence.json).
+Adaptive and physical Windows validation remain separate pending work.

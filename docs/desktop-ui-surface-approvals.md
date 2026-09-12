@@ -55,10 +55,10 @@ may cover multiple listed states only when that scope is clear to the user.
 | surface-39 | Settings over playback | Approved at 1080p (shared treatment) | Behavior checks passed; adaptive/Windows pending | Account representative review; `6baa7a9b` |
 | surface-40 | Alternate theme · current only | Unreviewed | Not assessed in this pass | — |
 | surface-41 | Lineup menu | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | `ad716112`; six invoker/long-name captures |
-| surface-42 | Diagnostics · recording off | Unreviewed | Not assessed in this pass | — |
-| surface-43 | Diagnostics · synthetic events | Unreviewed | Not assessed in this pass | — |
-| surface-44 | Diagnostics · technical details | Unreviewed | Not assessed in this pass | — |
-| surface-45 | Diagnostics · events and details | Unreviewed | Not assessed in this pass | — |
+| surface-42 | Diagnostics · recording off | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | September12 conditional lock completed; `7193d52e` |
+| surface-43 | Diagnostics · synthetic events | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | September12 conditional lock completed; `7193d52e` |
+| surface-44 | Diagnostics · technical details | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | September12 conditional lock completed; `7193d52e` |
+| surface-45 | Diagnostics · events and details | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | September12 conditional lock completed; `7193d52e` |
 
 ## Approval records
 
@@ -1749,3 +1749,39 @@ updated two stale expectations from approved Settings/channel work without
 changing their behavior. Adaptive visual and exact-commit physical Windows
 input/native-video checks remain pending. Independent review not specifically
 recommended. Surface40 stays skipped/unreviewed. Next: Diagnostics42–45.
+
+## September 12 — Diagnostics42–45 locked; Lineup indicator amendment
+
+User approved the Diagnostics direction after root inspected the refined four-group
+A mock, all four frozen states, source owners, event retention/copy behavior and
+report privacy boundaries. A fresh Luna/xhigh task implemented the settled visual
+pass; root integrated header geometry, technical grouping, label font inheritance,
+aligned event details, positive-dimension handling, local timestamps with seconds
+and accessible dates, plus allowlisted export of pixel format, primaries, matrix
+and bounded finite signal peak. No new collectors or invented playback decisions.
+
+Final user request: “okay lets make those and lock it”, accepting the proposal to
+replace the three-line per-stream block with “Per-stream handling · Unavailable”
+and display expanded event facts horizontally with muted labels, brighter values,
+24px gaps and natural wrapping. The same Luna task completed that bounded pass.
+Root personally inspected both regenerated real1080p captures and found the exact
+conditions fulfilled. The final images were not claimed as a second user-reviewed
+comparison. Recording off/on-empty, events, technical and expanded-event states
+are covered by this family lock.
+
+The user also explicitly requested: “yes anywhere that ellipsis is present in this
+way should be replaced by the hamburger type icon”. The only existing LINEUP
+ellipsis was in Settings; it is now an18px hamburger, matching Diagnostics.
+This supersedes only the indicator in the earlier Settings lock. Its Support
+recording helper now states that turning recording off clears recorded events.
+Other locked surfaces and menu content remain unchanged; surface40 stays skipped.
+
+Implementation `7193d52e`. Durable final captures, hashes, approval and limitations:
+`docs/design/desktop-ui/approved/2026-09-12-diagnostics/evidence.json`.
+21 focused existing behavior tests passed after integration; the final narrow
+pass passed3 Diagnostics tests, focused analysis, formatting/diff checks and2
+regenerated capture cases. Three unchanged initial captures are reused. Synthetic
+Windows-target fixture and pinned fonts are portable evidence only. Grouped
+adaptive/DPI/enlarged-text/accessibility and exact-commit physical Windows checks
+remain pending. Independent review not specifically recommended. No push.
+This completes the requested visual sequence; skipped surfaces are not approved.
