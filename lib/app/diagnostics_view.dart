@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -114,6 +116,9 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
     });
   }
 
+  double _effectiveTextScale(BuildContext context) =>
+      math.max(1.0, MediaQuery.textScalerOf(context).scale(1));
+
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.sizeOf(context);
@@ -126,80 +131,83 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
     final unseen = currentEvents
         .where((event) => !_visibleEvents.contains(event))
         .length;
-    return FocusTraversalGroup(
-      child: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _diagnosticsHeader(context, scale),
-            Expanded(
-              child: Material(
-                color: Colors.transparent,
-                child: Padding(
-                  padding: EdgeInsets.fromLTRB(
-                    48 * scale,
-                    32 * scale,
-                    48 * scale,
-                    0,
-                  ),
-                  child: ListView(
-                    controller: _scroll,
-                    children: [
-                      _diagnosticsIntro(context, scale),
-                      SizedBox(height: 28 * scale),
-                      _summary(context, snapshot, telemetry, scale),
-                      SizedBox(height: 32 * scale),
-                      _eventsHeader(
-                        context,
-                        snapshot,
-                        currentEvents,
-                        unseen,
-                        scale,
-                      ),
-                      if (!snapshot.recordingEnabled)
-                        SizedBox(
-                          height: 180 * scale,
-                          child: _emptyEvents(
-                            'Diagnostic recording is off',
-                            'Enable recording in Settings > Support, then reproduce the issue.',
-                            scale,
-                          ),
-                        )
-                      else if (_visibleEvents.isEmpty)
-                        SizedBox(
-                          height: 180 * scale,
-                          child: _emptyEvents(
-                            'No events recorded yet',
-                            'Reproduce the issue to collect support events.',
-                            scale,
-                          ),
-                        )
-                      else
-                        for (final event in _visibleEvents)
-                          _eventTile(event, scale),
-                      SizedBox(height: 12 * scale),
-                      Text(
-                        'This session only · Up to 250 recent events retained',
-                        style: TextStyle(
-                          color: LineupTheme.of(context).secondaryText,
-                          fontSize: 14 * scale,
+    return IconTheme.merge(
+      data: IconThemeData(size: 24 * scale),
+      child: FocusTraversalGroup(
+        child: SafeArea(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _diagnosticsHeader(context, scale),
+              Expanded(
+                child: Material(
+                  color: Colors.transparent,
+                  child: Padding(
+                    padding: EdgeInsets.fromLTRB(
+                      48 * scale,
+                      32 * scale,
+                      48 * scale,
+                      0,
+                    ),
+                    child: ListView(
+                      controller: _scroll,
+                      children: [
+                        _diagnosticsIntro(context, scale),
+                        SizedBox(height: 28 * scale),
+                        _summary(context, snapshot, telemetry, scale),
+                        SizedBox(height: 32 * scale),
+                        _eventsHeader(
+                          context,
+                          snapshot,
+                          currentEvents,
+                          unseen,
+                          scale,
                         ),
-                      ),
-                      SizedBox(height: 8 * scale),
-                      Text(
-                        'Reports exclude credentials, URLs and private paths. Review before sharing.',
-                        style: TextStyle(
-                          color: LineupTheme.of(context).secondaryText,
-                          fontSize: 14 * scale,
+                        if (!snapshot.recordingEnabled)
+                          SizedBox(
+                            height: 180 * scale,
+                            child: _emptyEvents(
+                              'Diagnostic recording is off',
+                              'Enable recording in Settings > Support, then reproduce the issue.',
+                              scale,
+                            ),
+                          )
+                        else if (_visibleEvents.isEmpty)
+                          SizedBox(
+                            height: 180 * scale,
+                            child: _emptyEvents(
+                              'No events recorded yet',
+                              'Reproduce the issue to collect support events.',
+                              scale,
+                            ),
+                          )
+                        else
+                          for (final event in _visibleEvents)
+                            _eventTile(event, scale),
+                        SizedBox(height: 12 * scale),
+                        Text(
+                          'This session only · Up to 250 recent events retained',
+                          style: TextStyle(
+                            color: LineupTheme.of(context).secondaryText,
+                            fontSize: 14 * scale,
+                          ),
                         ),
-                      ),
-                      SizedBox(height: 16 * scale),
-                    ],
+                        SizedBox(height: 8 * scale),
+                        Text(
+                          'Reports exclude credentials, URLs and private paths. Review before sharing.',
+                          style: TextStyle(
+                            color: LineupTheme.of(context).secondaryText,
+                            fontSize: 14 * scale,
+                          ),
+                        ),
+                        SizedBox(height: 16 * scale),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -279,14 +287,24 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
         FilledButton(
           focusNode: widget.focusNode,
           onPressed: _copying ? null : _copy,
+          style: FilledButton.styleFrom(
+            minimumSize: Size(148 * scale, 54 * scale),
+            padding: EdgeInsets.symmetric(
+              horizontal: 24 * scale,
+              vertical: 16 * scale,
+            ),
+          ),
           child: Text(
             'Copy redacted report',
             style: TextStyle(fontSize: 16 * scale),
           ),
         ),
-        SizedBox(
-          height: 40 * scale,
-          width: 300 * scale,
+        ConstrainedBox(
+          constraints: BoxConstraints(
+            minHeight: 40 * scale * _effectiveTextScale(context),
+            minWidth: 300 * scale,
+            maxWidth: 300 * scale,
+          ),
           child: Align(
             alignment: Alignment.topRight,
             child: Semantics(
@@ -324,8 +342,10 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
         ),
       ],
     );
+    final effectiveTextScale = _effectiveTextScale(context);
     return LayoutBuilder(
-      builder: (context, constraints) => constraints.maxWidth < 720 * scale
+      builder: (context, constraints) =>
+          constraints.maxWidth < 720 * scale * effectiveTextScale
           ? Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -391,9 +411,11 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
             LayoutBuilder(
               builder: (context, constraints) {
                 final gap = 28 * scale;
-                final columns = constraints.maxWidth >= 1100 * scale
+                final effectiveTextScale = _effectiveTextScale(context);
+                final columns =
+                    constraints.maxWidth >= 1100 * scale * effectiveTextScale
                     ? 4
-                    : constraints.maxWidth >= 600 * scale
+                    : constraints.maxWidth >= 600 * scale * effectiveTextScale
                     ? 2
                     : 1;
                 final width = columns == 1
@@ -444,7 +466,8 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final roles = LineupTheme.of(context);
-        final wide = constraints.maxWidth >= 1100 * scale;
+        final wide =
+            constraints.maxWidth >= 1100 * scale * _effectiveTextScale(context);
         final gap = 24 * scale;
         final narrowGroup = wide
             ? (constraints.maxWidth - 2 * gap) / 4
@@ -566,9 +589,11 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
         LayoutBuilder(
           builder: (context, constraints) {
             final gap = 24 * scale;
-            final columns = constraints.maxWidth >= 800 * scale
+            final effectiveTextScale = _effectiveTextScale(context);
+            final columns =
+                constraints.maxWidth >= 800 * scale * effectiveTextScale
                 ? 3
-                : constraints.maxWidth >= 500 * scale
+                : constraints.maxWidth >= 500 * scale * effectiveTextScale
                 ? 2
                 : 1;
             final width = columns == 1
@@ -663,8 +688,10 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
         ),
       ],
     );
+    final effectiveTextScale = _effectiveTextScale(context);
     return LayoutBuilder(
-      builder: (context, constraints) => constraints.maxWidth < 1000 * scale
+      builder: (context, constraints) =>
+          constraints.maxWidth < 1000 * scale * effectiveTextScale
           ? Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -727,6 +754,8 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
         title: ExcludeSemantics(
           child: LayoutBuilder(
             builder: (context, constraints) {
+              final eventScale = scale * _effectiveTextScale(context);
+              final gap = 16 * eventScale;
               final time = Text(
                 _eventTime(event.time),
                 style: TextStyle(
@@ -745,18 +774,16 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
                 event.message,
                 style: TextStyle(fontSize: 16 * scale),
               );
-              if (constraints.maxWidth < 520 * scale) {
+              if (constraints.maxWidth < 520 * eventScale) {
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        time,
-                        SizedBox(width: 16 * scale),
-                        area,
-                      ],
+                    Wrap(
+                      spacing: gap,
+                      runSpacing: 4 * eventScale,
+                      children: [time, area],
                     ),
-                    SizedBox(height: 4 * scale),
+                    SizedBox(height: 4 * eventScale),
                     message,
                   ],
                 );
@@ -765,10 +792,10 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
                 crossAxisAlignment: CrossAxisAlignment.baseline,
                 textBaseline: TextBaseline.alphabetic,
                 children: [
-                  SizedBox(width: 104 * scale, child: time),
-                  SizedBox(width: 16 * scale),
-                  SizedBox(width: 120 * scale, child: area),
-                  SizedBox(width: 16 * scale),
+                  SizedBox(width: 104 * eventScale, child: time),
+                  SizedBox(width: gap),
+                  SizedBox(width: 120 * eventScale, child: area),
+                  SizedBox(width: gap),
                   Expanded(child: message),
                 ],
               );
@@ -784,12 +811,13 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
 
   Widget _eventDetails(DiagnosticEntry event, double scale) => LayoutBuilder(
     builder: (context, constraints) {
-      final compact = constraints.maxWidth < 720 * scale;
+      final eventScale = scale * _effectiveTextScale(context);
+      final compact = constraints.maxWidth < 720 * eventScale;
       return SizedBox(
         width: constraints.maxWidth,
         child: Padding(
           padding: EdgeInsets.fromLTRB(
-            compact ? 16 * scale : 272 * scale,
+            compact ? 16 * scale : 16 * scale + 256 * eventScale,
             0,
             16 * scale,
             16 * scale,

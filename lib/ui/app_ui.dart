@@ -19,7 +19,7 @@ abstract final class LineupLayout {
   static bool isCompactWidth(double width) => width < compact;
 
   static double scaleFor(Size size) =>
-      math.min(size.width / 1920, size.height / 1080).clamp(1.0, 1.35);
+      math.max(1.0, math.min(size.width / 1920, size.height / 1080));
 
   static EdgeInsets pageInsets(Size size) => EdgeInsets.all(
     (isCompactWidth(size.width) ? 20.0 : 32.0) * scaleFor(size),

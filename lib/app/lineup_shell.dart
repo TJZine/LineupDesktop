@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -1026,7 +1027,7 @@ class _SettingsViewState extends State<SettingsView> {
                     : Colors.transparent,
                 border: Border(
                   left: BorderSide(
-                    width: 2,
+                    width: 2 * scale,
                     color: category == _category
                         ? roles.progressFill
                         : Colors.transparent,
@@ -1049,7 +1050,7 @@ class _SettingsViewState extends State<SettingsView> {
                   textStyle: Theme.of(context).textTheme.labelLarge
                       ?.copyWith(fontSize: 18 * scale),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(5),
+                    borderRadius: BorderRadius.circular(5 * scale),
                   ),
                 ),
                 onPressed: () {
@@ -1376,10 +1377,14 @@ class _SettingsViewState extends State<SettingsView> {
   }
 
   Widget _settingFeedback(String keyName) {
+    final size = MediaQuery.sizeOf(context);
+    final scale =
+        LineupLayout.scaleFor(size) *
+        (size.height / 1080).clamp(0.82, 1.0).toDouble();
     final error = _errors[keyName];
     if (error != null) {
       return Padding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+        padding: EdgeInsets.fromLTRB(16 * scale, 0, 16 * scale, 8 * scale),
         child: Text(
           error,
           key: ValueKey('setting-error-$keyName'),
@@ -1388,8 +1393,8 @@ class _SettingsViewState extends State<SettingsView> {
       );
     }
     if (_showSaving.contains(keyName)) {
-      return const Padding(
-        padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+      return Padding(
+        padding: EdgeInsets.fromLTRB(16 * scale, 0, 16 * scale, 8 * scale),
         child: Text('Saving…'),
       );
     }
@@ -1530,7 +1535,7 @@ class _SettingsSection extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(height: 6),
+        SizedBox(height: 6 * scale),
         Text(
           description,
           style: theme.textTheme.bodyLarge?.copyWith(
@@ -1567,7 +1572,7 @@ class _SettingsRow extends StatelessWidget {
           LineupLayout.scaleFor(size) *
           (size.height / 1080).clamp(0.82, 1.0).toDouble();
       final reflow =
-          constraints.maxWidth < 600 ||
+          constraints.maxWidth < 600 * scale ||
           MediaQuery.textScalerOf(context).scale(1) >= 2;
       final theme = Theme.of(context);
       final roles = LineupTheme.of(context);
@@ -1652,7 +1657,26 @@ class _SettingsSwitchTile extends StatelessWidget {
     child: _SettingsRow(
       label: title,
       helper: subtitle,
-      control: Switch(value: value, onChanged: onChanged),
+      control: Builder(
+        builder: (context) {
+          final size = MediaQuery.sizeOf(context);
+          final scale =
+              LineupLayout.scaleFor(size) *
+              (size.height / 1080).clamp(0.82, 1.0).toDouble();
+          final textScale = MediaQuery.textScalerOf(context).scale(1);
+          final controlScale = math.max(1.0, scale * math.max(1.0, textScale));
+          return SizedBox(
+            width: 60 * controlScale,
+            height: 48 * controlScale,
+            child: Center(
+              child: Transform.scale(
+                scale: controlScale,
+                child: Switch(value: value, onChanged: onChanged),
+              ),
+            ),
+          );
+        },
+      ),
       first: first,
     ),
   );
@@ -1681,24 +1705,27 @@ class _Dropdown<T> extends StatelessWidget {
     final scale =
         LineupLayout.scaleFor(size) *
         (size.height / 1080).clamp(0.82, 1.0).toDouble();
+    final textScale = MediaQuery.textScalerOf(context).scale(1);
+    final controlScale = math.max(1.0, scale * math.max(1.0, textScale));
     final theme = Theme.of(context);
     return MergeSemantics(
       child: _SettingsRow(
         label: Text(label),
         helper: Text(description),
         control: SizedBox(
-          width: 248 * scale,
+          width: 248 * controlScale,
           child: DropdownButtonFormField<T>(
             key: ValueKey(value),
             initialValue: value,
             isExpanded: true,
-            icon: Icon(Icons.arrow_drop_down, size: 20 * scale),
+            itemHeight: 48 * controlScale,
+            icon: Icon(Icons.arrow_drop_down, size: 20 * controlScale),
             style: theme.textTheme.bodyLarge?.copyWith(fontSize: 16 * scale),
             decoration: InputDecoration(
               border: const OutlineInputBorder(),
               contentPadding: EdgeInsets.symmetric(
-                horizontal: 14 * scale,
-                vertical: 11 * scale,
+                horizontal: 14 * controlScale,
+                vertical: 11 * controlScale,
               ),
             ),
             items: [
