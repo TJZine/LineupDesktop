@@ -1,0 +1,215 @@
+{
+  "baseline_commit": "5dfc0901",
+  "source_sha256": {
+    "lib/app/channels_view.dart": "36b66e68e34a0d0b658a4712b276ffd658978f412f66835eea7f4309b4af2623"
+  },
+  "normal_1080_comparisons": [
+    {
+      "state": "directory",
+      "baseline_sha256": "63fe67bff4ebcf0173b68bd571009f621b44e1e1ad185825e4036ce7009dd28b",
+      "final_sha256": "63fe67bff4ebcf0173b68bd571009f621b44e1e1ad185825e4036ce7009dd28b",
+      "byte_identical": true
+    },
+    {
+      "state": "selection",
+      "baseline_sha256": "839e397b57215fe41cfe8675965c2bf8bea7818eadb7b9904ff3db0e6d0b39ea",
+      "final_sha256": "839e397b57215fe41cfe8675965c2bf8bea7818eadb7b9904ff3db0e6d0b39ea",
+      "byte_identical": true
+    },
+    {
+      "state": "reorder",
+      "baseline_sha256": "61dc680544cc3011d04adcf765a8e3f9e59ffc3aaea9c20ef48c73b4c19346dc",
+      "final_sha256": "61dc680544cc3011d04adcf765a8e3f9e59ffc3aaea9c20ef48c73b4c19346dc",
+      "byte_identical": true
+    },
+    {
+      "state": "row-popup",
+      "baseline_sha256": "46ab7d5e27c9ccd5fe2f500c531edf2b1a5903dd8e594e3cbce5207806b12053",
+      "final_sha256": "46ab7d5e27c9ccd5fe2f500c531edf2b1a5903dd8e594e3cbce5207806b12053",
+      "byte_identical": true
+    },
+    {
+      "state": "move",
+      "baseline_sha256": "4f0c9c94923a95691764fa3ea4605c8ea9ae37d995e7f4bc35651c4f9e6ff8d1",
+      "final_sha256": "4f0c9c94923a95691764fa3ea4605c8ea9ae37d995e7f4bc35651c4f9e6ff8d1",
+      "byte_identical": true
+    },
+    {
+      "state": "delete",
+      "baseline_sha256": "22c0a34995e76b49c65f82058ee7188f119346935d90d054351823a7ba1c1fbf",
+      "final_sha256": "22c0a34995e76b49c65f82058ee7188f119346935d90d054351823a7ba1c1fbf",
+      "byte_identical": true
+    }
+  ],
+  "captures": [
+    {
+      "path": "build/desktop-ui/scaling/channels-after-1080/directory.png",
+      "physical_size": [
+        1920,
+        1080
+      ],
+      "sha256": "63fe67bff4ebcf0173b68bd571009f621b44e1e1ad185825e4036ce7009dd28b"
+    },
+    {
+      "path": "build/desktop-ui/scaling/channels-after-1080/reorder.png",
+      "physical_size": [
+        1920,
+        1080
+      ],
+      "sha256": "61dc680544cc3011d04adcf765a8e3f9e59ffc3aaea9c20ef48c73b4c19346dc"
+    },
+    {
+      "path": "build/desktop-ui/scaling/channels-after-1080/selection.png",
+      "physical_size": [
+        1920,
+        1080
+      ],
+      "sha256": "839e397b57215fe41cfe8675965c2bf8bea7818eadb7b9904ff3db0e6d0b39ea"
+    },
+    {
+      "path": "build/desktop-ui/scaling/channels-after-1440/directory.png",
+      "physical_size": [
+        2560,
+        1440
+      ],
+      "sha256": "cb9b41a27df792fbfbfc1d3d18d0d4260a0ab79826a324d9609f29f4f8016bc2"
+    },
+    {
+      "path": "build/desktop-ui/scaling/channels-after-1440/reorder.png",
+      "physical_size": [
+        2560,
+        1440
+      ],
+      "sha256": "b6a4d025767d80be89d1fac7c883d6f7e4a28664fe64f4f0ef1dd83b8315be4d"
+    },
+    {
+      "path": "build/desktop-ui/scaling/channels-after-1440/selection.png",
+      "physical_size": [
+        2560,
+        1440
+      ],
+      "sha256": "f6f19cedd78a0d3f7c7fb6c5cb16788b05b91200f7dcaaf4dc77b6410a0acdc9"
+    },
+    {
+      "path": "build/desktop-ui/scaling/channels-after-2160/directory.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "9a225d28a1c40419a604fc9c278e8d7c27c72408df9c34bf45e6b5478ae77970"
+    },
+    {
+      "path": "build/desktop-ui/scaling/channels-after-2160/reorder.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "adc79fefef5e54d304b4654c1bc72e89bb973c600ca695a0857557f9f4b9c17d"
+    },
+    {
+      "path": "build/desktop-ui/scaling/channels-after-2160/selection.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "6367c8afc550f86afae41197b5778c90a202a75ebda2df438adb234c2a4b83e0"
+    },
+    {
+      "path": "build/desktop-ui/scaling/channels-after-2160-dpr2-text2/directory.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "86a590adfbe53cc836115abf6eb12ea21d9fa62bf5d108c50a87916aeb06a5c3"
+    },
+    {
+      "path": "build/desktop-ui/scaling/channels-after-2160-dpr2-text2/reorder.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "89a6c8052961b50545439022c642f62846cf3c58a5bdbbe1b6f25d9286bd2eed"
+    },
+    {
+      "path": "build/desktop-ui/scaling/channels-after-2160-dpr2-text2/selection.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "8ac81059b19e928e59e3bd3429f327b8afe2b1e8e7536e9c5a1f728f27acddea"
+    },
+    {
+      "path": "build/desktop-ui/scaling/channels-overlays-final-1080/delete.png",
+      "physical_size": [
+        1920,
+        1080
+      ],
+      "sha256": "22c0a34995e76b49c65f82058ee7188f119346935d90d054351823a7ba1c1fbf"
+    },
+    {
+      "path": "build/desktop-ui/scaling/channels-overlays-final-1080/move.png",
+      "physical_size": [
+        1920,
+        1080
+      ],
+      "sha256": "4f0c9c94923a95691764fa3ea4605c8ea9ae37d995e7f4bc35651c4f9e6ff8d1"
+    },
+    {
+      "path": "build/desktop-ui/scaling/channels-overlays-final-1080/row-popup.png",
+      "physical_size": [
+        1920,
+        1080
+      ],
+      "sha256": "46ab7d5e27c9ccd5fe2f500c531edf2b1a5903dd8e594e3cbce5207806b12053"
+    },
+    {
+      "path": "build/desktop-ui/scaling/channels-overlays-final-2160/delete.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "d395ed7601e3827ff23c265a56a05a8de59108b365ea4979f5865b100ced8167"
+    },
+    {
+      "path": "build/desktop-ui/scaling/channels-overlays-final-2160/move.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "18b33e9ba367a3016c1b780295fef95b5d4052d4c2fce576cc1fd64f78e28f0a"
+    },
+    {
+      "path": "build/desktop-ui/scaling/channels-overlays-final-2160/row-popup.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "605c274c9167b9658b4b2a80412d7d6ae989084d5b49a38b341914e416f497d0"
+    },
+    {
+      "path": "build/desktop-ui/scaling/channels-overlays-final-2160-dpr2-text2/delete.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "1539140929266505072702cbc5df9ecff89b5f30558f4aec04bd19662086cf4d"
+    },
+    {
+      "path": "build/desktop-ui/scaling/channels-overlays-final-2160-dpr2-text2/move.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "f2e56fac090cc64a6f5e532c6e01e04dab48e1eb004f6f89dc86d88ead7ef238"
+    },
+    {
+      "path": "build/desktop-ui/scaling/channels-overlays-final-2160-dpr2-text2/row-popup.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "2a5abf007d7bc94e3ee7f33ade88348588e8053485548fba70821dbf082fd17d"
+    }
+  ],
+  "limitations": "Portable synthetic Flutter captures, not physical Windows validation. Initial 1440p and native4K main-view captures predate the overlay-only follow-up; final overlays identify the follow-up source."
+}

@@ -97,3 +97,26 @@ was recaptured at native 4K; it preserves the scale1 font values.
 
 No independent review was run or is specifically recommended for this group.
 Physical Windows acceptance remains outstanding.
+
+## Group 2c — Channels directory and overlays
+
+Luna task `01a09773-cfa8-72f2-9abb-e97141cf8918` completed the initial pass and
+a bounded overlay follow-up, then returned its lease. Header controls, action
+padding, selection controls, reorder icons and row menus now scale with the
+shared reference. Number columns accommodate enlarged text. Move dialog sizing
+and typography scale locally, with scrolling retained. Astra caught and returned
+an initially unscaled Move text theme and an incorrect popup constraint override;
+the follow-up preserves Flutter's default popup width policy at scale1. Channel
+state, health, ordering and deletion behavior remain with their existing owners.
+
+Twelve existing Channels/navigation checks passed, along with targeted analysis,
+formatting and diff checks. Main-view captures passed at 1080p, 1440p, native
+2160p and 2160p/DPR2/text200%. Final popup, Move and Delete captures passed at
+1080p, native2160p and 2160p/DPR2/text200%. All six normal1080 states are
+byte-identical to true pre-change references, independently confirmed by Astra.
+Astra inspected the corrected native4K Move dialog and enlarged Reorder/Delete.
+[Source and capture hashes](design/desktop-ui/scaling/group-2c-evidence.json)
+record the evidence and distinguish earlier main-view captures from final overlays.
+
+No independent review was run or is specifically recommended for this
+presentation-only group. Physical Windows validation remains outstanding.
