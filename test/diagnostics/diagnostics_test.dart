@@ -152,6 +152,10 @@ void main() {
           width: 1920,
           height: 1080,
           videoCodec: 'h264',
+          pixelFormat: 'yuv420p10le',
+          primaries: 'bt.2020',
+          colorMatrix: 'bt.2020-ncl',
+          signalPeak: 10,
           videoOutput: 'safe-looking-secret-sentinel',
         ),
       ),
@@ -164,6 +168,10 @@ void main() {
     expect(report, contains('Plex connection verified: No'));
     expect(report, contains('Received video: 1920x1080'));
     expect(report, contains('Received video codec: h264'));
+    expect(report, contains('Reported pixel format: yuv420p10le'));
+    expect(report, contains('Reported color primaries: bt.2020'));
+    expect(report, contains('Reported color matrix: bt.2020-ncl'));
+    expect(report, contains('Reported signal peak: 10.0'));
     expect(report, contains('playback: Playback request failed'));
     expect(report, contains('operation=seek'));
     expect(report, contains('code=http_error'));
@@ -186,7 +194,15 @@ void main() {
       platform: 'windows',
       plexServerSelected: false,
       plexConnectionVerified: false,
-      playback: const PlaybackDiagnosticSnapshot(state: PlayerState.idle),
+      playback: const PlaybackDiagnosticSnapshot(
+        state: PlayerState.idle,
+        receivedTelemetry: PlayerTelemetry(
+          pixelFormat: 'secret',
+          primaries: 'secret',
+          colorMatrix: 'secret',
+          signalPeak: double.infinity,
+        ),
+      ),
     );
 
     final report = diagnostics.buildSupportReport(snapshot);
@@ -194,5 +210,6 @@ void main() {
     expect(report, contains('App: Unavailable (42)'));
     expect(report, isNot(contains('secret')));
     expect(report, isNot(contains('private')));
+    expect(report, isNot(contains('Reported signal peak:')));
   });
 }

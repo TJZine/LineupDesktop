@@ -957,7 +957,7 @@ class _SettingsViewState extends State<SettingsView> {
                 children: [
                   const Text('LINEUP'),
                   SizedBox(width: 12 * scale),
-                  Icon(Icons.more_horiz, size: 18 * scale),
+                  Icon(Icons.menu, size: 18 * scale),
                 ],
               ),
             ),
@@ -1337,7 +1337,7 @@ class _SettingsViewState extends State<SettingsView> {
               _SettingsSwitchTile(
                 title: const Text('Record redacted diagnostics'),
                 subtitle: const Text(
-                  'Tokens, URLs, paths, headers and credentials are excluded.',
+                  'Tokens, URLs, paths, headers and credentials are excluded. Turning this off clears recorded events.',
                 ),
                 value: value.diagnosticsEnabled,
                 onChanged: _pendingSettingKeys.contains('diagnosticsEnabled')
