@@ -54,7 +54,7 @@ may cover multiple listed states only when that scope is clear to the user.
 | surface-38 | Settings · Support | Approved at 1080p (shared treatment) | Behavior checks passed; adaptive/Windows pending | Account representative review; `6baa7a9b` |
 | surface-39 | Settings over playback | Approved at 1080p (shared treatment) | Behavior checks passed; adaptive/Windows pending | Account representative review; `6baa7a9b` |
 | surface-40 | Alternate theme · current only | Unreviewed | Not assessed in this pass | — |
-| surface-41 | Lineup menu | Unreviewed | Not assessed in this pass | — |
+| surface-41 | Lineup menu | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | `ad716112`; six invoker/long-name captures |
 | surface-42 | Diagnostics · recording off | Unreviewed | Not assessed in this pass | — |
 | surface-43 | Diagnostics · synthetic events | Unreviewed | Not assessed in this pass | — |
 | surface-44 | Diagnostics · technical details | Unreviewed | Not assessed in this pass | — |
@@ -1726,3 +1726,26 @@ formatting and diff checks passed. Grouped adaptive/DPI/enlarged-text/accessibil
 visual checks and exact-commit physical Windows input/native-video validation
 remain pending. Independent review is not specifically recommended. No push.
 Next surface:40. Do not reopen33–39 without a new user request.
+
+## September 12 — Lineup menu41 locked
+
+User corrected the next surface to41 and explicitly skipped40. Root inspected
+compact anchored A and real production-shell captures, traced all five invokers,
+and verified menu navigation, dismissal, focus return and long-name wrapping.
+The user approved a small readability/icon-cleanup pass implemented by a fresh
+Luna/xhigh task on the shared checkout. Only shared menu content changed:
+16px destination/Account labels,14px identity/server/helper text, brighter server
+text, removed destination/Account icons and arrow, retained functional close X,
+48px minimum destination rows and all anchoring/selection/navigation behavior.
+Root reviewed the diff and six fresh1920x1080/DPR1/text1 captures. Settings capture
+was presented for approval. User: “yes, if you have no further refinements locked.”
+Root found no further refinements; the presented candidate is unchanged.
+
+Implementation `ad716112`; evidence and hashes:
+`docs/design/desktop-ui/approved/2026-09-12-lineup-menu/evidence.json`.
+10 existing navigation/parity tests and6 local capture/focus-return checks passed;
+focused analysis, formatting and diff checks passed. Prior test-only `fbc7e03f`
+updated two stale expectations from approved Settings/channel work without
+changing their behavior. Adaptive visual and exact-commit physical Windows
+input/native-video checks remain pending. Independent review not specifically
+recommended. Surface40 stays skipped/unreviewed. Next: Diagnostics42–45.
