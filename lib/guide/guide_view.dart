@@ -1122,8 +1122,10 @@ class _TimeHeader extends StatelessWidget {
                                         final tick = controller.windowStart.add(
                                           Duration(minutes: 30 * index),
                                         );
+                                        final localTick = tick.toLocal();
                                         final midnight =
-                                            tick.hour == 0 && tick.minute == 0;
+                                            localTick.hour == 0 &&
+                                            localTick.minute == 0;
                                         return Column(
                                           mainAxisAlignment:
                                               MainAxisAlignment.center,
@@ -1131,7 +1133,7 @@ class _TimeHeader extends StatelessWidget {
                                               CrossAxisAlignment.start,
                                           children: [
                                             Text(
-                                              _time(context, tick),
+                                              _time(context, localTick),
                                               overflow: TextOverflow.clip,
                                               maxLines: 1,
                                             ),
@@ -1139,9 +1141,7 @@ class _TimeHeader extends StatelessWidget {
                                               Text(
                                                 MaterialLocalizations.of(
                                                   context,
-                                                ).formatMediumDate(
-                                                  tick.toLocal(),
-                                                ),
+                                                ).formatMediumDate(localTick),
                                                 key: const Key(
                                                   'guide-midnight-date',
                                                 ),

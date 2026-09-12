@@ -1645,6 +1645,24 @@ void main() {
       );
       expect(await miniEnabled(loading, [movie]), isTrue);
       expect(find.textContaining('finishes loading'), findsOneWidget);
+
+      final filteredLoading = _channel(
+        id: 'filtered-loading-library',
+        number: 5,
+        name: 'Filtered loading library',
+        source: const LibrarySource(
+          libraryId: 'movies',
+          libraryType: PlexLibraryType.movie,
+          filters: {
+            LibraryFilter.genre: ['Comedy'],
+          },
+        ),
+      );
+      expect(await miniEnabled(filteredLoading, [movie]), isTrue);
+      expect(
+        find.text('Checking filters while library programming loads.'),
+        findsOneWidget,
+      );
     },
   );
 
@@ -2655,11 +2673,55 @@ void main() {
         ),
         findsOneWidget,
       );
+      expect(find.byType(ReorderableDragStartListener), findsNothing);
+      expect(find.byTooltip('Drag Third snapshot to reorder'), findsNothing);
+      tester
+          .widget<IconButton>(
+            find.ancestor(
+              of: find.byTooltip(
+                'Move Third snapshot earlier in channel Repeated manual',
+              ),
+              matching: find.byType(IconButton),
+            ),
+          )
+          .onPressed!();
+      await tester.pump();
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('studio-rundown')),
+          matching: find.text('Third snapshot'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.byTooltip('Move Third snapshot later in channel Repeated manual'),
+        findsOneWidget,
+      );
+      tester
+          .widget<IconButton>(
+            find.ancestor(
+              of: find.byTooltip(
+                'Move Third snapshot later in channel Repeated manual',
+              ),
+              matching: find.byType(IconButton),
+            ),
+          )
+          .onPressed!();
+      await tester.pump();
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('studio-rundown')),
+          matching: find.text('Third snapshot'),
+        ),
+        findsOneWidget,
+      );
       await tester.enterText(
         find.byKey(const Key('studio-rundown-search')),
         '',
       );
       await tester.pump();
+      expect(find.byType(ReorderableDragStartListener), findsNWidgets(3));
+      expect(find.byTooltip('Drag Third snapshot to reorder'), findsOneWidget);
       tester
           .widget<IconButton>(
             find.ancestor(

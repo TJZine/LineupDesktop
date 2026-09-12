@@ -514,9 +514,12 @@ class GuideController extends ChangeNotifier {
   }
 
   void setLibraryFilter(String? libraryId) {
-    if (_libraryFilterId == libraryId) return;
+    final next = libraryId != null && !_availableLibraryIds.contains(libraryId)
+        ? null
+        : libraryId;
+    if (_libraryFilterId == next) return;
     _rememberInspection();
-    _libraryFilterId = libraryId;
+    _libraryFilterId = next;
     _applyFilters();
     _finishFilterSessionIfInactive();
     notifyListeners();

@@ -1943,12 +1943,16 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
               onReorderItem: _saving || rundownQuery.isNotEmpty
                   ? (_, _) {}
                   : (from, to) => _reorderManual(from, to),
-              itemBuilder: (context, index) => _rundownRow(
-                rundownEntries[index].entry,
-                rundownEntries[index].index,
-                !inventoryById.containsKey(rundownEntries[index].entry.id),
-                inventoryById,
-              ),
+              itemBuilder: (context, visibleIndex) {
+                final item = rundownEntries[visibleIndex];
+                return _rundownRow(
+                  item.entry,
+                  item.index,
+                  !inventoryById.containsKey(item.entry.id),
+                  inventoryById,
+                  dragIndex: rundownQuery.isEmpty ? visibleIndex : null,
+                );
+              },
             ),
           ),
         ],
@@ -2272,8 +2276,9 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     _ManualEntry entry,
     int index,
     bool unavailable,
-    Map<String, PlexMediaItem> inventoryById,
-  ) {
+    Map<String, PlexMediaItem> inventoryById, {
+    int? dragIndex,
+  }) {
     final title = _manualEntryTitle(entry, inventoryById);
     final repeatedTitle =
         _manualEntries
@@ -2314,13 +2319,14 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
       trailing: Wrap(
         spacing: 4,
         children: [
-          Tooltip(
-            message: 'Drag $positionedTitle to reorder',
-            child: ReorderableDragStartListener(
-              index: index,
-              child: const Icon(Icons.drag_handle),
+          if (dragIndex case final visibleIndex?)
+            Tooltip(
+              message: 'Drag $positionedTitle to reorder',
+              child: ReorderableDragStartListener(
+                index: visibleIndex,
+                child: const Icon(Icons.drag_handle),
+              ),
             ),
-          ),
           IconButton(
             tooltip: 'Move $positionedTitle earlier in $_draftChannelLabel',
             onPressed: _saving || index == 0
@@ -2943,11 +2949,9 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
           return 'The saved library is unavailable. Choose a selected Plex library.';
         }
         if (widget.controller.libraryScanStatus == LibraryScanStatus.scanning) {
-          return 'Checking library programming while the selected Plex library finishes loading.';
-        }
-        if (filters.isNotEmpty &&
-            widget.controller.libraryScanStatus == LibraryScanStatus.scanning) {
-          return 'Checking filters while library programming loads.';
+          return filters.isNotEmpty
+              ? 'Checking filters while library programming loads.'
+              : 'Checking library programming while the selected Plex library finishes loading.';
         }
         final available = _facetOptions(libraryId).values;
         final missing = [
