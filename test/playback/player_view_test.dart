@@ -23,6 +23,9 @@ import 'package:lineup_desktop/ui/app_ui.dart';
 final _fixtureArtwork = base64Decode(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
 );
+final _fixtureLogoArtwork = base64Decode(
+  'iVBORw0KGgoAAAANSUhEUgAAAlgAAAB4AQMAAAAUmx6AAAAAIGNIUk0AAHomAACAhAAA+gAAAIDoAAB1MAAA6mAAADqYAAAXcJy6UTwAAAADUExURfPo0u6COk8AAAAHdElNRQfqCQwOHSj8iqZhAAAAJXRFWHRkYXRlOmNyZWF0ZQAyMDI2LTA5LTEyVDE0OjI5OjQwKzAwOjAw3a1YngAAACV0RVh0ZGF0ZTptb2RpZnkAMjAyNi0wOS0xMlQxNDoyOTo0MCswMDowMKzw4CIAAAAodEVYdGRhdGU6dGltZXN0YW1wADIwMjYtMDktMTJUMTQ6Mjk6NDArMDA6MDD75cH9AAAAIElEQVRo3u3BMQEAAADCoPVPbQo/oAAAAAAAAAAAgJcBI6AAAZ0TDkkAAAAASUVORK5CYII=',
+);
 final _extremeWideArtwork = base64Decode(
   'iVBORw0KGgoAAAANSUhEUgAABLAAAAAUCAIAAAASgVNzAAAAIGNIUk0AAHomAACAhAAA+gAAAIDoAAB1MAAA6mAAADqYAAAXcJy6UTwAAAAGYktHRAD/AP8A/6C9p5MAAAAHdElNRQfqCQQBEhHq/110AAAAJXRFWHRkYXRlOmNyZWF0ZQAyMDI2LTA5LTA0VDAxOjE4OjE3KzAwOjAwct2ViQAAACV0RVh0ZGF0ZTptb2RpZnkAMjAyNi0wOS0wNFQwMToxODoxNyswMDowMAOALTUAAAAodEVYdGRhdGU6dGltZXN0YW1wADIwMjYtMDktMDRUMDE6MTg6MTcrMDA6MDBUlQzqAAAAjUlEQVR42u3XMQEAIAzAMMC/5yFjRxMFfXtn5gAAANDztgMAAADYYQgBAACiDCEAAECUIQQAAIgyhAAAAFGGEAAAIMoQAgAARBlCAACAKEMIAAAQZQgBAACiDCEAAECUIQQAAIgyhAAAAFGGEAAAIMoQAgAARBlCAACAKEMIAAAQZQgBAACiDCEAAEDUB/B/AyWGhzYyAAAAAElFTkSuQmCC',
 );
@@ -1891,6 +1894,37 @@ void main() {
     );
   }, semanticsEnabled: true);
 
+  testWidgets('Now Playing preserves nullable episode facts including zero', (
+    tester,
+  ) async {
+    final fixture = _Fixture(
+      PlayerState.playing,
+      preferClearLogos: false,
+      richItemOverride: const ChannelItem(
+        id: 'zero-episode',
+        title: 'Zero Episode',
+        duration: Duration(hours: 1),
+        showTitle: 'Zero Stories',
+        episodeNumber: 0,
+      ),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+    await tester.pump();
+    fixture.player.showNowPlaying();
+    await tester.pumpAndSettle();
+
+    expect(find.text('E0 · 60 min'), findsOneWidget);
+    expect(find.textContaining('Season'), findsNothing);
+    expect(find.text('Zero Episode'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
   testWidgets(
     'Mini Guide single selects, double tunes, and outside dismisses',
     (tester) async {
@@ -2317,6 +2351,7 @@ void main() {
     fixture.player.showNowPlaying();
     await tester.pump();
     await tester.pumpAndSettle();
+    await _settleNowPlayingArtwork(tester);
 
     expect(find.byKey(const Key('player-now-playing-surface')), findsOneWidget);
     expect(
@@ -2325,8 +2360,12 @@ void main() {
     );
     expect(find.byKey(const Key('player-now-playing-channel')), findsNothing);
     expect(
-      tester.getSize(find.byKey(const Key('player-now-playing-shelf'))),
-      const Size(1180, 380),
+      tester.getSize(find.byKey(const Key('player-now-playing-shelf'))).width,
+      1180,
+    );
+    expect(
+      tester.getSize(find.byKey(const Key('player-now-playing-shelf'))).height,
+      lessThanOrEqualTo(380.01),
     );
     expect(
       MediaQuery.sizeOf(
@@ -2335,9 +2374,14 @@ void main() {
       const Size(1280, 720),
     );
     expect(fixture.lineup.artworkRequests, hasLength(2));
-    expect(find.byType(Image), findsNWidgets(2));
     expect(find.byKey(const Key('player-now-playing-logo')), findsOneWidget);
-    expect(find.text('Season 2 • Episode 6'), findsOneWidget);
+    expect(find.byType(Image), findsNWidgets(2));
+    expect(find.text('S2 · E6 · 60 min'), findsOneWidget);
+    final title = tester.widget<Text>(
+      find.byKey(const Key('player-now-playing-title')),
+    );
+    expect(title.style?.fontSize, 24);
+    expect(title.style?.fontWeight, FontWeight.w600);
     expect(
       find.text('A synthetic synopsis for deterministic tests.'),
       findsOneWidget,
@@ -2372,13 +2416,18 @@ void main() {
   testWidgets(
     'Now Playing renders bounded cast portraits, fallbacks, names, and semantics',
     (tester) async {
+      final cast = [
+        ..._fixtureCast.take(4),
+        ChannelCastMember(name: 'Alexander Maximilian Montgomery'),
+        ..._fixtureCast.skip(5),
+      ];
       final fixture = _Fixture(
         PlayerState.playing,
         richItemOverride: _fixtureItem(
           0,
           rich: true,
           duration: const Duration(hours: 1),
-          cast: _fixtureCast,
+          cast: cast,
         ),
       );
       await tester.binding.setSurfaceSize(const Size(1280, 720));
@@ -2409,10 +2458,17 @@ void main() {
         findsOneWidget,
       );
       expect(find.text('+2'), findsOneWidget);
+      for (final member in cast.take(4)) {
+        expect(find.text(member.name), findsOneWidget);
+      }
       expect(
-        find.text(
-          'Avery Vale • Mina Park • Solomon Reed • Clara Wynn • Noa Bell • Theo March • Imani Cross',
-        ),
+        find.byKey(const Key('player-now-playing-cast-names')),
+        findsNothing,
+      );
+      expect(find.text('Alexander M. Montgomery'), findsOneWidget);
+      expect(find.byTooltip('Alexander Maximilian Montgomery'), findsOneWidget);
+      expect(
+        find.bySemanticsLabel(RegExp('Cast:.*Alexander Maximilian Montgomery')),
         findsOneWidget,
       );
       expect(fixture.lineup.artworkRequests, hasLength(6));
@@ -2651,6 +2707,7 @@ void main() {
 
       fixture.player.showNowPlaying();
       await tester.pumpAndSettle();
+      await _settleNowPlayingArtwork(tester);
       await tester.runAsync(
         () => precacheImage(
           MemoryImage(_fixtureArtwork),
@@ -2848,6 +2905,7 @@ void main() {
     await tester.pump();
     fixture.player.showNowPlaying();
     await tester.pumpAndSettle();
+    await _settleNowPlayingArtwork(tester);
 
     expect(fixture.lineup.artworkRequests, hasLength(4));
     expect(find.byKey(const Key('player-now-playing-logo')), findsOneWidget);
@@ -2903,25 +2961,25 @@ void main() {
     for (final variant in const [
       (
         castPresent: false,
-        shelves: [
+        maxShelves: [
           Size(760, 336),
           Size(1180, 380),
           Size(1180, 450),
           Size(1180, 540),
           Size(1500, 560),
         ],
-        dpr2Shelf: Size(1180, 540),
+        dpr2MaxShelf: Size(1180, 540),
       ),
       (
         castPresent: true,
-        shelves: [
+        maxShelves: [
           Size(760, 378),
           Size(1180, 432),
           Size(1180, 486),
           Size(1180, 580),
           Size(1500, 580),
         ],
-        dpr2Shelf: Size(1180, 580),
+        dpr2MaxShelf: Size(1180, 580),
       ),
     ]) {
       final fixture = variant.castPresent
@@ -2945,7 +3003,7 @@ void main() {
         Size(1920, 1080),
         Size(3840, 2160),
       ].indexed) {
-        final expectedShelf = variant.shelves[index];
+        final maxShelf = variant.maxShelves[index];
         tester.view.physicalSize = viewport;
         await tester.pumpWidget(
           MaterialApp(
@@ -2955,6 +3013,7 @@ void main() {
         await tester.pump();
         fixture.player.showNowPlaying();
         await tester.pumpAndSettle();
+        await _settleNowPlayingArtwork(tester);
 
         if (index == 0) {
           await tester.runAsync(
@@ -2969,20 +3028,17 @@ void main() {
         final shelfSize = tester.getSize(
           find.byKey(const Key('player-now-playing-shelf')),
         );
-        expect(shelfSize.width, closeTo(expectedShelf.width, 0.01));
-        expect(shelfSize.height, closeTo(expectedShelf.height, 0.01));
-        expect(
-          tester
-              .getSize(find.byKey(const Key('player-now-playing-poster')))
-              .width,
-          closeTo((expectedShelf.height * 2 / 3).clamp(190, 374), 0.01),
+        final posterSize = tester.getSize(
+          find.byKey(const Key('player-now-playing-poster')),
         );
+        expect(shelfSize.width, closeTo(maxShelf.width, 0.01));
+        expect(shelfSize.height, lessThanOrEqualTo(maxShelf.height + 0.01));
+        expect(shelfSize.height, greaterThanOrEqualTo(190 * 3 / 2));
         expect(
-          tester
-              .getSize(find.byKey(const Key('player-now-playing-poster')))
-              .height,
-          closeTo(expectedShelf.height, 1.01),
+          posterSize.width,
+          closeTo((maxShelf.height * 2 / 3).clamp(190, 374), 0.01),
         );
+        expect(posterSize.height, closeTo(shelfSize.height, 1.01));
         expect(
           tester
               .getRect(find.byKey(const Key('player-now-playing-title')).last)
@@ -2993,6 +3049,13 @@ void main() {
                 .top,
           ),
         );
+        if (viewport == const Size(1920, 1080)) {
+          final title = tester.widget<Text>(
+            find.byKey(const Key('player-now-playing-title')).last,
+          );
+          expect(title.style?.fontSize, 28);
+          expect(title.style?.fontWeight, FontWeight.w600);
+        }
         expect(
           find.byKey(const Key('player-now-playing-cast')),
           variant.castPresent ? findsOneWidget : findsNothing,
@@ -3009,9 +3072,16 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+      await _settleNowPlayingArtwork(tester);
       expect(
-        tester.getSize(find.byKey(const Key('player-now-playing-shelf'))),
-        variant.dpr2Shelf,
+        tester.getSize(find.byKey(const Key('player-now-playing-shelf'))).width,
+        variant.dpr2MaxShelf.width,
+      );
+      expect(
+        tester
+            .getSize(find.byKey(const Key('player-now-playing-shelf')))
+            .height,
+        lessThanOrEqualTo(variant.dpr2MaxShelf.height + 0.01),
       );
       expect(
         find.byKey(const Key('player-now-playing-cast')),
@@ -3086,6 +3156,7 @@ void main() {
         );
         fixture.player.showNowPlaying();
         await tester.pumpAndSettle();
+        await _settleNowPlayingArtwork(tester);
 
         expect(
           find.byKey(const Key('player-now-playing-title')),
@@ -3369,7 +3440,8 @@ class _Lineup extends LineupController {
     if (blockArtwork) {
       return (artworkCompletions[path] ??= Completer<Uint8List?>()).future;
     }
-    return artworkBytes ?? _fixtureArtwork;
+    return artworkBytes ??
+        (path.path.contains('/logo') ? _fixtureLogoArtwork : _fixtureArtwork);
   }
 
   void replaceArtwork(String tag, {bool bumpGeneration = false}) {
@@ -3474,6 +3546,15 @@ final _fixtureCast = [
   ChannelCastMember(name: 'Theo March', role: 'Deputy Ames'),
   ChannelCastMember(name: 'Imani Cross', role: 'Nora Venn'),
 ];
+
+Future<void> _settleNowPlayingArtwork(WidgetTester tester) async {
+  for (var i = 0; i < 4; i++) {
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 40)),
+    );
+    await tester.pump();
+  }
+}
 
 String _statusLabelForTest(PlayerState state) => switch (state) {
   PlayerState.loading => 'Loading',
