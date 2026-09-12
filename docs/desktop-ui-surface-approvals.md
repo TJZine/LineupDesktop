@@ -40,7 +40,7 @@ may cover multiple listed states only when that scope is clear to the user.
 | surface-24 | Studio · filter picker | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Candidate07; `8c0617c7` |
 | surface-25 | Guide · no playback | Approved at 1080p | Behavior checks passed; adaptive/accessibility/motion/Windows pending | September 12 candidate04; `e0834448` |
 | surface-26 | Guide · PiP | Approved at 1080p | Behavior checks passed; adaptive/accessibility/motion/Windows pending | September 12 candidate04; `e0834448` |
-| surface-27 | Mini Guide | Unreviewed | Not assessed in this pass | — |
+| surface-27 | Mini Guide | Approved at 1080p | Behavior checks passed; adaptive/accessibility/moving footage/Windows pending | September12 candidate01; `90497d12` |
 | surface-28 | Player OSD · protected | Unreviewed | Not assessed in this pass | — |
 | surface-29 | Now Playing · protected | Unreviewed | Not assessed in this pass | — |
 | surface-30 | Audio tracks | Unreviewed | Not assessed in this pass | — |
@@ -1392,3 +1392,81 @@ checks remain pending, as does unavailable-static motion appearance. Synthetic
 playing status and a blank PiP do not establish decoded video or native layering.
 Independent review is not specifically recommended for this presentation pass.
 No push, deployment or publishing was performed.
+
+
+## September 12 — surface27 Mini Guide proposal
+
+Astra inspected the rendered mini-guide-edge-blend.html shaped-B reference at
+its 1920×1080 selection and a fresh real Flutter baseline at1920×1080/DPR1/text1.
+Base HEAD2d5d2cad; local capture: build/desktop-ui/surface-27/baseline/mini-guide-1920x1080.png.
+The fixture has synthetic schedules and blank native video, so does not establish
+fade contrast over footage. Frozen comparison27 remains historical baseline.
+
+Proposed: match comfortable five-row mock proportions (70px rows, 20px names and
+program titles, 16px metadata, 26px heading, 18px header controls at1080p); widen
+channel column to365px and use48px outer insets/36px column gaps. Put clock beside
+Mini Guide, use aligned Full Guide/Close actions and a single footer with hints
+left and browse arrows right. Replace play-circle with quiet play+Watching text;
+keep watched identity separate from browsing. Selected row uses a translucent
+warm band and narrow leading accent over video, without a full box outline.
+Extend shaped fade beyond final controls while keeping content legible. Preserve
+five unique nearby channels, selected-row tickers, row stability, all input/tune/
+dismissal behavior, and compact/enlarged-text fallback. No protected OSD/Now
+Playing changes. This is a proposal, not implementation or visual approval.
+
+No implementation task dispatched. After agreement, use fresh GPT-5.6 Luna/xhigh
+on the shared active checkout, sequentially; root retains behavior/contracts.
+
+### Mini Guide brief accepted — September 12
+
+User accepted the direction and permits slightly less height than the mock;
+requires a better Flutter capture with a visible background. Set66px normal
+1080p rows, preserving the proposed larger hierarchy and five-channel layout.
+Root will render an explicitly synthetic scene behind the actual Flutter overlay
+for before/after contrast evidence, not composite or retouch screenshots. Such
+evidence does not establish moving native-video/Windows acceptance.
+
+Dispatch a fresh GPT-5.6 Luna/xhigh task on this active checkout with exclusive
+Mini Guide presentation ownership inside player_view.dart. Root waits without
+parallel work, then handles capture and any difficult behavior/state corrections.
+No visual lock or commit yet.
+
+### Mini Guide candidate01 — awaiting visual approval
+
+Fresh Luna task01a09595-9192-7aa1-8924-7157155c0ea3 returned presentation
+changes and released its lease. Root reviewed the diff, retained theme font
+inheritance on header actions, used plain Up / Down hints to avoid missing arrow
+glyphs, and made Watching conditional on actual playback states rather than only
+the saved channel. No OSD/Now Playing changes.
+
+Root captured real Flutter PlayerView over matching synthetic light/dark scenes
+for baseline and candidate at1920×1080/DPR1/text1, including browsing away from
+the watched channel. No screenshots were composited or retouched. This replaces
+the black-only comparison for judging fade, but does not prove decoded/moving
+video or native layering. Root inspected the current light/dark/browsing renders
+and matched bright baseline. Exact hashes and evidence metadata are at
+`build/desktop-ui/surface-27/candidate-01/evidence.json`.
+
+70 Player/ticker behavior checks and2 candidate capture cases passed; baseline
+capture cases and targeted analysis/whitespace also passed. Existing obsolete
+footer/row-height expectations were updated, and the old all-rows-inside-shelf
+assertion now applies when the shelf has no scroll extent; the existing short
+viewport test still checks scroll access to footer. No new layout tests.
+
+Surface27 is not locked or committed. Grouped adaptive/accessibility and moving
+footage/physical Windows checks remain pending. Independent review is not
+specifically recommended for this bounded presentation correction.
+
+## September 12 — Mini Guide surface27 locked
+
+User explicitly approved “yes. locked. now onto 28 the played OSD.” Candidate01
+light-scene browsing and dark-scene captures are approved at1920×1080/DPR1/text1.
+The initial light-scene selected/watched capture is supplemental. Implementation
+commit `90497d128a51c3f23180d6a534ef544df91bcd97`. [Durable evidence](design/desktop-ui/approved/2026-09-12-mini-guide/evidence.json)
+binds source/capture hashes, approval, and checks. Source hashes matched the
+reviewed candidate immediately before commit; no post-approval UI edits.
+
+70 behavior checks passed, along with2 candidate capture cases, matched baseline
+captures, targeted analysis and whitespace checks. No new layout tests. Grouped
+adaptive/accessibility and moving footage/physical Windows acceptance remain
+pending. Independent review is not specifically recommended. No push or publish.
