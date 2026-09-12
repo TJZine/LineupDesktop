@@ -26,15 +26,63 @@ foreach ($relative in $scripts) {
   }
 }
 
+. (Join-Path $repository 'tool/windows/build-inputs.ps1')
+
 $buildReleasePath = Join-Path $repository 'tool/windows/build-release.ps1'
 $buildReleaseSource = Get-Content -Raw -LiteralPath $buildReleasePath
-if ($buildReleaseSource -notmatch '(?ms)function\s+Get-PubspecVersion\b') {
-  throw 'build-release.ps1 must strictly parse the pubspec version.'
+
+$pubspecTestDirectory = Join-Path ([IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString())
+try {
+  New-Item -ItemType Directory -LiteralPath $pubspecTestDirectory -ErrorAction Stop | Out-Null
+
+  function Assert-PubspecVersionRejected {
+    param(
+      [Parameter(Mandatory)] [string] $Path,
+      [Parameter(Mandatory)] [string] $Description
+    )
+
+    $rejected = $false
+    try {
+      Get-PubspecVersion -Path $Path | Out-Null
+    } catch {
+      $rejected = $true
+    }
+    if (-not $rejected) {
+      throw "Pubspec version case was accepted unexpectedly: $Description."
+    }
+  }
+
+  $validPath = Join-Path $pubspecTestDirectory 'valid.yaml'
+  @(
+    'name: lineup-desktop'
+    'version: 1.2.3+45'
+  ) | Set-Content -LiteralPath $validPath -Encoding utf8
+  $valid = Get-PubspecVersion -Path $validPath
+  if ($valid.Name -ne '1.2.3' -or $valid.Build -ne '45') {
+    throw 'Get-PubspecVersion returned the wrong name or build for a valid version.'
+  }
+
+  $missingBuildPath = Join-Path $pubspecTestDirectory 'missing-build.yaml'
+  'version: 1.2.3' | Set-Content -LiteralPath $missingBuildPath -Encoding utf8
+  Assert-PubspecVersionRejected $missingBuildPath 'missing numeric build'
+
+  $nonnumericBuildPath = Join-Path $pubspecTestDirectory 'nonnumeric-build.yaml'
+  'version: 1.2.3+beta' |
+    Set-Content -LiteralPath $nonnumericBuildPath -Encoding utf8
+  Assert-PubspecVersionRejected $nonnumericBuildPath 'nonnumeric build'
+
+  $duplicateVersionPath = Join-Path $pubspecTestDirectory 'duplicate-version.yaml'
+  @(
+    'version: 1.2.3+45'
+    'version: 1.2.4+46'
+  ) | Set-Content -LiteralPath $duplicateVersionPath -Encoding utf8
+  Assert-PubspecVersionRejected $duplicateVersionPath 'duplicate top-level version entries'
+} finally {
+  if (Test-Path -LiteralPath $pubspecTestDirectory -PathType Container) {
+    Remove-Item -LiteralPath $pubspecTestDirectory -Recurse -Force -ErrorAction Stop
+  }
 }
-if ($buildReleaseSource -notmatch '\$versionLines\.Count\s+-ne\s+1' -or
-  $buildReleaseSource -notmatch '\(\?<name>\[\^\+\\s\]\+\)\\\+\(\?<build>\[0-9\]\+\)') {
-  throw 'build-release.ps1 must reject ambiguous or malformed pubspec versions.'
-}
+
 if ($buildReleaseSource -notmatch
   '(?m)^\$sourceCommit\s*=\s*Get-GitValue\s+\$repository\s+@\(''rev-parse'',\s*''--verify'',\s*''HEAD''\)') {
   throw 'build-release.ps1 must use the exact verified source commit for build provenance.'
