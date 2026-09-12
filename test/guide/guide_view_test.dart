@@ -1311,7 +1311,8 @@ void main() {
   testWidgets(
     'timeline controls expose one aligned marker and 30-minute steps',
     (tester) async {
-      var now = DateTime.utc(2026, 1, 2, 4, 30);
+      final localMidnight = DateTime(2026, 1, 2);
+      var now = localMidnight.toUtc().subtract(const Duration(minutes: 30));
       final lineup = _Lineup(2, anchor: now.subtract(const Duration(hours: 1)));
       final guide = GuideController(
         lineup: lineup,
@@ -1338,7 +1339,7 @@ void main() {
         tester.widget<Text>(find.byKey(const Key('guide-midnight-date'))).data,
         MaterialLocalizations.of(
           tester.element(find.byKey(const Key('guide-midnight-date'))),
-        ).formatMediumDate(DateTime(2026, 1, 2)),
+        ).formatMediumDate(localMidnight),
       );
       expect(find.bySemanticsLabel('Current time'), findsOneWidget);
       expect(
@@ -1362,11 +1363,14 @@ void main() {
       );
       await tester.tap(find.byKey(const Key('guide-later')));
       await tester.pump();
-      expect(guide.windowStart, DateTime.utc(2026, 1, 2, 5));
+      expect(guide.windowStart, localMidnight.toUtc());
       expect(find.byKey(const Key('guide-midnight-date')), findsOneWidget);
       await tester.tap(find.byKey(const Key('guide-earlier')));
       await tester.pump();
-      expect(guide.windowStart, DateTime.utc(2026, 1, 2, 4, 30));
+      expect(
+        guide.windowStart,
+        localMidnight.toUtc().subtract(const Duration(minutes: 30)),
+      );
 
       guide.moveWindow(2);
       now = guide.windowStart.add(const Duration(hours: 1));
