@@ -415,6 +415,7 @@ void main() {
         home: GuideView(
           controller: guide,
           onClose: () {},
+          watchingChannelId: lineup.currentChannelId,
           onTune: (_) async => tunes++,
         ),
       ),
@@ -702,7 +703,7 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
     await tester.pumpAndSettle();
 
-    expect(find.text('SIGNAL HOUSE'), findsOneWidget);
+    expect(find.text('Signal House'), findsWidgets);
     expect(find.text('S01E02'), findsWidgets);
     expect(
       tester.widget<Text>(find.byKey(const Key('guide-program-meta'))).data,
@@ -1311,7 +1312,7 @@ void main() {
     'timeline controls expose one aligned marker and 30-minute steps',
     (tester) async {
       var now = DateTime.utc(2026, 1, 1, 23, 30);
-      final lineup = _Lineup(2);
+      final lineup = _Lineup(2, anchor: now.subtract(const Duration(hours: 1)));
       final guide = GuideController(
         lineup: lineup,
         clock: () => now,
@@ -1514,6 +1515,7 @@ void main() {
       MaterialApp(
         home: GuideView(
           controller: guide,
+          watchingChannelId: lineup.currentChannelId,
           onClose: () {},
           onTune: (_) async {},
         ),
@@ -1529,6 +1531,21 @@ void main() {
     await tester.pump();
     expect(guide.focusedChannelId, 'channel-1');
     expect(tester.widget<Text>(context).data, contains('Channel 0'));
+
+    // Remembering a channel is not evidence of current playback.
+    await tester.pumpWidget(
+      MaterialApp(
+        home: GuideView(
+          controller: guide,
+          onClose: () {},
+          onTune: (_) async {},
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(find.byKey(const Key('guide-now-playing-context')), findsNothing);
+    expect(find.text('Watching'), findsNothing);
+    expect(lineup.currentChannelId, 'channel-0');
 
     await tester.pumpWidget(const SizedBox.shrink());
     guide.dispose();
@@ -1549,6 +1566,7 @@ void main() {
       MaterialApp(
         home: GuideView(
           controller: guide,
+          watchingChannelId: lineup.currentChannelId,
           onClose: () {},
           onTune: (_) async {},
         ),
@@ -1762,7 +1780,7 @@ String _testTime(DateTime value) =>
     );
 
 class _Lineup extends LineupController {
-  _Lineup(int count, {this.artworkBytes})
+  _Lineup(int count, {this.artworkBytes, DateTime? anchor})
     : super(
         store: _Store(),
         credentials: _Credentials(),
@@ -1784,7 +1802,7 @@ class _Lineup extends LineupController {
           ),
         ]),
         playbackMode: PlaybackMode.sequential,
-        anchor: DateTime.now().subtract(const Duration(hours: 1)),
+        anchor: anchor ?? DateTime.now().subtract(const Duration(hours: 1)),
         shuffleSeed: index,
       ),
     );

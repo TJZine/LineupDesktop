@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../guide/guide_controller.dart';
+import '../guide/guide_playback_placeholder.dart';
 import '../guide/guide_view.dart';
 import '../playback/native_player.dart';
 import '../playback/player_coordinator.dart';
@@ -554,18 +555,37 @@ class _LineupShellState extends State<LineupShell> {
       openMenu: _openAppMenu,
     );
     final hasPlaybackSurface = _hasPlaybackSurface;
+    final guidePlaybackUnavailable =
+        _player.status.state == PlayerState.unsupported ||
+        _player.error != null;
+    final guideHasPicture = hasPlaybackSurface && !guidePlaybackUnavailable;
     final guideView = GuideView(
       controller: _guide,
+      watchingChannelId:
+          !guidePlaybackUnavailable &&
+              !_player.tuning &&
+              const {
+                PlayerState.playing,
+                PlayerState.paused,
+                PlayerState.buffering,
+                PlayerState.seeking,
+              }.contains(_player.status.state)
+          ? _player.currentChannel?.id
+          : null,
       focusNode: _guideFocus,
       onClose: () => _closeGuide(hasPlaybackSurface),
       onOpenMenu: _openAppMenu,
-      pictureInPicture: hasPlaybackSurface
+      pictureInPicture: guideHasPicture
           ? PlayerSurface(controller: _player, showErrors: true)
-          : null,
-      playbackMessage: _player.tuning
-          ? 'Preparing playback…'
-          : _player.error ?? _player.status.message,
-      onOpenPlayer: () => unawaited(_select(4)),
+          : GuidePlaybackPlaceholder(
+              unavailable: guidePlaybackUnavailable,
+              reduceMotion: controller.settings.reduceMotion,
+              message:
+                  _player.error ??
+                  (guidePlaybackUnavailable ? _player.status.message : null),
+              onRetry: _player.canRetry ? _player.retry : null,
+            ),
+      onOpenPlayer: guideHasPicture ? () => unawaited(_select(4)) : null,
       onTune: _tuneFromGuide,
     );
     final settingsView = SettingsView(

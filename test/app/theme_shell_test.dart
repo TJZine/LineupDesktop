@@ -250,6 +250,33 @@ void main() {
     expect(find.byType(PlayerView), findsNothing);
   });
 
+  testWidgets(
+    'unavailable Guide picture preserves a truthful non-tunable state',
+    (tester) async {
+      final player = FixturePlayer()
+        ..emit(
+          const PlayerStatus(
+            state: PlayerState.unsupported,
+            message: 'Playback is not supported on this device.',
+          ),
+        );
+      final fixture = UiFixture(player: player)
+        ..controller.stage = SetupStage.ready
+        ..controller.settings = const LineupSettings(reduceMotion: true);
+      await tester.pumpWidget(fixture.build());
+      await tester.pumpAndSettle();
+      expect(find.text('Playback unavailable'), findsOneWidget);
+      expect(
+        find.text('Playback is not supported on this device.'),
+        findsOneWidget,
+      );
+      expect(find.byType(PlayerSurface), findsNothing);
+      expect(find.text('Retry'), findsNothing);
+      await openDestination(tester, 'Channels');
+      expect(find.text('Playback unavailable'), findsNothing);
+    },
+  );
+
   testWidgets('legacy overlay preference still presents the PiP Guide', (
     tester,
   ) async {
