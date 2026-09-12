@@ -399,29 +399,19 @@ class _LineupShellState extends State<LineupShell> {
                       ),
                       _menuDestination(
                         index: 0,
-                        icon: Icons.live_tv_outlined,
                         label: 'Guide',
                         autofocus: true,
                       ),
                       _menuDestination(
                         index: 4,
-                        icon: Icons.play_circle_outline,
                         label: 'Player',
                         enabled: hasPlaybackSurface,
                         helper: hasPlaybackSurface
                             ? null
                             : 'Choose a channel in Guide',
                       ),
-                      _menuDestination(
-                        index: 1,
-                        icon: Icons.view_list_outlined,
-                        label: 'Channels',
-                      ),
-                      _menuDestination(
-                        index: 2,
-                        icon: Icons.settings_outlined,
-                        label: 'Settings',
-                      ),
+                      _menuDestination(index: 1, label: 'Channels'),
+                      _menuDestination(index: 2, label: 'Settings'),
                       const Divider(height: 24),
                       Semantics(
                         selected:
@@ -438,42 +428,33 @@ class _LineupShellState extends State<LineupShell> {
                                         SettingsCategory.account
                                 ? roles.primaryText
                                 : roles.secondaryText,
+                            textStyle: Theme.of(context).textTheme.labelLarge
+                                ?.copyWith(fontSize: 16),
                           ),
                           onPressed: () => unawaited(_openAccount()),
-                          child: Row(
+                          child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Icon(Icons.account_circle_outlined),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const Text('Account'),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      profileName == null
-                                          ? accountName
-                                          : '$profileName · $accountName',
-                                      softWrap: true,
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .bodySmall,
-                                    ),
-                                    const SizedBox(height: 3),
-                                    Text(
-                                      serverName,
-                                      softWrap: true,
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .bodySmall
-                                          ?.copyWith(color: roles.mutedText),
-                                    ),
-                                  ],
-                                ),
+                              const Text('Account'),
+                              const SizedBox(height: 4),
+                              Text(
+                                profileName == null
+                                    ? accountName
+                                    : '$profileName · $accountName',
+                                softWrap: true,
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(fontSize: 14),
                               ),
-                              const SizedBox(width: 8),
-                              const Icon(Icons.chevron_right),
+                              const SizedBox(height: 3),
+                              Text(
+                                serverName,
+                                softWrap: true,
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(
+                                      color: roles.secondaryText,
+                                      fontSize: 14,
+                                    ),
+                              ),
                             ],
                           ),
                         ),
@@ -491,7 +472,6 @@ class _LineupShellState extends State<LineupShell> {
 
   Widget _menuDestination({
     required int index,
-    required IconData icon,
     required String label,
     bool enabled = true,
     bool autofocus = false,
@@ -510,25 +490,32 @@ class _LineupShellState extends State<LineupShell> {
       enabled: enabled,
       label: semanticLabel,
       onTap: enabled ? () => unawaited(_select(index)) : null,
-      child: TextButton.icon(
+      child: TextButton(
         autofocus: autofocus,
         style: TextButton.styleFrom(
           alignment: Alignment.centerLeft,
+          minimumSize: const Size(0, 48),
+          padding: const EdgeInsets.all(12),
           foregroundColor: selected
               ? LineupTheme.of(context).primaryText
               : LineupTheme.of(context).secondaryText,
           backgroundColor: selected
               ? LineupTheme.of(context).selectedSurface
               : null,
+          textStyle: Theme.of(context).textTheme.labelLarge
+              ?.copyWith(fontSize: 16),
         ),
         onPressed: enabled ? () => unawaited(_select(index)) : null,
-        icon: Icon(icon),
-        label: Column(
+        child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(label),
             if (helper != null)
-              Text(helper, style: Theme.of(context).textTheme.bodySmall),
+              Text(
+                helper,
+                style: Theme.of(context).textTheme.bodySmall
+                    ?.copyWith(fontSize: 14),
+              ),
           ],
         ),
       ),
