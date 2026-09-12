@@ -99,7 +99,7 @@ void main() {
     expect(MediaQuery.sizeOf(tester.element(rail)), const Size(1920, 1080));
     expect(
       tester.getSize(rail).width,
-      248 * LineupLayout.scaleFor(const Size(1920, 1080)),
+      312 * LineupLayout.scaleFor(const Size(1920, 1080)),
     );
     expect(tester.takeException(), isNull);
   });
@@ -121,7 +121,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Delete'));
     await tester.pumpAndSettle();
-    expect(find.text('Delete Newsroom?'), findsOneWidget);
+    expect(find.text('Delete 1 channel?'), findsOneWidget);
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
     expect(fixture.controller.channels, hasLength(1));
