@@ -1671,11 +1671,17 @@ class _MiniGuide extends StatelessWidget {
     final horizontal =
         size.height >= 720 && !LineupLayout.isCompactWidth(size.width);
     final textScale = MediaQuery.textScalerOf(context).scale(1);
+    final layoutTextScale = textScale < 1 ? 1.0 : textScale;
+    final large = horizontal && size.width >= 1920 && size.height >= 1080;
     final rowHeight = horizontal
-        ? 56.0 * scale * textScale.clamp(1, 1.5)
+        ? (large ? 66.0 : 56.0) * scale * layoutTextScale
         : null;
-    final channelColumnWidth = 250.0 * scale;
-    final columnGap = 24.0 * scale;
+    final channelColumnWidth = (large ? 365.0 : 250.0) * scale;
+    final columnGap = (large ? 36.0 : 24.0) * scale;
+    final contentInset =
+        (horizontal ? (large ? 48.0 : 32.0) : roles.overlaySafeArea) * scale;
+    final rowInset = (large ? 18.0 : 12.0) * scale;
+    final fadeTail = (large ? 110.0 : 80.0) * scale;
     final scaledTheme = Theme.of(context).copyWith(
       textTheme: Theme.of(context).textTheme.apply(fontSizeFactor: scale),
     );
@@ -1688,133 +1694,248 @@ class _MiniGuide extends StatelessWidget {
             alignment: Alignment.topCenter,
             child: SafeArea(
               bottom: false,
-              child: Container(
-                key: const Key('mini-guide-shelf'),
-                width: double.infinity,
-                constraints: BoxConstraints(maxHeight: size.height),
-                padding: EdgeInsets.fromLTRB(
-                  roles.overlaySafeArea,
-                  12 * scale,
-                  roles.overlaySafeArea,
-                  16 * scale,
+              child: CustomPaint(
+                painter: _MiniGuideFadePainter(
+                  scrim: roles.scrim,
+                  tailHeight: fadeTail,
                 ),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      roles.scrim.withValues(alpha: 0.78),
-                      roles.scrim.withValues(alpha: 0.66),
-                      roles.scrim.withValues(alpha: 0.52),
-                      roles.scrim.withValues(alpha: 0.20),
-                      Colors.transparent,
-                    ],
-                    stops: const [0, 0.30, 0.72, 0.90, 1],
+                child: Container(
+                  key: const Key('mini-guide-shelf'),
+                  width: double.infinity,
+                  constraints: BoxConstraints(maxHeight: size.height),
+                  padding: EdgeInsets.fromLTRB(
+                    contentInset,
+                    12 * scale,
+                    contentInset,
+                    16 * scale,
                   ),
-                ),
-                child: Semantics(
-                  container: true,
-                  explicitChildNodes: true,
-                  label: 'Mini Guide',
-                  child: Listener(
-                    onPointerSignal: (event) {
-                      if (event is PointerScrollEvent &&
-                          event.scrollDelta.dy != 0) {
-                        controller.moveMiniGuide(
-                          event.scrollDelta.dy > 0 ? 1 : -1,
-                        );
-                      }
-                    },
-                    child: SingleChildScrollView(
-                      key: const Key('mini-guide-scroll'),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Wrap(
-                            alignment: WrapAlignment.spaceBetween,
-                            crossAxisAlignment: WrapCrossAlignment.center,
-                            spacing: 12,
-                            children: [
-                              ExcludeSemantics(
-                                child: Text(
-                                  'Mini Guide',
-                                  style: Theme.of(context).textTheme.titleLarge,
+                  child: Semantics(
+                    container: true,
+                    explicitChildNodes: true,
+                    label: 'Mini Guide',
+                    child: Listener(
+                      onPointerSignal: (event) {
+                        if (event is PointerScrollEvent &&
+                            event.scrollDelta.dy != 0) {
+                          controller.moveMiniGuide(
+                            event.scrollDelta.dy > 0 ? 1 : -1,
+                          );
+                        }
+                      },
+                      child: SingleChildScrollView(
+                        key: const Key('mini-guide-scroll'),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Wrap(
+                              alignment: WrapAlignment.spaceBetween,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              spacing: 12 * scale,
+                              runSpacing: 4 * scale,
+                              children: [
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    ExcludeSemantics(
+                                      child: Text(
+                                        'Mini Guide',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .titleLarge
+                                            ?.copyWith(
+                                              fontSize:
+                                                  (large ? 26 : 20) * scale,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                      ),
+                                    ),
+                                    SizedBox(width: 20 * scale),
+                                    Text(
+                                      _time(context, controller.guide.now),
+                                      style: TextStyle(
+                                        color: roles.secondaryText,
+                                        fontSize: (large ? 18 : 14) * scale,
+                                        fontWeight: FontWeight.w400,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    TextButton(
+                                      style: TextButton.styleFrom(
+                                        foregroundColor: roles.secondaryText,
+                                        minimumSize: Size(0, 44 * scale),
+                                        padding: EdgeInsets.symmetric(
+                                          horizontal: 8 * scale,
+                                        ),
+                                        textStyle: Theme.of(context)
+                                            .textTheme
+                                            .labelLarge
+                                            ?.copyWith(
+                                              fontSize:
+                                                  (large ? 18 : 14) * scale,
+                                              fontWeight: FontWeight.w400,
+                                            ),
+                                      ),
+                                      onPressed: () {
+                                        controller.showFullGuide();
+                                        openGuide();
+                                      },
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Text('Full Guide'),
+                                          SizedBox(width: 8 * scale),
+                                          const ExcludeSemantics(
+                                            child: Icon(
+                                              Icons.arrow_forward,
+                                              size: 16,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    TextButton(
+                                      style: TextButton.styleFrom(
+                                        foregroundColor: roles.secondaryText,
+                                        minimumSize: Size(0, 44 * scale),
+                                        padding: EdgeInsets.symmetric(
+                                          horizontal: 8 * scale,
+                                        ),
+                                        textStyle: Theme.of(context)
+                                            .textTheme
+                                            .labelLarge
+                                            ?.copyWith(
+                                              fontSize:
+                                                  (large ? 18 : 14) * scale,
+                                              fontWeight: FontWeight.w400,
+                                            ),
+                                      ),
+                                      onPressed: controller.closeOverlay,
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Text('Close'),
+                                          SizedBox(width: 8 * scale),
+                                          const ExcludeSemantics(
+                                            child: Icon(Icons.close, size: 16),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                            if (horizontal)
+                              Padding(
+                                padding: EdgeInsets.fromLTRB(
+                                  rowInset,
+                                  0,
+                                  rowInset,
+                                  large ? 8 * scale : 6 * scale,
+                                ),
+                                child: Row(
+                                  children: [
+                                    SizedBox(
+                                      width: channelColumnWidth,
+                                      child: Text(
+                                        'Channel',
+                                        style: TextStyle(
+                                          color: roles.secondaryText,
+                                          fontSize: (large ? 16 : 12) * scale,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ),
+                                    SizedBox(width: columnGap),
+                                    Expanded(
+                                      flex: 115,
+                                      child: Text(
+                                        'On now',
+                                        style: TextStyle(
+                                          color: roles.secondaryText,
+                                          fontSize: (large ? 16 : 12) * scale,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ),
+                                    SizedBox(width: columnGap),
+                                    Expanded(
+                                      flex: 100,
+                                      child: Text(
+                                        'Up next',
+                                        style: TextStyle(
+                                          color: roles.secondaryText,
+                                          fontSize: (large ? 16 : 12) * scale,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  TextButton(
-                                    onPressed: () {
-                                      controller.showFullGuide();
-                                      openGuide();
-                                    },
-                                    child: const Text('Full Guide'),
-                                  ),
-                                  TextButton(
-                                    onPressed: controller.closeOverlay,
-                                    child: const Text('Close'),
-                                  ),
-                                ],
+                            for (final (index, channel) in channels.indexed)
+                              _MiniGuideRow(
+                                controller: controller,
+                                channel: channel,
+                                rowHeight: rowHeight,
+                                channelColumnWidth: channelColumnWidth,
+                                columnGap: columnGap,
+                                active: active,
+                                large: large,
+                                scale: scale,
+                                rowInset: rowInset,
+                                isLast: index == channels.length - 1,
                               ),
-                            ],
-                          ),
-                          if (horizontal)
-                            Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                              ),
-                              child: Row(
-                                children: [
-                                  SizedBox(
-                                    width: channelColumnWidth,
-                                    child: const Text('Channel'),
+                            SizedBox(height: 8 * scale),
+                            Wrap(
+                              alignment: WrapAlignment.spaceBetween,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              spacing: 12 * scale,
+                              runSpacing: 4 * scale,
+                              children: [
+                                Text(
+                                  'Up / Down · Browse · Enter Tune · Esc Close',
+                                  style: TextStyle(
+                                    color: roles.secondaryText,
+                                    fontSize: (large ? 16 : 12) * scale,
                                   ),
-                                  SizedBox(width: columnGap),
-                                  const Expanded(
-                                    flex: 115,
-                                    child: Text('On now'),
-                                  ),
-                                  SizedBox(width: columnGap),
-                                  const Expanded(
-                                    flex: 100,
-                                    child: Text('Up next'),
-                                  ),
-                                ],
-                              ),
+                                ),
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      tooltip: 'Previous channel',
+                                      constraints: BoxConstraints(
+                                        minWidth: 44 * scale,
+                                        minHeight: 44 * scale,
+                                      ),
+                                      padding: EdgeInsets.zero,
+                                      onPressed: () =>
+                                          controller.moveMiniGuide(-1),
+                                      icon: const Icon(Icons.arrow_upward),
+                                    ),
+                                    IconButton(
+                                      tooltip: 'Next channel',
+                                      constraints: BoxConstraints(
+                                        minWidth: 44 * scale,
+                                        minHeight: 44 * scale,
+                                      ),
+                                      padding: EdgeInsets.zero,
+                                      onPressed: () =>
+                                          controller.moveMiniGuide(1),
+                                      icon: const Icon(Icons.arrow_downward),
+                                    ),
+                                  ],
+                                ),
+                              ],
                             ),
-                          for (final channel in channels)
-                            _MiniGuideRow(
-                              controller: controller,
-                              channel: channel,
-                              rowHeight: rowHeight,
-                              channelColumnWidth: channelColumnWidth,
-                              columnGap: columnGap,
-                              active: active,
-                            ),
-                          SizedBox(height: 8 * scale),
-                          Text(
-                            'Up / Down to browse • Enter to tune • Esc to close',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(fontSize: 12 * scale),
-                          ),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.end,
-                            children: [
-                              IconButton(
-                                tooltip: 'Previous channel',
-                                onPressed: () => controller.moveMiniGuide(-1),
-                                icon: const Icon(Icons.arrow_upward),
-                              ),
-                              IconButton(
-                                tooltip: 'Next channel',
-                                onPressed: () => controller.moveMiniGuide(1),
-                                icon: const Icon(Icons.arrow_downward),
-                              ),
-                            ],
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -1836,6 +1957,10 @@ class _MiniGuideRow extends StatelessWidget {
     required this.channelColumnWidth,
     required this.columnGap,
     required this.active,
+    required this.large,
+    required this.scale,
+    required this.rowInset,
+    required this.isLast,
   });
 
   final PlayerCoordinator controller;
@@ -1844,13 +1969,26 @@ class _MiniGuideRow extends StatelessWidget {
   final double channelColumnWidth;
   final double columnGap;
   final bool active;
+  final bool large;
+  final double scale;
+  final double rowInset;
+  final bool isLast;
 
   @override
   Widget build(BuildContext context) {
     final roles = LineupTheme.of(context);
     final focused = channel.id == controller.miniGuideChannelId;
     final foreground = focused ? roles.focusedText : roles.primaryText;
-    final tuned = channel.id == controller.lineup.currentChannelId;
+    final tuned =
+        channel.id == controller.lineup.currentChannelId &&
+        !controller.tuning &&
+        controller.error == null &&
+        const {
+          PlayerState.playing,
+          PlayerState.paused,
+          PlayerState.buffering,
+          PlayerState.seeking,
+        }.contains(controller.status.state);
     final unsupported = controller.status.state == PlayerState.unsupported;
     final current = controller.guide.currentProgram(channel.id);
     final next = controller.guide.nextProgram(channel.id);
@@ -1864,9 +2002,19 @@ class _MiniGuideRow extends StatelessWidget {
         ? 0.0
         : now.difference(current.scheduled.start).inMilliseconds /
               spanMilliseconds;
-    final horizontal = rowHeight != null;
-    final titleStyle = Theme.of(context).textTheme.bodyMedium
-        ?.copyWith(color: foreground);
+    final titleStyle = Theme.of(context).textTheme.bodyMedium?.copyWith(
+      color: foreground,
+      fontSize: (large ? 20 : 14) * scale,
+      fontWeight: FontWeight.w500,
+    );
+    final metadataStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
+      color: roles.secondaryText,
+      fontSize: (large ? 16 : 12) * scale,
+    );
+    final nextTitleStyle = titleStyle?.copyWith(
+      color: roles.secondaryText,
+      fontWeight: FontWeight.w400,
+    );
     Widget ticker(String text, Key key, {TextStyle? style}) => FocusedTicker(
       key: key,
       text: text,
@@ -1875,20 +2023,34 @@ class _MiniGuideRow extends StatelessWidget {
       reduceMotion: MediaQuery.disableAnimationsOf(context),
       style: style,
     );
-    final channelIdentity = Row(
+    final channelIdentity = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(
-          child: ticker(
-            channel.name,
-            Key('mini-guide-channel-${channel.id}'),
-            style: titleStyle?.copyWith(fontWeight: FontWeight.w700),
-          ),
+        ticker(
+          channel.name,
+          Key('mini-guide-channel-${channel.id}'),
+          style: titleStyle,
         ),
         if (tuned)
-          Icon(
-            Icons.play_circle_fill,
-            size: horizontal ? 16 : 18,
-            color: foreground,
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ExcludeSemantics(
+                child: Icon(
+                  Icons.play_arrow_rounded,
+                  size: (large ? 14 : 12) * scale,
+                  color: roles.secondaryText,
+                ),
+              ),
+              SizedBox(width: 4 * scale),
+              Text(
+                'Watching',
+                style: metadataStyle?.copyWith(
+                  fontSize: (large ? 14 : 12) * scale,
+                ),
+              ),
+            ],
           ),
       ],
     );
@@ -1911,18 +2073,15 @@ class _MiniGuideRow extends StatelessWidget {
           Text(
             '${_time(context, current.scheduled.start)}–${_time(context, current.scheduled.end)}',
             maxLines: 1,
-            style: Theme.of(context).textTheme.bodySmall
-                ?.copyWith(color: foreground),
+            style: metadataStyle,
           ),
         if (current != null) ...[
           const SizedBox(height: 3),
           LinearProgressIndicator(
             value: progress.clamp(0, 1),
             minHeight: 2,
-            color: focused ? foreground : null,
-            backgroundColor: focused
-                ? foreground.withValues(alpha: 0.25)
-                : null,
+            color: roles.progressFill,
+            backgroundColor: roles.progressTrack.withValues(alpha: 0.72),
             semanticsLabel: 'Program progress',
           ),
         ],
@@ -1937,27 +2096,18 @@ class _MiniGuideRow extends StatelessWidget {
               ticker(
                 next.scheduled.item.title,
                 Key('mini-guide-next-${channel.id}'),
-                style: Theme.of(context).textTheme.bodySmall
-                    ?.copyWith(color: foreground),
+                style: nextTitleStyle,
               ),
               Text(
                 _time(context, next.scheduled.start),
                 maxLines: 1,
-                style: Theme.of(context).textTheme.bodySmall
-                    ?.copyWith(color: foreground),
+                style: metadataStyle,
               ),
             ],
           );
     final number = SizedBox(
-      width: 46,
-      child: Text(
-        '${channel.number}',
-        style:
-            (horizontal
-                    ? Theme.of(context).textTheme.bodyLarge
-                    : Theme.of(context).textTheme.titleMedium)
-                ?.copyWith(color: foreground, fontWeight: FontWeight.w700),
-      ),
+      width: (large ? 46.0 : 32.0) * scale,
+      child: Text('${channel.number}', style: titleStyle),
     );
     return Semantics(
       key: Key('mini-guide-row-${channel.id}'),
@@ -1966,13 +2116,19 @@ class _MiniGuideRow extends StatelessWidget {
           'Channel ${channel.number}, ${channel.name}. Now $currentText.${next == null ? '' : ' Next ${next.scheduled.item.title}.'}${tuned ? ' Now watching.' : ''}',
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: focused ? roles.selectedSurface : Colors.transparent,
+          color: focused
+              ? roles.progressFill.withValues(alpha: 0.16)
+              : Colors.transparent,
           border: Border(
             left: BorderSide(
               color: focused ? roles.focusBorder : Colors.transparent,
-              width: focused ? roles.focusBorderWidth : 3,
+              width: roles.focusBorderWidth,
             ),
-            bottom: BorderSide(color: roles.subtleBorder),
+            bottom: BorderSide(
+              color: isLast
+                  ? Colors.transparent
+                  : roles.primaryText.withValues(alpha: 0.10),
+            ),
           ),
         ),
         child: Material(
@@ -1987,9 +2143,9 @@ class _MiniGuideRow extends StatelessWidget {
                   },
             child: rowHeight == null
                 ? Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 7,
+                    padding: EdgeInsets.symmetric(
+                      horizontal: rowInset,
+                      vertical: 7 * scale,
                     ),
                     child: Row(
                       children: [
@@ -2010,7 +2166,7 @@ class _MiniGuideRow extends StatelessWidget {
                 : SizedBox(
                     height: rowHeight,
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      padding: EdgeInsets.symmetric(horizontal: rowInset),
                       child: Row(
                         children: [
                           SizedBox(
@@ -2038,6 +2194,36 @@ class _MiniGuideRow extends StatelessWidget {
       ),
     );
   }
+}
+
+class _MiniGuideFadePainter extends CustomPainter {
+  const _MiniGuideFadePainter({required this.scrim, required this.tailHeight});
+
+  final Color scrim;
+  final double tailHeight;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final bounds = Offset.zero & Size(size.width, size.height + tailHeight);
+    final gradient = LinearGradient(
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+      colors: [
+        scrim.withValues(alpha: 0.78),
+        scrim.withValues(alpha: 0.66),
+        scrim.withValues(alpha: 0.62),
+        scrim.withValues(alpha: 0.52),
+        scrim.withValues(alpha: 0.20),
+        Colors.transparent,
+      ],
+      stops: const [0, 0.30, 0.65, 0.76, 0.88, 1],
+    );
+    canvas.drawRect(bounds, Paint()..shader = gradient.createShader(bounds));
+  }
+
+  @override
+  bool shouldRepaint(covariant _MiniGuideFadePainter oldDelegate) =>
+      scrim != oldDelegate.scrim || tailHeight != oldDelegate.tailHeight;
 }
 
 class _SleepTimerPicker extends StatelessWidget {

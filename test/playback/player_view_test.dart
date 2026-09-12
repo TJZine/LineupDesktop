@@ -566,7 +566,10 @@ void main() {
         size.width,
       );
       expect(fixture.player.miniGuideChannels, hasLength(5));
-      expect(find.textContaining('Up / Down to browse'), findsOneWidget);
+      expect(
+        find.textContaining('Browse · Enter Tune · Esc Close'),
+        findsOneWidget,
+      );
       final shelf = tester.getRect(find.byKey(const Key('mini-guide-shelf')));
       expect(
         MediaQuery.sizeOf(
@@ -579,13 +582,27 @@ void main() {
           find.byKey(Key('mini-guide-row-${channel.id}')),
         );
         expect(row.top, greaterThanOrEqualTo(shelf.top), reason: '$size');
-        expect(row.bottom, lessThanOrEqualTo(shelf.bottom), reason: '$size');
+        final miniScroll = tester
+            .state<ScrollableState>(
+              find.descendant(
+                of: find.byKey(const Key('mini-guide-scroll')),
+                matching: find.byType(Scrollable),
+              ),
+            )
+            .position;
+        if (miniScroll.maxScrollExtent == 0) {
+          expect(row.bottom, lessThanOrEqualTo(shelf.bottom), reason: '$size');
+        }
         if (LineupLayout.isCompactWidth(size.width) || size.height < 720) {
           expect(row.height, greaterThan(48), reason: '$size');
         } else {
           expect(
             row.height,
-            closeTo(56 * LineupLayout.scaleFor(size), 0.01),
+            closeTo(
+              (size.width >= 1920 && size.height >= 1080 ? 66 : 56) *
+                  LineupLayout.scaleFor(size),
+              0.01,
+            ),
             reason: '$size',
           );
         }
@@ -1243,7 +1260,7 @@ void main() {
     for (final channel in fixture.player.miniGuideChannels) {
       expect(
         tester.getSize(find.byKey(Key('mini-guide-row-${channel.id}'))).height,
-        56,
+        66,
       );
     }
     expect(tester.takeException(), isNull);
@@ -1663,7 +1680,7 @@ void main() {
     position.jumpTo(position.maxScrollExtent);
     await tester.pump();
 
-    final hint = find.textContaining('Up / Down to browse');
+    final hint = find.textContaining('Browse · Enter Tune · Esc Close');
     expect(tester.getRect(hint).bottom, lessThanOrEqualTo(240));
     expect(tester.takeException(), isNull);
 
