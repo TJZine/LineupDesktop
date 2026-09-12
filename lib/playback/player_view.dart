@@ -592,6 +592,7 @@ class _Osd extends StatelessWidget {
     // lane; keep the compact 800x600 regime stacked so every action remains
     // reachable without crowding the identity block.
     final horizontal = size.width >= 1200 && size.height >= 640;
+    final largeDesktop = size.width >= 1920 && size.height >= 900;
     final transportActions = <Widget>[
       IconButton(
         tooltip: 'Previous channel',
@@ -635,7 +636,7 @@ class _Osd extends StatelessWidget {
         ? null
         : (sleepRemaining.inSeconds / Duration.secondsPerMinute).ceil();
     final sleepLabel = remainingMinutes == null
-        ? 'Sleep • Off'
+        ? 'Sleep'
         : 'Stops in $remainingMinutes min';
     final optionActions = <Widget>[
       _osdAction(
@@ -698,8 +699,12 @@ class _Osd extends StatelessWidget {
     final logoPath = program == null
         ? null
         : _artworkPath(program.scheduled.item, GuideArtworkKind.clearLogo);
+    final item = program?.scheduled.item;
+    final showTitle = item?.showTitle?.trim();
+    final primaryTitle = showTitle?.isNotEmpty == true ? showTitle! : title;
+    final episodeFacts = item == null ? null : _osdEpisodeFacts(item);
     final statusFacts = [
-      program?.scheduled.item.showTitle,
+      episodeFacts,
       _statusLabel(controller.status.state),
     ].nonNulls.toList(growable: false);
     final identity = Column(
@@ -709,36 +714,41 @@ class _Osd extends StatelessWidget {
         if (controller.lineup.settings.preferClearLogos &&
             program != null &&
             logoPath != null)
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 320, maxHeight: 68),
-            child: _PlayerArtwork(
-              key: ValueKey((
-                program.id,
-                controller.lineup.contentGeneration,
-                logoPath,
-              )),
-              imageKey: const Key('player-osd-logo'),
-              semanticLabel: title,
-              future: controller.guide.artworkFor(
-                program,
-                GuideArtworkKind.clearLogo,
-              ),
-              fit: BoxFit.contain,
-              fallback: _OsdTitle(title: title),
-              clearLogo: true,
+          _PlayerArtwork(
+            key: ValueKey((
+              program.id,
+              controller.lineup.contentGeneration,
+              logoPath,
+            )),
+            imageKey: const Key('player-osd-logo'),
+            semanticLabel: primaryTitle,
+            future: controller.guide.artworkFor(
+              program,
+              GuideArtworkKind.clearLogo,
             ),
+            fit: BoxFit.contain,
+            fallback: _OsdTitle(title: primaryTitle),
+            clearLogo: true,
+            logoMaximumSize: Size(
+              size.width >= 1920 ? 520 : 360,
+              size.height >= 900 ? 128 : 72,
+            ),
+            logoMinimumVisibleSize: Size(96, size.height >= 900 ? 28 : 24),
           )
         else
-          _OsdTitle(title: title),
+          _OsdTitle(title: primaryTitle),
         if (statusFacts.isNotEmpty) ...[
-          const SizedBox(height: 4),
+          const SizedBox(height: 8),
           Text(
             statusFacts.join(' • '),
             key: const Key('player-osd-status'),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.bodyMedium
-                ?.copyWith(color: roles.secondaryText),
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: roles.primaryText.withValues(alpha: 0.88),
+              fontSize: largeDesktop ? 16 : 14,
+              fontWeight: FontWeight.w400,
+            ),
           ),
         ],
       ],
@@ -750,6 +760,11 @@ class _Osd extends StatelessWidget {
             displayedPosition,
             Duration(milliseconds: duration),
           );
+    final osdSecondaryStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
+      color: roles.primaryText.withValues(alpha: 0.88),
+      fontSize: horizontal ? (largeDesktop ? 16 : 14) : null,
+      fontWeight: FontWeight.w400,
+    );
     final progress = Row(
       key: const Key('player-osd-progress-block'),
       children: [
@@ -759,8 +774,7 @@ class _Osd extends StatelessWidget {
             ?remaining,
           ].join(' • '),
           key: const Key('player-osd-timing'),
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-            color: roles.secondaryText,
+          style: osdSecondaryStyle?.copyWith(
             fontFeatures: const [FontFeature.tabularFigures()],
           ),
         ),
@@ -776,34 +790,25 @@ class _Osd extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.end,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: roles.mutedText,
-                  fontWeight: FontWeight.w600,
-                ),
+                style: osdSecondaryStyle,
               ),
             ),
           ),
         ],
       ],
     );
-    Widget actionGroup(List<Widget> children, {bool separated = true}) =>
-        DecoratedBox(
-          decoration: BoxDecoration(
-            border: separated
-                ? Border(left: BorderSide(color: roles.subtleBorder))
-                : null,
-          ),
-          child: Padding(
-            padding: EdgeInsets.only(left: separated ? 8 : 0),
-            child: Row(mainAxisSize: MainAxisSize.min, children: children),
-          ),
-        );
+    Widget actionGroup(List<Widget> children) =>
+        Row(mainAxisSize: MainAxisSize.min, children: children);
     final groupedActions = Row(
       key: const Key('player-osd-action-groups'),
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (dvrControlsEnabled) actionGroup(transportActions, separated: false),
-        actionGroup(optionActions, separated: dvrControlsEnabled),
+        if (dvrControlsEnabled) ...[
+          actionGroup(transportActions),
+          const SizedBox(width: 16),
+        ],
+        actionGroup(optionActions),
+        const SizedBox(width: 16),
         actionGroup(windowActions),
       ],
     );
@@ -931,6 +936,7 @@ class _Osd extends StatelessWidget {
             child: _ChannelBug(
               key: const Key('player-osd-channel-bug'),
               channel: channel,
+              osdPresentation: true,
             ),
           ),
         progressLine,
@@ -945,29 +951,47 @@ class _OsdTitle extends StatelessWidget {
   final String title;
 
   @override
-  Widget build(BuildContext context) => Semantics(
-    container: true,
-    label: title,
-    excludeSemantics: true,
-    child: Text(
-      title,
-      key: const Key('player-osd-title'),
-      maxLines: 2,
-      overflow: TextOverflow.ellipsis,
-      style: Theme.of(context).textTheme.titleLarge
-          ?.copyWith(fontWeight: FontWeight.w800),
-    ),
-  );
+  Widget build(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    final largeDesktop = size.width >= 1920 && size.height >= 900;
+    final horizontal = size.width >= 1200 && size.height >= 640;
+    return Semantics(
+      container: true,
+      label: title,
+      excludeSemantics: true,
+      child: Text(
+        title,
+        key: const Key('player-osd-title'),
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+          color: LineupTheme.of(context).primaryText,
+          fontSize: largeDesktop
+              ? 28
+              : horizontal
+              ? 24
+              : null,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
 }
 
 class _ChannelBug extends StatelessWidget {
-  const _ChannelBug({required this.channel, super.key});
+  const _ChannelBug({
+    required this.channel,
+    this.osdPresentation = false,
+    super.key,
+  });
 
   final Channel channel;
+  final bool osdPresentation;
 
   @override
   Widget build(BuildContext context) {
     final roles = LineupTheme.of(context);
+    final size = MediaQuery.sizeOf(context);
     return Semantics(
       container: true,
       button: false,
@@ -985,7 +1009,10 @@ class _ChannelBug extends StatelessWidget {
             '${channel.number} • ${channel.name}',
             style: Theme.of(context).textTheme.labelLarge?.copyWith(
               color: roles.primaryText,
-              fontWeight: FontWeight.w800,
+              fontSize: osdPresentation
+                  ? (size.width >= 1920 && size.height >= 900 ? 16 : 14)
+                  : null,
+              fontWeight: osdPresentation ? FontWeight.w500 : FontWeight.w800,
             ),
           ),
         ),
@@ -1477,6 +1504,8 @@ class _PlayerArtwork extends StatelessWidget {
     this.imageKey,
     this.semanticLabel,
     this.clearLogo = false,
+    this.logoMaximumSize,
+    this.logoMinimumVisibleSize,
     super.key,
   });
 
@@ -1486,6 +1515,8 @@ class _PlayerArtwork extends StatelessWidget {
   final Key? imageKey;
   final String? semanticLabel;
   final bool clearLogo;
+  final Size? logoMaximumSize;
+  final Size? logoMinimumVisibleSize;
 
   @override
   Widget build(BuildContext context) => FutureBuilder<Uint8List?>(
@@ -1495,6 +1526,8 @@ class _PlayerArtwork extends StatelessWidget {
         : clearLogo
         ? ClearLogoImage(
             snapshot.data!,
+            maximumSize: logoMaximumSize,
+            minimumVisibleSize: logoMinimumVisibleSize,
             fallback: fallback,
             imageKey: imageKey,
             semanticLabel: semanticLabel,
@@ -1713,17 +1746,22 @@ class _MiniGuide extends StatelessWidget {
                     container: true,
                     explicitChildNodes: true,
                     label: 'Mini Guide',
-                    child: Listener(
-                      onPointerSignal: (event) {
-                        if (event is PointerScrollEvent &&
-                            event.scrollDelta.dy != 0) {
-                          controller.moveMiniGuide(
-                            event.scrollDelta.dy > 0 ? 1 : -1,
-                          );
-                        }
-                      },
-                      child: SingleChildScrollView(
-                        key: const Key('mini-guide-scroll'),
+                    child: SingleChildScrollView(
+                      key: const Key('mini-guide-scroll'),
+                      child: Listener(
+                        behavior: HitTestBehavior.opaque,
+                        onPointerSignal: (event) {
+                          if (event is! PointerScrollEvent ||
+                              event.scrollDelta.dy == 0) {
+                            return;
+                          }
+                          GestureBinding.instance.pointerSignalResolver
+                              .register(event, (_) {
+                                controller.moveMiniGuide(
+                                  event.scrollDelta.dy > 0 ? 1 : -1,
+                                );
+                              });
+                        },
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2778,6 +2816,7 @@ Widget _osdAction(
   FocusNode? focusNode,
 }) {
   final roles = LineupTheme.of(context);
+  final size = MediaQuery.sizeOf(context);
   return ConstrainedBox(
     constraints: BoxConstraints(maxWidth: compact ? 132 : 180),
     child: Tooltip(
@@ -2787,7 +2826,16 @@ Widget _osdAction(
         focusNode: focusNode,
         onPressed: onPressed,
         icon: Icon(icon, size: compact ? 17 : 18),
-        label: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+        label: Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: Theme.of(context).textTheme.labelLarge?.copyWith(
+            color: roles.primaryText,
+            fontSize: size.width >= 1920 && size.height >= 900 ? 16 : 14,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
         style: TextButton.styleFrom(
           foregroundColor: roles.primaryText,
           padding: EdgeInsets.symmetric(horizontal: compact ? 5 : 8),
@@ -2817,6 +2865,25 @@ String? _episodeLabel(ChannelItem item) {
     if (season != null) 'Season $season',
     if (episode != null) 'Episode $episode',
   ].join(' • ');
+}
+
+String? _osdEpisodeFacts(ChannelItem item) {
+  final numbered = [
+    if (item.seasonNumber != null) 'S${item.seasonNumber}',
+    if (item.episodeNumber != null) 'E${item.episodeNumber}',
+  ].join(' · ');
+  final showTitle = item.showTitle?.trim();
+  if (showTitle?.isNotEmpty != true) return numbered.isEmpty ? null : numbered;
+
+  final episodeTitle = item.title.trim();
+  if (numbered.isEmpty) {
+    return episodeTitle.isEmpty || episodeTitle == showTitle
+        ? null
+        : episodeTitle;
+  }
+  return episodeTitle.isEmpty || episodeTitle == showTitle
+      ? numbered
+      : '$numbered — $episodeTitle';
 }
 
 String? _dynamicRangeLabel(String? value, bool telemetryIsHdr) {

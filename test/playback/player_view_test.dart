@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -832,7 +834,7 @@ void main() {
 
     expect(find.text('Subtitles • Off'), findsOneWidget);
     expect(find.text('Audio • English stereo'), findsOneWidget);
-    expect(find.text('Sleep • Off'), findsOneWidget);
+    expect(find.text('Sleep'), findsOneWidget);
     expect(find.byKey(const Key('player-osd-subtitles')), findsOneWidget);
     expect(find.byKey(const Key('player-osd-audio')), findsOneWidget);
     expect(find.byKey(const Key('player-osd-sleep')), findsOneWidget);
@@ -967,7 +969,7 @@ void main() {
     final status = tester.widget<Text>(
       find.byKey(const Key('player-osd-status')),
     );
-    expect(status.data, 'Lineup Stories');
+    expect(status.data, 'S2 · E6 — Program');
     expect(status.data, isNot(contains('Playing')));
     expect(find.text('1080p'), findsNothing);
     expect(find.text('1920×1080'), findsNothing);
@@ -1077,9 +1079,16 @@ void main() {
   testWidgets('OSD uses official title artwork with a text fallback', (
     tester,
   ) async {
+    final logoBytes = File(
+      'test/support/now_playing/signal-after-midnight-title.png',
+    ).readAsBytesSync();
     final cases = [
       (
-        fixture: _Fixture(PlayerState.playing, richProgram: true),
+        fixture: _Fixture(
+          PlayerState.playing,
+          richProgram: true,
+          artworkBytes: logoBytes,
+        ),
         logo: true,
         description: 'loaded logo',
       ),
@@ -1114,28 +1123,37 @@ void main() {
       if (item.logo) {
         await tester.runAsync(
           () => precacheImage(
-            MemoryImage(_fixtureArtwork),
+            MemoryImage(logoBytes),
             tester.element(find.byType(PlayerView)),
           ),
         );
       }
+      await tester.pumpAndSettle();
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 80)),
+      );
       await tester.pumpAndSettle();
       expect(
         find.byKey(const Key('player-osd-logo')),
         item.logo ? findsOneWidget : findsNothing,
         reason: item.description,
       );
-      final titleSemantics = find.bySemanticsLabel('Program');
+      final titleSemantics = find.bySemanticsLabel('Lineup Stories');
       expect(titleSemantics, findsOneWidget, reason: item.description);
       final titleData = tester
           .getSemantics(
             find.byKey(Key(item.logo ? 'player-osd-logo' : 'player-osd-title')),
           )
           .getSemanticsData();
-      expect(titleData.label, 'Program', reason: item.description);
+      expect(titleData.label, 'Lineup Stories', reason: item.description);
       expect(
         titleData.flagsCollection.isImage,
         item.logo,
+        reason: item.description,
+      );
+      expect(
+        tester.widget<Text>(find.byKey(const Key('player-osd-status'))).data,
+        'S2 · E6 — Program',
         reason: item.description,
       );
       if (item.logo) {
@@ -1147,6 +1165,119 @@ void main() {
       item.fixture.dispose();
     }
   }, semanticsEnabled: true);
+
+  testWidgets('OSD keeps show identity and compact episode facts', (
+    tester,
+  ) async {
+    final cases = [
+      (
+        item: _fixtureItem(
+          0,
+          rich: true,
+          title: 'Episode title',
+          duration: const Duration(hours: 1),
+        ),
+        primary: 'Lineup Stories',
+        facts: 'S2 · E6 — Episode title',
+      ),
+      (
+        item: const ChannelItem(
+          id: 'un-numbered-episode',
+          title: 'Episode title',
+          duration: Duration(hours: 1),
+          showTitle: 'Un-numbered Show',
+        ),
+        primary: 'Un-numbered Show',
+        facts: 'Episode title',
+      ),
+      (
+        item: const ChannelItem(
+          id: 'season-zero',
+          title: 'Special',
+          duration: Duration(hours: 1),
+          showTitle: 'Zero Show',
+          seasonNumber: 0,
+        ),
+        primary: 'Zero Show',
+        facts: 'S0 — Special',
+      ),
+      (
+        item: const ChannelItem(
+          id: 'episode-zero',
+          title: 'Pilot',
+          duration: Duration(hours: 1),
+          showTitle: 'Episode Zero Show',
+          episodeNumber: 0,
+        ),
+        primary: 'Episode Zero Show',
+        facts: 'E0 — Pilot',
+      ),
+      (
+        item: const ChannelItem(
+          id: 'duplicate-title',
+          title: 'Same Show',
+          duration: Duration(hours: 1),
+          showTitle: 'Same Show',
+          seasonNumber: 0,
+          episodeNumber: 0,
+        ),
+        primary: 'Same Show',
+        facts: 'S0 · E0',
+      ),
+      (
+        item: const ChannelItem(
+          id: 'movie-with-numbers',
+          title: 'Movie',
+          duration: Duration(hours: 1),
+          seasonNumber: 0,
+          episodeNumber: 0,
+        ),
+        primary: 'Movie',
+        facts: 'S0 · E0',
+      ),
+      (
+        item: const ChannelItem(
+          id: 'movie',
+          title: 'Movie',
+          duration: Duration(hours: 1),
+        ),
+        primary: 'Movie',
+        facts: null,
+      ),
+    ];
+
+    for (final itemCase in cases) {
+      final fixture = _Fixture(
+        PlayerState.playing,
+        preferClearLogos: false,
+        richItemOverride: itemCase.item,
+      );
+      await fixture.guide.ensureCurrentProgram('channel');
+      fixture.player.showOsd();
+      await tester.pumpWidget(
+        MaterialApp(
+          key: ValueKey(itemCase.item.id),
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.widget<Text>(find.byKey(const Key('player-osd-title'))).data,
+        itemCase.primary,
+        reason: itemCase.item.id,
+      );
+      final status = find.byKey(const Key('player-osd-status'));
+      if (itemCase.facts == null) {
+        expect(status, findsNothing, reason: itemCase.item.id);
+      } else {
+        expect(tester.widget<Text>(status).data, itemCase.facts);
+      }
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    }
+  });
 
   testWidgets('OSD keeps its widescreen hierarchy at DPR2', (tester) async {
     final fixture = _Fixture(PlayerState.playing);
@@ -1683,6 +1814,56 @@ void main() {
     final hint = find.textContaining('Browse · Enter Tune · Esc Close');
     expect(tester.getRect(hint).bottom, lessThanOrEqualTo(240));
     expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
+  testWidgets('mini Guide wheel changes selection without scrolling', (
+    tester,
+  ) async {
+    final fixture = _Fixture(PlayerState.playing, channelCount: 7);
+    await tester.binding.setSurfaceSize(const Size(800, 240));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    fixture.player.showMiniGuide();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+    await tester.pump();
+
+    final scrollable = find.descendant(
+      of: find.byKey(const Key('mini-guide-scroll')),
+      matching: find.byType(Scrollable),
+    );
+    final position = tester.state<ScrollableState>(scrollable).position;
+    expect(position.maxScrollExtent, greaterThan(0));
+    position.jumpTo(position.maxScrollExtent / 2);
+    await tester.pump();
+    final pixels = position.pixels;
+    final selectedIndex = fixture.player.miniGuideChannelIndex;
+    final scroll = find.byKey(const Key('mini-guide-scroll'));
+
+    await tester.sendEventToBinding(
+      PointerScrollEvent(
+        position: tester.getCenter(scroll),
+        scrollDelta: const Offset(0, 40),
+      ),
+    );
+    await tester.pump();
+    expect(fixture.player.miniGuideChannelIndex, (selectedIndex + 1) % 7);
+    expect(position.pixels, pixels);
+
+    await tester.sendEventToBinding(
+      PointerScrollEvent(
+        position: tester.getCenter(scroll),
+        scrollDelta: const Offset(0, -40),
+      ),
+    );
+    await tester.pump();
+    expect(fixture.player.miniGuideChannelIndex, selectedIndex);
+    expect(position.pixels, pixels);
 
     await tester.pumpWidget(const SizedBox.shrink());
     fixture.dispose();
