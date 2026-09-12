@@ -527,7 +527,7 @@ void main() {
       ),
     );
     await _pump(tester, fixture.build());
-    await _openDestination(tester, 'Player');
+    await openDestination(tester, 'Player');
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.pump();
 
@@ -543,7 +543,7 @@ void main() {
       ),
     );
     await _pump(tester, fixture.build(), viewport: const Size(1920, 1080));
-    await _openDestination(tester, 'Player');
+    await openDestination(tester, 'Player');
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.pump();
 
@@ -566,7 +566,7 @@ void main() {
             reduceMotion: true,
           );
     await _pump(tester, fixture.build());
-    await _openDestination(tester, 'Player');
+    await openDestination(tester, 'Player');
     final context = tester.element(find.byKey(_goldenKey));
     await tester.runAsync(() async {
       for (final bytes in _nowPlayingArtwork.values) {
@@ -600,7 +600,7 @@ void main() {
             reduceMotion: true,
           );
     await _pump(tester, fixture.build(), viewport: const Size(1920, 1080));
-    await _openDestination(tester, 'Player');
+    await openDestination(tester, 'Player');
     final context = tester.element(find.byKey(_goldenKey));
     await tester.runAsync(() async {
       for (final bytes in _nowPlayingArtwork.values) {
@@ -645,7 +645,7 @@ void main() {
       ],
     )..controller.settings = const LineupSettings(reduceMotion: true);
     await _pump(tester, fixture.build());
-    await _openDestination(tester, 'Player');
+    await openDestination(tester, 'Player');
     await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
     await tester.pump();
 
@@ -676,7 +676,7 @@ void main() {
       ],
     )..controller.settings = const LineupSettings(reduceMotion: true);
     await _pump(tester, fixture.build());
-    await _openDestination(tester, 'Player');
+    await openDestination(tester, 'Player');
     await tester.sendKeyEvent(LogicalKeyboardKey.keyC);
     await tester.pumpAndSettle();
 
@@ -699,7 +699,7 @@ void main() {
       ),
     );
     await _pump(tester, fixture.build());
-    await _openDestination(tester, 'Player');
+    await openDestination(tester, 'Player');
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
     await tester.pump();
 
@@ -715,7 +715,7 @@ void main() {
       ),
     );
     await _pump(tester, fixture.build(), viewport: const Size(1920, 1080));
-    await _openDestination(tester, 'Player');
+    await openDestination(tester, 'Player');
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
     await tester.pump();
 
@@ -729,14 +729,14 @@ void main() {
         theme: LineupThemeName.slatePine,
       );
     await _pump(tester, fixture.build());
-    await _openDestination(tester, 'Settings');
+    await openDestination(tester, 'Settings');
     await _match(tester, 'settings-slate-pine-1280x720.png');
   });
 
   testWidgets('Appearance chooser at compact desktop size', (tester) async {
     final fixture = _readyFixture();
     await _pump(tester, fixture.build(), viewport: const Size(800, 600));
-    await _openDestination(tester, 'Settings');
+    await openDestination(tester, 'Settings');
 
     expect(find.byType(DropdownButton<LineupThemeName>), findsOneWidget);
     await _match(tester, 'settings-appearance-ember-steel-800x600.png');
@@ -745,7 +745,7 @@ void main() {
   testWidgets('Appearance chooser at large desktop size', (tester) async {
     final fixture = _readyFixture();
     await _pump(tester, fixture.build(), viewport: const Size(1920, 1080));
-    await _openDestination(tester, 'Settings');
+    await openDestination(tester, 'Settings');
 
     expect(find.byType(DropdownButton<LineupThemeName>), findsOneWidget);
     await _match(tester, 'settings-appearance-ember-steel-1920x1080.png');
@@ -759,7 +759,7 @@ void main() {
       ),
     )..controller.settings = const LineupSettings(reduceMotion: true);
     await _pump(tester, fixture.build());
-    await _openDestination(tester, 'Settings');
+    await openDestination(tester, 'Settings');
 
     expect(find.byType(PlayerSurface), findsOneWidget);
     expect(find.byType(PlayerView), findsNothing);
@@ -772,7 +772,7 @@ void main() {
   ) async {
     final fixture = _studioFixture();
     await _pump(tester, fixture.build());
-    await _openDestination(tester, 'Channels');
+    await openDestination(tester, 'Channels');
     await tester.tap(find.text('Saturday Cartoons').first);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
@@ -785,7 +785,7 @@ void main() {
   ) async {
     final fixture = _studioFixture();
     await _pump(tester, fixture.build(), viewport: const Size(800, 600));
-    await _openDestination(tester, 'Channels');
+    await openDestination(tester, 'Channels');
     await tester.tap(find.text('Saturday Cartoons').first);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
@@ -914,14 +914,6 @@ Future<void> _expectClassicOpacity(
         '$firstUnexpectedTransparency.',
   );
   expect(transparentPixels, allowed == null ? 0 : greaterThan(0));
-}
-
-Future<void> _openDestination(WidgetTester tester, String destination) async {
-  await tester.tap(find.byKey(const Key('guide-app-menu')));
-  await tester.pump(const Duration(milliseconds: 250));
-  await tester.tap(find.text(destination).last);
-  await tester.pump();
-  await tester.pump(const Duration(milliseconds: 250));
 }
 
 UiFixture _readyFixture({

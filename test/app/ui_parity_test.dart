@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/channels/channel.dart';
+import 'package:lineup_desktop/ui/app_ui.dart';
 
 import '../support/ui_fixture.dart';
 
@@ -78,6 +79,29 @@ void main() {
     await tester.tap(find.text('Open Diagnostics'));
     await tester.pumpAndSettle();
     expect(FocusManager.instance.primaryFocus?.debugLabel, 'Diagnostics');
+  });
+
+  testWidgets('Settings preserves logical desktop layout at DPR2', (
+    tester,
+  ) async {
+    tester.view
+      ..devicePixelRatio = 2
+      ..physicalSize = const Size(3840, 2160);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    final fixture = UiFixture()..controller.stage = SetupStage.ready;
+    await tester.pumpWidget(fixture.build());
+    await tester.pumpAndSettle();
+
+    await openDestination(tester, 'Settings');
+
+    final rail = find.byKey(const Key('settings-category-rail'));
+    expect(MediaQuery.sizeOf(tester.element(rail)), const Size(1920, 1080));
+    expect(
+      tester.getSize(rail).width,
+      248 * LineupLayout.scaleFor(const Size(1920, 1080)),
+    );
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('channel deletion requires explicit destructive confirmation', (
