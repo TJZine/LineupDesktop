@@ -33,7 +33,7 @@ $buildReleaseSource = Get-Content -Raw -LiteralPath $buildReleasePath
 
 $pubspecTestDirectory = Join-Path ([IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString())
 try {
-  New-Item -ItemType Directory -LiteralPath $pubspecTestDirectory -ErrorAction Stop | Out-Null
+  New-Item -ItemType Directory -Path $pubspecTestDirectory -ErrorAction Stop | Out-Null
 
   function Assert-PubspecVersionRejected {
     param(
