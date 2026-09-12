@@ -1755,7 +1755,15 @@ void main() {
     expect(focused.shape, isNull);
     expect(selected.shape, isNull);
     expect(focused.focusColor, isNot(selected.selectedTileColor));
-    expect((selected.trailing! as Icon).semanticLabel, 'Selected');
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('playback-track-audio-2')),
+        matching: find.byWidgetPredicate(
+          (widget) => widget is Icon && widget.semanticLabel == 'Selected',
+        ),
+      ),
+      findsOneWidget,
+    );
 
     await tester.pumpWidget(const SizedBox.shrink());
     fixture.dispose();
@@ -2012,9 +2020,9 @@ void main() {
       );
       expect(rail.right, size.width);
       expect(rail.height, size.height);
-      expect(rail.width, size.width == 800 ? 320 : 420);
+      expect(rail.width, size.width == 800 ? 320 : 400);
       position.jumpTo(position.maxScrollExtent);
-      await tester.pump();
+      await tester.pumpAndSettle();
       expect(find.text('Audio track 29'), findsOneWidget);
       expect(find.text('Close'), findsOneWidget);
       expect(tester.takeException(), isNull, reason: '$size');
@@ -2035,7 +2043,13 @@ void main() {
             id: index,
             type: PlayerTrackType.subtitle,
             selected: index == 24,
-            title: 'Subtitle track $index',
+            title: index == 24
+                ? 'Subtitle track $index'
+                : 'Subtitle track $index — Closed captions for deaf and hard '
+                      'of hearing viewers with additional descriptions in the '
+                      'extended restoration',
+            language: 'English',
+            codec: 'hdmv_pgs_subtitle',
           ),
       ],
     );
@@ -2062,6 +2076,7 @@ void main() {
   testWidgets('track panel scales its reading rail and soft fade through 4K', (
     tester,
   ) async {
+    final semantics = tester.ensureSemantics();
     final fixture = _Fixture(
       PlayerState.playing,
       tracks: const [
@@ -2083,29 +2098,29 @@ void main() {
       (
         viewport: Size(1280, 720),
         dpr: 1.0,
-        width: 420.0,
-        fade: 150.0,
+        width: 400.0,
+        fade: 200 / 3,
         scale: 1.0,
       ),
       (
         viewport: Size(1920, 1080),
         dpr: 1.25,
-        width: 420.0,
-        fade: 150.0,
+        width: 600.0,
+        fade: 100.0,
         scale: 1.0,
       ),
       (
         viewport: Size(2560, 1440),
         dpr: 1.5,
-        width: 560.0,
-        fade: 200.0,
+        width: 800.0,
+        fade: 400 / 3,
         scale: 4 / 3,
       ),
       (
         viewport: Size(3840, 2160),
         dpr: 2.0,
-        width: 567.0,
-        fade: 202.5,
+        width: 810.0,
+        fade: 135.0,
         scale: 1.35,
       ),
     ]) {
@@ -2152,12 +2167,29 @@ void main() {
                   .decoration!
               as BoxDecoration;
       final gradient = decoration.gradient! as LinearGradient;
-      expect(gradient.stops, const [0, 0.22, 0.4, 1]);
+      expect(gradient.stops, const [0, 0.10, 0.22, 1]);
       expect(gradient.colors.first.a, 0);
-      expect(gradient.colors.last.a, closeTo(0.84, 0.01));
+      expect(gradient.colors.last.a, closeTo(0.82, 0.01));
       expect(find.text('Audio'), findsOneWidget);
       expect(find.text('Close'), findsOneWidget);
       expect(find.text('PLAYBACK OPTIONS'), findsNothing);
+      expect(
+        find.byTooltip(
+          'A long descriptive English surround audio track label\n'
+          'English • eac3',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        tester
+            .getSemantics(
+              find.text(
+                'A long descriptive English surround audio track label',
+              ),
+            )
+            .label,
+        contains('A long descriptive English surround audio track label'),
+      );
       expect(
         tester
             .widget<Text>(
@@ -2178,6 +2210,7 @@ void main() {
 
     await tester.pumpWidget(const SizedBox.shrink());
     fixture.dispose();
+    semantics.dispose();
   });
 
   testWidgets('track rails enter from the right and exit in 300ms', (
