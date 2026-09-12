@@ -74,3 +74,26 @@ This completes portable setup scaling integration, not physical Windows
 validation or a new approval of the skipped Mini-marathons design. Independent
 review was not run; no separate review is specifically recommended for this
 presentation-only group. The existing Windows evidence boundary still applies.
+
+## Group 2b — onboarding
+
+Luna task `01a0975b-7b68-7b63-a14a-d5115a669ba2` returned its lease for onboarding
+and the geometry of the shared notice/empty-state widgets. Profile portraits,
+badges and spacing, linking QR captions and spacing, server rows and onboarding
+buttons now follow the shared viewport scale. Astra additionally corrected the
+empty-server caller's inherited typography; the shared empty-state widget still
+leaves text scaling with its caller. PIN entry and authentication logic were not
+changed.
+
+Ten existing onboarding checks passed, including after Astra's integration.
+Analysis, formatting and diff checks passed. Seven normal-text 1080p captures
+(Welcome, Profiles, Servers and four linking states) are byte-identical to the
+preserved baseline, confirmed by Astra. Portable captures also passed at 1440p,
+2160p and 2160p/DPR2/text200%; additional empty-server/error-notice states were
+exercised. Astra inspected final native-4K Profiles, enlarged Linking and the
+corrected native-4K empty-server state. [Evidence hashes](design/desktop-ui/scaling/group-2b-evidence.json)
+exclude superseded empty-server captures. The final empty-server typography fix
+was recaptured at native 4K; it preserves the scale1 font values.
+
+No independent review was run or is specifically recommended for this group.
+Physical Windows acceptance remains outstanding.

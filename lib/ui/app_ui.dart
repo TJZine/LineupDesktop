@@ -35,12 +35,13 @@ class LineupNotice extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = Theme.of(context).colorScheme.error;
     final radius = LineupTheme.of(context).panelRadius;
+    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
     return Semantics(
       liveRegion: true,
       container: true,
       child: Container(
         width: double.infinity,
-        padding: const EdgeInsets.all(14),
+        padding: EdgeInsets.all(14 * scale),
         decoration: BoxDecoration(
           color: color.withValues(alpha: 0.09),
           borderRadius: BorderRadius.circular(radius),
@@ -48,8 +49,8 @@ class LineupNotice extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Icon(Icons.error_outline, color: color),
-            const SizedBox(width: 12),
+            Icon(Icons.error_outline, color: color, size: 24 * scale),
+            SizedBox(width: 12 * scale),
             Expanded(child: Text(message)),
           ],
         ),
@@ -191,42 +192,50 @@ class LineupEmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, constraints) => SingleChildScrollView(
-      child: ConstrainedBox(
-        constraints: BoxConstraints(
-          minHeight: constraints.maxHeight.isFinite ? constraints.maxHeight : 0,
-        ),
-        child: Center(
-          child: Card(
-            child: Padding(
-              padding: const EdgeInsets.all(32),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    icon,
-                    size: 48,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
-                  const SizedBox(height: 16),
-                  Semantics(
-                    header: true,
-                    child: Text(
-                      title,
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.headlineSmall,
+    builder: (context, constraints) {
+      final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
+      return SingleChildScrollView(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            minHeight: constraints.maxHeight.isFinite
+                ? constraints.maxHeight
+                : 0,
+          ),
+          child: Center(
+            child: Card(
+              child: Padding(
+                padding: EdgeInsets.all(32 * scale),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      icon,
+                      size: 48 * scale,
+                      color: Theme.of(context).colorScheme.primary,
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(message, textAlign: TextAlign.center),
-                  if (action != null) ...[const SizedBox(height: 24), action!],
-                ],
+                    SizedBox(height: 16 * scale),
+                    Semantics(
+                      header: true,
+                      child: Text(
+                        title,
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.headlineSmall,
+                      ),
+                    ),
+                    SizedBox(height: 8 * scale),
+                    Text(message, textAlign: TextAlign.center),
+                    if (action != null) ...[
+                      SizedBox(height: 24 * scale),
+                      action!,
+                    ],
+                  ],
+                ),
               ),
             ),
           ),
         ),
-      ),
-    ),
+      );
+    },
   );
 }
 
