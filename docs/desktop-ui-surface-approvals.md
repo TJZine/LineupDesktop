@@ -38,8 +38,8 @@ may cover multiple listed states only when that scope is clear to the user.
 | surface-22 | Studio · browse sources | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Candidate07; `8c0617c7` |
 | surface-23 | Studio · library programming | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Candidate07; `8c0617c7` |
 | surface-24 | Studio · filter picker | Approved at 1080p | Behavior checks passed; adaptive/Windows pending | Candidate07; `8c0617c7` |
-| surface-25 | Guide · no playback | Unreviewed | Not assessed in this pass | — |
-| surface-26 | Guide · PiP | Unreviewed | Not assessed in this pass | — |
+| surface-25 | Guide · no playback | Approved at 1080p | Behavior checks passed; adaptive/accessibility/motion/Windows pending | September 12 candidate04; `e0834448` |
+| surface-26 | Guide · PiP | Approved at 1080p | Behavior checks passed; adaptive/accessibility/motion/Windows pending | September 12 candidate04; `e0834448` |
 | surface-27 | Mini Guide | Unreviewed | Not assessed in this pass | — |
 | surface-28 | Player OSD · protected | Unreviewed | Not assessed in this pass | — |
 | surface-29 | Now Playing · protected | Unreviewed | Not assessed in this pass | — |
@@ -1250,3 +1250,145 @@ a 1080p visual lock, not complete adaptive or platform acceptance.
 Independent review is not specifically recommended for this presentation-only
 pass. No push, deployment or publishing is authorized. Future surface families
 start with a fresh Luna worker; reuse is limited to the same family.
+
+
+## September 9, 2026 — Guide 25/26 polish proposal
+
+User requested a fresh Luna implementation worker for this family, mock-led
+header and information hierarchy, stronger artwork bleed, aligned controls without
+a search magnifier, quieter channel identity, and varied program durations in
+evidence. The user asked for recommendations on retaining a stable PiP region
+with a static effect when playback is unavailable. This direction remains under
+discussion; no implementation worker has been dispatched yet.
+
+Astra inspected the rendered guide-timeline.html fragment and fresh current
+Flutter captures at 1920×1080/DPR1/text100%, using an ignored copy of the existing
+acceptance fixture with 15/30/45/60/105-minute programs and staggered anchors.
+Baseline source: c6f301a23119a39e305a376f612e8010ec8a42ed. Local evidence:
+`build/desktop-ui/surface-25-26/baseline`. The synthetic baseline has no supplied
+program artwork, summaries or decoded video; its amber fallback does not prove
+artwork-color behavior. Later review fixtures should include synthetic artwork,
+episode metadata and summaries. The original comparison packet is unchanged.
+
+Proposal: larger light Arial LINEUP wordmark and trailing menu chevron; preserve
+optional header playing context. Vertically balance the program information,
+use show/title then episode identity, remove Airing now, retain future context,
+and bound the progress lane. Broaden artwork-derived color while preserving
+background preferences, legibility, 400ms transition and Reduce Motion. Keep the
+PiP geometry stable with quiet silent static and an in-place status when
+unavailable; freeze the effect for Reduce Motion. Align toolbar controls and
+remove the search magnifier. Preserve five rows, increase program text hierarchy,
+quiet cell separation, and replace the tuned rail icon with a Watching label.
+Preserve accurate time geometry, title-first narrow-cell rules, focus, selection,
+tuning and existing channel provenance where useful. Root retains playback
+state/contracts; a fresh worker_luna will receive only settled Guide presentation
+work after agreement. No UI layout tests or independent reviewers.
+
+
+### Guide correction brief accepted — implementation in progress
+
+The user replied “sounds good” to the complete first-pass proposal above. This
+approves implementation, including stable PiP/static treatment, not a visual lock.
+Actual assignment: fresh `guide_polish` worker, exposed `worker_luna` role
+(GPT-5.6 Luna/xhigh), exclusive `lib/guide/guide_view.dart`. Astra owns the
+Guide-only playback placeholder, shell integration, fixtures, checks and review.
+Shared Player OSD/Now Playing and native playback owners remain unchanged.
+
+The existing timeline behavior check mixed a fixed Guide clock with wall-clock
+channel anchors. Its fixture is being made deterministic using that same fixed
+clock; no layout assertions are added. Existing shell coverage is extended for
+unavailable status and navigation away.
+
+
+### September 12, 2026 — Guide candidate03 awaiting visual approval
+
+Resumed at the same HEAD with existing changes preserved. The fresh Guide Luna
+unit was interrupted after its main presentation edits; Astra completed
+integration and fixed rounded-border painting, text-height measurement and
+small-space overflow. Details center when they fit and scroll when necessary.
+The shell keeps a stable Guide PiP region for idle, supported and unavailable
+states, with a Guide-only silent static effect for unavailable playback and
+the existing Retry callback when available. Reduce Motion freezes the effect.
+The protected Player views and native owners are unchanged.
+
+Astra inspected three fresh candidate03 1920×1080/DPR1/text100% captures, using
+staggered synthetic program durations, episode metadata, summaries and decoded
+poster-derived color. The supported PiP fixture has no decoded video; still
+evidence does not validate the static animation or Windows composition. Source
+and image hashes are in `build/desktop-ui/surface-25-26/review-evidence.json`.
+98 behavior checks and three affected-state capture checks passed; targeted
+analysis and diff whitespace checks passed. One existing fixed-clock fixture was
+repaired and one unavailable-state behavior check added; no UI layout tests added.
+
+Surfaces 25/26 remain in review, awaiting explicit user visual approval. Grouped
+adaptive/accessibility, motion appearance and physical Windows checks remain
+pending. Independent review is not specifically recommended for this bounded pass.
+The frozen comparison archive and separately extracted packet are preserved.
+
+
+### September 12 — Guide focus/playback refinement approved for implementation
+
+User accepted removing competing watched-channel illumination and permits a
+root-defined playback indicator. Settled brief: neutral unfocused channel rail;
+small static play icon plus Watching label in secondary text; no pill/glow or
+channel-name recoloring for playback alone. Reserve a brighter warm fill and
+strong text for keyboard focus. Remove the normal cell outline, retain the
+Large focus indicators outline. Quiet persistent inspection and hover must not
+compete with keyboard focus. Root retains truthful playback-state integration;
+Luna handles bounded Guide presentation only. No visual lock is implied.
+
+Use a fresh GPT-5.6 Luna/xhigh user-facing task rather than a subagent. Do not
+monitor progress; integrate after completion. Current candidate03 and existing
+uncommitted changes are preserved; frozen comparison packet remains unchanged.
+
+
+### September 12 — Guide candidate04 awaiting visual approval
+
+User relayed Luna completion and file-lease release on the shared active branch.
+Astra reviewed its incremental change and supplied an explicit playback channel
+from the shell: playing/paused/buffering/seeking, excluding errors and active
+tuning. Idle, loading/ready-only, stopped/ended and unsupported states no longer
+claim Watching; the optional header uses the same input. Browsing focus never
+changes that playback identity. Existing semantics/context checks now supply
+explicit playback, and the existing focus/context test also verifies its removal
+while the remembered channel remains unchanged.
+
+The watched rail has a neutral background with a small static play icon and
+Watching text. Focus alone uses the stronger warm fill and text, without the
+normal outline; Large focus indicators retains its stronger indication. Astra
+personally inspected fresh 1920x1080/DPR1/text1 idle, unavailable, synthetic-playing,
+15-minute focused and 60-minute focused captures. Local source/capture hashes:
+`build/desktop-ui/surface-25-26/candidate-04/evidence.json`.
+
+Luna reported 80 scoped checks passing. Root Guide/shell checks (40) and capture
+cases (3) passed; after extending the existing playback-context regression,
+28 Guide checks and the three capture cases passed again. Targeted analysis and
+whitespace checks passed. No new UI layout tests or independent review.
+Independent review is not specifically recommended for this bounded correction.
+
+Surfaces 25/26 remain in review. No commit or lock yet; grouped adaptive and
+accessibility, motion review and physical Windows evidence remain outstanding.
+Synthetic playing status/blank PiP does not prove native playback.
+
+## September 12 — Guide surfaces 25/26 locked at 1080p
+
+User explicitly approved: “yes if you have no further refinements, locked.”
+Astra has no further refinements for this pass. Candidate04 is approved at
+1920×1080/DPR1/text100%: outline-free normal focus, quiet playback identity,
+and unavailable playback presentation. Presented evidence includes 15-minute
+and 60-minute program focus on channels other than the watched channel.
+Idle and initial synthetic-playing captures remain supplemental evidence.
+
+Implementation commit: `e0834448e25cd9592d38466df97b852b9052ac6a`.
+[Durable source/capture evidence](design/desktop-ui/approved/2026-09-12-guide/evidence.json)
+records exact hashes, verification and the user's approval. Source hashes were
+rechecked against the accepted candidate immediately before committing. No
+additional UI changes or recapture occurred after approval. The frozen comparison
+packet and separately extracted copy are preserved.
+
+Existing focused checks passed as recorded above. No UI layout tests were added.
+Grouped adaptive resolution/DPI/enlarged-text, accessibility and physical Windows
+checks remain pending, as does unavailable-static motion appearance. Synthetic
+playing status and a blank PiP do not establish decoded video or native layering.
+Independent review is not specifically recommended for this presentation pass.
+No push, deployment or publishing was performed.

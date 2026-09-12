@@ -5,6 +5,18 @@ correction pass**, not a restart of the original P0/implementation campaign.
 The original campaign handoff remains historical context; this document governs
 agent dispatch and acceptance for this pass.
 
+## September 12 workflow amendment — current authority
+
+The user replaced subagents with fresh user-facing implementation tasks using
+GPT-5.6 Luna / xhigh. Tasks share this existing branch/checkout; do not create
+isolated worktrees. Work sequentially: root makes no parallel edits while the
+implementation task holds the file lease. Supply the same bounded file ownership, current excerpts,
+settled visual decisions and checks. Do not poll or monitor their progress; resume
+integration after their final completion is available or the user reports done.
+The older worker/subagent and no-extra-task wording below is superseded for these
+explicitly requested implementation tasks. Astra retains complex contracts,
+playback-state wiring, personal visual inspection and final user approval.
+
 ## Start here
 
 Use **GPT-6 Astra as the root orchestrator and visual reviewer**, alongside the
