@@ -462,20 +462,45 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     final confirmedMovieOnly = _confirmedMovieOnly(draftResolution);
     _stageScheduleIdentity(programmingError);
     final theme = Theme.of(context);
-    final fontSize = _studioSize(18, 14);
+    final compact = LineupLayout.isCompactWidth(
+      MediaQuery.sizeOf(context).width,
+    );
+    final baseFontSize = compact ? 14.0 : 18.0;
+    final inputDecorationTheme = _uiScale > 1
+        ? theme.inputDecorationTheme.copyWith(
+            contentPadding: EdgeInsets.fromLTRB(
+              12 * _uiScale,
+              24 * _uiScale,
+              12 * _uiScale,
+              16 * _uiScale,
+            ),
+            prefixIconConstraints: BoxConstraints(
+              minWidth: 48 * _uiScale,
+              minHeight: 48 * _uiScale,
+            ),
+            suffixIconConstraints: BoxConstraints(
+              minWidth: 48 * _uiScale,
+              minHeight: 48 * _uiScale,
+            ),
+          )
+        : theme.inputDecorationTheme;
     return Theme(
       data: theme.copyWith(
-        inputDecorationTheme: theme.inputDecorationTheme.copyWith(
+        inputDecorationTheme: inputDecorationTheme.copyWith(
           floatingLabelStyle: TextStyle(
             fontSize: _studioSize(24, 18),
             color: LineupTheme.of(context).secondaryText,
           ),
         ),
         textTheme: theme.textTheme.copyWith(
-          bodyMedium: theme.textTheme.bodyMedium?.copyWith(fontSize: fontSize),
-          bodyLarge: theme.textTheme.bodyLarge?.copyWith(fontSize: fontSize),
+          bodyMedium: theme.textTheme.bodyMedium?.copyWith(
+            fontSize: baseFontSize,
+          ),
+          bodyLarge: theme.textTheme.bodyLarge?.copyWith(
+            fontSize: baseFontSize,
+          ),
           titleMedium: theme.textTheme.titleMedium?.copyWith(
-            fontSize: fontSize,
+            fontSize: baseFontSize,
           ),
         ),
       ),
@@ -508,11 +533,11 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                         LineupNotice(message: _error!),
                       ],
                       if (_success != null) ...[
-                        const SizedBox(height: 12),
+                        SizedBox(height: 12 * _uiScale),
                         Semantics(liveRegion: true, child: Text(_success!)),
                       ],
                       if (_saving) ...[
-                        const SizedBox(height: 12),
+                        SizedBox(height: 12 * _uiScale),
                         Semantics(
                           liveRegion: true,
                           container: true,
@@ -521,7 +546,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                         ),
                       ],
                       if (noNumber) ...[
-                        const SizedBox(height: 12),
+                        SizedBox(height: 12 * _uiScale),
                         const LineupNotice(
                           message: 'No channel numbers are available. Free or renumber a channel from Channels before saving.',
                         ),
@@ -533,7 +558,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                           noNumber ||
                           _conflict ||
                           _baseDeleted)
-                        const SizedBox(height: 12),
+                        SizedBox(height: 12 * _uiScale),
                       if (_hasPendingProgrammingChoice) ...[
                         Semantics(
                           liveRegion: true,
@@ -543,7 +568,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                                 : 'Add the selected programs, or cancel selection, before saving or tuning.',
                           ),
                         ),
-                        const SizedBox(height: 12),
+                        SizedBox(height: 12 * _uiScale),
                       ],
                       LayoutBuilder(
                         builder: (context, constraints) {
@@ -558,7 +583,8 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                             originalChannel: _expectedBase,
                             clock: _clock,
                             compact:
-                                constraints.maxWidth < LineupLayout.compact,
+                                constraints.maxWidth <
+                                LineupLayout.compact * _uiScale,
                             inclusionReason: _sourceLabel(
                               _displaySource,
                               widget.controller,
@@ -573,19 +599,20 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                               }
                             },
                           );
-                          return constraints.maxWidth < LineupLayout.compact
+                          return constraints.maxWidth <
+                                  LineupLayout.compact * _uiScale
                               ? Column(
                                   children: [
                                     FocusTraversalOrder(
                                       order: const NumericFocusOrder(1),
                                       child: station,
                                     ),
-                                    const SizedBox(height: 16),
+                                    SizedBox(height: 16 * _uiScale),
                                     FocusTraversalOrder(
                                       order: const NumericFocusOrder(2),
                                       child: programming,
                                     ),
-                                    const SizedBox(height: 16),
+                                    SizedBox(height: 16 * _uiScale),
                                     FocusTraversalOrder(
                                       order: const NumericFocusOrder(3),
                                       child: preview,
@@ -600,7 +627,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                                       order: const NumericFocusOrder(1),
                                       child: station,
                                     ),
-                                    const SizedBox(height: 16),
+                                    SizedBox(height: 16 * _uiScale),
                                     Row(
                                       crossAxisAlignment:
                                           CrossAxisAlignment.start,
@@ -612,7 +639,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                                             child: programming,
                                           ),
                                         ),
-                                        const SizedBox(width: 16),
+                                        SizedBox(width: 16 * _uiScale),
                                         Expanded(
                                           flex: 4,
                                           child: FocusTraversalOrder(
@@ -684,7 +711,9 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
         autofocus: true,
         onPressed: _busy ? null : () => unawaited(_leave()),
         style: _studioTextButtonStyle(),
-        icon: const Icon(Icons.arrow_back),
+        icon: _uiScale > 1
+            ? Icon(Icons.arrow_back, size: 24 * _uiScale)
+            : const Icon(Icons.arrow_back),
         label: const Text('Back to Channels'),
       ),
     );
@@ -701,7 +730,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     );
     final titleAndActions = LayoutBuilder(
       builder: (context, constraints) {
-        final narrow = compact || constraints.maxWidth < 1000;
+        final narrow = compact || constraints.maxWidth < 1000 * _uiScale;
         final title = Semantics(
           header: true,
           excludeSemantics: true,
@@ -751,8 +780,8 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
         Wrap(
           alignment: WrapAlignment.spaceBetween,
           crossAxisAlignment: WrapCrossAlignment.center,
-          spacing: 24,
-          runSpacing: 8,
+          spacing: 24 * _uiScale,
+          runSpacing: 8 * _uiScale,
           children: [
             back,
             Wrap(
@@ -819,12 +848,78 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
           ?.copyWith(fontSize: _studioSize(18, 14)) ??
       TextStyle(fontSize: _studioSize(18, 14));
 
+  double? get _studioDropdownItemHeight => _uiScale > 1 ? 48 * _uiScale : null;
+
+  ButtonStyle _studioScaledTextButtonStyle() =>
+      (Theme.of(context).textButtonTheme.style ?? const ButtonStyle()).copyWith(
+        minimumSize: WidgetStatePropertyAll(Size(64 * _uiScale, 40 * _uiScale)),
+        padding: WidgetStatePropertyAll(
+          EdgeInsets.symmetric(
+            horizontal: 12 * _uiScale,
+            vertical: 8 * _uiScale,
+          ),
+        ),
+        iconSize: WidgetStatePropertyAll(18 * _uiScale),
+        textStyle: WidgetStatePropertyAll(
+          Theme.of(context).textTheme.labelLarge
+              ?.apply(fontSizeFactor: _uiScale),
+        ),
+      );
+
+  ButtonStyle _studioScaledOutlinedButtonStyle() {
+    final theme = Theme.of(context);
+    final base = theme.outlinedButtonTheme.style ?? const ButtonStyle();
+    final textStyle =
+        base.textStyle?.resolve(const {}) ?? const TextStyle(fontSize: 17);
+    return base.copyWith(
+      minimumSize: WidgetStatePropertyAll(Size(148 * _uiScale, 54 * _uiScale)),
+      padding: WidgetStatePropertyAll(
+        EdgeInsets.symmetric(
+          horizontal: 24 * _uiScale,
+          vertical: 16 * _uiScale,
+        ),
+      ),
+      iconSize: WidgetStatePropertyAll(18 * _uiScale),
+      textStyle: WidgetStatePropertyAll(
+        textStyle.copyWith(fontSize: (textStyle.fontSize ?? 17) * _uiScale),
+      ),
+    );
+  }
+
+  ButtonStyle _studioScaledFilledButtonStyle() {
+    final theme = Theme.of(context);
+    final base = theme.filledButtonTheme.style ?? const ButtonStyle();
+    final textStyle =
+        base.textStyle?.resolve(const {}) ?? const TextStyle(fontSize: 17);
+    return base.copyWith(
+      minimumSize: WidgetStatePropertyAll(Size(148 * _uiScale, 54 * _uiScale)),
+      padding: WidgetStatePropertyAll(
+        EdgeInsets.symmetric(
+          horizontal: 24 * _uiScale,
+          vertical: 16 * _uiScale,
+        ),
+      ),
+      iconSize: WidgetStatePropertyAll(18 * _uiScale),
+      textStyle: WidgetStatePropertyAll(
+        textStyle.copyWith(fontSize: (textStyle.fontSize ?? 17) * _uiScale),
+      ),
+    );
+  }
+
+  double _studioSegmentVerticalPadding(TextStyle textStyle) {
+    if (_uiScale <= 1) return 0;
+    final fontSize = textStyle.fontSize ?? 14;
+    final targetHeight = 40 * _uiScale;
+    return targetHeight > fontSize ? (targetHeight - fontSize) / 2 : 0;
+  }
+
   ButtonStyle _studioTextButtonStyle() => TextButton.styleFrom(
     minimumSize: Size(0, 48 * _uiScale),
     padding: EdgeInsets.symmetric(
       horizontal: 16 * _uiScale,
       vertical: 12 * _uiScale,
     ),
+    iconSize: _uiScale > 1 ? 18 * _uiScale : null,
     textStyle: _studioControlStyle(),
   );
 
@@ -834,6 +929,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
       horizontal: 16 * _uiScale,
       vertical: 12 * _uiScale,
     ),
+    iconSize: _uiScale > 1 ? 18 * _uiScale : null,
     textStyle: _studioControlStyle(),
   );
 
@@ -843,17 +939,30 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
       horizontal: 16 * _uiScale,
       vertical: 12 * _uiScale,
     ),
+    iconSize: _uiScale > 1 ? 18 * _uiScale : null,
     textStyle: _studioControlStyle(),
+  );
+
+  ButtonStyle _studioIconButtonStyle() => IconButton.styleFrom(
+    minimumSize: Size(48 * _uiScale, 48 * _uiScale),
+    padding: EdgeInsets.all(8 * _uiScale),
+    iconSize: 24 * _uiScale,
   );
 
   ButtonStyle _studioSourceStyle() {
     final roles = LineupTheme.of(context);
+    final controlStyle = _studioControlStyle();
     return ButtonStyle(
-      minimumSize: WidgetStatePropertyAll(Size(0, 48 * _uiScale)),
       padding: WidgetStatePropertyAll(
-        EdgeInsets.symmetric(horizontal: 16 * _uiScale),
+        _uiScale > 1
+            ? EdgeInsets.symmetric(
+                horizontal: 16 * _uiScale,
+                vertical: _studioSegmentVerticalPadding(controlStyle),
+              )
+            : const EdgeInsets.symmetric(horizontal: 16),
       ),
-      textStyle: WidgetStatePropertyAll(_studioControlStyle()),
+      iconSize: _uiScale > 1 ? WidgetStatePropertyAll(18 * _uiScale) : null,
+      textStyle: WidgetStatePropertyAll(controlStyle),
       foregroundColor: WidgetStateProperty.resolveWith(
         (states) => states.contains(WidgetState.disabled)
             ? roles.mutedText
@@ -877,6 +986,82 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     );
   }
 
+  Widget _studioSwitchTile({
+    Key? key,
+    required bool value,
+    required Widget title,
+    required ValueChanged<bool>? onChanged,
+    EdgeInsetsGeometry? contentPadding,
+  }) {
+    if (_uiScale <= 1) {
+      return SwitchListTile(
+        key: key,
+        contentPadding: contentPadding,
+        value: value,
+        title: title,
+        onChanged: onChanged,
+      );
+    }
+    final control = SizedBox(
+      width: 60,
+      height: 40,
+      child: Center(
+        child: ExcludeFocus(
+          child: Switch(value: value, onChanged: onChanged),
+        ),
+      ),
+    );
+    return MergeSemantics(
+      key: key,
+      child: ListTile(
+        contentPadding:
+            contentPadding ?? EdgeInsets.symmetric(horizontal: 16 * _uiScale),
+        minTileHeight: 56 * _uiScale,
+        horizontalTitleGap: 16 * _uiScale,
+        trailing: SizedBox(
+          width: 60 * _uiScale,
+          height: 40 * _uiScale,
+          child: Transform.scale(scale: _uiScale, child: control),
+        ),
+        title: title,
+        onTap: onChanged == null ? null : () => onChanged(!value),
+      ),
+    );
+  }
+
+  Widget _studioCheckboxTile({
+    Key? key,
+    required bool value,
+    required Widget title,
+    required ValueChanged<bool?>? onChanged,
+    ListTileControlAffinity controlAffinity = ListTileControlAffinity.leading,
+    EdgeInsetsGeometry? contentPadding,
+  }) {
+    if (_uiScale <= 1) {
+      return CheckboxListTile(
+        key: key,
+        controlAffinity: controlAffinity,
+        contentPadding: contentPadding,
+        value: value,
+        title: title,
+        onChanged: onChanged,
+      );
+    }
+    return CheckboxListTile(
+      key: key,
+      controlAffinity: controlAffinity,
+      contentPadding:
+          contentPadding ?? EdgeInsets.symmetric(horizontal: 16 * _uiScale),
+      minTileHeight: 56 * _uiScale,
+      minLeadingWidth: 40 * _uiScale,
+      horizontalTitleGap: 16 * _uiScale,
+      checkboxScaleFactor: _uiScale,
+      value: value,
+      title: title,
+      onChanged: onChanged,
+    );
+  }
+
   Widget _studioActions({
     required bool persisted,
     required bool saved,
@@ -896,8 +1081,8 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
         !(identityLooksValid && !_airCheckCanSave);
     return Wrap(
       alignment: WrapAlignment.end,
-      spacing: 8,
-      runSpacing: 8,
+      spacing: 8 * _uiScale,
+      runSpacing: 8 * _uiScale,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
         if (_generated && !recovering)
@@ -954,24 +1139,25 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     final roles = LineupTheme.of(context);
     final error = Theme.of(context).colorScheme.error;
     final current = _currentBase;
-    final recoveryButtonStyle = ButtonStyle(
-      side: WidgetStateProperty.resolveWith(
-        (states) => BorderSide(
-          color: states.contains(WidgetState.focused)
-              ? roles.focusBorder
-              : roles.defaultBorder,
-          width: states.contains(WidgetState.focused)
-              ? roles.focusBorderWidth
-              : 1,
-        ),
+    final recoverySide = WidgetStateProperty.resolveWith(
+      (states) => BorderSide(
+        color: states.contains(WidgetState.focused)
+            ? roles.focusBorder
+            : roles.defaultBorder,
+        width: states.contains(WidgetState.focused)
+            ? roles.focusBorderWidth
+            : 1,
       ),
     );
+    final recoveryButtonStyle = _uiScale > 1
+        ? _studioScaledOutlinedButtonStyle().copyWith(side: recoverySide)
+        : ButtonStyle(side: recoverySide);
     return Semantics(
       liveRegion: true,
       container: true,
       label: _error,
       child: Container(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(16 * _uiScale),
         decoration: BoxDecoration(
           color: Color.alphaBlend(
             error.withValues(alpha: 0.08),
@@ -986,8 +1172,12 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.report_problem_outlined, color: error),
-                const SizedBox(width: 12),
+                Icon(
+                  Icons.report_problem_outlined,
+                  color: error,
+                  size: 24 * _uiScale,
+                ),
+                SizedBox(width: 12 * _uiScale),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1000,7 +1190,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                             ?.apply(fontSizeFactor: _uiScale)
                             .copyWith(fontWeight: FontWeight.w800),
                       ),
-                      const SizedBox(height: 4),
+                      SizedBox(height: 4 * _uiScale),
                       Text(
                         _baseDeleted
                             ? 'Your draft is retained for reference, but it will not recreate the deleted channel.'
@@ -1008,7 +1198,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                         style: TextStyle(color: roles.secondaryText),
                       ),
                       if (!_baseDeleted && current != null) ...[
-                        const SizedBox(height: 10),
+                        SizedBox(height: 10 * _uiScale),
                         _recoveryVersion('SAVED NOW', current.name),
                         _recoveryVersion(
                           'YOUR DRAFT',
@@ -1022,10 +1212,10 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                 ),
               ],
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: 12 * _uiScale),
             Wrap(
-              spacing: 10,
-              runSpacing: 10,
+              spacing: 10 * _uiScale,
+              runSpacing: 10 * _uiScale,
               children: [
                 if (_baseDeleted) ...[
                   OutlinedButton(
@@ -1062,11 +1252,11 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
   }
 
   Widget _recoveryVersion(String label, String value) => Padding(
-    padding: const EdgeInsets.only(top: 3),
+    padding: EdgeInsets.only(top: 3 * _uiScale),
     child: Row(
       children: [
         SizedBox(
-          width: 92,
+          width: 92 * _uiScale,
           child: Text(
             label,
             style: TextStyle(
@@ -1098,8 +1288,8 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
           Wrap(
             alignment: WrapAlignment.spaceBetween,
             crossAxisAlignment: WrapCrossAlignment.end,
-            spacing: 16,
-            runSpacing: 4,
+            spacing: 16 * _uiScale,
+            runSpacing: 4 * _uiScale,
             children: [
               Text('Programming', style: _studioSectionHeadingStyle()),
               Text(
@@ -1108,7 +1298,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
               ),
             ],
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: 16 * _uiScale),
           if (_sourceReadOnly)
             const Text(
               'Programming is read-only and will be preserved exactly.',
@@ -1119,14 +1309,14 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
               const Text(
                 'This mixed source is preserved exactly. Choose a source below only if you want to replace it.',
               ),
-              const SizedBox(height: 8),
+              SizedBox(height: 8 * _uiScale),
             ],
             LayoutBuilder(
               builder: (context, constraints) => SegmentedButton<_SourceChoice>(
                 key: const Key('studio-source-choices'),
                 direction:
                     MediaQuery.textScalerOf(context).scale(14) > 21 ||
-                        constraints.maxWidth < 480
+                        constraints.maxWidth < 480 * _uiScale
                     ? Axis.vertical
                     : Axis.horizontal,
                 multiSelectionEnabled: false,
@@ -1154,7 +1344,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                           _changed(() => _sourceChoice = value.singleOrNull),
               ),
             ),
-            const SizedBox(height: 8),
+            SizedBox(height: 8 * _uiScale),
             switch (_sourceChoice) {
               _SourceChoice.library => _filterEditor(),
               _SourceChoice.playlist => _playlistEditor(),
@@ -1191,6 +1381,8 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
         DropdownButtonFormField<String>(
           key: const Key('studio-playlist'),
           isExpanded: true,
+          iconSize: 24 * _uiScale,
+          itemHeight: _studioDropdownItemHeight,
           initialValue: selected ? _playlistId : null,
           decoration: const InputDecoration(labelText: 'Video playlist'),
           items: [
@@ -1202,16 +1394,18 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
               : (value) => _changed(() => _playlistId = value),
         ),
         if (otherUses.isNotEmpty) ...[
-          const SizedBox(height: 8),
+          SizedBox(height: 8 * _uiScale),
           const Text('Also used by'),
           for (final channel in otherUses)
             ListTile(
               contentPadding: EdgeInsets.zero,
+              minTileHeight: _uiScale > 1 ? 56 * _uiScale : null,
               title: Text('${channel.number} · ${channel.name}'),
               trailing: TextButton(
                 onPressed: _saving || widget.onOpenChannel == null
                     ? null
                     : () => widget.onOpenChannel!(channel),
+                style: _uiScale > 1 ? _studioScaledTextButtonStyle() : null,
                 child: const Text('Open channel'),
               ),
             ),
@@ -1237,12 +1431,13 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
         _inventoryStatus(),
         LayoutBuilder(
           builder: (context, constraints) {
-            final width = constraints.maxWidth >= 700
-                ? (constraints.maxWidth - 16) / 2
+            final gap = 16 * _uiScale;
+            final width = constraints.maxWidth >= 700 * _uiScale
+                ? (constraints.maxWidth - gap) / 2
                 : constraints.maxWidth;
             return Wrap(
-              spacing: 16,
-              runSpacing: 12,
+              spacing: gap,
+              runSpacing: 12 * _uiScale,
               children: [
                 SizedBox(
                   width: width,
@@ -1270,23 +1465,25 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
             'This library has no collections. Other filters remain available.',
             style: _studioSupportStyle(),
           ),
-        const SizedBox(height: 16),
+        SizedBox(height: 16 * _uiScale),
         Text('Filters', style: _studioBodyStyle(fontWeight: FontWeight.w600)),
-        const SizedBox(height: 16),
+        SizedBox(height: 16 * _uiScale),
         LayoutBuilder(
           builder: (context, constraints) {
             final textScale = MediaQuery.textScalerOf(context).scale(1);
             final columns = textScale > 1.4
                 ? 1
-                : constraints.maxWidth >= 960
+                : constraints.maxWidth >= 960 * _uiScale
                 ? 3
-                : constraints.maxWidth >= 640
+                : constraints.maxWidth >= 640 * _uiScale
                 ? 2
                 : 1;
-            final width = (constraints.maxWidth - 16 * (columns - 1)) / columns;
+            final gap = 16 * _uiScale;
+            final width =
+                (constraints.maxWidth - gap * (columns - 1)) / columns;
             return Wrap(
-              spacing: 16,
-              runSpacing: 12,
+              spacing: gap,
+              runSpacing: 12 * _uiScale,
               children: [
                 for (final key in _facetKeys.where(
                   (key) => key != 'collection',
@@ -1303,7 +1500,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
             );
           },
         ),
-        const SizedBox(height: 12),
+        SizedBox(height: 12 * _uiScale),
         Text(
           'Any selected value within each filter; all filters together.',
           style: _studioSupportStyle(),
@@ -1311,10 +1508,10 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
         Align(
           alignment: Alignment.centerLeft,
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 330),
+            constraints: BoxConstraints(maxWidth: 330 * _uiScale),
             child: Material(
               type: MaterialType.transparency,
-              child: SwitchListTile(
+              child: _studioSwitchTile(
                 key: const Key('studio-filter-include-watched'),
                 contentPadding: EdgeInsets.zero,
                 value: _filterIncludeWatched,
@@ -1327,14 +1524,14 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
             ),
           ),
         ),
-        const SizedBox(height: 16),
+        SizedBox(height: 16 * _uiScale),
         Divider(height: 1, color: roles.subtleBorder),
-        const SizedBox(height: 16),
+        SizedBox(height: 16 * _uiScale),
         Wrap(
           alignment: WrapAlignment.spaceBetween,
           crossAxisAlignment: WrapCrossAlignment.center,
-          spacing: 16,
-          runSpacing: 4,
+          spacing: 16 * _uiScale,
+          runSpacing: 4 * _uiScale,
           children: [
             Text('Matching programs', style: _studioSectionHeadingStyle()),
             Text(
@@ -1417,7 +1614,11 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
           child: Row(
             children: [
               Expanded(child: Text(summary, softWrap: true)),
-              Icon(Icons.expand_more, color: roles.secondaryText),
+              Icon(
+                Icons.expand_more,
+                color: roles.secondaryText,
+                size: _uiScale > 1 ? 24 * _uiScale : null,
+              ),
             ],
           ),
         ),
@@ -1469,7 +1670,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     final unavailable = _pendingFilterValues
         .where((value) => !_activeAvailableFilterValues.contains(value))
         .toSet();
-    Widget valueTile(String value) => CheckboxListTile(
+    Widget valueTile(String value) => _studioCheckboxTile(
       controlAffinity: ListTileControlAffinity.leading,
       value: _pendingFilterValues.contains(value),
       title: Text(
@@ -1485,7 +1686,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     );
     final media = MediaQuery.of(context);
     final independentlyScrollable =
-        media.size.width >= LineupLayout.compact &&
+        media.size.width >= LineupLayout.compact * _uiScale &&
         media.textScaler.scale(14) <= 21;
     return Material(
       type: MaterialType.transparency,
@@ -1504,12 +1705,12 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                 'Choose ${_facetLabel(key).toLowerCase()} values',
                 style: _studioSectionHeadingStyle(),
               ),
-              const SizedBox(height: 4),
+              SizedBox(height: 4 * _uiScale),
               Text(
                 _libraryTitle(_filterLibraryId),
                 style: _studioSupportStyle(),
               ),
-              const SizedBox(height: 8),
+              SizedBox(height: 8 * _uiScale),
               TextField(
                 controller: _filterPickerSearch,
                 autofocus: true,
@@ -1521,8 +1722,8 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                 onChanged: (_) => setState(() {}),
               ),
               Wrap(
-                spacing: 8,
-                runSpacing: 8,
+                spacing: 8 * _uiScale,
+                runSpacing: 8 * _uiScale,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   TextButton(
@@ -1556,7 +1757,10 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
               ),
               if (independentlyScrollable)
                 SizedBox(
-                  height: (media.size.height * .29).clamp(180, 460),
+                  height: (media.size.height * .29).clamp(
+                    180 * _uiScale,
+                    460 * _uiScale,
+                  ),
                   child: ListView.builder(
                     itemCount: visible.length,
                     itemBuilder: (context, index) => valueTile(visible[index]),
@@ -1564,11 +1768,11 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                 )
               else
                 for (final value in visible) valueTile(value),
-              const SizedBox(height: 12),
+              SizedBox(height: 12 * _uiScale),
               Wrap(
                 alignment: WrapAlignment.end,
-                spacing: 8,
-                runSpacing: 8,
+                spacing: 8 * _uiScale,
+                runSpacing: 8 * _uiScale,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   TextButton(
@@ -1621,6 +1825,93 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
       id ??
       'Library';
 
+  Widget _studioBrowseResultRow({
+    required PlexMediaItem item,
+    required bool available,
+    required Set<String> selectedIds,
+  }) {
+    final titleStyle = _studioBodyStyle();
+    final subtitleStyle = _studioSupportStyle();
+    final selected = selectedIds.contains(item.id);
+    final onTap = selected
+        ? null
+        : _browseSelecting
+        ? () => _toggleBrowseSelection(item)
+        : () => _addManualItem(item);
+    final browseCheckbox = Checkbox(
+      value: _browseSelection.contains(item.id),
+      onChanged: selected ? null : (_) => _toggleBrowseSelection(item),
+    );
+    final subtitle = item.grandparentTitle != null || !available
+        ? Text(
+            [
+              ?item.grandparentTitle,
+              if (!available) 'Unavailable — retained off air if added',
+            ].join(' · '),
+            style: subtitleStyle,
+          )
+        : null;
+    final action = _browseSelecting
+        ? null
+        : TextButton(
+            onPressed: _saving || selected ? null : () => _addManualItem(item),
+            style: _studioScaledTextButtonStyle(),
+            child: Text(selected ? 'Added' : 'Add'),
+          );
+    return Semantics(
+      key: Key('studio-result-${item.id}'),
+      container: true,
+      button: onTap != null,
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          onTap: onTap,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: 72 * _uiScale),
+            child: Padding(
+              padding: EdgeInsets.symmetric(
+                horizontal: 16 * _uiScale,
+                vertical: 8 * _uiScale,
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  if (_browseSelecting) ...[
+                    SizedBox(
+                      width: 48 * _uiScale,
+                      height: 48 * _uiScale,
+                      child: Center(
+                        child: Transform.scale(
+                          scale: _uiScale,
+                          child: browseCheckbox,
+                        ),
+                      ),
+                    ),
+                    SizedBox(width: 16 * _uiScale),
+                  ],
+                  Expanded(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(item.title, style: titleStyle),
+                        ?subtitle,
+                      ],
+                    ),
+                  ),
+                  if (action != null) ...[
+                    SizedBox(width: 16 * _uiScale),
+                    action,
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _manualEditor() {
     final inventory = _playableInventory.byId.values;
     final inventoryById = _playableInventory.byId;
@@ -1670,7 +1961,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
           border: Border(
             bottom: BorderSide(
               color: selected ? roles.progressFill : Colors.transparent,
-              width: 2,
+              width: 2 * _uiScale,
             ),
           ),
         ),
@@ -1695,8 +1986,8 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
       children: [
         _inventoryStatus(hasInventory: inventory.isNotEmpty),
         Wrap(
-          spacing: 8,
-          runSpacing: 8,
+          spacing: 8 * _uiScale,
+          runSpacing: 8 * _uiScale,
           children: [
             stageTab(
               key: const Key('studio-manual-browse-stage'),
@@ -1716,7 +2007,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
             ),
           ],
         ),
-        const SizedBox(height: 6),
+        SizedBox(height: 6 * _uiScale),
         Text(countLabel, style: _studioSupportStyle()),
         if (_settledCountLabel.isNotEmpty)
           Semantics(
@@ -1724,7 +2015,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
             label: _settledCountLabel,
             child: const SizedBox.shrink(),
           ),
-        const SizedBox(height: 12),
+        SizedBox(height: 12 * _uiScale),
         if (!_manualRundown) ...[
           TextField(
             key: const Key('studio-search'),
@@ -1737,21 +2028,22 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
             ),
             onChanged: (_) => _browseChanged(),
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: 12 * _uiScale),
           LayoutBuilder(
             builder: (context, constraints) {
-              final columns = constraints.maxWidth >= 960
+              final columns = constraints.maxWidth >= 960 * _uiScale
                   ? 4
-                  : constraints.maxWidth >= 700
+                  : constraints.maxWidth >= 700 * _uiScale
                   ? 3
-                  : constraints.maxWidth >= 480
+                  : constraints.maxWidth >= 480 * _uiScale
                   ? 2
                   : 1;
+              final gap = 12 * _uiScale;
               final width =
-                  (constraints.maxWidth - 12 * (columns - 1)) / columns;
+                  (constraints.maxWidth - gap * (columns - 1)) / columns;
               return Wrap(
-                spacing: 12,
-                runSpacing: 16,
+                spacing: gap,
+                runSpacing: 16 * _uiScale,
                 children: [
                   SizedBox(
                     width: width,
@@ -1768,6 +2060,8 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                     child: DropdownButtonFormField<String>(
                       key: const Key('studio-media-type'),
                       isExpanded: true,
+                      iconSize: 24 * _uiScale,
+                      itemHeight: _studioDropdownItemHeight,
                       initialValue: _manualMediaType ?? '',
                       style: _studioBodyStyle(),
                       decoration: const InputDecoration(
@@ -1814,10 +2108,10 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
               );
             },
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: 12 * _uiScale),
           Wrap(
-            spacing: 8,
-            runSpacing: 8,
+            spacing: 8 * _uiScale,
+            runSpacing: 8 * _uiScale,
             children: _browseSelecting
                 ? [
                     Text(
@@ -1827,11 +2121,17 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                       onPressed: _browseSelection.isEmpty
                           ? null
                           : () => _setShowBrowseSelected(true),
+                      style: _uiScale > 1
+                          ? _studioScaledTextButtonStyle()
+                          : null,
                       child: const Text('Show selected'),
                     ),
                     if (_showBrowseSelected)
                       TextButton(
                         onPressed: () => _setShowBrowseSelected(false),
+                        style: _uiScale > 1
+                            ? _studioScaledTextButtonStyle()
+                            : null,
                         child: const Text('Back to results'),
                       ),
                     TextButton(
@@ -1841,23 +2141,35 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                         _browseSelectionItems.clear();
                         _showBrowseSelected = false;
                       }),
+                      style: _uiScale > 1
+                          ? _studioScaledTextButtonStyle()
+                          : null,
                       child: const Text('Cancel'),
                     ),
                     FilledButton(
                       onPressed: _browseSelection.isEmpty
                           ? null
                           : _addBrowseSelected,
+                      style: _uiScale > 1
+                          ? _studioScaledFilledButtonStyle()
+                          : null,
                       child: Text('Add selected (${_browseSelection.length})'),
                     ),
                   ]
                 : [
                     OutlinedButton(
                       onPressed: () => setState(() => _browseSelecting = true),
+                      style: _uiScale > 1
+                          ? _studioScaledOutlinedButtonStyle()
+                          : null,
                       child: const Text('Select'),
                     ),
                     if (_lastAddedEntries.isNotEmpty)
                       TextButton(
                         onPressed: _undoLastAddition,
+                        style: _uiScale > 1
+                            ? _studioScaledTextButtonStyle()
+                            : null,
                         child: const Text('Undo last addition'),
                       ),
                   ],
@@ -1871,8 +2183,26 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
               itemBuilder: (context, index) {
                 final item = shown[index];
                 final available = _playableInventory.byId.containsKey(item.id);
+                if (_uiScale > 1) {
+                  return _studioBrowseResultRow(
+                    item: item,
+                    available: available,
+                    selectedIds: selectedIds,
+                  );
+                }
+                final browseCheckbox = Checkbox(
+                  value: _browseSelection.contains(item.id),
+                  onChanged: selectedIds.contains(item.id)
+                      ? null
+                      : (_) => _toggleBrowseSelection(item),
+                );
                 return ListTile(
                   key: Key('studio-result-${item.id}'),
+                  minTileHeight: _uiScale > 1 ? 56 * _uiScale : null,
+                  contentPadding: _uiScale > 1
+                      ? EdgeInsets.symmetric(horizontal: 16 * _uiScale)
+                      : null,
+                  horizontalTitleGap: _uiScale > 1 ? 16 * _uiScale : null,
                   title: Text(item.title),
                   subtitle: item.grandparentTitle != null || !available
                       ? Text(
@@ -1884,12 +2214,18 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                         )
                       : null,
                   leading: _browseSelecting
-                      ? Checkbox(
-                          value: _browseSelection.contains(item.id),
-                          onChanged: selectedIds.contains(item.id)
-                              ? null
-                              : (_) => _toggleBrowseSelection(item),
-                        )
+                      ? _uiScale > 1
+                            ? SizedBox(
+                                width: 48 * _uiScale,
+                                height: 48 * _uiScale,
+                                child: Center(
+                                  child: Transform.scale(
+                                    scale: _uiScale,
+                                    child: browseCheckbox,
+                                  ),
+                                ),
+                              )
+                            : browseCheckbox
                       : null,
                   trailing: _browseSelecting
                       ? null
@@ -1897,6 +2233,9 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                           onPressed: _saving || selectedIds.contains(item.id)
                               ? null
                               : () => _addManualItem(item),
+                          style: _uiScale > 1
+                              ? _studioScaledTextButtonStyle()
+                              : null,
                           child: Text(
                             selectedIds.contains(item.id) ? 'Added' : 'Add',
                           ),
@@ -1921,20 +2260,20 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                   : IconButton(
                       tooltip: 'Clear channel program search',
                       onPressed: () => setState(_rundownSearch.clear),
-                      icon: const Icon(Icons.clear),
+                      icon: Icon(Icons.clear, size: 24 * _uiScale),
                     ),
             ),
             onChanged: (_) => setState(() {}),
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: 8 * _uiScale),
           Text(
             _manualEntries.isEmpty
                 ? 'No programs selected. Return to Browse library to add programming.'
                 : '${rundownEntries.length} of ${_manualEntries.length} shown · Alt+Up/Down reorders · Delete removes${rundownQuery.isEmpty ? '' : ' · Clear search to drag reorder'}',
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: 8 * _uiScale),
           SizedBox(
-            height: rundownEntries.isEmpty ? 0 : 420,
+            height: rundownEntries.isEmpty ? 0 : 420 * _uiScale,
             child: ReorderableListView.builder(
               key: const Key('studio-rundown'),
               scrollController: _rundownScroll,
@@ -2061,6 +2400,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
           ),
           TextButton(
             onPressed: _saving ? null : _openGenerateLineup,
+            style: _uiScale > 1 ? _studioScaledTextButtonStyle() : null,
             child: const Text('Retry in Generate lineup'),
           ),
         ],
@@ -2075,6 +2415,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
           ),
           TextButton(
             onPressed: _saving ? null : _openGenerateLineup,
+            style: _uiScale > 1 ? _studioScaledTextButtonStyle() : null,
             child: const Text('Open Generate lineup'),
           ),
         ],
@@ -2097,6 +2438,8 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     return DropdownButtonFormField<String>(
       key: key,
       isExpanded: true,
+      iconSize: 24 * _uiScale,
+      itemHeight: _studioDropdownItemHeight,
       initialValue: selected
           ? value
           : allowAll
@@ -2128,6 +2471,8 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
       child: DropdownButtonFormField<String>(
         key: ValueKey(fieldValue),
         isExpanded: true,
+        iconSize: 24 * _uiScale,
+        itemHeight: _studioDropdownItemHeight,
         initialValue: fieldValue,
         decoration: InputDecoration(labelText: _facetLabel(key)),
         items: [
@@ -2309,6 +2654,11 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     final tile = ListTile(
       key: entry.occurrence == 1 ? Key('studio-rundown-${entry.id}') : null,
       title: Text(title),
+      minTileHeight: _uiScale > 1 ? 56 * _uiScale : null,
+      contentPadding: _uiScale > 1
+          ? EdgeInsets.symmetric(horizontal: 16 * _uiScale)
+          : null,
+      horizontalTitleGap: _uiScale > 1 ? 16 * _uiScale : null,
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -2317,14 +2667,14 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
         ],
       ),
       trailing: Wrap(
-        spacing: 4,
+        spacing: 4 * _uiScale,
         children: [
           if (dragIndex case final visibleIndex?)
             Tooltip(
               message: 'Drag $positionedTitle to reorder',
               child: ReorderableDragStartListener(
                 index: visibleIndex,
-                child: const Icon(Icons.drag_handle),
+                child: Icon(Icons.drag_handle, size: 24 * _uiScale),
               ),
             ),
           IconButton(
@@ -2332,6 +2682,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
             onPressed: _saving || index == 0
                 ? null
                 : () => _moveManual(entry, -1),
+            style: _uiScale > 1 ? _studioIconButtonStyle() : null,
             icon: const Icon(Icons.arrow_upward),
           ),
           IconButton(
@@ -2339,16 +2690,19 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
             onPressed: _saving || index == _manualEntries.length - 1
                 ? null
                 : () => _moveManual(entry, 1),
+            style: _uiScale > 1 ? _studioIconButtonStyle() : null,
             icon: const Icon(Icons.arrow_downward),
           ),
           IconButton(
             tooltip: 'Move $positionedTitle before or after another program',
             onPressed: _saving ? null : () => _moveManualTo(entry),
+            style: _uiScale > 1 ? _studioIconButtonStyle() : null,
             icon: const Icon(Icons.low_priority),
           ),
           IconButton(
             tooltip: 'Remove $positionedTitle from $_draftChannelLabel',
             onPressed: _saving ? null : () => _removeManual(entry),
+            style: _uiScale > 1 ? _studioIconButtonStyle() : null,
             icon: const Icon(Icons.delete_outline),
           ),
         ],
@@ -2516,7 +2870,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     final roles = LineupTheme.of(context);
     return Container(
       key: const Key('studio-station'),
-      padding: const EdgeInsets.only(top: 8, bottom: 16),
+      padding: EdgeInsets.only(top: 8 * _uiScale, bottom: 16 * _uiScale),
       decoration: BoxDecoration(
         border: Border(bottom: BorderSide(color: roles.subtleBorder)),
       ),
@@ -2525,6 +2879,9 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
         children: [
           LayoutBuilder(
             builder: (context, constraints) {
+              final textScale = MediaQuery.textScalerOf(context).scale(1);
+              final numberWidth =
+                  120 * _uiScale * (textScale > 1 ? textScale : 1);
               final identity = Row(
                 children: [
                   Expanded(
@@ -2546,9 +2903,9 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                           : null,
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  SizedBox(width: 12 * _uiScale),
                   SizedBox(
-                    width: 120,
+                    width: numberWidth,
                     child: TextFormField(
                       key: const Key('studio-number'),
                       controller: _number,
@@ -2574,7 +2931,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                       'Playback order · Read-only',
                       style: _studioSupportStyle(),
                     ),
-                    const SizedBox(height: 12),
+                    SizedBox(height: 12 * _uiScale),
                     Text(
                       _rhythmLabel(_playbackMode, _blockSize),
                       style: _studioBodyStyle(),
@@ -2583,16 +2940,20 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                     _playbackEditor(confirmedMovieOnly),
                 ],
               );
-              if (constraints.maxWidth < 760) {
+              if (constraints.maxWidth < 760 * _uiScale) {
                 return Column(
-                  children: [identity, const SizedBox(height: 12), playback],
+                  children: [
+                    identity,
+                    SizedBox(height: 12 * _uiScale),
+                    playback,
+                  ],
                 );
               }
               return Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(flex: 9, child: identity),
-                  const SizedBox(width: 24),
+                  SizedBox(width: 24 * _uiScale),
                   Expanded(flex: 11, child: playback),
                 ],
               );
@@ -2605,6 +2966,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                 onPressed: _saving || _lowestFreeNumber() == null
                     ? null
                     : _useNextAvailable,
+                style: _uiScale > 1 ? _studioScaledTextButtonStyle() : null,
                 child: const Text('Use next available'),
               ),
             ),
@@ -2621,12 +2983,12 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
               ),
             ),
           if (_generated) ...[
-            const SizedBox(height: 12),
+            SizedBox(height: 12 * _uiScale),
             Text(
               'Generator recipe: ${_sourceLabel(_source, widget.controller)}. Schedule timing stays the same.',
             ),
           ] else if (_playbackMode == PlaybackMode.block) ...[
-            if (!hasShowGrouping) const SizedBox(height: 12),
+            if (!hasShowGrouping) SizedBox(height: 12 * _uiScale),
             if (!hasShowGrouping)
               Focus(
                 child: Semantics(
@@ -2648,19 +3010,23 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
       final block = _playbackMode == PlaybackMode.block;
       final inline =
           block &&
-          constraints.maxWidth >= 740 &&
+          constraints.maxWidth >= 740 * _uiScale &&
           MediaQuery.textScalerOf(context).scale(14) <= 21;
       return Wrap(
-        spacing: 12,
-        runSpacing: 16,
+        spacing: 12 * _uiScale,
+        runSpacing: 16 * _uiScale,
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
           SizedBox(
-            width: inline ? constraints.maxWidth - 474 : constraints.maxWidth,
+            width: inline
+                ? constraints.maxWidth - 474 * _uiScale
+                : constraints.maxWidth,
             child: DropdownButtonFormField<PlaybackMode>(
               key: const Key('studio-playback-order'),
               initialValue: _playbackMode,
               isExpanded: true,
+              iconSize: 24 * _uiScale,
+              itemHeight: _studioDropdownItemHeight,
               decoration: const InputDecoration(
                 labelText: 'Playback order',
                 floatingLabelBehavior: FloatingLabelBehavior.always,
@@ -2695,10 +3061,12 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
           ),
           if (block) ...[
             SizedBox(
-              width: inline ? 220 : constraints.maxWidth,
+              width: inline ? 220 * _uiScale : constraints.maxWidth,
               child: DropdownButtonFormField<int>(
                 key: const Key('studio-block-size'),
                 isExpanded: true,
+                iconSize: 24 * _uiScale,
+                itemHeight: _studioDropdownItemHeight,
                 initialValue: (_blockSize ?? 3) >= 2 && (_blockSize ?? 3) <= 5
                     ? _blockSize ?? 3
                     : null,
@@ -2716,8 +3084,8 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
               ),
             ),
             SizedBox(
-              width: inline ? 230 : constraints.maxWidth,
-              child: SwitchListTile(
+              width: inline ? 230 * _uiScale : constraints.maxWidth,
+              child: _studioSwitchTile(
                 key: const Key('studio-include-specials'),
                 contentPadding: EdgeInsets.zero,
                 value: _includeSpecials,
@@ -3206,6 +3574,87 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     });
   }
 
+  Widget _scaledStudioDialog(
+    BuildContext context, {
+    required Widget title,
+    required Widget content,
+    required List<Widget> actions,
+  }) {
+    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
+    final dialog = AlertDialog(
+      insetPadding: scale > 1
+          ? EdgeInsets.symmetric(horizontal: 40 * scale, vertical: 24 * scale)
+          : null,
+      titlePadding: scale > 1
+          ? EdgeInsets.only(
+              left: 24 * scale,
+              top: 24 * scale,
+              right: 24 * scale,
+            )
+          : null,
+      contentPadding: scale > 1
+          ? EdgeInsets.fromLTRB(24 * scale, 16 * scale, 24 * scale, 24 * scale)
+          : null,
+      actionsPadding: scale > 1
+          ? EdgeInsets.only(
+              left: 24 * scale,
+              right: 24 * scale,
+              bottom: 24 * scale,
+            )
+          : null,
+      buttonPadding: scale > 1
+          ? EdgeInsets.symmetric(horizontal: 8 * scale)
+          : null,
+      actionsOverflowButtonSpacing: scale > 1 ? 8 * scale : null,
+      title: title,
+      content: content,
+      actions: actions,
+    );
+    if (scale <= 1) return dialog;
+    final theme = Theme.of(context);
+    final textTheme = theme.textTheme.apply(fontSizeFactor: scale);
+    final filledTextStyle = theme.filledButtonTheme.style?.textStyle?.resolve(
+      const {},
+    );
+    return Theme(
+      data: theme.copyWith(
+        textTheme: textTheme,
+        dialogTheme: theme.dialogTheme.copyWith(
+          insetPadding: EdgeInsets.symmetric(
+            horizontal: 40 * scale,
+            vertical: 24 * scale,
+          ),
+        ),
+        textButtonTheme: TextButtonThemeData(
+          style: theme.textButtonTheme.style?.copyWith(
+            minimumSize: WidgetStatePropertyAll(Size(64 * scale, 40 * scale)),
+            padding: WidgetStatePropertyAll(
+              EdgeInsets.symmetric(horizontal: 12 * scale, vertical: 8 * scale),
+            ),
+            textStyle: WidgetStatePropertyAll(textTheme.labelLarge),
+          ),
+        ),
+        filledButtonTheme: FilledButtonThemeData(
+          style: theme.filledButtonTheme.style?.copyWith(
+            minimumSize: WidgetStatePropertyAll(Size(148 * scale, 54 * scale)),
+            padding: WidgetStatePropertyAll(
+              EdgeInsets.symmetric(
+                horizontal: 24 * scale,
+                vertical: 16 * scale,
+              ),
+            ),
+            textStyle: WidgetStatePropertyAll(
+              filledTextStyle?.copyWith(
+                fontSize: (filledTextStyle.fontSize ?? 17) * scale,
+              ),
+            ),
+          ),
+        ),
+      ),
+      child: dialog,
+    );
+  }
+
   ContentSource get _displaySource {
     try {
       return _editedSource();
@@ -3246,7 +3695,8 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     final confirmed =
         await showDialog<bool>(
           context: context,
-          builder: (context) => AlertDialog(
+          builder: (context) => _scaledStudioDialog(
+            context,
             title: const Text('Use the saved version?'),
             content: const Text(
               'Your complete Studio draft will be discarded and the newer saved channel will be loaded.',
@@ -3305,7 +3755,8 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     final confirmed =
         await showDialog<bool>(
           context: context,
-          builder: (context) => AlertDialog(
+          builder: (context) => _scaledStudioDialog(
+            context,
             title: const Text('Replace the saved version?'),
             content: const Text(
               'The newer saved channel will be replaced with your complete Studio draft.',
@@ -3358,7 +3809,8 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     final confirmed =
         await showDialog<bool>(
           context: context,
-          builder: (context) => AlertDialog(
+          builder: (context) => _scaledStudioDialog(
+            context,
             title: const Text('Save changes and tune in?'),
             content: const Text(
               'Your changes to this channel will be saved before playback starts.',
@@ -3492,21 +3944,102 @@ class _MoveProgramDialogState extends State<_MoveProgramDialog> {
     if (_target == null || !targets.contains(_target)) {
       _target = targets.firstOrNull;
     }
-    return AlertDialog(
+    final size = MediaQuery.sizeOf(context);
+    final viewInsets = MediaQuery.viewInsetsOf(context);
+    final scale = LineupLayout.scaleFor(size);
+    final theme = Theme.of(context);
+    final dialogTextTheme = theme.textTheme.apply(fontSizeFactor: scale);
+    final segmentFontSize = dialogTextTheme.labelLarge?.fontSize ?? 14;
+    final segmentVerticalPadding = scale > 1
+        ? (40 * scale > segmentFontSize
+              ? (40 * scale - segmentFontSize) / 2
+              : 0.0)
+        : 0.0;
+    final actionStyle = scale > 1
+        ? TextButton.styleFrom(
+            minimumSize: Size(64 * scale, 40 * scale),
+            padding: EdgeInsets.symmetric(
+              horizontal: 12 * scale,
+              vertical: 8 * scale,
+            ),
+            textStyle: dialogTextTheme.labelLarge,
+          )
+        : null;
+    final moveStyle = scale > 1
+        ? FilledButton.styleFrom(
+            minimumSize: Size(148 * scale, 54 * scale),
+            padding: EdgeInsets.symmetric(
+              horizontal: 24 * scale,
+              vertical: 16 * scale,
+            ),
+            textStyle: theme.filledButtonTheme.style?.textStyle
+                ?.resolve(const {})
+                ?.copyWith(fontSize: 17 * scale),
+          )
+        : null;
+    final inputDecorationTheme = scale > 1
+        ? theme.inputDecorationTheme.copyWith(
+            contentPadding: EdgeInsets.fromLTRB(
+              12 * scale,
+              24 * scale,
+              12 * scale,
+              16 * scale,
+            ),
+            prefixIconConstraints: BoxConstraints(
+              minWidth: 48 * scale,
+              minHeight: 48 * scale,
+            ),
+            suffixIconConstraints: BoxConstraints(
+              minWidth: 48 * scale,
+              minHeight: 48 * scale,
+            ),
+          )
+        : theme.inputDecorationTheme;
+    final dialog = AlertDialog(
+      insetPadding: scale > 1
+          ? EdgeInsets.symmetric(horizontal: 40 * scale, vertical: 24 * scale)
+          : null,
+      titlePadding: scale > 1
+          ? EdgeInsets.only(
+              left: 24 * scale,
+              top: 24 * scale,
+              right: 24 * scale,
+            )
+          : null,
+      contentPadding: scale > 1
+          ? EdgeInsets.fromLTRB(24 * scale, 16 * scale, 24 * scale, 24 * scale)
+          : null,
+      actionsPadding: scale > 1
+          ? EdgeInsets.only(
+              left: 24 * scale,
+              right: 24 * scale,
+              bottom: 24 * scale,
+            )
+          : null,
+      buttonPadding: scale > 1
+          ? EdgeInsets.symmetric(horizontal: 8 * scale)
+          : null,
+      actionsOverflowButtonSpacing: scale > 1 ? 8 * scale : null,
       title: Text('Move ${widget.titleFor(widget.moving)}'),
       content: SizedBox(
-        width: 520,
-        height: 380,
+        width: (size.width - 128 * scale).clamp(0.0, 520 * scale),
+        height: (size.height - viewInsets.vertical - 200 * scale).clamp(
+          0.0,
+          380 * scale,
+        ),
         child: Column(
           children: [
             TextField(
               key: const Key('move-program-search'),
               controller: _search,
               autofocus: true,
-              decoration: const InputDecoration(labelText: 'Find program'),
+              decoration: InputDecoration(
+                labelText: 'Find program',
+                contentPadding: inputDecorationTheme.contentPadding,
+              ),
               onChanged: (_) => setState(() {}),
             ),
-            const SizedBox(height: 8),
+            SizedBox(height: 8 * scale),
             Expanded(
               child: RadioGroup<_ManualEntry>(
                 groupValue: _target,
@@ -3516,6 +4049,12 @@ class _MoveProgramDialogState extends State<_MoveProgramDialog> {
                     for (final entry in targets)
                       RadioListTile<_ManualEntry>(
                         value: entry,
+                        radioScaleFactor: scale,
+                        minTileHeight: scale > 1 ? 56 * scale : null,
+                        horizontalTitleGap: scale > 1 ? 16 * scale : null,
+                        contentPadding: scale > 1
+                            ? EdgeInsets.symmetric(horizontal: 16 * scale)
+                            : null,
                         title: Text(_label(entry)),
                       ),
                   ],
@@ -3528,6 +4067,17 @@ class _MoveProgramDialogState extends State<_MoveProgramDialog> {
                 ButtonSegment(value: true, label: Text('After')),
               ],
               selected: {_after},
+              style: scale > 1
+                  ? ButtonStyle(
+                      padding: WidgetStatePropertyAll(
+                        EdgeInsets.symmetric(
+                          horizontal: 16 * scale,
+                          vertical: segmentVerticalPadding,
+                        ),
+                      ),
+                      iconSize: WidgetStatePropertyAll(18 * scale),
+                    )
+                  : null,
               onSelectionChanged: (value) =>
                   setState(() => _after = value.single),
             ),
@@ -3538,6 +4088,7 @@ class _MoveProgramDialogState extends State<_MoveProgramDialog> {
         TextButton(
           autofocus: true,
           onPressed: () => Navigator.pop(context),
+          style: actionStyle,
           child: const Text('Cancel'),
         ),
         FilledButton(
@@ -3547,9 +4098,19 @@ class _MoveProgramDialogState extends State<_MoveProgramDialog> {
                   index: widget.entries.indexOf(_target!),
                   after: _after,
                 )),
+          style: moveStyle,
           child: const Text('Move'),
         ),
       ],
     );
+    return scale > 1
+        ? Theme(
+            data: theme.copyWith(
+              textTheme: dialogTextTheme,
+              inputDecorationTheme: inputDecorationTheme,
+            ),
+            child: dialog,
+          )
+        : dialog;
   }
 }

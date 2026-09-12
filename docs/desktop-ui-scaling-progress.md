@@ -120,3 +120,29 @@ record the evidence and distinguish earlier main-view captures from final overla
 
 No independent review was run or is specifically recommended for this
 presentation-only group. Physical Windows validation remains outstanding.
+
+## Group 2d — Studio and schedule preview
+
+Luna task `01a09791-b55f-7561-9f1f-64d80e5d4c0e` completed Studio and Air Check
+presentation scaling, with bounded follow-ups after Astra's visual inspection.
+Studio's inherited body text now receives the viewport scale once. Native
+controls, local dialogs, editor fields, spacing and preview rows follow the
+shared reference. Astra corrected one remaining standard-button font owner;
+Luna then removed the native ListTile height limit from enlarged Browse actions
+using a local row layout above scale1. Original scale1 rows remain intact.
+Scheduling, save/currentness and source-selection behavior were preserved.
+
+The final combined existing suite passed 91 checks (67 Studio and24 Air Check);
+analysis, formatting and diff checks passed. Final portable capture runs cover
+1080p, 1440p, native2160p and2160p/DPR2/text200%, including opened dropdowns,
+Move, save/tune confirmation, native controls and Browse Add/Undo/selection.
+Astra confirmed 13 normal1080 matches byte-for-byte: seven main views, five
+supplementary states and recovery. Checked Browse selection has different inner
+scroll positions between fixtures and is not claimed pixel-identical. Astra
+inspected final native4K and enlarged Browse actions and the corrected native
+Library/Move controls. [Source and capture hashes](design/desktop-ui/scaling/group-2d-evidence.json)
+identify the final artifacts and evidence limitations.
+
+These are synthetic portable captures, not Windows acceptance. No independent
+review was requested or run, and none is specifically recommended for this
+presentation-only group. Physical Windows validation remains outstanding.
