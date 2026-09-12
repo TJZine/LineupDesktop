@@ -41,7 +41,7 @@ may cover multiple listed states only when that scope is clear to the user.
 | surface-25 | Guide · no playback | Approved at 1080p | Behavior checks passed; adaptive/accessibility/motion/Windows pending | September 12 candidate04; `e0834448` |
 | surface-26 | Guide · PiP | Approved at 1080p | Behavior checks passed; adaptive/accessibility/motion/Windows pending | September 12 candidate04; `e0834448` |
 | surface-27 | Mini Guide | Approved at 1080p | Behavior checks passed; adaptive/accessibility/moving footage/Windows pending | September12 candidate01; `90497d12` |
-| surface-28 | Player OSD · protected | Unreviewed | Not assessed in this pass | — |
+| surface-28 | Player OSD · protected | Locked | Approved candidate04 bright/dark artwork and preserved text | September12 explicit user lock; adaptive/Windows checks pending |
 | surface-29 | Now Playing · protected | Unreviewed | Not assessed in this pass | — |
 | surface-30 | Audio tracks | Unreviewed | Not assessed in this pass | — |
 | surface-31 | Subtitles · long names | Unreviewed | Not assessed in this pass | — |
@@ -1470,3 +1470,104 @@ reviewed candidate immediately before commit; no post-approval UI edits.
 captures, targeted analysis and whitespace checks. No new layout tests. Grouped
 adaptive/accessibility and moving footage/physical Windows acceptance remain
 pending. Independent review is not specifically recommended. No push or publish.
+
+## September 12 — Player OSD surface28 critique
+
+User requested personal critique of the established production direction without
+a mock. Root inspected fresh1920×1080/DPR1/text1 real PlayerView captures over
+synthetic bright/dark scenes with populated movie/episode information, current
+track settings, menu/fullscreen and next-program context. Evidence is local at
+`build/desktop-ui/surface-28/baseline/evidence.json`. No OSD production edits.
+
+Retain shallow bottom composition, identity left/actions right, bottom-edge
+progress, compact top-right channel identifier and auto-hide. Proposed for
+discussion: stronger localized lower scrim for bright-video contrast; more
+readable restrained typography (roughly28px title/16px secondary/action labels
+at1080p); episode code next to series context; quieter inactive Sleep label;
+slightly larger/lighter channel identity on a compact backing. Preserve existing
+control order, DVR policy and behavior. The bright baseline exposes poor
+secondary-text contrast; dark baseline shows the underlying composition works.
+
+These are suggestions, not user approval of protected OSD structural changes.
+Any agreed structural refinement follows matched before/after real-widget
+1280×720 and1920×1080 review; moving/native Windows evidence remains separate.
+No task dispatched and no surface lock.
+
+### Player OSD brief accepted — September 12
+
+User accepted targeted typography, elegant series/episode context, simpler Sleep
+label, and softer channel badge. User specifically cautioned that darkening
+behind controls may spoil bright scenes. First pass preserves the existing
+gradient exactly, brightens hard-to-read secondary text and increases readability;
+any later shading change is judged over bright footage/scenes before acceptance.
+Root retains title-artwork sizing/fallback inspection, including wide/tall/padded/
+missing/failed artwork, and any required contract changes. Luna owns only settled
+OSD presentation. This later explicit approval permits these bounded changes
+to the protected baseline, not a broader redesign. Preserve controls, placement,
+progress lane, behavior and other Player surfaces. Fresh matching720p/1080p
+evidence remains required before final visual approval.
+
+Use a fresh GPT-5.6 Luna/xhigh task directly on this shared branch, no worktree
+or parallel root edits. Wait for completion before root integration/artwork work.
+
+### Player OSD candidate01 — September 12
+
+Fresh Luna/xhigh task completed bounded OSD presentation; root then implemented
+OSD-only title-artwork allocation and visible-content size fallback. Existing
+gradient is unchanged. Root inspected bright/dark1080p, settled artwork1080p
+and episode720p. Matching baseline720p and artwork1080p supplement the original
+baseline captures. Local evidence: `build/desktop-ui/surface-28/candidate-01/evidence.json`.
+
+Artwork retains normal title fallback while loading or for tiny visible content,
+extreme aspect ratios, empty or corrupt images. Other clear-logo consumers do
+not opt into the new visible-content check. This is a size suitability heuristic,
+not a guarantee of arbitrary artwork legibility.
+
+95 checks passed including two capture cases; additional720p/artwork/failure
+captures passed. Analyzer, formatting and whitespace clean. No UI layout tests
+added. Awaiting user visual approval; no lock or implementation commit yet.
+Adaptive/accessibility and physical Windows moving-video checks remain pending.
+Independent review is not specifically recommended for this bounded pass.
+
+### Player OSD candidate02 — September 12
+
+User approved show identity above independent compact season/episode and episode
+title, preserved under artwork or normal text;8px identity-to-facts spacing;
+16px gaps replacing OSD action-group borders; bottom-aligned controls. Fresh
+Luna/xhigh task completed only PlayerView and its behavior tests, preserving
+root artwork safeguards and the original gradient. Root inspected current code
+and same-episode bright1080p artwork/text plus dark720p artwork captures.
+Local evidence: `build/desktop-ui/surface-28/candidate-02/evidence.json`.
+
+65 PlayerView and1 clear-logo behavior checks passed per task; analyzer and
+formatting clean. Root's8 fresh capture cases passed at native720p/1080p, DPR1,
+text100%. No UI layout tests added. Thin title artwork remains less distinct
+than normal text against the bright synthetic scene; pending user judgment.
+Surface remains in review, not locked or committed. Grouped adaptive/accessibility
+and physical Windows moving-video validation remain outstanding. Independent
+review is not specifically recommended for this bounded refinement.
+
+### Player OSD candidate04 — September 12
+
+User increased large-screen artwork limits to520x128, then approved trimming
+transparent margins at the existing visible scale. Root reused the bounded
+alpha scan to return normalized bounds and remove padding for OSD-only callers,
+retaining one scan sample for antialiased edges. Original fallback spacing and
+gradient colors/stops preserved. Candidate03 is the pre-trim local comparison;
+candidate04 evidence is `build/desktop-ui/surface-28/candidate-04/evidence.json`.
+Root inspected fresh bright/dark1080p artwork; both text captures are byte-identical
+to candidate03.67 behavior checks and4 captures passed; analyzer clean.
+No new UI layout tests. Still awaiting explicit visual lock. Adaptive/accessibility
+and physical Windows moving-footage evidence remain pending.
+
+### Player OSD locked — September 12
+
+User approved candidate04: “looks good. locked.” Approved1080p evidence retained
+in `docs/design/desktop-ui/approved/2026-09-12-player-osd/evidence.json`.
+Larger artwork520x128, transparent-margin trimming at existing visible scale,
+episode hierarchy and borderless action groups accepted.67 behavior checks
+and4 final capture cases passed; analyzer clean. Grouped adaptive/accessibility
+(including final720p trim) and physical Windows moving-video/native overlay
+checks outstanding. Independent review not specifically recommended.
+
+OSD implementation commit: `10750c5a`.
