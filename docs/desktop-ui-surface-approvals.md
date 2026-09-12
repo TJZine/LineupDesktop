@@ -43,9 +43,9 @@ may cover multiple listed states only when that scope is clear to the user.
 | surface-27 | Mini Guide | Approved at 1080p | Behavior checks passed; adaptive/accessibility/moving footage/Windows pending | September12 candidate01; `90497d12` |
 | surface-28 | Player OSD · protected | Locked | Approved candidate04 bright/dark artwork and preserved text | September12 explicit user lock; adaptive/Windows checks pending |
 | surface-29 | Now Playing · protected | Locked | Candidate04; compact long names condition completed | `dc9de607`; adaptive/Windows checks pending |
-| surface-30 | Audio tracks | Unreviewed | Not assessed in this pass | — |
-| surface-31 | Subtitles · long names | Unreviewed | Not assessed in this pass | — |
-| surface-32 | Sleep timer | Unreviewed | Not assessed in this pass | — |
+| surface-30 | Audio tracks | Approved at 1080p | Portable checks passed; adaptive/Windows pending | September12 conditional lock completed; `baec2d04` |
+| surface-31 | Subtitles · long names | Approved at 1080p | Portable checks passed; adaptive/Windows pending | September12 conditional lock completed; `baec2d04` |
+| surface-32 | Sleep timer | Approved at 1080p | Portable checks passed; adaptive/Windows pending | September12 conditional lock completed; `baec2d04` |
 | surface-33 | Settings · Appearance | Unreviewed | Not assessed in this pass | — |
 | surface-34 | Settings · Guide | Unreviewed | Not assessed in this pass | — |
 | surface-35 | Settings · Playback | Unreviewed | Not assessed in this pass | — |
@@ -1621,3 +1621,66 @@ passed, analyzer clean. Implementation `dc9de607`. Approved evidence:
 `docs/design/desktop-ui/approved/2026-09-12-now-playing/evidence.json`.
 Grouped adaptive/accessibility and physical Windows moving-video checks pending.
 Independent review not specifically recommended.
+
+
+## September 12 — surfaces30/31/32 candidate03 awaiting visual approval
+
+User authorized the general first-pass audio/subtitle long-name and timer polish
+before presentation, retaining transparency and all established behavior. User
+supplied Audio/Subtitles B reference screenshots; root personally inspected them
+and the sleep reference through the local HTTP wrapper. The locked specification
+calls for B reading protection with a slightly broader, more transparent inward
+tail, not a uniform A/B opacity average.
+
+A fresh GPT-5.6 Luna/xhigh task implemented only PlayerView drawers and their
+existing test coverage on the shared checkout; its lease is released. Root
+reviewed the diff and repaired selected-track visibility for wrapped long lists:
+native tracks are bounded to256, so standard scroll/column layout and selected-row
+reveal replace the fixed74px row estimate. The existing deep-list focus regression
+now uses long labels and metadata. Root also removed duplicate tooltip semantics,
+used font-supported keyboard hint text, and retained dense timer choice text size.
+
+Track rails use600px width and240px inward fade at1080p, bounded proportional
+geometry, brighter supporting text, restrained translucent selection, a reserved
+check/pending slot, wrapping labels capped at three lines with ellipsis and full
+hover/accessibility text, and bottom keyboard hints. Timer uses354px width at1080p,
+aligned labels and selected presets, remaining time beneath the heading, and its
+unchanged backing/invocation/focus lifecycle. Production typography is preserved;
+it is smaller than the reference typography. Locked OSD/NowPlaying unchanged.
+
+Root inspected8 fresh1920x1080/DPR1/text100% production-widget captures: audio,
+subtitles, timer Off, timer active, each on synthetic bright/dark scenes. The
+expanded fixture contains6 audio and8 subtitle tracks plus Off, codec/language
+metadata and long descriptions; it differs from the sparse starting captures and
+from mock content. Local source/capture hashes and evidence:
+`build/desktop-ui/surface-30-32/candidate-03/evidence.json`.
+
+67 PlayerView tests, focused analyzer, formatting, diff check and8 capture cases
+passed. No new layout tests/goldens or native changes. Awaiting explicit visual
+approval; no locks or commits. Grouped adaptive/DPI/text/accessibility visual
+checks and exact-commit physical Windows input/moving-video evidence remain
+pending. Independent review is not specifically recommended for this bounded pass.
+
+
+### Surfaces30/31/32 locked — September 12
+
+User approved the group conditional on a narrower track fade and very slightly
+increased transparency, delegated text size to root, and explicitly waived a
+further comparison: “id like to reign in the horizontal width of the transparency part to be closer to where the text starts and maybe inscrease overall transparency very very slightly then if you have no further refinements we can lock it. ill defer to you on text size. we dont need another visual comparison after this pass of changes. once they are in we are locked and can move on”.
+
+Root retained production typography, reduced only the tracks' extra inward fade
+from240px to100px at1080p, and reduced nonzero gradient alpha by0.02 to
+0.34/0.74/0.82. Stops0/0.10/0.22/1 keep reading protection near the labels.
+Rail/text geometry and timer candidate03 remain unchanged. Root personally
+inspected all4 fresh final bright/dark track captures; no further refinements.
+The conditional lock is completed for Audio/Subtitles and timer Off/active at1080p.
+Final track captures were not represented as another user-reviewed comparison.
+
+Implementation commit `baec2d04fb76afcc60aa3e3579a2718880a7165b`. Durable source/capture hashes, exact approval
+message,4 final tracks and4 reused unchanged timer images:
+`docs/design/desktop-ui/approved/2026-09-12-tracks-sleep/evidence.json`.
+67 PlayerView tests, focused analyzer, formatting/diff checks and4 final capture
+cases passed. Grouped adaptive/DPI/text/accessibility and exact-commit physical
+Windows moving-video/input checks remain pending. Independent review not
+specifically recommended. No push or remote publication. Next surface:33,
+Settings Appearance; do not reopen30–32.

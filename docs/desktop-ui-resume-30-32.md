@@ -1,5 +1,12 @@
 # Resume collaborative desktop UI review — surfaces 30–32
 
+> Completed September12: surfaces30/31/32 are locked at1080p after the
+> user-authorized final fade adjustment, implementation `baec2d04`.
+> See the current approval ledger and
+> `design/desktop-ui/approved/2026-09-12-tracks-sleep/evidence.json`.
+> The operational steps below are historical; do not repeat or reopen them.
+> Next surface is33, Settings Appearance. The collaborative workflow remains active.
+
 Prepared September 12, 2026 at the user's request. This is an operational
 continuation of the existing intentional workflow, not a fresh redesign or audit.
 Read this entire document before acting. Latest explicit user request is to
