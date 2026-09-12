@@ -42,7 +42,7 @@ may cover multiple listed states only when that scope is clear to the user.
 | surface-26 | Guide · PiP | Approved at 1080p | Behavior checks passed; adaptive/accessibility/motion/Windows pending | September 12 candidate04; `e0834448` |
 | surface-27 | Mini Guide | Approved at 1080p | Behavior checks passed; adaptive/accessibility/moving footage/Windows pending | September12 candidate01; `90497d12` |
 | surface-28 | Player OSD · protected | Locked | Approved candidate04 bright/dark artwork and preserved text | September12 explicit user lock; adaptive/Windows checks pending |
-| surface-29 | Now Playing · protected | Unreviewed | Not assessed in this pass | — |
+| surface-29 | Now Playing · protected | Locked | Candidate04; compact long names condition completed | `dc9de607`; adaptive/Windows checks pending |
 | surface-30 | Audio tracks | Unreviewed | Not assessed in this pass | — |
 | surface-31 | Subtitles · long names | Unreviewed | Not assessed in this pass | — |
 | surface-32 | Sleep timer | Unreviewed | Not assessed in this pass | — |
@@ -1571,3 +1571,53 @@ and4 final capture cases passed; analyzer clean. Grouped adaptive/accessibility
 checks outstanding. Independent review not specifically recommended.
 
 OSD implementation commit: `10750c5a`.
+
+### Now Playing surface29 baseline — September 12
+
+Root inspected fresh real-widget1080p artwork/dark and text/bright populated
+episode captures.4 capture cases passed; baseline evidence at
+`build/desktop-ui/surface-29/baseline/evidence.json`. No Now Playing changes.
+Proposed: preserve attached shelf/poster direction; stabilize title hierarchy
+across artwork/text, trim artwork padding, consolidate metadata, clarify cast
+portrait/name association, slightly strengthen this information panel's backing
+over bright scenes. Exact correction brief awaits collaborative agreement.
+
+### Now Playing candidate02 — September 12
+
+User accepted hierarchy, consolidated metadata, associated cast labels and
+content-driven panel height; explicitly preserve transparency and brighten
+secondary text first. Fresh Luna/xhigh task implemented PlayerView and existing
+behavior checks. Root replaced custom render layout with bounded standard
+Stack/Padding to retain original poster width, and top-aligned cast columns.
+Panel height follows content up to existing cap; overflow details scroll while
+progress stays visible. OSD untouched.
+
+68 focused checks passed after root corrections; analyzer/format/whitespace
+clean.8 final captures passed at720p/1080p DPR1 text100%. Evidence:
+`build/desktop-ui/surface-29/candidate-02/evidence.json`. User visual approval
+pending; no lock/commit. Grouped adaptive/accessibility and physical Windows
+moving-video/native overlay evidence outstanding. Independent review not
+specifically recommended for this bounded refinement.
+
+### Now Playing candidate03 — September 12
+
+User approved stronger fallback show name and wider cast columns, requesting
+elegant long-name handling. Root applied20px/medium normal-case show name
+(16px dense),104px desktop cast columns, consistent two-line name slots scaled
+with text settings, ellipsis plus full-name tooltip; outer semantics retain
+full names and roles. Existing transparency unchanged. Fresh1080p long-name
+bright/dark artwork/text evidence: `build/desktop-ui/surface-29/candidate-03/evidence.json`.
+68 focused tests and4 capture cases passed; analyzer clean. User lock pending.
+
+### Now Playing locked — September 12
+
+User explicitly requested compact long names with full name on hover as the
+last adjustment before lock. Implemented only when full text exceeds two lines;
+interior name tokens become initials, preserving first/last tokens. Full names
+and roles remain in semantics and full names in tooltips. This is display-only
+abbreviation, not semantic name parsing; extreme names can still ellipsize.
+Root inspected final long-name1080p capture.68 focused checks and4 captures
+passed, analyzer clean. Implementation `dc9de607`. Approved evidence:
+`docs/design/desktop-ui/approved/2026-09-12-now-playing/evidence.json`.
+Grouped adaptive/accessibility and physical Windows moving-video checks pending.
+Independent review not specifically recommended.
