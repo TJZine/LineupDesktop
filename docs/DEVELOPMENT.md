@@ -164,6 +164,12 @@ flutter test test/app/ui_acceptance_golden_test.dart
 flutter test test/app/guide_sparse_golden_test.dart
 ```
 
+Mandatory macOS golden coverage is five representative 1920×1080 snapshots:
+rich and reference-free Guide, OSD, Now Playing, and Ember & Steel Appearance.
+The suites load fonts from the pinned Flutter SDK, run with
+`TZ=America/New_York`, and remain macOS-only. Behavioral tests remain broad;
+update a baseline only after visually reviewing a real-widget render.
+
 Inspect intentional golden changes from the real widgets. Preserve
 [approved UI decisions](../.interface-design/system.md), including the protected
 Player layouts and separate approval for structural proposals.

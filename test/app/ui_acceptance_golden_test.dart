@@ -2,7 +2,6 @@
 library;
 
 import 'dart:io';
-import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -11,11 +10,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/channels/channel.dart';
-import 'package:lineup_desktop/channels/channel_builder.dart';
 import 'package:lineup_desktop/channels/scheduler.dart';
 import 'package:lineup_desktop/playback/native_player.dart';
-import 'package:lineup_desktop/playback/player_view.dart';
-import 'package:lineup_desktop/plex/plex_models.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 
 import '../support/golden_test_support.dart';
@@ -54,452 +50,18 @@ void main() {
     TestWidgetsFlutterBinding.ensureInitialized();
   });
 
-  testWidgets('profile selection', (tester) async {
-    final fixture = _profileSelectionFixture();
-
-    await _pump(tester, fixture.build());
-    await _match(
-      tester,
-      'profiles-1280x720.png',
-      precacheLogo: true,
-      additionalPumps: 1,
-    );
-  });
-
-  testWidgets('profile selection at 1920x1080', (tester) async {
-    final fixture = _profileSelectionFixture();
-
-    await _pump(tester, fixture.build(), viewport: const Size(1920, 1080));
-    await _match(
-      tester,
-      'profiles-1920x1080.png',
-      precacheLogo: true,
-      additionalPumps: 1,
-    );
-  });
-
-  testWidgets('protected profile PIN', (tester) async {
-    const profile = PlexHomeUser(
-      id: 'protected',
-      name: 'Taylor',
-      protected: true,
-    );
-    final fixture = UiFixture()
-      ..controller.stage = SetupStage.profiles
-      ..controller.profiles = const [profile];
-
-    await _pump(tester, fixture.build());
-    await tester.tap(find.text('Taylor'));
-    await tester.pumpAndSettle();
-    await _match(
-      tester,
-      'profile-pin-1280x720.png',
-      precacheLogo: true,
-      additionalPumps: 1,
-    );
-  });
-
-  testWidgets('terminal Plex linking failure', (tester) async {
-    final fixture = UiFixture()
-      ..controller.stage = SetupStage.linking
-      ..controller.error =
-          'Lineup could not connect to Plex. Check your connection and request a new code.';
-
-    await _pump(tester, fixture.build());
-    expect(find.text('Waiting for sign-in…'), findsNothing);
-    await _match(tester, 'auth-link-failure-1280x720.png');
-  });
-
-  testWidgets('server selection', (tester) async {
-    final selected = PlexServer(
-      id: 'studio',
-      name: 'Studio Server',
-      owned: true,
-      connections: [
-        PlexConnection(
-          uri: Uri.parse('https://local.synthetic.invalid'),
-          local: true,
-          relay: false,
-        ),
-        PlexConnection(
-          uri: Uri.parse('https://remote.synthetic.invalid'),
-          local: false,
-          relay: false,
-        ),
-        PlexConnection(
-          uri: Uri.parse('https://relay.synthetic.invalid'),
-          local: false,
-          relay: true,
-        ),
-      ],
-    );
-    final fixture = UiFixture()
-      ..controller.stage = SetupStage.servers
-      ..controller.server = selected
-      ..controller.connection = PlexConnection(
-        uri: Uri.parse('https://selected.synthetic.invalid'),
-        local: true,
-        relay: false,
-        latency: const Duration(milliseconds: 126),
-      )
-      ..controller.servers = [
-        selected,
-        PlexServer(
-          id: 'shared',
-          name: 'Family Server',
-          connections: [
-            PlexConnection(
-              uri: Uri.parse('https://shared.synthetic.invalid'),
-              local: false,
-              relay: false,
-            ),
-          ],
-        ),
-      ];
-
-    await _pump(tester, fixture.build());
-    await _match(
-      tester,
-      'server-selection-1280x720.png',
-      precacheLogo: true,
-      additionalPumps: 1,
-    );
-  });
-
-  testWidgets('Channel Setup strategies', (tester) async {
-    final controller = _VisualController()
-      ..stage = SetupStage.channelSetup
-      ..libraries = const [
-        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
-      ];
-    await _pump(
-      tester,
-      UiFixture(controller: controller, guideClock: () => _fixedNow).build(),
-    );
-    await tester.tap(find.byKey(const Key('scan-selected-libraries')));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Shape your lineup'), findsOneWidget);
-    final stage = tester.getRect(find.byKey(const Key('channel-setup-stage')));
-    final header = tester.getRect(
-      find.byKey(const Key('channel-setup-header')),
-    );
-    expect(header.bottom, lessThanOrEqualTo(stage.top));
-    expect(find.byKey(const Key('channel-configuration')), findsOneWidget);
-    expect(
-      tester.getBottomRight(find.byKey(const Key('review-channels'))).dy,
-      lessThanOrEqualTo(_viewport.height),
-    );
-    await _match(
-      tester,
-      'channel-setup-strategies-1280x720.png',
-      precacheLogo: true,
-      additionalPumps: 2,
-    );
-  });
-
-  testWidgets('Channel Setup review', (tester) async {
-    final controller = _VisualController()
-      ..stage = SetupStage.channelSetup
-      ..libraries = const [
-        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
-      ];
-    await _pump(
-      tester,
-      TickerMode(
-        enabled: false,
-        child: UiFixture(
-          controller: controller,
-          guideClock: () => _fixedNow,
-        ).build(),
-      ),
-    );
-    await tester.tap(find.byKey(const Key('scan-selected-libraries')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('review-channels')));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Review your first lineup'), findsOneWidget);
-    expect(
-      tester.getBottomLeft(find.byKey(const Key('channel-setup-header'))).dy,
-      lessThan(
-        tester
-            .getTopLeft(find.byKey(const Key('channel-setup-review-roster')))
-            .dy,
-      ),
-    );
-    expect(
-      tester.getBottomRight(find.byKey(const Key('apply-reviewed-lineup'))).dy,
-      lessThanOrEqualTo(_viewport.height),
-    );
-    await _match(
-      tester,
-      'channel-setup-review-1280x720.png',
-      precacheLogo: true,
-      additionalPumps: 2,
-    );
-  });
-
-  testWidgets('Channel Setup review at 1920x1080', (tester) async {
-    final controller = _VisualController()
-      ..stage = SetupStage.channelSetup
-      ..libraries = const [
-        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
-      ];
-    await _pump(
-      tester,
-      TickerMode(
-        enabled: false,
-        child: UiFixture(
-          controller: controller,
-          guideClock: () => _fixedNow,
-        ).build(),
-      ),
-      viewport: const Size(1920, 1080),
-    );
-    await tester.tap(find.byKey(const Key('scan-selected-libraries')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('review-channels')));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Review your first lineup'), findsOneWidget);
-    expect(find.text('2 channels ready to create').first, findsOneWidget);
-    expect(
-      tester.getBottomRight(find.byKey(const Key('apply-reviewed-lineup'))).dy,
-      lessThanOrEqualTo(1080),
-    );
-    await _match(
-      tester,
-      'channel-setup-review-1920x1080.png',
-      precacheLogo: true,
-      additionalPumps: 2,
-    );
-  });
-
-  testWidgets('Channel Setup review with generated removals', (tester) async {
-    final controller = _VisualController()
-      ..stage = SetupStage.channelSetup
-      ..libraries = const [
-        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
-      ]
-      ..channels = [
-        Channel(
-          id: 'retro-detectives',
-          number: 42,
-          name: 'Retro Detectives',
-          source: const LibrarySource(
-            libraryId: 'movies',
-            libraryType: PlexLibraryType.movie,
-          ),
-          playbackMode: PlaybackMode.shuffle,
-          anchor: DateTime.utc(2026, 1, 15),
-          shuffleSeed: 42,
-          builderKey: 'synthetic:retro-detectives',
-        ),
-      ];
-    await _pump(
-      tester,
-      TickerMode(
-        enabled: false,
-        child: UiFixture(
-          controller: controller,
-          guideClock: () => _fixedNow,
-        ).build(),
-      ),
-    );
-    await tester.tap(find.byKey(const Key('scan-selected-libraries')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('review-channels')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('review-build-method')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Replace generated channels').last);
-    await tester.pumpAndSettle();
-    expect(
-      find.byKey(const Key('channel-setup-replace-confirmation')),
-      findsOneWidget,
-    );
-    expect(
-      tester
-          .widget<FilledButton>(find.byKey(const Key('apply-reviewed-lineup')))
-          .onPressed,
-      isNull,
-    );
-    await _match(
-      tester,
-      'channel-setup-review-removals-1280x720.png',
-      precacheLogo: true,
-      additionalPumps: 2,
-    );
-  });
-
-  testWidgets('Channel Setup progress', (tester) async {
-    final controller = _PendingVisualController()
-      ..stage = SetupStage.channelSetup
-      ..libraries = const [
-        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
-      ];
-    await _pump(
-      tester,
-      TickerMode(
-        enabled: false,
-        child: UiFixture(
-          controller: controller,
-          guideClock: () => _fixedNow,
-        ).build(),
-      ),
-    );
-    await _openChannelSetupApply(tester);
-
-    expect(find.text('Creating your lineup…'), findsOneWidget);
-    expect(
-      tester.getBottomLeft(find.byKey(const Key('channel-setup-header'))).dy,
-      lessThan(tester.getTopLeft(find.text('Creating your lineup…')).dy),
-    );
-    expect(
-      tester.getTopLeft(find.byKey(const Key('channel-setup-header'))).dy,
-      greaterThanOrEqualTo(0),
-    );
-    expect(find.byKey(const Key('channel-setup-steps')), findsOneWidget);
-    for (final element in tester.allElements) {
-      element.renderObject?.markNeedsPaint();
-    }
-    await tester.pump();
-    await _match(
-      tester,
-      'channel-setup-progress-1280x720.png',
-      precacheLogo: true,
-      additionalPumps: 2,
-    );
-  });
-
-  testWidgets('Channel Setup complete', (tester) async {
-    final controller = _PendingVisualController()
-      ..stage = SetupStage.channelSetup
-      ..libraries = const [
-        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
-      ];
-    await _pump(
-      tester,
-      TickerMode(
-        enabled: false,
-        child: UiFixture(
-          controller: controller,
-          guideClock: () => _fixedNow,
-        ).build(),
-      ),
-    );
-    await _openChannelSetupApply(tester);
-    controller.finishApply();
-    await tester.pumpAndSettle();
-
-    expect(find.text('Your lineup is ready'), findsOneWidget);
-    expect(
-      tester.getBottomLeft(find.byKey(const Key('channel-setup-header'))).dy,
-      lessThan(tester.getTopLeft(find.text('Your lineup is ready')).dy),
-    );
-    expect(
-      tester.getBottomRight(find.text('View lineup')).dy,
-      lessThanOrEqualTo(_viewport.height),
-    );
-    await _match(
-      tester,
-      'channel-setup-complete-1280x720.png',
-      precacheLogo: true,
-      additionalPumps: 2,
-    );
-  });
-
-  testWidgets('Channel Setup library outcomes', (tester) async {
-    final controller = _VisualController()
-      ..stage = SetupStage.channelSetup
-      ..libraries = const [
-        PlexLibrary(
-          id: 'movies',
-          title: 'Feature Films',
-          type: PlexLibraryType.movie,
-        ),
-        PlexLibrary(id: 'shows', title: 'Series', type: PlexLibraryType.show),
-        PlexLibrary(
-          id: 'archive',
-          title: 'Archive',
-          type: PlexLibraryType.movie,
-        ),
-        PlexLibrary(
-          id: 'imports',
-          title: 'Recent Imports',
-          type: PlexLibraryType.movie,
-        ),
-      ]
-      ..selectedLibraryIds = const {'movies', 'shows', 'archive', 'imports'}
-      ..libraryScanStatus = LibraryScanStatus.transientFailure
-      ..libraryScanCompletedPages = 8
-      ..libraryScanCompletedItems = 83
-      ..libraryScanTotalItems = 112
-      ..error = 'Plex could not complete the library scan.'
-      ..scanFacts = const {
-        'movies': LibraryScanFact(
-          status: LibraryScanStatus.complete,
-          completedPages: 4,
-          completedItems: 72,
-          totalItems: 72,
-        ),
-        'shows': LibraryScanFact(
-          status: LibraryScanStatus.unsupported,
-          completedPages: 2,
-          completedItems: 8,
-          totalItems: 8,
-        ),
-        'archive': LibraryScanFact(
-          status: LibraryScanStatus.empty,
-          completedPages: 1,
-          totalItems: 0,
-        ),
-        'imports': LibraryScanFact(
-          status: LibraryScanStatus.transientFailure,
-          completedPages: 1,
-          completedItems: 3,
-          totalItems: 32,
-        ),
-      };
-
-    await _pump(
-      tester,
-      TickerMode(
-        enabled: false,
-        child: UiFixture(
-          controller: controller,
-          guideClock: () => _fixedNow,
-        ).build(),
-      ),
-    );
-    expect(find.text('Retry failed scans'), findsOneWidget);
-    expect(find.text('Ready · 72 items checked'), findsOneWidget);
-    expect(find.text('No playable media found'), findsOneWidget);
-    expect(find.text('No media found'), findsOneWidget);
-    expect(find.text('Couldn’t scan · Try again.'), findsOneWidget);
-    await _match(
-      tester,
-      'channel-setup-libraries-1280x720.png',
-      precacheLogo: true,
-      additionalPumps: 2,
-    );
-  });
-
-  testWidgets('Guide without playback', (tester) async {
+  testWidgets('Guide without playback remains opaque outside its aperture', (
+    tester,
+  ) async {
     final fixture = _readyFixture()
       ..controller.settings = const LineupSettings(reduceMotion: true);
     await _pump(tester, fixture.build());
     await _expectClassicOpacity(tester);
-    await _match(
-      tester,
-      'guide-no-playback-1280x720.png',
-      precacheLogo: true,
-      additionalPumps: 2,
-    );
   });
 
-  testWidgets('Guide with PiP allocation', (tester) async {
+  testWidgets('Guide with PiP remains opaque outside its native aperture', (
+    tester,
+  ) async {
     final fixture = _readyFixture(
       playerState: const PlayerStatus(
         state: PlayerState.ready,
@@ -511,28 +73,6 @@ void main() {
       tester,
       aperture: find.byKey(const Key('guide-picture-in-picture')),
     );
-    await _match(
-      tester,
-      'guide-pip-1280x720.png',
-      precacheLogo: true,
-      additionalPumps: 2,
-    );
-  });
-
-  testWidgets('player OSD', (tester) async {
-    final fixture = _readyFixture(
-      playerState: const PlayerStatus(
-        state: PlayerState.paused,
-        message: 'Paused',
-      ),
-    );
-    await _pump(tester, fixture.build());
-    await openDestination(tester, 'Player');
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
-    await tester.pump();
-
-    expect(find.byKey(const Key('player-osd-surface')), findsOneWidget);
-    await _match(tester, 'player-osd-1280x720.png', additionalPumps: 2);
   });
 
   testWidgets('player OSD at 1920x1080', (tester) async {
@@ -549,40 +89,6 @@ void main() {
 
     expect(find.byKey(const Key('player-osd-surface')), findsOneWidget);
     await _match(tester, 'player-osd-1920x1080.png', additionalPumps: 2);
-  });
-
-  testWidgets('player Now Playing', (tester) async {
-    final fixture =
-        _readyFixture(
-            useWordmarkArtwork: true,
-            playerState: const PlayerStatus(
-              state: PlayerState.playing,
-              message: 'Playing',
-            ),
-          )
-          ..controller.channels = _richPlayerChannels
-          ..controller.settings = const LineupSettings(
-            guideHours: 4,
-            reduceMotion: true,
-          );
-    await _pump(tester, fixture.build());
-    await openDestination(tester, 'Player');
-    final context = tester.element(find.byKey(_goldenKey));
-    await tester.runAsync(() async {
-      for (final bytes in _nowPlayingArtwork.values) {
-        await precacheImage(MemoryImage(bytes), context);
-      }
-    });
-    await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
-    await tester.pump();
-
-    expect(find.byKey(const Key('player-now-playing-surface')), findsOneWidget);
-    await _match(
-      tester,
-      'player-now-playing-1280x720.png',
-      precacheLogo: true,
-      additionalPumps: 2,
-    );
   });
 
   testWidgets('player Now Playing at 1920x1080', (tester) async {
@@ -619,129 +125,6 @@ void main() {
     );
   });
 
-  testWidgets('player audio track rail', (tester) async {
-    final fixture = _readyFixture(
-      playerState: const PlayerStatus(
-        state: PlayerState.playing,
-        message: 'Playing',
-      ),
-      tracks: const [
-        PlayerTrack(
-          id: 1,
-          type: PlayerTrackType.audio,
-          selected: true,
-          title: 'English',
-          language: 'eng',
-          codec: 'aac',
-        ),
-        PlayerTrack(
-          id: 2,
-          type: PlayerTrackType.audio,
-          selected: false,
-          title: 'Spanish',
-          language: 'spa',
-          codec: 'ac3',
-        ),
-      ],
-    )..controller.settings = const LineupSettings(reduceMotion: true);
-    await _pump(tester, fixture.build());
-    await openDestination(tester, 'Player');
-    await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
-    await tester.pump();
-
-    expect(find.byKey(const Key('playback-options-rail')), findsOneWidget);
-    await _match(
-      tester,
-      'player-audio-tracks-1280x720.png',
-      additionalPumps: 2,
-    );
-  });
-
-  testWidgets('player long subtitle track rail', (tester) async {
-    final fixture = _readyFixture(
-      playerState: const PlayerStatus(
-        state: PlayerState.playing,
-        message: 'Playing',
-      ),
-      tracks: [
-        for (var index = 1; index <= 14; index++)
-          PlayerTrack(
-            id: index,
-            type: PlayerTrackType.subtitle,
-            selected: index == 10,
-            title: 'Subtitle track $index',
-            language: index.isEven ? 'eng' : 'spa',
-            codec: index.isEven ? 'ass' : 'srt',
-          ),
-      ],
-    )..controller.settings = const LineupSettings(reduceMotion: true);
-    await _pump(tester, fixture.build());
-    await openDestination(tester, 'Player');
-    await tester.sendKeyEvent(LogicalKeyboardKey.keyC);
-    await tester.pumpAndSettle();
-
-    expect(
-      Focus.of(tester.element(find.text('Subtitle track 10'))).hasFocus,
-      isTrue,
-    );
-    await _match(
-      tester,
-      'player-subtitles-long-1280x720.png',
-      additionalPumps: 2,
-    );
-  });
-
-  testWidgets('Mini Guide', (tester) async {
-    final fixture = _readyFixture(
-      playerState: const PlayerStatus(
-        state: PlayerState.playing,
-        message: 'Playing',
-      ),
-    );
-    await _pump(tester, fixture.build());
-    await openDestination(tester, 'Player');
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
-    await tester.pump();
-
-    expect(find.byKey(const Key('mini-guide-shelf')), findsOneWidget);
-    await _match(tester, 'mini-guide-1280x720.png', additionalPumps: 2);
-  });
-
-  testWidgets('Mini Guide at 1920x1080', (tester) async {
-    final fixture = _readyFixture(
-      playerState: const PlayerStatus(
-        state: PlayerState.playing,
-        message: 'Playing',
-      ),
-    );
-    await _pump(tester, fixture.build(), viewport: const Size(1920, 1080));
-    await openDestination(tester, 'Player');
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
-    await tester.pump();
-
-    expect(find.byKey(const Key('mini-guide-shelf')), findsOneWidget);
-    await _match(tester, 'mini-guide-1920x1080.png', additionalPumps: 2);
-  });
-
-  testWidgets('Settings in alternate theme', (tester) async {
-    final fixture = _readyFixture()
-      ..controller.settings = const LineupSettings(
-        theme: LineupThemeName.slatePine,
-      );
-    await _pump(tester, fixture.build());
-    await openDestination(tester, 'Settings');
-    await _match(tester, 'settings-slate-pine-1280x720.png');
-  });
-
-  testWidgets('Appearance chooser at compact desktop size', (tester) async {
-    final fixture = _readyFixture();
-    await _pump(tester, fixture.build(), viewport: const Size(800, 600));
-    await openDestination(tester, 'Settings');
-
-    expect(find.byType(DropdownButton<LineupThemeName>), findsOneWidget);
-    await _match(tester, 'settings-appearance-ember-steel-800x600.png');
-  });
-
   testWidgets('Appearance chooser at large desktop size', (tester) async {
     final fixture = _readyFixture();
     await _pump(tester, fixture.build(), viewport: const Size(1920, 1080));
@@ -749,48 +132,6 @@ void main() {
 
     expect(find.byType(DropdownButton<LineupThemeName>), findsOneWidget);
     await _match(tester, 'settings-appearance-ember-steel-1920x1080.png');
-  });
-
-  testWidgets('Settings over playback in Ember & Steel', (tester) async {
-    final fixture = _readyFixture(
-      playerState: const PlayerStatus(
-        state: PlayerState.playing,
-        message: 'Playing',
-      ),
-    )..controller.settings = const LineupSettings(reduceMotion: true);
-    await _pump(tester, fixture.build());
-    await openDestination(tester, 'Settings');
-
-    expect(find.byType(PlayerSurface), findsOneWidget);
-    expect(find.byType(PlayerView), findsNothing);
-    expect(find.byType(NavigationRail), findsNothing);
-    await _match(tester, 'settings-playback-ember-steel-1280x720.png');
-  });
-
-  testWidgets('Channel Studio expanded custom authoring with Air Check', (
-    tester,
-  ) async {
-    final fixture = _studioFixture();
-    await _pump(tester, fixture.build());
-    await openDestination(tester, 'Channels');
-    await tester.tap(find.text('Saturday Cartoons').first);
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 100));
-    await tester.pumpAndSettle();
-    await _match(tester, 'channel-studio-expanded-1280x720.png');
-  });
-
-  testWidgets('Channel Studio compact custom authoring with Air Check', (
-    tester,
-  ) async {
-    final fixture = _studioFixture();
-    await _pump(tester, fixture.build(), viewport: const Size(800, 600));
-    await openDestination(tester, 'Channels');
-    await tester.tap(find.text('Saturday Cartoons').first);
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 100));
-    await tester.pumpAndSettle();
-    await _match(tester, 'channel-studio-compact-800x600.png');
   });
 }
 
@@ -808,41 +149,6 @@ Future<void> _pump(
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 250));
 }
-
-UiFixture _profileSelectionFixture() => UiFixture()
-  ..controller.stage = SetupStage.profiles
-  ..controller.profile = const PlexHomeUser(
-    id: 'adult',
-    name: 'Alex',
-    protected: false,
-    admin: true,
-  )
-  ..controller.profiles = const [
-    PlexHomeUser(id: 'adult', name: 'Alex', protected: false, admin: true),
-    PlexHomeUser(
-      id: 'child',
-      name: 'Family',
-      protected: true,
-      restricted: true,
-    ),
-    PlexHomeUser(id: 'guest', name: 'Guest', protected: false),
-    PlexHomeUser(
-      id: 'movies',
-      name: 'A deliberately long synthetic profile name',
-      protected: false,
-      restricted: true,
-    ),
-    PlexHomeUser(id: 'kids', name: 'Kids', protected: false, restricted: true),
-    PlexHomeUser(id: 'sports', name: 'Sports', protected: false),
-    PlexHomeUser(id: 'parents', name: 'Parents', protected: true),
-    PlexHomeUser(id: 'weekend', name: 'Weekend', protected: false),
-    PlexHomeUser(
-      id: 'visitor',
-      name: 'Visitor',
-      protected: false,
-      restricted: true,
-    ),
-  ];
 
 Future<void> _match(
   WidgetTester tester,
@@ -918,7 +224,6 @@ Future<void> _expectClassicOpacity(
 
 UiFixture _readyFixture({
   PlayerStatus? playerState,
-  List<PlayerTrack>? tracks,
   bool useWordmarkArtwork = false,
 }) {
   final player = FixturePlayer();
@@ -939,29 +244,13 @@ UiFixture _readyFixture({
               height: 1080,
               videoCodec: 'h264',
             ),
-      tracks:
-          tracks ??
-          const [
-            PlayerTrack(
-              id: 1,
-              type: PlayerTrackType.audio,
-              selected: true,
-              title: 'English',
-            ),
-            PlayerTrack(
-              id: 2,
-              type: PlayerTrackType.subtitle,
-              selected: false,
-              title: 'English captions',
-            ),
-          ],
     );
   }
   final controller = _VisualController()
-    ..useWordmarkArtwork = useWordmarkArtwork
     ..stage = SetupStage.ready
     ..channels = _channels
-    ..currentChannelId = _channels[1].id;
+    ..currentChannelId = _channels[1].id
+    ..useWordmarkArtwork = useWordmarkArtwork;
   return UiFixture(
     controller: controller,
     player: player,
@@ -969,87 +258,8 @@ UiFixture _readyFixture({
   );
 }
 
-UiFixture _studioFixture() {
-  const programs = [
-    ChannelItem(
-      id: 'cartoon-one',
-      title: 'Moonbase Mystery',
-      showTitle: 'Saturday Signals',
-      duration: Duration(minutes: 30),
-    ),
-    ChannelItem(
-      id: 'cartoon-two',
-      title: 'The Clockwork Cove',
-      showTitle: 'Saturday Signals',
-      duration: Duration(minutes: 30),
-    ),
-    ChannelItem(
-      id: 'cartoon-three',
-      title: 'Rocket Club Rescue',
-      showTitle: 'Junior Orbit',
-      duration: Duration(minutes: 30),
-    ),
-    ChannelItem(
-      id: 'cartoon-four',
-      title: 'Cloud City Picnic',
-      showTitle: 'Junior Orbit',
-      duration: Duration(minutes: 30),
-    ),
-  ];
-  final channel = Channel(
-    id: 'studio-custom',
-    number: 42,
-    name: 'Saturday Cartoons',
-    source: const ManualSource(programs),
-    playbackMode: PlaybackMode.sequential,
-    anchor: DateTime.utc(2026, 1, 15, 3),
-    shuffleSeed: 42,
-  );
-  final controller = _VisualController()
-    ..stage = SetupStage.ready
-    ..channels = [channel]
-    ..availableMedia = [
-      for (final program in programs)
-        PlexMediaItem(
-          id: program.id,
-          title: program.title,
-          type: 'episode',
-          duration: program.duration,
-          grandparentTitle: program.showTitle,
-          parts: [PlexMediaPart(path: '/synthetic/${program.id}')],
-        ),
-    ];
-  return UiFixture(controller: controller, guideClock: () => _fixedNow);
-}
-
 class _VisualController extends FixtureController {
-  Map<String, LibraryScanFact> scanFacts = const {};
   bool useWordmarkArtwork = false;
-  Set<String> _scannedLibraryIds = const {};
-  List<PlexMediaItem>? _scannedMedia;
-
-  @override
-  Map<String, LibraryScanFact> get libraryScanFacts => scanFacts;
-
-  @override
-  Set<String> get libraryScanReadyIds => Set.unmodifiable(
-    scanFacts.entries
-        .where((entry) => entry.value.status == LibraryScanStatus.complete)
-        .map((entry) => entry.key),
-  );
-
-  @override
-  Set<String> get libraryScanRetryIds => Set.unmodifiable(
-    scanFacts.entries
-        .where(
-          (entry) => const {
-            LibraryScanStatus.transientFailure,
-            LibraryScanStatus.cancelled,
-            LibraryScanStatus.idle,
-          }.contains(entry.value.status),
-        )
-        .map((entry) => entry.key),
-  );
 
   @override
   Future<Uint8List?> artworkForPath(Uri path) async =>
@@ -1058,95 +268,6 @@ class _VisualController extends FixtureController {
   @override
   Future<ScheduleIndex> loadScheduleFor(Channel channel) async =>
       buildChannelSchedule(channel, (channel.source as ManualSource).items);
-
-  Future<List<PlexMediaItem>> _scanSyntheticMovies() async => [
-    for (var index = 0; index < 12; index++)
-      PlexMediaItem(
-        id: 'movie-$index',
-        title: 'Synthetic Movie ${index + 1}',
-        type: 'movie',
-        duration: const Duration(minutes: 90),
-        libraryId: 'movies',
-        parts: [PlexMediaPart(path: '/parts/movie-$index')],
-        genres: const ['Drama'],
-        addedAt: DateTime.utc(2026, 1, index + 1),
-      ),
-  ];
-
-  @override
-  Future<bool> scanLibraries(
-    Set<String> ids, {
-    bool retryFailedOnly = false,
-  }) async {
-    if (ids.isEmpty) return false;
-    _scannedLibraryIds = Set.unmodifiable(ids);
-    _scannedMedia = List.unmodifiable(await _scanSyntheticMovies());
-    scanFacts = {
-      for (final id in ids)
-        id: const LibraryScanFact(
-          status: LibraryScanStatus.complete,
-          completedPages: 1,
-          completedItems: 12,
-          totalItems: 12,
-        ),
-    };
-    libraryScanStatus = LibraryScanStatus.complete;
-    libraryScanCompletedPages = 1;
-    libraryScanCompletedItems = 12;
-    libraryScanTotalItems = 12;
-    notifyListeners();
-    return true;
-  }
-
-  @override
-  Future<bool> commitLibraryScan(Set<String> readyIds) async {
-    final scanned = _scannedMedia;
-    if (scanned == null ||
-        readyIds.isEmpty ||
-        !_scannedLibraryIds.containsAll(readyIds)) {
-      return false;
-    }
-    selectedLibraryIds = Set.unmodifiable(readyIds);
-    availableMedia = List.unmodifiable(scanned);
-    notifyListeners();
-    return true;
-  }
-
-  @override
-  Future<bool> setLibraries(Set<String> ids) async {
-    if (!await scanLibraries(ids)) return false;
-    if (libraryScanRetryIds.isNotEmpty) return false;
-    return commitLibraryScan(ids);
-  }
-}
-
-class _PendingVisualController extends _VisualController {
-  final _apply = Completer<void>();
-
-  @override
-  Future<ChannelPlanApplyResult> applyReviewedChannelPlan(
-    List<Channel> planned, {
-    required ChannelBuildMode mode,
-    required List<Channel> expectedBase,
-  }) async {
-    await _apply.future;
-    return super.applyReviewedChannelPlan(
-      planned,
-      mode: mode,
-      expectedBase: expectedBase,
-    );
-  }
-
-  void finishApply() => _apply.complete();
-}
-
-Future<void> _openChannelSetupApply(WidgetTester tester) async {
-  await tester.tap(find.byKey(const Key('scan-selected-libraries')));
-  await tester.pumpAndSettle();
-  await tester.tap(find.byKey(const Key('review-channels')));
-  await tester.pumpAndSettle();
-  await tester.tap(find.byKey(const Key('apply-reviewed-lineup')));
-  await tester.pump();
 }
 
 final _channels = List.generate(

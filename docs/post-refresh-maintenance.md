@@ -41,4 +41,13 @@ existing accessible-text regression, full theme shell suite and shared
 navigation suite pass, with formatting, analysis and diff checks clean. No
 golden or dependency changes were made. The contact sheet and these checks are
 portable evidence only; no physical Windows build or launch validation is
-implied. The golden-reduction and dependency-assessment units remain pending.
+implied.
+
+The golden reduction is complete in the current checkout: 30 screenshot
+assertions and baselines became 5 representative 1920×1080 snapshots; 23 UI
+golden cases were removed, 25 obsolete PNGs were deleted, and the two Guide
+opacity cases remain as non-baseline aperture checks. The retained baselines
+were refreshed and rerun without `--update-goldens` using the pinned Flutter
+SDK, `TZ=America/New_York`, and macOS. The final five renders were reviewed in
+one contact sheet. No full-suite run or physical Windows validation is implied;
+the dependency-assessment unit remains pending.
