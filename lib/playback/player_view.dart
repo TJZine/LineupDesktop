@@ -1054,7 +1054,9 @@ class _ChannelBug extends StatelessWidget {
   Widget build(BuildContext context) {
     final roles = LineupTheme.of(context);
     final size = MediaQuery.sizeOf(context);
-    final scale = osdPresentation ? LineupLayout.scaleFor(size) : 1.0;
+    final scale = LineupLayout.scaleFor(size);
+    final inheritedLabelSize =
+        Theme.of(context).textTheme.labelLarge?.fontSize ?? 14;
     return Semantics(
       container: true,
       button: false,
@@ -1077,7 +1079,7 @@ class _ChannelBug extends StatelessWidget {
               color: roles.primaryText,
               fontSize: osdPresentation
                   ? (size.width >= 1920 && size.height >= 900 ? 16 : 14) * scale
-                  : null,
+                  : inheritedLabelSize * scale,
               fontWeight: osdPresentation ? FontWeight.w500 : FontWeight.w800,
             ),
           ),
@@ -1101,23 +1103,22 @@ class _NowPlaying extends StatelessWidget {
     final telemetry = controller.telemetry;
     final roles = LineupTheme.of(context);
     final size = MediaQuery.sizeOf(context);
+    final scale = LineupLayout.scaleFor(size);
     final compact =
-        LineupLayout.isCompactWidth(size.width) || size.height < 650;
-    final shelfWidth = size.width >= 2560
-        ? size.width.clamp(0, 1500).toDouble()
-        : (size.width * 0.95).clamp(0, 1180).toDouble();
+        LineupLayout.isCompactWidth(size.width) || size.height < 650 * scale;
+    final shelfWidth = (size.width * 0.95).clamp(0, 1180 * scale).toDouble();
     final shelfHeight = compact
         ? (size.height * (item.cast.isEmpty ? 0.56 : 0.63))
-              .clamp(300, 380)
+              .clamp(300 * scale, 380 * scale)
               .toDouble()
         : (size.height * (item.cast.isEmpty ? 0.50 : 0.54))
               .clamp(
-                item.cast.isEmpty ? 380 : 432,
-                item.cast.isEmpty ? 560 : 580,
+                (item.cast.isEmpty ? 380 : 432) * scale,
+                (item.cast.isEmpty ? 560 : 580) * scale,
               )
               .toDouble();
-    final denseShelf = compact || shelfHeight < 440;
-    final showPoster = size.width >= 700 && size.height >= 500;
+    final denseShelf = compact || shelfHeight < 440 * scale;
+    final showPoster = size.width >= 700 * scale && size.height >= 500 * scale;
     final preferLogo = controller.lineup.settings.preferClearLogos;
     final posterPath = _artworkPath(item, GuideArtworkKind.poster);
     final logoPath = _artworkPath(item, GuideArtworkKind.clearLogo);
@@ -1228,11 +1229,14 @@ class _NowPlaying extends StatelessWidget {
                   clipBehavior: Clip.antiAlias,
                   decoration: BoxDecoration(
                     border: Border(
-                      top: BorderSide(color: roles.subtleBorder),
-                      right: BorderSide(color: roles.subtleBorder),
+                      top: BorderSide(color: roles.subtleBorder, width: scale),
+                      right: BorderSide(
+                        color: roles.subtleBorder,
+                        width: scale,
+                      ),
                     ),
                     borderRadius: BorderRadius.only(
-                      topRight: const Radius.circular(16),
+                      topRight: Radius.circular(16 * scale),
                     ),
                     gradient: LinearGradient(
                       begin: Alignment.topLeft,
@@ -1267,7 +1271,7 @@ class _NowPlaying extends StatelessWidget {
                               Align(
                                 alignment: Alignment.centerRight,
                                 child: SizedBox(
-                                  width: compact ? 48 : 64,
+                                  width: (compact ? 48 : 64) * scale,
                                   child: DecoratedBox(
                                     decoration: BoxDecoration(
                                       gradient: LinearGradient(
@@ -1287,10 +1291,10 @@ class _NowPlaying extends StatelessWidget {
                         : null,
                     content: Padding(
                       padding: EdgeInsets.fromLTRB(
-                        denseShelf ? 18 : 28,
-                        denseShelf ? 16 : 24,
-                        denseShelf ? 18 : 28,
-                        denseShelf ? 14 : 20,
+                        (denseShelf ? 18 : 28) * scale,
+                        (denseShelf ? 16 : 24) * scale,
+                        (denseShelf ? 18 : 28) * scale,
+                        (denseShelf ? 14 : 20) * scale,
                       ),
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
@@ -1324,7 +1328,9 @@ class _NowPlaying extends StatelessWidget {
                                       compact: denseShelf,
                                     ),
                                   if (episodeFacts.isNotEmpty) ...[
-                                    SizedBox(height: denseShelf ? 8 : 10),
+                                    SizedBox(
+                                      height: (denseShelf ? 8 : 10) * scale,
+                                    ),
                                     Text(
                                       episodeFacts,
                                       key: const Key(
@@ -1337,7 +1343,9 @@ class _NowPlaying extends StatelessWidget {
                                     ),
                                   ],
                                   if (editorial.isNotEmpty) ...[
-                                    SizedBox(height: denseShelf ? 8 : 10),
+                                    SizedBox(
+                                      height: (denseShelf ? 8 : 10) * scale,
+                                    ),
                                     Text(
                                       editorial,
                                       key: const Key(
@@ -1352,13 +1360,13 @@ class _NowPlaying extends StatelessWidget {
                                     ),
                                   ],
                                   if (!compact && badges.isNotEmpty) ...[
-                                    const SizedBox(height: 14),
+                                    SizedBox(height: 14 * scale),
                                     Wrap(
                                       key: const Key(
                                         'player-now-playing-badges',
                                       ),
-                                      spacing: 8,
-                                      runSpacing: 8,
+                                      spacing: 8 * scale,
+                                      runSpacing: 8 * scale,
                                       children: [
                                         for (final badge in badges)
                                           _NowPlayingBadge(label: badge),
@@ -1366,7 +1374,9 @@ class _NowPlaying extends StatelessWidget {
                                     ),
                                   ],
                                   if (!compact && playbackFacts != null) ...[
-                                    SizedBox(height: denseShelf ? 8 : 10),
+                                    SizedBox(
+                                      height: (denseShelf ? 8 : 10) * scale,
+                                    ),
                                     Text(
                                       playbackFacts,
                                       key: const Key(
@@ -1381,7 +1391,9 @@ class _NowPlaying extends StatelessWidget {
                                     ),
                                   ],
                                   if (item.summary case final summary?) ...[
-                                    SizedBox(height: denseShelf ? 10 : 14),
+                                    SizedBox(
+                                      height: (denseShelf ? 10 : 14) * scale,
+                                    ),
                                     Text(
                                       summary,
                                       key: const Key(
@@ -1396,12 +1408,21 @@ class _NowPlaying extends StatelessWidget {
                                           .bodyLarge
                                           ?.copyWith(
                                             color: roles.primaryText,
+                                            fontSize:
+                                                (Theme.of(context)
+                                                        .textTheme
+                                                        .bodyLarge
+                                                        ?.fontSize ??
+                                                    16) *
+                                                scale,
                                             height: 1.45,
                                           ),
                                     ),
                                   ],
                                   if (item.cast.isNotEmpty) ...[
-                                    SizedBox(height: denseShelf ? 10 : 14),
+                                    SizedBox(
+                                      height: (denseShelf ? 10 : 14) * scale,
+                                    ),
                                     _NowPlayingCast(
                                       controller: controller,
                                       cast: item.cast,
@@ -1413,15 +1434,15 @@ class _NowPlaying extends StatelessWidget {
                               ),
                             ),
                           ),
-                          const SizedBox(height: 16),
+                          SizedBox(height: 16 * scale),
                           LinearProgressIndicator(
                             key: const Key('player-now-playing-progress'),
                             value: progress,
-                            minHeight: 5,
+                            minHeight: 5 * scale,
                             color: roles.progressFill,
                             backgroundColor: roles.progressTrack,
                           ),
-                          const SizedBox(height: 8),
+                          SizedBox(height: 8 * scale),
                           Text(
                             playbackTime,
                             key: const Key('player-now-playing-time'),
@@ -1441,8 +1462,10 @@ class _NowPlaying extends StatelessWidget {
         ),
         if (channel != null)
           Positioned(
-            top: 24,
-            right: (size.width * 0.05).clamp(24.0, 96.0),
+            top: 24 * scale,
+            right: (size.width * 0.05)
+                .clamp(24.0 * scale, 96.0 * scale)
+                .toDouble(),
             child: _ChannelBug(
               key: const Key('player-now-playing-channel-bug'),
               channel: channel,
@@ -1464,38 +1487,43 @@ class _NowPlayingShelfLayout extends StatelessWidget {
   final Widget? poster;
 
   @override
-  Widget build(BuildContext context) => ConstrainedBox(
-    constraints: BoxConstraints(maxHeight: maxHeight - 1),
-    child: Stack(
-      children: [
-        Padding(
-          padding: EdgeInsets.only(
-            left: poster == null
-                ? 0
-                : (maxHeight * 2 / 3).clamp(190, 374).toDouble(),
+  Widget build(BuildContext context) {
+    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
+    final posterWidth = poster == null
+        ? 0.0
+        : (maxHeight * 2 / 3).clamp(190 * scale, 374 * scale).toDouble();
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxHeight: maxHeight - scale),
+      child: Stack(
+        children: [
+          Padding(
+            padding: EdgeInsets.only(left: posterWidth),
+            child: content,
           ),
-          child: content,
-        ),
-        if (poster != null)
-          Positioned(
-            left: 0,
-            top: 0,
-            bottom: 0,
-            width: (maxHeight * 2 / 3).clamp(190, 374).toDouble(),
-            child: poster!,
-          ),
-      ],
-    ),
-  );
+          if (poster != null)
+            Positioned(
+              left: 0,
+              top: 0,
+              bottom: 0,
+              width: posterWidth,
+              child: poster!,
+            ),
+        ],
+      ),
+    );
+  }
 }
 
 TextStyle? _nowPlayingSecondaryStyle(
   BuildContext context, {
   required bool dense,
-}) => Theme.of(context).textTheme.bodyMedium?.copyWith(
-  color: LineupTheme.of(context).primaryText.withValues(alpha: 0.88),
-  fontSize: dense ? 14 : 16,
-);
+}) {
+  final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
+  return Theme.of(context).textTheme.bodyMedium?.copyWith(
+    color: LineupTheme.of(context).primaryText.withValues(alpha: 0.88),
+    fontSize: (dense ? 14 : 16) * scale,
+  );
+}
 
 class _NowPlayingIdentity extends StatefulWidget {
   const _NowPlayingIdentity({
@@ -1525,15 +1553,16 @@ class _NowPlayingIdentityState extends State<_NowPlayingIdentity> {
   Widget build(BuildContext context) => FutureBuilder<Uint8List?>(
     future: _logo,
     builder: (context, snapshot) {
+      final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
       final bytes = snapshot.data;
       final item = widget.program.scheduled.item;
       final showTitle = item.showTitle?.trim();
       final logoMaxHeight = widget.hasCast && widget.compact
-          ? 58.0
+          ? 58.0 * scale
           : widget.compact
-          ? 84.0
-          : 132.0;
-      final logoMaxWidth = widget.compact ? 360.0 : 600.0;
+          ? 84.0 * scale
+          : 132.0 * scale;
+      final logoMaxWidth = (widget.compact ? 360.0 : 600.0) * scale;
       return LayoutBuilder(
         builder: (context, available) {
           final logoFallback = OverflowBox(
@@ -1570,11 +1599,14 @@ class _NowPlayingIdentityState extends State<_NowPlayingIdentity> {
                     imageKey: const Key('player-now-playing-logo'),
                     excludeFromSemantics: true,
                     maximumSize: Size(logoMaxWidth, logoMaxHeight),
-                    minimumVisibleSize: Size(96, widget.compact ? 20 : 28),
+                    minimumVisibleSize: Size(
+                      96 * scale,
+                      (widget.compact ? 20 : 28) * scale,
+                    ),
                     fallback: logoFallback,
                   ),
                 ),
-              SizedBox(height: widget.compact ? 8 : 12),
+              SizedBox(height: (widget.compact ? 8 : 12) * scale),
               Text(
                 widget.program.scheduled.item.title,
                 key: const Key('player-now-playing-title'),
@@ -1597,42 +1629,47 @@ class _NowPlayingTitle extends StatelessWidget {
   final bool compact;
 
   @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      if (item.showTitle != null) ...[
+  Widget build(BuildContext context) {
+    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (item.showTitle != null) ...[
+          Text(
+            item.showTitle!.trim(),
+            key: const Key('player-now-playing-series'),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: _nowPlayingSeriesStyle(context, dense: compact),
+          ),
+          SizedBox(height: 6 * scale),
+        ],
         Text(
-          item.showTitle!.trim(),
-          key: const Key('player-now-playing-series'),
-          maxLines: 1,
+          item.title,
+          key: const Key('player-now-playing-title'),
+          maxLines: 2,
           overflow: TextOverflow.ellipsis,
-          style: _nowPlayingSeriesStyle(context, dense: compact),
+          style: _nowPlayingTitleStyle(context, dense: compact),
         ),
-        const SizedBox(height: 6),
       ],
-      Text(
-        item.title,
-        key: const Key('player-now-playing-title'),
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-        style: _nowPlayingTitleStyle(context, dense: compact),
-      ),
-    ],
-  );
+    );
+  }
 }
 
 TextStyle? _nowPlayingSeriesStyle(
   BuildContext context, {
   required bool dense,
-}) => _nowPlayingSecondaryStyle(
-  context,
-  dense: dense,
-)?.copyWith(fontSize: dense ? 16 : 20, fontWeight: FontWeight.w500);
+}) => _nowPlayingSecondaryStyle(context, dense: dense)?.copyWith(
+  fontSize:
+      (dense ? 16 : 20) * LineupLayout.scaleFor(MediaQuery.sizeOf(context)),
+  fontWeight: FontWeight.w500,
+);
 
 TextStyle _nowPlayingTitleStyle(BuildContext context, {required bool dense}) =>
     (Theme.of(context).textTheme.bodyLarge ?? const TextStyle()).copyWith(
       color: LineupTheme.of(context).primaryText,
-      fontSize: dense ? 24 : 28,
+      fontSize:
+          (dense ? 24 : 28) * LineupLayout.scaleFor(MediaQuery.sizeOf(context)),
       fontWeight: FontWeight.w600,
     );
 
@@ -1698,10 +1735,17 @@ class _ArtworkFallback extends StatelessWidget {
   final LineupThemeRoles roles;
 
   @override
-  Widget build(BuildContext context) => ColoredBox(
-    color: roles.primarySurface,
-    child: Icon(Icons.movie_outlined, size: 64, color: roles.mutedText),
-  );
+  Widget build(BuildContext context) {
+    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
+    return ColoredBox(
+      color: roles.primarySurface,
+      child: Icon(
+        Icons.movie_outlined,
+        size: 64 * scale,
+        color: roles.mutedText,
+      ),
+    );
+  }
 }
 
 class _NowPlayingBadge extends StatelessWidget {
@@ -1712,6 +1756,7 @@ class _NowPlayingBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final roles = LineupTheme.of(context);
+    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
     return DecoratedBox(
       decoration: BoxDecoration(
         color: roles.elevatedSurface.withValues(alpha: 0.82),
@@ -1719,8 +1764,18 @@ class _NowPlayingBadge extends StatelessWidget {
         borderRadius: BorderRadius.circular(999),
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-        child: Text(label, style: Theme.of(context).textTheme.labelMedium),
+        padding: EdgeInsets.symmetric(
+          horizontal: 10 * scale,
+          vertical: 4 * scale,
+        ),
+        child: Text(
+          label,
+          style: Theme.of(context).textTheme.labelMedium?.copyWith(
+            fontSize:
+                (Theme.of(context).textTheme.labelMedium?.fontSize ?? 12) *
+                scale,
+          ),
+        ),
       ),
     );
   }
@@ -1742,13 +1797,14 @@ class _NowPlayingCast extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final roles = LineupTheme.of(context);
+    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
     final limit = compact ? 4 : 5;
     final visible = cast.take(limit).toList(growable: false);
     final hidden = cast.length - visible.length;
-    final diameter = dense ? 40.0 : 46.0;
-    final columnLimit = dense ? 72.0 : 104.0;
+    final diameter = (dense ? 40.0 : 46.0) * scale;
+    final columnLimit = (dense ? 72.0 : 104.0) * scale;
     final columnCount = visible.length + (hidden > 0 ? 1 : 0);
-    final spacing = math.max(0, columnCount - 1) * 8.0;
+    final spacing = math.max(0, columnCount - 1) * 8.0 * scale;
     return Column(
       key: const Key('player-now-playing-cast'),
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1791,7 +1847,7 @@ class _NowPlayingCast extends StatelessWidget {
                         Expanded(
                           child: Padding(
                             padding: EdgeInsets.only(
-                              right: child == children.last ? 0 : 8,
+                              right: child == children.last ? 0 : 8 * scale,
                             ),
                             child: child,
                           ),
@@ -1803,7 +1859,7 @@ class _NowPlayingCast extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       for (final (index, child) in children.indexed) ...[
-                        if (index > 0) const SizedBox(width: 8),
+                        if (index > 0) SizedBox(width: 8 * scale),
                         child,
                       ],
                     ],
@@ -1837,11 +1893,12 @@ class _NowPlayingCastColumn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
     final portrait = member.portrait;
     final nameStyle = _nowPlayingSecondaryStyle(
       context,
       dense: dense,
-    )?.copyWith(fontSize: dense ? 12 : 14, height: 1.3);
+    )?.copyWith(fontSize: (dense ? 12 : 14) * scale, height: 1.3);
     var displayName = member.name;
     final words = member.name.trim().split(RegExp(r'\s+'));
     if (words.length > 2) {
@@ -1887,11 +1944,14 @@ class _NowPlayingCastColumn extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(height: 6),
+        SizedBox(height: 6 * scale),
         SizedBox(
           width: width,
           height:
-              MediaQuery.textScalerOf(context).scale(dense ? 12 : 14) * 1.3 * 2,
+              MediaQuery.textScalerOf(context)
+                  .scale((dense ? 12 : 14) * scale) *
+              1.3 *
+              2,
           child: Tooltip(
             message: member.name,
             excludeFromSemantics: true,
@@ -1924,33 +1984,38 @@ class _NowPlayingCastMore extends StatelessWidget {
   final LineupThemeRoles roles;
 
   @override
-  Widget build(BuildContext context) => Column(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      SizedBox.square(
-        dimension: diameter,
-        child: DecoratedBox(
-          key: const Key('player-now-playing-cast-more'),
-          decoration: BoxDecoration(
-            color: roles.elevatedSurface,
-            border: Border.all(color: roles.subtleBorder),
-            shape: BoxShape.circle,
-          ),
-          child: Center(
-            child: Text(
-              '+$hidden',
-              style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                color: roles.primaryText,
-                fontWeight: FontWeight.w800,
+  Widget build(BuildContext context) {
+    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
+    final labelSize = Theme.of(context).textTheme.labelLarge?.fontSize ?? 14;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox.square(
+          dimension: diameter,
+          child: DecoratedBox(
+            key: const Key('player-now-playing-cast-more'),
+            decoration: BoxDecoration(
+              color: roles.elevatedSurface,
+              border: Border.all(color: roles.subtleBorder),
+              shape: BoxShape.circle,
+            ),
+            child: Center(
+              child: Text(
+                '+$hidden',
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  color: roles.primaryText,
+                  fontSize: labelSize * scale,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
             ),
           ),
         ),
-      ),
-      const SizedBox(height: 6),
-      SizedBox(width: width, child: const SizedBox.shrink()),
-    ],
-  );
+        SizedBox(height: 6 * scale),
+        SizedBox(width: width, child: const SizedBox.shrink()),
+      ],
+    );
+  }
 }
 
 class _CastFallback extends StatelessWidget {
@@ -1960,11 +2025,14 @@ class _CastFallback extends StatelessWidget {
   final LineupThemeRoles roles;
 
   @override
-  Widget build(BuildContext context) => ColoredBox(
-    key: ValueKey('player-now-playing-cast-fallback-$index'),
-    color: roles.elevatedSurface,
-    child: Icon(Icons.person, color: roles.mutedText),
-  );
+  Widget build(BuildContext context) {
+    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
+    return ColoredBox(
+      key: ValueKey('player-now-playing-cast-fallback-$index'),
+      color: roles.elevatedSurface,
+      child: Icon(Icons.person, size: 24 * scale, color: roles.mutedText),
+    );
+  }
 }
 
 class _MiniGuide extends StatelessWidget {

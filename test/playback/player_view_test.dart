@@ -2999,7 +2999,7 @@ void main() {
           Size(1180, 380),
           Size(1180, 450),
           Size(1180, 540),
-          Size(1500, 560),
+          Size(2360, 1080),
         ],
         dpr2MaxShelf: Size(1180, 540),
       ),
@@ -3010,7 +3010,7 @@ void main() {
           Size(1180, 432),
           Size(1180, 486),
           Size(1180, 580),
-          Size(1500, 580),
+          Size(2360, 1160),
         ],
         dpr2MaxShelf: Size(1180, 580),
       ),
@@ -3037,6 +3037,7 @@ void main() {
         Size(3840, 2160),
       ].indexed) {
         final maxShelf = variant.maxShelves[index];
+        final scale = index == 4 ? 2.0 : 1.0;
         tester.view.physicalSize = viewport;
         await tester.pumpWidget(
           MaterialApp(
@@ -3066,12 +3067,15 @@ void main() {
         );
         expect(shelfSize.width, closeTo(maxShelf.width, 0.01));
         expect(shelfSize.height, lessThanOrEqualTo(maxShelf.height + 0.01));
-        expect(shelfSize.height, greaterThanOrEqualTo(190 * 3 / 2));
+        expect(shelfSize.height, greaterThanOrEqualTo(190 * scale * 3 / 2));
         expect(
           posterSize.width,
-          closeTo((maxShelf.height * 2 / 3).clamp(190, 374), 0.01),
+          closeTo(
+            (maxShelf.height * 2 / 3).clamp(190 * scale, 374 * scale),
+            0.01,
+          ),
         );
-        expect(posterSize.height, closeTo(shelfSize.height, 1.01));
+        expect(posterSize.height, closeTo(shelfSize.height, scale + 0.01));
         expect(
           tester
               .getRect(find.byKey(const Key('player-now-playing-title')).last)

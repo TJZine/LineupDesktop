@@ -196,3 +196,24 @@ a logical3840x2160 viewport with DPR2 and expects the retired1.35 font cap.
 The remaining track-panel scaling group must resolve this; full-suite success
 is not claimed. Physical Windows validation remains outstanding. No independent
 review was run or is specifically recommended for this presentation-only group.
+
+## Group 4b — Now Playing
+
+Luna task `01a09838-016b-74a0-a6b2-591415e44758` returned its presentation
+lease. The attached shelf, poster limits, typography, cast columns and name
+measurements now scale from the1080 reference; the separate1500px shelf cap
+is removed. Detail content still scrolls within a content-driven height cap,
+with progress/time outside the scroll. Artwork lifetime, name abbreviation,
+metadata and transitions remain unchanged.
+
+Astra updated the existing native4K shelf/poster expectations to match the
+approved proportional dimensions; all13 Now Playing behavior checks passed.
+Worker clear-logo, navigation and OSD checks passed, with20 portable Now Playing
+captures across sizes and content states. Astra verified four Now Playing and
+two OSD normal1080 pairs byte-identical, and inspected final native4K and enlarged
+artwork/cast shelves. [Evidence](design/desktop-ui/scaling/group-4b-evidence.json)
+records final hashes and checks. The known track-panel cap assertion remains
+for the drawer group; full PlayerView success is not yet claimed.
+
+Physical Windows validation remains outstanding. No independent review was run
+or is specifically recommended for this bounded presentation-only group.
