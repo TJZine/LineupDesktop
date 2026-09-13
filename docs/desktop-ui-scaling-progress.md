@@ -172,3 +172,27 @@ This is portable presentation evidence, not physical Windows validation. Native
 video layering, Windows fonts/input and live monitor-DPI transitions remain
 unvalidated. Independent review was not run and is not specifically recommended
 for this presentation-only group.
+
+## Group 4a — Player controls
+
+Luna task `01a09815-dfcd-7a91-8982-fdc7eb3652e0` returned its OSD presentation
+lease after a follow-up for initially missed option-action scaling. Identity,
+action controls, spacing, caller-owned artwork limits, channel badge and progress
+geometry now follow the shared viewport scale. Enlarged option actions can wrap.
+The locked gradient, playback operations and artwork behavior remain unchanged;
+Now Playing's shared badge branch is preserved.
+
+Final focused checks passed: 18 OSD, one OSD clear-logo, two Guide clear-logo and
+six navigation checks, plus analysis, format and diff checks. Twenty-six portable
+capture cases cover normal1080,1440,native4K artwork, enlarged text at DPR1/2,
+DVR, long track labels, disabled subtitles and compact windows. Astra confirmed
+six normal1080 captures byte-identical and inspected final native4K actions and
+enlarged DVR. [Evidence hashes](design/desktop-ui/scaling/group-4a-evidence.json)
+identify the sources/captures.
+
+The earlier full PlayerView run had66 passes and one track-panel font assertion
+failure. Astra reproduced that failure on the pre-OSD commit: the test injects
+a logical3840x2160 viewport with DPR2 and expects the retired1.35 font cap.
+The remaining track-panel scaling group must resolve this; full-suite success
+is not claimed. Physical Windows validation remains outstanding. No independent
+review was run or is specifically recommended for this presentation-only group.

@@ -567,7 +567,10 @@ class _Osd extends StatelessWidget {
   Widget build(BuildContext context) {
     final roles = LineupTheme.of(context);
     final size = MediaQuery.sizeOf(context);
-    final horizontalInset = (size.width * 0.05).clamp(24.0, 96.0);
+    final scale = LineupLayout.scaleFor(size);
+    final horizontalInset = (size.width * 0.05)
+        .clamp(24.0 * scale, 96.0 * scale)
+        .toDouble();
     final channel = controller.currentChannel;
     final program = controller.currentProgram;
     final next = controller.nextProgram;
@@ -599,7 +602,11 @@ class _Osd extends StatelessWidget {
       IconButton(
         tooltip: 'Previous channel',
         onPressed: unsupported ? null : controller.previousChannel,
-        iconSize: 28,
+        constraints: scale > 1
+            ? BoxConstraints(minWidth: 48 * scale, minHeight: 48 * scale)
+            : null,
+        padding: scale > 1 ? EdgeInsets.all(8 * scale) : null,
+        iconSize: 28 * scale,
         icon: const Icon(Icons.skip_previous),
       ),
       IconButton(
@@ -607,7 +614,11 @@ class _Osd extends StatelessWidget {
             ? 'Pause'
             : 'Play',
         onPressed: unsupported ? null : controller.togglePlayback,
-        iconSize: 36,
+        constraints: scale > 1
+            ? BoxConstraints(minWidth: 48 * scale, minHeight: 48 * scale)
+            : null,
+        padding: scale > 1 ? EdgeInsets.all(8 * scale) : null,
+        iconSize: 36 * scale,
         icon: Icon(
           controller.status.state == PlayerState.playing
               ? Icons.pause
@@ -617,7 +628,11 @@ class _Osd extends StatelessWidget {
       IconButton(
         tooltip: 'Next channel',
         onPressed: unsupported ? null : controller.nextChannel,
-        iconSize: 28,
+        constraints: scale > 1
+            ? BoxConstraints(minWidth: 48 * scale, minHeight: 48 * scale)
+            : null,
+        padding: scale > 1 ? EdgeInsets.all(8 * scale) : null,
+        iconSize: 28 * scale,
         icon: const Icon(Icons.skip_next),
       ),
     ];
@@ -682,6 +697,11 @@ class _Osd extends StatelessWidget {
             focusNode: menuFocus,
             tooltip: 'Open Lineup menu',
             onPressed: () => openMenu!(invokerContext, menuFocus),
+            constraints: scale > 1
+                ? BoxConstraints(minWidth: 48 * scale, minHeight: 48 * scale)
+                : null,
+            padding: scale > 1 ? EdgeInsets.all(8 * scale) : null,
+            iconSize: 24 * scale,
             icon: const Icon(Icons.menu),
           ),
         ),
@@ -692,6 +712,11 @@ class _Osd extends StatelessWidget {
             ? 'Exit fullscreen'
             : 'Fullscreen',
         onPressed: unsupported ? null : controller.toggleFullscreen,
+        constraints: scale > 1
+            ? BoxConstraints(minWidth: 48 * scale, minHeight: 48 * scale)
+            : null,
+        padding: scale > 1 ? EdgeInsets.all(8 * scale) : null,
+        iconSize: 24 * scale,
         icon: Icon(
           controller.fullscreen ? Icons.fullscreen_exit : Icons.fullscreen,
         ),
@@ -732,15 +757,18 @@ class _Osd extends StatelessWidget {
             fallback: _OsdTitle(title: primaryTitle),
             clearLogo: true,
             logoMaximumSize: Size(
-              size.width >= 1920 ? 520 : 360,
-              size.height >= 900 ? 128 : 72,
+              (size.width >= 1920 ? 520 : 360) * scale,
+              (size.height >= 900 ? 128 : 72) * scale,
             ),
-            logoMinimumVisibleSize: Size(96, size.height >= 900 ? 28 : 24),
+            logoMinimumVisibleSize: Size(
+              96 * scale,
+              (size.height >= 900 ? 28 : 24) * scale,
+            ),
           )
         else
           _OsdTitle(title: primaryTitle),
         if (statusFacts.isNotEmpty) ...[
-          const SizedBox(height: 8),
+          SizedBox(height: 8 * scale),
           Text(
             statusFacts.join(' • '),
             key: const Key('player-osd-status'),
@@ -748,7 +776,7 @@ class _Osd extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
               color: roles.primaryText.withValues(alpha: 0.88),
-              fontSize: largeDesktop ? 16 : 14,
+              fontSize: (largeDesktop ? 16 : 14) * scale,
               fontWeight: FontWeight.w400,
             ),
           ),
@@ -764,7 +792,7 @@ class _Osd extends StatelessWidget {
           );
     final osdSecondaryStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
       color: roles.primaryText.withValues(alpha: 0.88),
-      fontSize: horizontal ? (largeDesktop ? 16 : 14) : null,
+      fontSize: horizontal ? (largeDesktop ? 16 : 14) * scale : null,
       fontWeight: FontWeight.w400,
     );
     final progress = Row(
@@ -781,7 +809,7 @@ class _Osd extends StatelessWidget {
           ),
         ),
         if (next != null) ...[
-          const SizedBox(width: 16),
+          SizedBox(width: 16 * scale),
           Expanded(
             child: Align(
               alignment: Alignment.centerRight,
@@ -801,26 +829,47 @@ class _Osd extends StatelessWidget {
     );
     Widget actionGroup(List<Widget> children) =>
         Row(mainAxisSize: MainAxisSize.min, children: children);
-    final groupedActions = Row(
-      key: const Key('player-osd-action-groups'),
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (dvrControlsEnabled) ...[
-          actionGroup(transportActions),
-          const SizedBox(width: 16),
-        ],
-        actionGroup(optionActions),
-        const SizedBox(width: 16),
-        actionGroup(windowActions),
-      ],
-    );
+    final wrapActions = MediaQuery.textScalerOf(context).scale(1) > 1;
+    final optionGroup = wrapActions
+        ? Wrap(
+            spacing: 8 * scale,
+            runSpacing: 6 * scale,
+            children: optionActions,
+          )
+        : actionGroup(optionActions);
+    final groupedActions = wrapActions
+        ? Wrap(
+            key: const Key('player-osd-action-groups'),
+            alignment: WrapAlignment.end,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 16 * scale,
+            runSpacing: 6 * scale,
+            children: [
+              if (dvrControlsEnabled) actionGroup(transportActions),
+              optionGroup,
+              actionGroup(windowActions),
+            ],
+          )
+        : Row(
+            key: const Key('player-osd-action-groups'),
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (dvrControlsEnabled) ...[
+                actionGroup(transportActions),
+                SizedBox(width: 16 * scale),
+              ],
+              optionGroup,
+              SizedBox(width: 16 * scale),
+              actionGroup(windowActions),
+            ],
+          );
     final progressLine = Positioned(
       key: const Key('player-osd-progress-line'),
       left: 0,
       right: 0,
       bottom: 0,
       child: SizedBox(
-        height: 40,
+        height: 40 * scale,
         child: Semantics(
           label: 'Playback progress',
           value:
@@ -831,7 +880,7 @@ class _Osd extends StatelessWidget {
               Align(
                 alignment: Alignment.bottomCenter,
                 child: SizedBox(
-                  height: 4,
+                  height: 4 * scale,
                   child: LinearProgressIndicator(
                     value: progressValue,
                     color: roles.progressFill,
@@ -842,7 +891,7 @@ class _Osd extends StatelessWidget {
               if (dvrControlsEnabled)
                 SliderTheme(
                   data: SliderTheme.of(context).copyWith(
-                    trackHeight: 4,
+                    trackHeight: 4 * scale,
                     activeTrackColor: Colors.transparent,
                     inactiveTrackColor: Colors.transparent,
                     thumbShape: SliderComponentShape.noThumb,
@@ -876,10 +925,10 @@ class _Osd extends StatelessWidget {
               padding: EdgeInsets.fromLTRB(
                 horizontalInset,
                 horizontal
-                    ? (size.height >= 900 ? 44 : 20)
-                    : (size.height >= 720 ? 56 : 40),
+                    ? (size.height >= 900 ? 44 : 20) * scale
+                    : (size.height >= 720 ? 56 : 40) * scale,
                 horizontalInset,
-                12 + (dvrControlsEnabled ? 40 : 0),
+                12 * scale + (dvrControlsEnabled ? 40 * scale : 0),
               ),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
@@ -907,23 +956,33 @@ class _Osd extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
                           Expanded(child: identity),
-                          const SizedBox(width: 24),
-                          groupedActions,
+                          SizedBox(width: 24 * scale),
+                          if (wrapActions)
+                            Flexible(
+                              child: Align(
+                                alignment: Alignment.bottomRight,
+                                child: groupedActions,
+                              ),
+                            )
+                          else
+                            groupedActions,
                         ],
                       )
                     else ...[
                       identity,
-                      const SizedBox(height: 6),
+                      SizedBox(height: 6 * scale),
                       Align(
                         alignment: Alignment.centerRight,
-                        child: Row(
-                          key: const Key('player-osd-stacked-controls'),
-                          mainAxisSize: MainAxisSize.min,
-                          children: [groupedActions],
-                        ),
+                        child: wrapActions
+                            ? groupedActions
+                            : Row(
+                                key: const Key('player-osd-stacked-controls'),
+                                mainAxisSize: MainAxisSize.min,
+                                children: [groupedActions],
+                              ),
                       ),
                     ],
-                    const SizedBox(height: 10),
+                    SizedBox(height: 10 * scale),
                     progress,
                   ],
                 ),
@@ -933,7 +992,7 @@ class _Osd extends StatelessWidget {
         ),
         if (channel != null)
           Positioned(
-            top: 24,
+            top: 24 * scale,
             right: horizontalInset,
             child: _ChannelBug(
               key: const Key('player-osd-channel-bug'),
@@ -955,6 +1014,7 @@ class _OsdTitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.sizeOf(context);
+    final scale = LineupLayout.scaleFor(size);
     final largeDesktop = size.width >= 1920 && size.height >= 900;
     final horizontal = size.width >= 1200 && size.height >= 640;
     return Semantics(
@@ -969,9 +1029,9 @@ class _OsdTitle extends StatelessWidget {
         style: Theme.of(context).textTheme.titleLarge?.copyWith(
           color: LineupTheme.of(context).primaryText,
           fontSize: largeDesktop
-              ? 28
+              ? 28 * scale
               : horizontal
-              ? 24
+              ? 24 * scale
               : null,
           fontWeight: FontWeight.w600,
         ),
@@ -994,6 +1054,7 @@ class _ChannelBug extends StatelessWidget {
   Widget build(BuildContext context) {
     final roles = LineupTheme.of(context);
     final size = MediaQuery.sizeOf(context);
+    final scale = osdPresentation ? LineupLayout.scaleFor(size) : 1.0;
     return Semantics(
       container: true,
       button: false,
@@ -1006,13 +1067,16 @@ class _ChannelBug extends StatelessWidget {
           border: Border.all(color: roles.subtleBorder),
         ),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+          padding: EdgeInsets.symmetric(
+            horizontal: 12 * scale,
+            vertical: 7 * scale,
+          ),
           child: Text(
             '${channel.number} • ${channel.name}',
             style: Theme.of(context).textTheme.labelLarge?.copyWith(
               color: roles.primaryText,
               fontSize: osdPresentation
-                  ? (size.width >= 1920 && size.height >= 900 ? 16 : 14)
+                  ? (size.width >= 1920 && size.height >= 900 ? 16 : 14) * scale
                   : null,
               fontWeight: osdPresentation ? FontWeight.w500 : FontWeight.w800,
             ),
@@ -3167,31 +3231,41 @@ Widget _osdAction(
 }) {
   final roles = LineupTheme.of(context);
   final size = MediaQuery.sizeOf(context);
+  final scale = LineupLayout.scaleFor(size);
+  final largeDesktop = size.width >= 1920 && size.height >= 900;
   return ConstrainedBox(
-    constraints: BoxConstraints(maxWidth: compact ? 132 : 180),
+    constraints: BoxConstraints(maxWidth: (compact ? 132 : 180) * scale),
     child: Tooltip(
       message: tooltip,
-      child: TextButton.icon(
+      child: TextButton(
         key: key,
         focusNode: focusNode,
         onPressed: onPressed,
-        icon: Icon(icon, size: compact ? 17 : 18),
-        label: Text(
-          label,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: Theme.of(context).textTheme.labelLarge?.copyWith(
-            color: roles.primaryText,
-            fontSize: size.width >= 1920 && size.height >= 900 ? 16 : 14,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
         style: TextButton.styleFrom(
           foregroundColor: roles.primaryText,
-          padding: EdgeInsets.symmetric(horizontal: compact ? 5 : 8),
-          minimumSize: const Size(0, 40),
+          padding: EdgeInsets.symmetric(horizontal: (compact ? 5 : 8) * scale),
+          minimumSize: Size(0, 40 * scale),
           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
           visualDensity: VisualDensity.compact,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: (compact ? 17 : 18) * scale),
+            SizedBox(width: 8 * scale),
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  color: roles.primaryText,
+                  fontSize: (largeDesktop ? 16 : 14) * scale,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     ),
