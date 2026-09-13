@@ -2177,10 +2177,10 @@ class _MiniGuide extends StatelessWidget {
                                         children: [
                                           const Text('Full Guide'),
                                           SizedBox(width: 8 * scale),
-                                          const ExcludeSemantics(
+                                          ExcludeSemantics(
                                             child: Icon(
                                               Icons.arrow_forward,
-                                              size: 16,
+                                              size: 16 * scale,
                                             ),
                                           ),
                                         ],
@@ -2208,8 +2208,11 @@ class _MiniGuide extends StatelessWidget {
                                         children: [
                                           const Text('Close'),
                                           SizedBox(width: 8 * scale),
-                                          const ExcludeSemantics(
-                                            child: Icon(Icons.close, size: 16),
+                                          ExcludeSemantics(
+                                            child: Icon(
+                                              Icons.close,
+                                              size: 16 * scale,
+                                            ),
                                           ),
                                         ],
                                       ),
@@ -2305,7 +2308,10 @@ class _MiniGuide extends StatelessWidget {
                                       padding: EdgeInsets.zero,
                                       onPressed: () =>
                                           controller.moveMiniGuide(-1),
-                                      icon: const Icon(Icons.arrow_upward),
+                                      icon: Icon(
+                                        Icons.arrow_upward,
+                                        size: 24 * scale,
+                                      ),
                                     ),
                                     IconButton(
                                       tooltip: 'Next channel',
@@ -2316,7 +2322,10 @@ class _MiniGuide extends StatelessWidget {
                                       padding: EdgeInsets.zero,
                                       onPressed: () =>
                                           controller.moveMiniGuide(1),
-                                      icon: const Icon(Icons.arrow_downward),
+                                      icon: Icon(
+                                        Icons.arrow_downward,
+                                        size: 24 * scale,
+                                      ),
                                     ),
                                   ],
                                 ),
@@ -2464,10 +2473,10 @@ class _MiniGuideRow extends StatelessWidget {
             style: metadataStyle,
           ),
         if (current != null) ...[
-          const SizedBox(height: 3),
+          SizedBox(height: 3 * scale),
           LinearProgressIndicator(
             value: progress.clamp(0, 1),
-            minHeight: 2,
+            minHeight: 2 * scale,
             color: roles.progressFill,
             backgroundColor: roles.progressTrack.withValues(alpha: 0.72),
             semanticsLabel: 'Program progress',
@@ -2493,9 +2502,22 @@ class _MiniGuideRow extends StatelessWidget {
               ),
             ],
           );
+    final numberText = '${channel.number}';
+    final numberMeasure = TextPainter(
+      text: TextSpan(text: numberText, style: titleStyle),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+      locale: Localizations.maybeLocaleOf(context),
+      maxLines: 1,
+    )..layout();
+    final numberWidth = math.max(
+      (large ? 46.0 : 32.0) * scale,
+      numberMeasure.width + 8 * scale,
+    );
+    numberMeasure.dispose();
     final number = SizedBox(
-      width: (large ? 46.0 : 32.0) * scale,
-      child: Text('${channel.number}', style: titleStyle),
+      width: numberWidth,
+      child: Text(numberText, style: titleStyle),
     );
     return Semantics(
       key: Key('mini-guide-row-${channel.id}'),
@@ -2510,12 +2532,13 @@ class _MiniGuideRow extends StatelessWidget {
           border: Border(
             left: BorderSide(
               color: focused ? roles.focusBorder : Colors.transparent,
-              width: roles.focusBorderWidth,
+              width: roles.focusBorderWidth * scale,
             ),
             bottom: BorderSide(
               color: isLast
                   ? Colors.transparent
                   : roles.primaryText.withValues(alpha: 0.10),
+              width: scale,
             ),
           ),
         ),

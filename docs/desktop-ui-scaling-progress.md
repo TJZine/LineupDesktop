@@ -241,3 +241,22 @@ Portable captures do not establish physical Windows acceptance. No independent
 review was run or is specifically recommended for this presentation-only group.
 Mini Guide, the shared Lineup menu and remaining Player status sizing still
 require the scaling pass before campaign closeout.
+
+## Group 4d — Mini Guide
+
+Luna task `01a0986c-5cb8-7330-9b0c-34c7fddb3862` returned its presentation
+lease after a bounded channel-number follow-up. Header/footer glyphs, progress
+spacing/thickness and row accents now follow the shared reference scale. Channel
+numbers receive their measured width at the actual text scale, retaining original
+column allocation when sufficient. Five-channel composition, selected-row tickers,
+input and the protected fade remain unchanged.
+
+The initial PlayerView/ticker/navigation checks passed81 tests; the final number
+correction passed74 PlayerView/ticker checks, analysis, format and diff checks.
+Astra verified final source/capture hashes and three byte-identical normal1080
+pairs, and inspected corrected720p/text200 and native4K/text200 three-digit rows.
+[Evidence](design/desktop-ui/scaling/group-4d-evidence.json) separates15 correction
+captures from reused1440p/native4K normal-text evidence and superseded captures.
+
+No independent review was run or is specifically recommended for this bounded
+presentation pass. Physical Windows validation remains outstanding.

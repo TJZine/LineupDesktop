@@ -1,0 +1,243 @@
+{
+  "sourceBase": "406b4a3abf9d4ba8164a50c6b7cc920ed91cad6d",
+  "branch": "dev/desktop-ui-refinement",
+  "sourceSha256": "272c5de7dba75e0e92a9a8fd9d8805ab918bcf4a706a54f4f78563ef1fa3566d",
+  "harness": "build/desktop-ui/scaling/miniguide_test.dart",
+  "harnessSha256": "eb504d08a59b5647d55d72277ecb7bcc691b6c520bcbd7bafd43e2db8cdd4ce0",
+  "scope": [
+    "lib/playback/player_view.dart:_MiniGuide.build",
+    "lib/playback/player_view.dart:_MiniGuideRow.build"
+  ],
+  "fadePainterChanged": false,
+  "captures": [
+    {
+      "configuration": "1920x1080 physical, DPR1, text1, default fixture",
+      "path": "build/desktop-ui/scaling/miniguide-final-1920/mini-guide-bright-1920x1080.png",
+      "sha256": "a3462e0563bd40979cd78455bb6d42a2757b504587db76920024e3306aa4b02a"
+    },
+    {
+      "configuration": "1920x1080 physical, DPR1, text1, browsing state",
+      "path": "build/desktop-ui/scaling/miniguide-final-1920/mini-guide-browsing-1920x1080.png",
+      "sha256": "b1848ec0fd918ead94f744095789274bc293fbfd00aeba12536e13a4c1601fbe"
+    },
+    {
+      "configuration": "1920x1080 physical, DPR1, text1, dark scene",
+      "path": "build/desktop-ui/scaling/miniguide-final-1920/mini-guide-dark-1920x1080.png",
+      "sha256": "62d5685e6860d7a9188096ae28655385767e395e5a23bc10fc2f1d3c39e701a9"
+    },
+    {
+      "configuration": "2560x1440 physical, DPR1, text1, default fixture",
+      "path": "build/desktop-ui/scaling/miniguide-final-2560/mini-guide-bright-2560x1440.png",
+      "sha256": "40229e31b1c1173d7e03d149e714e8fbbf8aa55cb9f33539607bc9208c180d01"
+    },
+    {
+      "configuration": "2560x1440 physical, DPR1, text1, browsing state",
+      "path": "build/desktop-ui/scaling/miniguide-final-2560/mini-guide-browsing-2560x1440.png",
+      "sha256": "f48861d0fa6f54195f0b59aad4607a5a31fe055c4b1dcddaa6b7de482e5f6386"
+    },
+    {
+      "configuration": "2560x1440 physical, DPR1, text1, dark scene",
+      "path": "build/desktop-ui/scaling/miniguide-final-2560/mini-guide-dark-2560x1440.png",
+      "sha256": "8454f17bc3b5e2ee2443d95adeceb9c9953c0bf9ccae94a1e8850bc09ba69b98"
+    },
+    {
+      "configuration": "3840x2160 physical, DPR1, text1, default fixture",
+      "path": "build/desktop-ui/scaling/miniguide-final-3840-text1/mini-guide-bright-3840x2160.png",
+      "sha256": "5f241829c9dd581b3ebf4b4335fabf0ab4359e12ffd21f05c8b42a6205169163"
+    },
+    {
+      "configuration": "3840x2160 physical, DPR1, text1, browsing state",
+      "path": "build/desktop-ui/scaling/miniguide-final-3840-text1/mini-guide-browsing-3840x2160.png",
+      "sha256": "3c131bc83b3b65f015d709564c3db7597b94680c0020106419322e30fc385064"
+    },
+    {
+      "configuration": "3840x2160 physical, DPR1, text1, dark scene",
+      "path": "build/desktop-ui/scaling/miniguide-final-3840-text1/mini-guide-dark-3840x2160.png",
+      "sha256": "99f214cbb98055cc7d69aa6151c003cb0a7156ff2c03922d462bf6b11606bee9"
+    },
+    {
+      "configuration": "3840x2160 physical, DPR1, text2, CHECK_LONG1",
+      "path": "build/desktop-ui/scaling/miniguide-final-3840-text2/mini-guide-bright-3840x2160.png",
+      "sha256": "23598079c191a2ec7cb2cbc602a6be05ea7d4f3c7ff7e76fbabde6b6c3e8cd3e"
+    },
+    {
+      "configuration": "3840x2160 physical, DPR1, text2, CHECK_LONG1, browsing state",
+      "path": "build/desktop-ui/scaling/miniguide-final-3840-text2/mini-guide-browsing-3840x2160.png",
+      "sha256": "e6ba5798f0ac0b5abbd7bc3748bf641d0d43322fb30654a64b2f2bdf15121734"
+    },
+    {
+      "configuration": "3840x2160 physical, DPR1, text2, CHECK_LONG1, dark scene",
+      "path": "build/desktop-ui/scaling/miniguide-final-3840-text2/mini-guide-dark-3840x2160.png",
+      "sha256": "18852e3e052170f1a9f4467be37cc21589196b69d9e8372d4d2b0e35cba85401"
+    },
+    {
+      "configuration": "3840x2160 physical, DPR2, text2, CHECK_LONG1",
+      "path": "build/desktop-ui/scaling/miniguide-final-3840-dpr2-text2/mini-guide-bright-3840x2160.png",
+      "sha256": "113aa7ddfb73d360eb715614a4e50838c07ea4348d42d1c66f03f639fddc817a"
+    },
+    {
+      "configuration": "3840x2160 physical, DPR2, text2, CHECK_LONG1, browsing state",
+      "path": "build/desktop-ui/scaling/miniguide-final-3840-dpr2-text2/mini-guide-browsing-3840x2160.png",
+      "sha256": "dd1b37a7281b97ceaae983cb5298c79cf3af15540b828a02f8ae81568c4a089e"
+    },
+    {
+      "configuration": "3840x2160 physical, DPR2, text2, CHECK_LONG1, dark scene",
+      "path": "build/desktop-ui/scaling/miniguide-final-3840-dpr2-text2/mini-guide-dark-3840x2160.png",
+      "sha256": "13b43eac2aaa4babac78af34827411107647a44d20c832c6292b384976bec0dd"
+    },
+    {
+      "configuration": "1280x720 physical, DPR1, text2, CHECK_LONG1",
+      "path": "build/desktop-ui/scaling/miniguide-final-1280-text2/mini-guide-bright-1280x720.png",
+      "sha256": "07fcaf665eb5fabd808eca5ed67de0c5da09b4929d674ff8d6341641e404be11"
+    },
+    {
+      "configuration": "1280x720 physical, DPR1, text2, CHECK_LONG1, browsing state",
+      "path": "build/desktop-ui/scaling/miniguide-final-1280-text2/mini-guide-browsing-1280x720.png",
+      "sha256": "3e69abcf49352bbcc3b7ee56ffa4160de1dc6c8eac9e5ea6ea73f937df3549f4"
+    },
+    {
+      "configuration": "1280x720 physical, DPR1, text2, CHECK_LONG1, dark scene",
+      "path": "build/desktop-ui/scaling/miniguide-final-1280-text2/mini-guide-dark-1280x720.png",
+      "sha256": "ca582644e477f08d8fca6dac9d1359c1234fcdc3d6ac0f8b2b02d3f20bf8bd8d"
+    }
+  ],
+  "initialCaptureStatus": "The initial capture set above predates the number-column correction. The affected native-4K/text2, native-4K/DPR2/text2, and compact 720p/text2 entries are superseded below; the 1440p and native-4K/text1 entries are reused unchanged.",
+  "supersededInitialCaptures": [
+    "build/desktop-ui/scaling/miniguide-final-3840-text2/mini-guide-bright-3840x2160.png",
+    "build/desktop-ui/scaling/miniguide-final-3840-text2/mini-guide-browsing-3840x2160.png",
+    "build/desktop-ui/scaling/miniguide-final-3840-text2/mini-guide-dark-3840x2160.png",
+    "build/desktop-ui/scaling/miniguide-final-3840-dpr2-text2/mini-guide-bright-3840x2160.png",
+    "build/desktop-ui/scaling/miniguide-final-3840-dpr2-text2/mini-guide-browsing-3840x2160.png",
+    "build/desktop-ui/scaling/miniguide-final-3840-dpr2-text2/mini-guide-dark-3840x2160.png",
+    "build/desktop-ui/scaling/miniguide-final-1280-text2/mini-guide-bright-1280x720.png",
+    "build/desktop-ui/scaling/miniguide-final-1280-text2/mini-guide-browsing-1280x720.png",
+    "build/desktop-ui/scaling/miniguide-final-1280-text2/mini-guide-dark-1280x720.png"
+  ],
+  "reusedUnmodifiedCaptures": [
+    "build/desktop-ui/scaling/miniguide-final-2560/mini-guide-bright-2560x1440.png",
+    "build/desktop-ui/scaling/miniguide-final-2560/mini-guide-browsing-2560x1440.png",
+    "build/desktop-ui/scaling/miniguide-final-2560/mini-guide-dark-2560x1440.png",
+    "build/desktop-ui/scaling/miniguide-final-3840-text1/mini-guide-bright-3840x2160.png",
+    "build/desktop-ui/scaling/miniguide-final-3840-text1/mini-guide-browsing-3840x2160.png",
+    "build/desktop-ui/scaling/miniguide-final-3840-text1/mini-guide-dark-3840x2160.png"
+  ],
+  "correctionCaptures": [
+    {
+      "configuration": "1920x1080 physical, DPR1, text1, default fixture",
+      "path": "build/desktop-ui/scaling/miniguide-correction-1920/mini-guide-bright-1920x1080.png",
+      "sha256": "a3462e0563bd40979cd78455bb6d42a2757b504587db76920024e3306aa4b02a"
+    },
+    {
+      "configuration": "1920x1080 physical, DPR1, text1, browsing state",
+      "path": "build/desktop-ui/scaling/miniguide-correction-1920/mini-guide-browsing-1920x1080.png",
+      "sha256": "b1848ec0fd918ead94f744095789274bc293fbfd00aeba12536e13a4c1601fbe"
+    },
+    {
+      "configuration": "1920x1080 physical, DPR1, text1, dark scene",
+      "path": "build/desktop-ui/scaling/miniguide-correction-1920/mini-guide-dark-1920x1080.png",
+      "sha256": "62d5685e6860d7a9188096ae28655385767e395e5a23bc10fc2f1d3c39e701a9"
+    },
+    {
+      "configuration": "3840x2160 physical, DPR1, text2, CHECK_LONG1",
+      "path": "build/desktop-ui/scaling/miniguide-correction-3840-text2/mini-guide-bright-3840x2160.png",
+      "sha256": "3fc6e1870ff778d93d060bfb6b6dcb644c938d8bbcc80a99247015d9a30e3966"
+    },
+    {
+      "configuration": "3840x2160 physical, DPR1, text2, CHECK_LONG1, browsing state",
+      "path": "build/desktop-ui/scaling/miniguide-correction-3840-text2/mini-guide-browsing-3840x2160.png",
+      "sha256": "1a81758b615a430c9eaf6b58c61a50736933dda2fafa99f936cacf68719bed6b"
+    },
+    {
+      "configuration": "3840x2160 physical, DPR1, text2, CHECK_LONG1, dark scene",
+      "path": "build/desktop-ui/scaling/miniguide-correction-3840-text2/mini-guide-dark-3840x2160.png",
+      "sha256": "3f64b484523fc34e0482fa82b94fd51cffb6c1f899f4722d104943fa83224ca0"
+    },
+    {
+      "configuration": "3840x2160 physical, DPR2, text2, CHECK_LONG1",
+      "path": "build/desktop-ui/scaling/miniguide-correction-3840-dpr2-text2/mini-guide-bright-3840x2160.png",
+      "sha256": "2602340d44036c35440b8a032fc4c7c4469e6e47f14d6f4741da7d574b895180"
+    },
+    {
+      "configuration": "3840x2160 physical, DPR2, text2, CHECK_LONG1, browsing state",
+      "path": "build/desktop-ui/scaling/miniguide-correction-3840-dpr2-text2/mini-guide-browsing-3840x2160.png",
+      "sha256": "982fb74cc06f76e4917e1adb96f931e7ab2427144708c1c00ffcd061bf3f3da6"
+    },
+    {
+      "configuration": "3840x2160 physical, DPR2, text2, CHECK_LONG1, dark scene",
+      "path": "build/desktop-ui/scaling/miniguide-correction-3840-dpr2-text2/mini-guide-dark-3840x2160.png",
+      "sha256": "5ae157e974fc6de55a4f024f84d9bcad99fd02c5193ceca15efdd70bc060722e"
+    },
+    {
+      "configuration": "1280x720 physical, DPR1, text2, CHECK_LONG1",
+      "path": "build/desktop-ui/scaling/miniguide-correction-1280-text2/mini-guide-bright-1280x720.png",
+      "sha256": "9edcc7a5fd4cc309b44d8d267842c2fcbf5efb2a025c13879bda38e054b6b289"
+    },
+    {
+      "configuration": "1280x720 physical, DPR1, text2, CHECK_LONG1, browsing state",
+      "path": "build/desktop-ui/scaling/miniguide-correction-1280-text2/mini-guide-browsing-1280x720.png",
+      "sha256": "01005d82388ffc43bb545b8f3390bf0f6787bab34289276931671ef6af8cfc07"
+    },
+    {
+      "configuration": "1280x720 physical, DPR1, text2, CHECK_LONG1, dark scene",
+      "path": "build/desktop-ui/scaling/miniguide-correction-1280-text2/mini-guide-dark-1280x720.png",
+      "sha256": "37f584e0c103d22768e77cd467dd308b552c35b926cc46c98b55d66b713bd824"
+    },
+    {
+      "configuration": "3840x2160 physical, DPR1, text2, CHECK_LONG1, CHECK_THREE_DIGIT1",
+      "path": "build/desktop-ui/scaling/miniguide-correction-3840-text2-3digit/mini-guide-bright-3840x2160.png",
+      "sha256": "f07fcac5295fd093dfa89b84760fc0c9d32c3caf6ac27752fe2ac63ed43c9ad7"
+    },
+    {
+      "configuration": "3840x2160 physical, DPR1, text2, CHECK_LONG1, CHECK_THREE_DIGIT1, browsing state",
+      "path": "build/desktop-ui/scaling/miniguide-correction-3840-text2-3digit/mini-guide-browsing-3840x2160.png",
+      "sha256": "4039b71a2685ccb2394caa9aec68e2026607718bdad3ea428339d162845d0237"
+    },
+    {
+      "configuration": "3840x2160 physical, DPR1, text2, CHECK_LONG1, CHECK_THREE_DIGIT1, dark scene",
+      "path": "build/desktop-ui/scaling/miniguide-correction-3840-text2-3digit/mini-guide-dark-3840x2160.png",
+      "sha256": "cc344409ddbfd74553072703e4118de483f317f0126501ded826b9934b797109"
+    }
+  ],
+  "normal1080Comparisons": [
+    {
+      "final": "build/desktop-ui/scaling/miniguide-correction-1920/mini-guide-bright-1920x1080.png",
+      "baseline": "build/desktop-ui/scaling/miniguide-before-1920/mini-guide-bright-1920x1080.png",
+      "result": "byte-identical"
+    },
+    {
+      "final": "build/desktop-ui/scaling/miniguide-correction-1920/mini-guide-browsing-1920x1080.png",
+      "baseline": "build/desktop-ui/scaling/miniguide-before-1920/mini-guide-browsing-1920x1080.png",
+      "result": "byte-identical"
+    },
+    {
+      "final": "build/desktop-ui/scaling/miniguide-correction-1920/mini-guide-dark-1920x1080.png",
+      "baseline": "build/desktop-ui/scaling/miniguide-before-1920/mini-guide-dark-1920x1080.png",
+      "result": "byte-identical"
+    }
+  ],
+  "checks": {
+    "playerViewTests": "67 passed",
+    "focusedTickerTests": "7 passed",
+    "desktopNavigationTests": "7 passed",
+    "targetedAnalyze": "clean",
+    "dartFormat": "clean",
+    "gitDiffCheck": "clean",
+    "initialCaptureRuns": "6 runs, 2 tests passed per run, 18 PNGs written",
+    "correctionCaptureRuns": "5 runs, 2 tests passed per run, 15 PNGs written",
+    "captureRuns": "11 runs total, 2 tests passed per run, 33 PNGs retained",
+    "captureExceptions": "none observed in final runs",
+    "numberColumnCorrection": "Measured actual number text with current title style/TextScaler/direction; preserved 46/32 reference width when sufficient and added 8xscale separation when needed. 12 and 101-112 remained single-line in enlarged captures.",
+    "fiveUniqueNearbyChannels": "observed in final captures",
+    "footerAndScrollFallback": "observed in compact enlarged-text capture"
+  },
+  "concerns": [
+    "An optional finder-based geometry report was removed after it stalled the capture runner; final captures retain explicit no-exception assertions and the existing widget rendering path.",
+    "The long-label fixture intentionally uses synthetic replacement titles and is stress evidence, not a product-content baseline."
+  ],
+  "portableEvidenceLimits": [
+    "Captures use the pinned Flutter 3.47.2 SDK, macOS software rendering, portable test fonts, and synthetic scenes/schedules.",
+    "These captures do not establish physical Windows fonts, input, DPI transitions, native video layering, moving footage, HDR, DirectComposition, or packaging acceptance."
+  ],
+  "independentReview": "Not run; not specifically recommended for this bounded presentation-only pass.",
+  "rootReview": "Astra reviewed final source and verified all recorded hashes and three byte-identical normal1080 comparisons; personally inspected corrected compact text200 and native4K text200 three-digit captures."
+}
