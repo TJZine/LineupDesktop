@@ -46,8 +46,10 @@ Read the example relevant to the behavior, not every suite:
 
 Prefer behavior, focus, and semantics assertions for interaction changes. For
 visual changes, reuse the production widget harness and
-[golden support](../../../test/support/golden_test_support.dart). The two golden
-suites are macOS-only; a skipped suite is not visual proof. Updating a baseline
+[golden support](../../../test/support/golden_test_support.dart). The two optional golden
+suites under `tool/visual/` are macOS-only and run explicitly for visual review;
+required CI retains the exact `test/app/guide_opacity_test.dart` checks.
+A skipped suite is not visual proof. Updating a baseline
 does not approve a design: follow
 [the interface system](../../../.interface-design/system.md#player-protected-baseline)
 for protected Player comparisons and existing UI agreements.

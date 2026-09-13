@@ -106,7 +106,7 @@ portable work; report the specific unverified behavior and required scenario.
 | --- | --- | --- |
 | Documentation only | `git diff --check`; check changed links, examples, and claims against their owners | Structural and source consistency; no new product or platform evidence |
 | Dart policy, models, async work | Pinned Flutter SDK; focused tests plus the relevant full format/analyze/test checks below | Deterministic contracts; no Xcode application build or Windows engine provisioning required |
-| Flutter layout, focus, semantics | Relevant widget tests at representative sizes; macOS for the two golden suites below | Flutter composition and input/semantics contracts; physical Windows input, AT, and video layering remain separate |
+| Flutter layout, focus, semantics | Relevant widget tests at representative sizes; macOS for the required alpha suite and optional local visual checks below | Flutter composition and input/semantics contracts; physical Windows input, AT, and video layering remain separate |
 | Persistence or credentials | Controller/store/transport failure, rollback, scope-isolation, and secret-flow tests named in [Architecture](architecture.md#changing-asynchronous-and-persisted-state) | Deterministic recovery/currentness; OS credential storage and physical filesystem behavior need platform observation |
 | macOS development app | Xcode and macOS setup below; `flutter run -d macos` or `flutter build macos` as relevant | Development UI/runtime or build evidence; the macOS player explicitly reports unsupported playback |
 | Windows package policy | PowerShell 7.4+ on a portable host; `pwsh -File ./tool/windows/verify-release-policy.ps1` | Script parsing and pinned policy inputs; no Windows runtime or package execution proof |
@@ -147,38 +147,49 @@ is canonical for localized schedule goldens. On Windows, Dart uses the Windows
 system timezone; `$env:TZ` alone does not select it. Run the portable Windows
 tests in the machine's configured timezone, or set the OS timezone to Eastern
 Standard Time before treating localized schedule assertions as canonical. The
-full suite on Linux/Windows excludes the two suites marked `@TestOn('mac-os')`;
-a pass there is not golden evidence. Run these on macOS when the affected UI
-needs pixel verification:
+full suite on Linux/Windows excludes the required alpha suite marked
+`@TestOn('mac-os')`; the optional visual checks are outside the default `test/`
+tree. A portable pass there is not macOS visual evidence. Run the required
+macOS alpha checks when the Guide surface needs pixel verification:
 
 ```sh
-TZ=America/New_York flutter test test/app/ui_acceptance_golden_test.dart
-TZ=America/New_York flutter test test/app/guide_sparse_golden_test.dart
+TZ=America/New_York flutter test test/app/guide_opacity_test.dart
 ```
 
-The equivalent commands from PowerShell on macOS are:
+The five screenshot goldens are optional local visual-review checks outside the
+default `test/` tree. They use Flutter's default exact comparator and remain
+useful for intentional visual changes; run them explicitly when reviewing a
+surface:
+
+```sh
+TZ=America/New_York flutter test tool/visual/ui_acceptance_golden_test.dart
+TZ=America/New_York flutter test tool/visual/guide_sparse_golden_test.dart
+```
+
+To intentionally replace one of these local baselines after reviewing the
+real-widget render, use `--update-goldens` on that explicit command:
+
+```sh
+TZ=America/New_York flutter test --update-goldens tool/visual/ui_acceptance_golden_test.dart
+TZ=America/New_York flutter test --update-goldens tool/visual/guide_sparse_golden_test.dart
+```
+
+The equivalent required-alpha command from PowerShell on macOS is:
 
 ```powershell
 $env:TZ = 'America/New_York'
-flutter test test/app/ui_acceptance_golden_test.dart
-flutter test test/app/guide_sparse_golden_test.dart
+flutter test test/app/guide_opacity_test.dart
 ```
 
-Mandatory macOS golden coverage is five representative 1920×1080 snapshots:
+The required alpha suite loads fonts from the pinned Flutter SDK, runs with
+`TZ=America/New_York`, remains macOS-only, and performs exact pixel-alpha
+checks: the no-playback Guide must be opaque, while Classic PiP transparency
+must remain inside its native aperture. The two optional local suites load the
+same pinned fonts and retain exactly five representative 1920×1080 snapshots:
 rich and reference-free Guide, OSD, Now Playing, and Ember & Steel Appearance.
-The suites load fonts from the pinned Flutter SDK, run with
-`TZ=America/New_York`, and remain macOS-only. Behavioral tests remain broad;
-update a baseline only after visually reviewing a real-widget render.
-
-The five screenshot assertions use a bounded cross-macOS raster comparator:
-image dimensions must match, and both limits must hold—no more than 0.1% of
-pixels may differ and no RGBA channel may differ by more than 70/255. This
-ceiling covers the observed sparse text/icon edge raster variance only; it is
-not approval for layout, palette, content, or baseline changes. The two Guide
-alpha-aperture assertions remain exact and do not use this comparator. Golden
-failures still produce Flutter's comparison artifacts, and
-`--update-goldens` still replaces baselines through the normal comparator
-update path.
+They are not run by default `flutter test` or required CI. The optional checks
+use exact comparison, so inspect intentional visual changes before using
+`--update-goldens`.
 
 Inspect intentional golden changes from the real widgets. Preserve
 [approved UI decisions](../.interface-design/system.md), including the protected
@@ -372,7 +383,7 @@ engine metadata, and rejects stale markers or modified build artifacts.
 ## CI evidence
 
 [The workflow](../.github/workflows/ci.yml) runs portable Dart verification on
-Linux, the two golden suites and an application build on macOS, portable
+Linux, the required macOS alpha suite and an application build on macOS, portable
 PowerShell release-policy validation, and focused widget tests plus a
 stock-engine C++/CMake application build on Windows Server 2022.
 

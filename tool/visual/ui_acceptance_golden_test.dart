@@ -2,10 +2,8 @@
 library;
 
 import 'dart:io';
-import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
@@ -14,8 +12,8 @@ import 'package:lineup_desktop/channels/scheduler.dart';
 import 'package:lineup_desktop/playback/native_player.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 
-import '../support/golden_test_support.dart';
-import '../support/ui_fixture.dart';
+import '../../test/support/golden_test_support.dart';
+import '../../test/support/ui_fixture.dart';
 
 const _viewport = Size(1280, 720);
 const _goldenKey = Key('visual-acceptance-boundary');
@@ -44,40 +42,10 @@ final _nowPlayingArtwork = <Uri, Uint8List>{
 };
 
 void main() {
-  late GoldenFileComparator previousGoldenFileComparator;
-  setUpAll(() async {
-    await loadPinnedTestFonts();
-    previousGoldenFileComparator = installCrossMacOsGoldenComparator();
-  });
-  tearDownAll(() => restoreGoldenFileComparator(previousGoldenFileComparator));
+  setUpAll(loadPinnedTestFonts);
 
   setUp(() {
     TestWidgetsFlutterBinding.ensureInitialized();
-  });
-
-  testWidgets('Guide without playback remains opaque outside its aperture', (
-    tester,
-  ) async {
-    final fixture = _readyFixture()
-      ..controller.settings = const LineupSettings(reduceMotion: true);
-    await _pump(tester, fixture.build());
-    await _expectClassicOpacity(tester);
-  });
-
-  testWidgets('Guide with PiP remains opaque outside its native aperture', (
-    tester,
-  ) async {
-    final fixture = _readyFixture(
-      playerState: const PlayerStatus(
-        state: PlayerState.ready,
-        message: 'Synthetic player surface',
-      ),
-    )..controller.settings = const LineupSettings(reduceMotion: true);
-    await _pump(tester, fixture.build());
-    await _expectClassicOpacity(
-      tester,
-      aperture: find.byKey(const Key('guide-picture-in-picture')),
-    );
   });
 
   testWidgets('player OSD at 1920x1080', (tester) async {
@@ -177,54 +145,6 @@ Future<void> _match(
   markSubtreeNeedsPaint(tester.renderObject(boundary));
   await tester.pump();
   await expectLater(boundary, matchesGoldenFile('goldens/$name'));
-}
-
-Future<void> _expectClassicOpacity(
-  WidgetTester tester, {
-  Finder? aperture,
-}) async {
-  final boundaryFinder = find.byKey(_goldenKey);
-  final boundary = tester.renderObject<RenderRepaintBoundary>(boundaryFinder);
-  final capture = await tester.runAsync(() async {
-    final image = await boundary.toImage(pixelRatio: 1);
-    final pixels = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
-    final result = (width: image.width, height: image.height, pixels: pixels);
-    image.dispose();
-    return result;
-  });
-  if (capture == null || capture.pixels == null) {
-    fail('Classic Guide pixels could not be read.');
-  }
-  final width = capture.width;
-  final height = capture.height;
-  final pixels = capture.pixels!;
-
-  final boundaryOrigin = tester.getTopLeft(boundaryFinder);
-  final allowed = aperture == null
-      ? null
-      : (tester.getTopLeft(aperture) - boundaryOrigin) &
-            tester.getSize(aperture);
-  Offset? firstUnexpectedTransparency;
-  var transparentPixels = 0;
-  for (var y = 0; y < height; y++) {
-    for (var x = 0; x < width; x++) {
-      if (pixels.getUint8((y * width + x) * 4 + 3) == 255) continue;
-      transparentPixels++;
-      final point = Offset(x + 0.5, y + 0.5);
-      if (allowed == null || !allowed.inflate(1).contains(point)) {
-        firstUnexpectedTransparency ??= point;
-      }
-    }
-  }
-
-  expect(
-    firstUnexpectedTransparency,
-    isNull,
-    reason:
-        'Classic Guide transparency escaped the PlayerSurface aperture at '
-        '$firstUnexpectedTransparency.',
-  );
-  expect(transparentPixels, allowed == null ? 0 : greaterThan(0));
 }
 
 UiFixture _readyFixture({

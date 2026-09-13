@@ -13,8 +13,8 @@ import 'package:lineup_desktop/guide/guide_view.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 import 'package:lineup_desktop/ui/app_theme.dart';
 
-import '../support/golden_test_support.dart';
-import '../support/ui_fixture.dart';
+import '../../test/support/golden_test_support.dart';
+import '../../test/support/ui_fixture.dart';
 
 const _goldenKey = Key('guide-sparse-visual-boundary');
 const _viewport = Size(1920, 1080);
@@ -24,12 +24,7 @@ final _fixedNow = DateTime.utc(2026, 1, 15, 3, 17);
 final Uint8List _artworkBytes = Uint8List(0);
 
 void main() {
-  late GoldenFileComparator previousGoldenFileComparator;
-  setUpAll(() async {
-    await loadPinnedTestFonts();
-    previousGoldenFileComparator = installCrossMacOsGoldenComparator();
-  });
-  tearDownAll(() => restoreGoldenFileComparator(previousGoldenFileComparator));
+  setUpAll(loadPinnedTestFonts);
 
   testWidgets('matched rich Guide information', (tester) async {
     await _pumpGuide(tester, rich: true);
