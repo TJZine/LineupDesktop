@@ -523,32 +523,69 @@ class _SurfaceError extends StatelessWidget {
   final PlayerCoordinator controller;
 
   @override
-  Widget build(BuildContext context) => ColoredBox(
-    color: LineupTheme.of(context).deepBackground,
-    child: Center(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.error_outline),
-            const SizedBox(height: 8),
-            Text(
-              controller.error ?? controller.status.message,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
+  Widget build(BuildContext context) {
+    final roles = LineupTheme.of(context);
+    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
+    final textTheme = Theme.of(context).textTheme;
+    final bodyFontSize = textTheme.bodyMedium?.fontSize;
+    final bodyStyle = scale > 1 && bodyFontSize != null
+        ? textTheme.bodyMedium!.copyWith(fontSize: bodyFontSize * scale)
+        : textTheme.bodyMedium;
+    final retryStyle = scale > 1
+        ? TextButton.styleFrom(
+            minimumSize: Size(64 * scale, 36 * scale),
+            padding: EdgeInsets.symmetric(
+              horizontal: 12 * scale,
+              vertical: 8 * scale,
             ),
-            if (controller.canRetry)
-              TextButton(
-                onPressed: controller.retry,
-                child: const Text('Retry'),
+            textStyle: textTheme.labelLarge?.copyWith(
+              fontSize: (textTheme.labelLarge?.fontSize ?? 14) * scale,
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(roles.panelRadius * scale),
+            ),
+          )
+        : null;
+    return ColoredBox(
+      color: roles.deepBackground,
+      child: LayoutBuilder(
+        builder: (context, constraints) => SingleChildScrollView(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              minHeight: constraints.maxHeight.isFinite
+                  ? constraints.maxHeight
+                  : 0,
+            ),
+            child: Center(
+              child: Padding(
+                padding: EdgeInsets.all(16 * scale),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.error_outline, size: 24 * scale),
+                    SizedBox(height: 8 * scale),
+                    Text(
+                      controller.error ?? controller.status.message,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: bodyStyle,
+                    ),
+                    if (controller.canRetry)
+                      TextButton(
+                        onPressed: controller.retry,
+                        style: retryStyle,
+                        child: const Text('Retry'),
+                      ),
+                  ],
+                ),
               ),
-          ],
+            ),
+          ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 class _Osd extends StatelessWidget {
@@ -3198,96 +3235,215 @@ class _ChannelNumber extends StatelessWidget {
   const _ChannelNumber({required this.controller});
   final PlayerCoordinator controller;
   @override
-  Widget build(BuildContext context) => Center(
-    child: Semantics(
-      liveRegion: true,
-      label: 'Channel number ${controller.channelNumber}',
-      child: Card(
-        key: const Key('channel-number-buffer'),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 34, vertical: 24),
-          child: Text(
-            controller.channelNumber,
-            style: Theme.of(context).textTheme.displayMedium,
+  Widget build(BuildContext context) {
+    final roles = LineupTheme.of(context);
+    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
+    final numberStyle = Theme.of(context).textTheme.displayMedium;
+    final numberFontSize = numberStyle?.fontSize;
+    return Center(
+      child: Semantics(
+        liveRegion: true,
+        label: 'Channel number ${controller.channelNumber}',
+        child: Card(
+          key: const Key('channel-number-buffer'),
+          margin: scale > 1 ? EdgeInsets.all(4 * scale) : null,
+          shape: scale > 1
+              ? RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(
+                    roles.panelRadius * scale,
+                  ),
+                  side: BorderSide(color: roles.subtleBorder, width: scale),
+                )
+              : null,
+          child: Padding(
+            padding: EdgeInsets.symmetric(
+              horizontal: 34 * scale,
+              vertical: 24 * scale,
+            ),
+            child: Text(
+              controller.channelNumber,
+              maxLines: 1,
+              softWrap: false,
+              style: scale > 1 && numberFontSize != null
+                  ? numberStyle!.copyWith(fontSize: numberFontSize * scale)
+                  : numberStyle,
+            ),
           ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 class _ErrorOverlay extends StatelessWidget {
   const _ErrorOverlay({required this.controller});
   final PlayerCoordinator controller;
   @override
-  Widget build(BuildContext context) => Center(
-    child: Card(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Semantics(
-          liveRegion: true,
-          label: 'Playback error',
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.error_outline, size: 42),
-              const SizedBox(height: 12),
-              Text(controller.error ?? 'Playback failed.'),
-              const SizedBox(height: 16),
-              Wrap(
-                spacing: 10,
-                children: [
-                  if (controller.canRetry)
-                    FilledButton(
-                      onPressed: controller.retry,
-                      child: const Text('Retry'),
+  Widget build(BuildContext context) {
+    final roles = LineupTheme.of(context);
+    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
+    final textTheme = Theme.of(context).textTheme;
+    final bodyFontSize = textTheme.bodyMedium?.fontSize;
+    final bodyStyle = scale > 1 && bodyFontSize != null
+        ? textTheme.bodyMedium!.copyWith(fontSize: bodyFontSize * scale)
+        : textTheme.bodyMedium;
+    final filledButtonStyle = scale > 1
+        ? FilledButton.styleFrom(
+            minimumSize: Size(148 * scale, 54 * scale),
+            padding: EdgeInsets.symmetric(
+              horizontal: 24 * scale,
+              vertical: 16 * scale,
+            ),
+            textStyle: textTheme.labelLarge?.copyWith(
+              fontSize: 17 * scale,
+              fontWeight: FontWeight.w700,
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(roles.panelRadius * scale),
+            ),
+          )
+        : null;
+    final closeButtonStyle = scale > 1
+        ? TextButton.styleFrom(
+            minimumSize: Size(64 * scale, 36 * scale),
+            padding: EdgeInsets.symmetric(
+              horizontal: 12 * scale,
+              vertical: 8 * scale,
+            ),
+            textStyle: textTheme.labelLarge?.copyWith(
+              fontSize: (textTheme.labelLarge?.fontSize ?? 14) * scale,
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(roles.panelRadius * scale),
+            ),
+          )
+        : null;
+    return LayoutBuilder(
+      builder: (context, constraints) => Center(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: constraints.maxHeight.isFinite
+                ? constraints.maxHeight
+                : double.infinity,
+          ),
+          child: Card(
+            margin: scale > 1 ? EdgeInsets.all(4 * scale) : null,
+            shape: scale > 1
+                ? RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(
+                      roles.panelRadius * scale,
                     ),
-                  TextButton(
-                    onPressed: controller.closeOverlay,
-                    child: const Text('Close'),
+                    side: BorderSide(color: roles.subtleBorder, width: scale),
+                  )
+                : null,
+            child: SingleChildScrollView(
+              child: Padding(
+                padding: EdgeInsets.all(24 * scale),
+                child: Semantics(
+                  liveRegion: true,
+                  label: 'Playback error',
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.error_outline, size: 42 * scale),
+                      SizedBox(height: 12 * scale),
+                      Text(
+                        controller.error ?? 'Playback failed.',
+                        style: bodyStyle,
+                      ),
+                      SizedBox(height: 16 * scale),
+                      Wrap(
+                        spacing: 10 * scale,
+                        runSpacing: scale > 1 ? 10 * scale : 0,
+                        children: [
+                          if (controller.canRetry)
+                            FilledButton(
+                              onPressed: controller.retry,
+                              style: filledButtonStyle,
+                              child: const Text('Retry'),
+                            ),
+                          TextButton(
+                            onPressed: controller.closeOverlay,
+                            style: closeButtonStyle,
+                            child: const Text('Close'),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
-            ],
+            ),
           ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 class _Loading extends StatelessWidget {
   const _Loading({required this.label});
   final String label;
   @override
-  Widget build(BuildContext context) => Center(
-    child: Semantics(
-      liveRegion: true,
-      label: label,
-      child: const CircularProgressIndicator(),
-    ),
-  );
+  Widget build(BuildContext context) {
+    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
+    return Center(
+      child: Semantics(
+        liveRegion: true,
+        label: label,
+        child: scale > 1
+            ? CircularProgressIndicator(
+                strokeWidth: 4 * scale,
+                constraints: BoxConstraints(
+                  minWidth: 40 * scale,
+                  minHeight: 40 * scale,
+                ),
+              )
+            : const CircularProgressIndicator(),
+      ),
+    );
+  }
 }
 
 class _Unsupported extends StatelessWidget {
   const _Unsupported({required this.message});
   final String message;
   @override
-  Widget build(BuildContext context) => Center(
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        const Icon(Icons.desktop_windows_outlined, size: 54),
-        const SizedBox(height: 18),
-        Text(
-          'Playback unavailable',
-          style: Theme.of(context).textTheme.headlineSmall,
+  Widget build(BuildContext context) {
+    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
+    final textTheme = Theme.of(context).textTheme;
+    final headlineFontSize = textTheme.headlineSmall?.fontSize;
+    final headlineStyle = scale > 1 && headlineFontSize != null
+        ? textTheme.headlineSmall!.copyWith(fontSize: headlineFontSize * scale)
+        : textTheme.headlineSmall;
+    final bodyFontSize = textTheme.bodyMedium?.fontSize;
+    final bodyStyle = scale > 1 && bodyFontSize != null
+        ? textTheme.bodyMedium!.copyWith(fontSize: bodyFontSize * scale)
+        : textTheme.bodyMedium;
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            minHeight: constraints.maxHeight.isFinite
+                ? constraints.maxHeight
+                : 0,
+          ),
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.desktop_windows_outlined, size: 54 * scale),
+                SizedBox(height: 18 * scale),
+                Text('Playback unavailable', style: headlineStyle),
+                SizedBox(height: 8 * scale),
+                Text(message, style: bodyStyle),
+              ],
+            ),
+          ),
         ),
-        const SizedBox(height: 8),
-        Text(message),
-      ],
-    ),
-  );
+      ),
+    );
+  }
 }
 
 String? _digit(LogicalKeyboardKey key) {

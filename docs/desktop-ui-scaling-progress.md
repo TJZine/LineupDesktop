@@ -279,3 +279,41 @@ source/capture hashes and corrected contact-sheet labeling.
 Portable evidence does not validate live monitor-DPI transitions or physical
 Windows behavior. No independent review was run or is specifically recommended.
 The remaining Player status sizing pass is the final implementation group.
+
+## Group 6 — remaining Player status widgets
+
+Luna task `01a09891-4aa5-7dd3-b451-952cc66c38c8` returned its final presentation
+lease. Channel entry, playback error, loading, unavailable and compact surface
+error now scale local typography, spacing, indicators and control geometry.
+Bounded scrolling keeps recovery controls reachable in compact views; controller,
+retry, state precedence, native surface and previously completed overlay owners
+remain unchanged.
+
+All67 existing PlayerView checks passed, with analysis, formatting and diff checks.
+Five default captures and20 matrix cases passed at1440p, native4K, DPR2/text200
+and720p/text200, with additional retryable, four-digit and small/scaled-PiP checks.
+Astra inspected the full diff and labeled contact sheets, verified final source
+and harness hashes, and confirmed all five normal1080 captures byte-identical.
+[Evidence](design/desktop-ui/scaling/group-6-evidence.json) records the final
+reference/matrix directories, targeted checks, raw artifact hashes and limitations.
+No independent review was run or is specifically recommended.
+
+## Scaling campaign closeout
+
+The authorized code-side proportional scaling implementation and portable review
+are complete. All planned families and the remaining Player status owners have
+been integrated on the existing branch. Locked normal1080 designs were preserved;
+skipped surfaces02,11 and40 were not reopened or newly approved. The shared scale
+uses logical viewport dimensions, so OS display scaling is not applied twice.
+Accessibility text remains independent and may require wrapping, scrolling or
+fewer visible rows; identical content density at every size is not promised.
+
+This is implemented and deterministically/visually checked with portable fixtures,
+not physical Windows acceptance. Before release, validate the final release commit
+on Windows at1440p and2160p, including representative100/150/200% display scaling,
+text enlargement, a resize/live monitor-DPI transition, menu anchoring/focus and
+Guide/Player native video placement. Static DPR fixtures do not prove dynamic
+monitor transitions, Windows fonts, native input or DirectComposition layering.
+No push or publication was performed. No independent review is specifically
+recommended for this presentation-only campaign; physical Windows acceptance is
+the remaining validation step.
