@@ -343,6 +343,19 @@ class _LineupShellState extends State<LineupShell> {
     final anchor = _appMenuAnchor;
     if (anchor == null) return const SizedBox.shrink();
     final roles = LineupTheme.of(context);
+    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
+    final textTheme = Theme.of(context).textTheme;
+    final titleStyle = textTheme.titleLarge?.copyWith(
+      fontSize: (textTheme.titleLarge?.fontSize ?? 22) * scale,
+    );
+    final labelStyle = textTheme.labelLarge?.copyWith(fontSize: 16 * scale);
+    final detailStyle = textTheme.bodySmall?.copyWith(fontSize: 14 * scale);
+    final menuShape = scale > 1
+        ? RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(roles.panelRadius * scale),
+            side: BorderSide(color: roles.subtleBorder, width: scale),
+          )
+        : null;
     final profileName = widget.controller.profile?.name;
     final accountName = widget.controller.account?.name ?? 'Plex account';
     final serverName = widget.controller.server?.name ?? 'No server selected';
@@ -355,7 +368,7 @@ class _LineupShellState extends State<LineupShell> {
           color: roles.scrim.withValues(alpha: 0.45),
         ),
         CustomSingleChildLayout(
-          delegate: _AnchoredMenuLayout(anchor),
+          delegate: _AnchoredMenuLayout(anchor, scale),
           child: FocusScope(
             node: _appMenuScope,
             autofocus: true,
@@ -374,23 +387,30 @@ class _LineupShellState extends State<LineupShell> {
               child: Card(
                 key: const Key('immersive-app-menu'),
                 margin: EdgeInsets.zero,
+                shape: menuShape,
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(12),
+                  padding: EdgeInsets.all(12 * scale),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Padding(
-                        padding: const EdgeInsets.fromLTRB(12, 4, 4, 8),
+                        padding: EdgeInsets.fromLTRB(
+                          12 * scale,
+                          4 * scale,
+                          4 * scale,
+                          8 * scale,
+                        ),
                         child: Row(
                           children: [
-                            Expanded(
-                              child: Text(
-                                'Lineup',
-                                style: Theme.of(context).textTheme.titleLarge,
-                              ),
-                            ),
+                            Expanded(child: Text('Lineup', style: titleStyle)),
                             IconButton(
+                              constraints: BoxConstraints(
+                                minWidth: 48 * scale,
+                                minHeight: 48 * scale,
+                              ),
+                              padding: EdgeInsets.all(8 * scale),
+                              iconSize: 24 * scale,
                               tooltip: 'Close Lineup menu',
                               onPressed: _closeAppMenu,
                               icon: const Icon(Icons.close),
@@ -402,6 +422,9 @@ class _LineupShellState extends State<LineupShell> {
                         index: 0,
                         label: 'Guide',
                         autofocus: true,
+                        labelStyle: labelStyle,
+                        detailStyle: detailStyle,
+                        scale: scale,
                       ),
                       _menuDestination(
                         index: 4,
@@ -410,10 +433,25 @@ class _LineupShellState extends State<LineupShell> {
                         helper: hasPlaybackSurface
                             ? null
                             : 'Choose a channel in Guide',
+                        labelStyle: labelStyle,
+                        detailStyle: detailStyle,
+                        scale: scale,
                       ),
-                      _menuDestination(index: 1, label: 'Channels'),
-                      _menuDestination(index: 2, label: 'Settings'),
-                      const Divider(height: 24),
+                      _menuDestination(
+                        index: 1,
+                        label: 'Channels',
+                        labelStyle: labelStyle,
+                        detailStyle: detailStyle,
+                        scale: scale,
+                      ),
+                      _menuDestination(
+                        index: 2,
+                        label: 'Settings',
+                        labelStyle: labelStyle,
+                        detailStyle: detailStyle,
+                        scale: scale,
+                      ),
+                      Divider(height: 24 * scale, thickness: scale),
                       Semantics(
                         selected:
                             _selectedIndex == 2 &&
@@ -422,39 +460,35 @@ class _LineupShellState extends State<LineupShell> {
                         child: TextButton(
                           style: TextButton.styleFrom(
                             alignment: Alignment.centerLeft,
-                            padding: const EdgeInsets.all(12),
+                            padding: EdgeInsets.all(12 * scale),
                             foregroundColor:
                                 _selectedIndex == 2 &&
                                     _settingsCategory ==
                                         SettingsCategory.account
                                 ? roles.primaryText
                                 : roles.secondaryText,
-                            textStyle: Theme.of(context).textTheme.labelLarge
-                                ?.copyWith(fontSize: 16),
+                            textStyle: labelStyle,
                           ),
                           onPressed: () => unawaited(_openAccount()),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               const Text('Account'),
-                              const SizedBox(height: 4),
+                              SizedBox(height: 4 * scale),
                               Text(
                                 profileName == null
                                     ? accountName
                                     : '$profileName · $accountName',
                                 softWrap: true,
-                                style: Theme.of(context).textTheme.bodySmall
-                                    ?.copyWith(fontSize: 14),
+                                style: detailStyle,
                               ),
-                              const SizedBox(height: 3),
+                              SizedBox(height: 3 * scale),
                               Text(
                                 serverName,
                                 softWrap: true,
-                                style: Theme.of(context).textTheme.bodySmall
-                                    ?.copyWith(
-                                      color: roles.secondaryText,
-                                      fontSize: 14,
-                                    ),
+                                style: detailStyle?.copyWith(
+                                  color: roles.secondaryText,
+                                ),
                               ),
                             ],
                           ),
@@ -477,6 +511,9 @@ class _LineupShellState extends State<LineupShell> {
     bool enabled = true,
     bool autofocus = false,
     String? helper,
+    required TextStyle? labelStyle,
+    required TextStyle? detailStyle,
+    required double scale,
   }) {
     final selected = _selectedIndex == index;
     final semanticLabel = [
@@ -495,28 +532,22 @@ class _LineupShellState extends State<LineupShell> {
         autofocus: autofocus,
         style: TextButton.styleFrom(
           alignment: Alignment.centerLeft,
-          minimumSize: const Size(0, 48),
-          padding: const EdgeInsets.all(12),
+          minimumSize: Size(0, 48 * scale),
+          padding: EdgeInsets.all(12 * scale),
           foregroundColor: selected
               ? LineupTheme.of(context).primaryText
               : LineupTheme.of(context).secondaryText,
           backgroundColor: selected
               ? LineupTheme.of(context).selectedSurface
               : null,
-          textStyle: Theme.of(context).textTheme.labelLarge
-              ?.copyWith(fontSize: 16),
+          textStyle: labelStyle,
         ),
         onPressed: enabled ? () => unawaited(_select(index)) : null,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(label),
-            if (helper != null)
-              Text(
-                helper,
-                style: Theme.of(context).textTheme.bodySmall
-                    ?.copyWith(fontSize: 14),
-              ),
+            if (helper != null) Text(helper, style: detailStyle),
           ],
         ),
       ),
@@ -664,44 +695,50 @@ class _LineupShellState extends State<LineupShell> {
 }
 
 class _AnchoredMenuLayout extends SingleChildLayoutDelegate {
-  const _AnchoredMenuLayout(this.anchor);
+  const _AnchoredMenuLayout(this.anchor, this.scale);
 
-  static const _margin = 16.0;
-  static const _gap = 8.0;
   final Rect anchor;
+  final double scale;
+
+  double get _margin => 16 * scale;
+  double get _gap => 8 * scale;
 
   @override
   BoxConstraints getConstraintsForChild(BoxConstraints constraints) =>
       BoxConstraints(
-        maxWidth: (constraints.maxWidth - _margin * 2).clamp(0, 320),
+        maxWidth: (constraints.maxWidth - _margin * 2).clamp(0.0, 320 * scale),
         maxHeight: (constraints.maxHeight - _margin * 2).clamp(
-          0,
+          0.0,
           double.infinity,
         ),
       );
 
   @override
   Offset getPositionForChild(Size size, Size childSize) {
+    final horizontalMargin = math.min(_margin, size.width / 2);
+    final leftLimit = size.width - childSize.width - horizontalMargin;
     final left = (anchor.right - childSize.width).clamp(
-      _margin,
-      size.width - childSize.width - _margin,
+      math.min(horizontalMargin, leftLimit),
+      math.max(horizontalMargin, leftLimit),
     );
+    final verticalMargin = math.min(_margin, size.height / 2);
+    final bottomLimit = size.height - childSize.height - verticalMargin;
     final below = anchor.bottom + _gap;
     final above = anchor.top - childSize.height - _gap;
-    final top = below + childSize.height <= size.height - _margin
+    final top = below + childSize.height <= size.height - verticalMargin
         ? below
-        : above >= _margin
+        : above >= verticalMargin
         ? above
         : (anchor.center.dy - childSize.height / 2).clamp(
-            _margin,
-            size.height - childSize.height - _margin,
+            math.min(verticalMargin, bottomLimit),
+            math.max(verticalMargin, bottomLimit),
           );
-    return Offset(left, top);
+    return Offset(left.toDouble(), top.toDouble());
   }
 
   @override
   bool shouldRelayout(_AnchoredMenuLayout oldDelegate) =>
-      oldDelegate.anchor != anchor;
+      oldDelegate.anchor != anchor || oldDelegate.scale != scale;
 }
 
 Uri _mediaUri(String value) {

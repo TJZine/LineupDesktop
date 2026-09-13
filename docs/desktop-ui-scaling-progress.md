@@ -260,3 +260,22 @@ captures from reused1440p/native4K normal-text evidence and superseded captures.
 
 No independent review was run or is specifically recommended for this bounded
 presentation pass. Physical Windows validation remains outstanding.
+
+## Group 5 — shared Lineup menu
+
+Luna task `01a0987e-4d8a-7a43-865b-d8a83ef6a7d5` released its menu lease.
+Anchored width, margins/gap, typography, native controls and local Card geometry
+now use the shared logical scale. Existing route selection, focus restoration,
+invoker ownership and full-name wrapping remain intact.
+
+Ten navigation/parity tests and18 worker capture cases passed, plus analysis,
+format and diff checks. Astra verified six byte-identical1080 references and
+reviewed the diff/contact sheets. The worker's1440-labeled runs were1440x810;
+Astra added two true2560x1440 invoker captures, both passing. Final evidence spans
+20 raw images including native4K, DPR2, text200, top/bottom invokers and constrained
+scroll access. [Evidence](design/desktop-ui/scaling/group-5-evidence.json) records
+source/capture hashes and corrected contact-sheet labeling.
+
+Portable evidence does not validate live monitor-DPI transitions or physical
+Windows behavior. No independent review was run or is specifically recommended.
+The remaining Player status sizing pass is the final implementation group.
