@@ -80,12 +80,65 @@ selected by Flutter's constraints.
 The verified CI action pins remain unchanged: checkout v7.0.1
 (`3d3c42e5aac5ba805825da76410c181273ba90b1`), upload-artifact v7.0.1
 (`043fb46d1a93c77aae656e7c1c64a875d1fc6a0a`), and flutter-action v2.23.0
-(`1a449444c387b1966244ae4d4f8c696479add0b2`). Native mpv/FFmpeg/libplacebo
-bundle and depot_tools assessment remains pending; those pins were not changed
-in this unit. Physical Windows patched-engine rebuild and runtime validation are
-still required before making native Windows support claims.
+(`1a449444c387b1966244ae4d4f8c696479add0b2`). The native runtime and
+`depot_tools` assessment is recorded below. Physical Windows patched-engine
+rebuild and runtime validation are still required before making native Windows
+support claims.
 
-Verification for this unit used the separate 3.47.4 SDK cache with
+## Native runtime refresh
+
+The pinned runtime now uses the latest same-vendor standard x86-64 LGPL asset
+available on 2026-09-12:
+`mpv-dev-lgpl-x86_64-20260912-git-14f2d48cbc.7z`. Its downloaded bytes matched
+the release SHA-256
+`455965297ba3f5906a63cd2b219442685be45528a1fe806e4b228147881e41cb` before
+inspection. The exact [successful LGPL x86-64 build](https://github.com/zhongfly/mpv-winbuild/actions/runs/34692529514)
+was run `34692529514`, job `103550228585`; the release metadata also records
+the [published asset](https://github.com/zhongfly/mpv-winbuild/releases/tag/2026-09-12-14f2d48cbc)
+and [build logs artifact](https://github.com/zhongfly/mpv-winbuild/actions/runs/34692529514/artifacts/10297832765).
+
+Component identities are taken from the new DLL, build logs, and the separate
+FFmpeg build artifact:
+
+- mpv `v0.41.0-1044-g14f2d48cb`, commit
+  `14f2d48cbc7dda61adb4bd181e107a1f3f76e533`, DLL SHA-256
+  `b507529d99a4dffdeaec85eceff7661a7e3c6ca4efd09c2014e11a1441b83eaa`;
+- FFmpeg `N-126523-g884590dd4`, commit
+  `884590dd4aad5fcc7a91fbbb7af8a5da80b61d96`;
+- libplacebo `7.371.0`, source commit
+  `3330a515d62139259c26239014f286e233bd3a5c`.
+
+The mpv configure log reports `gpl=false`; the FFmpeg configure log reports
+`License: LGPL version 3 or later`. The four upstream license texts at these
+revisions match the checked-in files byte-for-byte, so their existing SHA-256
+anchors remain unchanged. The [mpv source comparison](https://github.com/mpv-player/mpv/compare/7e4cb538a3f30d25920ad8e87ba6571540fb729f...14f2d48cbc7dda61adb4bd181e107a1f3f76e533)
+contains the Android `hwdec_aimagereader` fixes; no Windows ABI or playback
+benefit is claimed from that source delta.
+
+Static PE inspection found the new DLL is still x86-64 PE32+, retains the same
+47 imported DLLs and 206 exported symbols as the old bundle. The selected
+standard x86-64 distribution and documented Vulkan-loader prerequisite remain
+unchanged; this is not physical CPU or runtime compatibility evidence. The changed DLL
+is now independently pinned by `prepare-mpv.ps1`, runner CMake, and the package
+gate; no old-provenance DLL is mixed with the new asset.
+
+`depot_tools` remains pinned to `13febbee9ece9e03df923f69d540afc63c6db93e`.
+The current upstream utility revision
+[`36a8df4ad006eaa0572fb446edb8145fe5403592`](https://chromium.googlesource.com/chromium/tools/depot_tools/+/36a8df4ad006eaa0572fb446edb8145fe5403592)
+was reviewed and not adopted: it reverts a recent change because
+that change broke `gclient sync`. Keeping the existing pinned utility avoids
+additional provisioning churn; Flutter 3.47.4 does not require a newer revision.
+CMake, MSVC, and Windows SDK versions remain
+machine-discovered toolchain minimums rather than vendored dependency pins.
+
+The portable gate covers release-policy parsing, exact source/license hashes,
+and the independent archive/DLL pins. The user must prepare the new runtime in
+a fresh directory and rebuild the patched debug/release engines and host before
+building or packaging. No Windows compile, launch, playback, HDR, Vulkan-loader,
+DirectComposition, or physical acceptance result is established by this
+macOS-side refresh.
+
+Verification for the preceding SDK/Dart unit used the separate 3.47.4 SDK cache with
 `TZ=America/New_York`: tracked Dart formatting and analysis passed, `flutter pub
 get` and `flutter pub outdated --json` resolved the recorded lockfile, and the
 full macOS suite passed all 811 tests, including the five retained goldens and

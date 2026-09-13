@@ -197,7 +197,7 @@ x86-64 LGPL libmpv directory before configuring the application:
 
 ```powershell
 Set-Location C:\path\to\LineupDesktop
-$mpvRoot = 'C:\local\lineup-mpv' # New or empty directory.
+$mpvRoot = 'C:\local\lineup-mpv-20260912-14f2d48cbc' # New or empty directory.
 & .\tool\windows\prepare-mpv.ps1 -Destination $mpvRoot
 $env:LINEUP_MPV_ROOT = $mpvRoot
 flutter build windows
@@ -214,6 +214,12 @@ integrity checks live in the build scripts and CMake; see
 component versions, licenses, and redistribution obligations. Runnable test and
 package machines also need a GPU driver or Vulkan Runtime providing
 `vulkan-1.dll`, even though Lineup selects D3D11 output.
+
+When the pinned runtime changes, provision it into a fresh unique destination;
+do not reuse or overwrite an older prepared directory. Rebuild the Lineup
+application against the new runtime. This refresh also upgrades Flutter to
+3.47.4, so reprovision its patched `host_debug` and `host_release` outputs
+before launching or packaging; the older SDK outputs cannot be reused.
 
 ### Patched engine provisioning
 
@@ -270,7 +276,7 @@ in the current session as well:
 
 ```powershell
 $engineSource = 'C:\path\to\flutter\engine\src'
-$mpvRoot = 'C:\local\lineup-mpv'
+$mpvRoot = 'C:\local\lineup-mpv-20260912-14f2d48cbc'
 [Environment]::SetEnvironmentVariable('LINEUP_ENGINE_SOURCE', $engineSource, 'User')
 [Environment]::SetEnvironmentVariable('LINEUP_MPV_ROOT', $mpvRoot, 'User')
 $env:LINEUP_ENGINE_SOURCE = $engineSource
@@ -320,7 +326,7 @@ package the portable application:
 
 ```powershell
 Set-Location C:\path\to\LineupDesktop
-$env:LINEUP_MPV_ROOT = 'C:\local\lineup-mpv'
+$env:LINEUP_MPV_ROOT = 'C:\local\lineup-mpv-20260912-14f2d48cbc'
 .\tool\windows\build-release.ps1 -EngineSource 'C:\path\to\flutter\engine\src'
 .\tool\windows\package.ps1
 ```
