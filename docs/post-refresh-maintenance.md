@@ -49,5 +49,44 @@ golden cases were removed, 25 obsolete PNGs were deleted, and the two Guide
 opacity cases remain as non-baseline aperture checks. The retained baselines
 were refreshed and rerun without `--update-goldens` using the pinned Flutter
 SDK, `TZ=America/New_York`, and macOS. The final five renders were reviewed in
-one contact sheet. No full-suite run or physical Windows validation is implied;
-the dependency-assessment unit remains pending.
+one contact sheet. That golden-reduction run did not establish full-suite or
+physical Windows validation; the dependency-assessment unit is recorded below.
+
+## Dependency and SDK assessment
+
+The SDK refresh uses the stable Flutter 3.47.4 tag, verified at framework
+revision `9584c6713b324636289d067944a46fd6b49df14b`, engine revision
+`06a2e2a110089dff50fe635cffd2a61e1b24fbcd`, and Dart 3.13.3. The tag matches
+the stable branch; the upstream delta from 3.47.2 was reviewed in the
+[Flutter 3.47.2 to 3.47.4 comparison](https://github.com/flutter/flutter/compare/3.47.2...3.47.4).
+The existing DirectComposition patch still applies contextually to the exact
+3.47.4 Windows manager source; its logic is unchanged, while its engine marker
+and normalized patched-manager hash were refreshed.
+
+`flutter_secure_storage` moves from `^11.0.0` to `^11.1.1`. The resolver also
+updated `flutter_secure_storage_darwin` to 0.4.2, `flutter_secure_storage_linux`
+to 3.0.3, and `flutter_secure_storage_platform_interface` to 2.1.0. The
+[flutter_secure_storage changelog](https://pub.dev/packages/flutter_secure_storage/changelog)
+and the [Darwin](https://pub.dev/packages/flutter_secure_storage_darwin/changelog),
+[Linux](https://pub.dev/packages/flutter_secure_storage_linux/changelog), and
+[platform-interface](https://pub.dev/packages/flutter_secure_storage_platform_interface/changelog)
+changelogs were reviewed; no application migration is needed for this additive
+upgrade. Other direct dependencies had no compatible
+updates. `qr_flutter` remains at 4.1.0 with `qr` 3.0.2 because `qr` 4.x changes
+the renderer-facing correction-level and constructor APIs. SDK-owned
+`material_color_utilities` 0.13.0 and `test_api` 0.7.12 remain at the versions
+selected by Flutter's constraints.
+
+The verified CI action pins remain unchanged: checkout v7.0.1
+(`3d3c42e5aac5ba805825da76410c181273ba90b1`), upload-artifact v7.0.1
+(`043fb46d1a93c77aae656e7c1c64a875d1fc6a0a`), and flutter-action v2.23.0
+(`1a449444c387b1966244ae4d4f8c696479add0b2`). Native mpv/FFmpeg/libplacebo
+bundle and depot_tools assessment remains pending; those pins were not changed
+in this unit. Physical Windows patched-engine rebuild and runtime validation are
+still required before making native Windows support claims.
+
+Verification for this unit used the separate 3.47.4 SDK cache with
+`TZ=America/New_York`: tracked Dart formatting and analysis passed, `flutter pub
+get` and `flutter pub outdated --json` resolved the recorded lockfile, and the
+full macOS suite passed all 811 tests, including the five retained goldens and
+two pixel checks. No golden baseline was regenerated.

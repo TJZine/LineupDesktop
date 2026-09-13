@@ -24,7 +24,7 @@ jobs:
           persist-credentials: false
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
-          flutter-version: 3.47.2
+          flutter-version: 3.47.4
           channel: stable
           cache: true
       - run: flutter pub get
@@ -44,7 +44,7 @@ jobs:
           persist-credentials: false
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
-          flutter-version: 3.47.2
+          flutter-version: 3.47.4
           channel: stable
           cache: true
       - id: golden
@@ -86,7 +86,7 @@ jobs:
           persist-credentials: false
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
-          flutter-version: 3.47.2
+          flutter-version: 3.47.4
           channel: stable
           cache: true
       - name: Verify portable UI on Windows
@@ -189,7 +189,7 @@ jobs:
           persist-credentials: false
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
-          flutter-version: 3.47.2
+          flutter-version: 3.47.4
           channel: stable
           cache: true
       - name: Validate exact Flutter and engine sources and build the patched engine
