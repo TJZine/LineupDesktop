@@ -146,3 +146,29 @@ identify the final artifacts and evidence limitations.
 These are synthetic portable captures, not Windows acceptance. No independent
 review was requested or run, and none is specifically recommended for this
 presentation-only group. Physical Windows validation remains outstanding.
+
+## Group 3 — Guide
+
+Luna task `01a097e3-c21a-7921-9175-bfec44eee9a4` returned its lease after
+bounded integration follow-ups. Guide geometry, native controls, program-cell
+measurements and preview/detail spacing follow the shared viewport scale.
+The header accommodates enlarged text; controls share an available-width wrap
+policy. Popup rows grow independently of their closed selected labels. Existing
+rail allocation limits remain, without clamping actual accessibility text.
+Normal text retains five rows; enlarged content remains scrollable. Fractional
+raster seams receive local opaque coverage around the existing PiP aperture.
+No controller, tuning, artwork lifetime or native playback owner changed.
+
+Forty existing Guide, ticker and navigation checks passed, with targeted analysis,
+format and diff checks. Final captures cover 1080p, 1440p, native2160p, native2160p
+with text200%, 2160p/DPR2/text200%, and 720p/text200%; additional checks cover
+the compact wrap boundary. Open library/hours menus, selected library/search
+and a standalone Retry placeholder were captured. Astra verified five normal1080
+images byte-for-byte and inspected the corrected native4K controls and enlarged
+PiP. [Evidence hashes](design/desktop-ui/scaling/group-3-evidence.json) identify
+the final sources and captures.
+
+This is portable presentation evidence, not physical Windows validation. Native
+video layering, Windows fonts/input and live monitor-DPI transitions remain
+unvalidated. Independent review was not run and is not specifically recommended
+for this presentation-only group.

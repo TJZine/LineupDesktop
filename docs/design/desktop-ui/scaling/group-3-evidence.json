@@ -1,0 +1,106 @@
+{
+  "base": "71bbf621fa7380158101eef06fedd417b7a6c4eb",
+  "sourceHashes": {
+    "lib/guide/guide_view.dart": "ab92887aa616c35e786e60af91947ef2382abdfbcafc8620921b9bdc8d3facd7",
+    "lib/guide/guide_playback_placeholder.dart": "1118a1836f6487847d23a2521418264e23315af5002ef4e33ec795b36622fdbf"
+  },
+  "checks": {
+    "format": "pass: no changes",
+    "analyze": "pass: No issues found",
+    "diffCheck": "pass",
+    "targetedTests": "pass: 40 checks",
+    "scalingHarness": {
+      "1920x1080 dpr1 text1": "pass: 5 checks; five baseline captures byte-identical",
+      "2560x1440 dpr1 text1": "pass: 5 checks",
+      "3840x2160 dpr1 text1": "pass: 5 checks",
+      "3840x2160 dpr1 text2": "pass: 5 checks; controls wrap at scaled threshold",
+      "3840x2160 dpr2 text2": "pass: 5 checks",
+      "1280x720 dpr1 text2": "pass: 5 checks"
+    },
+    "thresholdHarness": {
+      "1020x573.75 dpr1 text1": "pass: controls wrap",
+      "1040x585 dpr1 text1": "pass: controls stay on one row"
+    }
+  },
+  "captureHashes": {
+    "build/desktop-ui/scaling/guide-final-followup-1080": {
+      "guide-guide-no-playback-capture.png": "07104d49887722eea9990ab71506eef6afeb28d40f44e777e3c006d2a926f2c0",
+      "guide-guide-pip-capture.png": "b377a14576c390b8ce165d81ffbfac9346a43d4a01f7ab4b27c66963d8da1b55",
+      "guide-guide-unavailable-capture.png": "d42b58bd2b2c2adf54765934f8f210b415756b35ae7aa9e1387735a1f7aa9da5",
+      "guide-guide-focus-short-capture.png": "331956c5f842bd8f54f5d5a4fb65e61964b1bc48210cd2657c978bf798f8fcab",
+      "guide-guide-focus-long-capture.png": "9defa38c8a14c3e6269cf9af7c821907ea7c64c70834c5c49ea39426906d124b"
+    },
+    "build/desktop-ui/scaling/guide-final-followup-1440": {
+      "guide-guide-no-playback-capture.png": "163ef37e13aa7eef1298396a7243d4173faad937cc778f8d57ba9de598f34eab",
+      "guide-guide-pip-capture.png": "601408c1d58730e7b531d1db8f30c96f0b27b7fe519ddc3afc714c292f42a975",
+      "guide-guide-unavailable-capture.png": "e71d24523f59bf9af5682ab4607c5e7de372f96096fd42f61609086c2b61e99f",
+      "guide-guide-focus-short-capture.png": "d89323ccedca4f2a9695391bcb63f39a0cf4826025e6ad7c72377c8883ab5d99",
+      "guide-guide-focus-long-capture.png": "6b80f8c158d9e97fe8883dae9739ff10edd7694765fb09bea2636370d769a24c"
+    },
+    "build/desktop-ui/scaling/guide-final-followup-2160": {
+      "guide-guide-no-playback-capture.png": "1e3b9e7af04e0f8979420672f7e456b5554fa804ea22b45bf92cd025ec12bc83",
+      "guide-guide-pip-capture.png": "6f0a5f895ca01993318e947b4aa2d373c59daeeeabd277f458e00f7aaca53220",
+      "guide-guide-unavailable-capture.png": "4d6809a31c01fe1cbc2528ba4af2ae6f7c662ac9f25fd7e2eb22c2bd081add01",
+      "guide-guide-focus-short-capture.png": "d0e2df45dc2b910f759827eb186022546e67f03f3691738b7c51f59bd35d752f",
+      "guide-guide-focus-long-capture.png": "55ebf19d7cb63dfd4d5e981084dd7a2e063a7b5bf0bfa865d3103bc767c7ba49"
+    },
+    "build/desktop-ui/scaling/guide-final-followup-2160-text2": {
+      "guide-guide-no-playback-capture.png": "227040cbac8bec92be58136811b6b641199b59b28658e8a4b72d4ba7ac41682e",
+      "guide-guide-pip-capture.png": "ae343b1202e9baf65aa687c95c8623e538e7f337f5b47475d47ee3d95663fdf0",
+      "guide-guide-unavailable-capture.png": "33c5f1baab7ecaad2921e3bd9aa03a29acb6a098faa3fdd7e9d39baf2ecae9df",
+      "guide-guide-focus-short-capture.png": "3752f11c5a0e123c0ca4893bbfe1915ed126f3537d799f3616970ca747475deb",
+      "guide-guide-focus-long-capture.png": "ed1cee3dd5b343c01c8c0ceaba7afa7de3b8bc99d1d2ecffd3ff23fef385264a"
+    },
+    "build/desktop-ui/scaling/guide-final-followup-2160-dpr2-text2": {
+      "guide-guide-no-playback-capture.png": "135faaa4f9c4254af5d03bbfb078bef022d899182d3bde3e513c91ca870e919a",
+      "guide-guide-pip-capture.png": "91c581fdcc2a662ff3b24e4a3d925c21a0581d7cb5bd41ab2636171632a62985",
+      "guide-guide-unavailable-capture.png": "c338ff1b8c05ea4d98b95d51938e7529a6e57df93b0b77fe9f1d2286adbe496c",
+      "guide-guide-focus-short-capture.png": "8077b6ee75dc6f3e76623a16567e088e2dba247ff046e8739a84eb06b241b460",
+      "guide-guide-focus-long-capture.png": "025e50142f7ae15aca43d025e8467400847ed97889ad277c694bdbc5d291953c"
+    },
+    "build/desktop-ui/scaling/guide-final-followup-720-text2": {
+      "guide-guide-no-playback-capture.png": "4d2e4bb5ac3ad477f779e59d04dc8a7ed1a08d893f8a5cedd49abb91359289a2",
+      "guide-guide-pip-capture.png": "30fb65025bbf53289ab67b7d41a053bc7d2be49d95cd579db2d39bdcecaf5d26",
+      "guide-guide-unavailable-capture.png": "ef52c3ff0fd6902ae9fd50064d0229794a5481f26226eff1a72677f65de56545",
+      "guide-guide-focus-short-capture.png": "3e1381a2fc196a75d5845524aabfe51e8cefeb893b65319719c902c0976710e5",
+      "guide-guide-focus-long-capture.png": "2dd14c54600658b6a17386e28b18b5980d69eed43579deacf20ce6b1705f0abb"
+    }
+  },
+  "controlEvidence": {
+    "native4K": {
+      "directory": "build/desktop-ui/scaling/guide-final-followup-2160",
+      "guide-guide-library-popup.png": "f25e4329159e5cde21a89217cde665ec80d726a1b344d42695d9a79ac7100339",
+      "guide-guide-hours-popup.png": "f0d89bbaa88a7d224816107176c90c02c48a2e288dd9b5c74499cc93038ba521",
+      "guide-guide-library-long-search.png": "cd2dc479e827ea36cc1591c997029756c2123c95da953e1f95caa11863eac836",
+      "guide-guide-recovery-retry.png": "de8039185ad327812cb2adae388266f3c5a9a499b17f9d0e665422343c35a5f7"
+    },
+    "native4K-text2": {
+      "directory": "build/desktop-ui/scaling/guide-final-followup-2160-text2",
+      "guide-guide-library-popup.png": "d15f7ff71babd8158dc88fa60a14579a9059d8f570c32d538c7718f1ff9e3f0e",
+      "guide-guide-hours-popup.png": "f855ca9a9d4fa25d7b12ebd562213b4daba31f8467279c166605960d44d5a752",
+      "guide-guide-library-long-search.png": "8c69ec31d478d98bc87c1565c7b09588a2df6f50b92fce15cdaa4e7dc4f19fc6",
+      "guide-guide-recovery-retry.png": "00fd3ceec978f33f2e1143bc9f0e4c5b875cae0f05f3cfba03be7712d53d6a12"
+    },
+    "native4K-dpr2-text2": {
+      "directory": "build/desktop-ui/scaling/guide-final-followup-2160-dpr2-text2",
+      "guide-guide-library-popup.png": "ca1c316cf3e47037e901a5f540e10fe5524d95733f257b6f5618f9fa83e12f29",
+      "guide-guide-hours-popup.png": "f3524cc79ae15f7f59ab8de2669d0a990014906e07267f509e6f75a78dea32e8",
+      "guide-guide-library-long-search.png": "b5872a64edcd6a83d855246fa9f1dfa0b35298695ef858d1dfe9d90fe434aa9b",
+      "guide-guide-recovery-retry.png": "7d6913782fe9d2b2919fdfdb1b8861d4ca3fe27d7499b7df5f7ef13bca3d0fdc"
+    }
+  },
+  "notes": [
+    "Hours popup rows retain scaled minimum height and padding; enlarged controls use an unpadded selectedItemBuilder for the closed value.",
+    "The wrap threshold uses available content width and viewport scale in both policy prediction and actual LayoutBuilder selection.",
+    "At 2560x1440, the row epsilon addresses the measured floating-point floor from 4.999999 rows to the required five-row composition.",
+    "At 2560x1440, the fractional right side seam showed unexpected alpha at x=2533.5; scaled inward side fill closes that seam.",
+    "At 1280x720 text2, the fractional toolbar/divider seam showed unexpected alpha at x=0.5,y=88.5; the enlarged combined header removes that seam.",
+    "No Windows native, HDR, DirectComposition, or packaging claim was made.",
+    "The ignored scaling fixture includes popup, wrapped-label, and Retry recovery evidence."
+  ],
+  "rootIntegration": {
+    "normal1080": "Five captures verified byte-identical by Astra",
+    "visualInspection": "Native4K closed Hours/search and opened library/hours; DPR1/text200 PiP, earlier DPR2/text200 PiP and Retry",
+    "boundary": "Synthetic portable captures; no physical Windows acceptance"
+  }
+}
