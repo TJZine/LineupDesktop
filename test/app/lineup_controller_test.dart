@@ -600,6 +600,7 @@ void main() {
         plex: plex,
         scheduleClock: () => DateTime.utc(2026, 1, 1, 0, 0, 30),
       );
+      addTearDown(controller.dispose);
 
       final initialization = controller.initialize();
       await store.migrationSaveStarted.future;
@@ -611,7 +612,6 @@ void main() {
 
       expect(controller.channels.single.scheduleVersion, 1);
       expect(controller.channels.single.scheduleTransition, isNull);
-      controller.dispose();
     },
   );
 

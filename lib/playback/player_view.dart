@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 
 import '../channels/channel.dart';
@@ -521,32 +523,69 @@ class _SurfaceError extends StatelessWidget {
   final PlayerCoordinator controller;
 
   @override
-  Widget build(BuildContext context) => ColoredBox(
-    color: LineupTheme.of(context).deepBackground,
-    child: Center(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.error_outline),
-            const SizedBox(height: 8),
-            Text(
-              controller.error ?? controller.status.message,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
+  Widget build(BuildContext context) {
+    final roles = LineupTheme.of(context);
+    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
+    final textTheme = Theme.of(context).textTheme;
+    final bodyFontSize = textTheme.bodyMedium?.fontSize;
+    final bodyStyle = scale > 1 && bodyFontSize != null
+        ? textTheme.bodyMedium!.copyWith(fontSize: bodyFontSize * scale)
+        : textTheme.bodyMedium;
+    final retryStyle = scale > 1
+        ? TextButton.styleFrom(
+            minimumSize: Size(64 * scale, 36 * scale),
+            padding: EdgeInsets.symmetric(
+              horizontal: 12 * scale,
+              vertical: 8 * scale,
             ),
-            if (controller.canRetry)
-              TextButton(
-                onPressed: controller.retry,
-                child: const Text('Retry'),
+            textStyle: textTheme.labelLarge?.copyWith(
+              fontSize: (textTheme.labelLarge?.fontSize ?? 14) * scale,
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(roles.panelRadius * scale),
+            ),
+          )
+        : null;
+    return ColoredBox(
+      color: roles.deepBackground,
+      child: LayoutBuilder(
+        builder: (context, constraints) => SingleChildScrollView(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              minHeight: constraints.maxHeight.isFinite
+                  ? constraints.maxHeight
+                  : 0,
+            ),
+            child: Center(
+              child: Padding(
+                padding: EdgeInsets.all(16 * scale),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.error_outline, size: 24 * scale),
+                    SizedBox(height: 8 * scale),
+                    Text(
+                      controller.error ?? controller.status.message,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: bodyStyle,
+                    ),
+                    if (controller.canRetry)
+                      TextButton(
+                        onPressed: controller.retry,
+                        style: retryStyle,
+                        child: const Text('Retry'),
+                      ),
+                  ],
+                ),
               ),
-          ],
+            ),
+          ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 class _Osd extends StatelessWidget {
@@ -565,7 +604,10 @@ class _Osd extends StatelessWidget {
   Widget build(BuildContext context) {
     final roles = LineupTheme.of(context);
     final size = MediaQuery.sizeOf(context);
-    final horizontalInset = (size.width * 0.05).clamp(24.0, 96.0);
+    final scale = LineupLayout.scaleFor(size);
+    final horizontalInset = (size.width * 0.05)
+        .clamp(24.0 * scale, 96.0 * scale)
+        .toDouble();
     final channel = controller.currentChannel;
     final program = controller.currentProgram;
     final next = controller.nextProgram;
@@ -592,11 +634,16 @@ class _Osd extends StatelessWidget {
     // lane; keep the compact 800x600 regime stacked so every action remains
     // reachable without crowding the identity block.
     final horizontal = size.width >= 1200 && size.height >= 640;
+    final largeDesktop = size.width >= 1920 && size.height >= 900;
     final transportActions = <Widget>[
       IconButton(
         tooltip: 'Previous channel',
         onPressed: unsupported ? null : controller.previousChannel,
-        iconSize: 28,
+        constraints: scale > 1
+            ? BoxConstraints(minWidth: 48 * scale, minHeight: 48 * scale)
+            : null,
+        padding: scale > 1 ? EdgeInsets.all(8 * scale) : null,
+        iconSize: 28 * scale,
         icon: const Icon(Icons.skip_previous),
       ),
       IconButton(
@@ -604,7 +651,11 @@ class _Osd extends StatelessWidget {
             ? 'Pause'
             : 'Play',
         onPressed: unsupported ? null : controller.togglePlayback,
-        iconSize: 36,
+        constraints: scale > 1
+            ? BoxConstraints(minWidth: 48 * scale, minHeight: 48 * scale)
+            : null,
+        padding: scale > 1 ? EdgeInsets.all(8 * scale) : null,
+        iconSize: 36 * scale,
         icon: Icon(
           controller.status.state == PlayerState.playing
               ? Icons.pause
@@ -614,7 +665,11 @@ class _Osd extends StatelessWidget {
       IconButton(
         tooltip: 'Next channel',
         onPressed: unsupported ? null : controller.nextChannel,
-        iconSize: 28,
+        constraints: scale > 1
+            ? BoxConstraints(minWidth: 48 * scale, minHeight: 48 * scale)
+            : null,
+        padding: scale > 1 ? EdgeInsets.all(8 * scale) : null,
+        iconSize: 28 * scale,
         icon: const Icon(Icons.skip_next),
       ),
     ];
@@ -635,7 +690,7 @@ class _Osd extends StatelessWidget {
         ? null
         : (sleepRemaining.inSeconds / Duration.secondsPerMinute).ceil();
     final sleepLabel = remainingMinutes == null
-        ? 'Sleep • Off'
+        ? 'Sleep'
         : 'Stops in $remainingMinutes min';
     final optionActions = <Widget>[
       _osdAction(
@@ -679,6 +734,11 @@ class _Osd extends StatelessWidget {
             focusNode: menuFocus,
             tooltip: 'Open Lineup menu',
             onPressed: () => openMenu!(invokerContext, menuFocus),
+            constraints: scale > 1
+                ? BoxConstraints(minWidth: 48 * scale, minHeight: 48 * scale)
+                : null,
+            padding: scale > 1 ? EdgeInsets.all(8 * scale) : null,
+            iconSize: 24 * scale,
             icon: const Icon(Icons.menu),
           ),
         ),
@@ -689,6 +749,11 @@ class _Osd extends StatelessWidget {
             ? 'Exit fullscreen'
             : 'Fullscreen',
         onPressed: unsupported ? null : controller.toggleFullscreen,
+        constraints: scale > 1
+            ? BoxConstraints(minWidth: 48 * scale, minHeight: 48 * scale)
+            : null,
+        padding: scale > 1 ? EdgeInsets.all(8 * scale) : null,
+        iconSize: 24 * scale,
         icon: Icon(
           controller.fullscreen ? Icons.fullscreen_exit : Icons.fullscreen,
         ),
@@ -698,8 +763,12 @@ class _Osd extends StatelessWidget {
     final logoPath = program == null
         ? null
         : _artworkPath(program.scheduled.item, GuideArtworkKind.clearLogo);
+    final item = program?.scheduled.item;
+    final showTitle = item?.showTitle?.trim();
+    final primaryTitle = showTitle?.isNotEmpty == true ? showTitle! : title;
+    final episodeFacts = item == null ? null : _osdEpisodeFacts(item);
     final statusFacts = [
-      program?.scheduled.item.showTitle,
+      episodeFacts,
       _statusLabel(controller.status.state),
     ].nonNulls.toList(growable: false);
     final identity = Column(
@@ -709,36 +778,44 @@ class _Osd extends StatelessWidget {
         if (controller.lineup.settings.preferClearLogos &&
             program != null &&
             logoPath != null)
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 320, maxHeight: 68),
-            child: _PlayerArtwork(
-              key: ValueKey((
-                program.id,
-                controller.lineup.contentGeneration,
-                logoPath,
-              )),
-              imageKey: const Key('player-osd-logo'),
-              semanticLabel: title,
-              future: controller.guide.artworkFor(
-                program,
-                GuideArtworkKind.clearLogo,
-              ),
-              fit: BoxFit.contain,
-              fallback: _OsdTitle(title: title),
-              clearLogo: true,
+          _PlayerArtwork(
+            key: ValueKey((
+              program.id,
+              controller.lineup.contentGeneration,
+              logoPath,
+            )),
+            imageKey: const Key('player-osd-logo'),
+            semanticLabel: primaryTitle,
+            future: controller.guide.artworkFor(
+              program,
+              GuideArtworkKind.clearLogo,
+            ),
+            fit: BoxFit.contain,
+            fallback: _OsdTitle(title: primaryTitle),
+            clearLogo: true,
+            logoMaximumSize: Size(
+              (size.width >= 1920 ? 520 : 360) * scale,
+              (size.height >= 900 ? 128 : 72) * scale,
+            ),
+            logoMinimumVisibleSize: Size(
+              96 * scale,
+              (size.height >= 900 ? 28 : 24) * scale,
             ),
           )
         else
-          _OsdTitle(title: title),
+          _OsdTitle(title: primaryTitle),
         if (statusFacts.isNotEmpty) ...[
-          const SizedBox(height: 4),
+          SizedBox(height: 8 * scale),
           Text(
             statusFacts.join(' • '),
             key: const Key('player-osd-status'),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.bodyMedium
-                ?.copyWith(color: roles.secondaryText),
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: roles.primaryText.withValues(alpha: 0.88),
+              fontSize: (largeDesktop ? 16 : 14) * scale,
+              fontWeight: FontWeight.w400,
+            ),
           ),
         ],
       ],
@@ -750,6 +827,11 @@ class _Osd extends StatelessWidget {
             displayedPosition,
             Duration(milliseconds: duration),
           );
+    final osdSecondaryStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
+      color: roles.primaryText.withValues(alpha: 0.88),
+      fontSize: horizontal ? (largeDesktop ? 16 : 14) * scale : null,
+      fontWeight: FontWeight.w400,
+    );
     final progress = Row(
       key: const Key('player-osd-progress-block'),
       children: [
@@ -759,13 +841,12 @@ class _Osd extends StatelessWidget {
             ?remaining,
           ].join(' • '),
           key: const Key('player-osd-timing'),
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-            color: roles.secondaryText,
+          style: osdSecondaryStyle?.copyWith(
             fontFeatures: const [FontFeature.tabularFigures()],
           ),
         ),
         if (next != null) ...[
-          const SizedBox(width: 16),
+          SizedBox(width: 16 * scale),
           Expanded(
             child: Align(
               alignment: Alignment.centerRight,
@@ -776,44 +857,56 @@ class _Osd extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.end,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: roles.mutedText,
-                  fontWeight: FontWeight.w600,
-                ),
+                style: osdSecondaryStyle,
               ),
             ),
           ),
         ],
       ],
     );
-    Widget actionGroup(List<Widget> children, {bool separated = true}) =>
-        DecoratedBox(
-          decoration: BoxDecoration(
-            border: separated
-                ? Border(left: BorderSide(color: roles.subtleBorder))
-                : null,
-          ),
-          child: Padding(
-            padding: EdgeInsets.only(left: separated ? 8 : 0),
-            child: Row(mainAxisSize: MainAxisSize.min, children: children),
-          ),
-        );
-    final groupedActions = Row(
-      key: const Key('player-osd-action-groups'),
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (dvrControlsEnabled) actionGroup(transportActions, separated: false),
-        actionGroup(optionActions, separated: dvrControlsEnabled),
-        actionGroup(windowActions),
-      ],
-    );
+    Widget actionGroup(List<Widget> children) =>
+        Row(mainAxisSize: MainAxisSize.min, children: children);
+    final wrapActions = MediaQuery.textScalerOf(context).scale(1) > 1;
+    final optionGroup = wrapActions
+        ? Wrap(
+            spacing: 8 * scale,
+            runSpacing: 6 * scale,
+            children: optionActions,
+          )
+        : actionGroup(optionActions);
+    final groupedActions = wrapActions
+        ? Wrap(
+            key: const Key('player-osd-action-groups'),
+            alignment: WrapAlignment.end,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 16 * scale,
+            runSpacing: 6 * scale,
+            children: [
+              if (dvrControlsEnabled) actionGroup(transportActions),
+              optionGroup,
+              actionGroup(windowActions),
+            ],
+          )
+        : Row(
+            key: const Key('player-osd-action-groups'),
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (dvrControlsEnabled) ...[
+                actionGroup(transportActions),
+                SizedBox(width: 16 * scale),
+              ],
+              optionGroup,
+              SizedBox(width: 16 * scale),
+              actionGroup(windowActions),
+            ],
+          );
     final progressLine = Positioned(
       key: const Key('player-osd-progress-line'),
       left: 0,
       right: 0,
       bottom: 0,
       child: SizedBox(
-        height: 40,
+        height: 40 * scale,
         child: Semantics(
           label: 'Playback progress',
           value:
@@ -824,7 +917,7 @@ class _Osd extends StatelessWidget {
               Align(
                 alignment: Alignment.bottomCenter,
                 child: SizedBox(
-                  height: 4,
+                  height: 4 * scale,
                   child: LinearProgressIndicator(
                     value: progressValue,
                     color: roles.progressFill,
@@ -835,7 +928,7 @@ class _Osd extends StatelessWidget {
               if (dvrControlsEnabled)
                 SliderTheme(
                   data: SliderTheme.of(context).copyWith(
-                    trackHeight: 4,
+                    trackHeight: 4 * scale,
                     activeTrackColor: Colors.transparent,
                     inactiveTrackColor: Colors.transparent,
                     thumbShape: SliderComponentShape.noThumb,
@@ -869,10 +962,10 @@ class _Osd extends StatelessWidget {
               padding: EdgeInsets.fromLTRB(
                 horizontalInset,
                 horizontal
-                    ? (size.height >= 900 ? 44 : 20)
-                    : (size.height >= 720 ? 56 : 40),
+                    ? (size.height >= 900 ? 44 : 20) * scale
+                    : (size.height >= 720 ? 56 : 40) * scale,
                 horizontalInset,
-                12 + (dvrControlsEnabled ? 40 : 0),
+                12 * scale + (dvrControlsEnabled ? 40 * scale : 0),
               ),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
@@ -900,23 +993,33 @@ class _Osd extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
                           Expanded(child: identity),
-                          const SizedBox(width: 24),
-                          groupedActions,
+                          SizedBox(width: 24 * scale),
+                          if (wrapActions)
+                            Flexible(
+                              child: Align(
+                                alignment: Alignment.bottomRight,
+                                child: groupedActions,
+                              ),
+                            )
+                          else
+                            groupedActions,
                         ],
                       )
                     else ...[
                       identity,
-                      const SizedBox(height: 6),
+                      SizedBox(height: 6 * scale),
                       Align(
                         alignment: Alignment.centerRight,
-                        child: Row(
-                          key: const Key('player-osd-stacked-controls'),
-                          mainAxisSize: MainAxisSize.min,
-                          children: [groupedActions],
-                        ),
+                        child: wrapActions
+                            ? groupedActions
+                            : Row(
+                                key: const Key('player-osd-stacked-controls'),
+                                mainAxisSize: MainAxisSize.min,
+                                children: [groupedActions],
+                              ),
                       ),
                     ],
-                    const SizedBox(height: 10),
+                    SizedBox(height: 10 * scale),
                     progress,
                   ],
                 ),
@@ -926,11 +1029,12 @@ class _Osd extends StatelessWidget {
         ),
         if (channel != null)
           Positioned(
-            top: 24,
+            top: 24 * scale,
             right: horizontalInset,
             child: _ChannelBug(
               key: const Key('player-osd-channel-bug'),
               channel: channel,
+              osdPresentation: true,
             ),
           ),
         progressLine,
@@ -945,29 +1049,51 @@ class _OsdTitle extends StatelessWidget {
   final String title;
 
   @override
-  Widget build(BuildContext context) => Semantics(
-    container: true,
-    label: title,
-    excludeSemantics: true,
-    child: Text(
-      title,
-      key: const Key('player-osd-title'),
-      maxLines: 2,
-      overflow: TextOverflow.ellipsis,
-      style: Theme.of(context).textTheme.titleLarge
-          ?.copyWith(fontWeight: FontWeight.w800),
-    ),
-  );
+  Widget build(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    final scale = LineupLayout.scaleFor(size);
+    final largeDesktop = size.width >= 1920 && size.height >= 900;
+    final horizontal = size.width >= 1200 && size.height >= 640;
+    return Semantics(
+      container: true,
+      label: title,
+      excludeSemantics: true,
+      child: Text(
+        title,
+        key: const Key('player-osd-title'),
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+          color: LineupTheme.of(context).primaryText,
+          fontSize: largeDesktop
+              ? 28 * scale
+              : horizontal
+              ? 24 * scale
+              : null,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
 }
 
 class _ChannelBug extends StatelessWidget {
-  const _ChannelBug({required this.channel, super.key});
+  const _ChannelBug({
+    required this.channel,
+    this.osdPresentation = false,
+    super.key,
+  });
 
   final Channel channel;
+  final bool osdPresentation;
 
   @override
   Widget build(BuildContext context) {
     final roles = LineupTheme.of(context);
+    final size = MediaQuery.sizeOf(context);
+    final scale = LineupLayout.scaleFor(size);
+    final inheritedLabelSize =
+        Theme.of(context).textTheme.labelLarge?.fontSize ?? 14;
     return Semantics(
       container: true,
       button: false,
@@ -980,12 +1106,18 @@ class _ChannelBug extends StatelessWidget {
           border: Border.all(color: roles.subtleBorder),
         ),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+          padding: EdgeInsets.symmetric(
+            horizontal: 12 * scale,
+            vertical: 7 * scale,
+          ),
           child: Text(
             '${channel.number} • ${channel.name}',
             style: Theme.of(context).textTheme.labelLarge?.copyWith(
               color: roles.primaryText,
-              fontWeight: FontWeight.w800,
+              fontSize: osdPresentation
+                  ? (size.width >= 1920 && size.height >= 900 ? 16 : 14) * scale
+                  : inheritedLabelSize * scale,
+              fontWeight: osdPresentation ? FontWeight.w500 : FontWeight.w800,
             ),
           ),
         ),
@@ -1008,23 +1140,22 @@ class _NowPlaying extends StatelessWidget {
     final telemetry = controller.telemetry;
     final roles = LineupTheme.of(context);
     final size = MediaQuery.sizeOf(context);
+    final scale = LineupLayout.scaleFor(size);
     final compact =
-        LineupLayout.isCompactWidth(size.width) || size.height < 650;
-    final shelfWidth = size.width >= 2560
-        ? size.width.clamp(0, 1500).toDouble()
-        : (size.width * 0.95).clamp(0, 1180).toDouble();
+        LineupLayout.isCompactWidth(size.width) || size.height < 650 * scale;
+    final shelfWidth = (size.width * 0.95).clamp(0, 1180 * scale).toDouble();
     final shelfHeight = compact
         ? (size.height * (item.cast.isEmpty ? 0.56 : 0.63))
-              .clamp(300, 380)
+              .clamp(300 * scale, 380 * scale)
               .toDouble()
         : (size.height * (item.cast.isEmpty ? 0.50 : 0.54))
               .clamp(
-                item.cast.isEmpty ? 380 : 432,
-                item.cast.isEmpty ? 560 : 580,
+                (item.cast.isEmpty ? 380 : 432) * scale,
+                (item.cast.isEmpty ? 560 : 580) * scale,
               )
               .toDouble();
-    final denseShelf = compact || shelfHeight < 440;
-    final showPoster = size.width >= 700 && size.height >= 500;
+    final denseShelf = compact || shelfHeight < 440 * scale;
+    final showPoster = size.width >= 700 * scale && size.height >= 500 * scale;
     final preferLogo = controller.lineup.settings.preferClearLogos;
     final posterPath = _artworkPath(item, GuideArtworkKind.poster);
     final logoPath = _artworkPath(item, GuideArtworkKind.clearLogo);
@@ -1048,6 +1179,11 @@ class _NowPlaying extends StatelessWidget {
         ? 0.0
         : timingPosition.inMilliseconds / timingDuration.inMilliseconds;
     final episode = _episodeLabel(item);
+    final episodeFacts = [
+      if (item.seasonNumber != null) 'S${item.seasonNumber}',
+      if (item.episodeNumber != null) 'E${item.episodeNumber}',
+      if (timingDuration > Duration.zero) '${timingDuration.inMinutes} min',
+    ].join(' · ');
     final dynamicRange = _dynamicRangeLabel(item.dynamicRange, telemetry.isHdr);
     final badges = <String>[
       ?item.contentRating,
@@ -1127,15 +1263,17 @@ class _NowPlaying extends StatelessWidget {
                 child: Container(
                   key: const Key('player-now-playing-shelf'),
                   width: shelfWidth,
-                  height: shelfHeight,
                   clipBehavior: Clip.antiAlias,
                   decoration: BoxDecoration(
                     border: Border(
-                      top: BorderSide(color: roles.subtleBorder),
-                      right: BorderSide(color: roles.subtleBorder),
+                      top: BorderSide(color: roles.subtleBorder, width: scale),
+                      right: BorderSide(
+                        color: roles.subtleBorder,
+                        width: scale,
+                      ),
                     ),
                     borderRadius: BorderRadius.only(
-                      topRight: const Radius.circular(16),
+                      topRight: Radius.circular(16 * scale),
                     ),
                     gradient: LinearGradient(
                       begin: Alignment.topLeft,
@@ -1146,15 +1284,11 @@ class _NowPlaying extends StatelessWidget {
                       ],
                     ),
                   ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      if (showPoster) ...[
-                        SizedBox(
-                          key: const Key('player-now-playing-poster'),
-                          width: (shelfHeight * 2 / 3).clamp(190, 374),
-                          height: shelfHeight,
-                          child: Stack(
+                  child: _NowPlayingShelfLayout(
+                    maxHeight: shelfHeight,
+                    poster: showPoster
+                        ? Stack(
+                            key: const Key('player-now-playing-poster'),
                             fit: StackFit.expand,
                             children: [
                               posterPath == null
@@ -1174,7 +1308,7 @@ class _NowPlaying extends StatelessWidget {
                               Align(
                                 alignment: Alignment.centerRight,
                                 child: SizedBox(
-                                  width: compact ? 48 : 64,
+                                  width: (compact ? 48 : 64) * scale,
                                   child: DecoratedBox(
                                     decoration: BoxDecoration(
                                       gradient: LinearGradient(
@@ -1190,143 +1324,173 @@ class _NowPlaying extends StatelessWidget {
                                 ),
                               ),
                             ],
-                          ),
-                        ),
-                      ],
-                      Expanded(
-                        child: Padding(
-                          padding: EdgeInsets.fromLTRB(
-                            denseShelf ? 18 : 28,
-                            denseShelf ? 16 : 24,
-                            denseShelf ? 18 : 28,
-                            denseShelf ? 14 : 20,
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              if (preferLogo && logoPath != null)
-                                _NowPlayingIdentity(
-                                  key: ValueKey((
-                                    artworkIdentity,
-                                    GuideArtworkKind.clearLogo,
-                                    logoPath,
-                                    preferLogo,
-                                  )),
-                                  controller: controller,
-                                  program: program,
-                                  compact: denseShelf,
-                                  hasCast: item.cast.isNotEmpty,
-                                )
-                              else
-                                _NowPlayingTitle(
-                                  item: item,
-                                  compact: denseShelf,
-                                ),
-                              if (episode != null) ...[
-                                SizedBox(height: denseShelf ? 8 : 10),
-                                Text(
-                                  episode,
-                                  key: const Key('player-now-playing-episode'),
-                                  style: Theme.of(context).textTheme.titleMedium
-                                      ?.copyWith(
-                                        color: roles.secondaryText,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                ),
-                              ],
-                              if (timingDuration > Duration.zero) ...[
-                                SizedBox(height: denseShelf ? 4 : 6),
-                                Text(
-                                  _humanDuration(timingDuration),
-                                  key: const Key('player-now-playing-runtime'),
-                                  style: Theme.of(context).textTheme.bodyMedium
-                                      ?.copyWith(color: roles.mutedText),
-                                ),
-                              ],
-                              if (!compact && badges.isNotEmpty) ...[
-                                const SizedBox(height: 14),
-                                Wrap(
-                                  key: const Key('player-now-playing-badges'),
-                                  spacing: 8,
-                                  runSpacing: 8,
-                                  children: [
-                                    for (final badge in badges)
-                                      _NowPlayingBadge(label: badge),
-                                  ],
-                                ),
-                              ],
-                              if (!compact && playbackFacts != null) ...[
-                                SizedBox(height: denseShelf ? 8 : 10),
-                                Text(
-                                  playbackFacts,
-                                  key: const Key(
-                                    'player-now-playing-runtime-facts',
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: Theme.of(context).textTheme.bodySmall
-                                      ?.copyWith(color: roles.mutedText),
-                                ),
-                              ],
-                              if (editorial.isNotEmpty) ...[
-                                SizedBox(height: denseShelf ? 8 : 10),
-                                Text(
-                                  editorial,
-                                  key: const Key(
-                                    'player-now-playing-editorial',
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: Theme.of(context).textTheme.bodySmall
-                                      ?.copyWith(color: roles.mutedText),
-                                ),
-                              ],
-                              if (item.summary case final summary?) ...[
-                                SizedBox(height: denseShelf ? 10 : 14),
-                                Text(
-                                  summary,
-                                  key: const Key('player-now-playing-summary'),
-                                  maxLines: item.cast.isEmpty
-                                      ? (denseShelf ? 3 : 4)
-                                      : (denseShelf ? 2 : 3),
-                                  overflow: TextOverflow.ellipsis,
-                                  style: Theme.of(context).textTheme.bodyLarge
-                                      ?.copyWith(
-                                        color: roles.primaryText,
-                                        height: 1.45,
-                                      ),
-                                ),
-                              ],
-                              if (item.cast.isNotEmpty) ...[
-                                SizedBox(height: denseShelf ? 10 : 14),
-                                _NowPlayingCast(
-                                  controller: controller,
-                                  cast: item.cast,
-                                  compact: compact,
-                                  dense: denseShelf,
-                                ),
-                              ],
-                              const Spacer(),
-                              LinearProgressIndicator(
-                                key: const Key('player-now-playing-progress'),
-                                value: progress,
-                                minHeight: 5,
-                                color: roles.progressFill,
-                                backgroundColor: roles.progressTrack,
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                playbackTime,
-                                key: const Key('player-now-playing-time'),
-                                style: Theme.of(context).textTheme.bodyMedium
-                                    ?.copyWith(color: roles.secondaryText),
-                              ),
-                            ],
-                          ),
-                        ),
+                          )
+                        : null,
+                    content: Padding(
+                      padding: EdgeInsets.fromLTRB(
+                        (denseShelf ? 18 : 28) * scale,
+                        (denseShelf ? 16 : 24) * scale,
+                        (denseShelf ? 18 : 28) * scale,
+                        (denseShelf ? 14 : 20) * scale,
                       ),
-                    ],
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Flexible(
+                            fit: FlexFit.loose,
+                            child: SingleChildScrollView(
+                              key: const Key('player-now-playing-details'),
+                              primary: false,
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  if (preferLogo && logoPath != null)
+                                    _NowPlayingIdentity(
+                                      key: ValueKey((
+                                        artworkIdentity,
+                                        GuideArtworkKind.clearLogo,
+                                        logoPath,
+                                        preferLogo,
+                                      )),
+                                      controller: controller,
+                                      program: program,
+                                      compact: denseShelf,
+                                      hasCast: item.cast.isNotEmpty,
+                                    )
+                                  else
+                                    _NowPlayingTitle(
+                                      item: item,
+                                      compact: denseShelf,
+                                    ),
+                                  if (episodeFacts.isNotEmpty) ...[
+                                    SizedBox(
+                                      height: (denseShelf ? 8 : 10) * scale,
+                                    ),
+                                    Text(
+                                      episodeFacts,
+                                      key: const Key(
+                                        'player-now-playing-episode',
+                                      ),
+                                      style: _nowPlayingSecondaryStyle(
+                                        context,
+                                        dense: denseShelf,
+                                      ),
+                                    ),
+                                  ],
+                                  if (editorial.isNotEmpty) ...[
+                                    SizedBox(
+                                      height: (denseShelf ? 8 : 10) * scale,
+                                    ),
+                                    Text(
+                                      editorial,
+                                      key: const Key(
+                                        'player-now-playing-editorial',
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: _nowPlayingSecondaryStyle(
+                                        context,
+                                        dense: denseShelf,
+                                      ),
+                                    ),
+                                  ],
+                                  if (!compact && badges.isNotEmpty) ...[
+                                    SizedBox(height: 14 * scale),
+                                    Wrap(
+                                      key: const Key(
+                                        'player-now-playing-badges',
+                                      ),
+                                      spacing: 8 * scale,
+                                      runSpacing: 8 * scale,
+                                      children: [
+                                        for (final badge in badges)
+                                          _NowPlayingBadge(label: badge),
+                                      ],
+                                    ),
+                                  ],
+                                  if (!compact && playbackFacts != null) ...[
+                                    SizedBox(
+                                      height: (denseShelf ? 8 : 10) * scale,
+                                    ),
+                                    Text(
+                                      playbackFacts,
+                                      key: const Key(
+                                        'player-now-playing-runtime-facts',
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: _nowPlayingSecondaryStyle(
+                                        context,
+                                        dense: denseShelf,
+                                      ),
+                                    ),
+                                  ],
+                                  if (item.summary case final summary?) ...[
+                                    SizedBox(
+                                      height: (denseShelf ? 10 : 14) * scale,
+                                    ),
+                                    Text(
+                                      summary,
+                                      key: const Key(
+                                        'player-now-playing-summary',
+                                      ),
+                                      maxLines: item.cast.isEmpty
+                                          ? (denseShelf ? 3 : 4)
+                                          : (denseShelf ? 2 : 3),
+                                      overflow: TextOverflow.ellipsis,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodyLarge
+                                          ?.copyWith(
+                                            color: roles.primaryText,
+                                            fontSize:
+                                                (Theme.of(context)
+                                                        .textTheme
+                                                        .bodyLarge
+                                                        ?.fontSize ??
+                                                    16) *
+                                                scale,
+                                            height: 1.45,
+                                          ),
+                                    ),
+                                  ],
+                                  if (item.cast.isNotEmpty) ...[
+                                    SizedBox(
+                                      height: (denseShelf ? 10 : 14) * scale,
+                                    ),
+                                    _NowPlayingCast(
+                                      controller: controller,
+                                      cast: item.cast,
+                                      compact: compact,
+                                      dense: denseShelf,
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          ),
+                          SizedBox(height: 16 * scale),
+                          LinearProgressIndicator(
+                            key: const Key('player-now-playing-progress'),
+                            value: progress,
+                            minHeight: 5 * scale,
+                            color: roles.progressFill,
+                            backgroundColor: roles.progressTrack,
+                          ),
+                          SizedBox(height: 8 * scale),
+                          Text(
+                            playbackTime,
+                            key: const Key('player-now-playing-time'),
+                            style: _nowPlayingSecondaryStyle(
+                              context,
+                              dense: denseShelf,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -1335,8 +1499,10 @@ class _NowPlaying extends StatelessWidget {
         ),
         if (channel != null)
           Positioned(
-            top: 24,
-            right: (size.width * 0.05).clamp(24.0, 96.0),
+            top: 24 * scale,
+            right: (size.width * 0.05)
+                .clamp(24.0 * scale, 96.0 * scale)
+                .toDouble(),
             child: _ChannelBug(
               key: const Key('player-now-playing-channel-bug'),
               channel: channel,
@@ -1345,6 +1511,55 @@ class _NowPlaying extends StatelessWidget {
       ],
     );
   }
+}
+
+class _NowPlayingShelfLayout extends StatelessWidget {
+  const _NowPlayingShelfLayout({
+    required this.maxHeight,
+    required this.content,
+    this.poster,
+  });
+  final double maxHeight;
+  final Widget content;
+  final Widget? poster;
+
+  @override
+  Widget build(BuildContext context) {
+    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
+    final posterWidth = poster == null
+        ? 0.0
+        : (maxHeight * 2 / 3).clamp(190 * scale, 374 * scale).toDouble();
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxHeight: maxHeight - scale),
+      child: Stack(
+        children: [
+          Padding(
+            padding: EdgeInsets.only(left: posterWidth),
+            child: content,
+          ),
+          if (poster != null)
+            Positioned(
+              left: 0,
+              top: 0,
+              bottom: 0,
+              width: posterWidth,
+              child: poster!,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+TextStyle? _nowPlayingSecondaryStyle(
+  BuildContext context, {
+  required bool dense,
+}) {
+  final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
+  return Theme.of(context).textTheme.bodyMedium?.copyWith(
+    color: LineupTheme.of(context).primaryText.withValues(alpha: 0.88),
+    fontSize: (dense ? 14 : 16) * scale,
+  );
 }
 
 class _NowPlayingIdentity extends StatefulWidget {
@@ -1375,60 +1590,70 @@ class _NowPlayingIdentityState extends State<_NowPlayingIdentity> {
   Widget build(BuildContext context) => FutureBuilder<Uint8List?>(
     future: _logo,
     builder: (context, snapshot) {
+      final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
       final bytes = snapshot.data;
       final item = widget.program.scheduled.item;
-      final logoFallback = FittedBox(
-        fit: BoxFit.scaleDown,
-        alignment: Alignment.centerLeft,
-        child: switch (item.showTitle?.trim()) {
-          final showTitle? when showTitle.isNotEmpty => Text(
-            showTitle.toUpperCase(),
-            key: const Key('player-now-playing-series'),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          _ => _NowPlayingTitle(item: item, compact: widget.compact),
-        },
-      );
+      final showTitle = item.showTitle?.trim();
       final logoMaxHeight = widget.hasCast && widget.compact
-          ? 58.0
+          ? 58.0 * scale
           : widget.compact
-          ? 84.0
-          : 132.0;
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (bytes == null)
-            ConstrainedBox(
-              constraints: BoxConstraints(maxHeight: logoMaxHeight),
-              child: logoFallback,
-            )
-          else
-            ConstrainedBox(
-              constraints: BoxConstraints(
-                maxWidth: widget.compact ? 360 : 600,
-                maxHeight: logoMaxHeight,
+          ? 84.0 * scale
+          : 132.0 * scale;
+      final logoMaxWidth = (widget.compact ? 360.0 : 600.0) * scale;
+      return LayoutBuilder(
+        builder: (context, available) {
+          final logoFallback = OverflowBox(
+            alignment: Alignment.centerLeft,
+            minWidth: 0,
+            maxWidth: available.maxWidth,
+            minHeight: 0,
+            maxHeight: double.infinity,
+            fit: OverflowBoxFit.deferToChild,
+            child: switch (showTitle) {
+              final value? when value.isNotEmpty => Text(
+                value,
+                key: const Key('player-now-playing-series'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: _nowPlayingSeriesStyle(context, dense: widget.compact),
               ),
-              child: ClearLogoImage(
-                bytes,
-                imageKey: const Key('player-now-playing-logo'),
-                excludeFromSemantics: true,
-                fallback: logoFallback,
+              _ => const SizedBox.shrink(),
+            },
+          );
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (bytes == null)
+                logoFallback
+              else
+                ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxWidth: math.min(available.maxWidth, logoMaxWidth),
+                    maxHeight: logoMaxHeight,
+                  ),
+                  child: ClearLogoImage(
+                    bytes,
+                    imageKey: const Key('player-now-playing-logo'),
+                    excludeFromSemantics: true,
+                    maximumSize: Size(logoMaxWidth, logoMaxHeight),
+                    minimumVisibleSize: Size(
+                      96 * scale,
+                      (widget.compact ? 20 : 28) * scale,
+                    ),
+                    fallback: logoFallback,
+                  ),
+                ),
+              SizedBox(height: (widget.compact ? 8 : 12) * scale),
+              Text(
+                widget.program.scheduled.item.title,
+                key: const Key('player-now-playing-title'),
+                maxLines: widget.compact ? 1 : 2,
+                overflow: TextOverflow.ellipsis,
+                style: _nowPlayingTitleStyle(context, dense: widget.compact),
               ),
-            ),
-          if (item.showTitle != null) ...[
-            SizedBox(height: widget.compact ? 8 : 12),
-            Text(
-              widget.program.scheduled.item.title,
-              key: const Key('player-now-playing-title'),
-              maxLines: widget.compact ? 1 : 2,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.headlineSmall
-                  ?.copyWith(fontWeight: FontWeight.w800),
-            ),
-          ],
-        ],
+            ],
+          );
+        },
       );
     },
   );
@@ -1441,33 +1666,54 @@ class _NowPlayingTitle extends StatelessWidget {
   final bool compact;
 
   @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      if (item.showTitle != null) ...[
+  Widget build(BuildContext context) {
+    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (item.showTitle != null) ...[
+          Text(
+            item.showTitle!.trim(),
+            key: const Key('player-now-playing-series'),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: _nowPlayingSeriesStyle(context, dense: compact),
+          ),
+          SizedBox(height: 6 * scale),
+        ],
         Text(
-          item.showTitle!.toUpperCase(),
-          key: const Key('player-now-playing-series'),
-          maxLines: 1,
+          item.title,
+          key: const Key('player-now-playing-title'),
+          maxLines: 2,
           overflow: TextOverflow.ellipsis,
-          style: Theme.of(context).textTheme.titleMedium,
+          style: _nowPlayingTitleStyle(context, dense: compact),
         ),
-        const SizedBox(height: 6),
       ],
-      Text(
-        item.title,
-        key: const Key('player-now-playing-title'),
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-        style:
-            (compact
-                    ? Theme.of(context).textTheme.headlineMedium
-                    : Theme.of(context).textTheme.displaySmall)
-                ?.copyWith(fontWeight: FontWeight.w900),
-      ),
-    ],
-  );
+    );
+  }
 }
+
+TextStyle? _nowPlayingSeriesStyle(
+  BuildContext context, {
+  required bool dense,
+}) => _nowPlayingSecondaryStyle(context, dense: dense)?.copyWith(
+  fontSize:
+      (dense ? 16 : 20) * LineupLayout.scaleFor(MediaQuery.sizeOf(context)),
+  fontWeight: FontWeight.w500,
+);
+
+TextStyle _nowPlayingTitleStyle(BuildContext context, {required bool dense}) =>
+    (Theme.of(context).textTheme.bodyLarge ?? const TextStyle()).copyWith(
+      color: LineupTheme.of(context).primaryText,
+      fontSize:
+          (dense ? 24 : 28) * LineupLayout.scaleFor(MediaQuery.sizeOf(context)),
+      fontWeight: FontWeight.w600,
+    );
+
+/*
+ * Keep the logo bounds on the image path only. ClearLogoImage's fallback is
+ * intentionally independent so a failed logo cannot constrain the title.
+ */
 
 class _PlayerArtwork extends StatelessWidget {
   const _PlayerArtwork({
@@ -1477,6 +1723,8 @@ class _PlayerArtwork extends StatelessWidget {
     this.imageKey,
     this.semanticLabel,
     this.clearLogo = false,
+    this.logoMaximumSize,
+    this.logoMinimumVisibleSize,
     super.key,
   });
 
@@ -1486,6 +1734,8 @@ class _PlayerArtwork extends StatelessWidget {
   final Key? imageKey;
   final String? semanticLabel;
   final bool clearLogo;
+  final Size? logoMaximumSize;
+  final Size? logoMinimumVisibleSize;
 
   @override
   Widget build(BuildContext context) => FutureBuilder<Uint8List?>(
@@ -1495,6 +1745,8 @@ class _PlayerArtwork extends StatelessWidget {
         : clearLogo
         ? ClearLogoImage(
             snapshot.data!,
+            maximumSize: logoMaximumSize,
+            minimumVisibleSize: logoMinimumVisibleSize,
             fallback: fallback,
             imageKey: imageKey,
             semanticLabel: semanticLabel,
@@ -1520,10 +1772,17 @@ class _ArtworkFallback extends StatelessWidget {
   final LineupThemeRoles roles;
 
   @override
-  Widget build(BuildContext context) => ColoredBox(
-    color: roles.primarySurface,
-    child: Icon(Icons.movie_outlined, size: 64, color: roles.mutedText),
-  );
+  Widget build(BuildContext context) {
+    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
+    return ColoredBox(
+      color: roles.primarySurface,
+      child: Icon(
+        Icons.movie_outlined,
+        size: 64 * scale,
+        color: roles.mutedText,
+      ),
+    );
+  }
 }
 
 class _NowPlayingBadge extends StatelessWidget {
@@ -1534,6 +1793,7 @@ class _NowPlayingBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final roles = LineupTheme.of(context);
+    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
     return DecoratedBox(
       decoration: BoxDecoration(
         color: roles.elevatedSurface.withValues(alpha: 0.82),
@@ -1541,8 +1801,18 @@ class _NowPlayingBadge extends StatelessWidget {
         borderRadius: BorderRadius.circular(999),
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-        child: Text(label, style: Theme.of(context).textTheme.labelMedium),
+        padding: EdgeInsets.symmetric(
+          horizontal: 10 * scale,
+          vertical: 4 * scale,
+        ),
+        child: Text(
+          label,
+          style: Theme.of(context).textTheme.labelMedium?.copyWith(
+            fontSize:
+                (Theme.of(context).textTheme.labelMedium?.fontSize ?? 12) *
+                scale,
+          ),
+        ),
       ),
     );
   }
@@ -1564,75 +1834,222 @@ class _NowPlayingCast extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final roles = LineupTheme.of(context);
+    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
     final limit = compact ? 4 : 5;
     final visible = cast.take(limit).toList(growable: false);
     final hidden = cast.length - visible.length;
-    final diameter = dense ? 40.0 : 46.0;
+    final diameter = (dense ? 40.0 : 46.0) * scale;
+    final columnLimit = (dense ? 72.0 : 104.0) * scale;
+    final columnCount = visible.length + (hidden > 0 ? 1 : 0);
+    final spacing = math.max(0, columnCount - 1) * 8.0 * scale;
     return Column(
       key: const Key('player-now-playing-cast'),
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            for (final (index, member) in visible.indexed) ...[
-              if (index > 0) const SizedBox(width: 8),
-              SizedBox.square(
-                key: ValueKey('player-now-playing-cast-portrait-$index'),
-                dimension: diameter,
-                child: ClipOval(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: roles.elevatedSurface,
-                      border: Border.all(color: roles.subtleBorder),
-                      shape: BoxShape.circle,
-                    ),
-                    child: member.portrait == null
-                        ? _CastFallback(index: index, roles: roles)
-                        : _PlayerArtwork(
-                            future: controller.guide.artworkForPath(
-                              member.portrait!,
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final width = constraints.maxWidth.isFinite
+                ? constraints.maxWidth
+                : columnCount * columnLimit + spacing;
+            final columnWidth = math.min(
+              columnLimit,
+              math.max(0.0, (width - spacing) / columnCount),
+            );
+            final constrained = width < columnCount * columnLimit + spacing;
+            final children = <Widget>[
+              for (final (index, member) in visible.indexed)
+                _NowPlayingCastColumn(
+                  key: ValueKey('player-now-playing-cast-column-$index'),
+                  width: columnWidth,
+                  diameter: diameter,
+                  index: index,
+                  member: member,
+                  controller: controller,
+                  roles: roles,
+                  dense: dense,
+                ),
+              if (hidden > 0)
+                _NowPlayingCastMore(
+                  width: columnWidth,
+                  diameter: diameter,
+                  hidden: hidden,
+                  roles: roles,
+                ),
+            ];
+            return constrained
+                ? Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      for (final child in children)
+                        Expanded(
+                          child: Padding(
+                            padding: EdgeInsets.only(
+                              right: child == children.last ? 0 : 8 * scale,
                             ),
-                            fit: BoxFit.cover,
-                            fallback: _CastFallback(index: index, roles: roles),
+                            child: child,
                           ),
-                  ),
-                ),
+                        ),
+                    ],
+                  )
+                : Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (final (index, child) in children.indexed) ...[
+                        if (index > 0) SizedBox(width: 8 * scale),
+                        child,
+                      ],
+                    ],
+                  );
+          },
+        ),
+      ],
+    );
+  }
+}
+
+class _NowPlayingCastColumn extends StatelessWidget {
+  const _NowPlayingCastColumn({
+    required this.width,
+    required this.diameter,
+    required this.index,
+    required this.member,
+    required this.controller,
+    required this.roles,
+    required this.dense,
+    super.key,
+  });
+
+  final double width;
+  final double diameter;
+  final int index;
+  final ChannelCastMember member;
+  final PlayerCoordinator controller;
+  final LineupThemeRoles roles;
+  final bool dense;
+
+  @override
+  Widget build(BuildContext context) {
+    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
+    final portrait = member.portrait;
+    final nameStyle = _nowPlayingSecondaryStyle(
+      context,
+      dense: dense,
+    )?.copyWith(fontSize: (dense ? 12 : 14) * scale, height: 1.3);
+    var displayName = member.name;
+    final words = member.name.trim().split(RegExp(r'\s+'));
+    if (words.length > 2) {
+      final measure = TextPainter(
+        text: TextSpan(text: member.name, style: nameStyle),
+        textDirection: Directionality.of(context),
+        textScaler: MediaQuery.textScalerOf(context),
+        locale: Localizations.maybeLocaleOf(context),
+        maxLines: 2,
+      )..layout(maxWidth: width);
+      if (measure.didExceedMaxLines) {
+        displayName = [
+          words.first,
+          ...words
+              .skip(1)
+              .take(words.length - 2)
+              .map((word) => '${word.characters.first}.'),
+          words.last,
+        ].join(' ');
+      }
+      measure.dispose();
+    }
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox.square(
+          key: ValueKey('player-now-playing-cast-portrait-$index'),
+          dimension: diameter,
+          child: ClipOval(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: roles.elevatedSurface,
+                border: Border.all(color: roles.subtleBorder),
+                shape: BoxShape.circle,
               ),
-            ],
-            if (hidden > 0) ...[
-              const SizedBox(width: 8),
-              SizedBox.square(
-                dimension: diameter,
-                child: DecoratedBox(
-                  key: const Key('player-now-playing-cast-more'),
-                  decoration: BoxDecoration(
-                    color: roles.elevatedSurface,
-                    border: Border.all(color: roles.subtleBorder),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Center(
-                    child: Text(
-                      '+$hidden',
-                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                        color: roles.primaryText,
-                        fontWeight: FontWeight.w800,
-                      ),
+              child: portrait == null
+                  ? _CastFallback(index: index, roles: roles)
+                  : _PlayerArtwork(
+                      future: controller.guide.artworkForPath(portrait),
+                      fit: BoxFit.cover,
+                      fallback: _CastFallback(index: index, roles: roles),
                     ),
-                  ),
+            ),
+          ),
+        ),
+        SizedBox(height: 6 * scale),
+        SizedBox(
+          width: width,
+          height:
+              MediaQuery.textScalerOf(context)
+                  .scale((dense ? 12 : 14) * scale) *
+              1.3 *
+              2,
+          child: Tooltip(
+            message: member.name,
+            excludeFromSemantics: true,
+            child: Text(
+              displayName,
+              key: ValueKey('player-now-playing-cast-name-$index'),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: nameStyle,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _NowPlayingCastMore extends StatelessWidget {
+  const _NowPlayingCastMore({
+    required this.width,
+    required this.diameter,
+    required this.hidden,
+    required this.roles,
+  });
+
+  final double width;
+  final double diameter;
+  final int hidden;
+  final LineupThemeRoles roles;
+
+  @override
+  Widget build(BuildContext context) {
+    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
+    final labelSize = Theme.of(context).textTheme.labelLarge?.fontSize ?? 14;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox.square(
+          dimension: diameter,
+          child: DecoratedBox(
+            key: const Key('player-now-playing-cast-more'),
+            decoration: BoxDecoration(
+              color: roles.elevatedSurface,
+              border: Border.all(color: roles.subtleBorder),
+              shape: BoxShape.circle,
+            ),
+            child: Center(
+              child: Text(
+                '+$hidden',
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  color: roles.primaryText,
+                  fontSize: labelSize * scale,
+                  fontWeight: FontWeight.w800,
                 ),
               ),
-            ],
-          ],
+            ),
+          ),
         ),
-        const SizedBox(height: 6),
-        Text(
-          cast.map((member) => member.name).join(' • '),
-          key: const Key('player-now-playing-cast-names'),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: Theme.of(context).textTheme.bodySmall
-              ?.copyWith(color: roles.secondaryText),
-        ),
+        SizedBox(height: 6 * scale),
+        SizedBox(width: width, child: const SizedBox.shrink()),
       ],
     );
   }
@@ -1645,11 +2062,14 @@ class _CastFallback extends StatelessWidget {
   final LineupThemeRoles roles;
 
   @override
-  Widget build(BuildContext context) => ColoredBox(
-    key: ValueKey('player-now-playing-cast-fallback-$index'),
-    color: roles.elevatedSurface,
-    child: Icon(Icons.person, color: roles.mutedText),
-  );
+  Widget build(BuildContext context) {
+    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
+    return ColoredBox(
+      key: ValueKey('player-now-playing-cast-fallback-$index'),
+      color: roles.elevatedSurface,
+      child: Icon(Icons.person, size: 24 * scale, color: roles.mutedText),
+    );
+  }
 }
 
 class _MiniGuide extends StatelessWidget {
@@ -1671,11 +2091,17 @@ class _MiniGuide extends StatelessWidget {
     final horizontal =
         size.height >= 720 && !LineupLayout.isCompactWidth(size.width);
     final textScale = MediaQuery.textScalerOf(context).scale(1);
+    final layoutTextScale = textScale < 1 ? 1.0 : textScale;
+    final large = horizontal && size.width >= 1920 && size.height >= 1080;
     final rowHeight = horizontal
-        ? 56.0 * scale * textScale.clamp(1, 1.5)
+        ? (large ? 66.0 : 56.0) * scale * layoutTextScale
         : null;
-    final channelColumnWidth = 250.0 * scale;
-    final columnGap = 24.0 * scale;
+    final channelColumnWidth = (large ? 365.0 : 250.0) * scale;
+    final columnGap = (large ? 36.0 : 24.0) * scale;
+    final contentInset =
+        (horizontal ? (large ? 48.0 : 32.0) : roles.overlaySafeArea) * scale;
+    final rowInset = (large ? 18.0 : 12.0) * scale;
+    final fadeTail = (large ? 110.0 : 80.0) * scale;
     final scaledTheme = Theme.of(context).copyWith(
       textTheme: Theme.of(context).textTheme.apply(fontSizeFactor: scale),
     );
@@ -1688,133 +2114,262 @@ class _MiniGuide extends StatelessWidget {
             alignment: Alignment.topCenter,
             child: SafeArea(
               bottom: false,
-              child: Container(
-                key: const Key('mini-guide-shelf'),
-                width: double.infinity,
-                constraints: BoxConstraints(maxHeight: size.height),
-                padding: EdgeInsets.fromLTRB(
-                  roles.overlaySafeArea,
-                  12 * scale,
-                  roles.overlaySafeArea,
-                  16 * scale,
+              child: CustomPaint(
+                painter: _MiniGuideFadePainter(
+                  scrim: roles.scrim,
+                  tailHeight: fadeTail,
                 ),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      roles.scrim.withValues(alpha: 0.78),
-                      roles.scrim.withValues(alpha: 0.66),
-                      roles.scrim.withValues(alpha: 0.52),
-                      roles.scrim.withValues(alpha: 0.20),
-                      Colors.transparent,
-                    ],
-                    stops: const [0, 0.30, 0.72, 0.90, 1],
+                child: Container(
+                  key: const Key('mini-guide-shelf'),
+                  width: double.infinity,
+                  constraints: BoxConstraints(maxHeight: size.height),
+                  padding: EdgeInsets.fromLTRB(
+                    contentInset,
+                    12 * scale,
+                    contentInset,
+                    16 * scale,
                   ),
-                ),
-                child: Semantics(
-                  container: true,
-                  explicitChildNodes: true,
-                  label: 'Mini Guide',
-                  child: Listener(
-                    onPointerSignal: (event) {
-                      if (event is PointerScrollEvent &&
-                          event.scrollDelta.dy != 0) {
-                        controller.moveMiniGuide(
-                          event.scrollDelta.dy > 0 ? 1 : -1,
-                        );
-                      }
-                    },
+                  child: Semantics(
+                    container: true,
+                    explicitChildNodes: true,
+                    label: 'Mini Guide',
                     child: SingleChildScrollView(
                       key: const Key('mini-guide-scroll'),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Wrap(
-                            alignment: WrapAlignment.spaceBetween,
-                            crossAxisAlignment: WrapCrossAlignment.center,
-                            spacing: 12,
-                            children: [
-                              ExcludeSemantics(
-                                child: Text(
-                                  'Mini Guide',
-                                  style: Theme.of(context).textTheme.titleLarge,
+                      child: Listener(
+                        behavior: HitTestBehavior.opaque,
+                        onPointerSignal: (event) {
+                          if (event is! PointerScrollEvent ||
+                              event.scrollDelta.dy == 0) {
+                            return;
+                          }
+                          GestureBinding.instance.pointerSignalResolver
+                              .register(event, (_) {
+                                controller.moveMiniGuide(
+                                  event.scrollDelta.dy > 0 ? 1 : -1,
+                                );
+                              });
+                        },
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Wrap(
+                              alignment: WrapAlignment.spaceBetween,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              spacing: 12 * scale,
+                              runSpacing: 4 * scale,
+                              children: [
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    ExcludeSemantics(
+                                      child: Text(
+                                        'Mini Guide',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .titleLarge
+                                            ?.copyWith(
+                                              fontSize:
+                                                  (large ? 26 : 20) * scale,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                      ),
+                                    ),
+                                    SizedBox(width: 20 * scale),
+                                    Text(
+                                      _time(context, controller.guide.now),
+                                      style: TextStyle(
+                                        color: roles.secondaryText,
+                                        fontSize: (large ? 18 : 14) * scale,
+                                        fontWeight: FontWeight.w400,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    TextButton(
+                                      style: TextButton.styleFrom(
+                                        foregroundColor: roles.secondaryText,
+                                        minimumSize: Size(0, 44 * scale),
+                                        padding: EdgeInsets.symmetric(
+                                          horizontal: 8 * scale,
+                                        ),
+                                        textStyle: Theme.of(context)
+                                            .textTheme
+                                            .labelLarge
+                                            ?.copyWith(
+                                              fontSize:
+                                                  (large ? 18 : 14) * scale,
+                                              fontWeight: FontWeight.w400,
+                                            ),
+                                      ),
+                                      onPressed: () {
+                                        controller.showFullGuide();
+                                        openGuide();
+                                      },
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Text('Full Guide'),
+                                          SizedBox(width: 8 * scale),
+                                          ExcludeSemantics(
+                                            child: Icon(
+                                              Icons.arrow_forward,
+                                              size: 16 * scale,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    TextButton(
+                                      style: TextButton.styleFrom(
+                                        foregroundColor: roles.secondaryText,
+                                        minimumSize: Size(0, 44 * scale),
+                                        padding: EdgeInsets.symmetric(
+                                          horizontal: 8 * scale,
+                                        ),
+                                        textStyle: Theme.of(context)
+                                            .textTheme
+                                            .labelLarge
+                                            ?.copyWith(
+                                              fontSize:
+                                                  (large ? 18 : 14) * scale,
+                                              fontWeight: FontWeight.w400,
+                                            ),
+                                      ),
+                                      onPressed: controller.closeOverlay,
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Text('Close'),
+                                          SizedBox(width: 8 * scale),
+                                          ExcludeSemantics(
+                                            child: Icon(
+                                              Icons.close,
+                                              size: 16 * scale,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                            if (horizontal)
+                              Padding(
+                                padding: EdgeInsets.fromLTRB(
+                                  rowInset,
+                                  0,
+                                  rowInset,
+                                  large ? 8 * scale : 6 * scale,
+                                ),
+                                child: Row(
+                                  children: [
+                                    SizedBox(
+                                      width: channelColumnWidth,
+                                      child: Text(
+                                        'Channel',
+                                        style: TextStyle(
+                                          color: roles.secondaryText,
+                                          fontSize: (large ? 16 : 12) * scale,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ),
+                                    SizedBox(width: columnGap),
+                                    Expanded(
+                                      flex: 115,
+                                      child: Text(
+                                        'On now',
+                                        style: TextStyle(
+                                          color: roles.secondaryText,
+                                          fontSize: (large ? 16 : 12) * scale,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ),
+                                    SizedBox(width: columnGap),
+                                    Expanded(
+                                      flex: 100,
+                                      child: Text(
+                                        'Up next',
+                                        style: TextStyle(
+                                          color: roles.secondaryText,
+                                          fontSize: (large ? 16 : 12) * scale,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  TextButton(
-                                    onPressed: () {
-                                      controller.showFullGuide();
-                                      openGuide();
-                                    },
-                                    child: const Text('Full Guide'),
-                                  ),
-                                  TextButton(
-                                    onPressed: controller.closeOverlay,
-                                    child: const Text('Close'),
-                                  ),
-                                ],
+                            for (final (index, channel) in channels.indexed)
+                              _MiniGuideRow(
+                                controller: controller,
+                                channel: channel,
+                                rowHeight: rowHeight,
+                                channelColumnWidth: channelColumnWidth,
+                                columnGap: columnGap,
+                                active: active,
+                                large: large,
+                                scale: scale,
+                                rowInset: rowInset,
+                                isLast: index == channels.length - 1,
                               ),
-                            ],
-                          ),
-                          if (horizontal)
-                            Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                              ),
-                              child: Row(
-                                children: [
-                                  SizedBox(
-                                    width: channelColumnWidth,
-                                    child: const Text('Channel'),
+                            SizedBox(height: 8 * scale),
+                            Wrap(
+                              alignment: WrapAlignment.spaceBetween,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              spacing: 12 * scale,
+                              runSpacing: 4 * scale,
+                              children: [
+                                Text(
+                                  'Up / Down · Browse · Enter Tune · Esc Close',
+                                  style: TextStyle(
+                                    color: roles.secondaryText,
+                                    fontSize: (large ? 16 : 12) * scale,
                                   ),
-                                  SizedBox(width: columnGap),
-                                  const Expanded(
-                                    flex: 115,
-                                    child: Text('On now'),
-                                  ),
-                                  SizedBox(width: columnGap),
-                                  const Expanded(
-                                    flex: 100,
-                                    child: Text('Up next'),
-                                  ),
-                                ],
-                              ),
+                                ),
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      tooltip: 'Previous channel',
+                                      constraints: BoxConstraints(
+                                        minWidth: 44 * scale,
+                                        minHeight: 44 * scale,
+                                      ),
+                                      padding: EdgeInsets.zero,
+                                      onPressed: () =>
+                                          controller.moveMiniGuide(-1),
+                                      icon: Icon(
+                                        Icons.arrow_upward,
+                                        size: 24 * scale,
+                                      ),
+                                    ),
+                                    IconButton(
+                                      tooltip: 'Next channel',
+                                      constraints: BoxConstraints(
+                                        minWidth: 44 * scale,
+                                        minHeight: 44 * scale,
+                                      ),
+                                      padding: EdgeInsets.zero,
+                                      onPressed: () =>
+                                          controller.moveMiniGuide(1),
+                                      icon: Icon(
+                                        Icons.arrow_downward,
+                                        size: 24 * scale,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
                             ),
-                          for (final channel in channels)
-                            _MiniGuideRow(
-                              controller: controller,
-                              channel: channel,
-                              rowHeight: rowHeight,
-                              channelColumnWidth: channelColumnWidth,
-                              columnGap: columnGap,
-                              active: active,
-                            ),
-                          SizedBox(height: 8 * scale),
-                          Text(
-                            'Up / Down to browse • Enter to tune • Esc to close',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(fontSize: 12 * scale),
-                          ),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.end,
-                            children: [
-                              IconButton(
-                                tooltip: 'Previous channel',
-                                onPressed: () => controller.moveMiniGuide(-1),
-                                icon: const Icon(Icons.arrow_upward),
-                              ),
-                              IconButton(
-                                tooltip: 'Next channel',
-                                onPressed: () => controller.moveMiniGuide(1),
-                                icon: const Icon(Icons.arrow_downward),
-                              ),
-                            ],
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -1836,6 +2391,10 @@ class _MiniGuideRow extends StatelessWidget {
     required this.channelColumnWidth,
     required this.columnGap,
     required this.active,
+    required this.large,
+    required this.scale,
+    required this.rowInset,
+    required this.isLast,
   });
 
   final PlayerCoordinator controller;
@@ -1844,13 +2403,26 @@ class _MiniGuideRow extends StatelessWidget {
   final double channelColumnWidth;
   final double columnGap;
   final bool active;
+  final bool large;
+  final double scale;
+  final double rowInset;
+  final bool isLast;
 
   @override
   Widget build(BuildContext context) {
     final roles = LineupTheme.of(context);
     final focused = channel.id == controller.miniGuideChannelId;
     final foreground = focused ? roles.focusedText : roles.primaryText;
-    final tuned = channel.id == controller.lineup.currentChannelId;
+    final tuned =
+        channel.id == controller.lineup.currentChannelId &&
+        !controller.tuning &&
+        controller.error == null &&
+        const {
+          PlayerState.playing,
+          PlayerState.paused,
+          PlayerState.buffering,
+          PlayerState.seeking,
+        }.contains(controller.status.state);
     final unsupported = controller.status.state == PlayerState.unsupported;
     final current = controller.guide.currentProgram(channel.id);
     final next = controller.guide.nextProgram(channel.id);
@@ -1864,9 +2436,19 @@ class _MiniGuideRow extends StatelessWidget {
         ? 0.0
         : now.difference(current.scheduled.start).inMilliseconds /
               spanMilliseconds;
-    final horizontal = rowHeight != null;
-    final titleStyle = Theme.of(context).textTheme.bodyMedium
-        ?.copyWith(color: foreground);
+    final titleStyle = Theme.of(context).textTheme.bodyMedium?.copyWith(
+      color: foreground,
+      fontSize: (large ? 20 : 14) * scale,
+      fontWeight: FontWeight.w500,
+    );
+    final metadataStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
+      color: roles.secondaryText,
+      fontSize: (large ? 16 : 12) * scale,
+    );
+    final nextTitleStyle = titleStyle?.copyWith(
+      color: roles.secondaryText,
+      fontWeight: FontWeight.w400,
+    );
     Widget ticker(String text, Key key, {TextStyle? style}) => FocusedTicker(
       key: key,
       text: text,
@@ -1875,20 +2457,34 @@ class _MiniGuideRow extends StatelessWidget {
       reduceMotion: MediaQuery.disableAnimationsOf(context),
       style: style,
     );
-    final channelIdentity = Row(
+    final channelIdentity = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(
-          child: ticker(
-            channel.name,
-            Key('mini-guide-channel-${channel.id}'),
-            style: titleStyle?.copyWith(fontWeight: FontWeight.w700),
-          ),
+        ticker(
+          channel.name,
+          Key('mini-guide-channel-${channel.id}'),
+          style: titleStyle,
         ),
         if (tuned)
-          Icon(
-            Icons.play_circle_fill,
-            size: horizontal ? 16 : 18,
-            color: foreground,
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ExcludeSemantics(
+                child: Icon(
+                  Icons.play_arrow_rounded,
+                  size: (large ? 14 : 12) * scale,
+                  color: roles.secondaryText,
+                ),
+              ),
+              SizedBox(width: 4 * scale),
+              Text(
+                'Watching',
+                style: metadataStyle?.copyWith(
+                  fontSize: (large ? 14 : 12) * scale,
+                ),
+              ),
+            ],
           ),
       ],
     );
@@ -1911,18 +2507,15 @@ class _MiniGuideRow extends StatelessWidget {
           Text(
             '${_time(context, current.scheduled.start)}–${_time(context, current.scheduled.end)}',
             maxLines: 1,
-            style: Theme.of(context).textTheme.bodySmall
-                ?.copyWith(color: foreground),
+            style: metadataStyle,
           ),
         if (current != null) ...[
-          const SizedBox(height: 3),
+          SizedBox(height: 3 * scale),
           LinearProgressIndicator(
             value: progress.clamp(0, 1),
-            minHeight: 2,
-            color: focused ? foreground : null,
-            backgroundColor: focused
-                ? foreground.withValues(alpha: 0.25)
-                : null,
+            minHeight: 2 * scale,
+            color: roles.progressFill,
+            backgroundColor: roles.progressTrack.withValues(alpha: 0.72),
             semanticsLabel: 'Program progress',
           ),
         ],
@@ -1937,27 +2530,31 @@ class _MiniGuideRow extends StatelessWidget {
               ticker(
                 next.scheduled.item.title,
                 Key('mini-guide-next-${channel.id}'),
-                style: Theme.of(context).textTheme.bodySmall
-                    ?.copyWith(color: foreground),
+                style: nextTitleStyle,
               ),
               Text(
                 _time(context, next.scheduled.start),
                 maxLines: 1,
-                style: Theme.of(context).textTheme.bodySmall
-                    ?.copyWith(color: foreground),
+                style: metadataStyle,
               ),
             ],
           );
+    final numberText = '${channel.number}';
+    final numberMeasure = TextPainter(
+      text: TextSpan(text: numberText, style: titleStyle),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+      locale: Localizations.maybeLocaleOf(context),
+      maxLines: 1,
+    )..layout();
+    final numberWidth = math.max(
+      (large ? 46.0 : 32.0) * scale,
+      numberMeasure.width + 8 * scale,
+    );
+    numberMeasure.dispose();
     final number = SizedBox(
-      width: 46,
-      child: Text(
-        '${channel.number}',
-        style:
-            (horizontal
-                    ? Theme.of(context).textTheme.bodyLarge
-                    : Theme.of(context).textTheme.titleMedium)
-                ?.copyWith(color: foreground, fontWeight: FontWeight.w700),
-      ),
+      width: numberWidth,
+      child: Text(numberText, style: titleStyle),
     );
     return Semantics(
       key: Key('mini-guide-row-${channel.id}'),
@@ -1966,13 +2563,20 @@ class _MiniGuideRow extends StatelessWidget {
           'Channel ${channel.number}, ${channel.name}. Now $currentText.${next == null ? '' : ' Next ${next.scheduled.item.title}.'}${tuned ? ' Now watching.' : ''}',
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: focused ? roles.selectedSurface : Colors.transparent,
+          color: focused
+              ? roles.progressFill.withValues(alpha: 0.16)
+              : Colors.transparent,
           border: Border(
             left: BorderSide(
               color: focused ? roles.focusBorder : Colors.transparent,
-              width: focused ? roles.focusBorderWidth : 3,
+              width: roles.focusBorderWidth * scale,
             ),
-            bottom: BorderSide(color: roles.subtleBorder),
+            bottom: BorderSide(
+              color: isLast
+                  ? Colors.transparent
+                  : roles.primaryText.withValues(alpha: 0.10),
+              width: scale,
+            ),
           ),
         ),
         child: Material(
@@ -1987,9 +2591,9 @@ class _MiniGuideRow extends StatelessWidget {
                   },
             child: rowHeight == null
                 ? Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 7,
+                    padding: EdgeInsets.symmetric(
+                      horizontal: rowInset,
+                      vertical: 7 * scale,
                     ),
                     child: Row(
                       children: [
@@ -2010,7 +2614,7 @@ class _MiniGuideRow extends StatelessWidget {
                 : SizedBox(
                     height: rowHeight,
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      padding: EdgeInsets.symmetric(horizontal: rowInset),
                       child: Row(
                         children: [
                           SizedBox(
@@ -2040,6 +2644,43 @@ class _MiniGuideRow extends StatelessWidget {
   }
 }
 
+class _MiniGuideFadePainter extends CustomPainter {
+  const _MiniGuideFadePainter({required this.scrim, required this.tailHeight});
+
+  final Color scrim;
+  final double tailHeight;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final bounds = Offset.zero & Size(size.width, size.height + tailHeight);
+    final gradient = LinearGradient(
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+      colors: [
+        scrim.withValues(alpha: 0.78),
+        scrim.withValues(alpha: 0.66),
+        scrim.withValues(alpha: 0.62),
+        scrim.withValues(alpha: 0.52),
+        scrim.withValues(alpha: 0.20),
+        Colors.transparent,
+      ],
+      stops: const [0, 0.30, 0.65, 0.76, 0.88, 1],
+    );
+    canvas.drawRect(bounds, Paint()..shader = gradient.createShader(bounds));
+  }
+
+  @override
+  bool shouldRepaint(covariant _MiniGuideFadePainter oldDelegate) =>
+      scrim != oldDelegate.scrim || tailHeight != oldDelegate.tailHeight;
+}
+
+double _playerDrawerGeometryScale(Size size) {
+  final referenceScale = math.min(size.width / 1920, size.height / 1080);
+  return referenceScale < 1
+      ? referenceScale.clamp(2 / 3, 1).toDouble()
+      : LineupLayout.scaleFor(size);
+}
+
 class _SleepTimerPicker extends StatelessWidget {
   const _SleepTimerPicker({
     required this.controller,
@@ -2059,11 +2700,26 @@ class _SleepTimerPicker extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final roles = LineupTheme.of(context);
-    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
+    final mediaQuery = MediaQuery.of(context);
+    final size = mediaQuery.size;
+    final scale = LineupLayout.scaleFor(size);
+    final geometryScale = _playerDrawerGeometryScale(size);
+    final availableHeight =
+        size.height - mediaQuery.padding.vertical - (24 + 132) * scale;
+    final maxHeight = math
+        .min(size.height - 180 * scale, availableHeight)
+        .clamp(240.0, double.infinity)
+        .toDouble();
+    final supportingText = Color.lerp(
+      roles.secondaryText,
+      roles.primaryText,
+      0.65,
+    )!;
     final scaledTheme = Theme.of(context).copyWith(
       textTheme: Theme.of(context).textTheme.apply(fontSizeFactor: scale),
     );
     final selected = controller.sleepDuration;
+    final remaining = controller.sleepRemaining;
     final choices = <(String, Duration?)>[
       ('Off', null),
       ('30 minutes', const Duration(minutes: 30)),
@@ -2087,51 +2743,87 @@ class _SleepTimerPicker extends StatelessWidget {
               child: Material(
                 key: const Key('sleep-timer-picker'),
                 color: roles.scrim.withValues(alpha: 0.92),
-                borderRadius: BorderRadius.circular(roles.panelRadius),
+                borderRadius: BorderRadius.circular(roles.panelRadius * scale),
                 child: ConstrainedBox(
                   constraints: BoxConstraints(
-                    maxWidth: 280 * scale,
-                    maxHeight: (MediaQuery.sizeOf(context).height - 180).clamp(
-                      240,
-                      double.infinity,
-                    ),
+                    maxWidth: 354 * geometryScale,
+                    maxHeight: maxHeight,
                   ),
                   child: SingleChildScrollView(
                     child: Padding(
-                      padding: EdgeInsets.all(14 * scale),
+                      padding: EdgeInsets.fromLTRB(
+                        12 * geometryScale,
+                        24 * geometryScale,
+                        12 * geometryScale,
+                        12 * geometryScale,
+                      ),
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          Text(
-                            'Stop playback after…',
-                            style: scaledTheme.textTheme.titleMedium,
+                          Padding(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: 18 * geometryScale,
+                            ),
+                            child: Text(
+                              'Stop playback after…',
+                              style: scaledTheme.textTheme.titleMedium
+                                  ?.copyWith(color: roles.primaryText),
+                            ),
                           ),
-                          const SizedBox(height: 8),
+                          if (remaining case final value?)
+                            Padding(
+                              padding: EdgeInsets.only(
+                                top: 8 * geometryScale,
+                                left: 18 * geometryScale,
+                                right: 18 * geometryScale,
+                              ),
+                              child: Text(
+                                'Stops in ${(value.inSeconds / 60).ceil()} min',
+                                style: scaledTheme.textTheme.bodySmall
+                                    ?.copyWith(color: supportingText),
+                              ),
+                            ),
+                          SizedBox(height: 18 * geometryScale),
                           for (final choice in choices)
                             ListTile(
                               key: Key(
                                 'sleep-timer-${choice.$2?.inMinutes ?? 'off'}',
                               ),
                               dense: true,
+                              minTileHeight: 60 * geometryScale,
+                              selected: choice.$2 == selected,
+                              selectedTileColor: roles.progressFill.withValues(
+                                alpha: 0.10,
+                              ),
+                              focusColor: roles.focusedSurface,
+                              horizontalTitleGap: geometryScale > 1
+                                  ? 16 * geometryScale
+                                  : null,
+                              minVerticalPadding: geometryScale > 1
+                                  ? 8 * geometryScale
+                                  : null,
+                              contentPadding: EdgeInsets.symmetric(
+                                horizontal: 18 * geometryScale,
+                              ),
                               autofocus: choice.$2 == selected,
-                              title: Text(choice.$1),
+                              title: Text(
+                                choice.$1,
+                                style: scaledTheme.textTheme.bodyLarge
+                                    ?.copyWith(
+                                      color: roles.primaryText,
+                                      fontSize: 13 * scale,
+                                    ),
+                              ),
                               trailing: choice.$2 == selected
                                   ? Icon(
                                       Icons.check,
                                       color: roles.progressFill,
+                                      size: 24 * scale,
                                       semanticLabel: 'Selected preset',
                                     )
                                   : null,
                               onTap: () => _choose(choice.$2),
-                            ),
-                          if (controller.sleepRemaining case final remaining?)
-                            Padding(
-                              padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-                              child: Text(
-                                'Stops in ${(remaining.inSeconds / 60).ceil()} min',
-                                style: scaledTheme.textTheme.bodySmall,
-                              ),
                             ),
                         ],
                       ),
@@ -2157,21 +2849,24 @@ class _Tracks extends StatefulWidget {
 }
 
 class _TracksState extends State<_Tracks> {
-  late final ScrollController _scrollController;
+  final _scrollController = ScrollController();
+  final _selectedRowKey = GlobalKey();
+  late final int? _initialSelectedTrackId;
 
   @override
   void initState() {
     super.initState();
-    final tracks = widget.controller.tracks
-        .where((track) => track.type == widget.type)
-        .toList();
-    final selectedIndex = tracks.indexWhere((track) => track.selected);
-    final listIndex = selectedIndex < 0
-        ? 0
-        : selectedIndex + (widget.type == PlayerTrackType.subtitle ? 1 : 0);
-    _scrollController = ScrollController(
-      initialScrollOffset: (listIndex * 74.0 - 120).clamp(0, double.infinity),
-    );
+    _initialSelectedTrackId = widget.controller.tracks
+        .where((track) => track.type == widget.type && track.selected)
+        .firstOrNull
+        ?.id;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final selectedContext = _selectedRowKey.currentContext;
+      if (selectedContext != null) {
+        Scrollable.ensureVisible(selectedContext, alignment: 0.5);
+      }
+    });
   }
 
   @override
@@ -2191,19 +2886,32 @@ class _TracksState extends State<_Tracks> {
       builder: (context, constraints) {
         final size = constraints.biggest;
         final scale = LineupLayout.scaleFor(size);
-        final railWidth = (constraints.maxWidth * 0.4).clamp(
-          0.0,
-          420.0 * scale,
+        final geometryScale = _playerDrawerGeometryScale(size);
+        final railWidth = math.min(
+          constraints.maxWidth * 0.4,
+          600.0 * geometryScale,
         );
-        final fadeWidth = (150.0 * scale).clamp(
-          0.0,
+        final fadeWidth = math.min(
+          100.0 * geometryScale,
           constraints.maxWidth - railWidth,
         );
-        final padding = (constraints.maxWidth <= 800 ? 20.0 : 28.0) * scale;
+        final padding = constraints.maxWidth <= 800
+            ? EdgeInsets.all(20 * geometryScale)
+            : EdgeInsets.fromLTRB(
+                36 * geometryScale,
+                48 * geometryScale,
+                48 * geometryScale,
+                36 * geometryScale,
+              );
         final textTheme = Theme.of(context).textTheme;
         TextStyle? scaled(TextStyle? style) => style?.fontSize == null
             ? style
             : style!.copyWith(fontSize: style.fontSize! * scale);
+        final supportingText = Color.lerp(
+          roles.secondaryText,
+          roles.primaryText,
+          0.65,
+        )!;
         return Align(
           alignment: Alignment.centerRight,
           child: FocusScope(
@@ -2217,11 +2925,11 @@ class _TracksState extends State<_Tracks> {
                   end: Alignment.centerRight,
                   colors: [
                     Colors.transparent,
-                    roles.scrim.withValues(alpha: 0.44),
-                    roles.scrim.withValues(alpha: 0.76),
-                    roles.scrim.withValues(alpha: 0.84),
+                    roles.scrim.withValues(alpha: 0.34),
+                    roles.scrim.withValues(alpha: 0.74),
+                    roles.scrim.withValues(alpha: 0.82),
                   ],
-                  stops: const [0, 0.22, 0.4, 1],
+                  stops: const [0, 0.10, 0.22, 1],
                 ),
               ),
               child: Align(
@@ -2230,7 +2938,7 @@ class _TracksState extends State<_Tracks> {
                   key: const Key('playback-options-rail'),
                   width: railWidth,
                   child: Padding(
-                    padding: EdgeInsets.all(padding),
+                    padding: padding,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
@@ -2252,12 +2960,22 @@ class _TracksState extends State<_Tracks> {
                               onPressed: widget.controller.closeOverlay,
                               style: TextButton.styleFrom(
                                 textStyle: scaled(textTheme.labelLarge),
+                                foregroundColor: supportingText,
+                                padding: scale > 1
+                                    ? EdgeInsets.symmetric(
+                                        horizontal: 12 * scale,
+                                        vertical: 8 * scale,
+                                      )
+                                    : null,
+                                minimumSize: scale > 1
+                                    ? Size(64 * scale, 40 * scale)
+                                    : null,
                               ),
                               child: const Text('Close'),
                             ),
                           ],
                         ),
-                        SizedBox(height: 18 * scale),
+                        SizedBox(height: 36 * geometryScale),
                         if (tracks.isEmpty &&
                             widget.type == PlayerTrackType.subtitle)
                           Padding(
@@ -2286,119 +3004,195 @@ class _TracksState extends State<_Tracks> {
                                       style: scaled(textTheme.bodyMedium),
                                     ),
                                   )
-                                : ListView.separated(
+                                // Native track projection is bounded to 256 rows.
+                                // Lay them out once so wrapped labels can be
+                                // focused/revealed without estimating row heights.
+                                : SingleChildScrollView(
                                     key: const Key('playback-options-list'),
                                     controller: _scrollController,
-                                    itemCount:
-                                        tracks.length +
-                                        (widget.type == PlayerTrackType.subtitle
-                                            ? 1
-                                            : 0),
-                                    separatorBuilder: (_, _) => Divider(
-                                      height: 1,
-                                      color: roles.subtleBorder.withValues(
-                                        alpha: 0.45,
-                                      ),
-                                    ),
-                                    itemBuilder: (context, index) {
-                                      final off =
-                                          widget.type ==
-                                              PlayerTrackType.subtitle &&
-                                          index == 0;
-                                      final track = off
-                                          ? null
-                                          : tracks[index -
-                                                (widget.type ==
-                                                        PlayerTrackType.subtitle
-                                                    ? 1
-                                                    : 0)];
-                                      final selected = off
-                                          ? selectedTrack == null
-                                          : track!.selected;
-                                      final metadata = track == null
-                                          ? const <String>[]
-                                          : [
-                                              if (track.language != null)
-                                                track.language!,
-                                              if (track.codec != null)
-                                                track.codec!,
-                                            ];
-                                      return Material(
-                                        color: Colors.transparent,
-                                        child: ListTile(
-                                          key: Key(
-                                            off
-                                                ? 'playback-track-off'
-                                                : 'playback-track-${widget.type.name}-${track!.id}',
-                                          ),
-                                          autofocus: selected,
-                                          selected: selected,
-                                          selectedTileColor:
-                                              roles.selectedSurface,
-                                          focusColor: roles.focusedSurface,
-                                          contentPadding: EdgeInsets.symmetric(
-                                            horizontal: 12 * scale,
-                                            vertical: 8 * scale,
-                                          ),
-                                          title: Text(
-                                            off
-                                                ? 'Off'
-                                                : track!.title ??
-                                                      track.language ??
-                                                      '${track.type.name} ${track.id}',
-                                            maxLines: 3,
-                                            overflow: TextOverflow.visible,
-                                            softWrap: true,
-                                            style: scaled(textTheme.bodyLarge)
-                                                ?.copyWith(
-                                                  fontWeight: FontWeight.w500,
-                                                ),
-                                          ),
-                                          subtitle: metadata.isEmpty
-                                              ? null
-                                              : Text(
-                                                  metadata.join(' • '),
-                                                  maxLines: 3,
-                                                  overflow:
-                                                      TextOverflow.visible,
-                                                  softWrap: true,
-                                                  style: scaled(
-                                                    textTheme.bodyMedium,
-                                                  ),
-                                                ),
-                                          trailing:
-                                              widget
+                                    child: Column(
+                                      children: [
+                                        for (
+                                          var index = 0;
+                                          index <
+                                              tracks.length +
+                                                  (widget.type ==
+                                                          PlayerTrackType
+                                                              .subtitle
+                                                      ? 1
+                                                      : 0);
+                                          index++
+                                        ) ...[
+                                          if (index > 0)
+                                            Divider(
+                                              height: 1,
+                                              color: roles.subtleBorder
+                                                  .withValues(alpha: 0.45),
+                                            ),
+                                          Builder(
+                                            builder: (context) {
+                                              final off =
+                                                  widget.type ==
+                                                      PlayerTrackType
+                                                          .subtitle &&
+                                                  index == 0;
+                                              final track = off
+                                                  ? null
+                                                  : tracks[index -
+                                                        (widget.type ==
+                                                                PlayerTrackType
+                                                                    .subtitle
+                                                            ? 1
+                                                            : 0)];
+                                              final selected = off
+                                                  ? selectedTrack == null
+                                                  : track!.selected;
+                                              final metadata = track == null
+                                                  ? const <String>[]
+                                                  : [
+                                                      if (track.language !=
+                                                          null)
+                                                        track.language!,
+                                                      if (track.codec != null)
+                                                        track.codec!,
+                                                    ];
+                                              final title = off
+                                                  ? 'Off'
+                                                  : track!.title ??
+                                                        track.language ??
+                                                        '${track.type.name} ${track.id}';
+                                              final metadataText = metadata
+                                                  .join(' • ');
+                                              final minTileHeight =
+                                                  (metadata.isEmpty ? 56 : 72) *
+                                                  scale;
+                                              final tooltip =
+                                                  metadataText.isEmpty
+                                                  ? title
+                                                  : '$title\n$metadataText';
+                                              final pending =
+                                                  widget
                                                           .controller
                                                           .pendingTrackType ==
                                                       widget.type &&
                                                   widget
                                                           .controller
                                                           .pendingTrackId ==
-                                                      track?.id
-                                              ? const SizedBox.square(
-                                                  dimension: 18,
-                                                  child:
-                                                      CircularProgressIndicator(
-                                                        strokeWidth: 2,
-                                                        semanticsLabel:
-                                                            'Changing track',
+                                                      track?.id;
+                                              return Material(
+                                                key:
+                                                    (off
+                                                        ? _initialSelectedTrackId ==
+                                                              null
+                                                        : track!.id ==
+                                                              _initialSelectedTrackId)
+                                                    ? _selectedRowKey
+                                                    : null,
+                                                color: Colors.transparent,
+                                                child: ListTile(
+                                                  key: Key(
+                                                    off
+                                                        ? 'playback-track-off'
+                                                        : 'playback-track-${widget.type.name}-${track!.id}',
+                                                  ),
+                                                  autofocus: selected,
+                                                  selected: selected,
+                                                  selectedTileColor: roles
+                                                      .progressFill
+                                                      .withValues(alpha: 0.10),
+                                                  focusColor:
+                                                      roles.focusedSurface,
+                                                  minTileHeight: scale > 1
+                                                      ? minTileHeight
+                                                      : null,
+                                                  horizontalTitleGap: scale > 1
+                                                      ? 16 * scale
+                                                      : null,
+                                                  minVerticalPadding: scale > 1
+                                                      ? 8 * scale
+                                                      : null,
+                                                  contentPadding:
+                                                      EdgeInsets.symmetric(
+                                                        horizontal: 12 * scale,
+                                                        vertical: 8 * scale,
                                                       ),
-                                                )
-                                              : selected
-                                              ? Icon(
-                                                  Icons.check,
-                                                  color: roles.progressFill,
-                                                  semanticLabel: 'Selected',
-                                                )
-                                              : null,
-                                          onTap: () =>
-                                              widget.controller.selectTrack(
-                                                widget.type,
-                                                track?.id,
-                                              ),
-                                        ),
-                                      );
-                                    },
+                                                  title: Tooltip(
+                                                    message: tooltip,
+                                                    excludeFromSemantics: true,
+                                                    child: Text(
+                                                      title,
+                                                      semanticsLabel: title,
+                                                      maxLines: 3,
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
+                                                      softWrap: true,
+                                                      style:
+                                                          scaled(
+                                                            textTheme.bodyLarge,
+                                                          )?.copyWith(
+                                                            color: roles
+                                                                .primaryText,
+                                                            fontWeight:
+                                                                FontWeight.w500,
+                                                          ),
+                                                    ),
+                                                  ),
+                                                  subtitle: metadata.isEmpty
+                                                      ? null
+                                                      : Text(
+                                                          metadataText,
+                                                          semanticsLabel:
+                                                              metadataText,
+                                                          maxLines: 3,
+                                                          overflow: TextOverflow
+                                                              .ellipsis,
+                                                          softWrap: true,
+                                                          style:
+                                                              scaled(
+                                                                textTheme
+                                                                    .bodyMedium,
+                                                              )?.copyWith(
+                                                                color:
+                                                                    supportingText,
+                                                              ),
+                                                        ),
+                                                  trailing: SizedBox(
+                                                    width: 30 * scale,
+                                                    child: Center(
+                                                      child: pending
+                                                          ? SizedBox.square(
+                                                              dimension:
+                                                                  18 * scale,
+                                                              child: CircularProgressIndicator(
+                                                                strokeWidth:
+                                                                    2 * scale,
+                                                                semanticsLabel: 'Changing track',
+                                                              ),
+                                                            )
+                                                          : selected
+                                                          ? Icon(
+                                                              Icons.check,
+                                                              color: roles
+                                                                  .progressFill,
+                                                              size: 24 * scale,
+                                                              semanticLabel:
+                                                                  'Selected',
+                                                            )
+                                                          : const SizedBox.shrink(),
+                                                    ),
+                                                  ),
+                                                  onTap: () => widget.controller
+                                                      .selectTrack(
+                                                        widget.type,
+                                                        track?.id,
+                                                      ),
+                                                ),
+                                              );
+                                            },
+                                          ),
+                                        ],
+                                      ],
+                                    ),
                                   ),
                           ),
                         ),
@@ -2410,12 +3204,20 @@ class _TracksState extends State<_Tracks> {
                               liveRegion: true,
                               child: Text(
                                 error,
-                                style: TextStyle(
+                                style: scaled(textTheme.bodyMedium)?.copyWith(
                                   color: Theme.of(context).colorScheme.error,
                                 ),
                               ),
                             ),
                           ),
+                        Padding(
+                          padding: EdgeInsets.only(top: 20 * geometryScale),
+                          child: Text(
+                            'Up/Down Browse · Enter Select · Esc Close',
+                            style: scaled(textTheme.bodySmall)
+                                ?.copyWith(color: supportingText),
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -2433,96 +3235,215 @@ class _ChannelNumber extends StatelessWidget {
   const _ChannelNumber({required this.controller});
   final PlayerCoordinator controller;
   @override
-  Widget build(BuildContext context) => Center(
-    child: Semantics(
-      liveRegion: true,
-      label: 'Channel number ${controller.channelNumber}',
-      child: Card(
-        key: const Key('channel-number-buffer'),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 34, vertical: 24),
-          child: Text(
-            controller.channelNumber,
-            style: Theme.of(context).textTheme.displayMedium,
+  Widget build(BuildContext context) {
+    final roles = LineupTheme.of(context);
+    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
+    final numberStyle = Theme.of(context).textTheme.displayMedium;
+    final numberFontSize = numberStyle?.fontSize;
+    return Center(
+      child: Semantics(
+        liveRegion: true,
+        label: 'Channel number ${controller.channelNumber}',
+        child: Card(
+          key: const Key('channel-number-buffer'),
+          margin: scale > 1 ? EdgeInsets.all(4 * scale) : null,
+          shape: scale > 1
+              ? RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(
+                    roles.panelRadius * scale,
+                  ),
+                  side: BorderSide(color: roles.subtleBorder, width: scale),
+                )
+              : null,
+          child: Padding(
+            padding: EdgeInsets.symmetric(
+              horizontal: 34 * scale,
+              vertical: 24 * scale,
+            ),
+            child: Text(
+              controller.channelNumber,
+              maxLines: 1,
+              softWrap: false,
+              style: scale > 1 && numberFontSize != null
+                  ? numberStyle!.copyWith(fontSize: numberFontSize * scale)
+                  : numberStyle,
+            ),
           ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 class _ErrorOverlay extends StatelessWidget {
   const _ErrorOverlay({required this.controller});
   final PlayerCoordinator controller;
   @override
-  Widget build(BuildContext context) => Center(
-    child: Card(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Semantics(
-          liveRegion: true,
-          label: 'Playback error',
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.error_outline, size: 42),
-              const SizedBox(height: 12),
-              Text(controller.error ?? 'Playback failed.'),
-              const SizedBox(height: 16),
-              Wrap(
-                spacing: 10,
-                children: [
-                  if (controller.canRetry)
-                    FilledButton(
-                      onPressed: controller.retry,
-                      child: const Text('Retry'),
+  Widget build(BuildContext context) {
+    final roles = LineupTheme.of(context);
+    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
+    final textTheme = Theme.of(context).textTheme;
+    final bodyFontSize = textTheme.bodyMedium?.fontSize;
+    final bodyStyle = scale > 1 && bodyFontSize != null
+        ? textTheme.bodyMedium!.copyWith(fontSize: bodyFontSize * scale)
+        : textTheme.bodyMedium;
+    final filledButtonStyle = scale > 1
+        ? FilledButton.styleFrom(
+            minimumSize: Size(148 * scale, 54 * scale),
+            padding: EdgeInsets.symmetric(
+              horizontal: 24 * scale,
+              vertical: 16 * scale,
+            ),
+            textStyle: textTheme.labelLarge?.copyWith(
+              fontSize: 17 * scale,
+              fontWeight: FontWeight.w700,
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(roles.panelRadius * scale),
+            ),
+          )
+        : null;
+    final closeButtonStyle = scale > 1
+        ? TextButton.styleFrom(
+            minimumSize: Size(64 * scale, 36 * scale),
+            padding: EdgeInsets.symmetric(
+              horizontal: 12 * scale,
+              vertical: 8 * scale,
+            ),
+            textStyle: textTheme.labelLarge?.copyWith(
+              fontSize: (textTheme.labelLarge?.fontSize ?? 14) * scale,
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(roles.panelRadius * scale),
+            ),
+          )
+        : null;
+    return LayoutBuilder(
+      builder: (context, constraints) => Center(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: constraints.maxHeight.isFinite
+                ? constraints.maxHeight
+                : double.infinity,
+          ),
+          child: Card(
+            margin: scale > 1 ? EdgeInsets.all(4 * scale) : null,
+            shape: scale > 1
+                ? RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(
+                      roles.panelRadius * scale,
                     ),
-                  TextButton(
-                    onPressed: controller.closeOverlay,
-                    child: const Text('Close'),
+                    side: BorderSide(color: roles.subtleBorder, width: scale),
+                  )
+                : null,
+            child: SingleChildScrollView(
+              child: Padding(
+                padding: EdgeInsets.all(24 * scale),
+                child: Semantics(
+                  liveRegion: true,
+                  label: 'Playback error',
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.error_outline, size: 42 * scale),
+                      SizedBox(height: 12 * scale),
+                      Text(
+                        controller.error ?? 'Playback failed.',
+                        style: bodyStyle,
+                      ),
+                      SizedBox(height: 16 * scale),
+                      Wrap(
+                        spacing: 10 * scale,
+                        runSpacing: scale > 1 ? 10 * scale : 0,
+                        children: [
+                          if (controller.canRetry)
+                            FilledButton(
+                              onPressed: controller.retry,
+                              style: filledButtonStyle,
+                              child: const Text('Retry'),
+                            ),
+                          TextButton(
+                            onPressed: controller.closeOverlay,
+                            style: closeButtonStyle,
+                            child: const Text('Close'),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
-            ],
+            ),
           ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 class _Loading extends StatelessWidget {
   const _Loading({required this.label});
   final String label;
   @override
-  Widget build(BuildContext context) => Center(
-    child: Semantics(
-      liveRegion: true,
-      label: label,
-      child: const CircularProgressIndicator(),
-    ),
-  );
+  Widget build(BuildContext context) {
+    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
+    return Center(
+      child: Semantics(
+        liveRegion: true,
+        label: label,
+        child: scale > 1
+            ? CircularProgressIndicator(
+                strokeWidth: 4 * scale,
+                constraints: BoxConstraints(
+                  minWidth: 40 * scale,
+                  minHeight: 40 * scale,
+                ),
+              )
+            : const CircularProgressIndicator(),
+      ),
+    );
+  }
 }
 
 class _Unsupported extends StatelessWidget {
   const _Unsupported({required this.message});
   final String message;
   @override
-  Widget build(BuildContext context) => Center(
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        const Icon(Icons.desktop_windows_outlined, size: 54),
-        const SizedBox(height: 18),
-        Text(
-          'Playback unavailable',
-          style: Theme.of(context).textTheme.headlineSmall,
+  Widget build(BuildContext context) {
+    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
+    final textTheme = Theme.of(context).textTheme;
+    final headlineFontSize = textTheme.headlineSmall?.fontSize;
+    final headlineStyle = scale > 1 && headlineFontSize != null
+        ? textTheme.headlineSmall!.copyWith(fontSize: headlineFontSize * scale)
+        : textTheme.headlineSmall;
+    final bodyFontSize = textTheme.bodyMedium?.fontSize;
+    final bodyStyle = scale > 1 && bodyFontSize != null
+        ? textTheme.bodyMedium!.copyWith(fontSize: bodyFontSize * scale)
+        : textTheme.bodyMedium;
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            minHeight: constraints.maxHeight.isFinite
+                ? constraints.maxHeight
+                : 0,
+          ),
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.desktop_windows_outlined, size: 54 * scale),
+                SizedBox(height: 18 * scale),
+                Text('Playback unavailable', style: headlineStyle),
+                SizedBox(height: 8 * scale),
+                Text(message, style: bodyStyle),
+              ],
+            ),
+          ),
         ),
-        const SizedBox(height: 8),
-        Text(message),
-      ],
-    ),
-  );
+      ),
+    );
+  }
 }
 
 String? _digit(LogicalKeyboardKey key) {
@@ -2592,22 +3513,42 @@ Widget _osdAction(
   FocusNode? focusNode,
 }) {
   final roles = LineupTheme.of(context);
+  final size = MediaQuery.sizeOf(context);
+  final scale = LineupLayout.scaleFor(size);
+  final largeDesktop = size.width >= 1920 && size.height >= 900;
   return ConstrainedBox(
-    constraints: BoxConstraints(maxWidth: compact ? 132 : 180),
+    constraints: BoxConstraints(maxWidth: (compact ? 132 : 180) * scale),
     child: Tooltip(
       message: tooltip,
-      child: TextButton.icon(
+      child: TextButton(
         key: key,
         focusNode: focusNode,
         onPressed: onPressed,
-        icon: Icon(icon, size: compact ? 17 : 18),
-        label: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
         style: TextButton.styleFrom(
           foregroundColor: roles.primaryText,
-          padding: EdgeInsets.symmetric(horizontal: compact ? 5 : 8),
-          minimumSize: const Size(0, 40),
+          padding: EdgeInsets.symmetric(horizontal: (compact ? 5 : 8) * scale),
+          minimumSize: Size(0, 40 * scale),
           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
           visualDensity: VisualDensity.compact,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: (compact ? 17 : 18) * scale),
+            SizedBox(width: 8 * scale),
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  color: roles.primaryText,
+                  fontSize: (largeDesktop ? 16 : 14) * scale,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     ),
@@ -2631,6 +3572,25 @@ String? _episodeLabel(ChannelItem item) {
     if (season != null) 'Season $season',
     if (episode != null) 'Episode $episode',
   ].join(' • ');
+}
+
+String? _osdEpisodeFacts(ChannelItem item) {
+  final numbered = [
+    if (item.seasonNumber != null) 'S${item.seasonNumber}',
+    if (item.episodeNumber != null) 'E${item.episodeNumber}',
+  ].join(' · ');
+  final showTitle = item.showTitle?.trim();
+  if (showTitle?.isNotEmpty != true) return numbered.isEmpty ? null : numbered;
+
+  final episodeTitle = item.title.trim();
+  if (numbered.isEmpty) {
+    return episodeTitle.isEmpty || episodeTitle == showTitle
+        ? null
+        : episodeTitle;
+  }
+  return episodeTitle.isEmpty || episodeTitle == showTitle
+      ? numbered
+      : '$numbered — $episodeTitle';
 }
 
 String? _dynamicRangeLabel(String? value, bool telemetryIsHdr) {

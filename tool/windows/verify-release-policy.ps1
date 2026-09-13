@@ -11,6 +11,7 @@ $scripts = @(
   'tool/windows/build-release.ps1',
   'tool/windows/package.ps1',
   'tool/windows/prepare-mpv.ps1',
+  'tool/windows/run.ps1',
   'tool/windows/verify-release-policy.ps1'
 )
 foreach ($relative in $scripts) {
@@ -26,15 +27,168 @@ foreach ($relative in $scripts) {
   }
 }
 
+. (Join-Path $repository 'tool/windows/build-inputs.ps1')
+
 $buildReleasePath = Join-Path $repository 'tool/windows/build-release.ps1'
 $buildReleaseSource = Get-Content -Raw -LiteralPath $buildReleasePath
-if ($buildReleaseSource -notmatch '(?ms)function\s+Get-PubspecVersion\b') {
-  throw 'build-release.ps1 must strictly parse the pubspec version.'
+$launcherPath = Join-Path $repository 'tool/windows/run.ps1'
+$launcherSource = Get-Content -Raw -LiteralPath $launcherPath
+
+foreach ($required in @(
+    '#Requires -Version 7.4',
+    '[string] $EngineSource = $env:LINEUP_ENGINE_SOURCE',
+    '[string] $MpvRoot = $env:LINEUP_MPV_ROOT',
+    '[string] $MediaPath',
+    "'--local-engine=host_debug'",
+    "'--local-engine-host=host_debug'",
+    '"--local-engine-src-path=$EngineSource"',
+    '"--dart-entrypoint-args=--media=$MediaPath"',
+    "'out/host_debug'",
+    "'build.ninja'",
+    'PSBoundParameters.ContainsKey(''MediaPath'')',
+    '& $flutter @flutterArguments',
+    '$env:LINEUP_MPV_ROOT = $mpvRoot',
+    'Push-Location -LiteralPath $repository',
+    'Pop-Location',
+    'if ($flutterExitCode) { exit $flutterExitCode }'
+  )) {
+  if (-not $launcherSource.Contains($required)) {
+    throw "run.ps1 is missing its required launch contract: $required"
+  }
 }
-if ($buildReleaseSource -notmatch '\$versionLines\.Count\s+-ne\s+1' -or
-  $buildReleaseSource -notmatch '\(\?<name>\[\^\+\\s\]\+\)\\\+\(\?<build>\[0-9\]\+\)') {
-  throw 'build-release.ps1 must reject ambiguous or malformed pubspec versions.'
+if ($launcherSource -match '(?i)Invoke-Expression|Get-Command\s+[''\"]?flutter') {
+  throw 'run.ps1 must invoke only the pinned flutter.bat path without shell interpolation.'
 }
+if ($launcherSource -notmatch '(?m)\$ninjaCommand\s*=\s*Get-Command\s+''ninja\.exe''') {
+  throw 'run.ps1 must resolve ninja as an executable before invoking it.'
+}
+if ($launcherSource -notmatch '(?m)&\s*\$ninja\s+@Arguments|Invoke-NativeChecked\s+-FilePath\s+\$ninja') {
+  throw 'run.ps1 must incrementally invoke ninja with an argument array.'
+}
+
+$launcherTokens = $null
+$launcherErrors = $null
+$launcherAst = [Management.Automation.Language.Parser]::ParseInput(
+  $launcherSource,
+  [ref] $launcherTokens,
+  [ref] $launcherErrors
+)
+if ($launcherErrors.Count) {
+  throw "run.ps1 has parse errors in its executable check: $($launcherErrors.Message -join '; ')"
+}
+foreach ($functionName in @('Resolve-RequiredPath', 'Get-FlutterArguments')) {
+  $functionAst = $launcherAst.Find({
+      param($node)
+      $node -is [Management.Automation.Language.FunctionDefinitionAst] -and
+        $node.Name -eq $functionName
+    }, $true)
+  if (-not $functionAst) { throw "run.ps1 is missing $functionName for executable checks." }
+  Invoke-Expression -Command $functionAst.Extent.Text
+}
+
+$launcherTestDirectory = Join-Path ([IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString())
+try {
+  New-Item -ItemType Directory -Path $launcherTestDirectory -ErrorAction Stop | Out-Null
+  $spacedMediaPath = Join-Path $launcherTestDirectory 'media file with spaces.mp4'
+  New-Item -ItemType File -Path $spacedMediaPath -ErrorAction Stop | Out-Null
+
+  $withoutMedia = @(Get-FlutterArguments -EngineSource 'C:\engine root\engine\src' `
+      -BoundParameters @{} -MediaPath '')
+  if ($withoutMedia.Count -ne 6 -or
+    ($withoutMedia -contains '--dart-entrypoint-args=--media=')) {
+    throw 'run.ps1 supplied a media argument when MediaPath was omitted.'
+  }
+
+  $blankRejected = $false
+  try {
+    Get-FlutterArguments -EngineSource 'C:\engine root\engine\src' `
+      -BoundParameters @{ MediaPath = '' } -MediaPath '' | Out-Null
+  } catch {
+    $blankRejected = $true
+  }
+  if (-not $blankRejected) {
+    throw 'run.ps1 accepted an explicitly blank MediaPath.'
+  }
+
+  $resolvedSpacedMediaPath = Resolve-RequiredPath -Path $spacedMediaPath `
+    -Name 'MediaPath' -PathType Leaf
+  $withMedia = @(Get-FlutterArguments -EngineSource 'C:\engine root\engine\src' `
+      -BoundParameters @{ MediaPath = $resolvedSpacedMediaPath } `
+      -MediaPath $resolvedSpacedMediaPath)
+  $expectedMediaArgument = "--dart-entrypoint-args=--media=$resolvedSpacedMediaPath"
+  if ($withMedia.Count -ne 7 -or $withMedia[6] -ne $expectedMediaArgument) {
+    throw 'run.ps1 did not preserve an existing MediaPath with spaces as one argument.'
+  }
+
+  $invalidPathRejected = $false
+  try {
+    Resolve-RequiredPath -Path (Join-Path $launcherTestDirectory 'missing file.mp4') `
+      -Name 'MediaPath' -PathType Leaf | Out-Null
+  } catch {
+    $invalidPathRejected = $true
+  }
+  if (-not $invalidPathRejected) {
+    throw 'run.ps1 accepted an invalid MediaPath.'
+  }
+  Write-Host 'Launcher parameter/path checks passed (native Windows invocation not exercised).'
+} finally {
+  if (Test-Path -LiteralPath $launcherTestDirectory -PathType Container) {
+    Remove-Item -LiteralPath $launcherTestDirectory -Recurse -Force -ErrorAction Stop
+  }
+}
+
+$pubspecTestDirectory = Join-Path ([IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString())
+try {
+  New-Item -ItemType Directory -Path $pubspecTestDirectory -ErrorAction Stop | Out-Null
+
+  function Assert-PubspecVersionRejected {
+    param(
+      [Parameter(Mandatory)] [string] $Path,
+      [Parameter(Mandatory)] [string] $Description
+    )
+
+    $rejected = $false
+    try {
+      Get-PubspecVersion -Path $Path | Out-Null
+    } catch {
+      $rejected = $true
+    }
+    if (-not $rejected) {
+      throw "Pubspec version case was accepted unexpectedly: $Description."
+    }
+  }
+
+  $validPath = Join-Path $pubspecTestDirectory 'valid.yaml'
+  @(
+    'name: lineup-desktop'
+    'version: 1.2.3+45'
+  ) | Set-Content -LiteralPath $validPath -Encoding utf8
+  $valid = Get-PubspecVersion -Path $validPath
+  if ($valid.Name -ne '1.2.3' -or $valid.Build -ne '45') {
+    throw 'Get-PubspecVersion returned the wrong name or build for a valid version.'
+  }
+
+  $missingBuildPath = Join-Path $pubspecTestDirectory 'missing-build.yaml'
+  'version: 1.2.3' | Set-Content -LiteralPath $missingBuildPath -Encoding utf8
+  Assert-PubspecVersionRejected $missingBuildPath 'missing numeric build'
+
+  $nonnumericBuildPath = Join-Path $pubspecTestDirectory 'nonnumeric-build.yaml'
+  'version: 1.2.3+beta' |
+    Set-Content -LiteralPath $nonnumericBuildPath -Encoding utf8
+  Assert-PubspecVersionRejected $nonnumericBuildPath 'nonnumeric build'
+
+  $duplicateVersionPath = Join-Path $pubspecTestDirectory 'duplicate-version.yaml'
+  @(
+    'version: 1.2.3+45'
+    'version: 1.2.4+46'
+  ) | Set-Content -LiteralPath $duplicateVersionPath -Encoding utf8
+  Assert-PubspecVersionRejected $duplicateVersionPath 'duplicate top-level version entries'
+} finally {
+  if (Test-Path -LiteralPath $pubspecTestDirectory -PathType Container) {
+    Remove-Item -LiteralPath $pubspecTestDirectory -Recurse -Force -ErrorAction Stop
+  }
+}
+
 if ($buildReleaseSource -notmatch
   '(?m)^\$sourceCommit\s*=\s*Get-GitValue\s+\$repository\s+@\(''rev-parse'',\s*''--verify'',\s*''HEAD''\)') {
   throw 'build-release.ps1 must use the exact verified source commit for build provenance.'

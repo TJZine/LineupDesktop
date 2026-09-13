@@ -1,0 +1,208 @@
+{
+  "baseline_commit": "729deae5",
+  "source_sha256": {
+    "lib/app/channel_setup_view.dart": "269169dd3b97017ef9d363ca43d5b8d5e451a4e1fd566f444b4e3ab692cdec56"
+  },
+  "captures": [
+    {
+      "path": "build/desktop-ui/scaling/setup-followup2-1080/setup-complete.png",
+      "physical_size": [
+        1920,
+        1080
+      ],
+      "sha256": "322d26e3185c945268b61f650dd3caeca0a7da4d3e7c89df8b5cecac4a6bdae2"
+    },
+    {
+      "path": "build/desktop-ui/scaling/setup-followup2-1080/setup-libraries.png",
+      "physical_size": [
+        1920,
+        1080
+      ],
+      "sha256": "821b6c6b7875c4a1596e47919ed4a3566582f6edfae412cf6a8509bae941b595"
+    },
+    {
+      "path": "build/desktop-ui/scaling/setup-followup2-1080/setup-review.png",
+      "physical_size": [
+        1920,
+        1080
+      ],
+      "sha256": "b5d3d3ac77063f94fe48da22e931fc5f35e51ba95737364d8767a8d35a3ba7d1"
+    },
+    {
+      "path": "build/desktop-ui/scaling/setup-followup2-1080/setup-rules.png",
+      "physical_size": [
+        1920,
+        1080
+      ],
+      "sha256": "c1578b28fb483ae930dc4f2349811897f4271852e02e1ddb721521097d9467ca"
+    },
+    {
+      "path": "build/desktop-ui/scaling/setup-followup2-1080/setup-sources.png",
+      "physical_size": [
+        1920,
+        1080
+      ],
+      "sha256": "f07eda00688d603fc5bfba0a21aad79917a5471b06ee257464bfaedd313bc789"
+    },
+    {
+      "path": "build/desktop-ui/scaling/setup-followup2-2160/setup-complete.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "73891b87b0f8004a5cd414d52e79fde4460bae95e417ec5bfff0d97171731280"
+    },
+    {
+      "path": "build/desktop-ui/scaling/setup-followup2-2160/setup-libraries.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "bbe5b18a9a0a7714fce1dd29ac87f3591923cddcf3bad9d103ce39cf82ec6ea4"
+    },
+    {
+      "path": "build/desktop-ui/scaling/setup-followup2-2160/setup-review.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "385da0172d132c88f1d625ac3fe01db91a4b0f78e83e1a7ed9a8a634566519c5"
+    },
+    {
+      "path": "build/desktop-ui/scaling/setup-followup2-2160/setup-rules.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "2a20761bc313f861aa4d11a1538ece315ec7acac7c7af7d329bae30f47d9bced"
+    },
+    {
+      "path": "build/desktop-ui/scaling/setup-followup2-2160/setup-sources.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "5f90d9366ddfa95cbb3b3de0a75a459e5e33529f8d4e5614871a90d1b8fb0248"
+    },
+    {
+      "path": "build/desktop-ui/scaling/setup-followup2-2160-dpr2-text2/setup-complete.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "f12a7e1418a792210b3d351d5f3d93dc36c3df011768b9136a2204fcb794d53d"
+    },
+    {
+      "path": "build/desktop-ui/scaling/setup-followup2-2160-dpr2-text2/setup-libraries.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "dd1b596b6d9e8c04e85764aa7bd2c37c070df737b5b3ff0215fb5e2d48c2060f"
+    },
+    {
+      "path": "build/desktop-ui/scaling/setup-followup2-2160-dpr2-text2/setup-review.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "837addcb9ab550c9809d6899d43ea8cc4c256d4e798ebd02be17f10e253ff358"
+    },
+    {
+      "path": "build/desktop-ui/scaling/setup-followup2-2160-dpr2-text2/setup-rules.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "2b781b2190d411ba121e8acb199bc94300e49fbe89af357299a5e0d8933f4c8d"
+    },
+    {
+      "path": "build/desktop-ui/scaling/setup-followup2-2160-dpr2-text2/setup-sources.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "33abb98298aee11c6dac39e1490b6a354d9bad452aef7dde2cfc4a83dc91d3ed"
+    },
+    {
+      "path": "build/desktop-ui/scaling/setup-followup2-1280-text2/setup-complete.png",
+      "physical_size": [
+        1280,
+        720
+      ],
+      "sha256": "3b8cd5dd066c5899d2fda711d6f7489ae5c5ed1f056318009c2349da7800c14b"
+    },
+    {
+      "path": "build/desktop-ui/scaling/setup-followup2-1280-text2/setup-libraries.png",
+      "physical_size": [
+        1280,
+        720
+      ],
+      "sha256": "1b75dfc96f9b5269edf06289a2257c857e663974377b8c46c61b337a42ccc178"
+    },
+    {
+      "path": "build/desktop-ui/scaling/setup-followup2-1280-text2/setup-review.png",
+      "physical_size": [
+        1280,
+        720
+      ],
+      "sha256": "7586efa075f35ca7bd79253bd90544a4387cffe402447493ba4591dc032f86b1"
+    },
+    {
+      "path": "build/desktop-ui/scaling/setup-followup2-1280-text2/setup-rules.png",
+      "physical_size": [
+        1280,
+        720
+      ],
+      "sha256": "7c4d4b718d046b05d47da498008827c5650e1530072615728715925e696dba9d"
+    },
+    {
+      "path": "build/desktop-ui/scaling/setup-followup2-1280-text2/setup-sources.png",
+      "physical_size": [
+        1280,
+        720
+      ],
+      "sha256": "cfeeb995576e035d596c7bdb6ab302a8b394a2827c92aee51dcc437259186a54"
+    },
+    {
+      "path": "build/desktop-ui/scaling/setup-followup2-enlarged/setup-playback-switch.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "f24d5e94de53f96a7600cbb48c9c6705dd5a4c9f65a3bf96eadb27b2c88b6183"
+    },
+    {
+      "path": "build/desktop-ui/scaling/setup-followup2-enlarged/setup-rules-max1000-closed.png",
+      "physical_size": [
+        1920,
+        1080
+      ],
+      "sha256": "a82c0b8bf77e8492a8ae1d9aed8b06b9965c64861cb20fdacfcf24b7a7ff4a3c"
+    },
+    {
+      "path": "build/desktop-ui/scaling/setup-followup2-enlarged/setup-rules-max1000-open.png",
+      "physical_size": [
+        1920,
+        1080
+      ],
+      "sha256": "0e8b0558ca1ed9fee8d9370f0f20ed3fcfeb64f904ba33e6c8c997e4ab9ea27e"
+    },
+    {
+      "path": "build/desktop-ui/scaling/setup-followup2-enlarged/setup-sources-grouping-closed.png",
+      "physical_size": [
+        1920,
+        1080
+      ],
+      "sha256": "6db0b7bc2402641f11c36f774329bd2bde00df60534344602ece45aa32dc9c97"
+    },
+    {
+      "path": "build/desktop-ui/scaling/setup-followup2-enlarged/setup-sources-grouping-open.png",
+      "physical_size": [
+        1920,
+        1080
+      ],
+      "sha256": "7ba28e69b2d1745a3cf681586beb3266d19fb3fc55b749c467bf6e34b501f0d4"
+    }
+  ]
+}

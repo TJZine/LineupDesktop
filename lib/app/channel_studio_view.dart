@@ -461,151 +461,201 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
         false;
     final confirmedMovieOnly = _confirmedMovieOnly(draftResolution);
     _stageScheduleIdentity(programmingError);
-    return LineupPage(
-      traversalPolicy: OrderedTraversalPolicy(),
-      title: _name.text.trim().isEmpty ? 'New channel' : _name.text.trim(),
-      titleWidget: Builder(
-        builder: (_) => _studioTitle(validNumber ? number : null, saved),
-      ),
-      actions: Builder(
-        builder: (_) => _studioActions(
-          persisted: persisted,
-          saved: saved,
-          noNumber: noNumber,
-          identityLooksValid: identityLooksValid,
-          programmingError: programmingError,
+    final theme = Theme.of(context);
+    final compact = LineupLayout.isCompactWidth(
+      MediaQuery.sizeOf(context).width,
+    );
+    final baseFontSize = compact ? 14.0 : 18.0;
+    final inputDecorationTheme = _uiScale > 1
+        ? theme.inputDecorationTheme.copyWith(
+            contentPadding: EdgeInsets.fromLTRB(
+              12 * _uiScale,
+              24 * _uiScale,
+              12 * _uiScale,
+              16 * _uiScale,
+            ),
+            prefixIconConstraints: BoxConstraints(
+              minWidth: 48 * _uiScale,
+              minHeight: 48 * _uiScale,
+            ),
+            suffixIconConstraints: BoxConstraints(
+              minWidth: 48 * _uiScale,
+              minHeight: 48 * _uiScale,
+            ),
+          )
+        : theme.inputDecorationTheme;
+    return Theme(
+      data: theme.copyWith(
+        inputDecorationTheme: inputDecorationTheme.copyWith(
+          floatingLabelStyle: TextStyle(
+            fontSize: _studioSize(24, 18),
+            color: LineupTheme.of(context).secondaryText,
+          ),
+        ),
+        textTheme: theme.textTheme.copyWith(
+          bodyMedium: theme.textTheme.bodyMedium?.copyWith(
+            fontSize: baseFontSize,
+          ),
+          bodyLarge: theme.textTheme.bodyLarge?.copyWith(
+            fontSize: baseFontSize,
+          ),
+          titleMedium: theme.textTheme.titleMedium?.copyWith(
+            fontSize: baseFontSize,
+          ),
         ),
       ),
-      child: Builder(
-        builder: (context) => SingleChildScrollView(
-          key: const Key('studio-scroll'),
-          child: AbsorbPointer(
-            absorbing: _busy,
-            child: Form(
-              key: _form,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (_error != null && !_conflict && !_baseDeleted) ...[
-                    LineupNotice(message: _error!),
-                  ],
-                  if (_success != null) ...[
-                    const SizedBox(height: 12),
-                    Semantics(liveRegion: true, child: Text(_success!)),
-                  ],
-                  if (_saving) ...[
-                    const SizedBox(height: 12),
-                    Semantics(
-                      liveRegion: true,
-                      container: true,
-                      label: 'Saving channel',
-                      child: const Text('Saving channel…'),
-                    ),
-                  ],
-                  if (noNumber) ...[
-                    const SizedBox(height: 12),
-                    const LineupNotice(
-                      message: 'No channel numbers are available. Free or renumber a channel from Channels before saving.',
-                    ),
-                  ],
-                  if (_conflict || _baseDeleted) ...[_recoveryInterlock()],
-                  if (_error != null ||
-                      _success != null ||
-                      _saving ||
-                      noNumber ||
-                      _conflict ||
-                      _baseDeleted)
-                    const SizedBox(height: 12),
-                  if (_hasPendingProgrammingChoice) ...[
-                    Semantics(
-                      liveRegion: true,
-                      child: Text(
-                        _activeFilterKey != null
-                            ? 'Finish this filter with Done, or cancel it, before saving or tuning.'
-                            : 'Add the selected programs, or cancel selection, before saving or tuning.',
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                  ],
-                  LayoutBuilder(
-                    builder: (context, constraints) {
-                      final programming = _programmingCard();
-                      final station = _stationCard(
-                        hasShowGrouping: hasShowGrouping,
-                        confirmedMovieOnly: confirmedMovieOnly,
-                      );
-                      final preview = ChannelAirCheck(
-                        controller: widget.controller,
-                        channel: _previewDraft,
-                        originalChannel: _expectedBase,
-                        clock: _clock,
-                        compact: constraints.maxWidth < LineupLayout.compact,
-                        inclusionReason: _sourceLabel(
-                          _displaySource,
-                          widget.controller,
+      child: Material(
+        type: MaterialType.transparency,
+        child: LineupPage(
+          traversalPolicy: OrderedTraversalPolicy(),
+          title: _name.text.trim().isEmpty ? 'New channel' : _name.text.trim(),
+          titleWidget: Builder(
+            builder: (_) => _studioTitle(
+              validNumber ? number : null,
+              saved,
+              persisted: persisted,
+              noNumber: noNumber,
+              identityLooksValid: identityLooksValid,
+              programmingError: programmingError,
+            ),
+          ),
+          child: Builder(
+            builder: (context) => SingleChildScrollView(
+              key: const Key('studio-scroll'),
+              child: AbsorbPointer(
+                absorbing: _busy,
+                child: Form(
+                  key: _form,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (_error != null && !_conflict && !_baseDeleted) ...[
+                        LineupNotice(message: _error!),
+                      ],
+                      if (_success != null) ...[
+                        SizedBox(height: 12 * _uiScale),
+                        Semantics(liveRegion: true, child: Text(_success!)),
+                      ],
+                      if (_saving) ...[
+                        SizedBox(height: 12 * _uiScale),
+                        Semantics(
+                          liveRegion: true,
+                          container: true,
+                          label: 'Saving channel',
+                          child: const Text('Saving channel…'),
                         ),
-                        sourceIssue: programmingError,
-                        playableById: _playableInventory.byId,
-                        onValidityChanged: (status) {
-                          if (!mounted || _airCheckStatus == status) return;
-                          setState(() => _airCheckStatus = status);
-                          if (_isCurrentAirCheckStatus(status)) {
-                            _commitScheduleIdentity();
-                          }
-                        },
-                      );
-                      return constraints.maxWidth < LineupLayout.compact
-                          ? Column(
-                              children: [
-                                FocusTraversalOrder(
-                                  order: const NumericFocusOrder(1),
-                                  child: station,
-                                ),
-                                const SizedBox(height: 16),
-                                FocusTraversalOrder(
-                                  order: const NumericFocusOrder(2),
-                                  child: programming,
-                                ),
-                                const SizedBox(height: 16),
-                                FocusTraversalOrder(
-                                  order: const NumericFocusOrder(3),
-                                  child: preview,
-                                ),
-                              ],
-                            )
-                          : Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                FocusTraversalOrder(
-                                  order: const NumericFocusOrder(1),
-                                  child: station,
-                                ),
-                                const SizedBox(height: 16),
-                                Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
+                      ],
+                      if (noNumber) ...[
+                        SizedBox(height: 12 * _uiScale),
+                        const LineupNotice(
+                          message: 'No channel numbers are available. Free or renumber a channel from Channels before saving.',
+                        ),
+                      ],
+                      if (_conflict || _baseDeleted) ...[_recoveryInterlock()],
+                      if (_error != null ||
+                          _success != null ||
+                          _saving ||
+                          noNumber ||
+                          _conflict ||
+                          _baseDeleted)
+                        SizedBox(height: 12 * _uiScale),
+                      if (_hasPendingProgrammingChoice) ...[
+                        Semantics(
+                          liveRegion: true,
+                          child: Text(
+                            _activeFilterKey != null
+                                ? 'Finish this filter with Done, or cancel it, before saving or tuning.'
+                                : 'Add the selected programs, or cancel selection, before saving or tuning.',
+                          ),
+                        ),
+                        SizedBox(height: 12 * _uiScale),
+                      ],
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          final programming = _programmingCard();
+                          final station = _stationCard(
+                            hasShowGrouping: hasShowGrouping,
+                            confirmedMovieOnly: confirmedMovieOnly,
+                          );
+                          final preview = ChannelAirCheck(
+                            controller: widget.controller,
+                            channel: _previewDraft,
+                            originalChannel: _expectedBase,
+                            clock: _clock,
+                            compact:
+                                constraints.maxWidth <
+                                LineupLayout.compact * _uiScale,
+                            inclusionReason: _sourceLabel(
+                              _displaySource,
+                              widget.controller,
+                            ),
+                            sourceIssue: programmingError,
+                            playableById: _playableInventory.byId,
+                            onValidityChanged: (status) {
+                              if (!mounted || _airCheckStatus == status) return;
+                              setState(() => _airCheckStatus = status);
+                              if (_isCurrentAirCheckStatus(status)) {
+                                _commitScheduleIdentity();
+                              }
+                            },
+                          );
+                          return constraints.maxWidth <
+                                  LineupLayout.compact * _uiScale
+                              ? Column(
                                   children: [
-                                    Expanded(
-                                      flex: 5,
-                                      child: FocusTraversalOrder(
-                                        order: const NumericFocusOrder(2),
-                                        child: programming,
-                                      ),
+                                    FocusTraversalOrder(
+                                      order: const NumericFocusOrder(1),
+                                      child: station,
                                     ),
-                                    const SizedBox(width: 16),
-                                    Expanded(
-                                      flex: 4,
-                                      child: FocusTraversalOrder(
-                                        order: const NumericFocusOrder(3),
-                                        child: preview,
-                                      ),
+                                    SizedBox(height: 16 * _uiScale),
+                                    FocusTraversalOrder(
+                                      order: const NumericFocusOrder(2),
+                                      child: programming,
+                                    ),
+                                    SizedBox(height: 16 * _uiScale),
+                                    FocusTraversalOrder(
+                                      order: const NumericFocusOrder(3),
+                                      child: preview,
                                     ),
                                   ],
-                                ),
-                              ],
-                            );
-                    },
+                                )
+                              : Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    FocusTraversalOrder(
+                                      order: const NumericFocusOrder(1),
+                                      child: station,
+                                    ),
+                                    SizedBox(height: 16 * _uiScale),
+                                    Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Expanded(
+                                          flex: 5,
+                                          child: FocusTraversalOrder(
+                                            order: const NumericFocusOrder(2),
+                                            child: programming,
+                                          ),
+                                        ),
+                                        SizedBox(width: 16 * _uiScale),
+                                        Expanded(
+                                          flex: 4,
+                                          child: FocusTraversalOrder(
+                                            order: const NumericFocusOrder(3),
+                                            child: preview,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                );
+                        },
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
           ),
@@ -614,8 +664,18 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     );
   }
 
-  Widget _studioTitle(int? number, bool saved) {
+  Widget _studioTitle(
+    int? number,
+    bool saved, {
+    required bool persisted,
+    required bool noNumber,
+    required bool identityLooksValid,
+    required String? programmingError,
+  }) {
     final roles = LineupTheme.of(context);
+    final compact = LineupLayout.isCompactWidth(
+      MediaQuery.sizeOf(context).width,
+    );
     final name = _name.text.trim().isEmpty ? 'New channel' : _name.text.trim();
     final status = _conflict
         ? 'My draft retained'
@@ -627,65 +687,378 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
         ? 'Saved'
         : 'Draft';
     final mode = _modeLabel(_effectiveMode);
-    return Semantics(
-      header: true,
-      label:
-          '${number == null ? 'No channel number' : 'Channel $number'}, $name, ${_modeHeaderLabel(_effectiveMode)}, $mode, $status',
-      child: ExcludeSemantics(
-        child: Row(
-          children: [
-            Container(
-              width: 52,
-              height: 52,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: roles.progressFill,
-                borderRadius: BorderRadius.circular(roles.panelRadius),
-              ),
-              child: Text(
-                number?.toString() ?? '—',
-                style: TextStyle(
-                  color: roles.onFocus,
-                  fontSize: 21 * _uiScale,
-                  fontWeight: FontWeight.w900,
-                  fontFeatures: const [FontFeature.tabularFigures()],
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+    final titleStyle = Theme.of(context).textTheme.headlineMedium?.copyWith(
+      fontSize: (compact ? 24 : 36) * _uiScale,
+      fontWeight: FontWeight.w600,
+    );
+    final statusStyle = _studioBodyStyle(
+      color: _conflict || _baseDeleted
+          ? Theme.of(context).colorScheme.error
+          : roles.secondaryText,
+    );
+    final wordmarkStyle = TextStyle(
+      color: roles.primaryText,
+      fontFamily: 'Arial',
+      fontSize: (compact ? 14 : 18) * _uiScale,
+      fontWeight: FontWeight.w400,
+      letterSpacing: 1.5,
+    );
+    final contextStyle = _studioSupportStyle(fontWeight: FontWeight.w600);
+    final back = FocusTraversalOrder(
+      order: const NumericFocusOrder(0),
+      child: TextButton.icon(
+        focusNode: _backFocus,
+        autofocus: true,
+        onPressed: _busy ? null : () => unawaited(_leave()),
+        style: _studioTextButtonStyle(),
+        icon: _uiScale > 1
+            ? Icon(Icons.arrow_back, size: 24 * _uiScale)
+            : const Icon(Icons.arrow_back),
+        label: const Text('Back to Channels'),
+      ),
+    );
+    final actions = Align(
+      widthFactor: 1,
+      alignment: Alignment.centerRight,
+      child: _studioActions(
+        persisted: persisted,
+        saved: saved,
+        noNumber: noNumber,
+        identityLooksValid: identityLooksValid,
+        programmingError: programmingError,
+      ),
+    );
+    final titleAndActions = LayoutBuilder(
+      builder: (context, constraints) {
+        final narrow = compact || constraints.maxWidth < 1000 * _uiScale;
+        final title = Semantics(
+          header: true,
+          excludeSemantics: true,
+          label:
+              '${number == null ? 'No channel number' : 'Channel $number'}, $name, ${_modeHeaderLabel(_effectiveMode)}, $mode, $status',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(name, softWrap: true, style: titleStyle),
+              SizedBox(height: 4 * _uiScale),
+              Wrap(
+                spacing: 8 * _uiScale,
+                runSpacing: 2 * _uiScale,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  Text(
-                    name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.headlineSmall
-                        ?.apply(fontSizeFactor: _uiScale)
-                        .copyWith(fontWeight: FontWeight.w800),
-                  ),
-                  DefaultTextStyle.merge(
-                    style: TextStyle(
-                      color: _conflict || _baseDeleted
-                          ? Theme.of(context).colorScheme.error
-                          : roles.secondaryText,
-                      fontSize: 12 * _uiScale,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.8,
-                    ),
-                    child: Wrap(
-                      spacing: 6,
-                      runSpacing: 2,
-                      children: [Text(mode), const Text('·'), Text(status)],
-                    ),
-                  ),
+                  Text(mode, style: statusStyle),
+                  Text('·', style: statusStyle),
+                  Text(status, style: statusStyle),
                 ],
               ),
+            ],
+          ),
+        );
+        if (narrow) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              title,
+              SizedBox(height: 12 * _uiScale),
+              actions,
+            ],
+          );
+        }
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: title),
+            SizedBox(width: 24 * _uiScale),
+            actions,
+          ],
+        );
+      },
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 24 * _uiScale,
+          runSpacing: 8 * _uiScale,
+          children: [
+            back,
+            Wrap(
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 16 * _uiScale,
+              children: [
+                Text('LINEUP', style: wordmarkStyle),
+                Text(
+                  '/',
+                  style: _studioBodyStyle(color: roles.secondaryText)
+                      .copyWith(fontSize: (compact ? 14 : 18) * _uiScale),
+                ),
+                Text('CHANNEL STUDIO', style: contextStyle),
+              ],
             ),
           ],
         ),
+        Divider(height: 1, color: roles.subtleBorder),
+        SizedBox(height: 20 * _uiScale),
+        titleAndActions,
+      ],
+    );
+  }
+
+  double _studioSize(double wide, double compact) =>
+      (LineupLayout.isCompactWidth(MediaQuery.sizeOf(context).width)
+          ? compact
+          : wide) *
+      _uiScale;
+
+  TextStyle _studioBodyStyle({Color? color, FontWeight? fontWeight}) =>
+      Theme.of(context).textTheme.bodyMedium?.copyWith(
+        fontSize: _studioSize(18, 14),
+        color: color,
+        fontWeight: fontWeight,
+      ) ??
+      TextStyle(
+        fontSize: _studioSize(18, 14),
+        color: color,
+        fontWeight: fontWeight,
+      );
+
+  TextStyle _studioSupportStyle({Color? color, FontWeight? fontWeight}) =>
+      Theme.of(context).textTheme.bodyMedium?.copyWith(
+        fontSize: _studioSize(16, 14),
+        color: color ?? LineupTheme.of(context).secondaryText,
+        fontWeight: fontWeight,
+      ) ??
+      TextStyle(
+        fontSize: _studioSize(16, 14),
+        color: color ?? LineupTheme.of(context).secondaryText,
+        fontWeight: fontWeight,
+      );
+
+  TextStyle _studioSectionHeadingStyle() =>
+      Theme.of(context).textTheme.titleLarge?.copyWith(
+        fontSize: _studioSize(24, 20),
+        fontWeight: FontWeight.w600,
+      ) ??
+      TextStyle(fontSize: _studioSize(24, 20), fontWeight: FontWeight.w600);
+
+  TextStyle _studioControlStyle() =>
+      Theme.of(context).textTheme.labelLarge
+          ?.copyWith(fontSize: _studioSize(18, 14)) ??
+      TextStyle(fontSize: _studioSize(18, 14));
+
+  double? get _studioDropdownItemHeight => _uiScale > 1 ? 48 * _uiScale : null;
+
+  ButtonStyle _studioScaledTextButtonStyle() =>
+      (Theme.of(context).textButtonTheme.style ?? const ButtonStyle()).copyWith(
+        minimumSize: WidgetStatePropertyAll(Size(64 * _uiScale, 40 * _uiScale)),
+        padding: WidgetStatePropertyAll(
+          EdgeInsets.symmetric(
+            horizontal: 12 * _uiScale,
+            vertical: 8 * _uiScale,
+          ),
+        ),
+        iconSize: WidgetStatePropertyAll(18 * _uiScale),
+        textStyle: WidgetStatePropertyAll(
+          Theme.of(context).textTheme.labelLarge
+              ?.apply(fontSizeFactor: _uiScale),
+        ),
+      );
+
+  ButtonStyle _studioScaledOutlinedButtonStyle() {
+    final theme = Theme.of(context);
+    final base = theme.outlinedButtonTheme.style ?? const ButtonStyle();
+    final textStyle =
+        base.textStyle?.resolve(const {}) ?? const TextStyle(fontSize: 17);
+    return base.copyWith(
+      minimumSize: WidgetStatePropertyAll(Size(148 * _uiScale, 54 * _uiScale)),
+      padding: WidgetStatePropertyAll(
+        EdgeInsets.symmetric(
+          horizontal: 24 * _uiScale,
+          vertical: 16 * _uiScale,
+        ),
       ),
+      iconSize: WidgetStatePropertyAll(18 * _uiScale),
+      textStyle: WidgetStatePropertyAll(
+        textStyle.copyWith(fontSize: (textStyle.fontSize ?? 17) * _uiScale),
+      ),
+    );
+  }
+
+  ButtonStyle _studioScaledFilledButtonStyle() {
+    final theme = Theme.of(context);
+    final base = theme.filledButtonTheme.style ?? const ButtonStyle();
+    final textStyle =
+        base.textStyle?.resolve(const {}) ?? const TextStyle(fontSize: 17);
+    return base.copyWith(
+      minimumSize: WidgetStatePropertyAll(Size(148 * _uiScale, 54 * _uiScale)),
+      padding: WidgetStatePropertyAll(
+        EdgeInsets.symmetric(
+          horizontal: 24 * _uiScale,
+          vertical: 16 * _uiScale,
+        ),
+      ),
+      iconSize: WidgetStatePropertyAll(18 * _uiScale),
+      textStyle: WidgetStatePropertyAll(
+        textStyle.copyWith(fontSize: (textStyle.fontSize ?? 17) * _uiScale),
+      ),
+    );
+  }
+
+  double _studioSegmentVerticalPadding(TextStyle textStyle) {
+    if (_uiScale <= 1) return 0;
+    final fontSize = textStyle.fontSize ?? 14;
+    final targetHeight = 40 * _uiScale;
+    return targetHeight > fontSize ? (targetHeight - fontSize) / 2 : 0;
+  }
+
+  ButtonStyle _studioTextButtonStyle() => TextButton.styleFrom(
+    minimumSize: Size(0, 48 * _uiScale),
+    padding: EdgeInsets.symmetric(
+      horizontal: 16 * _uiScale,
+      vertical: 12 * _uiScale,
+    ),
+    iconSize: _uiScale > 1 ? 18 * _uiScale : null,
+    textStyle: _studioControlStyle(),
+  );
+
+  ButtonStyle _studioOutlinedButtonStyle() => OutlinedButton.styleFrom(
+    minimumSize: Size(0, 48 * _uiScale),
+    padding: EdgeInsets.symmetric(
+      horizontal: 16 * _uiScale,
+      vertical: 12 * _uiScale,
+    ),
+    iconSize: _uiScale > 1 ? 18 * _uiScale : null,
+    textStyle: _studioControlStyle(),
+  );
+
+  ButtonStyle _studioFilledButtonStyle() => FilledButton.styleFrom(
+    minimumSize: Size(0, 48 * _uiScale),
+    padding: EdgeInsets.symmetric(
+      horizontal: 16 * _uiScale,
+      vertical: 12 * _uiScale,
+    ),
+    iconSize: _uiScale > 1 ? 18 * _uiScale : null,
+    textStyle: _studioControlStyle(),
+  );
+
+  ButtonStyle _studioIconButtonStyle() => IconButton.styleFrom(
+    minimumSize: Size(48 * _uiScale, 48 * _uiScale),
+    padding: EdgeInsets.all(8 * _uiScale),
+    iconSize: 24 * _uiScale,
+  );
+
+  ButtonStyle _studioSourceStyle() {
+    final roles = LineupTheme.of(context);
+    final controlStyle = _studioControlStyle();
+    return ButtonStyle(
+      padding: WidgetStatePropertyAll(
+        _uiScale > 1
+            ? EdgeInsets.symmetric(
+                horizontal: 16 * _uiScale,
+                vertical: _studioSegmentVerticalPadding(controlStyle),
+              )
+            : const EdgeInsets.symmetric(horizontal: 16),
+      ),
+      iconSize: _uiScale > 1 ? WidgetStatePropertyAll(18 * _uiScale) : null,
+      textStyle: WidgetStatePropertyAll(controlStyle),
+      foregroundColor: WidgetStateProperty.resolveWith(
+        (states) => states.contains(WidgetState.disabled)
+            ? roles.mutedText
+            : states.contains(WidgetState.selected)
+            ? roles.primaryText
+            : roles.secondaryText,
+      ),
+      backgroundColor: WidgetStateProperty.resolveWith(
+        (states) => states.contains(WidgetState.selected)
+            ? roles.selectedSurface
+            : Colors.transparent,
+      ),
+      side: WidgetStateProperty.resolveWith(
+        (states) => states.contains(WidgetState.focused)
+            ? BorderSide(
+                color: roles.focusBorder,
+                width: roles.focusBorderWidth,
+              )
+            : BorderSide.none,
+      ),
+    );
+  }
+
+  Widget _studioSwitchTile({
+    Key? key,
+    required bool value,
+    required Widget title,
+    required ValueChanged<bool>? onChanged,
+    EdgeInsetsGeometry? contentPadding,
+  }) {
+    if (_uiScale <= 1) {
+      return SwitchListTile(
+        key: key,
+        contentPadding: contentPadding,
+        value: value,
+        title: title,
+        onChanged: onChanged,
+      );
+    }
+    final control = SizedBox(
+      width: 60,
+      height: 40,
+      child: Center(
+        child: ExcludeFocus(
+          child: Switch(value: value, onChanged: onChanged),
+        ),
+      ),
+    );
+    return MergeSemantics(
+      key: key,
+      child: ListTile(
+        contentPadding:
+            contentPadding ?? EdgeInsets.symmetric(horizontal: 16 * _uiScale),
+        minTileHeight: 56 * _uiScale,
+        horizontalTitleGap: 16 * _uiScale,
+        trailing: SizedBox(
+          width: 60 * _uiScale,
+          height: 40 * _uiScale,
+          child: Transform.scale(scale: _uiScale, child: control),
+        ),
+        title: title,
+        onTap: onChanged == null ? null : () => onChanged(!value),
+      ),
+    );
+  }
+
+  Widget _studioCheckboxTile({
+    Key? key,
+    required bool value,
+    required Widget title,
+    required ValueChanged<bool?>? onChanged,
+    ListTileControlAffinity controlAffinity = ListTileControlAffinity.leading,
+    EdgeInsetsGeometry? contentPadding,
+  }) {
+    if (_uiScale <= 1) {
+      return CheckboxListTile(
+        key: key,
+        controlAffinity: controlAffinity,
+        contentPadding: contentPadding,
+        value: value,
+        title: title,
+        onChanged: onChanged,
+      );
+    }
+    return CheckboxListTile(
+      key: key,
+      controlAffinity: controlAffinity,
+      contentPadding:
+          contentPadding ?? EdgeInsets.symmetric(horizontal: 16 * _uiScale),
+      minTileHeight: 56 * _uiScale,
+      minLeadingWidth: 40 * _uiScale,
+      horizontalTitleGap: 16 * _uiScale,
+      checkboxScaleFactor: _uiScale,
+      value: value,
+      title: title,
+      onChanged: onChanged,
     );
   }
 
@@ -707,24 +1080,17 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
         !(identityLooksValid && programmingError != null) &&
         !(identityLooksValid && !_airCheckCanSave);
     return Wrap(
-      spacing: 8,
-      runSpacing: 8,
+      alignment: WrapAlignment.end,
+      spacing: 8 * _uiScale,
+      runSpacing: 8 * _uiScale,
+      crossAxisAlignment: WrapCrossAlignment.center,
       children: [
-        FocusTraversalOrder(
-          order: const NumericFocusOrder(0),
-          child: TextButton.icon(
-            focusNode: _backFocus,
-            autofocus: true,
-            onPressed: _busy ? null : () => unawaited(_leave()),
-            icon: const Icon(Icons.arrow_back),
-            label: const Text('Back to Channels'),
-          ),
-        ),
         if (_generated && !recovering)
           FocusTraversalOrder(
             order: const NumericFocusOrder(4),
             child: OutlinedButton(
               onPressed: _busy ? null : _duplicate,
+              style: _studioOutlinedButtonStyle(),
               child: const Text('Duplicate as custom'),
             ),
           ),
@@ -735,12 +1101,14 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                 ? FilledButton.icon(
                     key: const Key('studio-tune'),
                     onPressed: _busy ? null : _tune,
+                    style: _studioFilledButtonStyle(),
                     icon: const Icon(Icons.play_arrow),
                     label: const Text('Tune in'),
                   )
                 : OutlinedButton.icon(
                     key: const Key('studio-tune'),
                     onPressed: canSave ? _confirmSaveAndTune : null,
+                    style: _studioOutlinedButtonStyle(),
                     icon: const Icon(Icons.play_arrow),
                     label: const Text('Tune in'),
                   ),
@@ -751,6 +1119,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
             child: FilledButton(
               focusNode: _saveFocus,
               onPressed: canSave ? _save : null,
+              style: _studioFilledButtonStyle(),
               child: Text(
                 _saving
                     ? 'Saving…'
@@ -770,24 +1139,25 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     final roles = LineupTheme.of(context);
     final error = Theme.of(context).colorScheme.error;
     final current = _currentBase;
-    final recoveryButtonStyle = ButtonStyle(
-      side: WidgetStateProperty.resolveWith(
-        (states) => BorderSide(
-          color: states.contains(WidgetState.focused)
-              ? roles.focusBorder
-              : roles.defaultBorder,
-          width: states.contains(WidgetState.focused)
-              ? roles.focusBorderWidth
-              : 1,
-        ),
+    final recoverySide = WidgetStateProperty.resolveWith(
+      (states) => BorderSide(
+        color: states.contains(WidgetState.focused)
+            ? roles.focusBorder
+            : roles.defaultBorder,
+        width: states.contains(WidgetState.focused)
+            ? roles.focusBorderWidth
+            : 1,
       ),
     );
+    final recoveryButtonStyle = _uiScale > 1
+        ? _studioScaledOutlinedButtonStyle().copyWith(side: recoverySide)
+        : ButtonStyle(side: recoverySide);
     return Semantics(
       liveRegion: true,
       container: true,
       label: _error,
       child: Container(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(16 * _uiScale),
         decoration: BoxDecoration(
           color: Color.alphaBlend(
             error.withValues(alpha: 0.08),
@@ -802,8 +1172,12 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.report_problem_outlined, color: error),
-                const SizedBox(width: 12),
+                Icon(
+                  Icons.report_problem_outlined,
+                  color: error,
+                  size: 24 * _uiScale,
+                ),
+                SizedBox(width: 12 * _uiScale),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -816,7 +1190,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                             ?.apply(fontSizeFactor: _uiScale)
                             .copyWith(fontWeight: FontWeight.w800),
                       ),
-                      const SizedBox(height: 4),
+                      SizedBox(height: 4 * _uiScale),
                       Text(
                         _baseDeleted
                             ? 'Your draft is retained for reference, but it will not recreate the deleted channel.'
@@ -824,7 +1198,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                         style: TextStyle(color: roles.secondaryText),
                       ),
                       if (!_baseDeleted && current != null) ...[
-                        const SizedBox(height: 10),
+                        SizedBox(height: 10 * _uiScale),
                         _recoveryVersion('SAVED NOW', current.name),
                         _recoveryVersion(
                           'YOUR DRAFT',
@@ -838,10 +1212,10 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                 ),
               ],
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: 12 * _uiScale),
             Wrap(
-              spacing: 10,
-              runSpacing: 10,
+              spacing: 10 * _uiScale,
+              runSpacing: 10 * _uiScale,
               children: [
                 if (_baseDeleted) ...[
                   OutlinedButton(
@@ -878,11 +1252,11 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
   }
 
   Widget _recoveryVersion(String label, String value) => Padding(
-    padding: const EdgeInsets.only(top: 3),
+    padding: EdgeInsets.only(top: 3 * _uiScale),
     child: Row(
       children: [
         SizedBox(
-          width: 92,
+          width: 92 * _uiScale,
           child: Text(
             label,
             style: TextStyle(
@@ -903,72 +1277,86 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     ),
   );
 
-  Widget _programmingCard() => Column(
-    key: const Key('studio-programming'),
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      Wrap(
-        alignment: WrapAlignment.spaceBetween,
-        crossAxisAlignment: WrapCrossAlignment.end,
-        spacing: 16,
-        runSpacing: 4,
+  Widget _programmingCard() {
+    final roles = LineupTheme.of(context);
+    return DefaultTextStyle.merge(
+      style: _studioBodyStyle(),
+      child: Column(
+        key: const Key('studio-programming'),
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('Programming', style: Theme.of(context).textTheme.titleLarge),
-          Text(_sourceLabel(_displaySource, widget.controller)),
-        ],
-      ),
-      const SizedBox(height: 10),
-      if (_sourceReadOnly)
-        const Text('Programming is read-only and will be preserved exactly.')
-      else ...[
-        if (_source is MixedSource && _sourceChoice == null) ...[
-          _inventoryStatus(),
-          const Text(
-            'This mixed source is preserved exactly. Choose a source below only if you want to replace it.',
-          ),
-          const SizedBox(height: 8),
-        ],
-        LayoutBuilder(
-          builder: (context, constraints) => SegmentedButton<_SourceChoice>(
-            key: const Key('studio-source-choices'),
-            direction:
-                MediaQuery.textScalerOf(context).scale(14) > 21 ||
-                    constraints.maxWidth < 480
-                ? Axis.vertical
-                : Axis.horizontal,
-            multiSelectionEnabled: false,
-            emptySelectionAllowed: _source is MixedSource,
-            segments: const [
-              ButtonSegment(
-                value: _SourceChoice.library,
-                label: Text('Library'),
-              ),
-              ButtonSegment(
-                value: _SourceChoice.playlist,
-                label: Text('Plex playlist'),
-              ),
-              ButtonSegment(
-                value: _SourceChoice.handPicked,
-                label: Text('Hand-picked'),
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.end,
+            spacing: 16 * _uiScale,
+            runSpacing: 4 * _uiScale,
+            children: [
+              Text('Programming', style: _studioSectionHeadingStyle()),
+              Text(
+                _sourceLabel(_displaySource, widget.controller),
+                style: _studioSupportStyle(color: roles.secondaryText),
               ),
             ],
-            selected: {?_sourceChoice},
-            onSelectionChanged: _saving
-                ? null
-                : (value) => _changed(() => _sourceChoice = value.singleOrNull),
           ),
-        ),
-        const SizedBox(height: 8),
-        switch (_sourceChoice) {
-          _SourceChoice.library => _filterEditor(),
-          _SourceChoice.playlist => _playlistEditor(),
-          _SourceChoice.filter => _filterEditor(),
-          _SourceChoice.handPicked => _manualEditor(),
-          null => const SizedBox.shrink(),
-        },
-      ],
-    ],
-  );
+          SizedBox(height: 16 * _uiScale),
+          if (_sourceReadOnly)
+            const Text(
+              'Programming is read-only and will be preserved exactly.',
+            )
+          else ...[
+            if (_source is MixedSource && _sourceChoice == null) ...[
+              _inventoryStatus(),
+              const Text(
+                'This mixed source is preserved exactly. Choose a source below only if you want to replace it.',
+              ),
+              SizedBox(height: 8 * _uiScale),
+            ],
+            LayoutBuilder(
+              builder: (context, constraints) => SegmentedButton<_SourceChoice>(
+                key: const Key('studio-source-choices'),
+                direction:
+                    MediaQuery.textScalerOf(context).scale(14) > 21 ||
+                        constraints.maxWidth < 480 * _uiScale
+                    ? Axis.vertical
+                    : Axis.horizontal,
+                multiSelectionEnabled: false,
+                emptySelectionAllowed: _source is MixedSource,
+                segments: const [
+                  ButtonSegment(
+                    value: _SourceChoice.library,
+                    label: Text('Library'),
+                  ),
+                  ButtonSegment(
+                    value: _SourceChoice.playlist,
+                    label: Text('Plex playlist'),
+                  ),
+                  ButtonSegment(
+                    value: _SourceChoice.handPicked,
+                    label: Text('Hand-picked'),
+                  ),
+                ],
+                selected: {?_sourceChoice},
+                showSelectedIcon: false,
+                style: _studioSourceStyle(),
+                onSelectionChanged: _saving
+                    ? null
+                    : (value) =>
+                          _changed(() => _sourceChoice = value.singleOrNull),
+              ),
+            ),
+            SizedBox(height: 8 * _uiScale),
+            switch (_sourceChoice) {
+              _SourceChoice.library => _filterEditor(),
+              _SourceChoice.playlist => _playlistEditor(),
+              _SourceChoice.filter => _filterEditor(),
+              _SourceChoice.handPicked => _manualEditor(),
+              null => const SizedBox.shrink(),
+            },
+          ],
+        ],
+      ),
+    );
+  }
 
   Widget _playlistEditor() {
     final available = _playableInventory.playlists;
@@ -993,6 +1381,8 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
         DropdownButtonFormField<String>(
           key: const Key('studio-playlist'),
           isExpanded: true,
+          iconSize: 24 * _uiScale,
+          itemHeight: _studioDropdownItemHeight,
           initialValue: selected ? _playlistId : null,
           decoration: const InputDecoration(labelText: 'Video playlist'),
           items: [
@@ -1004,16 +1394,18 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
               : (value) => _changed(() => _playlistId = value),
         ),
         if (otherUses.isNotEmpty) ...[
-          const SizedBox(height: 8),
+          SizedBox(height: 8 * _uiScale),
           const Text('Also used by'),
           for (final channel in otherUses)
             ListTile(
               contentPadding: EdgeInsets.zero,
+              minTileHeight: _uiScale > 1 ? 56 * _uiScale : null,
               title: Text('${channel.number} · ${channel.name}'),
               trailing: TextButton(
                 onPressed: _saving || widget.onOpenChannel == null
                     ? null
                     : () => widget.onOpenChannel!(channel),
+                style: _uiScale > 1 ? _studioScaledTextButtonStyle() : null,
                 child: const Text('Open channel'),
               ),
             ),
@@ -1023,6 +1415,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
   }
 
   Widget _filterEditor() {
+    final roles = LineupTheme.of(context);
     final facets = _facetOptions(_filterLibraryId);
     final matches = _filteredInventory(
       libraryId: _filterLibraryId,
@@ -1036,48 +1429,132 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _inventoryStatus(),
-        _libraryDropdown(
-          key: const Key('studio-filter-library'),
-          value: _filterLibraryId,
-          onChanged: (value) => _filterChanged(() => _filterLibraryId = value),
-        ),
-        const SizedBox(height: 8),
-        _filterControl(
-          'collection',
-          facets.values['collection'] ?? const [],
-          facets.labels['collection'] ?? const {},
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final gap = 16 * _uiScale;
+            final width = constraints.maxWidth >= 700 * _uiScale
+                ? (constraints.maxWidth - gap) / 2
+                : constraints.maxWidth;
+            return Wrap(
+              spacing: gap,
+              runSpacing: 12 * _uiScale,
+              children: [
+                SizedBox(
+                  width: width,
+                  child: _libraryDropdown(
+                    key: const Key('studio-filter-library'),
+                    value: _filterLibraryId,
+                    onChanged: (value) =>
+                        _filterChanged(() => _filterLibraryId = value),
+                  ),
+                ),
+                SizedBox(
+                  width: width,
+                  child: _filterControl(
+                    'collection',
+                    facets.values['collection'] ?? const [],
+                    facets.labels['collection'] ?? const {},
+                  ),
+                ),
+              ],
+            );
+          },
         ),
         if ((facets.values['collection'] ?? const []).isEmpty)
-          const Text(
+          Text(
             'This library has no collections. Other filters remain available.',
+            style: _studioSupportStyle(),
           ),
-        const SizedBox(height: 8),
-        const Text('Filters'),
-        for (final key in _facetKeys.where((key) => key != 'collection'))
-          _filterControl(
-            key,
-            facets.values[key] ?? const [],
-            facets.labels[key] ?? const {},
-          ),
-        const Text(
+        SizedBox(height: 16 * _uiScale),
+        Text('Filters', style: _studioBodyStyle(fontWeight: FontWeight.w600)),
+        SizedBox(height: 16 * _uiScale),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final textScale = MediaQuery.textScalerOf(context).scale(1);
+            final columns = textScale > 1.4
+                ? 1
+                : constraints.maxWidth >= 960 * _uiScale
+                ? 3
+                : constraints.maxWidth >= 640 * _uiScale
+                ? 2
+                : 1;
+            final gap = 16 * _uiScale;
+            final width =
+                (constraints.maxWidth - gap * (columns - 1)) / columns;
+            return Wrap(
+              spacing: gap,
+              runSpacing: 12 * _uiScale,
+              children: [
+                for (final key in _facetKeys.where(
+                  (key) => key != 'collection',
+                ))
+                  SizedBox(
+                    width: width,
+                    child: _filterControl(
+                      key,
+                      facets.values[key] ?? const [],
+                      facets.labels[key] ?? const {},
+                    ),
+                  ),
+              ],
+            );
+          },
+        ),
+        SizedBox(height: 12 * _uiScale),
+        Text(
           'Any selected value within each filter; all filters together.',
+          style: _studioSupportStyle(),
         ),
-        Material(
-          color: Theme.of(context).colorScheme.surface,
-          child: SwitchListTile(
-            key: const Key('studio-filter-include-watched'),
-            value: _filterIncludeWatched,
-            title: const Text('Include watched items'),
-            onChanged: _saving
-                ? null
-                : (value) =>
-                      _filterChanged(() => _filterIncludeWatched = value),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: 330 * _uiScale),
+            child: Material(
+              type: MaterialType.transparency,
+              child: _studioSwitchTile(
+                key: const Key('studio-filter-include-watched'),
+                contentPadding: EdgeInsets.zero,
+                value: _filterIncludeWatched,
+                title: Text('Include watched items', style: _studioBodyStyle()),
+                onChanged: _saving
+                    ? null
+                    : (value) =>
+                          _filterChanged(() => _filterIncludeWatched = value),
+              ),
+            ),
           ),
         ),
-        Text('${matches.length} matching programs'),
-        for (final item in matches.take(5)) Text(item.title),
+        SizedBox(height: 16 * _uiScale),
+        Divider(height: 1, color: roles.subtleBorder),
+        SizedBox(height: 16 * _uiScale),
+        Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 16 * _uiScale,
+          runSpacing: 4 * _uiScale,
+          children: [
+            Text('Matching programs', style: _studioSectionHeadingStyle()),
+            Text(
+              '${matches.length} matching programs',
+              style: _studioSupportStyle(),
+            ),
+          ],
+        ),
+        for (final item in matches.take(5))
+          DecoratedBox(
+            decoration: BoxDecoration(
+              border: Border(bottom: BorderSide(color: roles.subtleBorder)),
+            ),
+            child: Padding(
+              padding: EdgeInsets.symmetric(vertical: 8 * _uiScale),
+              child: Text(item.title, style: _studioBodyStyle()),
+            ),
+          ),
         if (matches.length > 5)
-          Text('Showing 5 of ${matches.length} matching programs.'),
+          Text(
+            'Showing 5 of ${matches.length} matching programs.',
+            style: _studioSupportStyle(),
+          ),
       ],
     );
   }
@@ -1095,26 +1572,56 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     final unavailable = selected
         .where((value) => !values.contains(value))
         .length;
-    return ListTile(
+    final focus = _filterControlFocus.putIfAbsent(
+      key,
+      () => FocusNode(debugLabel: 'Edit ${_facetLabel(key)} filter'),
+    );
+    final summary = selected.isEmpty
+        ? key == 'collection'
+              ? 'Any collection'
+              : 'Any'
+        : '${selectedLabels.take(3).join(', ')}${selected.length > 3 ? ' · +${selected.length - 3} more' : ''}${unavailable > 0 ? ' · $unavailable unavailable' : ''}';
+    final roles = LineupTheme.of(context);
+    return ListenableBuilder(
       key: Key('studio-filter-$key'),
-      contentPadding: EdgeInsets.zero,
-      title: Text(_facetLabel(key)),
-      subtitle: Text(
-        selected.isEmpty
-            ? key == 'collection'
-                  ? 'Any collection'
-                  : 'Any'
-            : '${selectedLabels.take(3).join(', ')}${selected.length > 3 ? ' · +${selected.length - 3} more' : ''}${unavailable > 0 ? ' · $unavailable unavailable' : ''}',
-      ),
-      trailing: OutlinedButton(
-        focusNode: _filterControlFocus.putIfAbsent(
-          key,
-          () => FocusNode(debugLabel: 'Edit ${_facetLabel(key)} filter'),
-        ),
+      listenable: focus,
+      builder: (context, _) => OutlinedButton(
+        focusNode: focus,
         onPressed: _saving
             ? null
             : () => _openFilterPicker(key, values, labels),
-        child: Text(selected.isEmpty ? 'Choose' : 'Edit'),
+        style: OutlinedButton.styleFrom(
+          minimumSize: Size.zero,
+          padding: EdgeInsets.zero,
+          alignment: Alignment.centerLeft,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          foregroundColor: roles.primaryText,
+          textStyle: _studioBodyStyle(),
+          side: BorderSide.none,
+        ),
+        child: InputDecorator(
+          isEmpty: false,
+          isFocused: focus.hasFocus,
+          decoration: InputDecoration(
+            labelText: _facetLabel(key),
+            floatingLabelBehavior: FloatingLabelBehavior.always,
+            enabled: !_saving,
+            contentPadding: EdgeInsets.symmetric(
+              horizontal: 16 * _uiScale,
+              vertical: 16 * _uiScale,
+            ),
+          ),
+          child: Row(
+            children: [
+              Expanded(child: Text(summary, softWrap: true)),
+              Icon(
+                Icons.expand_more,
+                color: roles.secondaryText,
+                size: _uiScale > 1 ? 24 * _uiScale : null,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -1163,7 +1670,8 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     final unavailable = _pendingFilterValues
         .where((value) => !_activeAvailableFilterValues.contains(value))
         .toSet();
-    Widget valueTile(String value) => CheckboxListTile(
+    Widget valueTile(String value) => _studioCheckboxTile(
+      controlAffinity: ListTileControlAffinity.leading,
       value: _pendingFilterValues.contains(value),
       title: Text(
         _activeAvailableFilterValues.contains(value)
@@ -1178,93 +1686,121 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     );
     final media = MediaQuery.of(context);
     final independentlyScrollable =
-        media.size.width >= LineupLayout.compact &&
+        media.size.width >= LineupLayout.compact * _uiScale &&
         media.textScaler.scale(14) <= 21;
-    return CallbackShortcuts(
-      bindings: {
-        const SingleActivator(LogicalKeyboardKey.escape): () =>
-            _closeFilterPicker(key),
-      },
-      child: Focus(
-        autofocus: true,
-        child: Column(
-          key: Key('studio-filter-picker-$key'),
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text('${_libraryTitle(_filterLibraryId)} · ${_facetLabel(key)}'),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _filterPickerSearch,
-              autofocus: true,
-              decoration: const InputDecoration(
-                labelText: 'Search values',
-                prefixIcon: Icon(Icons.search),
+    return Material(
+      type: MaterialType.transparency,
+      child: CallbackShortcuts(
+        bindings: {
+          const SingleActivator(LogicalKeyboardKey.escape): () =>
+              _closeFilterPicker(key),
+        },
+        child: Focus(
+          autofocus: true,
+          child: Column(
+            key: Key('studio-filter-picker-$key'),
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Choose ${_facetLabel(key).toLowerCase()} values',
+                style: _studioSectionHeadingStyle(),
               ),
-              onChanged: (_) => setState(() {}),
-            ),
-            Wrap(
-              spacing: 8,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                TextButton(
-                  onPressed: () => setState(
-                    () => _showPendingFilterValues = !_showPendingFilterValues,
-                  ),
-                  child: Text('${_pendingFilterValues.length} selected'),
+              SizedBox(height: 4 * _uiScale),
+              Text(
+                _libraryTitle(_filterLibraryId),
+                style: _studioSupportStyle(),
+              ),
+              SizedBox(height: 8 * _uiScale),
+              TextField(
+                controller: _filterPickerSearch,
+                autofocus: true,
+                style: _studioBodyStyle(),
+                decoration: const InputDecoration(
+                  labelText: 'Search values',
+                  floatingLabelBehavior: FloatingLabelBehavior.always,
                 ),
-                TextButton(
-                  onPressed: _pendingFilterValues.isEmpty
-                      ? null
-                      : () => setState(_pendingFilterValues.clear),
-                  child: const Text('Clear selection'),
-                ),
-                if (unavailable.isNotEmpty)
+                onChanged: (_) => setState(() {}),
+              ),
+              Wrap(
+                spacing: 8 * _uiScale,
+                runSpacing: 8 * _uiScale,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
                   TextButton(
                     onPressed: () => setState(
-                      () => _pendingFilterValues.removeAll(unavailable),
+                      () =>
+                          _showPendingFilterValues = !_showPendingFilterValues,
                     ),
-                    child: Text('Remove ${unavailable.length} unavailable'),
+                    style: _studioTextButtonStyle(),
+                    child: Text('${_pendingFilterValues.length} selected'),
                   ),
-                Text('$count matching programs'),
-              ],
-            ),
-            if (independentlyScrollable)
-              SizedBox(
-                height: (media.size.height * .17).clamp(120, 240),
-                child: ListView.builder(
-                  itemCount: visible.length,
-                  itemBuilder: (context, index) => valueTile(visible[index]),
-                ),
-              )
-            else
-              for (final value in visible) valueTile(value),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                TextButton(
-                  onPressed: () => _closeFilterPicker(key),
-                  child: const Text('Cancel'),
-                ),
-                const SizedBox(width: 8),
-                FilledButton(
-                  onPressed: () {
-                    final result = _pendingFilterValues.toList();
-                    final filter = _libraryFilter(key);
-                    _filterChanged(() {
-                      if (result.isEmpty) {
-                        _filters.remove(filter);
-                      } else {
-                        _filters[filter] = List.unmodifiable(result);
-                      }
-                      _activeFilterKey = null;
-                    });
-                    _restoreFilterFocus(key);
-                  },
-                  child: const Text('Done'),
-                ),
-              ],
-            ),
-          ],
+                  TextButton(
+                    onPressed: _pendingFilterValues.isEmpty
+                        ? null
+                        : () => setState(_pendingFilterValues.clear),
+                    style: _studioTextButtonStyle(),
+                    child: const Text('Clear selection'),
+                  ),
+                  if (unavailable.isNotEmpty)
+                    TextButton(
+                      onPressed: () => setState(
+                        () => _pendingFilterValues.removeAll(unavailable),
+                      ),
+                      style: _studioTextButtonStyle(),
+                      child: Text('Remove ${unavailable.length} unavailable'),
+                    ),
+                  Text(
+                    '$count matching programs',
+                    style: _studioSupportStyle(),
+                  ),
+                ],
+              ),
+              if (independentlyScrollable)
+                SizedBox(
+                  height: (media.size.height * .29).clamp(
+                    180 * _uiScale,
+                    460 * _uiScale,
+                  ),
+                  child: ListView.builder(
+                    itemCount: visible.length,
+                    itemBuilder: (context, index) => valueTile(visible[index]),
+                  ),
+                )
+              else
+                for (final value in visible) valueTile(value),
+              SizedBox(height: 12 * _uiScale),
+              Wrap(
+                alignment: WrapAlignment.end,
+                spacing: 8 * _uiScale,
+                runSpacing: 8 * _uiScale,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  TextButton(
+                    onPressed: () => _closeFilterPicker(key),
+                    style: _studioTextButtonStyle(),
+                    child: const Text('Cancel'),
+                  ),
+                  FilledButton(
+                    onPressed: () {
+                      final result = _pendingFilterValues.toList();
+                      final filter = _libraryFilter(key);
+                      _filterChanged(() {
+                        if (result.isEmpty) {
+                          _filters.remove(filter);
+                        } else {
+                          _filters[filter] = List.unmodifiable(result);
+                        }
+                        _activeFilterKey = null;
+                      });
+                      _restoreFilterFocus(key);
+                    },
+                    style: _studioFilledButtonStyle(),
+                    child: const Text('Done'),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1288,6 +1824,93 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
           ?.title ??
       id ??
       'Library';
+
+  Widget _studioBrowseResultRow({
+    required PlexMediaItem item,
+    required bool available,
+    required Set<String> selectedIds,
+  }) {
+    final titleStyle = _studioBodyStyle();
+    final subtitleStyle = _studioSupportStyle();
+    final selected = selectedIds.contains(item.id);
+    final onTap = selected
+        ? null
+        : _browseSelecting
+        ? () => _toggleBrowseSelection(item)
+        : () => _addManualItem(item);
+    final browseCheckbox = Checkbox(
+      value: _browseSelection.contains(item.id),
+      onChanged: selected ? null : (_) => _toggleBrowseSelection(item),
+    );
+    final subtitle = item.grandparentTitle != null || !available
+        ? Text(
+            [
+              ?item.grandparentTitle,
+              if (!available) 'Unavailable — retained off air if added',
+            ].join(' · '),
+            style: subtitleStyle,
+          )
+        : null;
+    final action = _browseSelecting
+        ? null
+        : TextButton(
+            onPressed: _saving || selected ? null : () => _addManualItem(item),
+            style: _studioScaledTextButtonStyle(),
+            child: Text(selected ? 'Added' : 'Add'),
+          );
+    return Semantics(
+      key: Key('studio-result-${item.id}'),
+      container: true,
+      button: onTap != null,
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          onTap: onTap,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: 72 * _uiScale),
+            child: Padding(
+              padding: EdgeInsets.symmetric(
+                horizontal: 16 * _uiScale,
+                vertical: 8 * _uiScale,
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  if (_browseSelecting) ...[
+                    SizedBox(
+                      width: 48 * _uiScale,
+                      height: 48 * _uiScale,
+                      child: Center(
+                        child: Transform.scale(
+                          scale: _uiScale,
+                          child: browseCheckbox,
+                        ),
+                      ),
+                    ),
+                    SizedBox(width: 16 * _uiScale),
+                  ],
+                  Expanded(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(item.title, style: titleStyle),
+                        ?subtitle,
+                      ],
+                    ),
+                  ),
+                  if (action != null) ...[
+                    SizedBox(width: 16 * _uiScale),
+                    action,
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
   Widget _manualEditor() {
     final inventory = _playableInventory.byId.values;
@@ -1324,41 +1947,75 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     ];
     final countLabel =
         '${visible.length} matching, ${_manualEntries.length} selected';
+    final roles = LineupTheme.of(context);
+    Widget stageTab({
+      required Key key,
+      required bool selected,
+      required String label,
+      required VoidCallback? onPressed,
+    }) => Semantics(
+      selected: selected,
+      button: true,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border(
+            bottom: BorderSide(
+              color: selected ? roles.progressFill : Colors.transparent,
+              width: 2 * _uiScale,
+            ),
+          ),
+        ),
+        child: TextButton(
+          key: key,
+          onPressed: onPressed,
+          style: _studioTextButtonStyle().copyWith(
+            foregroundColor: WidgetStateProperty.resolveWith(
+              (states) => states.contains(WidgetState.disabled)
+                  ? roles.mutedText
+                  : selected
+                  ? roles.primaryText
+                  : roles.secondaryText,
+            ),
+          ),
+          child: Text(label),
+        ),
+      ),
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _inventoryStatus(hasInventory: inventory.isNotEmpty),
         Wrap(
-          spacing: 8,
-          runSpacing: 8,
+          spacing: 8 * _uiScale,
+          runSpacing: 8 * _uiScale,
           children: [
-            ChoiceChip(
+            stageTab(
               key: const Key('studio-manual-browse-stage'),
               selected: !_manualRundown,
-              label: Text('Browse library · ${visible.length}'),
-              onSelected: _saving
+              label: 'Browse library · ${visible.length}',
+              onPressed: _saving
                   ? null
-                  : (_) => setState(() => _manualRundown = false),
+                  : () => setState(() => _manualRundown = false),
             ),
-            ChoiceChip(
+            stageTab(
               key: const Key('studio-manual-rundown-stage'),
               selected: _manualRundown,
-              label: Text('Channel programs · ${_manualEntries.length}'),
-              onSelected: _saving
+              label: 'Channel programs · ${_manualEntries.length}',
+              onPressed: _saving
                   ? null
-                  : (_) => setState(() => _manualRundown = true),
+                  : () => setState(() => _manualRundown = true),
             ),
           ],
         ),
-        const SizedBox(height: 6),
-        Text(countLabel),
+        SizedBox(height: 6 * _uiScale),
+        Text(countLabel, style: _studioSupportStyle()),
         if (_settledCountLabel.isNotEmpty)
           Semantics(
             liveRegion: true,
             label: _settledCountLabel,
             child: const SizedBox.shrink(),
           ),
-        const SizedBox(height: 12),
+        SizedBox(height: 12 * _uiScale),
         if (!_manualRundown) ...[
           TextField(
             key: const Key('studio-search'),
@@ -1371,62 +2028,90 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
             ),
             onChanged: (_) => _browseChanged(),
           ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              SizedBox(
-                width: 220,
-                child: _libraryDropdown(
-                  key: const Key('studio-manual-library'),
-                  value: _manualLibraryId,
-                  allowAll: true,
-                  onChanged: (value) =>
-                      _browseChanged(() => _manualLibraryId = value),
-                ),
-              ),
-              SizedBox(
-                width: 180,
-                child: DropdownButtonFormField<String>(
-                  key: const Key('studio-media-type'),
-                  isExpanded: true,
-                  initialValue: _manualMediaType,
-                  decoration: const InputDecoration(labelText: 'Media type'),
-                  items: [
-                    const DropdownMenuItem(value: '', child: Text('All types')),
-                    for (final type
-                        in inventory.map((item) => item.type).toSet())
-                      DropdownMenuItem(value: type, child: Text(type)),
-                  ],
-                  onChanged: _saving
-                      ? null
-                      : (value) => _browseChanged(
-                          () => _manualMediaType = value?.isEmpty == true
-                              ? null
-                              : value,
+          SizedBox(height: 12 * _uiScale),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final columns = constraints.maxWidth >= 960 * _uiScale
+                  ? 4
+                  : constraints.maxWidth >= 700 * _uiScale
+                  ? 3
+                  : constraints.maxWidth >= 480 * _uiScale
+                  ? 2
+                  : 1;
+              final gap = 12 * _uiScale;
+              final width =
+                  (constraints.maxWidth - gap * (columns - 1)) / columns;
+              return Wrap(
+                spacing: gap,
+                runSpacing: 16 * _uiScale,
+                children: [
+                  SizedBox(
+                    width: width,
+                    child: _libraryDropdown(
+                      key: const Key('studio-manual-library'),
+                      value: _manualLibraryId,
+                      allowAll: true,
+                      onChanged: (value) =>
+                          _browseChanged(() => _manualLibraryId = value),
+                    ),
+                  ),
+                  SizedBox(
+                    width: width,
+                    child: DropdownButtonFormField<String>(
+                      key: const Key('studio-media-type'),
+                      isExpanded: true,
+                      iconSize: 24 * _uiScale,
+                      itemHeight: _studioDropdownItemHeight,
+                      initialValue: _manualMediaType ?? '',
+                      style: _studioBodyStyle(),
+                      decoration: const InputDecoration(
+                        labelText: 'Media type',
+                        hintText: 'All types',
+                        floatingLabelBehavior: FloatingLabelBehavior.always,
+                      ),
+                      items: [
+                        const DropdownMenuItem(
+                          value: '',
+                          child: Text('All types'),
                         ),
-                ),
-              ),
-            ],
+                        for (final type
+                            in inventory.map((item) => item.type).toSet())
+                          DropdownMenuItem(value: type, child: Text(type)),
+                      ],
+                      onChanged: _saving
+                          ? null
+                          : (value) => _browseChanged(
+                              () => _manualMediaType = value?.isEmpty == true
+                                  ? null
+                                  : value,
+                            ),
+                    ),
+                  ),
+                  for (final key in _facetKeys)
+                    SizedBox(
+                      width: width,
+                      child: _facetDropdown(
+                        key: key,
+                        values: facets.values[key] ?? const [],
+                        labels: facets.labels[key] ?? const {},
+                        selected: _manualFilters[key],
+                        onChanged: (value) => _browseChanged(() {
+                          if (value == null) {
+                            _manualFilters.remove(key);
+                          } else {
+                            _manualFilters[key] = value;
+                          }
+                        }),
+                      ),
+                    ),
+                ],
+              );
+            },
           ),
-          for (final key in _facetKeys)
-            _facetDropdown(
-              key: key,
-              values: facets.values[key] ?? const [],
-              labels: facets.labels[key] ?? const {},
-              selected: _manualFilters[key],
-              onChanged: (value) => _browseChanged(() {
-                if (value == null) {
-                  _manualFilters.remove(key);
-                } else {
-                  _manualFilters[key] = value;
-                }
-              }),
-            ),
+          SizedBox(height: 12 * _uiScale),
           Wrap(
-            spacing: 8,
-            runSpacing: 8,
+            spacing: 8 * _uiScale,
+            runSpacing: 8 * _uiScale,
             children: _browseSelecting
                 ? [
                     Text(
@@ -1436,11 +2121,17 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                       onPressed: _browseSelection.isEmpty
                           ? null
                           : () => _setShowBrowseSelected(true),
+                      style: _uiScale > 1
+                          ? _studioScaledTextButtonStyle()
+                          : null,
                       child: const Text('Show selected'),
                     ),
                     if (_showBrowseSelected)
                       TextButton(
                         onPressed: () => _setShowBrowseSelected(false),
+                        style: _uiScale > 1
+                            ? _studioScaledTextButtonStyle()
+                            : null,
                         child: const Text('Back to results'),
                       ),
                     TextButton(
@@ -1450,29 +2141,41 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                         _browseSelectionItems.clear();
                         _showBrowseSelected = false;
                       }),
+                      style: _uiScale > 1
+                          ? _studioScaledTextButtonStyle()
+                          : null,
                       child: const Text('Cancel'),
                     ),
                     FilledButton(
                       onPressed: _browseSelection.isEmpty
                           ? null
                           : _addBrowseSelected,
+                      style: _uiScale > 1
+                          ? _studioScaledFilledButtonStyle()
+                          : null,
                       child: Text('Add selected (${_browseSelection.length})'),
                     ),
                   ]
                 : [
                     OutlinedButton(
                       onPressed: () => setState(() => _browseSelecting = true),
+                      style: _uiScale > 1
+                          ? _studioScaledOutlinedButtonStyle()
+                          : null,
                       child: const Text('Select'),
                     ),
                     if (_lastAddedEntries.isNotEmpty)
                       TextButton(
                         onPressed: _undoLastAddition,
+                        style: _uiScale > 1
+                            ? _studioScaledTextButtonStyle()
+                            : null,
                         child: const Text('Undo last addition'),
                       ),
                   ],
           ),
           SizedBox(
-            height: 300,
+            height: _studioSize(300, 300),
             child: ListView.builder(
               key: const Key('studio-results'),
               controller: _browseScroll,
@@ -1480,8 +2183,26 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
               itemBuilder: (context, index) {
                 final item = shown[index];
                 final available = _playableInventory.byId.containsKey(item.id);
+                if (_uiScale > 1) {
+                  return _studioBrowseResultRow(
+                    item: item,
+                    available: available,
+                    selectedIds: selectedIds,
+                  );
+                }
+                final browseCheckbox = Checkbox(
+                  value: _browseSelection.contains(item.id),
+                  onChanged: selectedIds.contains(item.id)
+                      ? null
+                      : (_) => _toggleBrowseSelection(item),
+                );
                 return ListTile(
                   key: Key('studio-result-${item.id}'),
+                  minTileHeight: _uiScale > 1 ? 56 * _uiScale : null,
+                  contentPadding: _uiScale > 1
+                      ? EdgeInsets.symmetric(horizontal: 16 * _uiScale)
+                      : null,
+                  horizontalTitleGap: _uiScale > 1 ? 16 * _uiScale : null,
                   title: Text(item.title),
                   subtitle: item.grandparentTitle != null || !available
                       ? Text(
@@ -1493,12 +2214,18 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                         )
                       : null,
                   leading: _browseSelecting
-                      ? Checkbox(
-                          value: _browseSelection.contains(item.id),
-                          onChanged: selectedIds.contains(item.id)
-                              ? null
-                              : (_) => _toggleBrowseSelection(item),
-                        )
+                      ? _uiScale > 1
+                            ? SizedBox(
+                                width: 48 * _uiScale,
+                                height: 48 * _uiScale,
+                                child: Center(
+                                  child: Transform.scale(
+                                    scale: _uiScale,
+                                    child: browseCheckbox,
+                                  ),
+                                ),
+                              )
+                            : browseCheckbox
                       : null,
                   trailing: _browseSelecting
                       ? null
@@ -1506,6 +2233,9 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                           onPressed: _saving || selectedIds.contains(item.id)
                               ? null
                               : () => _addManualItem(item),
+                          style: _uiScale > 1
+                              ? _studioScaledTextButtonStyle()
+                              : null,
                           child: Text(
                             selectedIds.contains(item.id) ? 'Added' : 'Add',
                           ),
@@ -1530,20 +2260,20 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                   : IconButton(
                       tooltip: 'Clear channel program search',
                       onPressed: () => setState(_rundownSearch.clear),
-                      icon: const Icon(Icons.clear),
+                      icon: Icon(Icons.clear, size: 24 * _uiScale),
                     ),
             ),
             onChanged: (_) => setState(() {}),
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: 8 * _uiScale),
           Text(
             _manualEntries.isEmpty
                 ? 'No programs selected. Return to Browse library to add programming.'
                 : '${rundownEntries.length} of ${_manualEntries.length} shown · Alt+Up/Down reorders · Delete removes${rundownQuery.isEmpty ? '' : ' · Clear search to drag reorder'}',
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: 8 * _uiScale),
           SizedBox(
-            height: rundownEntries.isEmpty ? 0 : 420,
+            height: rundownEntries.isEmpty ? 0 : 420 * _uiScale,
             child: ReorderableListView.builder(
               key: const Key('studio-rundown'),
               scrollController: _rundownScroll,
@@ -1552,12 +2282,16 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
               onReorderItem: _saving || rundownQuery.isNotEmpty
                   ? (_, _) {}
                   : (from, to) => _reorderManual(from, to),
-              itemBuilder: (context, index) => _rundownRow(
-                rundownEntries[index].entry,
-                rundownEntries[index].index,
-                !inventoryById.containsKey(rundownEntries[index].entry.id),
-                inventoryById,
-              ),
+              itemBuilder: (context, visibleIndex) {
+                final item = rundownEntries[visibleIndex];
+                return _rundownRow(
+                  item.entry,
+                  item.index,
+                  !inventoryById.containsKey(item.entry.id),
+                  inventoryById,
+                  dragIndex: rundownQuery.isEmpty ? visibleIndex : null,
+                );
+              },
             ),
           ),
         ],
@@ -1666,6 +2400,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
           ),
           TextButton(
             onPressed: _saving ? null : _openGenerateLineup,
+            style: _uiScale > 1 ? _studioScaledTextButtonStyle() : null,
             child: const Text('Retry in Generate lineup'),
           ),
         ],
@@ -1680,6 +2415,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
           ),
           TextButton(
             onPressed: _saving ? null : _openGenerateLineup,
+            style: _uiScale > 1 ? _studioScaledTextButtonStyle() : null,
             child: const Text('Open Generate lineup'),
           ),
         ],
@@ -1702,6 +2438,8 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     return DropdownButtonFormField<String>(
       key: key,
       isExpanded: true,
+      iconSize: 24 * _uiScale,
+      itemHeight: _studioDropdownItemHeight,
       initialValue: selected
           ? value
           : allowAll
@@ -1733,6 +2471,8 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
       child: DropdownButtonFormField<String>(
         key: ValueKey(fieldValue),
         isExpanded: true,
+        iconSize: 24 * _uiScale,
+        itemHeight: _studioDropdownItemHeight,
         initialValue: fieldValue,
         decoration: InputDecoration(labelText: _facetLabel(key)),
         items: [
@@ -1881,8 +2621,9 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     _ManualEntry entry,
     int index,
     bool unavailable,
-    Map<String, PlexMediaItem> inventoryById,
-  ) {
+    Map<String, PlexMediaItem> inventoryById, {
+    int? dragIndex,
+  }) {
     final title = _manualEntryTitle(entry, inventoryById);
     final repeatedTitle =
         _manualEntries
@@ -1913,6 +2654,11 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     final tile = ListTile(
       key: entry.occurrence == 1 ? Key('studio-rundown-${entry.id}') : null,
       title: Text(title),
+      minTileHeight: _uiScale > 1 ? 56 * _uiScale : null,
+      contentPadding: _uiScale > 1
+          ? EdgeInsets.symmetric(horizontal: 16 * _uiScale)
+          : null,
+      horizontalTitleGap: _uiScale > 1 ? 16 * _uiScale : null,
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1921,20 +2667,22 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
         ],
       ),
       trailing: Wrap(
-        spacing: 4,
+        spacing: 4 * _uiScale,
         children: [
-          Tooltip(
-            message: 'Drag $positionedTitle to reorder',
-            child: ReorderableDragStartListener(
-              index: index,
-              child: const Icon(Icons.drag_handle),
+          if (dragIndex case final visibleIndex?)
+            Tooltip(
+              message: 'Drag $positionedTitle to reorder',
+              child: ReorderableDragStartListener(
+                index: visibleIndex,
+                child: Icon(Icons.drag_handle, size: 24 * _uiScale),
+              ),
             ),
-          ),
           IconButton(
             tooltip: 'Move $positionedTitle earlier in $_draftChannelLabel',
             onPressed: _saving || index == 0
                 ? null
                 : () => _moveManual(entry, -1),
+            style: _uiScale > 1 ? _studioIconButtonStyle() : null,
             icon: const Icon(Icons.arrow_upward),
           ),
           IconButton(
@@ -1942,16 +2690,19 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
             onPressed: _saving || index == _manualEntries.length - 1
                 ? null
                 : () => _moveManual(entry, 1),
+            style: _uiScale > 1 ? _studioIconButtonStyle() : null,
             icon: const Icon(Icons.arrow_downward),
           ),
           IconButton(
             tooltip: 'Move $positionedTitle before or after another program',
             onPressed: _saving ? null : () => _moveManualTo(entry),
+            style: _uiScale > 1 ? _studioIconButtonStyle() : null,
             icon: const Icon(Icons.low_priority),
           ),
           IconButton(
             tooltip: 'Remove $positionedTitle from $_draftChannelLabel',
             onPressed: _saving ? null : () => _removeManual(entry),
+            style: _uiScale > 1 ? _studioIconButtonStyle() : null,
             icon: const Icon(Icons.delete_outline),
           ),
         ],
@@ -2119,7 +2870,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     final roles = LineupTheme.of(context);
     return Container(
       key: const Key('studio-station'),
-      padding: const EdgeInsets.only(top: 8, bottom: 16),
+      padding: EdgeInsets.only(top: 8 * _uiScale, bottom: 16 * _uiScale),
       decoration: BoxDecoration(
         border: Border(bottom: BorderSide(color: roles.subtleBorder)),
       ),
@@ -2128,6 +2879,9 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
         children: [
           LayoutBuilder(
             builder: (context, constraints) {
+              final textScale = MediaQuery.textScalerOf(context).scale(1);
+              final numberWidth =
+                  120 * _uiScale * (textScale > 1 ? textScale : 1);
               final identity = Row(
                 children: [
                   Expanded(
@@ -2136,9 +2890,11 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                       controller: _name,
                       focusNode: _nameFocus,
                       enabled: !_saving,
+                      style: _studioBodyStyle(),
                       decoration: const InputDecoration(
-                        labelText: 'Station name',
+                        labelText: 'Channel name',
                         hintText: 'Required',
+                        floatingLabelBehavior: FloatingLabelBehavior.always,
                       ),
                       onChanged: (_) => _changed(),
                       validator: (value) =>
@@ -2147,16 +2903,20 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                           : null,
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  SizedBox(width: 12 * _uiScale),
                   SizedBox(
-                    width: 120,
+                    width: numberWidth,
                     child: TextFormField(
                       key: const Key('studio-number'),
                       controller: _number,
                       focusNode: _numberFocus,
                       enabled: !_saving,
                       keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(labelText: 'Number'),
+                      style: _studioBodyStyle(),
+                      decoration: const InputDecoration(
+                        labelText: 'Number',
+                        floatingLabelBehavior: FloatingLabelBehavior.always,
+                      ),
                       onChanged: (_) => _changed(),
                       validator: _validateNumber,
                     ),
@@ -2166,74 +2926,34 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
               final playback = Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text(
-                    _generated
-                        ? 'PLAYBACK RHYTHM · READ-ONLY'
-                        : 'PLAYBACK RHYTHM',
-                    style: TextStyle(
-                      color: roles.secondaryText,
-                      fontSize: 11 * _uiScale,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 1,
+                  if (_generated) ...[
+                    Text(
+                      'Playback order · Read-only',
+                      style: _studioSupportStyle(),
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  if (_generated)
+                    SizedBox(height: 12 * _uiScale),
                     Text(
                       _rhythmLabel(_playbackMode, _blockSize),
-                      style: const TextStyle(fontWeight: FontWeight.w700),
-                    )
-                  else
-                    RadioGroup<PlaybackMode>(
-                      groupValue: _playbackMode,
-                      onChanged: (value) {
-                        if (_busy || value == null) return;
-                        _changed(() {
-                          _playbackMode = value;
-                          _blockSize ??= 3;
-                        });
-                      },
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: _rhythmChoice(
-                              PlaybackMode.sequential,
-                              'In order',
-                              enabled: true,
-                            ),
-                          ),
-                          Expanded(
-                            child: _rhythmChoice(
-                              PlaybackMode.shuffle,
-                              'Mix it up',
-                              enabled: true,
-                            ),
-                          ),
-                          Expanded(
-                            child: _rhythmChoice(
-                              PlaybackMode.block,
-                              'Mini-marathons',
-                              enabled:
-                                  !confirmedMovieOnly ||
-                                  _playbackMode == PlaybackMode.block,
-                            ),
-                          ),
-                        ],
-                      ),
+                      style: _studioBodyStyle(),
                     ),
-                  Text(_rhythmHelp(_playbackMode)),
+                  ] else
+                    _playbackEditor(confirmedMovieOnly),
                 ],
               );
-              if (constraints.maxWidth < 760) {
+              if (constraints.maxWidth < 760 * _uiScale) {
                 return Column(
-                  children: [identity, const SizedBox(height: 12), playback],
+                  children: [
+                    identity,
+                    SizedBox(height: 12 * _uiScale),
+                    playback,
+                  ],
                 );
               }
               return Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(flex: 9, child: identity),
-                  const SizedBox(width: 24),
+                  SizedBox(width: 24 * _uiScale),
                   Expanded(flex: 11, child: playback),
                 ],
               );
@@ -2246,6 +2966,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                 onPressed: _saving || _lowestFreeNumber() == null
                     ? null
                     : _useNextAvailable,
+                style: _uiScale > 1 ? _studioScaledTextButtonStyle() : null,
                 child: const Text('Use next available'),
               ),
             ),
@@ -2262,43 +2983,12 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
               ),
             ),
           if (_generated) ...[
-            const SizedBox(height: 12),
+            SizedBox(height: 12 * _uiScale),
             Text(
               'Generator recipe: ${_sourceLabel(_source, widget.controller)}. Schedule timing stays the same.',
             ),
           ] else if (_playbackMode == PlaybackMode.block) ...[
-            const SizedBox(height: 12),
-            DropdownButtonFormField<int>(
-              key: const Key('studio-block-size'),
-              isExpanded: true,
-              initialValue: (_blockSize ?? 3) >= 2 && (_blockSize ?? 3) <= 5
-                  ? _blockSize ?? 3
-                  : null,
-              decoration: const InputDecoration(labelText: 'Episodes per show'),
-              items: [
-                for (var size = 2; size <= 5; size++)
-                  DropdownMenuItem(value: size, child: Text('$size')),
-              ],
-              onChanged: _saving
-                  ? null
-                  : (value) => _changed(() => _blockSize = value),
-            ),
-            Material(
-              color: Theme.of(context).colorScheme.surface,
-              child: SwitchListTile(
-                key: const Key('studio-include-specials'),
-                value: _includeSpecials,
-                title: const Text('Include specials'),
-                subtitle: _includeSpecials
-                    ? const Text(
-                        'Season 0 specials play after regular seasons.',
-                      )
-                    : null,
-                onChanged: _saving
-                    ? null
-                    : (value) => _changed(() => _includeSpecials = value),
-              ),
-            ),
+            if (!hasShowGrouping) SizedBox(height: 12 * _uiScale),
             if (!hasShowGrouping)
               Focus(
                 child: Semantics(
@@ -2315,37 +3005,103 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     );
   }
 
-  Widget _rhythmChoice(
-    PlaybackMode value,
-    String title, {
-    bool enabled = true,
-  }) {
-    final roles = LineupTheme.of(context);
-    final selected = _playbackMode == value;
-    return Padding(
-      padding: const EdgeInsets.only(top: 6),
-      child: Material(
-        color: selected ? roles.selectedSurface : roles.primarySurface,
-        child: RadioListTile<PlaybackMode>(
-          value: value,
-          enabled: !_busy && enabled,
-          dense: true,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-          title: Text(
-            title,
-            maxLines: 2,
-            style: const TextStyle(fontWeight: FontWeight.w700),
+  Widget _playbackEditor(bool confirmedMovieOnly) => LayoutBuilder(
+    builder: (context, constraints) {
+      final block = _playbackMode == PlaybackMode.block;
+      final inline =
+          block &&
+          constraints.maxWidth >= 740 * _uiScale &&
+          MediaQuery.textScalerOf(context).scale(14) <= 21;
+      return Wrap(
+        spacing: 12 * _uiScale,
+        runSpacing: 16 * _uiScale,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          SizedBox(
+            width: inline
+                ? constraints.maxWidth - 474 * _uiScale
+                : constraints.maxWidth,
+            child: DropdownButtonFormField<PlaybackMode>(
+              key: const Key('studio-playback-order'),
+              initialValue: _playbackMode,
+              isExpanded: true,
+              iconSize: 24 * _uiScale,
+              itemHeight: _studioDropdownItemHeight,
+              decoration: const InputDecoration(
+                labelText: 'Playback order',
+                floatingLabelBehavior: FloatingLabelBehavior.always,
+              ),
+              items: [
+                const DropdownMenuItem(
+                  value: PlaybackMode.shuffle,
+                  child: Text('Shuffle'),
+                ),
+                const DropdownMenuItem(
+                  value: PlaybackMode.sequential,
+                  child: Text('In order'),
+                ),
+                DropdownMenuItem(
+                  value: PlaybackMode.block,
+                  enabled:
+                      !confirmedMovieOnly ||
+                      _playbackMode == PlaybackMode.block,
+                  child: const Text('Mini-marathons'),
+                ),
+              ],
+              onChanged: _busy
+                  ? null
+                  : (value) {
+                      if (value == null) return;
+                      _changed(() {
+                        _playbackMode = value;
+                        _blockSize ??= 3;
+                      });
+                    },
+            ),
           ),
-        ),
-      ),
-    );
-  }
-
-  String _rhythmHelp(PlaybackMode mode) => switch (mode) {
-    PlaybackMode.sequential => 'Plays the lineup from top to bottom.',
-    PlaybackMode.shuffle => 'Uses a stable shuffle for this station.',
-    PlaybackMode.block => 'Keeps small groups from the same series together.',
-  };
+          if (block) ...[
+            SizedBox(
+              width: inline ? 220 * _uiScale : constraints.maxWidth,
+              child: DropdownButtonFormField<int>(
+                key: const Key('studio-block-size'),
+                isExpanded: true,
+                iconSize: 24 * _uiScale,
+                itemHeight: _studioDropdownItemHeight,
+                initialValue: (_blockSize ?? 3) >= 2 && (_blockSize ?? 3) <= 5
+                    ? _blockSize ?? 3
+                    : null,
+                decoration: const InputDecoration(
+                  labelText: 'Episodes per block',
+                  floatingLabelBehavior: FloatingLabelBehavior.always,
+                ),
+                items: [
+                  for (var size = 2; size <= 5; size++)
+                    DropdownMenuItem(value: size, child: Text('$size')),
+                ],
+                onChanged: _saving
+                    ? null
+                    : (value) => _changed(() => _blockSize = value),
+              ),
+            ),
+            SizedBox(
+              width: inline ? 230 * _uiScale : constraints.maxWidth,
+              child: _studioSwitchTile(
+                key: const Key('studio-include-specials'),
+                contentPadding: EdgeInsets.zero,
+                value: _includeSpecials,
+                title: const Text('Include specials'),
+                onChanged: _saving
+                    ? null
+                    : (value) => _changed(() => _includeSpecials = value),
+              ),
+            ),
+            if (_includeSpecials)
+              const Text('Season 0 specials play after regular seasons.'),
+          ],
+        ],
+      );
+    },
+  );
 
   Channel? get _conflictingChannel {
     final number = int.tryParse(_number.text);
@@ -2561,11 +3317,9 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
           return 'The saved library is unavailable. Choose a selected Plex library.';
         }
         if (widget.controller.libraryScanStatus == LibraryScanStatus.scanning) {
-          return 'Checking library programming while the selected Plex library finishes loading.';
-        }
-        if (filters.isNotEmpty &&
-            widget.controller.libraryScanStatus == LibraryScanStatus.scanning) {
-          return 'Checking filters while library programming loads.';
+          return filters.isNotEmpty
+              ? 'Checking filters while library programming loads.'
+              : 'Checking library programming while the selected Plex library finishes loading.';
         }
         final available = _facetOptions(libraryId).values;
         final missing = [
@@ -2820,6 +3574,87 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     });
   }
 
+  Widget _scaledStudioDialog(
+    BuildContext context, {
+    required Widget title,
+    required Widget content,
+    required List<Widget> actions,
+  }) {
+    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
+    final dialog = AlertDialog(
+      insetPadding: scale > 1
+          ? EdgeInsets.symmetric(horizontal: 40 * scale, vertical: 24 * scale)
+          : null,
+      titlePadding: scale > 1
+          ? EdgeInsets.only(
+              left: 24 * scale,
+              top: 24 * scale,
+              right: 24 * scale,
+            )
+          : null,
+      contentPadding: scale > 1
+          ? EdgeInsets.fromLTRB(24 * scale, 16 * scale, 24 * scale, 24 * scale)
+          : null,
+      actionsPadding: scale > 1
+          ? EdgeInsets.only(
+              left: 24 * scale,
+              right: 24 * scale,
+              bottom: 24 * scale,
+            )
+          : null,
+      buttonPadding: scale > 1
+          ? EdgeInsets.symmetric(horizontal: 8 * scale)
+          : null,
+      actionsOverflowButtonSpacing: scale > 1 ? 8 * scale : null,
+      title: title,
+      content: content,
+      actions: actions,
+    );
+    if (scale <= 1) return dialog;
+    final theme = Theme.of(context);
+    final textTheme = theme.textTheme.apply(fontSizeFactor: scale);
+    final filledTextStyle = theme.filledButtonTheme.style?.textStyle?.resolve(
+      const {},
+    );
+    return Theme(
+      data: theme.copyWith(
+        textTheme: textTheme,
+        dialogTheme: theme.dialogTheme.copyWith(
+          insetPadding: EdgeInsets.symmetric(
+            horizontal: 40 * scale,
+            vertical: 24 * scale,
+          ),
+        ),
+        textButtonTheme: TextButtonThemeData(
+          style: theme.textButtonTheme.style?.copyWith(
+            minimumSize: WidgetStatePropertyAll(Size(64 * scale, 40 * scale)),
+            padding: WidgetStatePropertyAll(
+              EdgeInsets.symmetric(horizontal: 12 * scale, vertical: 8 * scale),
+            ),
+            textStyle: WidgetStatePropertyAll(textTheme.labelLarge),
+          ),
+        ),
+        filledButtonTheme: FilledButtonThemeData(
+          style: theme.filledButtonTheme.style?.copyWith(
+            minimumSize: WidgetStatePropertyAll(Size(148 * scale, 54 * scale)),
+            padding: WidgetStatePropertyAll(
+              EdgeInsets.symmetric(
+                horizontal: 24 * scale,
+                vertical: 16 * scale,
+              ),
+            ),
+            textStyle: WidgetStatePropertyAll(
+              filledTextStyle?.copyWith(
+                fontSize: (filledTextStyle.fontSize ?? 17) * scale,
+              ),
+            ),
+          ),
+        ),
+      ),
+      child: dialog,
+    );
+  }
+
   ContentSource get _displaySource {
     try {
       return _editedSource();
@@ -2860,7 +3695,8 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     final confirmed =
         await showDialog<bool>(
           context: context,
-          builder: (context) => AlertDialog(
+          builder: (context) => _scaledStudioDialog(
+            context,
             title: const Text('Use the saved version?'),
             content: const Text(
               'Your complete Studio draft will be discarded and the newer saved channel will be loaded.',
@@ -2919,7 +3755,8 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     final confirmed =
         await showDialog<bool>(
           context: context,
-          builder: (context) => AlertDialog(
+          builder: (context) => _scaledStudioDialog(
+            context,
             title: const Text('Replace the saved version?'),
             content: const Text(
               'The newer saved channel will be replaced with your complete Studio draft.',
@@ -2972,7 +3809,8 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     final confirmed =
         await showDialog<bool>(
           context: context,
-          builder: (context) => AlertDialog(
+          builder: (context) => _scaledStudioDialog(
+            context,
             title: const Text('Save changes and tune in?'),
             content: const Text(
               'Your changes to this channel will be saved before playback starts.',
@@ -3034,7 +3872,7 @@ String channelRhythmLabel(PlaybackMode mode, int? blockSize) =>
 
 String _rhythmLabel(PlaybackMode mode, [int? blockSize]) => switch (mode) {
   PlaybackMode.sequential => 'In order',
-  PlaybackMode.shuffle => 'Mix it up',
+  PlaybackMode.shuffle => 'Shuffle',
   PlaybackMode.block => 'Mini-marathons of ${blockSize ?? 3}',
 };
 
@@ -3106,21 +3944,102 @@ class _MoveProgramDialogState extends State<_MoveProgramDialog> {
     if (_target == null || !targets.contains(_target)) {
       _target = targets.firstOrNull;
     }
-    return AlertDialog(
+    final size = MediaQuery.sizeOf(context);
+    final viewInsets = MediaQuery.viewInsetsOf(context);
+    final scale = LineupLayout.scaleFor(size);
+    final theme = Theme.of(context);
+    final dialogTextTheme = theme.textTheme.apply(fontSizeFactor: scale);
+    final segmentFontSize = dialogTextTheme.labelLarge?.fontSize ?? 14;
+    final segmentVerticalPadding = scale > 1
+        ? (40 * scale > segmentFontSize
+              ? (40 * scale - segmentFontSize) / 2
+              : 0.0)
+        : 0.0;
+    final actionStyle = scale > 1
+        ? TextButton.styleFrom(
+            minimumSize: Size(64 * scale, 40 * scale),
+            padding: EdgeInsets.symmetric(
+              horizontal: 12 * scale,
+              vertical: 8 * scale,
+            ),
+            textStyle: dialogTextTheme.labelLarge,
+          )
+        : null;
+    final moveStyle = scale > 1
+        ? FilledButton.styleFrom(
+            minimumSize: Size(148 * scale, 54 * scale),
+            padding: EdgeInsets.symmetric(
+              horizontal: 24 * scale,
+              vertical: 16 * scale,
+            ),
+            textStyle: theme.filledButtonTheme.style?.textStyle
+                ?.resolve(const {})
+                ?.copyWith(fontSize: 17 * scale),
+          )
+        : null;
+    final inputDecorationTheme = scale > 1
+        ? theme.inputDecorationTheme.copyWith(
+            contentPadding: EdgeInsets.fromLTRB(
+              12 * scale,
+              24 * scale,
+              12 * scale,
+              16 * scale,
+            ),
+            prefixIconConstraints: BoxConstraints(
+              minWidth: 48 * scale,
+              minHeight: 48 * scale,
+            ),
+            suffixIconConstraints: BoxConstraints(
+              minWidth: 48 * scale,
+              minHeight: 48 * scale,
+            ),
+          )
+        : theme.inputDecorationTheme;
+    final dialog = AlertDialog(
+      insetPadding: scale > 1
+          ? EdgeInsets.symmetric(horizontal: 40 * scale, vertical: 24 * scale)
+          : null,
+      titlePadding: scale > 1
+          ? EdgeInsets.only(
+              left: 24 * scale,
+              top: 24 * scale,
+              right: 24 * scale,
+            )
+          : null,
+      contentPadding: scale > 1
+          ? EdgeInsets.fromLTRB(24 * scale, 16 * scale, 24 * scale, 24 * scale)
+          : null,
+      actionsPadding: scale > 1
+          ? EdgeInsets.only(
+              left: 24 * scale,
+              right: 24 * scale,
+              bottom: 24 * scale,
+            )
+          : null,
+      buttonPadding: scale > 1
+          ? EdgeInsets.symmetric(horizontal: 8 * scale)
+          : null,
+      actionsOverflowButtonSpacing: scale > 1 ? 8 * scale : null,
       title: Text('Move ${widget.titleFor(widget.moving)}'),
       content: SizedBox(
-        width: 520,
-        height: 380,
+        width: (size.width - 128 * scale).clamp(0.0, 520 * scale),
+        height: (size.height - viewInsets.vertical - 200 * scale).clamp(
+          0.0,
+          380 * scale,
+        ),
         child: Column(
           children: [
             TextField(
               key: const Key('move-program-search'),
               controller: _search,
               autofocus: true,
-              decoration: const InputDecoration(labelText: 'Find program'),
+              decoration: InputDecoration(
+                labelText: 'Find program',
+                contentPadding: inputDecorationTheme.contentPadding,
+              ),
               onChanged: (_) => setState(() {}),
             ),
-            const SizedBox(height: 8),
+            SizedBox(height: 8 * scale),
             Expanded(
               child: RadioGroup<_ManualEntry>(
                 groupValue: _target,
@@ -3130,6 +4049,12 @@ class _MoveProgramDialogState extends State<_MoveProgramDialog> {
                     for (final entry in targets)
                       RadioListTile<_ManualEntry>(
                         value: entry,
+                        radioScaleFactor: scale,
+                        minTileHeight: scale > 1 ? 56 * scale : null,
+                        horizontalTitleGap: scale > 1 ? 16 * scale : null,
+                        contentPadding: scale > 1
+                            ? EdgeInsets.symmetric(horizontal: 16 * scale)
+                            : null,
                         title: Text(_label(entry)),
                       ),
                   ],
@@ -3142,6 +4067,17 @@ class _MoveProgramDialogState extends State<_MoveProgramDialog> {
                 ButtonSegment(value: true, label: Text('After')),
               ],
               selected: {_after},
+              style: scale > 1
+                  ? ButtonStyle(
+                      padding: WidgetStatePropertyAll(
+                        EdgeInsets.symmetric(
+                          horizontal: 16 * scale,
+                          vertical: segmentVerticalPadding,
+                        ),
+                      ),
+                      iconSize: WidgetStatePropertyAll(18 * scale),
+                    )
+                  : null,
               onSelectionChanged: (value) =>
                   setState(() => _after = value.single),
             ),
@@ -3152,6 +4088,7 @@ class _MoveProgramDialogState extends State<_MoveProgramDialog> {
         TextButton(
           autofocus: true,
           onPressed: () => Navigator.pop(context),
+          style: actionStyle,
           child: const Text('Cancel'),
         ),
         FilledButton(
@@ -3161,9 +4098,19 @@ class _MoveProgramDialogState extends State<_MoveProgramDialog> {
                   index: widget.entries.indexOf(_target!),
                   after: _after,
                 )),
+          style: moveStyle,
           child: const Text('Move'),
         ),
       ],
     );
+    return scale > 1
+        ? Theme(
+            data: theme.copyWith(
+              textTheme: dialogTextTheme,
+              inputDecorationTheme: inputDecorationTheme,
+            ),
+            child: dialog,
+          )
+        : dialog;
   }
 }

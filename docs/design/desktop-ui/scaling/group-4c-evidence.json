@@ -1,0 +1,228 @@
+{
+  "sourceBase": "51ce2fae3a8aaccb860509b669fa3d2e559bd9db",
+  "scope": {
+    "production": [
+      "lib/playback/player_view.dart"
+    ],
+    "test": [
+      "test/playback/player_view_test.dart"
+    ],
+    "captureHarness": "build/desktop-ui/scaling/drawers_test.dart",
+    "productionOwners": [
+      "_playerDrawerGeometryScale",
+      "_SleepTimerPicker.build",
+      "_TracksState.build"
+    ]
+  },
+  "changes": [
+    "Reuse uncapped shared LineupLayout.scaleFor above the 1080p reference while preserving the compact 2/3..1 range below it.",
+    "Scale sleep picker height budget, large-screen list spacing, and selected indicators while preserving 1080p output.",
+    "Scale track drawer close affordance, row minimums/spacing, selected and pending indicators, and error text style.",
+    "Update the existing 3840x2160 DPR2 scaling tuple to width 1200, fade 200, scale 2.",
+    "Astra integration preserves the original compact sleep checkmark size and scales the sleep panel radius above the reference."
+  ],
+  "sourceSha256": {
+    "lib/playback/player_view.dart": "53468fabb0c28aefa6acb0e651163e15cc937835456231047d1cdd9ec1affaf4",
+    "test/playback/player_view_test.dart": "5443304516e36f9df6494db863d92ee17fba6fd4490678bb73795f1bbbcf5a23",
+    "build/desktop-ui/scaling/drawers_test.dart": "07ee035d4ccf9e165f94e340eb8093f50582ede894dd49a5f24da051cf974ce0"
+  },
+  "verification": {
+    "targetedTest": {
+      "count": 1,
+      "command": "TZ=America/New_York <pinned Flutter 3.47.2 bin>/flutter test --no-pub test/playback/player_view_test.dart",
+      "result": "67 tests passed"
+    },
+    "analyze": {
+      "count": 1,
+      "command": "TZ=America/New_York <pinned Flutter 3.47.2 bin>/flutter analyze --no-pub lib/playback/player_view.dart test/playback/player_view_test.dart",
+      "result": "No issues found"
+    },
+    "format": {
+      "count": 1,
+      "command": "<pinned Flutter 3.47.2 bin>/dart format --output=none --set-exit-if-changed lib/playback/player_view.dart test/playback/player_view_test.dart",
+      "result": "2 files formatted, 0 changed"
+    },
+    "diffCheck": {
+      "count": 1,
+      "command": "git diff --check",
+      "result": "passed"
+    },
+    "captureMatrix": {
+      "commandTemplate": "env TZ=America/New_York CHECK_WIDTH=<width> CHECK_DPR=<dpr> CHECK_TEXT=<textScale> DRAWER=<drawer> DRAWER_STATE=normal TIMER_ACTIVE=<optional> MINI_CAPTURE_DIR=<dir> <pinned Flutter 3.47.2 bin>/flutter test --no-pub build/desktop-ui/scaling/drawers_test.dart",
+      "invocations": 20,
+      "widgetAssertions": 40,
+      "result": "all passed",
+      "configurations": [
+        {
+          "directory": "1080",
+          "viewport": "1920x1080",
+          "dpr": 1,
+          "textScale": 1,
+          "invocations": 3,
+          "widgetAssertions": 6
+        },
+        {
+          "directory": "active-1080",
+          "viewport": "1920x1080",
+          "dpr": 1,
+          "textScale": 1,
+          "timerActive": true,
+          "invocations": 1,
+          "widgetAssertions": 2
+        },
+        {
+          "directory": "1440",
+          "viewport": "2560x1440",
+          "dpr": 1,
+          "textScale": 1,
+          "invocations": 3,
+          "widgetAssertions": 6
+        },
+        {
+          "directory": "2160-native",
+          "viewport": "3840x2160",
+          "dpr": 1,
+          "textScale": 1,
+          "invocations": 3,
+          "widgetAssertions": 6
+        },
+        {
+          "directory": "2160-dpr2-text2",
+          "viewport": "3840x2160",
+          "dpr": 2,
+          "textScale": 2,
+          "invocations": 3,
+          "widgetAssertions": 6
+        },
+        {
+          "directory": "2160-text2",
+          "viewport": "3840x2160",
+          "dpr": 1,
+          "textScale": 2,
+          "invocations": 3,
+          "widgetAssertions": 6
+        },
+        {
+          "directory": "2160-text2-active",
+          "viewport": "3840x2160",
+          "dpr": 1,
+          "textScale": 2,
+          "timerActive": true,
+          "invocations": 1,
+          "widgetAssertions": 2
+        },
+        {
+          "directory": "720-text2",
+          "viewport": "1280x720",
+          "dpr": 1,
+          "textScale": 2,
+          "invocations": 3,
+          "widgetAssertions": 6
+        }
+      ]
+    },
+    "stressFixtures": {
+      "commandTemplate": "env TZ=America/New_York CHECK_WIDTH=<width> CHECK_DPR=1 CHECK_TEXT=2 DRAWER=<drawer> DRAWER_STATE=<state> MINI_CAPTURE_DIR=<dir> <pinned Flutter 3.47.2 bin>/flutter test --no-pub build/desktop-ui/scaling/drawers_test.dart",
+      "invocations": 7,
+      "widgetAssertions": 14,
+      "result": "all passed; each run completed with 2 theme cases and exited 0",
+      "states": [
+        "deep audio 3840x2160",
+        "deep subtitles 3840x2160",
+        "pending audio 3840x2160",
+        "pending subtitles 3840x2160",
+        "error-focus audio 2560x1440",
+        "empty audio 1280x720",
+        "empty subtitles 1280x720"
+      ]
+    },
+    "rootIntegration": {
+      "playerView": "67 tests passed after integration",
+      "sleepCaptures": "Seven recapture invocations / 14 theme cases passed after radius and compact checkmark correction. DPR2 remains unaffected at scale1.",
+      "baselineComparison": "Astra independently verified eight byte-identical 1080p PNGs",
+      "visualInspection": "Astra inspected native4K Audio and final native4K/text200 active Sleep."
+    }
+  },
+  "baselineComparison": {
+    "normal1080": {
+      "comparedFiles": 6,
+      "result": "6/6 byte-identical to build/desktop-ui/scaling/drawers-before-1920"
+    },
+    "active1080": {
+      "comparedFiles": 2,
+      "result": "2/2 byte-identical to docs/design/desktop-ui/approved/2026-09-12-tracks-sleep"
+    },
+    "total": "8/8 approved 1080p PNGs byte-identical"
+  },
+  "geometryEvidence": {
+    "native4kText2": "deep-subtitles/subtitles-deep-bright-layout.txt: rail 1200px, fade 200px, selected row y=1020..1260, check 48px",
+    "pending": "pending-subtitles/subtitles-pending-bright-layout.txt: pending indicator 36px",
+    "errorFocus": "errorfocus-audio/audio-errorfocus-bright-layout.txt: selectedHasFocus=true",
+    "sleepActive": "2160-text2-active/sleep-active-normal-bright-layout.txt: 708px picker; all four choices visible; maxScrollExtent=0",
+    "compactEmpty": "empty-subtitles/subtitles-empty-bright-layout.txt: empty-state message visible in 1280x720 textScale2",
+    "gradient": "stops [0, 0.1, 0.22, 1], alpha [0, 0.34, 0.74, 0.82]"
+  },
+  "captureCount": 54,
+  "captureSha256": {
+    "build/desktop-ui/scaling/drawers-final/1080/audio-bright-1920x1080.png": "743c75e6f569b9f3e75f2f7a64c0544c9383aa9ff5b55c819d995b6b255e853c",
+    "build/desktop-ui/scaling/drawers-final/1080/audio-dark-1920x1080.png": "4a855f1b721d0615bd00611913a2cdcc9db0e4711f3075fa54ce516f69163e3e",
+    "build/desktop-ui/scaling/drawers-final/1080/sleep-bright-1920x1080.png": "0bbf06f4bdb5b6bd916c6ff4f05753765ef0957a10a3c983cbd2eca843944e4d",
+    "build/desktop-ui/scaling/drawers-final/1080/sleep-dark-1920x1080.png": "0910be1a8d69beb08fd8df9903f0116fdb79dcbdf8f8e758828607ac1f3764ac",
+    "build/desktop-ui/scaling/drawers-final/1080/subtitles-bright-1920x1080.png": "9e87640710aabee5d7ad593335c977a64f49648613166e34f5754e699b23551f",
+    "build/desktop-ui/scaling/drawers-final/1080/subtitles-dark-1920x1080.png": "a9472e60405be041042b837b568ad159391ad7b217db298f3fb722dd9227d2a4",
+    "build/desktop-ui/scaling/drawers-final/1440/audio-bright-2560x1440.png": "2b3e1a9af3b8bbef7bec8a88b41490fc7c07800ea85f37fd65533283ca73fe62",
+    "build/desktop-ui/scaling/drawers-final/1440/audio-dark-2560x1440.png": "7a6842c7765747982cc664f8b0190f9add06dc6fbd2e44a82b16274ae21aebcd",
+    "build/desktop-ui/scaling/drawers-final/1440/sleep-bright-2560x1440.png": "8d704150ab3eac11d745d33c679624358ccd2651efc01c793751987c542f5984",
+    "build/desktop-ui/scaling/drawers-final/1440/sleep-dark-2560x1440.png": "3e6d9b74bb673614458e49af43867b7070b7ae4eea3cd7db6e682a0fb85c1ee6",
+    "build/desktop-ui/scaling/drawers-final/1440/subtitles-bright-2560x1440.png": "0f0eba5029898151f1ab9138659e66b6474d8a61c21aff6f9c0149534e407305",
+    "build/desktop-ui/scaling/drawers-final/1440/subtitles-dark-2560x1440.png": "99db71661e5197a6453d971798110757d2bbe39d8d8a0b678ce761fd988006c3",
+    "build/desktop-ui/scaling/drawers-final/2160-dpr2-text2/audio-bright-3840x2160.png": "28b4bd3d0fa11642e9a08675a6ea080472ba120744931f7b3e8b2a53ad4f067d",
+    "build/desktop-ui/scaling/drawers-final/2160-dpr2-text2/audio-dark-3840x2160.png": "49f5d5d8c576fd7200567ee049656fcb05e91e2d1862a1134809330cb244045e",
+    "build/desktop-ui/scaling/drawers-final/2160-dpr2-text2/sleep-bright-3840x2160.png": "106df57cda1efb0dba8b8065e9e321a1c664a158c84d3abf34fd9078c5895cda",
+    "build/desktop-ui/scaling/drawers-final/2160-dpr2-text2/sleep-dark-3840x2160.png": "c0d0e874edd514a98586503947307f03c49de5c142f3039892cb1a86a007170a",
+    "build/desktop-ui/scaling/drawers-final/2160-dpr2-text2/subtitles-bright-3840x2160.png": "b9e5558f98c974fdcca98d2e77853b67d43f77b46e4c6cf7b77d5c4f0b036fc8",
+    "build/desktop-ui/scaling/drawers-final/2160-dpr2-text2/subtitles-dark-3840x2160.png": "e57e4ffea497f1ccfb6c7ce8673f4e1932a74265d6dfc46b59322592a127738a",
+    "build/desktop-ui/scaling/drawers-final/2160-native/audio-bright-3840x2160.png": "9e53e01a7a4046d6b3d18296658889b934d0111e6e344983d615ac1fa772690a",
+    "build/desktop-ui/scaling/drawers-final/2160-native/audio-dark-3840x2160.png": "a9b6655edde220ab842610d2bb695540ae9f467f7e11ac3458cd8a5484bbfc1b",
+    "build/desktop-ui/scaling/drawers-final/2160-native/sleep-bright-3840x2160.png": "9bb5c9a2a960508845be0795365bce91d479b17b2dd19794236f4df86ee3ea50",
+    "build/desktop-ui/scaling/drawers-final/2160-native/sleep-dark-3840x2160.png": "b930a85af1e2d56b7ffda3bc404f2e2728e9c2ffc66ead718b97d72fc41b986e",
+    "build/desktop-ui/scaling/drawers-final/2160-native/subtitles-bright-3840x2160.png": "b4a8e5ab92858b693233b9ba091eaabb93b3eb241c36f3d2c482cb7f5c054623",
+    "build/desktop-ui/scaling/drawers-final/2160-native/subtitles-dark-3840x2160.png": "345824a32971b595bec4f0b56145fab1109a6d71b6b919c1368c4155f56d5b8c",
+    "build/desktop-ui/scaling/drawers-final/2160-text2-active/sleep-active-bright-3840x2160.png": "3563c495617b07a93219c4794c6e77a9c0042759cb2b23ce755d415eff4fd046",
+    "build/desktop-ui/scaling/drawers-final/2160-text2-active/sleep-active-dark-3840x2160.png": "4629d9e6d23da359feac896dacdb160ee899ccbee453cc335e2cda7cb32cc8b6",
+    "build/desktop-ui/scaling/drawers-final/2160-text2/audio-bright-3840x2160.png": "85c624b088fc100bf7515c5723a08f3046a4c39f9fa6e538d8b3cefd171690e0",
+    "build/desktop-ui/scaling/drawers-final/2160-text2/audio-dark-3840x2160.png": "575b10b8449974deec6e3232a6ddfc54eb11f570c44e100353a95996091e394f",
+    "build/desktop-ui/scaling/drawers-final/2160-text2/sleep-bright-3840x2160.png": "5c737c55f63cba8a9eecacffe839ee4bfb971eb9f603cdec3093d7d2677e5b4d",
+    "build/desktop-ui/scaling/drawers-final/2160-text2/sleep-dark-3840x2160.png": "6910f092b748c9fe9c2fd5212ae0a6d4cdd47550ec428fec67257929e746be5f",
+    "build/desktop-ui/scaling/drawers-final/2160-text2/subtitles-bright-3840x2160.png": "7a8d0a71d171926d8568f4db1ed97050a8403e196e85743d285f919b3d2a9ab3",
+    "build/desktop-ui/scaling/drawers-final/2160-text2/subtitles-dark-3840x2160.png": "3db1e676cc57dced1d71c301243e5c63f51a7a0d3993ea4a24d9da45898dda29",
+    "build/desktop-ui/scaling/drawers-final/720-text2/audio-bright-1280x720.png": "39cbfe25b7b466483b875a5ae28afdfaea08520771ca0c362ea5a6ddda9b26b5",
+    "build/desktop-ui/scaling/drawers-final/720-text2/audio-dark-1280x720.png": "556232900a92535cf379d11f84c3e5fdf9b1bdce4e7d9bc9c4ca501817f9ee66",
+    "build/desktop-ui/scaling/drawers-final/720-text2/sleep-bright-1280x720.png": "2801e3d82f040e7a60dbce56550c5eb2bc53e6221a4931e4f5d5d0d85f5cd3bf",
+    "build/desktop-ui/scaling/drawers-final/720-text2/sleep-dark-1280x720.png": "36d230ee9c87509fca90b9f4f6189e26e465dbce5ce4ca283df3191f7817092b",
+    "build/desktop-ui/scaling/drawers-final/720-text2/subtitles-bright-1280x720.png": "0f183f0a941261018f4e02e7d8d5b7e016823bc1f029cfa52042da91f8e6103e",
+    "build/desktop-ui/scaling/drawers-final/720-text2/subtitles-dark-1280x720.png": "4db69ad7bdb4556ff664b5ba41bb7a66965a2d93b56e451b188b286ae9ad3161",
+    "build/desktop-ui/scaling/drawers-final/active-1080/sleep-active-bright-1920x1080.png": "aa242b10e23b547fdde2c8e1852e508e53fdd4a86a334341d2f77c1015491c37",
+    "build/desktop-ui/scaling/drawers-final/active-1080/sleep-active-dark-1920x1080.png": "8393564a5272375a4ebeb5a18258eedb4a671f0d1fb5a9bd15fc62a1838b6a33",
+    "build/desktop-ui/scaling/drawers-final/deep-audio/audio-deep-bright-3840x2160.png": "36133dd350244612dc3f7d3209e3d22f82477944cca84ae34cfe98e23f4368a2",
+    "build/desktop-ui/scaling/drawers-final/deep-audio/audio-deep-dark-3840x2160.png": "59aae698b7049ab57ac1ffea46c41d50b0742995c4f10a148cef2c1e07bafc4f",
+    "build/desktop-ui/scaling/drawers-final/deep-subtitles/subtitles-deep-bright-3840x2160.png": "0b1aedca50110ec0afe9c9da90dc20d83671a02a817250c7fda471818e1b8139",
+    "build/desktop-ui/scaling/drawers-final/deep-subtitles/subtitles-deep-dark-3840x2160.png": "67c50f33e3fd81ff063250bc2b710af7a2c81761ee5a875da65ad4270bae18be",
+    "build/desktop-ui/scaling/drawers-final/empty-audio/audio-empty-bright-1280x720.png": "1bc4fce76fe287cd868807159e4852ee6e46887ed52ac09c850772c0c21424fe",
+    "build/desktop-ui/scaling/drawers-final/empty-audio/audio-empty-dark-1280x720.png": "52acd977fcd7861c2d6b194b805ac5e1e2b51865bdd1a8025926a42c2731eabf",
+    "build/desktop-ui/scaling/drawers-final/empty-subtitles/subtitles-empty-bright-1280x720.png": "d09e611dddedca7915fc7bf4e427648e20c6dd9d71793ffafbd93b34ea2e2fc0",
+    "build/desktop-ui/scaling/drawers-final/empty-subtitles/subtitles-empty-dark-1280x720.png": "057c8bcbd81e20cdce4a772673d890a600084eab9cb7209f5d2d4a221a6f57ec",
+    "build/desktop-ui/scaling/drawers-final/errorfocus-audio/audio-errorfocus-bright-2560x1440.png": "fb245e8e8fdb1c852d627bc2a5234bf9d8aff284c436c72b33297394eef05712",
+    "build/desktop-ui/scaling/drawers-final/errorfocus-audio/audio-errorfocus-dark-2560x1440.png": "97828a4a445c771e181c949e0f1bf9ac4bf81fcb03be0d086f05d57fc539a7f8",
+    "build/desktop-ui/scaling/drawers-final/pending-audio/audio-pending-bright-3840x2160.png": "3649d21e0bc74bfdc313787a43214cef27b14b267343789397f686a3ba8c6648",
+    "build/desktop-ui/scaling/drawers-final/pending-audio/audio-pending-dark-3840x2160.png": "31271635e853977aafa7e030bd9a0451caf7e9554ceecf2ab915f650a70752dc",
+    "build/desktop-ui/scaling/drawers-final/pending-subtitles/subtitles-pending-bright-3840x2160.png": "2b123de334b564c57e437fb2bbed2994af926d2c157df77ae50e2e0371c2431c",
+    "build/desktop-ui/scaling/drawers-final/pending-subtitles/subtitles-pending-dark-3840x2160.png": "94960ef61e228fd467171591be3a5c6a64dab17bd523bce0935826faa90ecbbe"
+  },
+  "limitations": [
+    "Evidence is from the portable macOS Flutter tester with synthetic scene/content and pinned test fonts.",
+    "This does not claim physical Windows acceptance, DirectComposition/libmpv behavior, HDR, fullscreen, monitor-DPI, native input, or packaging validation.",
+    "An empty audio-track request remains closed by existing product policy; the empty subtitle state is the verified empty-drawer case.",
+    "An aggregate stress attempt left a runner alive after writing artifacts; the 7 state fixtures were rerun individually with bounded alarms and all exited 0."
+  ]
+}

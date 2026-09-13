@@ -25,12 +25,13 @@ No new visual design was produced in this archive pass.
 | [server-selection-refinement.html](server-selection-refinement.html) | Open server rows; discovery/current/verified reachability semantics come from spec. |
 | [library-layout-options.html](library-layout-options.html) | Open checkbox-row direction A only; alternate composition is comparison history. |
 | [library-scan-states.html](library-scan-states.html) | Row-local scanning outcomes; no real scan or progress evidence. |
-| [channel-source-comparison.html](channel-source-comparison.html) | Two-column source composition A; illustrative inclusion/counts are not allocation authority. |
+| [channel-source-comparison.html](channel-source-comparison.html) | Rich source-row component (960px, single column); later specification requires two-column screen composition. Illustrative inclusion/counts are not allocation authority. |
 | [playback-order-fluid.html](playback-order-fluid.html) | Fluid full-window composition; mock extra-version defaults/counts are illustrative. Spec requires extras off by default and final Mini-marathon chronology/specials. |
 | [lineup-rules-design.html](lineup-rules-design.html) | Two-column limits/source order with arrows at far right; actual allocation/counts governed by spec. |
 | [review-polished-states.html](review-polished-states.html) | Overview ABOVE full-width roster; all three build methods remain required even if controls are omitted. |
 | [review-edge-cases.html](review-edge-cases.html) | Long names, removals, large text and zero-match composition; not rendering performance evidence. |
-| [setup-result-states.html](setup-result-states.html) | Minimal progress/result composition; real rollback and action transitions follow spec. |
+| [setup-result-states.html](setup-result-states.html) | Original minimal result reference; fluid-light refinement supersedes progress/completion composition. |
+| [setup-result-fluid-light.html](setup-result-fluid-light.html) | September 9 approved curved-light motion and centered result composition; prototype only, production branding retains logo-first combo. |
 | [channels-management-refined.html](channels-management-refined.html) | Directory, selection and reorder composition; actual batch persistence/focus/drag not demonstrated. |
 | [studio-consolidated-review.html](studio-consolidated-review.html) | Combined Studio B states; hand-picked/playlist/mixed source requirements remain despite mock omissions. |
 | [studio-playback-space-refinement.html](studio-playback-space-refinement.html) | Final shared playback row and taller schedule; row counts vary with actual content/text scale. |

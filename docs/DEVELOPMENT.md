@@ -106,7 +106,7 @@ portable work; report the specific unverified behavior and required scenario.
 | --- | --- | --- |
 | Documentation only | `git diff --check`; check changed links, examples, and claims against their owners | Structural and source consistency; no new product or platform evidence |
 | Dart policy, models, async work | Pinned Flutter SDK; focused tests plus the relevant full format/analyze/test checks below | Deterministic contracts; no Xcode application build or Windows engine provisioning required |
-| Flutter layout, focus, semantics | Relevant widget tests at representative sizes; macOS for the two golden suites below | Flutter composition and input/semantics contracts; physical Windows input, AT, and video layering remain separate |
+| Flutter layout, focus, semantics | Relevant widget tests at representative sizes; macOS for the required alpha suite and optional local visual checks below | Flutter composition and input/semantics contracts; physical Windows input, AT, and video layering remain separate |
 | Persistence or credentials | Controller/store/transport failure, rollback, scope-isolation, and secret-flow tests named in [Architecture](architecture.md#changing-asynchronous-and-persisted-state) | Deterministic recovery/currentness; OS credential storage and physical filesystem behavior need platform observation |
 | macOS development app | Xcode and macOS setup below; `flutter run -d macos` or `flutter build macos` as relevant | Development UI/runtime or build evidence; the macOS player explicitly reports unsupported playback |
 | Windows package policy | PowerShell 7.4+ on a portable host; `pwsh -File ./tool/windows/verify-release-policy.ps1` | Script parsing and pinned policy inputs; no Windows runtime or package execution proof |
@@ -115,15 +115,15 @@ portable work; report the specific unverified behavior and required scenario.
 
 ## Portable commands
 
-Flutter SDK `3.47.2` (revision
-`d3b14c876900e553bc736ca19295fc09e3853e8e`, Dart `3.13.2`) is the reproducible
+Flutter SDK `3.47.4` (revision
+`9584c6713b324636289d067944a46fd6b49df14b`, Dart `3.13.3`) is the reproducible
 toolchain for macOS, Windows, and CI.
 
 Select the exact Flutter checkout rather than a different SDK already on PATH:
 
 ```sh
 git clone https://github.com/flutter/flutter.git /path/to/flutter
-git -C /path/to/flutter checkout d3b14c876900e553bc736ca19295fc09e3853e8e
+git -C /path/to/flutter checkout 9584c6713b324636289d067944a46fd6b49df14b
 export PATH=/path/to/flutter/bin:$PATH
 flutter doctor -v
 ```
@@ -147,22 +147,49 @@ is canonical for localized schedule goldens. On Windows, Dart uses the Windows
 system timezone; `$env:TZ` alone does not select it. Run the portable Windows
 tests in the machine's configured timezone, or set the OS timezone to Eastern
 Standard Time before treating localized schedule assertions as canonical. The
-full suite on Linux/Windows excludes the two suites marked `@TestOn('mac-os')`;
-a pass there is not golden evidence. Run these on macOS when the affected UI
-needs pixel verification:
+full suite on Linux/Windows excludes the required alpha suite marked
+`@TestOn('mac-os')`; the optional visual checks are outside the default `test/`
+tree. A portable pass there is not macOS visual evidence. Run the required
+macOS alpha checks when the Guide surface needs pixel verification:
 
 ```sh
-TZ=America/New_York flutter test test/app/ui_acceptance_golden_test.dart
-TZ=America/New_York flutter test test/app/guide_sparse_golden_test.dart
+TZ=America/New_York flutter test test/app/guide_opacity_test.dart
 ```
 
-The equivalent commands from PowerShell on macOS are:
+The five screenshot goldens are optional local visual-review checks outside the
+default `test/` tree. They use Flutter's default exact comparator and remain
+useful for intentional visual changes; run them explicitly when reviewing a
+surface:
+
+```sh
+TZ=America/New_York flutter test tool/visual/ui_acceptance_golden_test.dart
+TZ=America/New_York flutter test tool/visual/guide_sparse_golden_test.dart
+```
+
+To intentionally replace one of these local baselines after reviewing the
+real-widget render, use `--update-goldens` on that explicit command:
+
+```sh
+TZ=America/New_York flutter test --update-goldens tool/visual/ui_acceptance_golden_test.dart
+TZ=America/New_York flutter test --update-goldens tool/visual/guide_sparse_golden_test.dart
+```
+
+The equivalent required-alpha command from PowerShell on macOS is:
 
 ```powershell
 $env:TZ = 'America/New_York'
-flutter test test/app/ui_acceptance_golden_test.dart
-flutter test test/app/guide_sparse_golden_test.dart
+flutter test test/app/guide_opacity_test.dart
 ```
+
+The required alpha suite loads fonts from the pinned Flutter SDK, runs with
+`TZ=America/New_York`, remains macOS-only, and performs exact pixel-alpha
+checks: the no-playback Guide must be opaque, while Classic PiP transparency
+must remain inside its native aperture. The two optional local suites load the
+same pinned fonts and retain exactly five representative 1920×1080 snapshots:
+rich and reference-free Guide, OSD, Now Playing, and Ember & Steel Appearance.
+They are not run by default `flutter test` or required CI. The optional checks
+use exact comparison, so inspect intentional visual changes before using
+`--update-goldens`.
 
 Inspect intentional golden changes from the real widgets. Preserve
 [approved UI decisions](../.interface-design/system.md), including the protected
@@ -191,7 +218,7 @@ x86-64 LGPL libmpv directory before configuring the application:
 
 ```powershell
 Set-Location C:\path\to\LineupDesktop
-$mpvRoot = 'C:\local\lineup-mpv' # New or empty directory.
+$mpvRoot = 'C:\local\lineup-mpv-20260912-14f2d48cbc' # New or empty directory.
 & .\tool\windows\prepare-mpv.ps1 -Destination $mpvRoot
 $env:LINEUP_MPV_ROOT = $mpvRoot
 flutter build windows
@@ -208,6 +235,12 @@ integrity checks live in the build scripts and CMake; see
 component versions, licenses, and redistribution obligations. Runnable test and
 package machines also need a GPU driver or Vulkan Runtime providing
 `vulkan-1.dll`, even though Lineup selects D3D11 output.
+
+When the pinned runtime changes, provision it into a fresh unique destination;
+do not reuse or overwrite an older prepared directory. Rebuild the Lineup
+application against the new runtime. This refresh also upgrades Flutter to
+3.47.4, so reprovision its patched `host_debug` and `host_release` outputs
+before launching or packaging; the older SDK outputs cannot be reused.
 
 ### Patched engine provisioning
 
@@ -252,20 +285,91 @@ ninja -C out\host_release
 
 See the [engine patch contract](../tool/flutter_engine/README.md) for source
 validation and provenance. Reuse provisioned outputs only while their inputs
-remain current. Select the resulting engine explicitly; do not replace
-Flutter's SDK cache:
+remain current. Select the resulting engine explicitly; do not replace a stock
+Flutter SDK cache.
+
+### Development launcher
+
+After the one-time prerequisites and patched `host_debug` setup above, the
+small PowerShell launcher reuses those exact local-engine outputs. Configure
+the two machine-specific paths once as user environment values, and set them
+in the current session as well:
+
+```powershell
+$engineSource = 'C:\path\to\flutter\engine\src'
+$mpvRoot = 'C:\local\lineup-mpv-20260912-14f2d48cbc'
+[Environment]::SetEnvironmentVariable('LINEUP_ENGINE_SOURCE', $engineSource, 'User')
+[Environment]::SetEnvironmentVariable('LINEUP_MPV_ROOT', $mpvRoot, 'User')
+$env:LINEUP_ENGINE_SOURCE = $engineSource
+$env:LINEUP_MPV_ROOT = $mpvRoot
+```
+
+Then run the normal Plex onboarding/application entry point:
 
 ```powershell
 Set-Location C:\path\to\LineupDesktop
-$engineSource = 'C:\path\to\flutter\engine\src'
-flutter run -d windows `
-  --local-engine=host_debug `
-  --local-engine-host=host_debug `
-  --local-engine-src-path=$engineSource `
-  --dart-entrypoint-args='--media=C:\path\to\sdr-sample.mp4'
-
-& .\tool\windows\build-release.ps1 -EngineSource $engineSource
+pwsh -File .\tool\windows\run.ps1
 ```
+
+The script also works from another caller directory when given its full path:
+
+```powershell
+pwsh -File 'C:\path\to\LineupDesktop\tool\windows\run.ps1'
+```
+
+For the existing local-media entry point, pass an existing file explicitly:
+
+```powershell
+pwsh -File .\tool\windows\run.ps1 -MediaPath 'C:\path\to\sdr-sample.mp4'
+```
+
+The launcher validates Windows, the required paths, the pinned Flutter
+framework/engine revisions, the repository patch and applied manager source,
+and the prepared libmpv inputs. It requires `engine\src\out\host_debug\build.ninja`
+and runs incremental Ninja before `flutter run`, so changed patched-engine
+source is not silently stale. It does not run GN, provision engine sources,
+apply the patch, or use an arbitrary `flutter` on `PATH`; missing provisioning
+is a setup error with a link back to the commands above. If the pinned
+Flutter checkout lacks its Windows SDK cache, the launcher runs that
+checkout's `bin\flutter.bat precache --windows` once; it never changes a
+different SDK cache. Uncommitted Lineup application edits are allowed for
+development, while the release wrapper below still requires a clean checkout.
+
+Update the saved paths after moving or reprovisioning the Flutter engine or
+libmpv directory. The launcher restores the caller's current directory and
+`LINEUP_MPV_ROOT` value when it exits.
+
+### Portable package
+
+After the one-time prerequisites, patched `host_release` setup, and a clean
+Lineup checkout (no tracked changes or non-ignored untracked files), build and
+package the portable application:
+
+```powershell
+Set-Location C:\path\to\LineupDesktop
+$env:LINEUP_MPV_ROOT = 'C:\local\lineup-mpv-20260912-14f2d48cbc'
+.\tool\windows\build-release.ps1 -EngineSource 'C:\path\to\flutter\engine\src'
+.\tool\windows\package.ps1
+```
+
+The default archive is
+`build/package/LineupDesktop-<version>-windows-x64.zip` (for example,
+`LineupDesktop-0.1.0-1-windows-x64.zip`). If that destination or archive
+already exists, choose a unique destination below `build/package`:
+
+```powershell
+.\tool\windows\package.ps1 -Destination 'build/package/LineupDesktop-0.1.0-1-windows-x64-rerun'
+```
+
+Review and deliberately move or remove an old package yourself when that is
+intended; the package script never silently overwrites or deletes an existing
+destination. The resulting archive contains a complete portable folder.
+Extract the entire folder and run `lineup_desktop.exe`; keep its adjacent DLLs
+and `data` directory together. The package also includes provenance, licenses,
+system requirements, and a manifest. This is a private portable build flow,
+not an installer or a public-release claim; launch, media, and hardware
+acceptance still require the physical-Windows procedure in
+[Windows Native Acceptance](windows-native-validation.md).
 
 The release wrapper validates the clean Lineup checkout, exact framework and
 engine revisions, and exact patched manager source, refreshes the configured
@@ -279,7 +383,7 @@ engine metadata, and rejects stale markers or modified build artifacts.
 ## CI evidence
 
 [The workflow](../.github/workflows/ci.yml) runs portable Dart verification on
-Linux, the two golden suites and an application build on macOS, portable
+Linux, the required macOS alpha suite and an application build on macOS, portable
 PowerShell release-policy validation, and focused widget tests plus a
 stock-engine C++/CMake application build on Windows Server 2022.
 

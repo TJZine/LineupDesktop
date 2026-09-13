@@ -103,15 +103,31 @@ void main() {
       controller.diagnostics.add('application', 'Operation failed', {
         'code': 'unexpected',
       });
+      final semantics = tester.ensureSemantics();
+
       await show(tester, controller);
+      final time = controller.diagnostics.entries.single.time.toLocal();
+      final timestamp = [
+        time.hour,
+        time.minute,
+        time.second,
+      ].map((part) => part.toString().padLeft(2, '0')).join(':');
+      expect(find.text(timestamp), findsOneWidget);
+      expect(
+        find.bySemanticsLabel(
+          RegExp('${RegExp.escape(timestamp)}.*application: Operation failed'),
+        ),
+        findsOneWidget,
+      );
+      semantics.dispose();
       await tester.tap(find.text('Operation failed'));
       await tester.pumpAndSettle();
-      expect(find.text('code: unexpected'), findsOneWidget);
+      expect(find.text('Code: unexpected', findRichText: true), findsOneWidget);
       final oldPosition = tester.getTopLeft(find.text('Operation failed'));
       controller.diagnostics.add('plex-auth', 'PIN cancellation failed');
       await tester.pumpAndSettle();
       expect(find.text('1 new event'), findsOneWidget);
-      expect(find.text('code: unexpected'), findsOneWidget);
+      expect(find.text('Code: unexpected', findRichText: true), findsOneWidget);
       expect(tester.getTopLeft(find.text('Operation failed')), oldPosition);
       expect(find.text('PIN cancellation failed'), findsNothing);
       await tester.tap(find.text('1 new event'));

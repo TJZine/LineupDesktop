@@ -29,7 +29,9 @@ Future<void> loadPinnedTestFonts() async {
       throw StateError('Pinned Flutter test font is missing: $filename');
     }
   }
-  for (final family in ['Roboto', '.AppleSystemUIFont']) {
+  // Golden tests map platform family names to pinned Roboto; this Arial alias
+  // is a deterministic test surrogate, not physical Arial evidence.
+  for (final family in ['Roboto', '.AppleSystemUIFont', 'Arial']) {
     final loader = FontLoader(family);
     for (final file in [
       'Roboto-Regular.ttf',

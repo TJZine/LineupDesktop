@@ -1,0 +1,59 @@
+{
+  "status": "Approved at 1080p",
+  "base_commit": "c6f301a23119a39e305a376f612e8010ec8a42ed",
+  "source_sha256": {
+    "lib/guide/guide_view.dart": "74effe847611e4054232275e234f065ee11c994b1a8804a924c1b8a98245ae16",
+    "lib/app/lineup_shell.dart": "0aef1e52702335588759095e2e086a4a7cfae1aa9f2ee9cdbfe42a724f3ca347",
+    "lib/guide/guide_playback_placeholder.dart": "6ef667706d598e57b09c9765c9dd96abcd4acee17d954bc7530da30059d1d095",
+    "test/guide/guide_view_test.dart": "585d893f43737c7b279c1417f10ea65f35fc2fac1a0ef6b8bea817bb6150a300",
+    "test/app/theme_shell_test.dart": "833e25d8035f27a1761ecea7f7ef335c6d5de4672a09ba38bfa7746f5ad4a630"
+  },
+  "captures": {
+    "guide-focus-long-1920x1080.png": {
+      "sha256": "9defa38c8a14c3e6269cf9af7c821907ea7c64c70834c5c49ea39426906d124b",
+      "width": 1920,
+      "height": 1080
+    },
+    "guide-focus-short-1920x1080.png": {
+      "sha256": "331956c5f842bd8f54f5d5a4fb65e61964b1bc48210cd2657c978bf798f8fcab",
+      "width": 1920,
+      "height": 1080
+    },
+    "guide-no-playback-1920x1080.png": {
+      "sha256": "07104d49887722eea9990ab71506eef6afeb28d40f44e777e3c006d2a926f2c0",
+      "width": 1920,
+      "height": 1080
+    },
+    "guide-pip-1920x1080.png": {
+      "sha256": "b377a14576c390b8ce165d81ffbfac9346a43d4a01f7ab4b27c66963d8da1b55",
+      "width": 1920,
+      "height": 1080
+    },
+    "guide-unavailable-1920x1080.png": {
+      "sha256": "d42b58bd2b2c2adf54765934f8f210b415756b35ae7aa9e1387735a1f7aa9da5",
+      "width": 1920,
+      "height": 1080
+    }
+  },
+  "dpr": 1,
+  "text_scale": 1,
+  "notes": [
+    "Synthetic fixture playback status; black PiP is not decoded video.",
+    "Watched channel remains channel 2 while focus moves to other channels, including 15 and 60 minute programs.",
+    "Idle/unavailable states omit Watching and header playback identity.",
+    "No UI layout tests added.",
+    "Luna reported 80 scoped tests passed; root ran 40 Guide/shell checks plus 3 capture cases, then reran 28 Guide checks and 3 capture cases after adding an existing-test playback absence assertion. Targeted analysis and whitespace passed.",
+    "Grouped adaptive/accessibility, motion and physical Windows checks pending."
+  ],
+  "implementation_commit": "e0834448e25cd9592d38466df97b852b9052ac6a",
+  "approval": {
+    "date": "2026-09-12",
+    "quote": "yes if you have no further refinements, locked.",
+    "scope": "Guide surfaces 25/26 candidate04; presented short/long program focus and unavailable playback. Idle and initial synthetic-playing captures are supplemental."
+  },
+  "remaining": [
+    "Grouped adaptive resolution/DPI/enlarged-text checks",
+    "Grouped accessibility and physical Windows focus/input/rendering acceptance",
+    "Unavailable-static motion appearance; still captures freeze Reduce Motion"
+  ]
+}
