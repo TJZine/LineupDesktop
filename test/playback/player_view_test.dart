@@ -2119,9 +2119,9 @@ void main() {
       (
         viewport: Size(3840, 2160),
         dpr: 2.0,
-        width: 810.0,
-        fade: 135.0,
-        scale: 1.35,
+        width: 1200.0,
+        fade: 200.0,
+        scale: 2.0,
       ),
     ]) {
       await tester.binding.setSurfaceSize(layout.viewport);

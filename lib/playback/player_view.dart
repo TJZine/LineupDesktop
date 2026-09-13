@@ -2614,10 +2614,12 @@ class _MiniGuideFadePainter extends CustomPainter {
       scrim != oldDelegate.scrim || tailHeight != oldDelegate.tailHeight;
 }
 
-double _playerDrawerGeometryScale(Size size) => math
-    .min(size.width / 1920, size.height / 1080)
-    .clamp(2 / 3, 1.35)
-    .toDouble();
+double _playerDrawerGeometryScale(Size size) {
+  final referenceScale = math.min(size.width / 1920, size.height / 1080);
+  return referenceScale < 1
+      ? referenceScale.clamp(2 / 3, 1).toDouble()
+      : LineupLayout.scaleFor(size);
+}
 
 class _SleepTimerPicker extends StatelessWidget {
   const _SleepTimerPicker({
@@ -2638,9 +2640,16 @@ class _SleepTimerPicker extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final roles = LineupTheme.of(context);
-    final size = MediaQuery.sizeOf(context);
+    final mediaQuery = MediaQuery.of(context);
+    final size = mediaQuery.size;
     final scale = LineupLayout.scaleFor(size);
     final geometryScale = _playerDrawerGeometryScale(size);
+    final availableHeight =
+        size.height - mediaQuery.padding.vertical - (24 + 132) * scale;
+    final maxHeight = math
+        .min(size.height - 180 * scale, availableHeight)
+        .clamp(240.0, double.infinity)
+        .toDouble();
     final supportingText = Color.lerp(
       roles.secondaryText,
       roles.primaryText,
@@ -2674,14 +2683,11 @@ class _SleepTimerPicker extends StatelessWidget {
               child: Material(
                 key: const Key('sleep-timer-picker'),
                 color: roles.scrim.withValues(alpha: 0.92),
-                borderRadius: BorderRadius.circular(roles.panelRadius),
+                borderRadius: BorderRadius.circular(roles.panelRadius * scale),
                 child: ConstrainedBox(
                   constraints: BoxConstraints(
                     maxWidth: 354 * geometryScale,
-                    maxHeight: (MediaQuery.sizeOf(context).height - 180).clamp(
-                      240,
-                      double.infinity,
-                    ),
+                    maxHeight: maxHeight,
                   ),
                   child: SingleChildScrollView(
                     child: Padding(
@@ -2731,6 +2737,12 @@ class _SleepTimerPicker extends StatelessWidget {
                                 alpha: 0.10,
                               ),
                               focusColor: roles.focusedSurface,
+                              horizontalTitleGap: geometryScale > 1
+                                  ? 16 * geometryScale
+                                  : null,
+                              minVerticalPadding: geometryScale > 1
+                                  ? 8 * geometryScale
+                                  : null,
                               contentPadding: EdgeInsets.symmetric(
                                 horizontal: 18 * geometryScale,
                               ),
@@ -2747,6 +2759,7 @@ class _SleepTimerPicker extends StatelessWidget {
                                   ? Icon(
                                       Icons.check,
                                       color: roles.progressFill,
+                                      size: 24 * scale,
                                       semanticLabel: 'Selected preset',
                                     )
                                   : null,
@@ -2888,6 +2901,15 @@ class _TracksState extends State<_Tracks> {
                               style: TextButton.styleFrom(
                                 textStyle: scaled(textTheme.labelLarge),
                                 foregroundColor: supportingText,
+                                padding: scale > 1
+                                    ? EdgeInsets.symmetric(
+                                        horizontal: 12 * scale,
+                                        vertical: 8 * scale,
+                                      )
+                                    : null,
+                                minimumSize: scale > 1
+                                    ? Size(64 * scale, 40 * scale)
+                                    : null,
                               ),
                               child: const Text('Close'),
                             ),
@@ -2981,6 +3003,9 @@ class _TracksState extends State<_Tracks> {
                                                         '${track.type.name} ${track.id}';
                                               final metadataText = metadata
                                                   .join(' • ');
+                                              final minTileHeight =
+                                                  (metadata.isEmpty ? 56 : 72) *
+                                                  scale;
                                               final tooltip =
                                                   metadataText.isEmpty
                                                   ? title
@@ -3017,6 +3042,15 @@ class _TracksState extends State<_Tracks> {
                                                       .withValues(alpha: 0.10),
                                                   focusColor:
                                                       roles.focusedSurface,
+                                                  minTileHeight: scale > 1
+                                                      ? minTileHeight
+                                                      : null,
+                                                  horizontalTitleGap: scale > 1
+                                                      ? 16 * scale
+                                                      : null,
+                                                  minVerticalPadding: scale > 1
+                                                      ? 8 * scale
+                                                      : null,
                                                   contentPadding:
                                                       EdgeInsets.symmetric(
                                                         horizontal: 12 * scale,
@@ -3069,8 +3103,9 @@ class _TracksState extends State<_Tracks> {
                                                           ? SizedBox.square(
                                                               dimension:
                                                                   18 * scale,
-                                                              child: const CircularProgressIndicator(
-                                                                strokeWidth: 2,
+                                                              child: CircularProgressIndicator(
+                                                                strokeWidth:
+                                                                    2 * scale,
                                                                 semanticsLabel: 'Changing track',
                                                               ),
                                                             )
@@ -3079,6 +3114,7 @@ class _TracksState extends State<_Tracks> {
                                                               Icons.check,
                                                               color: roles
                                                                   .progressFill,
+                                                              size: 24 * scale,
                                                               semanticLabel:
                                                                   'Selected',
                                                             )
@@ -3108,7 +3144,7 @@ class _TracksState extends State<_Tracks> {
                               liveRegion: true,
                               child: Text(
                                 error,
-                                style: TextStyle(
+                                style: scaled(textTheme.bodyMedium)?.copyWith(
                                   color: Theme.of(context).colorScheme.error,
                                 ),
                               ),

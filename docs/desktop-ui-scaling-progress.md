@@ -217,3 +217,27 @@ for the drawer group; full PlayerView success is not yet claimed.
 
 Physical Windows validation remains outstanding. No independent review was run
 or is specifically recommended for this bounded presentation-only group.
+
+## Group 4c — Audio, Subtitles and Sleep timer
+
+Luna task `01a09848-3cb3-7c31-8969-538fc3d5160f` returned its drawer lease.
+The protected rail/fade geometry now follows the uncapped shared reference above
+1080p while retaining its compact floor. Native row spacing, selected/pending
+indicators, Close controls and error typography scale together. Sleep timer
+height respects the available viewport; Astra preserved its compact checkmark
+size and scaled its corner radius. Track selection, focus, timer behavior and
+the approved gradient remain unchanged.
+
+All67 existing PlayerView checks passed again after integration, resolving the
+previously recorded obsolete track-panel cap expectation. The worker completed
+54 portable captures including deep selection, pending/error/focus, empty
+subtitles and active timer states; Astra recaptured14 sleep cases after the final
+correction. Astra verified all eight normal1080 PNGs byte-identical and inspected
+native4K Audio and enlarged active Sleep. [Evidence hashes](design/desktop-ui/scaling/group-4c-evidence.json)
+identify final sources/captures. Analysis, formatting and diff checks passed.
+
+Empty Audio intentionally remains closed under existing product behavior.
+Portable captures do not establish physical Windows acceptance. No independent
+review was run or is specifically recommended for this presentation-only group.
+Mini Guide, the shared Lineup menu and remaining Player status sizing still
+require the scaling pass before campaign closeout.
