@@ -52,8 +52,14 @@ jobs:
           # Golden baselines include localized schedule times.
           TZ: America/New_York
         run: |
-          flutter test test/app/ui_acceptance_golden_test.dart
-          flutter test test/app/guide_sparse_golden_test.dart
+          ui_status=0
+          guide_status=0
+          flutter test test/app/ui_acceptance_golden_test.dart || ui_status=$?
+          flutter test test/app/guide_sparse_golden_test.dart || guide_status=$?
+          if [ "$ui_status" -ne 0 ] || [ "$guide_status" -ne 0 ]; then
+            echo "Golden suites failed: ui_acceptance=$ui_status guide_sparse=$guide_status" >&2
+            exit 1
+          fi
       - name: Upload golden failure images
         if: ${{ failure() && steps.golden.outcome == 'failure' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

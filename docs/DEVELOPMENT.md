@@ -170,6 +170,16 @@ The suites load fonts from the pinned Flutter SDK, run with
 `TZ=America/New_York`, and remain macOS-only. Behavioral tests remain broad;
 update a baseline only after visually reviewing a real-widget render.
 
+The five screenshot assertions use a bounded cross-macOS raster comparator:
+image dimensions must match, and both limits must hold—no more than 0.1% of
+pixels may differ and no RGBA channel may differ by more than 70/255. This
+ceiling covers the observed sparse text/icon edge raster variance only; it is
+not approval for layout, palette, content, or baseline changes. The two Guide
+alpha-aperture assertions remain exact and do not use this comparator. Golden
+failures still produce Flutter's comparison artifacts, and
+`--update-goldens` still replaces baselines through the normal comparator
+update path.
+
 Inspect intentional golden changes from the real widgets. Preserve
 [approved UI decisions](../.interface-design/system.md), including the protected
 Player layouts and separate approval for structural proposals.

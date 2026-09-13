@@ -52,6 +52,22 @@ SDK, `TZ=America/New_York`, and macOS. The final five renders were reviewed in
 one contact sheet. That golden-reduction run did not establish full-suite or
 physical Windows validation; the dependency-assessment unit is recorded below.
 
+The current golden CI failure was investigated from the macOS run at the exact
+checkout. Its three failing screenshot pairs were equal in size and content,
+with sparse scattered text/icon-edge differences: 391 pixels (maximum channel
+delta 66/255) in OSD, 1,161 pixels (53/255) in Now Playing, and 1,007 pixels
+(42/255) in Appearance, each out of 2,073,600 pixels. The evidence supports
+cross-macOS rasterization variance between the hosted and local macOS images;
+the specific CoreText/Skia mechanism is inferred, not proven. Pinned Flutter
+fonts, locale, timezone, test harness, source, and baseline bytes were checked,
+and no baseline was regenerated. The retained screenshot assertions now use a
+bounded comparator that accepts only equal-sized images where both the changed
+pixel fraction is at most 0.1% and the maximum RGBA channel delta is at most
+70/255. The two alpha-aperture checks remain exact, failure artifacts remain
+enabled, and `--update-goldens` behavior is unchanged. The CI step also runs
+both golden suites before reporting failure so a first-suite failure does not
+hide the second suite's result.
+
 ## Dependency and SDK assessment
 
 The SDK refresh uses the stable Flutter 3.47.4 tag, verified at framework

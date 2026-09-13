@@ -24,7 +24,12 @@ final _fixedNow = DateTime.utc(2026, 1, 15, 3, 17);
 final Uint8List _artworkBytes = Uint8List(0);
 
 void main() {
-  setUpAll(loadPinnedTestFonts);
+  late GoldenFileComparator previousGoldenFileComparator;
+  setUpAll(() async {
+    await loadPinnedTestFonts();
+    previousGoldenFileComparator = installCrossMacOsGoldenComparator();
+  });
+  tearDownAll(() => restoreGoldenFileComparator(previousGoldenFileComparator));
 
   testWidgets('matched rich Guide information', (tester) async {
     await _pumpGuide(tester, rich: true);

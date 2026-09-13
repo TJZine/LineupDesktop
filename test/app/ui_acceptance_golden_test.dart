@@ -44,7 +44,12 @@ final _nowPlayingArtwork = <Uri, Uint8List>{
 };
 
 void main() {
-  setUpAll(loadPinnedTestFonts);
+  late GoldenFileComparator previousGoldenFileComparator;
+  setUpAll(() async {
+    await loadPinnedTestFonts();
+    previousGoldenFileComparator = installCrossMacOsGoldenComparator();
+  });
+  tearDownAll(() => restoreGoldenFileComparator(previousGoldenFileComparator));
 
   setUp(() {
     TestWidgetsFlutterBinding.ensureInitialized();
