@@ -252,20 +252,91 @@ ninja -C out\host_release
 
 See the [engine patch contract](../tool/flutter_engine/README.md) for source
 validation and provenance. Reuse provisioned outputs only while their inputs
-remain current. Select the resulting engine explicitly; do not replace
-Flutter's SDK cache:
+remain current. Select the resulting engine explicitly; do not replace a stock
+Flutter SDK cache.
+
+### Development launcher
+
+After the one-time prerequisites and patched `host_debug` setup above, the
+small PowerShell launcher reuses those exact local-engine outputs. Configure
+the two machine-specific paths once as user environment values, and set them
+in the current session as well:
+
+```powershell
+$engineSource = 'C:\path\to\flutter\engine\src'
+$mpvRoot = 'C:\local\lineup-mpv'
+[Environment]::SetEnvironmentVariable('LINEUP_ENGINE_SOURCE', $engineSource, 'User')
+[Environment]::SetEnvironmentVariable('LINEUP_MPV_ROOT', $mpvRoot, 'User')
+$env:LINEUP_ENGINE_SOURCE = $engineSource
+$env:LINEUP_MPV_ROOT = $mpvRoot
+```
+
+Then run the normal Plex onboarding/application entry point:
 
 ```powershell
 Set-Location C:\path\to\LineupDesktop
-$engineSource = 'C:\path\to\flutter\engine\src'
-flutter run -d windows `
-  --local-engine=host_debug `
-  --local-engine-host=host_debug `
-  --local-engine-src-path=$engineSource `
-  --dart-entrypoint-args='--media=C:\path\to\sdr-sample.mp4'
-
-& .\tool\windows\build-release.ps1 -EngineSource $engineSource
+pwsh -File .\tool\windows\run.ps1
 ```
+
+The script also works from another caller directory when given its full path:
+
+```powershell
+pwsh -File 'C:\path\to\LineupDesktop\tool\windows\run.ps1'
+```
+
+For the existing local-media entry point, pass an existing file explicitly:
+
+```powershell
+pwsh -File .\tool\windows\run.ps1 -MediaPath 'C:\path\to\sdr-sample.mp4'
+```
+
+The launcher validates Windows, the required paths, the pinned Flutter
+framework/engine revisions, the repository patch and applied manager source,
+and the prepared libmpv inputs. It requires `engine\src\out\host_debug\build.ninja`
+and runs incremental Ninja before `flutter run`, so changed patched-engine
+source is not silently stale. It does not run GN, provision engine sources,
+apply the patch, or use an arbitrary `flutter` on `PATH`; missing provisioning
+is a setup error with a link back to the commands above. If the pinned
+Flutter checkout lacks its Windows SDK cache, the launcher runs that
+checkout's `bin\flutter.bat precache --windows` once; it never changes a
+different SDK cache. Uncommitted Lineup application edits are allowed for
+development, while the release wrapper below still requires a clean checkout.
+
+Update the saved paths after moving or reprovisioning the Flutter engine or
+libmpv directory. The launcher restores the caller's current directory and
+`LINEUP_MPV_ROOT` value when it exits.
+
+### Portable package
+
+After the one-time prerequisites, patched `host_release` setup, and a clean
+Lineup checkout (no tracked changes or non-ignored untracked files), build and
+package the portable application:
+
+```powershell
+Set-Location C:\path\to\LineupDesktop
+$env:LINEUP_MPV_ROOT = 'C:\local\lineup-mpv'
+.\tool\windows\build-release.ps1 -EngineSource 'C:\path\to\flutter\engine\src'
+.\tool\windows\package.ps1
+```
+
+The default archive is
+`build/package/LineupDesktop-<version>-windows-x64.zip` (for example,
+`LineupDesktop-0.1.0-1-windows-x64.zip`). If that destination or archive
+already exists, choose a unique destination below `build/package`:
+
+```powershell
+.\tool\windows\package.ps1 -Destination 'build/package/LineupDesktop-0.1.0-1-windows-x64-rerun'
+```
+
+Review and deliberately move or remove an old package yourself when that is
+intended; the package script never silently overwrites or deletes an existing
+destination. The resulting archive contains a complete portable folder.
+Extract the entire folder and run `lineup_desktop.exe`; keep its adjacent DLLs
+and `data` directory together. The package also includes provenance, licenses,
+system requirements, and a manifest. This is a private portable build flow,
+not an installer or a public-release claim; launch, media, and hardware
+acceptance still require the physical-Windows procedure in
+[Windows Native Acceptance](windows-native-validation.md).
 
 The release wrapper validates the clean Lineup checkout, exact framework and
 engine revisions, and exact patched manager source, refreshes the configured

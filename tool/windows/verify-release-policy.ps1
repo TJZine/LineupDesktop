@@ -11,6 +11,7 @@ $scripts = @(
   'tool/windows/build-release.ps1',
   'tool/windows/package.ps1',
   'tool/windows/prepare-mpv.ps1',
+  'tool/windows/run.ps1',
   'tool/windows/verify-release-policy.ps1'
 )
 foreach ($relative in $scripts) {
@@ -30,6 +31,111 @@ foreach ($relative in $scripts) {
 
 $buildReleasePath = Join-Path $repository 'tool/windows/build-release.ps1'
 $buildReleaseSource = Get-Content -Raw -LiteralPath $buildReleasePath
+$launcherPath = Join-Path $repository 'tool/windows/run.ps1'
+$launcherSource = Get-Content -Raw -LiteralPath $launcherPath
+
+foreach ($required in @(
+    '#Requires -Version 7.4',
+    '[string] $EngineSource = $env:LINEUP_ENGINE_SOURCE',
+    '[string] $MpvRoot = $env:LINEUP_MPV_ROOT',
+    '[string] $MediaPath',
+    "'--local-engine=host_debug'",
+    "'--local-engine-host=host_debug'",
+    '"--local-engine-src-path=$EngineSource"',
+    '"--dart-entrypoint-args=--media=$MediaPath"',
+    "'out/host_debug'",
+    "'build.ninja'",
+    'PSBoundParameters.ContainsKey(''MediaPath'')',
+    '& $flutter @flutterArguments',
+    '$env:LINEUP_MPV_ROOT = $mpvRoot',
+    'Push-Location -LiteralPath $repository',
+    'Pop-Location',
+    'if ($flutterExitCode) { exit $flutterExitCode }'
+  )) {
+  if (-not $launcherSource.Contains($required)) {
+    throw "run.ps1 is missing its required launch contract: $required"
+  }
+}
+if ($launcherSource -match '(?i)Invoke-Expression|Get-Command\s+[''\"]?flutter') {
+  throw 'run.ps1 must invoke only the pinned flutter.bat path without shell interpolation.'
+}
+if ($launcherSource -notmatch '(?m)\$ninjaCommand\s*=\s*Get-Command\s+''ninja\.exe''') {
+  throw 'run.ps1 must resolve ninja as an executable before invoking it.'
+}
+if ($launcherSource -notmatch '(?m)&\s*\$ninja\s+@Arguments|Invoke-NativeChecked\s+-FilePath\s+\$ninja') {
+  throw 'run.ps1 must incrementally invoke ninja with an argument array.'
+}
+
+$launcherTokens = $null
+$launcherErrors = $null
+$launcherAst = [Management.Automation.Language.Parser]::ParseInput(
+  $launcherSource,
+  [ref] $launcherTokens,
+  [ref] $launcherErrors
+)
+if ($launcherErrors.Count) {
+  throw "run.ps1 has parse errors in its executable check: $($launcherErrors.Message -join '; ')"
+}
+foreach ($functionName in @('Resolve-RequiredPath', 'Get-FlutterArguments')) {
+  $functionAst = $launcherAst.Find({
+      param($node)
+      $node -is [Management.Automation.Language.FunctionDefinitionAst] -and
+        $node.Name -eq $functionName
+    }, $true)
+  if (-not $functionAst) { throw "run.ps1 is missing $functionName for executable checks." }
+  Invoke-Expression -Command $functionAst.Extent.Text
+}
+
+$launcherTestDirectory = Join-Path ([IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString())
+try {
+  New-Item -ItemType Directory -Path $launcherTestDirectory -ErrorAction Stop | Out-Null
+  $spacedMediaPath = Join-Path $launcherTestDirectory 'media file with spaces.mp4'
+  New-Item -ItemType File -Path $spacedMediaPath -ErrorAction Stop | Out-Null
+
+  $withoutMedia = @(Get-FlutterArguments -EngineSource 'C:\engine root\engine\src' `
+      -BoundParameters @{} -MediaPath '')
+  if ($withoutMedia.Count -ne 6 -or
+    ($withoutMedia -contains '--dart-entrypoint-args=--media=')) {
+    throw 'run.ps1 supplied a media argument when MediaPath was omitted.'
+  }
+
+  $blankRejected = $false
+  try {
+    Get-FlutterArguments -EngineSource 'C:\engine root\engine\src' `
+      -BoundParameters @{ MediaPath = '' } -MediaPath '' | Out-Null
+  } catch {
+    $blankRejected = $true
+  }
+  if (-not $blankRejected) {
+    throw 'run.ps1 accepted an explicitly blank MediaPath.'
+  }
+
+  $resolvedSpacedMediaPath = Resolve-RequiredPath -Path $spacedMediaPath `
+    -Name 'MediaPath' -PathType Leaf
+  $withMedia = @(Get-FlutterArguments -EngineSource 'C:\engine root\engine\src' `
+      -BoundParameters @{ MediaPath = $resolvedSpacedMediaPath } `
+      -MediaPath $resolvedSpacedMediaPath)
+  $expectedMediaArgument = "--dart-entrypoint-args=--media=$resolvedSpacedMediaPath"
+  if ($withMedia.Count -ne 7 -or $withMedia[6] -ne $expectedMediaArgument) {
+    throw 'run.ps1 did not preserve an existing MediaPath with spaces as one argument.'
+  }
+
+  $invalidPathRejected = $false
+  try {
+    Resolve-RequiredPath -Path (Join-Path $launcherTestDirectory 'missing file.mp4') `
+      -Name 'MediaPath' -PathType Leaf | Out-Null
+  } catch {
+    $invalidPathRejected = $true
+  }
+  if (-not $invalidPathRejected) {
+    throw 'run.ps1 accepted an invalid MediaPath.'
+  }
+  Write-Host 'Launcher parameter/path checks passed (native Windows invocation not exercised).'
+} finally {
+  if (Test-Path -LiteralPath $launcherTestDirectory -PathType Container) {
+    Remove-Item -LiteralPath $launcherTestDirectory -Recurse -Force -ErrorAction Stop
+  }
+}
 
 $pubspecTestDirectory = Join-Path ([IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString())
 try {
