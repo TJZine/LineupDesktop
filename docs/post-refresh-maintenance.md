@@ -35,6 +35,10 @@ by existing package/SDK constraints and require explicit assessment.
 
 ## Status
 
-Planning and source inspection complete for the Windows launcher unit; remaining
-units await sequential implementation and assessment. No physical Windows build
-or launch validation is implied by portable checks.
+The Windows development launcher and portable-package instructions are complete
+in commit 8aa4cf0b. The bounded Settings overflow repair is also complete: the
+existing accessible-text regression, full theme shell suite and shared
+navigation suite pass, with formatting, analysis and diff checks clean. No
+golden or dependency changes were made. The contact sheet and these checks are
+portable evidence only; no physical Windows build or launch validation is
+implied. The golden-reduction and dependency-assessment units remain pending.

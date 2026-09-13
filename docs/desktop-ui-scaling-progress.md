@@ -317,3 +317,17 @@ monitor transitions, Windows fonts, native input or DirectComposition layering.
 No push or publication was performed. No independent review is specifically
 recommended for this presentation-only campaign; physical Windows acceptance is
 the remaining validation step.
+
+## Follow-up — Settings enlarged-text header
+
+September 12, 2026. The first scaling pass missed a non-golden Settings header
+overflow at 800x600 with 200% text. The header now keeps Back and Settings
+together and lets the LINEUP menu move to a second line only when the contents
+cannot fit; its minimum height and ordinary 1920x1080 placement remain
+unchanged. The menu retains its existing focus node and keyboard activation.
+
+The existing accessible-text regression passes again, as do the complete theme
+shell and shared navigation suites. Formatting, analysis and diff checks pass;
+no golden or dependency changes were made. The fresh contact sheet is portable
+Flutter fixture evidence only, not physical Windows acceptance or proof of live
+monitor-DPI behavior.

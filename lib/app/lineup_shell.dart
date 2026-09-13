@@ -936,40 +936,48 @@ class _SettingsViewState extends State<SettingsView> {
   }
 
   Widget _settingsHeader(BuildContext context, double scale) => Container(
-    height: 96 * scale,
+    alignment: Alignment.center,
+    constraints: BoxConstraints(minHeight: 96 * scale),
     margin: EdgeInsets.symmetric(horizontal: 48 * scale),
     decoration: BoxDecoration(
       border: Border(
         bottom: BorderSide(color: LineupTheme.of(context).subtleBorder),
       ),
     ),
-    child: Row(
+    child: OverflowBar(
+      alignment: MainAxisAlignment.spaceBetween,
+      spacing: 12 * scale,
+      overflowSpacing: 8 * scale,
       children: [
-        TextButton.icon(
-          onPressed: widget.onBack,
-          icon: Icon(Icons.arrow_back, size: 18 * scale),
-          label: const Text('Back'),
-          style: TextButton.styleFrom(
-            foregroundColor: LineupTheme.of(context).secondaryText,
-            minimumSize: Size(0, 48 * scale),
-            padding: EdgeInsets.symmetric(
-              horizontal: 4 * scale,
-              vertical: 8 * scale,
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextButton.icon(
+              onPressed: widget.onBack,
+              icon: Icon(Icons.arrow_back, size: 18 * scale),
+              label: const Text('Back'),
+              style: TextButton.styleFrom(
+                foregroundColor: LineupTheme.of(context).secondaryText,
+                minimumSize: Size(0, 48 * scale),
+                padding: EdgeInsets.symmetric(
+                  horizontal: 4 * scale,
+                  vertical: 8 * scale,
+                ),
+                textStyle: Theme.of(context).textTheme.labelLarge
+                    ?.copyWith(fontSize: 18 * scale),
+              ),
             ),
-            textStyle: Theme.of(context).textTheme.labelLarge
-                ?.copyWith(fontSize: 18 * scale),
-          ),
+            SizedBox(width: 12 * scale),
+            Text(
+              'Settings',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                color: LineupTheme.of(context).primaryText,
+                fontSize: 26 * scale,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
         ),
-        SizedBox(width: 12 * scale),
-        Text(
-          'Settings',
-          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-            color: LineupTheme.of(context).primaryText,
-            fontSize: 26 * scale,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        const Spacer(),
         if (widget.onOpenMenu != null && widget.menuFocusNode != null)
           Builder(
             builder: (buttonContext) => TextButton(

@@ -138,6 +138,16 @@ void main() {
     await openDestination(tester, 'Settings');
 
     expect(find.byType(DropdownButton<LineupThemeName>), findsOneWidget);
+    final menu = find.byKey(const Key('settings-app-menu'));
+    expect(menu, findsOneWidget);
+    final menuButton = tester.widget<TextButton>(menu);
+    expect(menuButton.focusNode, isNotNull);
+    menuButton.focusNode!.requestFocus();
+    await tester.pump();
+    expect(FocusManager.instance.primaryFocus, same(menuButton.focusNode));
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('immersive-app-menu')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
