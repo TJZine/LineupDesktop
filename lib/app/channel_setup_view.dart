@@ -2576,17 +2576,30 @@ class _SetupState extends State<UpstreamChannelSetupView> {
         counts.added == 0 && counts.updated == 0 && counts.removed == 0;
     final dimensions = _ConfigurationDimensions(MediaQuery.sizeOf(context));
     final roles = LineupTheme.of(context);
+    final actionSize = Size(dimensions.fixed(148), dimensions.fixed(54));
+    final actionPadding = EdgeInsets.symmetric(
+      horizontal: dimensions.fixed(24),
+      vertical: dimensions.fixed(16),
+    );
+    final actionTextStyle = Theme.of(context).textTheme.labelLarge!.copyWith(
+      fontSize: dimensions.value(14, 18),
+    );
     final actionStyle = FilledButton.styleFrom(
-      textStyle: Theme.of(context).textTheme.labelLarge!.copyWith(
-        fontSize: dimensions.value(14, 18),
-        fontWeight: FontWeight.w600,
-      ),
+      minimumSize: actionSize,
+      padding: actionPadding,
+      textStyle: actionTextStyle.copyWith(fontWeight: FontWeight.w600),
     );
     return _Stage(
       footer: _Footer(
         configuration: true,
         leading: [
           TextButton(
+            key: const ValueKey('back-to-configure'),
+            style: TextButton.styleFrom(
+              minimumSize: actionSize,
+              padding: actionPadding,
+              textStyle: actionTextStyle,
+            ),
             onPressed: () => setState(() => _step = 2),
             child: const Text('Back to configure'),
           ),
@@ -3742,6 +3755,7 @@ class _Footer extends StatelessWidget {
         spacing: dimensions.value(12, 20),
         runSpacing: dimensions.fixed(12),
         alignment: WrapAlignment.end,
+        crossAxisAlignment: WrapCrossAlignment.center,
         children: [...leading, trailing],
       );
       return DecoratedBox(

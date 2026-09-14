@@ -163,6 +163,36 @@ class _LineupShellState extends State<LineupShell> {
   bool get _hasPlaybackSurface =>
       _player.hasPlaybackIntent || _player.error != null;
 
+  bool get _canShowNowPlaying =>
+      _player.hasPlaybackIntent &&
+      !_player.tuning &&
+      _player.error == null &&
+      _player.currentProgram != null;
+
+  Future<void> _openNowPlaying() async {
+    if (_selectionPending || !_canShowNowPlaying) return;
+    await _select(4);
+    if (!mounted ||
+        widget.controller.stage != SetupStage.ready ||
+        _selectedIndex != 4 ||
+        _appMenuOpen ||
+        !_canShowNowPlaying) {
+      return;
+    }
+    _player.showNowPlaying();
+    // Same-route menu dismissal restores its invoker on the next frame.
+    // Transfer focus to Player afterwards, not to the now-hidden OSD button.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted &&
+          widget.controller.stage == SetupStage.ready &&
+          _selectedIndex == 4 &&
+          !_appMenuOpen &&
+          _player.overlay == PlayerOverlay.nowPlaying) {
+        _playerFocus.requestFocus();
+      }
+    });
+  }
+
   void _restoreRouteFocus() {
     if (!mounted) return;
     final target = switch (_selectedIndex) {
@@ -437,6 +467,22 @@ class _LineupShellState extends State<LineupShell> {
                         detailStyle: detailStyle,
                         scale: scale,
                       ),
+                      if (_canShowNowPlaying)
+                        Tooltip(
+                          message: 'Program information (I)',
+                          child: TextButton(
+                            key: const Key('app-menu-now-playing'),
+                            style: TextButton.styleFrom(
+                              alignment: Alignment.centerLeft,
+                              minimumSize: Size(0, 48 * scale),
+                              padding: EdgeInsets.all(12 * scale),
+                              foregroundColor: roles.secondaryText,
+                              textStyle: labelStyle,
+                            ),
+                            onPressed: () => unawaited(_openNowPlaying()),
+                            child: const Text('Now Playing'),
+                          ),
+                        ),
                       _menuDestination(
                         index: 1,
                         label: 'Channels',
