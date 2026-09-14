@@ -2581,9 +2581,8 @@ class _SetupState extends State<UpstreamChannelSetupView> {
       horizontal: dimensions.fixed(24),
       vertical: dimensions.fixed(16),
     );
-    final actionTextStyle = Theme.of(context).textTheme.labelLarge!.copyWith(
-      fontSize: dimensions.value(14, 18),
-    );
+    final actionTextStyle = Theme.of(context).textTheme.labelLarge!
+        .copyWith(fontSize: dimensions.value(14, 18));
     final actionStyle = FilledButton.styleFrom(
       minimumSize: actionSize,
       padding: actionPadding,
