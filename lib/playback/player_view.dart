@@ -3047,20 +3047,15 @@ class _TracksState extends State<_Tracks> {
                                               final selected = off
                                                   ? selectedTrack == null
                                                   : track!.selected;
-                                              final metadata = track == null
-                                                  ? const <String>[]
-                                                  : [
-                                                      if (track.language !=
-                                                          null)
-                                                        track.language!,
-                                                      if (track.codec != null)
-                                                        track.codec!,
-                                                    ];
                                               final title = off
                                                   ? 'Off'
-                                                  : track!.title ??
-                                                        track.language ??
-                                                        '${track.type.name} ${track.id}';
+                                                  : _railTrackTitle(track!);
+                                              final metadata = track == null
+                                                  ? const <String>[]
+                                                  : _railTrackDetail(
+                                                      track,
+                                                      title,
+                                                    );
                                               final metadataText = metadata
                                                   .join(' • ');
                                               final minTileHeight =
@@ -3492,14 +3487,46 @@ String? _wholeMinutesLeft(Duration position, Duration duration) {
 }
 
 String _osdTrackLabel(String category, PlayerTrack? track) {
-  final title = track?.title?.trim();
-  final language = track?.language?.trim();
-  final detail = title?.isNotEmpty == true
-      ? title
-      : language?.isNotEmpty == true
-      ? language
-      : null;
+  final detail = track == null ? null : _compactTrackLabel(track);
   return detail == null ? category : '$category • $detail';
+}
+
+/// Trims an optional native track field; whitespace-only counts as absent.
+String? _meaningfulTrackText(String? value) {
+  final trimmed = value?.trim();
+  if (trimmed == null || trimmed.isEmpty) return null;
+  return trimmed;
+}
+
+/// Compact fallback shared by the options rail and the OSD: a meaningful
+/// title, otherwise a meaningful language. The rail adds a type/ID label when
+/// this is absent; the OSD keeps its bare category instead.
+String? _compactTrackLabel(PlayerTrack track) =>
+    _meaningfulTrackText(track.title) ?? _meaningfulTrackText(track.language);
+
+/// Rail primary label: the shared compact fallback, otherwise a readable
+/// type/ID label such as `Audio track 3` or `Subtitle track 2`.
+String _railTrackTitle(PlayerTrack track) =>
+    _compactTrackLabel(track) ?? _fallbackTrackLabel(track.type, track.id);
+
+String _fallbackTrackLabel(PlayerTrackType type, int id) {
+  final kind = switch (type) {
+    PlayerTrackType.audio => 'Audio',
+    PlayerTrackType.subtitle => 'Subtitle',
+    PlayerTrackType.video => 'Video',
+  };
+  return '$kind track $id';
+}
+
+/// Rail detail components: normalized language/codec with blanks omitted and
+/// exact duplicates of the shown title (or each other) removed.
+List<String> _railTrackDetail(PlayerTrack track, String title) {
+  final language = _meaningfulTrackText(track.language);
+  final codec = _meaningfulTrackText(track.codec);
+  return [
+    if (language != null && language != title) language,
+    if (codec != null && codec != title && codec != language) codec,
+  ];
 }
 
 Widget _osdAction(

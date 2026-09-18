@@ -1793,8 +1793,384 @@ void main() {
     );
     expect(
       tester.getTopLeft(find.text('Off')).dy,
-      lessThan(tester.getTopLeft(find.text('subtitle 3')).dy),
+      lessThan(tester.getTopLeft(find.text('Subtitle track 3')).dy),
     );
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
+  testWidgets('track rail normalizes blank titles to language and ID labels', (
+    tester,
+  ) async {
+    final fixture = _Fixture(
+      PlayerState.playing,
+      tracks: const [
+        PlayerTrack(
+          id: 1,
+          type: PlayerTrackType.audio,
+          selected: true,
+          title: '   ',
+          language: 'English',
+          codec: 'eac3',
+        ),
+        PlayerTrack(
+          id: 2,
+          type: PlayerTrackType.audio,
+          selected: false,
+          title: '',
+          language: '  ',
+          codec: '',
+        ),
+        PlayerTrack(id: 3, type: PlayerTrackType.audio, selected: false),
+        PlayerTrack(
+          id: 4,
+          type: PlayerTrackType.audio,
+          selected: false,
+          title: '  Director commentary  ',
+          language: 'en',
+          codec: 'aac',
+        ),
+      ],
+    );
+    fixture.player.showTracks(PlayerTrackType.audio);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+    await tester.pump();
+
+    // A whitespace-only title falls back to the meaningful language, and the
+    // detail drops the duplicated language instead of repeating it.
+    expect(find.text('English'), findsOneWidget);
+    expect(find.text('eac3'), findsOneWidget);
+    expect(find.text('English • eac3'), findsNothing);
+    // Fully blank metadata falls back to a readable type/ID label with no
+    // secondary row or stray separators.
+    expect(find.text('Audio track 2'), findsOneWidget);
+    expect(find.text('Audio track 3'), findsOneWidget);
+    for (final id in [2, 3]) {
+      expect(
+        tester
+            .widget<ListTile>(find.byKey(Key('playback-track-audio-$id')))
+            .subtitle,
+        isNull,
+        reason: 'track $id has no meaningful detail',
+      );
+    }
+    // A custom title keeps its trimmed text and full language/codec detail.
+    expect(find.text('Director commentary'), findsOneWidget);
+    expect(find.text('en • aac'), findsOneWidget);
+    expect(find.text('   '), findsNothing);
+    // Formatting and metadata display emit no native selection command.
+    expect(fixture.native.selectedTracks, isEmpty);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
+  testWidgets(
+    'subtitle rail preserves Unicode titles, unknown codes, and Off',
+    (tester) async {
+      final fixture = _Fixture(
+        PlayerState.playing,
+        tracks: const [
+          PlayerTrack(
+            id: 7,
+            type: PlayerTrackType.subtitle,
+            selected: true,
+            title: '監督コメンタリー 🎬',
+            language: 'ja',
+            codec: 'ass',
+          ),
+          PlayerTrack(
+            id: 8,
+            type: PlayerTrackType.subtitle,
+            selected: false,
+            title: '  ',
+            language: 'tlh',
+            codec: '   ',
+          ),
+        ],
+      );
+      fixture.player.showTracks(PlayerTrackType.subtitle);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.text('監督コメンタリー 🎬'), findsOneWidget);
+      expect(find.text('ja • ass'), findsOneWidget);
+      // An unknown language code is used as-is once the blank title is absent.
+      expect(find.text('tlh'), findsOneWidget);
+      expect(
+        tester
+            .widget<ListTile>(
+              find.byKey(const Key('playback-track-subtitle-8')),
+            )
+            .subtitle,
+        isNull,
+      );
+      // Subtitle Off stays a distinct first action.
+      expect(find.text('Off'), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.text('Off')).dy,
+        lessThan(tester.getTopLeft(find.text('監督コメンタリー 🎬')).dy),
+      );
+      expect(fixture.native.selectedTracks, isEmpty);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    },
+  );
+
+  testWidgets('OSD shares the blank-title fallback with compact labels', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 720));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final fixture = _Fixture(
+      PlayerState.playing,
+      tracks: const [
+        PlayerTrack(
+          id: 5,
+          type: PlayerTrackType.audio,
+          selected: true,
+          title: '  ',
+          language: 'Deutsch',
+        ),
+        PlayerTrack(id: 6, type: PlayerTrackType.subtitle, selected: false),
+      ],
+    );
+    fixture.player.showOsd();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(size: Size(1280, 720)),
+          child: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    // Rail and OSD agree the whitespace title is absent: the OSD uses the
+    // language without forcing the rail's full type/ID label into the chip.
+    expect(find.text('Audio • Deutsch'), findsOneWidget);
+    expect(find.text('Subtitles • Off'), findsOneWidget);
+    expect(fixture.native.selectedTracks, isEmpty);
+
+    // The same tracks in the rail agree: language title, no repeated detail.
+    fixture.player.showTracks(PlayerTrackType.audio);
+    await tester.pump();
+    expect(find.text('Deutsch'), findsOneWidget);
+    expect(
+      tester
+          .widget<ListTile>(find.byKey(const Key('playback-track-audio-5')))
+          .subtitle,
+      isNull,
+    );
+    expect(fixture.native.selectedTracks, isEmpty);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
+  testWidgets('OSD keeps the bare category when no track field is meaningful', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 720));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final fixture = _Fixture(
+      PlayerState.playing,
+      tracks: const [
+        PlayerTrack(
+          id: 9,
+          type: PlayerTrackType.audio,
+          selected: true,
+          title: ' ',
+          language: '',
+          codec: '  ',
+        ),
+      ],
+    );
+    fixture.player.showOsd();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(size: Size(1280, 720)),
+          child: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(find.text('Audio'), findsOneWidget);
+    expect(find.textContaining('Audio •'), findsNothing);
+
+    fixture.player.showTracks(PlayerTrackType.audio);
+    await tester.pump();
+    expect(find.text('Audio track 9'), findsOneWidget);
+    expect(
+      tester
+          .widget<ListTile>(find.byKey(const Key('playback-track-audio-9')))
+          .subtitle,
+      isNull,
+    );
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
+  testWidgets('long track labels stay bounded at compact and enlarged text', (
+    tester,
+  ) async {
+    const longTitle =
+        'A deliberately long synthetic commentary track title that must remain '
+        'ellipsized inside the on-screen display and the options rail';
+    final fixture = _Fixture(
+      PlayerState.playing,
+      tracks: const [
+        PlayerTrack(
+          id: 11,
+          type: PlayerTrackType.audio,
+          selected: true,
+          title: longTitle,
+          language: 'English',
+          codec: 'truehd',
+        ),
+      ],
+    );
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.binding.setSurfaceSize(const Size(800, 600));
+    fixture.player.showOsd();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(size: Size(800, 600)),
+          child: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      ),
+    );
+    await tester.pump();
+    final osdLabel = find.text('Audio • $longTitle');
+    expect(osdLabel, findsOneWidget);
+    final osdText = tester.widget<Text>(osdLabel);
+    expect(osdText.maxLines, 1);
+    expect(osdText.overflow, TextOverflow.ellipsis);
+
+    await tester.binding.setSurfaceSize(const Size(3840, 2160));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(
+            size: Size(3840, 2160),
+            textScaler: TextScaler.linear(2),
+          ),
+          child: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      ),
+    );
+    await tester.pump();
+    fixture.player.showTracks(PlayerTrackType.audio);
+    await tester.pump();
+    expect(find.text(longTitle), findsOneWidget);
+    expect(find.text('English • truehd'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
+  testWidgets('displaying track metadata emits no native selection command', (
+    tester,
+  ) async {
+    final fixture = _Fixture(
+      PlayerState.playing,
+      tracks: const [
+        PlayerTrack(
+          id: 1,
+          type: PlayerTrackType.audio,
+          selected: true,
+          title: 'Stereo',
+        ),
+        PlayerTrack(
+          id: 2,
+          type: PlayerTrackType.audio,
+          selected: false,
+          title: 'Surround',
+        ),
+      ],
+    );
+    fixture.player.showOsd();
+    fixture.player.showTracks(PlayerTrackType.audio);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+    expect(fixture.native.selectedTracks, isEmpty);
+
+    // Positive control: tapping a row still reaches the native selection.
+    await tester.tap(find.text('Surround'));
+    await tester.pump();
+    await tester.pump();
+    expect(fixture.native.selectedTracks, [(PlayerTrackType.audio, 2)]);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
+  testWidgets('failed track switch keeps the rail and reports recovery', (
+    tester,
+  ) async {
+    final fixture = _Fixture(
+      PlayerState.playing,
+      failTrackSelect: true,
+      tracks: const [
+        PlayerTrack(
+          id: 1,
+          type: PlayerTrackType.audio,
+          selected: true,
+          title: 'Stereo',
+        ),
+        PlayerTrack(
+          id: 2,
+          type: PlayerTrackType.audio,
+          selected: false,
+          title: 'Surround',
+        ),
+      ],
+    );
+    fixture.player.showTracks(PlayerTrackType.audio);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.text('Surround'));
+    await tester.pump();
+    await tester.pump();
+    expect(
+      find.text('Could not change this track. Try again.'),
+      findsOneWidget,
+    );
+    expect(fixture.player.overlay, PlayerOverlay.audioTracks);
+    expect(find.byKey(const Key('playback-options-list')), findsOneWidget);
+    expect(find.text('Stereo'), findsOneWidget);
+    expect(find.text('Surround'), findsOneWidget);
+    expect(
+      tester
+          .widget<ListTile>(find.byKey(const Key('playback-track-audio-1')))
+          .selected,
+      isTrue,
+    );
+    expect(fixture.native.selectedTracks, [(PlayerTrackType.audio, 2)]);
 
     await tester.pumpWidget(const SizedBox.shrink());
     fixture.dispose();
@@ -3319,6 +3695,7 @@ class _Fixture {
     bool failLoad = false,
     bool failStop = false,
     bool failControls = false,
+    bool failTrackSelect = false,
     bool blockLoad = false,
     List<PlayerTrack> tracks = const [],
     int channelCount = 1,
@@ -3368,6 +3745,7 @@ class _Fixture {
       failLoad: failLoad,
       failStop: failStop,
       failControls: failControls,
+      failTrackSelect: failTrackSelect,
       blockLoad: blockLoad,
       tracks: tracks,
       positionValue: nativePosition,
@@ -3606,6 +3984,7 @@ class _Native implements NativePlayer {
     this.failLoad = false,
     this.failStop = false,
     this.failControls = false,
+    this.failTrackSelect = false,
     this.blockLoad = false,
     this.tracks = const [],
     this.positionValue = const Duration(minutes: 10),
@@ -3621,6 +4000,7 @@ class _Native implements NativePlayer {
   final bool failLoad;
   final bool failStop;
   final bool failControls;
+  final bool failTrackSelect;
   final bool blockLoad;
   final Duration positionValue;
   final Duration durationValue;
@@ -3630,6 +4010,7 @@ class _Native implements NativePlayer {
   int transportCommands = 0;
   int loadCalls = 0;
   final fullscreenValues = <bool>[];
+  final selectedTracks = <(PlayerTrackType, int?)>[];
 
   @override
   final PlayerStatus status;
@@ -3694,7 +4075,11 @@ class _Native implements NativePlayer {
   }
 
   @override
-  Future<void> selectTrack(PlayerTrackType type, int? id) async {}
+  Future<void> selectTrack(PlayerTrackType type, int? id) async {
+    selectedTracks.add((type, id));
+    if (failTrackSelect) throw StateError('synthetic track failure');
+  }
+
   @override
   Future<void> setVolume(double volume) async {}
   @override
