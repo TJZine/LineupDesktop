@@ -366,7 +366,10 @@ class PlexClient {
     Future<void>? cancelled,
   }) async {
     final output = <PlexMediaItem>[];
+    final seenIds = <String>{};
     var start = 0;
+    var rawConsumed = 0;
+    int? knownTotal;
     const pageSize = 100;
     for (var page = 0; page < 1000; page++) {
       if (!isCurrent()) {
@@ -382,32 +385,106 @@ class PlexClient {
             },
           );
       final json = await _serverJson(uri, token, cancelled: cancelled);
-      final metadata = _containerList(json, 'Metadata');
+      if (!isCurrent()) {
+        throw const PlexException('cancelled', 'Library scan cancelled.');
+      }
+      final containerRaw = json['MediaContainer'];
+      if (containerRaw is! Map) {
+        throw const PlexException(
+          'library-page-invalid',
+          'Plex returned an invalid library page.',
+        );
+      }
+      final container = Map<String, Object?>.from(containerRaw);
+      final pageTotal = _libraryPageCount(container['totalSize']);
+      final pageSizeValue = _libraryPageCount(container['size']);
+      final pageOffset = _libraryPageCount(container['offset']);
+      if (pageOffset != null && pageOffset != start) {
+        throw const PlexException(
+          'library-page-invalid',
+          'Plex returned an invalid library page.',
+        );
+      }
+      if (pageTotal != null) {
+        if (knownTotal == null) {
+          knownTotal = pageTotal;
+        } else if (knownTotal != pageTotal) {
+          throw const PlexException(
+            'library-page-invalid',
+            'Plex returned an invalid library page.',
+          );
+        }
+      }
+      final rawMetadata = container['Metadata'];
+      final List<Object?> metadata;
+      if (rawMetadata == null) {
+        if (pageSizeValue == 0) {
+          metadata = const [];
+        } else {
+          throw const PlexException(
+            'library-page-invalid',
+            'Plex returned an invalid library page.',
+          );
+        }
+      } else if (rawMetadata is List) {
+        metadata = rawMetadata;
+      } else {
+        throw const PlexException(
+          'library-page-invalid',
+          'Plex returned an invalid library page.',
+        );
+      }
       if (metadata.length > pageSize) {
         throw const PlexException(
           'library-page-too-large',
           'Plex returned more library items than requested.',
         );
       }
-      output.addAll(
-        metadata.map((item) => parseMediaItem(item, libraryId: libraryId)),
-      );
+      if (pageSizeValue != null && pageSizeValue != metadata.length) {
+        throw const PlexException(
+          'library-page-invalid',
+          'Plex returned an invalid library page.',
+        );
+      }
+      final known = knownTotal;
+      if (known != null) {
+        if (rawConsumed + metadata.length > known) {
+          throw const PlexException(
+            'library-page-invalid',
+            'Plex returned an invalid library page.',
+          );
+        }
+        if (metadata.isEmpty && rawConsumed < known) {
+          throw const PlexException(
+            'library-page-invalid',
+            'Plex returned an invalid library page.',
+          );
+        }
+      }
+      final pageItems = <PlexMediaItem>[];
+      for (final raw in metadata) {
+        final item = parseMediaItem(raw, libraryId: libraryId);
+        if (!seenIds.add(item.id)) {
+          throw const PlexException(
+            'library-page-not-progressing',
+            'Plex returned a library page without progress.',
+          );
+        }
+        pageItems.add(item);
+      }
+      output.addAll(pageItems);
+      rawConsumed += metadata.length;
       if (!isCurrent()) {
         throw const PlexException('cancelled', 'Library scan cancelled.');
       }
-      final container = json['MediaContainer'];
-      final totalItems = container is Map
-          ? _optionalInteger(container['totalSize'])
-          : null;
       onProgress((
         completedPages: page + 1,
         completedItems: output.length,
-        totalItems: totalItems,
+        totalItems: knownTotal,
       ));
-      if (metadata.length < pageSize ||
-          (totalItems != null &&
-              totalItems >= 0 &&
-              output.length == totalItems)) {
+      if (knownTotal != null) {
+        if (rawConsumed == knownTotal) return output;
+      } else if (metadata.isEmpty) {
         return output;
       }
       start += metadata.length;
@@ -1071,6 +1148,29 @@ int _integer(Object? value, String label) => value is num
     : int.tryParse(value?.toString() ?? '') ??
           (throw PlexException('parse-error', '$label was invalid.'));
 const _maxExactJsonInteger = 0x1fffffffffffff;
+
+/// Validates an optional library container count. Absent values stay absent;
+/// present values must be nonnegative integral counts or the page is invalid.
+int? _libraryPageCount(Object? value) {
+  if (value == null) return null;
+  final number = switch (value) {
+    num number => number,
+    String text => num.tryParse(text.trim()),
+    _ => null,
+  };
+  if (number == null ||
+      !number.isFinite ||
+      number.isNegative ||
+      number.abs() > _maxExactJsonInteger ||
+      number.toInt() != number) {
+    throw const PlexException(
+      'library-page-invalid',
+      'Plex returned an invalid library page.',
+    );
+  }
+  return number.toInt();
+}
+
 int? _optionalInteger(Object? value) {
   final number = switch (value) {
     num number => number,

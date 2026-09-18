@@ -1023,6 +1023,7 @@ void main() {
             return http.Response(
               jsonEncode({
                 'MediaContainer': {
+                  'totalSize': 1,
                   'Metadata': [
                     {
                       'ratingKey': 'e1',
@@ -1212,6 +1213,7 @@ void main() {
     'library pagination reports exact progress without page snapshots',
     () async {
       var requests = 0;
+      final requestedStarts = <int>[];
       final progress = <PlexLibraryPageProgress>[];
       final client = PlexClient(
         clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
@@ -1220,6 +1222,7 @@ void main() {
           final start = int.parse(
             request.url.queryParameters['X-Plex-Container-Start']!,
           );
+          requestedStarts.add(start);
           const total = 2505;
           final count = (total - start).clamp(0, 100);
           return http.Response(
@@ -1254,6 +1257,11 @@ void main() {
 
       expect(items, hasLength(2505));
       expect(requests, 26);
+      expect(requestedStarts, [
+        for (var start = 0; start <= 2500; start += 100) start,
+      ]);
+      expect(items.first.id, '0');
+      expect(items.last.id, '2504');
       expect(
         progress.map((value) => value.completedItems),
         orderedEquals([
@@ -1265,6 +1273,898 @@ void main() {
       expect(progress.last.totalItems, 2505);
     },
   );
+
+  test(
+    'library short pages continue until the known total is reached',
+    () async {
+      final requestedStarts = <int>[];
+      final progress = <PlexLibraryPageProgress>[];
+      Map<String, Object?> page(int start, int count) => {
+        'MediaContainer': {
+          'offset': start,
+          'totalSize': 120,
+          'Metadata': [
+            for (var index = 0; index < count; index++)
+              {
+                'ratingKey': '${start + index}',
+                'key': '/library/metadata/${start + index}',
+                'title': 'Item ${start + index}',
+                'type': 'movie',
+                'duration': 1000,
+              },
+          ],
+        },
+      };
+      final client = PlexClient(
+        clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+        httpClient: MockClient((request) async {
+          final start = int.parse(
+            request.url.queryParameters['X-Plex-Container-Start']!,
+          );
+          requestedStarts.add(start);
+          return switch (start) {
+            0 => http.Response(jsonEncode(page(0, 50)), 200),
+            50 => http.Response(jsonEncode(page(50, 50)), 200),
+            100 => http.Response(jsonEncode(page(100, 20)), 200),
+            _ => http.Response(jsonEncode(page(start, 0)), 200),
+          };
+        }),
+      );
+      addTearDown(client.close);
+
+      final items = await client.libraryItems(
+        Uri.parse('https://plex.example:32400'),
+        'secret',
+        '7',
+        PlexLibraryType.movie,
+        isCurrent: () => true,
+        onProgress: progress.add,
+      );
+
+      expect(items, hasLength(120));
+      expect(requestedStarts, [0, 50, 100]);
+      expect(items.map((item) => item.id), [
+        for (var index = 0; index < 120; index++) '$index',
+      ]);
+      expect(progress.last.totalItems, 120);
+    },
+  );
+
+  test('library exact full pages advance by raw records consumed', () async {
+    final requestedStarts = <int>[];
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      httpClient: MockClient((request) async {
+        final start = int.parse(
+          request.url.queryParameters['X-Plex-Container-Start']!,
+        );
+        requestedStarts.add(start);
+        return http.Response(
+          jsonEncode({
+            'MediaContainer': {
+              'totalSize': 200,
+              'Metadata': [
+                for (var index = 0; index < 100; index++)
+                  {
+                    'ratingKey': '${start + index}',
+                    'key': '/library/metadata/${start + index}',
+                    'title': 'Item ${start + index}',
+                    'type': 'movie',
+                    'duration': 1000,
+                  },
+              ],
+            },
+          }),
+          200,
+        );
+      }),
+    );
+
+    final items = await client.libraryItems(
+      Uri.parse('https://plex.example:32400'),
+      'secret',
+      '7',
+      PlexLibraryType.movie,
+      isCurrent: () => true,
+      onProgress: (_) {},
+    );
+
+    expect(items, hasLength(200));
+    expect(requestedStarts, [0, 100]);
+    expect(items.first.id, '0');
+    expect(items.last.id, '199');
+  });
+
+  test('library total zero returns an empty complete result', () async {
+    final requestedStarts = <int>[];
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      httpClient: MockClient((request) async {
+        requestedStarts.add(
+          int.parse(request.url.queryParameters['X-Plex-Container-Start']!),
+        );
+        return http.Response(
+          jsonEncode({
+            'MediaContainer': {'totalSize': 0, 'Metadata': []},
+          }),
+          200,
+        );
+      }),
+    );
+
+    final items = await client.libraryItems(
+      Uri.parse('https://plex.example:32400'),
+      'secret',
+      '7',
+      PlexLibraryType.movie,
+      isCurrent: () => true,
+      onProgress: (_) {},
+    );
+
+    expect(items, isEmpty);
+    expect(requestedStarts, [0]);
+  });
+
+  test(
+    'library pages without a total terminate on a valid empty page',
+    () async {
+      final requestedStarts = <int>[];
+      Map<String, Object?> page(List<int> ids) => {
+        'MediaContainer': {
+          'Metadata': [
+            for (final id in ids)
+              {
+                'ratingKey': '$id',
+                'key': '/library/metadata/$id',
+                'title': 'Item $id',
+                'type': 'movie',
+                'duration': 1000,
+              },
+          ],
+        },
+      };
+      final client = PlexClient(
+        clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+        httpClient: MockClient((request) async {
+          final start = int.parse(
+            request.url.queryParameters['X-Plex-Container-Start']!,
+          );
+          requestedStarts.add(start);
+          return switch (start) {
+            0 => http.Response(jsonEncode(page([0, 1])), 200),
+            2 => http.Response(jsonEncode(page([2])), 200),
+            _ => http.Response(jsonEncode(page(const [])), 200),
+          };
+        }),
+      );
+
+      final items = await client.libraryItems(
+        Uri.parse('https://plex.example:32400'),
+        'secret',
+        '7',
+        PlexLibraryType.movie,
+        isCurrent: () => true,
+        onProgress: (_) {},
+      );
+
+      expect(items.map((item) => item.id), ['0', '1', '2']);
+      expect(requestedStarts, [0, 2, 3]);
+    },
+  );
+
+  test('library retains an earlier total when later pages omit it', () async {
+    final requestedStarts = <int>[];
+    final progress = <PlexLibraryPageProgress>[];
+    http.Response page(int start, List<int> ids, [int? total]) => http.Response(
+      jsonEncode({
+        'MediaContainer': {
+          'totalSize': ?total,
+          'Metadata': [
+            for (final id in ids)
+              {
+                'ratingKey': '$id',
+                'key': '/library/metadata/$id',
+                'title': 'Item $id',
+                'type': 'movie',
+                'duration': 1000,
+              },
+          ],
+        },
+      }),
+      200,
+    );
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      httpClient: MockClient((request) async {
+        final start = int.parse(
+          request.url.queryParameters['X-Plex-Container-Start']!,
+        );
+        requestedStarts.add(start);
+        return switch (start) {
+          0 => page(0, [0, 1], 5),
+          2 => page(2, [2, 3]),
+          _ => page(4, [4]),
+        };
+      }),
+    );
+
+    final items = await client.libraryItems(
+      Uri.parse('https://plex.example:32400'),
+      'secret',
+      '7',
+      PlexLibraryType.movie,
+      isCurrent: () => true,
+      onProgress: progress.add,
+    );
+
+    expect(items.map((item) => item.id), ['0', '1', '2', '3', '4']);
+    expect(requestedStarts, [0, 2, 4]);
+    expect(progress.last.totalItems, 5);
+  });
+
+  test('library rejects a changed total', () async {
+    final requestedStarts = <int>[];
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      httpClient: MockClient((request) async {
+        final start = int.parse(
+          request.url.queryParameters['X-Plex-Container-Start']!,
+        );
+        requestedStarts.add(start);
+        return http.Response(
+          jsonEncode({
+            'MediaContainer': {
+              'totalSize': start == 0 ? 5 : 6,
+              'Metadata': [
+                for (var index = 0; index < 2; index++)
+                  {
+                    'ratingKey': '${start + index}',
+                    'key': '/library/metadata/${start + index}',
+                    'title': 'Item ${start + index}',
+                    'type': 'movie',
+                    'duration': 1000,
+                  },
+              ],
+            },
+          }),
+          200,
+        );
+      }),
+    );
+
+    await expectLater(
+      client.libraryItems(
+        Uri.parse('https://plex.example:32400'),
+        'secret',
+        '7',
+        PlexLibraryType.movie,
+        isCurrent: () => true,
+        onProgress: (_) {},
+      ),
+      _plexError('library-page-invalid'),
+    );
+    expect(requestedStarts, [0, 2]);
+  });
+
+  test('library rejects a mismatched offset', () async {
+    final requestedStarts = <int>[];
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      httpClient: MockClient((request) async {
+        final start = int.parse(
+          request.url.queryParameters['X-Plex-Container-Start']!,
+        );
+        requestedStarts.add(start);
+        return http.Response(
+          jsonEncode({
+            'MediaContainer': {
+              'offset': 0,
+              'totalSize': 4,
+              'Metadata': [
+                for (var index = 0; index < 2; index++)
+                  {
+                    'ratingKey': '${start + index}',
+                    'key': '/library/metadata/${start + index}',
+                    'title': 'Item ${start + index}',
+                    'type': 'movie',
+                    'duration': 1000,
+                  },
+              ],
+            },
+          }),
+          200,
+        );
+      }),
+    );
+
+    await expectLater(
+      client.libraryItems(
+        Uri.parse('https://plex.example:32400'),
+        'secret',
+        '7',
+        PlexLibraryType.movie,
+        isCurrent: () => true,
+        onProgress: (_) {},
+      ),
+      _plexError('library-page-invalid'),
+    );
+    expect(requestedStarts, [0, 2]);
+  });
+
+  test('library rejects malformed container counts', () async {
+    Map<String, Object?> record(String id) => {
+      'ratingKey': id,
+      'key': '/library/metadata/$id',
+      'title': 'Item $id',
+      'type': 'movie',
+      'duration': 1000,
+    };
+    final badBodies = <String, Object?>{
+      'missing container': {'Other': []},
+      'non-map container': {'MediaContainer': []},
+      'non-list metadata': {
+        'MediaContainer': {'Metadata': 'soon'},
+      },
+      'missing metadata without empty size': {
+        'MediaContainer': {'totalSize': 2},
+      },
+      'negative total': {
+        'MediaContainer': {
+          'totalSize': -1,
+          'Metadata': [record('0')],
+        },
+      },
+      'nonintegral total': {
+        'MediaContainer': {
+          'totalSize': 'many',
+          'Metadata': [record('0')],
+        },
+      },
+      'fractional total': {
+        'MediaContainer': {
+          'totalSize': 2.5,
+          'Metadata': [record('0')],
+        },
+      },
+      'negative offset': {
+        'MediaContainer': {
+          'offset': -3,
+          'totalSize': 2,
+          'Metadata': [record('0')],
+        },
+      },
+      'nonintegral offset': {
+        'MediaContainer': {
+          'offset': 'start',
+          'totalSize': 2,
+          'Metadata': [record('0')],
+        },
+      },
+      'contradictory size': {
+        'MediaContainer': {
+          'size': 2,
+          'totalSize': 2,
+          'Metadata': [record('0')],
+        },
+      },
+    };
+    for (final entry in badBodies.entries) {
+      final client = PlexClient(
+        clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+        httpClient: MockClient(
+          (_) async => http.Response(jsonEncode(entry.value), 200),
+        ),
+      );
+      await expectLater(
+        client.libraryItems(
+          Uri.parse('https://plex.example:32400'),
+          'secret',
+          '7',
+          PlexLibraryType.movie,
+          isCurrent: () => true,
+          onProgress: (_) {},
+        ),
+        _plexError('library-page-invalid'),
+        reason: entry.key,
+      );
+    }
+  });
+
+  test('library rejects a repeated page without progress', () async {
+    final requestedStarts = <int>[];
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      httpClient: MockClient((request) async {
+        final start = int.parse(
+          request.url.queryParameters['X-Plex-Container-Start']!,
+        );
+        requestedStarts.add(start);
+        const ids = [0, 1];
+        return http.Response(
+          jsonEncode({
+            'MediaContainer': {
+              'totalSize': 4,
+              'Metadata': [
+                for (final id in ids)
+                  {
+                    'ratingKey': '$id',
+                    'key': '/library/metadata/$id',
+                    'title': 'Item $id',
+                    'type': 'movie',
+                    'duration': 1000,
+                  },
+              ],
+            },
+          }),
+          200,
+        );
+      }),
+    );
+
+    await expectLater(
+      client.libraryItems(
+        Uri.parse('https://plex.example:32400'),
+        'secret',
+        '7',
+        PlexLibraryType.movie,
+        isCurrent: () => true,
+        onProgress: (_) {},
+      ),
+      _plexError('library-page-not-progressing'),
+    );
+    expect(requestedStarts, [0, 2]);
+  });
+
+  test('library rejects duplicate identities across pages', () async {
+    final requestedStarts = <int>[];
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      httpClient: MockClient((request) async {
+        final start = int.parse(
+          request.url.queryParameters['X-Plex-Container-Start']!,
+        );
+        requestedStarts.add(start);
+        final ids = start == 0 ? [0, 1] : [1, 2];
+        return http.Response(
+          jsonEncode({
+            'MediaContainer': {
+              'totalSize': 4,
+              'Metadata': [
+                for (final id in ids)
+                  {
+                    'ratingKey': '$id',
+                    'key': '/library/metadata/$id',
+                    'title': 'Item $id',
+                    'type': 'movie',
+                    'duration': 1000,
+                  },
+              ],
+            },
+          }),
+          200,
+        );
+      }),
+    );
+
+    await expectLater(
+      client.libraryItems(
+        Uri.parse('https://plex.example:32400'),
+        'secret',
+        '7',
+        PlexLibraryType.movie,
+        isCurrent: () => true,
+        onProgress: (_) {},
+      ),
+      _plexError('library-page-not-progressing'),
+    );
+    expect(requestedStarts, [0, 2]);
+  });
+
+  test('library rejects duplicate identities within one page', () async {
+    final requestedStarts = <int>[];
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      httpClient: MockClient((request) async {
+        requestedStarts.add(
+          int.parse(request.url.queryParameters['X-Plex-Container-Start']!),
+        );
+        return http.Response(
+          jsonEncode({
+            'MediaContainer': {
+              'totalSize': 2,
+              'Metadata': [
+                for (final id in ['7', '7'])
+                  {
+                    'ratingKey': id,
+                    'key': '/library/metadata/$id',
+                    'title': 'Item $id',
+                    'type': 'movie',
+                    'duration': 1000,
+                  },
+              ],
+            },
+          }),
+          200,
+        );
+      }),
+    );
+
+    await expectLater(
+      client.libraryItems(
+        Uri.parse('https://plex.example:32400'),
+        'secret',
+        '7',
+        PlexLibraryType.movie,
+        isCurrent: () => true,
+        onProgress: (_) {},
+      ),
+      _plexError('library-page-not-progressing'),
+    );
+    expect(requestedStarts, [0]);
+  });
+
+  test('library accepts a total that appears on a later page', () async {
+    final requestedStarts = <int>[];
+    final progress = <PlexLibraryPageProgress>[];
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      httpClient: MockClient((request) async {
+        final start = int.parse(
+          request.url.queryParameters['X-Plex-Container-Start']!,
+        );
+        requestedStarts.add(start);
+        return http.Response(
+          jsonEncode({
+            'MediaContainer': {
+              if (start != 0) 'totalSize': 4,
+              'Metadata': [
+                for (var index = 0; index < 2; index++)
+                  {
+                    'ratingKey': '${start + index}',
+                    'key': '/library/metadata/${start + index}',
+                    'title': 'Item ${start + index}',
+                    'type': 'movie',
+                    'duration': 1000,
+                  },
+              ],
+            },
+          }),
+          200,
+        );
+      }),
+    );
+
+    final items = await client.libraryItems(
+      Uri.parse('https://plex.example:32400'),
+      'secret',
+      '7',
+      PlexLibraryType.movie,
+      isCurrent: () => true,
+      onProgress: progress.add,
+    );
+
+    expect(items.map((item) => item.id), ['0', '1', '2', '3']);
+    expect(requestedStarts, [0, 2]);
+    expect(progress.last.totalItems, 4);
+  });
+
+  test('library treats an explicit empty container as complete', () async {
+    final requestedStarts = <int>[];
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      httpClient: MockClient((request) async {
+        requestedStarts.add(
+          int.parse(request.url.queryParameters['X-Plex-Container-Start']!),
+        );
+        return http.Response(
+          jsonEncode({
+            'MediaContainer': {'size': 0, 'totalSize': 0},
+          }),
+          200,
+        );
+      }),
+    );
+
+    final items = await client.libraryItems(
+      Uri.parse('https://plex.example:32400'),
+      'secret',
+      '7',
+      PlexLibraryType.movie,
+      isCurrent: () => true,
+      onProgress: (_) {},
+    );
+
+    expect(items, isEmpty);
+    expect(requestedStarts, [0]);
+  });
+
+  test('library rejects an empty page before the total is reached', () async {
+    final requestedStarts = <int>[];
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      httpClient: MockClient((request) async {
+        final start = int.parse(
+          request.url.queryParameters['X-Plex-Container-Start']!,
+        );
+        requestedStarts.add(start);
+        return http.Response(
+          jsonEncode({
+            'MediaContainer': {
+              'totalSize': 3,
+              'Metadata': [
+                if (start == 0)
+                  for (final id in [0, 1])
+                    {
+                      'ratingKey': '$id',
+                      'key': '/library/metadata/$id',
+                      'title': 'Item $id',
+                      'type': 'movie',
+                      'duration': 1000,
+                    },
+              ],
+            },
+          }),
+          200,
+        );
+      }),
+    );
+
+    await expectLater(
+      client.libraryItems(
+        Uri.parse('https://plex.example:32400'),
+        'secret',
+        '7',
+        PlexLibraryType.movie,
+        isCurrent: () => true,
+        onProgress: (_) {},
+      ),
+      _plexError('library-page-invalid'),
+    );
+    expect(requestedStarts, [0, 2]);
+  });
+
+  test('library rejects records beyond the reported total', () async {
+    final requestedStarts = <int>[];
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      httpClient: MockClient((request) async {
+        final start = int.parse(
+          request.url.queryParameters['X-Plex-Container-Start']!,
+        );
+        requestedStarts.add(start);
+        final ids = start == 0 ? [0, 1] : [2, 3];
+        return http.Response(
+          jsonEncode({
+            'MediaContainer': {
+              'totalSize': 3,
+              'Metadata': [
+                for (final id in ids)
+                  {
+                    'ratingKey': '$id',
+                    'key': '/library/metadata/$id',
+                    'title': 'Item $id',
+                    'type': 'movie',
+                    'duration': 1000,
+                  },
+              ],
+            },
+          }),
+          200,
+        );
+      }),
+    );
+
+    await expectLater(
+      client.libraryItems(
+        Uri.parse('https://plex.example:32400'),
+        'secret',
+        '7',
+        PlexLibraryType.movie,
+        isCurrent: () => true,
+        onProgress: (_) {},
+      ),
+      _plexError('library-page-invalid'),
+    );
+    expect(requestedStarts, [0, 2]);
+  });
+
+  test('library final-page failure invalidates the staged result', () async {
+    final requestedStarts = <int>[];
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      httpClient: MockClient((request) async {
+        final start = int.parse(
+          request.url.queryParameters['X-Plex-Container-Start']!,
+        );
+        requestedStarts.add(start);
+        if (start != 0) return http.Response('', 500);
+        return http.Response(
+          jsonEncode({
+            'MediaContainer': {
+              'totalSize': 4,
+              'Metadata': [
+                for (final id in [0, 1])
+                  {
+                    'ratingKey': '$id',
+                    'key': '/library/metadata/$id',
+                    'title': 'Item $id',
+                    'type': 'movie',
+                    'duration': 1000,
+                  },
+              ],
+            },
+          }),
+          200,
+        );
+      }),
+    );
+
+    await expectLater(
+      client.libraryItems(
+        Uri.parse('https://plex.example:32400'),
+        'secret',
+        '7',
+        PlexLibraryType.movie,
+        isCurrent: () => true,
+        onProgress: (_) {},
+      ),
+      _plexError('server-unreachable'),
+    );
+    expect(requestedStarts, [0, 2]);
+  });
+
+  test('library cancellation aborts the active HTTP request', () async {
+    final cancelled = Completer<void>();
+    var requests = 0;
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      httpClient: MockClient.streaming((request, _) async {
+        requests++;
+        // Hang like an unresponsive server until the scan is cancelled, then
+        // abort the way a real transport observes the abort trigger.
+        await (request as http.AbortableRequest).abortTrigger!;
+        throw http.RequestAbortedException(request.url);
+      }),
+    );
+    addTearDown(client.close);
+
+    final pending = client.libraryItems(
+      Uri.parse('https://plex.example:32400'),
+      'secret',
+      '7',
+      PlexLibraryType.movie,
+      isCurrent: () => true,
+      onProgress: (_) {},
+      cancelled: cancelled.future,
+    );
+    final assertion = expectLater(pending, _plexError('cancelled'));
+    await Future<void>.delayed(Duration.zero);
+    cancelled.complete();
+    await assertion;
+    expect(requests, 1);
+  });
+
+  test('library sends no request when the scope is already stale', () async {
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      httpClient: MockClient((_) async => fail('No request should be sent')),
+    );
+
+    await expectLater(
+      client.libraryItems(
+        Uri.parse('https://plex.example:32400'),
+        'secret',
+        '7',
+        PlexLibraryType.movie,
+        isCurrent: () => false,
+        onProgress: (_) {},
+      ),
+      _plexError('cancelled'),
+    );
+  });
+
+  test('library rejects stale results before progress callbacks', () async {
+    var requests = 0;
+    var currentCalls = 0;
+    var progressCalls = 0;
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      httpClient: MockClient((_) async {
+        requests++;
+        return http.Response(
+          jsonEncode({
+            'MediaContainer': {
+              'totalSize': 1,
+              'Metadata': [
+                {
+                  'ratingKey': '0',
+                  'key': '/library/metadata/0',
+                  'title': 'Item 0',
+                  'type': 'movie',
+                  'duration': 1000,
+                },
+              ],
+            },
+          }),
+          200,
+        );
+      }),
+    );
+
+    await expectLater(
+      client.libraryItems(
+        Uri.parse('https://plex.example:32400'),
+        'secret',
+        '7',
+        PlexLibraryType.movie,
+        isCurrent: () => ++currentCalls == 1,
+        onProgress: (_) => progressCalls++,
+      ),
+      _plexError('cancelled'),
+    );
+    expect(requests, 1);
+    expect(progressCalls, 0);
+  });
+
+  test('library advances raw offsets past unplayable records', () async {
+    // libraryItems retains every parsed record (playable filtering happens
+    // later in the controller), so this locks in that the next request offset
+    // counts raw records including the unplayable one.
+    final requestedStarts = <int>[];
+    Map<String, Object?> playable(String id) => {
+      'ratingKey': id,
+      'key': '/library/metadata/$id',
+      'title': 'Item $id',
+      'type': 'movie',
+      'duration': 1000,
+      'Media': [
+        {
+          'Part': [
+            {'key': '/library/parts/$id'},
+          ],
+        },
+      ],
+    };
+    Map<String, Object?> unplayable(String id) => {
+      'ratingKey': id,
+      'key': '/library/metadata/$id',
+      'title': 'Item $id',
+      'type': 'movie',
+      'duration': 0,
+    };
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      httpClient: MockClient((request) async {
+        final start = int.parse(
+          request.url.queryParameters['X-Plex-Container-Start']!,
+        );
+        requestedStarts.add(start);
+        return http.Response(
+          jsonEncode({
+            'MediaContainer': {
+              'totalSize': 5,
+              'Metadata': start == 0
+                  ? [playable('0'), unplayable('1'), playable('2')]
+                  : [playable('3'), playable('4')],
+            },
+          }),
+          200,
+        );
+      }),
+    );
+
+    final items = await client.libraryItems(
+      Uri.parse('https://plex.example:32400'),
+      'secret',
+      '7',
+      PlexLibraryType.movie,
+      isCurrent: () => true,
+      onProgress: (_) {},
+    );
+
+    expect(items.map((item) => item.id), ['0', '1', '2', '3', '4']);
+    expect(requestedStarts, [0, 3]);
+  });
 
   test('library pagination checks cancellation before the next page', () async {
     var current = true;
@@ -1312,10 +2212,14 @@ void main() {
   });
 
   test('library pagination rejects a page larger than requested', () async {
+    final requestedStarts = <int>[];
     final client = PlexClient(
       clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
-      httpClient: MockClient(
-        (_) async => http.Response(
+      httpClient: MockClient((request) async {
+        requestedStarts.add(
+          int.parse(request.url.queryParameters['X-Plex-Container-Start']!),
+        );
+        return http.Response(
           jsonEncode({
             'MediaContainer': {
               'Metadata': [
@@ -1330,8 +2234,8 @@ void main() {
             },
           }),
           200,
-        ),
-      ),
+        );
+      }),
     );
 
     await expectLater(
@@ -1351,32 +2255,38 @@ void main() {
         ),
       ),
     );
+    expect(requestedStarts, [0]);
   });
 
   test(
     'one thousand full pages return when the reported total is reached',
     () async {
       var requests = 0;
-      final page = jsonEncode({
-        'MediaContainer': {
-          'totalSize': 100000,
-          'Metadata': [
-            for (var index = 0; index < 100; index++)
-              {
-                'ratingKey': '$index',
-                'key': '/library/metadata/$index',
-                'title': 'Item $index',
-                'type': 'movie',
-                'duration': 1000,
-              },
-          ],
-        },
-      });
       final client = PlexClient(
         clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
-        httpClient: MockClient((_) async {
+        httpClient: MockClient((request) async {
           requests++;
-          return http.Response(page, 200);
+          final start = int.parse(
+            request.url.queryParameters['X-Plex-Container-Start']!,
+          );
+          return http.Response(
+            jsonEncode({
+              'MediaContainer': {
+                'totalSize': 100000,
+                'Metadata': [
+                  for (var index = 0; index < 100; index++)
+                    {
+                      'ratingKey': '${start + index}',
+                      'key': '/library/metadata/${start + index}',
+                      'title': 'Item ${start + index}',
+                      'type': 'movie',
+                      'duration': 1000,
+                    },
+                ],
+              },
+            }),
+            200,
+          );
         }),
       );
 
@@ -1398,26 +2308,31 @@ void main() {
     'one thousand full library pages fail visibly instead of truncating',
     () async {
       var requests = 0;
-      final page = jsonEncode({
-        'MediaContainer': {
-          'totalSize': 100001,
-          'Metadata': [
-            for (var index = 0; index < 100; index++)
-              {
-                'ratingKey': '$index',
-                'key': '/library/metadata/$index',
-                'title': 'Item $index',
-                'type': 'movie',
-                'duration': 1000,
-              },
-          ],
-        },
-      });
       final client = PlexClient(
         clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
-        httpClient: MockClient((_) async {
+        httpClient: MockClient((request) async {
           requests++;
-          return http.Response(page, 200);
+          final start = int.parse(
+            request.url.queryParameters['X-Plex-Container-Start']!,
+          );
+          return http.Response(
+            jsonEncode({
+              'MediaContainer': {
+                'totalSize': 100001,
+                'Metadata': [
+                  for (var index = 0; index < 100; index++)
+                    {
+                      'ratingKey': '${start + index}',
+                      'key': '/library/metadata/${start + index}',
+                      'title': 'Item ${start + index}',
+                      'type': 'movie',
+                      'duration': 1000,
+                    },
+                ],
+              },
+            }),
+            200,
+          );
         }),
       );
 
