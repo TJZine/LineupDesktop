@@ -1984,6 +1984,7 @@ void main() {
                   utf8.encode(
                     jsonEncode({
                       'MediaContainer': {
+                        'totalSize': 8,
                         'Metadata': [
                           for (var i = 0; i < 8; i++)
                             {'ratingKey': 'p$i', 'title': 'Playlist $i'},

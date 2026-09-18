@@ -508,40 +508,43 @@ class PlexClient {
     }
 
     checkCurrent();
-    final json = await _serverJson(
-      server
-          .resolve('/playlists/all')
-          .replace(queryParameters: const {'playlistType': 'video'}),
+    // A catalog failure throws and never becomes a successful empty catalog.
+    // A later contents-page failure for one playlist marks that playlist's id
+    // in failedIds without publishing its accumulated prefix.
+    final catalogRaws = await _playlistCatalogRaws(
+      server,
       token,
       cancelled: cancelled,
+      checkCurrent: checkCurrent,
     );
     checkCurrent();
     final output = <PlexPlaylist>[];
     final failed = <String>{};
-    final metadata = _containerList(json, 'Metadata');
-    for (var start = 0; start < metadata.length; start += 4) {
+    for (var start = 0; start < catalogRaws.length; start += 4) {
       checkCurrent();
-      final batch = metadata.skip(start).take(4).map((raw) async {
+      final batch = catalogRaws.skip(start).take(4).map((raw) async {
         try {
           final playlist = _record(raw, 'playlist');
           final id = _id(playlist['ratingKey'], 'playlist id');
-          final itemsJson = await _serverJson(
-            server.resolve('/playlists/${Uri.encodeComponent(id)}/items'),
+          final title = _text(playlist['title'], 'playlist title');
+          final itemRaws = await _playlistItemRaws(
+            server,
             token,
+            id,
             cancelled: cancelled,
+            checkCurrent: checkCurrent,
           );
           checkCurrent();
-          final items = _containerList(itemsJson, 'Metadata')
+          // Playable filtering applies after raw paging so unplayable records
+          // never shift pagination offsets. Repeated member occurrences are
+          // intentional programming and keep their order.
+          final items = itemRaws
               .map(parseMediaItem)
               .where((item) => item.isPlayable)
               .toList(growable: false);
           return items.isEmpty
               ? null
-              : PlexPlaylist(
-                  id: id,
-                  title: _text(playlist['title'], 'playlist title'),
-                  items: items,
-                );
+              : PlexPlaylist(id: id, title: title, items: items);
         } on PlexException catch (exception) {
           checkCurrent();
           if (const {
@@ -571,6 +574,131 @@ class PlexClient {
     return PlexPlaylistCatalog(
       playlists: List.unmodifiable(output),
       failedIds: Set.unmodifiable(failed),
+    );
+  }
+
+  /// Pages the complete video-playlist catalog in raw-record order.
+  ///
+  /// Catalog entries carry unique identities, so a repeated playlist id is a
+  /// non-progressing page. Playlist *contents* use [_playlistItemRaws], which
+  /// deliberately has no such guard because member repeats are legitimate.
+  Future<List<Object?>> _playlistCatalogRaws(
+    Uri server,
+    String token, {
+    required void Function() checkCurrent,
+    Future<void>? cancelled,
+  }) async {
+    const pageSize = 100;
+    final raws = <Object?>[];
+    final seenIds = <String>{};
+    var start = 0;
+    var rawConsumed = 0;
+    int? knownTotal;
+    for (var page = 0; page < 1000; page++) {
+      checkCurrent();
+      final json = await _serverJson(
+        server
+            .resolve('/playlists/all')
+            .replace(
+              queryParameters: {
+                'playlistType': 'video',
+                'X-Plex-Container-Start': '$start',
+                'X-Plex-Container-Size': '$pageSize',
+              },
+            ),
+        token,
+        cancelled: cancelled,
+      );
+      checkCurrent();
+      final validated = _validatePlaylistPage(
+        json,
+        start: start,
+        pageSize: pageSize,
+        rawConsumed: rawConsumed,
+        knownTotal: knownTotal,
+      );
+      knownTotal = validated.knownTotal;
+      for (final raw in validated.metadata) {
+        final id = raw is Map ? _optionalId(raw['ratingKey']) : null;
+        if (id != null && !seenIds.add(id)) {
+          throw const PlexException(
+            'playlist-page-not-progressing',
+            'Plex returned a playlist page without progress.',
+          );
+        }
+      }
+      raws.addAll(validated.metadata);
+      rawConsumed += validated.metadata.length;
+      checkCurrent();
+      final known = knownTotal;
+      if (known != null) {
+        if (rawConsumed == known) return raws;
+      } else if (validated.metadata.isEmpty) {
+        return raws;
+      }
+      start += validated.metadata.length;
+    }
+    throw const PlexException(
+      'playlist-scale-exceeded',
+      'This playlist catalog is too large to load safely.',
+    );
+  }
+
+  /// Pages one playlist's complete ordered item stream.
+  ///
+  /// Member ids are intentionally not deduplicated: repeats, including
+  /// identical blocks straddling a page boundary, are preserved in order.
+  /// Non-progress is detected from pagination metadata and the work bound,
+  /// never from repeated occurrences.
+  Future<List<Object?>> _playlistItemRaws(
+    Uri server,
+    String token,
+    String playlistId, {
+    required void Function() checkCurrent,
+    Future<void>? cancelled,
+  }) async {
+    const pageSize = 100;
+    final raws = <Object?>[];
+    var start = 0;
+    var rawConsumed = 0;
+    int? knownTotal;
+    for (var page = 0; page < 1000; page++) {
+      checkCurrent();
+      final json = await _serverJson(
+        server
+            .resolve('/playlists/${Uri.encodeComponent(playlistId)}/items')
+            .replace(
+              queryParameters: {
+                'X-Plex-Container-Start': '$start',
+                'X-Plex-Container-Size': '$pageSize',
+              },
+            ),
+        token,
+        cancelled: cancelled,
+      );
+      checkCurrent();
+      final validated = _validatePlaylistPage(
+        json,
+        start: start,
+        pageSize: pageSize,
+        rawConsumed: rawConsumed,
+        knownTotal: knownTotal,
+      );
+      knownTotal = validated.knownTotal;
+      raws.addAll(validated.metadata);
+      rawConsumed += validated.metadata.length;
+      checkCurrent();
+      final known = knownTotal;
+      if (known != null) {
+        if (rawConsumed == known) return raws;
+      } else if (validated.metadata.isEmpty) {
+        return raws;
+      }
+      start += validated.metadata.length;
+    }
+    throw const PlexException(
+      'playlist-scale-exceeded',
+      'This playlist is too large to load safely.',
     );
   }
 
@@ -1148,6 +1276,86 @@ int _integer(Object? value, String label) => value is num
     : int.tryParse(value?.toString() ?? '') ??
           (throw PlexException('parse-error', '$label was invalid.'));
 const _maxExactJsonInteger = 0x1fffffffffffff;
+
+/// Validates one playlist page against the pagination contract shared by the
+/// video-playlist catalog and playlist item streams: container shape,
+/// echoed offset, retained total, declared size, oversized pages, and
+/// empty/over-total pages. Returns the page records and the retained total.
+({List<Object?> metadata, int? knownTotal}) _validatePlaylistPage(
+  Map<String, Object?> json, {
+  required int start,
+  required int pageSize,
+  required int rawConsumed,
+  required int? knownTotal,
+}) {
+  const invalid = PlexException(
+    'playlist-page-invalid',
+    'Plex returned an invalid playlist page.',
+  );
+  final containerRaw = json['MediaContainer'];
+  if (containerRaw is! Map) throw invalid;
+  final container = Map<String, Object?>.from(containerRaw);
+  final pageTotal = _playlistPageCount(container['totalSize']);
+  final pageSizeValue = _playlistPageCount(container['size']);
+  final pageOffset = _playlistPageCount(container['offset']);
+  if (pageOffset != null && pageOffset != start) throw invalid;
+  var known = knownTotal;
+  if (pageTotal != null) {
+    if (known == null) {
+      known = pageTotal;
+    } else if (known != pageTotal) {
+      throw invalid;
+    }
+  }
+  final rawMetadata = container['Metadata'];
+  final List<Object?> metadata;
+  if (rawMetadata == null) {
+    if (pageSizeValue == 0) {
+      metadata = const [];
+    } else {
+      throw invalid;
+    }
+  } else if (rawMetadata is List) {
+    metadata = rawMetadata;
+  } else {
+    throw invalid;
+  }
+  if (metadata.length > pageSize) {
+    throw const PlexException(
+      'playlist-page-too-large',
+      'Plex returned more playlist items than requested.',
+    );
+  }
+  if (pageSizeValue != null && pageSizeValue != metadata.length) throw invalid;
+  final total = known;
+  if (total != null) {
+    if (rawConsumed + metadata.length > total) throw invalid;
+    if (metadata.isEmpty && rawConsumed < total) throw invalid;
+  }
+  return (metadata: metadata, knownTotal: known);
+}
+
+/// Validates an optional playlist container count. Absent values stay absent;
+/// present values must be nonnegative integral counts or the page is invalid.
+int? _playlistPageCount(Object? value) {
+  if (value == null) return null;
+  final number = switch (value) {
+    num number => number,
+    String text => num.tryParse(text.trim()),
+    _ => null,
+  };
+  if (number == null ||
+      !number.isFinite ||
+      number.isNegative ||
+      number.abs() > _maxExactJsonInteger ||
+      number.toInt() != number) {
+    throw const PlexException(
+      'playlist-page-invalid',
+      'Plex returned an invalid playlist page.',
+    );
+  }
+  return number.toInt();
+}
 
 /// Validates an optional library container count. Absent values stay absent;
 /// present values must be nonnegative integral counts or the page is invalid.

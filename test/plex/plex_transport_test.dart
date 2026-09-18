@@ -1043,6 +1043,7 @@ void main() {
             return http.Response(
               jsonEncode({
                 'MediaContainer': {
+                  'totalSize': 1,
                   'Metadata': [
                     {
                       'ratingKey': 'p1',
@@ -1058,6 +1059,7 @@ void main() {
           return http.Response(
             jsonEncode({
               'MediaContainer': {
+                'totalSize': 1,
                 'Metadata': [
                   {
                     'ratingKey': 'm1',
@@ -1167,6 +1169,7 @@ void main() {
             return http.Response(
               jsonEncode({
                 'MediaContainer': {
+                  'totalSize': 8,
                   'Metadata': [
                     for (var i = 0; i < 8; i++)
                       {'ratingKey': 'p$i', 'title': 'Playlist $i'},
@@ -1208,6 +1211,731 @@ void main() {
       expect(itemRequests.where((scan) => scan == 2), hasLength(8));
     },
   );
+
+  test('playlist catalog loads every page in order', () async {
+    Map<String, Object?> catalogPage(int start, List<String> ids, int total) =>
+        {
+          'MediaContainer': {
+            'offset': start,
+            'totalSize': total,
+            'Metadata': [
+              for (final id in ids) {'ratingKey': id, 'title': 'Playlist $id'},
+            ],
+          },
+        };
+    Map<String, Object?> itemsPage(List<String> ids, [int? total]) => {
+      'MediaContainer': {
+        'totalSize': ?total,
+        'Metadata': [for (final id in ids) _playablePlaylistItem(id)],
+      },
+    };
+    final catalogStarts = <int>[];
+    final catalogSizes = <String?>[];
+    final playlistTypes = <String?>[];
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      httpClient: MockClient((request) async {
+        if (request.url.path == '/playlists/all') {
+          final params = request.url.queryParameters;
+          catalogStarts.add(int.parse(params['X-Plex-Container-Start']!));
+          catalogSizes.add(params['X-Plex-Container-Size']);
+          playlistTypes.add(params['playlistType']);
+          return switch (catalogStarts.last) {
+            0 => http.Response(
+              jsonEncode(catalogPage(0, ['p0', 'p1'], 5)),
+              200,
+            ),
+            2 => http.Response(
+              jsonEncode(catalogPage(2, ['p2', 'p3'], 5)),
+              200,
+            ),
+            _ => http.Response(jsonEncode(catalogPage(4, ['p4'], 5)), 200),
+          };
+        }
+        final id = request.url.pathSegments[1];
+        return http.Response(jsonEncode(itemsPage(['$id-item'], 1)), 200);
+      }),
+    );
+    addTearDown(client.close);
+
+    final catalog = await client.playlists(
+      Uri.parse('https://plex.example:32400'),
+      'secret',
+      isCurrent: () => true,
+    );
+
+    expect(catalogStarts, [0, 2, 4]);
+    expect(catalogSizes, ['100', '100', '100']);
+    expect(playlistTypes, ['video', 'video', 'video']);
+    expect(catalog.playlists.map((playlist) => playlist.id), [
+      'p0',
+      'p1',
+      'p2',
+      'p3',
+      'p4',
+    ]);
+    expect(catalog.failedIds, isEmpty);
+  });
+
+  test(
+    'playlist catalog without a total terminates on an empty page',
+    () async {
+      final catalogStarts = <int>[];
+      final client = PlexClient(
+        clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+        httpClient: MockClient((request) async {
+          if (request.url.path == '/playlists/all') {
+            final start = int.parse(
+              request.url.queryParameters['X-Plex-Container-Start']!,
+            );
+            catalogStarts.add(start);
+            Map<String, Object?> page(List<String> ids) => {
+              'MediaContainer': {
+                'Metadata': [
+                  for (final id in ids)
+                    {'ratingKey': id, 'title': 'Playlist $id'},
+                ],
+              },
+            };
+            return switch (start) {
+              0 => http.Response(jsonEncode(page(['p0', 'p1'])), 200),
+              _ => http.Response(jsonEncode(page(const [])), 200),
+            };
+          }
+          final id = request.url.pathSegments[1];
+          return http.Response(
+            jsonEncode({
+              'MediaContainer': {
+                'totalSize': 1,
+                'Metadata': [_playablePlaylistItem('$id-item')],
+              },
+            }),
+            200,
+          );
+        }),
+      );
+      addTearDown(client.close);
+
+      final catalog = await client.playlists(
+        Uri.parse('https://plex.example:32400'),
+        'secret',
+        isCurrent: () => true,
+      );
+
+      expect(catalogStarts, [0, 2]);
+      expect(catalog.playlists.map((playlist) => playlist.id), ['p0', 'p1']);
+      expect(catalog.failedIds, isEmpty);
+    },
+  );
+
+  test(
+    'playlist contents page through a known total preserving order',
+    () async {
+      Map<String, Object?> page(int start, int count) => {
+        'MediaContainer': {
+          'offset': start,
+          'totalSize': 120,
+          'Metadata': [
+            for (var index = 0; index < count; index++)
+              _playablePlaylistItem('m${start + index}'),
+          ],
+        },
+      };
+      final itemStarts = <int>[];
+      final client = PlexClient(
+        clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+        httpClient: MockClient((request) async {
+          if (request.url.path == '/playlists/all') {
+            return http.Response(
+              jsonEncode({
+                'MediaContainer': {
+                  'totalSize': 1,
+                  'Metadata': [
+                    {'ratingKey': 'p1', 'title': 'Playlist'},
+                  ],
+                },
+              }),
+              200,
+            );
+          }
+          final start = int.parse(
+            request.url.queryParameters['X-Plex-Container-Start']!,
+          );
+          itemStarts.add(start);
+          expect(request.url.queryParameters['X-Plex-Container-Size'], '100');
+          return switch (start) {
+            0 => http.Response(jsonEncode(page(0, 50)), 200),
+            50 => http.Response(jsonEncode(page(50, 50)), 200),
+            100 => http.Response(jsonEncode(page(100, 20)), 200),
+            _ => http.Response(jsonEncode(page(start, 0)), 200),
+          };
+        }),
+      );
+      addTearDown(client.close);
+
+      final catalog = await client.playlists(
+        Uri.parse('https://plex.example:32400'),
+        'secret',
+        isCurrent: () => true,
+      );
+
+      expect(itemStarts, [0, 50, 100]);
+      expect(catalog.failedIds, isEmpty);
+      expect(catalog.playlists.single.items.map((item) => item.id), [
+        for (var index = 0; index < 120; index++) 'm$index',
+      ]);
+    },
+  );
+
+  test(
+    'playlist pages without a total terminate on a valid empty page',
+    () async {
+      final itemStarts = <int>[];
+      final client = PlexClient(
+        clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+        httpClient: MockClient((request) async {
+          if (request.url.path == '/playlists/all') {
+            return http.Response(
+              jsonEncode({
+                'MediaContainer': {
+                  'totalSize': 1,
+                  'Metadata': [
+                    {'ratingKey': 'p1', 'title': 'Playlist'},
+                  ],
+                },
+              }),
+              200,
+            );
+          }
+          final start = int.parse(
+            request.url.queryParameters['X-Plex-Container-Start']!,
+          );
+          itemStarts.add(start);
+          Map<String, Object?> page(List<String> ids) => {
+            'MediaContainer': {
+              'Metadata': [for (final id in ids) _playablePlaylistItem(id)],
+            },
+          };
+          return switch (start) {
+            0 => http.Response(jsonEncode(page(['a', 'b'])), 200),
+            2 => http.Response(jsonEncode(page(['c'])), 200),
+            _ => http.Response(jsonEncode(page(const [])), 200),
+          };
+        }),
+      );
+      addTearDown(client.close);
+
+      final catalog = await client.playlists(
+        Uri.parse('https://plex.example:32400'),
+        'secret',
+        isCurrent: () => true,
+      );
+
+      expect(itemStarts, [0, 2, 3]);
+      expect(catalog.playlists.single.items.map((item) => item.id), [
+        'a',
+        'b',
+        'c',
+      ]);
+    },
+  );
+
+  test('playlist catalog rejects a mismatched offset', () async {
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      httpClient: MockClient((request) async {
+        final start = int.parse(
+          request.url.queryParameters['X-Plex-Container-Start']!,
+        );
+        final ids = start == 0 ? ['p0', 'p1'] : ['p2', 'p3'];
+        return http.Response(
+          jsonEncode({
+            'MediaContainer': {
+              'offset': 0,
+              'totalSize': 4,
+              'Metadata': [
+                for (final id in ids)
+                  {'ratingKey': id, 'title': 'Playlist $id'},
+              ],
+            },
+          }),
+          200,
+        );
+      }),
+    );
+    addTearDown(client.close);
+
+    await expectLater(
+      client.playlists(
+        Uri.parse('https://plex.example:32400'),
+        'secret',
+        isCurrent: () => true,
+      ),
+      _plexError('playlist-page-invalid'),
+    );
+  });
+
+  test(
+    'playlist contents reject a mismatched offset as a failed playlist',
+    () async {
+      final client = PlexClient(
+        clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+        httpClient: MockClient((request) async {
+          if (request.url.path == '/playlists/all') {
+            return http.Response(
+              jsonEncode({
+                'MediaContainer': {
+                  'totalSize': 1,
+                  'Metadata': [
+                    {'ratingKey': 'p1', 'title': 'Playlist'},
+                  ],
+                },
+              }),
+              200,
+            );
+          }
+          final start = int.parse(
+            request.url.queryParameters['X-Plex-Container-Start']!,
+          );
+          return http.Response(
+            jsonEncode({
+              'MediaContainer': {
+                'offset': 0,
+                'totalSize': 4,
+                'Metadata': [
+                  for (var index = 0; index < 2; index++)
+                    _playablePlaylistItem('m${start + index}'),
+                ],
+              },
+            }),
+            200,
+          );
+        }),
+      );
+      addTearDown(client.close);
+
+      final catalog = await client.playlists(
+        Uri.parse('https://plex.example:32400'),
+        'secret',
+        isCurrent: () => true,
+      );
+
+      expect(catalog.playlists, isEmpty);
+      expect(catalog.failedIds, {'p1'});
+    },
+  );
+
+  test('playlist later-page failure marks the playlist failed without partial success', () async {
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      httpClient: MockClient((request) async {
+        if (request.url.path == '/playlists/all') {
+          return http.Response(
+            jsonEncode({
+              'MediaContainer': {
+                'totalSize': 1,
+                'Metadata': [
+                  {'ratingKey': 'p1', 'title': 'Playlist'},
+                ],
+              },
+            }),
+            200,
+          );
+        }
+        final start = int.parse(
+          request.url.queryParameters['X-Plex-Container-Start']!,
+        );
+        if (start == 0) {
+          return http.Response(
+            jsonEncode({
+              'MediaContainer': {
+                'totalSize': 4,
+                'Metadata': [
+                  _playablePlaylistItem('m0'),
+                  _playablePlaylistItem('m1'),
+                ],
+              },
+            }),
+            200,
+          );
+        }
+        return http.Response('', 500);
+      }),
+    );
+    addTearDown(client.close);
+
+    final catalog = await client.playlists(
+      Uri.parse('https://plex.example:32400'),
+      'secret',
+      isCurrent: () => true,
+    );
+
+    expect(catalog.playlists, isEmpty);
+    expect(catalog.failedIds, {'p1'});
+  });
+
+  test('playlist catalog failure throws instead of an empty catalog', () async {
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      httpClient: MockClient((_) async => http.Response('', 500)),
+    );
+    addTearDown(client.close);
+
+    await expectLater(
+      client.playlists(
+        Uri.parse('https://plex.example:32400'),
+        'secret',
+        isCurrent: () => true,
+      ),
+      _plexError('server-unreachable'),
+    );
+  });
+
+  test(
+    'playlist repeated items across a page boundary are preserved',
+    () async {
+      final itemStarts = <int>[];
+      final client = PlexClient(
+        clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+        httpClient: MockClient((request) async {
+          if (request.url.path == '/playlists/all') {
+            return http.Response(
+              jsonEncode({
+                'MediaContainer': {
+                  'totalSize': 1,
+                  'Metadata': [
+                    {'ratingKey': 'p1', 'title': 'Playlist'},
+                  ],
+                },
+              }),
+              200,
+            );
+          }
+          final start = int.parse(
+            request.url.queryParameters['X-Plex-Container-Start']!,
+          );
+          itemStarts.add(start);
+          final ids = start == 0 ? ['m1', 'm2'] : ['m2', 'm3'];
+          return http.Response(
+            jsonEncode({
+              'MediaContainer': {
+                'offset': start,
+                'totalSize': 4,
+                'Metadata': [for (final id in ids) _playablePlaylistItem(id)],
+              },
+            }),
+            200,
+          );
+        }),
+      );
+      addTearDown(client.close);
+
+      final catalog = await client.playlists(
+        Uri.parse('https://plex.example:32400'),
+        'secret',
+        isCurrent: () => true,
+      );
+
+      expect(itemStarts, [0, 2]);
+      expect(catalog.failedIds, isEmpty);
+      expect(catalog.playlists.single.items.map((item) => item.id), [
+        'm1',
+        'm2',
+        'm2',
+        'm3',
+      ]);
+    },
+  );
+
+  test('playlist identical repeated blocks are not a repeated page', () async {
+    final itemStarts = <int>[];
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      httpClient: MockClient((request) async {
+        if (request.url.path == '/playlists/all') {
+          return http.Response(
+            jsonEncode({
+              'MediaContainer': {
+                'totalSize': 1,
+                'Metadata': [
+                  {'ratingKey': 'p1', 'title': 'Playlist'},
+                ],
+              },
+            }),
+            200,
+          );
+        }
+        final start = int.parse(
+          request.url.queryParameters['X-Plex-Container-Start']!,
+        );
+        itemStarts.add(start);
+        return http.Response(
+          jsonEncode({
+            'MediaContainer': {
+              'offset': start,
+              'totalSize': 6,
+              'Metadata': [
+                for (final id in ['a', 'b', 'c']) _playablePlaylistItem(id),
+              ],
+            },
+          }),
+          200,
+        );
+      }),
+    );
+    addTearDown(client.close);
+
+    final catalog = await client.playlists(
+      Uri.parse('https://plex.example:32400'),
+      'secret',
+      isCurrent: () => true,
+    );
+
+    expect(itemStarts, [0, 3]);
+    expect(catalog.failedIds, isEmpty);
+    expect(catalog.playlists.single.items.map((item) => item.id), [
+      'a',
+      'b',
+      'c',
+      'a',
+      'b',
+      'c',
+    ]);
+  });
+
+  test('playlist playable filtering applies after raw paging', () async {
+    Map<String, Object?> unplayableItem(String id) => {
+      'ratingKey': id,
+      'key': '/library/metadata/$id',
+      'title': 'Item $id',
+      'type': 'movie',
+      'duration': 1000,
+    };
+    final itemStarts = <int>[];
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      httpClient: MockClient((request) async {
+        if (request.url.path == '/playlists/all') {
+          return http.Response(
+            jsonEncode({
+              'MediaContainer': {
+                'totalSize': 1,
+                'Metadata': [
+                  {'ratingKey': 'p1', 'title': 'Playlist'},
+                ],
+              },
+            }),
+            200,
+          );
+        }
+        final start = int.parse(
+          request.url.queryParameters['X-Plex-Container-Start']!,
+        );
+        itemStarts.add(start);
+        return http.Response(
+          jsonEncode({
+            'MediaContainer': {
+              'offset': start,
+              'totalSize': 4,
+              'Metadata': start == 0
+                  ? [_playablePlaylistItem('m1'), unplayableItem('m2')]
+                  : [_playablePlaylistItem('m1'), _playablePlaylistItem('m3')],
+            },
+          }),
+          200,
+        );
+      }),
+    );
+    addTearDown(client.close);
+
+    final catalog = await client.playlists(
+      Uri.parse('https://plex.example:32400'),
+      'secret',
+      isCurrent: () => true,
+    );
+
+    expect(itemStarts, [0, 2]);
+    expect(catalog.failedIds, isEmpty);
+    expect(catalog.playlists.single.items.map((item) => item.id), [
+      'm1',
+      'm1',
+      'm3',
+    ]);
+  });
+
+  test('playlist catalog rejects duplicate playlist identities', () async {
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      httpClient: MockClient((request) async {
+        final start = int.parse(
+          request.url.queryParameters['X-Plex-Container-Start']!,
+        );
+        final ids = start == 0 ? ['p0', 'p1'] : ['p1', 'p2'];
+        return http.Response(
+          jsonEncode({
+            'MediaContainer': {
+              'offset': start,
+              'totalSize': 4,
+              'Metadata': [
+                for (final id in ids)
+                  {'ratingKey': id, 'title': 'Playlist $id'},
+              ],
+            },
+          }),
+          200,
+        );
+      }),
+    );
+    addTearDown(client.close);
+
+    await expectLater(
+      client.playlists(
+        Uri.parse('https://plex.example:32400'),
+        'secret',
+        isCurrent: () => true,
+      ),
+      _plexError('playlist-page-not-progressing'),
+    );
+  });
+
+  test('playlist catalog exceeding the work bound fails visibly', () async {
+    var requests = 0;
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      httpClient: MockClient((request) async {
+        requests++;
+        final start = int.parse(
+          request.url.queryParameters['X-Plex-Container-Start']!,
+        );
+        return http.Response(
+          jsonEncode({
+            'MediaContainer': {
+              'totalSize': 100001,
+              'Metadata': [
+                for (var index = 0; index < 100; index++)
+                  {
+                    'ratingKey': '${start + index}',
+                    'title': 'Playlist ${start + index}',
+                  },
+              ],
+            },
+          }),
+          200,
+        );
+      }),
+    );
+    addTearDown(client.close);
+
+    await expectLater(
+      client.playlists(
+        Uri.parse('https://plex.example:32400'),
+        'secret',
+        isCurrent: () => true,
+      ),
+      _plexError('playlist-scale-exceeded'),
+    );
+    expect(requests, 1000);
+  });
+
+  test(
+    'playlist contents exceeding the work bound fail only that playlist',
+    () async {
+      var itemRequests = 0;
+      final client = PlexClient(
+        clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+        httpClient: MockClient((request) async {
+          if (request.url.path == '/playlists/all') {
+            return http.Response(
+              jsonEncode({
+                'MediaContainer': {
+                  'totalSize': 1,
+                  'Metadata': [
+                    {'ratingKey': 'p1', 'title': 'Playlist'},
+                  ],
+                },
+              }),
+              200,
+            );
+          }
+          itemRequests++;
+          final start = int.parse(
+            request.url.queryParameters['X-Plex-Container-Start']!,
+          );
+          return http.Response(
+            jsonEncode({
+              'MediaContainer': {
+                'totalSize': 100001,
+                'Metadata': [
+                  for (var index = 0; index < 100; index++)
+                    _playablePlaylistItem('m${start + index}'),
+                ],
+              },
+            }),
+            200,
+          );
+        }),
+      );
+      addTearDown(client.close);
+
+      final catalog = await client.playlists(
+        Uri.parse('https://plex.example:32400'),
+        'secret',
+        isCurrent: () => true,
+      );
+
+      expect(itemRequests, 1000);
+      expect(catalog.playlists, isEmpty);
+      expect(catalog.failedIds, {'p1'});
+    },
+  );
+
+  test('playlist contents check cancellation before the next page', () async {
+    var current = true;
+    var itemRequests = 0;
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      httpClient: MockClient((request) async {
+        if (request.url.path == '/playlists/all') {
+          return http.Response(
+            jsonEncode({
+              'MediaContainer': {
+                'totalSize': 1,
+                'Metadata': [
+                  {'ratingKey': 'p1', 'title': 'Playlist'},
+                ],
+              },
+            }),
+            200,
+          );
+        }
+        itemRequests++;
+        current = false;
+        return http.Response(
+          jsonEncode({
+            'MediaContainer': {
+              'totalSize': 4,
+              'Metadata': [
+                _playablePlaylistItem('m0'),
+                _playablePlaylistItem('m1'),
+              ],
+            },
+          }),
+          200,
+        );
+      }),
+    );
+    addTearDown(client.close);
+
+    await expectLater(
+      client.playlists(
+        Uri.parse('https://plex.example:32400'),
+        'secret',
+        isCurrent: () => current,
+      ),
+      _plexError('cancelled'),
+    );
+    expect(itemRequests, 1);
+  });
 
   test(
     'library pagination reports exact progress without page snapshots',
@@ -2576,3 +3304,18 @@ List<PlexPlaybackPartDescriptor> _directPlaybackDescriptor(String partPath) =>
 Matcher _plexError(String code) => throwsA(
   isA<PlexException>().having((exception) => exception.code, 'code', code),
 );
+
+Map<String, Object?> _playablePlaylistItem(String id) => {
+  'ratingKey': id,
+  'key': '/library/metadata/$id',
+  'title': 'Item $id',
+  'type': 'movie',
+  'duration': 1000,
+  'Media': [
+    {
+      'Part': [
+        {'key': '/library/parts/$id'},
+      ],
+    },
+  ],
+};
