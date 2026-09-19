@@ -508,18 +508,56 @@ class PlexClient {
     }
 
     checkCurrent();
+    // One attempt-local lifetime for this catalog load. The first fatal
+    // authorization failure is recorded for propagation and aborts active
+    // sibling IO through the existing abortable transport; a fresh retry gets
+    // a fresh lifetime. Recoverable per-playlist failures never trigger it.
+    final attemptAbort = Completer<void>();
+    PlexException? fatal;
+    StackTrace? fatalStack;
+    void signalAttemptAbort() {
+      if (!attemptAbort.isCompleted) attemptAbort.complete();
+    }
+
+    final Future<void> attemptCancelled;
+    final callerCancelled = cancelled;
+    if (callerCancelled == null) {
+      attemptCancelled = attemptAbort.future;
+    } else {
+      final combined = Completer<void>();
+      unawaited(
+        callerCancelled.then((_) {
+          if (!combined.isCompleted) combined.complete();
+        }),
+      );
+      unawaited(
+        attemptAbort.future.then((_) {
+          if (!combined.isCompleted) combined.complete();
+        }),
+      );
+      attemptCancelled = combined.future;
+    }
+
+    void checkAttemptCurrent() {
+      checkCurrent();
+      if (attemptAbort.isCompleted) {
+        throw const PlexException('cancelled', 'Library scan cancelled.');
+      }
+    }
+
     // A catalog failure throws and never becomes a successful empty catalog.
     // A later contents-page failure for one playlist marks that playlist's
     // canonical id in failedIds without publishing its accumulated prefix.
     final catalogRecords = await _playlistCatalogRaws(
       server,
       token,
-      cancelled: cancelled,
+      cancelled: attemptCancelled,
       checkCurrent: checkCurrent,
     );
     checkCurrent();
     final output = <PlexPlaylist>[];
     final failed = <String>{};
+    const fatalCodes = {'auth-invalid', 'auth-required', 'access-denied'};
     for (var start = 0; start < catalogRecords.length; start += 4) {
       checkCurrent();
       final batch = catalogRecords.skip(start).take(4).map((record) async {
@@ -532,10 +570,10 @@ class PlexClient {
             server,
             token,
             id,
-            cancelled: cancelled,
-            checkCurrent: checkCurrent,
+            cancelled: attemptCancelled,
+            checkCurrent: checkAttemptCurrent,
           );
-          checkCurrent();
+          checkAttemptCurrent();
           // Playable filtering applies after raw paging so unplayable records
           // never shift pagination offsets. Repeated media is intentional
           // programming and keeps its order; repeated supplied occurrence
@@ -547,14 +585,18 @@ class PlexClient {
           return items.isEmpty
               ? null
               : PlexPlaylist(id: id, title: title, items: items);
-        } on PlexException catch (exception) {
+        } on PlexException catch (exception, stack) {
           checkCurrent();
-          if (const {
-            'cancelled',
-            'auth-invalid',
-            'auth-required',
-            'access-denied',
-          }.contains(exception.code)) {
+          if (exception.code == 'cancelled') {
+            if (fatal == null) rethrow;
+            // Our own attempt abort converging on a sibling while the
+            // recorded fatal propagates.
+            return null;
+          }
+          if (fatalCodes.contains(exception.code)) {
+            fatal ??= exception;
+            fatalStack ??= stack;
+            signalAttemptAbort();
             rethrow;
           }
           failed.add(id);
@@ -565,7 +607,17 @@ class PlexClient {
           return null;
         }
       });
-      final results = await Future.wait(batch);
+      List<PlexPlaylist?> results;
+      try {
+        results = await Future.wait(batch);
+      } on PlexException {
+        checkCurrent();
+        final firstFatal = fatal;
+        if (firstFatal != null) {
+          Error.throwWithStackTrace(firstFatal, fatalStack!);
+        }
+        rethrow;
+      }
       checkCurrent();
       for (final playlist in results) {
         if (playlist != null) output.add(playlist);

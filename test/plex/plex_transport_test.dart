@@ -2092,6 +2092,283 @@ void main() {
     },
   );
 
+  for (final entry in [(401, 'auth-invalid'), (403, 'access-denied')]) {
+    test(
+      'fatal playlist authorization ${entry.$1} aborts sibling IO with the original error',
+      timeout: const Timeout(Duration(seconds: 10)),
+      () async {
+        final status = entry.$1;
+        final code = entry.$2;
+        var mode = 'fatal';
+        final itemRequests = <String>[];
+        final allStarted = Completer<void>();
+        final releaseFatal = Completer<void>();
+        final abortObserved = Completer<void>();
+        var aborts = 0;
+        final client = PlexClient(
+          clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+          httpClient: MockClient.streaming((request, _) async {
+            if (request.url.path == '/playlists/all') {
+              return http.StreamedResponse(
+                Stream.value(
+                  utf8.encode(
+                    jsonEncode({
+                      'MediaContainer': {
+                        'totalSize': 5,
+                        'Metadata': [
+                          for (var i = 0; i < 5; i++)
+                            {'ratingKey': 'p$i', 'title': 'Playlist $i'},
+                        ],
+                      },
+                    }),
+                  ),
+                ),
+                200,
+              );
+            }
+            if (mode == 'valid') {
+              return http.StreamedResponse(
+                Stream.value(
+                  utf8.encode(
+                    jsonEncode({
+                      'MediaContainer': {
+                        'totalSize': 1,
+                        'Metadata': [_playablePlaylistItem('m')],
+                      },
+                    }),
+                  ),
+                ),
+                200,
+              );
+            }
+            final path = request.url.path;
+            itemRequests.add(
+              '$path?start=${request.url.queryParameters['X-Plex-Container-Start']}',
+            );
+            if (itemRequests.length >= 4 && !allStarted.isCompleted) {
+              allStarted.complete();
+            }
+            if (path == '/playlists/p0/items') {
+              await allStarted.future;
+              await releaseFatal.future;
+              return http.StreamedResponse(Stream.empty(), status);
+            }
+            if (path == '/playlists/p1/items') {
+              // The first page stays available until the fatal abort fires,
+              // so any second page would prove sibling work was not stopped.
+              await releaseFatal.future;
+              await abortObserved.future;
+              return http.StreamedResponse(
+                Stream.value(
+                  utf8.encode(
+                    jsonEncode({
+                      'MediaContainer': {
+                        'offset': 0,
+                        'totalSize': 4,
+                        'Metadata': [
+                          {..._playablePlaylistItem('a'), 'playlistItemID': 1},
+                          {..._playablePlaylistItem('b'), 'playlistItemID': 2},
+                        ],
+                      },
+                    }),
+                  ),
+                ),
+                200,
+              );
+            }
+            await (request as http.AbortableRequest).abortTrigger!;
+            aborts++;
+            if (!abortObserved.isCompleted) abortObserved.complete();
+            throw http.RequestAbortedException(request.url);
+          }),
+        );
+        addTearDown(client.close);
+
+        final attempt = client.playlists(
+          Uri.parse('https://plex.example:32400'),
+          'secret',
+          isCurrent: () => true,
+        );
+        await allStarted.future;
+        releaseFatal.complete();
+        await expectLater(attempt, _plexError(code));
+
+        expect(aborts, 2);
+        expect(
+          itemRequests.where((item) => item.startsWith('/playlists/p4/')),
+          isEmpty,
+        );
+        expect(itemRequests.where((item) => item.contains('start=2')), isEmpty);
+        expect(itemRequests, hasLength(4));
+
+        mode = 'valid';
+        final retry = await client.playlists(
+          Uri.parse('https://plex.example:32400'),
+          'secret',
+          isCurrent: () => true,
+        );
+        expect(retry.playlists.map((playlist) => playlist.id), [
+          'p0',
+          'p1',
+          'p2',
+          'p3',
+          'p4',
+        ]);
+        expect(retry.failedIds, isEmpty);
+      },
+    );
+  }
+
+  test(
+    'first fatal playlist authorization error wins the attempt',
+    timeout: const Timeout(Duration(seconds: 10)),
+    () async {
+      // p1 fails first with 403 while p0's 401 is held back until the abort
+      // signal proves p1's failure was already recorded. A simultaneous abort
+      // converging on p0 must not replace it.
+      final releaseSecond = Completer<void>();
+      final abortObserved = Completer<void>();
+      final client = PlexClient(
+        clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+        httpClient: MockClient.streaming((request, _) async {
+          if (request.url.path == '/playlists/all') {
+            return http.StreamedResponse(
+              Stream.value(
+                utf8.encode(
+                  jsonEncode({
+                    'MediaContainer': {
+                      'totalSize': 3,
+                      'Metadata': [
+                        {'ratingKey': 'p0', 'title': 'First'},
+                        {'ratingKey': 'p1', 'title': 'Second'},
+                        {'ratingKey': 'p2', 'title': 'Third'},
+                      ],
+                    },
+                  }),
+                ),
+              ),
+              200,
+            );
+          }
+          if (request.url.path == '/playlists/p1/items') {
+            return http.StreamedResponse(Stream.empty(), 403);
+          }
+          if (request.url.path == '/playlists/p0/items') {
+            await releaseSecond.future;
+            return http.StreamedResponse(Stream.empty(), 401);
+          }
+          await (request as http.AbortableRequest).abortTrigger!;
+          if (!abortObserved.isCompleted) abortObserved.complete();
+          throw http.RequestAbortedException(request.url);
+        }),
+      );
+      addTearDown(client.close);
+
+      final attempt = client.playlists(
+        Uri.parse('https://plex.example:32400'),
+        'secret',
+        isCurrent: () => true,
+      );
+      await abortObserved.future;
+      releaseSecond.complete();
+      await expectLater(attempt, _plexError('access-denied'));
+    },
+  );
+
+  test('external playlist cancellation still throws instead of per-playlist failure', () async {
+    final cancel = Completer<void>();
+    var itemRequests = 0;
+    final allStarted = Completer<void>();
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      httpClient: MockClient.streaming((request, _) async {
+        if (request.url.path == '/playlists/all') {
+          return http.StreamedResponse(
+            Stream.value(
+              utf8.encode(
+                jsonEncode({
+                  'MediaContainer': {
+                    'totalSize': 2,
+                    'Metadata': [
+                      {'ratingKey': 'p0', 'title': 'First'},
+                      {'ratingKey': 'p1', 'title': 'Second'},
+                    ],
+                  },
+                }),
+              ),
+            ),
+            200,
+          );
+        }
+        itemRequests++;
+        if (itemRequests == 2 && !allStarted.isCompleted) {
+          allStarted.complete();
+        }
+        await (request as http.AbortableRequest).abortTrigger!;
+        throw http.RequestAbortedException(request.url);
+      }),
+    );
+    addTearDown(client.close);
+
+    final attempt = client.playlists(
+      Uri.parse('https://plex.example:32400'),
+      'secret',
+      isCurrent: () => true,
+      cancelled: cancel.future,
+    );
+    await allStarted.future;
+    cancel.complete();
+    await expectLater(attempt, _plexError('cancelled'));
+    expect(itemRequests, 2);
+  });
+
+  test(
+    'individual playlist failure does not abort sibling playlists',
+    () async {
+      final client = PlexClient(
+        clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+        httpClient: MockClient((request) async {
+          if (request.url.path == '/playlists/all') {
+            return http.Response(
+              jsonEncode({
+                'MediaContainer': {
+                  'totalSize': 2,
+                  'Metadata': [
+                    {'ratingKey': 'p0', 'title': 'Failing'},
+                    {'ratingKey': 'p1', 'title': 'Working'},
+                  ],
+                },
+              }),
+              200,
+            );
+          }
+          if (request.url.path == '/playlists/p0/items') {
+            return http.Response('', 500);
+          }
+          return http.Response(
+            jsonEncode({
+              'MediaContainer': {
+                'totalSize': 1,
+                'Metadata': [_playablePlaylistItem('m')],
+              },
+            }),
+            200,
+          );
+        }),
+      );
+      addTearDown(client.close);
+
+      final catalog = await client.playlists(
+        Uri.parse('https://plex.example:32400'),
+        'secret',
+        isCurrent: () => true,
+      );
+
+      expect(catalog.playlists.map((playlist) => playlist.id), ['p1']);
+      expect(catalog.failedIds, {'p0'});
+    },
+  );
+
   test('playlist playable filtering applies after raw paging', () async {
     Map<String, Object?> unplayableItem(String id) => {
       'ratingKey': id,
@@ -2295,9 +2572,13 @@ void main() {
     },
   );
 
-  for (final title in <String?>[null, '', '   ']) {
+  for (final entry in <(String, Map<String, Object?>)>[
+    ('missing', {'ratingKey': 'p1'}),
+    ('blank-empty', {'ratingKey': 'p1', 'title': ''}),
+    ('blank-spaces', {'ratingKey': 'p1', 'title': '   '}),
+  ]) {
     test(
-      'playlist catalog entry with a ${title == null ? 'missing' : 'blank'} title fails that playlist canonically',
+      'playlist catalog entry with a ${entry.$1} title fails that playlist canonically',
       () async {
         var itemRequests = 0;
         final client = PlexClient(
@@ -2308,9 +2589,7 @@ void main() {
               jsonEncode({
                 'MediaContainer': {
                   'totalSize': 1,
-                  'Metadata': [
-                    {'ratingKey': 'p1', if (title != null) 'title': title},
-                  ],
+                  'Metadata': [entry.$2],
                 },
               }),
               200,
