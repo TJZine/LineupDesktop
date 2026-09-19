@@ -1,0 +1,130 @@
+{
+  "baseline_commit": "9bcc78d5dd5219b78d9afd316390f1d7f79b6821",
+  "source_sha256": {
+    "lib/ui/app_ui.dart": "3a657d4e3e3b13aa172393757d147744f7cc0259682241a854d79343e2043516",
+    "lib/app/lineup_shell.dart": "2a61abfe11c3c52bc272ff9b32ebaeec0a4df0d2925345829fd7494dfc29a811",
+    "lib/app/diagnostics_view.dart": "ea25f189e30f0b5c54aef8074383753119b385391c7d0c86a1551701a157e18f"
+  },
+  "captures": [
+    {
+      "path": "build/desktop-ui/scaling/g1-1080/account-long-1920x1080.png",
+      "physical_size": [
+        1920,
+        1080
+      ],
+      "dpr": 1,
+      "text_scale": 1,
+      "sha256": "ab5f76debd2d821ce19724f0bda01b69a6d6ac8fe2eaa2b521a7e542beb25770"
+    },
+    {
+      "path": "build/desktop-ui/scaling/g1-1080/event-expanded.png",
+      "physical_size": [
+        1920,
+        1080
+      ],
+      "dpr": 1,
+      "text_scale": 1,
+      "sha256": "7bc94934ebbf2850f50e494e5c09f1944e4e66c72dc5f4c6eb2c30565f95fdcf"
+    },
+    {
+      "path": "build/desktop-ui/scaling/g1-1080/technical.png",
+      "physical_size": [
+        1920,
+        1080
+      ],
+      "dpr": 1,
+      "text_scale": 1,
+      "sha256": "68c6e6be72cb5b531343709d3bf6ee35fbd1fee5597dd89f9107bcccf1e8075f"
+    },
+    {
+      "path": "build/desktop-ui/scaling/g1-1440/account-long-1920x1080.png",
+      "physical_size": [
+        2560,
+        1440
+      ],
+      "dpr": 1,
+      "text_scale": 1,
+      "sha256": "c9bf51e9f7fbdcc38faf9d2765b4fb3795bf1334325bc995046abb015ffc6aed"
+    },
+    {
+      "path": "build/desktop-ui/scaling/g1-1440/event-expanded.png",
+      "physical_size": [
+        2560,
+        1440
+      ],
+      "dpr": 1,
+      "text_scale": 1,
+      "sha256": "4c2049219c6f5d3ef2bca0abf0f4f5dfca70c14b44fb849c1d88d158541a0f53"
+    },
+    {
+      "path": "build/desktop-ui/scaling/g1-1440/technical.png",
+      "physical_size": [
+        2560,
+        1440
+      ],
+      "dpr": 1,
+      "text_scale": 1,
+      "sha256": "c09d133f06c31413502f1ae3c67f88abf0cd3f88872479fb773fc427d3ca0dab"
+    },
+    {
+      "path": "build/desktop-ui/scaling/g1-2160/account-long-1920x1080.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "dpr": 1,
+      "text_scale": 1,
+      "sha256": "1e9aa4804ec7ff152488f2f49b08cb4db10efc074ea537af612f946605471f2e"
+    },
+    {
+      "path": "build/desktop-ui/scaling/g1-2160/event-expanded.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "dpr": 1,
+      "text_scale": 1,
+      "sha256": "19292607ac888c7cf5e845c72940c4b1ce54feb07385148fc2da4d4e173ee8e9"
+    },
+    {
+      "path": "build/desktop-ui/scaling/g1-2160/technical.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "dpr": 1,
+      "text_scale": 1,
+      "sha256": "fe58bd9ad697dbbfe7b12886df66dbbf700d25b047246eb2e8e5eb207e561a1a"
+    },
+    {
+      "path": "build/desktop-ui/scaling/g1-text200/account-long-1920x1080.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "dpr": 2,
+      "text_scale": 2,
+      "sha256": "5294cd918c3b86ef051f99a0ce8114f00602b64498b9d5faab0c930545bdb4a4"
+    },
+    {
+      "path": "build/desktop-ui/scaling/g1-text200/event-expanded.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "dpr": 2,
+      "text_scale": 2,
+      "sha256": "d5ded1bf5f482501a03dcd21cb3a4a3a9a3f324510fba4dfca95ad519013e565"
+    },
+    {
+      "path": "build/desktop-ui/scaling/g1-text200/technical.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "dpr": 2,
+      "text_scale": 2,
+      "sha256": "c2822f9df0868db771831990f8d33d5fc3c2c5470a0b66ebfc7fa4c0b5a8a60d"
+    }
+  ]
+}

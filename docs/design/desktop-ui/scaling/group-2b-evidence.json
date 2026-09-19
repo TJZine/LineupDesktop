@@ -1,0 +1,265 @@
+{
+  "baseline_commit": "6582e97e",
+  "source_sha256": {
+    "lib/app/onboarding_view.dart": "7de9dcde7f272bf74033263d7b3ec57dc9b0df09316468854ddc91ff4314f586",
+    "lib/ui/app_ui.dart": "164bc055642612a1eb9f03eb5739971588c21291d596b0dee752333eb45912c8"
+  },
+  "captures": [
+    {
+      "path": "build/desktop-ui/scaling/onboarding-after-1080/profiles.png",
+      "physical_size": [
+        1920,
+        1080
+      ],
+      "sha256": "90ab29345c621d2e240af132f0a4a72041eedaa91eaaea08256b9428a89a42e1"
+    },
+    {
+      "path": "build/desktop-ui/scaling/onboarding-after-1080/servers.png",
+      "physical_size": [
+        1920,
+        1080
+      ],
+      "sha256": "3ad91e81468bcd7d8ea0e42a2799738d8457bdf18d8b8c9bc5431e1a24772623"
+    },
+    {
+      "path": "build/desktop-ui/scaling/onboarding-after-1080/surface-07-linking-browser-failure.png",
+      "physical_size": [
+        1920,
+        1080
+      ],
+      "sha256": "4d2aa351d0dbd089716afba683b5d8d799b75b22d1247ccf47df140216e75497"
+    },
+    {
+      "path": "build/desktop-ui/scaling/onboarding-after-1080/surface-07-linking-normal.png",
+      "physical_size": [
+        1920,
+        1080
+      ],
+      "sha256": "c75bffd18796ebcbcacc3ef8fae269f37e4293a81e1736032d3a0dc23c76d504"
+    },
+    {
+      "path": "build/desktop-ui/scaling/onboarding-after-1080/surface-08-linking-expired.png",
+      "physical_size": [
+        1920,
+        1080
+      ],
+      "sha256": "4db682fb2f787d6224ea3e5916a9375b949ce97c40562c883a04c1400b5f05ef"
+    },
+    {
+      "path": "build/desktop-ui/scaling/onboarding-after-1080/surface-09-linking-terminal-failure.png",
+      "physical_size": [
+        1920,
+        1080
+      ],
+      "sha256": "64e823bac392839167f84309423e505aa83d03b8c9e830c296497c3599161f65"
+    },
+    {
+      "path": "build/desktop-ui/scaling/onboarding-after-1080/welcome.png",
+      "physical_size": [
+        1920,
+        1080
+      ],
+      "sha256": "c44115f96293ae34b03e43f2a0fd56ea56c59d9819c9fcc3074a312881aee082"
+    },
+    {
+      "path": "build/desktop-ui/scaling/onboarding-after-1440/profiles.png",
+      "physical_size": [
+        2560,
+        1440
+      ],
+      "sha256": "683c4f5e7a6389b019521ff62e483fb55cd37be2054b915bcb011b3a273faad1"
+    },
+    {
+      "path": "build/desktop-ui/scaling/onboarding-after-1440/servers.png",
+      "physical_size": [
+        2560,
+        1440
+      ],
+      "sha256": "b6559063308b19ef63ba6da1c25396059d94925db2ad22a477ee943b2760f438"
+    },
+    {
+      "path": "build/desktop-ui/scaling/onboarding-after-1440/surface-07-linking-browser-failure.png",
+      "physical_size": [
+        2560,
+        1440
+      ],
+      "sha256": "8f7a179a3a9fb002d00e34e7d51ed28dc7c81c1ca54b56a01781a1912b63a6e5"
+    },
+    {
+      "path": "build/desktop-ui/scaling/onboarding-after-1440/surface-07-linking-normal.png",
+      "physical_size": [
+        2560,
+        1440
+      ],
+      "sha256": "4cd3d5ac10ad553f0bd91b840f5ebcb6a57f5a10cb93323134e8116760564ac9"
+    },
+    {
+      "path": "build/desktop-ui/scaling/onboarding-after-1440/surface-08-linking-expired.png",
+      "physical_size": [
+        2560,
+        1440
+      ],
+      "sha256": "c6f85ff80de3fadb54b0b5d6e95da3321a2de1fe01306b9f77f619f662cde216"
+    },
+    {
+      "path": "build/desktop-ui/scaling/onboarding-after-1440/surface-09-linking-terminal-failure.png",
+      "physical_size": [
+        2560,
+        1440
+      ],
+      "sha256": "97e603fafa98f6dc5a1154c93e547dcc8da8055bd41c40ba5b4af35f243c92ea"
+    },
+    {
+      "path": "build/desktop-ui/scaling/onboarding-after-1440/welcome.png",
+      "physical_size": [
+        2560,
+        1440
+      ],
+      "sha256": "811bd6d43300acc3bdc9ff17e5b1361103d58af548df4150ea844faa69329144"
+    },
+    {
+      "path": "build/desktop-ui/scaling/onboarding-after-2160/empty-notice/error-notice.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "6b7b6d305f5d8034cab49ca7da1ba66fb783e475d24cfed172ae703026ddb69e"
+    },
+    {
+      "path": "build/desktop-ui/scaling/onboarding-after-2160/profiles.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "733c1a0e5a6ffb08f752c3bf8107ecf41a7b6e6748fcd5425962da08ffcd6527"
+    },
+    {
+      "path": "build/desktop-ui/scaling/onboarding-after-2160/servers.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "1322ab58e20a0969ed0ba6ffbe7cdca5d40acb25d87bf34e3cd329b716276d32"
+    },
+    {
+      "path": "build/desktop-ui/scaling/onboarding-after-2160/surface-07-linking-browser-failure.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "a907e87610630ca456b33bbb30ecc1af0cb97ee5f8f24eea82aa27ce095902a5"
+    },
+    {
+      "path": "build/desktop-ui/scaling/onboarding-after-2160/surface-07-linking-normal.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "7e2ce91ba26d3aec9101a7dfc959145201aedcfd751a09ec856c2785f576b984"
+    },
+    {
+      "path": "build/desktop-ui/scaling/onboarding-after-2160/surface-08-linking-expired.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "b50cdfdbc8f2cbded836e9046fbeb635378b0d3a923cb415bd5ac9e3b6730638"
+    },
+    {
+      "path": "build/desktop-ui/scaling/onboarding-after-2160/surface-09-linking-terminal-failure.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "6b7b6d305f5d8034cab49ca7da1ba66fb783e475d24cfed172ae703026ddb69e"
+    },
+    {
+      "path": "build/desktop-ui/scaling/onboarding-after-2160/welcome.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "6c3446243ff1b18b7b303ef22006d10f95a2a2a00d4778f3e03a242064b7efba"
+    },
+    {
+      "path": "build/desktop-ui/scaling/onboarding-after-2160-dpr2-text2/empty-notice/error-notice.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "decfa94a059c54c840c98d96373dd6ca95180589e86fe0d9480c9621e63952df"
+    },
+    {
+      "path": "build/desktop-ui/scaling/onboarding-after-2160-dpr2-text2/profiles.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "6e4e40bdaa34ee34659fc232c5d3c81ff3f6ba8c4ff8845d603c8a243980a760"
+    },
+    {
+      "path": "build/desktop-ui/scaling/onboarding-after-2160-dpr2-text2/servers.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "ae7e029071ecce62eceb7bfd2f846fcc254b8ae6d183e66a97714cd0c6537e09"
+    },
+    {
+      "path": "build/desktop-ui/scaling/onboarding-after-2160-dpr2-text2/surface-07-linking-browser-failure.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "5ab7e8c6791db8f8b33dfa93036f605668ff9eb260411a56f77a987ce94aaebe"
+    },
+    {
+      "path": "build/desktop-ui/scaling/onboarding-after-2160-dpr2-text2/surface-07-linking-normal.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "e4e1bbdfd5fe33459f75b11b6a73431c3b45890d84d0aec8f10cf50f7c3ec19c"
+    },
+    {
+      "path": "build/desktop-ui/scaling/onboarding-after-2160-dpr2-text2/surface-08-linking-expired.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "4d5c0ae31b85e101c07eb630eabca196715075e327a79e4db5b2565bfdaaa17a"
+    },
+    {
+      "path": "build/desktop-ui/scaling/onboarding-after-2160-dpr2-text2/surface-09-linking-terminal-failure.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "decfa94a059c54c840c98d96373dd6ca95180589e86fe0d9480c9621e63952df"
+    },
+    {
+      "path": "build/desktop-ui/scaling/onboarding-after-2160-dpr2-text2/welcome.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "0bfac0903646324b11d32aa1f5d428980d880683581f5dbadd12db5777c3baa3"
+    },
+    {
+      "path": "build/desktop-ui/scaling/onboarding-final-2160/empty-servers.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "945a7a04fc1de730285347b7dee945b9b874cb3439227c0e6104fdb5052a6da2"
+    },
+    {
+      "path": "build/desktop-ui/scaling/onboarding-final-2160/error-notice.png",
+      "physical_size": [
+        3840,
+        2160
+      ],
+      "sha256": "6b7b6d305f5d8034cab49ca7da1ba66fb783e475d24cfed172ae703026ddb69e"
+    }
+  ]
+}

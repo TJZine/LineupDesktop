@@ -68,26 +68,6 @@ function Get-NormalizedTextSha256 {
   [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes))
 }
 
-function Get-PubspecVersion {
-  param([Parameter(Mandatory)] [string] $Path)
-
-  $versionLines = @(
-    Get-Content -LiteralPath $Path | Where-Object { $_ -match '^version\s*:' }
-  )
-  if ($versionLines.Count -ne 1) {
-    throw 'pubspec.yaml must contain exactly one top-level version entry.'
-  }
-  if ($versionLines[0] -notmatch
-    '^version\s*:\s*(?<name>[^+\s]+)\+(?<build>[0-9]+)\s*(?:#.*)?$') {
-    throw 'pubspec.yaml version must have a name and numeric build number (name+build).'
-  }
-
-  [pscustomobject]@{
-    Name = $Matches.name
-    Build = $Matches.build
-  }
-}
-
 function Assert-PinnedFlutterCheckout {
   param([Parameter(Mandatory)] [string] $Root)
 

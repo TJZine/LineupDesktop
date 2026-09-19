@@ -600,6 +600,7 @@ void main() {
         plex: plex,
         scheduleClock: () => DateTime.utc(2026, 1, 1, 0, 0, 30),
       );
+      addTearDown(controller.dispose);
 
       final initialization = controller.initialize();
       await store.migrationSaveStarted.future;
@@ -611,7 +612,6 @@ void main() {
 
       expect(controller.channels.single.scheduleVersion, 1);
       expect(controller.channels.single.scheduleTransition, isNull);
-      controller.dispose();
     },
   );
 
@@ -1984,6 +1984,7 @@ void main() {
                   utf8.encode(
                     jsonEncode({
                       'MediaContainer': {
+                        'totalSize': 8,
                         'Metadata': [
                           for (var i = 0; i < 8; i++)
                             {'ratingKey': 'p$i', 'title': 'Playlist $i'},
@@ -2472,6 +2473,381 @@ void main() {
           .where((entry) => entry.message == 'Playlist discovery unavailable')
           .single;
       expect(playlistDiagnostic.context, {'code': 'playlist-failed'});
+    },
+  );
+
+  test('canonical playlist failure cannot replace committed inventory with a required nested source', () async {
+    var catalogMode = 'padded-failure';
+    final transport = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      httpClient: MockClient((request) async {
+        if (request.url.path == '/playlists/all') {
+          return http.Response(
+            jsonEncode({
+              'MediaContainer': {
+                'totalSize': 1,
+                'Metadata': catalogMode == 'valid'
+                    ? [
+                        {'ratingKey': 'p1', 'title': 'Playlist'},
+                      ]
+                    : [
+                        {'ratingKey': ' p1 ', 'title': 'Padded'},
+                      ],
+              },
+            }),
+            200,
+          );
+        }
+        if (catalogMode == 'valid') {
+          return http.Response(
+            jsonEncode({
+              'MediaContainer': {
+                'totalSize': 1,
+                'Metadata': [
+                  {
+                    'ratingKey': 'm1',
+                    'key': '/library/metadata/m1',
+                    'title': 'Playlist movie',
+                    'type': 'movie',
+                    'duration': 1000,
+                    'Media': [
+                      {
+                        'Part': [
+                          {'key': '/library/parts/m1'},
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+            }),
+            200,
+          );
+        }
+        return http.Response('', 500);
+      }),
+    );
+    addTearDown(transport.close);
+    final selected = _server('server');
+    final store = _CountingMemoryStore(
+      const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+    );
+    final plex = _FakePlex()
+      ..serversResult = [selected]
+      ..connectionResult = selected.connections.single
+      ..librariesResult = const [
+        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
+      ]
+      ..libraryItemsHandler = (_, _, _, _) async {
+        return [_playableMovie];
+      }
+      ..playlistsScanHandler = (server, token, isCurrent, cancelled) =>
+          transport.playlists(
+            server,
+            token,
+            isCurrent: isCurrent,
+            cancelled: cancelled,
+          );
+    final controller = LineupController(
+      store: store,
+      credentials: _MemoryCredentials(accountToken: 'token'),
+      plex: plex,
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+    final previousMedia = [_playableMovie];
+    const previousPlaylists = [
+      PlexPlaylist(id: 'p1', title: 'Playlist', items: []),
+    ];
+    final previousGeneration = controller.contentGeneration;
+    final previousChannels = [
+      Channel(
+        id: 'saved',
+        number: 1,
+        name: 'Saved channel',
+        source: const MixedSource(
+          sources: [
+            LibrarySource(
+              libraryId: 'movies',
+              libraryType: PlexLibraryType.movie,
+            ),
+            MixedSource(sources: [PlaylistSource('p1')]),
+          ],
+        ),
+        playbackMode: PlaybackMode.sequential,
+        anchor: DateTime.utc(2026),
+        shuffleSeed: 1,
+      ),
+    ];
+    controller
+      ..selectedLibraryIds = const {'movies'}
+      ..availableMedia = previousMedia
+      ..availablePlaylists = previousPlaylists
+      ..channels = previousChannels
+      ..currentChannelId = 'saved'
+      ..diagnostics.enabled = true;
+    final savedBefore = store.saveCalls;
+
+    expect(await controller.setLibraries({'movies'}), isFalse);
+
+    expect(controller.availableMedia, same(previousMedia));
+    expect(controller.availablePlaylists, same(previousPlaylists));
+    expect(controller.channels, same(previousChannels));
+    expect(controller.currentChannelId, 'saved');
+    expect(controller.selectedLibraryIds, {'movies'});
+    expect(controller.contentGeneration, previousGeneration);
+    expect(
+      controller.error,
+      'A playlist used by this lineup could not be loaded. Retry setup.',
+    );
+    expect(store.saveCalls, savedBefore);
+
+    catalogMode = 'valid';
+    expect(await controller.setLibraries({'movies'}), isTrue);
+    expect(controller.availablePlaylists.map((playlist) => playlist.id), [
+      'p1',
+    ]);
+    expect(controller.libraryScanStatus, LibraryScanStatus.complete);
+    expect(store.saveCalls, savedBefore + 1);
+  });
+
+  test(
+    'unidentifiable playlist catalog cannot replace committed inventory',
+    () async {
+      final transport = PlexClient(
+        clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+        httpClient: MockClient((request) async {
+          return http.Response(
+            jsonEncode({
+              'MediaContainer': {
+                'totalSize': 1,
+                'Metadata': [
+                  {'title': 'Synthetic broken playlist'},
+                ],
+              },
+            }),
+            200,
+          );
+        }),
+      );
+      addTearDown(transport.close);
+      final selected = _server('server');
+      final store = _CountingMemoryStore(
+        const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+      );
+      final plex = _FakePlex()
+        ..serversResult = [selected]
+        ..connectionResult = selected.connections.single
+        ..librariesResult = const [
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+        ]
+        ..libraryItemsHandler = (_, _, _, _) async {
+          return [_playableMovie];
+        }
+        ..playlistsScanHandler = (server, token, isCurrent, cancelled) =>
+            transport.playlists(
+              server,
+              token,
+              isCurrent: isCurrent,
+              cancelled: cancelled,
+            );
+      final controller = LineupController(
+        store: store,
+        credentials: _MemoryCredentials(accountToken: 'token'),
+        plex: plex,
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+      final previousMedia = [_playableMovie];
+      const previousPlaylists = [
+        PlexPlaylist(id: 'p1', title: 'Playlist', items: []),
+      ];
+      final previousGeneration = controller.contentGeneration;
+      final previousChannels = [
+        Channel(
+          id: 'saved',
+          number: 1,
+          name: 'Saved channel',
+          source: const PlaylistSource('p1'),
+          playbackMode: PlaybackMode.sequential,
+          anchor: DateTime.utc(2026),
+          shuffleSeed: 1,
+        ),
+      ];
+      controller
+        ..selectedLibraryIds = const {'movies'}
+        ..availableMedia = previousMedia
+        ..availablePlaylists = previousPlaylists
+        ..channels = previousChannels
+        ..currentChannelId = 'saved'
+        ..diagnostics.enabled = true;
+      final savedBefore = store.saveCalls;
+
+      expect(await controller.setLibraries({'movies'}), isFalse);
+
+      expect(controller.availableMedia, same(previousMedia));
+      expect(controller.availablePlaylists, same(previousPlaylists));
+      expect(controller.channels, same(previousChannels));
+      expect(controller.currentChannelId, 'saved');
+      expect(controller.selectedLibraryIds, {'movies'});
+      expect(controller.contentGeneration, previousGeneration);
+      expect(controller.libraryScanStatus, LibraryScanStatus.transientFailure);
+      expect(
+        controller.error,
+        'A playlist used by this lineup could not be loaded. Retry setup.',
+      );
+      expect(store.saveCalls, savedBefore);
+      final playlistDiagnostic = controller.diagnostics.entries
+          .where((entry) => entry.message == 'Playlist discovery unavailable')
+          .single;
+      expect(playlistDiagnostic.context, {'code': 'playlist-page-invalid'});
+    },
+  );
+
+  test(
+    'fatal playlist authorization aborts siblings and recovers with refreshed access',
+    timeout: const Timeout(Duration(seconds: 10)),
+    () async {
+      var discoveries = 0;
+      final allStarted = Completer<void>();
+      final releaseFatal = Completer<void>();
+      var itemRequests = 0;
+      var aborts = 0;
+      final transport = PlexClient(
+        clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+        httpClient: MockClient.streaming((request, _) async {
+          if (request.url.path == '/playlists/all') {
+            return http.StreamedResponse(
+              Stream.value(
+                utf8.encode(
+                  jsonEncode({
+                    'MediaContainer': {
+                      'totalSize': 4,
+                      'Metadata': [
+                        for (var i = 0; i < 4; i++)
+                          {'ratingKey': 'p$i', 'title': 'Playlist $i'},
+                      ],
+                    },
+                  }),
+                ),
+              ),
+              200,
+            );
+          }
+          final refreshed = request.headers['X-Plex-Token'] == 'pms-token-2';
+          if (refreshed) {
+            return http.StreamedResponse(
+              Stream.value(
+                utf8.encode(
+                  jsonEncode({
+                    'MediaContainer': {
+                      'totalSize': 1,
+                      'Metadata': [
+                        {
+                          'ratingKey': 'm',
+                          'key': '/library/metadata/m',
+                          'title': 'Item m',
+                          'type': 'movie',
+                          'duration': 1000,
+                          'Media': [
+                            {
+                              'Part': [
+                                {'key': '/library/parts/m'},
+                              ],
+                            },
+                          ],
+                        },
+                      ],
+                    },
+                  }),
+                ),
+              ),
+              200,
+            );
+          }
+          itemRequests++;
+          if (itemRequests == 4 && !allStarted.isCompleted) {
+            allStarted.complete();
+          }
+          if (request.url.path == '/playlists/p0/items') {
+            await allStarted.future;
+            await releaseFatal.future;
+            return http.StreamedResponse(Stream.empty(), 401);
+          }
+          await (request as http.AbortableRequest).abortTrigger!;
+          aborts++;
+          throw http.RequestAbortedException(request.url);
+        }),
+      );
+      addTearDown(transport.close);
+      final selected = _server('server');
+      final store = _CountingMemoryStore(
+        const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+      );
+      final plex = _FakePlex()
+        ..serversResult = [selected]
+        ..connectionResult = selected.connections.single
+        ..librariesResult = const [
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+        ]
+        ..libraryItemsHandler = (_, _, _, _) async {
+          return [_playableMovie];
+        }
+        ..discoverServersHandler = (_) async {
+          discoveries++;
+          return [
+            PlexServerAccess(
+              server: selected,
+              token: discoveries == 1 ? 'pms-token' : 'pms-token-2',
+            ),
+          ];
+        }
+        ..playlistsScanHandler = (server, token, isCurrent, cancelled) =>
+            transport.playlists(
+              server,
+              token,
+              isCurrent: isCurrent,
+              cancelled: cancelled,
+            );
+      final controller = LineupController(
+        store: store,
+        credentials: _MemoryCredentials(accountToken: 'token'),
+        plex: plex,
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+      final savedBefore = store.saveCalls;
+
+      final scan = controller.setLibraries({'movies'});
+      await allStarted.future;
+      releaseFatal.complete();
+      expect(await scan, isTrue);
+
+      expect(aborts, 3);
+      expect(discoveries, 2);
+      expect(controller.availablePlaylists.map((playlist) => playlist.id), [
+        'p0',
+        'p1',
+        'p2',
+        'p3',
+      ]);
+      expect(
+        controller.availablePlaylists
+            .expand((playlist) => playlist.items)
+            .map((item) => item.id),
+        ['m', 'm', 'm', 'm'],
+      );
+      expect(controller.libraryScanStatus, LibraryScanStatus.complete);
+      expect(controller.error, isNull);
+      expect(store.saveCalls, savedBefore + 1);
     },
   );
 

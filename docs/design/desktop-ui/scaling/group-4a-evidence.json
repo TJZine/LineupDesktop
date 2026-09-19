@@ -1,0 +1,403 @@
+{
+  "surface": "surface-28 Player OSD proportional scaling",
+  "base": "a376a9ca565b7279a9f6d0e1456c9670daf1acba",
+  "source": {
+    "path": "lib/playback/player_view.dart",
+    "baseSha256": "6868024ea5a63a8153b2406d52a2878f65ab66ce57ba6b8b84b57550fe4e163b",
+    "finalSha256": "8cef42bee8c5a5821669a669bcdeaac97c185b5e9b5d84e44cd429429febd121"
+  },
+  "toolchain": {
+    "flutter": "3.47.2",
+    "flutterRevision": "d3b14c876900e553bc736ca19295fc09e3853e8e",
+    "dart": "3.13.2",
+    "timezone": "America/New_York"
+  },
+  "captures": [
+    {
+      "path": "build/desktop-ui/scaling/osd-final-1080-default/osd-player-osd-default-bright-capture.png",
+      "sha256": "45f4fb90874ca5150b574af1415827afbef7ad1731b6116a0735c128cb695438",
+      "physicalViewport": "1920x1080",
+      "dpr": 1,
+      "textScale": 1,
+      "logo": "default",
+      "dvr": false,
+      "scene": "bright"
+    },
+    {
+      "path": "build/desktop-ui/scaling/osd-final-1080-default/osd-player-osd-default-dark-capture.png",
+      "sha256": "0ac3e94a69761a92e7c9122aaaf26a42c3bfa43e3fbae7a3e06b57bfec621ab3",
+      "physicalViewport": "1920x1080",
+      "dpr": 1,
+      "textScale": 1,
+      "logo": "default",
+      "dvr": false,
+      "scene": "dark"
+    },
+    {
+      "path": "build/desktop-ui/scaling/osd-final-1080-logo/osd-player-osd-logo-bright-capture.png",
+      "sha256": "1d84737ecd68fbce348f815e1d932628395c060a90ee9b42b27701541e2a6286",
+      "physicalViewport": "1920x1080",
+      "dpr": 1,
+      "textScale": 1,
+      "logo": "logo",
+      "dvr": false,
+      "scene": "bright"
+    },
+    {
+      "path": "build/desktop-ui/scaling/osd-final-1080-logo/osd-player-osd-logo-dark-capture.png",
+      "sha256": "75196cda5a3297b0b4ad9096a84e134c62728cc5c807bf8429371eaa9e91572e",
+      "physicalViewport": "1920x1080",
+      "dpr": 1,
+      "textScale": 1,
+      "logo": "logo",
+      "dvr": false,
+      "scene": "dark"
+    },
+    {
+      "path": "build/desktop-ui/scaling/osd-final-1080-text/osd-player-osd-text-bright-capture.png",
+      "sha256": "0933f1058f726f5136eb6b2a24cf4c33597d77ac1989e2e3eb4cd5625b121a97",
+      "physicalViewport": "1920x1080",
+      "dpr": 1,
+      "textScale": 1,
+      "logo": "text",
+      "dvr": false,
+      "scene": "bright"
+    },
+    {
+      "path": "build/desktop-ui/scaling/osd-final-1080-text/osd-player-osd-text-dark-capture.png",
+      "sha256": "206c2011c1981db7cd0d8a54efeaf28b44f781165c40a77a8f917f3d5e3441a2",
+      "physicalViewport": "1920x1080",
+      "dpr": 1,
+      "textScale": 1,
+      "logo": "text",
+      "dvr": false,
+      "scene": "dark"
+    },
+    {
+      "path": "build/desktop-ui/scaling/osd-final-1440-default/osd-player-osd-default-bright-capture.png",
+      "sha256": "1466ab9a7fe7c320e703c86860af2615c929a52597527918f346ad11cecf954d",
+      "physicalViewport": "2560x1440",
+      "dpr": 1,
+      "textScale": 1,
+      "logo": "default",
+      "dvr": false,
+      "scene": "bright"
+    },
+    {
+      "path": "build/desktop-ui/scaling/osd-final-1440-default/osd-player-osd-default-dark-capture.png",
+      "sha256": "371f32d92be74be5b36b06e84b164272d9510e9dbfcd7ef03d095032b222daaa",
+      "physicalViewport": "2560x1440",
+      "dpr": 1,
+      "textScale": 1,
+      "logo": "default",
+      "dvr": false,
+      "scene": "dark"
+    },
+    {
+      "path": "build/desktop-ui/scaling/osd-final-2160-dpr2-text200/osd-player-osd-default-bright-capture.png",
+      "sha256": "3e006cafca18285a87f647e8acebe2814aa836117a55efd496200067ca2845a4",
+      "physicalViewport": "3840x2160",
+      "dpr": 2,
+      "textScale": 2,
+      "logicalViewport": "1920x1080",
+      "logo": "default",
+      "dvr": false,
+      "scene": "bright"
+    },
+    {
+      "path": "build/desktop-ui/scaling/osd-final-2160-dpr2-text200/osd-player-osd-default-dark-capture.png",
+      "sha256": "c4fcba3fa94f9d3737025d7e64ebf3af29484cd8899336834e2362ee54253a60",
+      "physicalViewport": "3840x2160",
+      "dpr": 2,
+      "textScale": 2,
+      "logicalViewport": "1920x1080",
+      "logo": "default",
+      "dvr": false,
+      "scene": "dark"
+    },
+    {
+      "path": "build/desktop-ui/scaling/osd-final-2160-dpr1-text200/osd-player-osd-default-bright-capture.png",
+      "sha256": "eb8a98d04e895d3047f9e140053b4d2ae215e9521856b9e56a1c54348aa64576",
+      "physicalViewport": "3840x2160",
+      "dpr": 1,
+      "textScale": 2,
+      "logicalViewport": "3840x2160",
+      "referenceScale": 2,
+      "logo": "default",
+      "dvr": false,
+      "scene": "bright"
+    },
+    {
+      "path": "build/desktop-ui/scaling/osd-final-2160-dpr1-text200/osd-player-osd-default-dark-capture.png",
+      "sha256": "e6f71c61ed1e388d226aa45d03b86d01ca3105899f056d90e85feba9615cc5ce",
+      "physicalViewport": "3840x2160",
+      "dpr": 1,
+      "textScale": 2,
+      "logicalViewport": "3840x2160",
+      "referenceScale": 2,
+      "logo": "default",
+      "dvr": false,
+      "scene": "dark"
+    },
+    {
+      "path": "build/desktop-ui/scaling/osd-final-2160-dpr1-text200-dvr/osd-player-osd-default-bright-capture.png",
+      "sha256": "f0693152432a2f52600b1d1c071e765fb305ec1c97b2659c1085f79a42fcd7af",
+      "physicalViewport": "3840x2160",
+      "dpr": 1,
+      "textScale": 2,
+      "logicalViewport": "3840x2160",
+      "referenceScale": 2,
+      "logo": "default",
+      "dvr": true,
+      "scene": "bright"
+    },
+    {
+      "path": "build/desktop-ui/scaling/osd-final-2160-dpr1-text200-dvr/osd-player-osd-default-dark-capture.png",
+      "sha256": "bb82b9a391536f1f5835254f06ac6c469923270b1ec9f5a7b84ee32d8337441c",
+      "physicalViewport": "3840x2160",
+      "dpr": 1,
+      "textScale": 2,
+      "logicalViewport": "3840x2160",
+      "referenceScale": 2,
+      "logo": "default",
+      "dvr": true,
+      "scene": "dark"
+    },
+    {
+      "path": "build/desktop-ui/scaling/osd-final-2160-dpr1-logo/osd-player-osd-logo-bright-capture.png",
+      "sha256": "9fbe437caf6cc7187b8852eb31df424f31c7796402f206313db1711fb34d4c5e",
+      "physicalViewport": "3840x2160",
+      "dpr": 1,
+      "textScale": 1,
+      "logicalViewport": "3840x2160",
+      "referenceScale": 2,
+      "logo": "logo",
+      "dvr": false,
+      "scene": "bright"
+    },
+    {
+      "path": "build/desktop-ui/scaling/osd-final-2160-dpr1-logo/osd-player-osd-logo-dark-capture.png",
+      "sha256": "87a9280c80ad4620e6c7fa47aed69b8d38f6fefecde820e7ee55d3d08d1156bc",
+      "physicalViewport": "3840x2160",
+      "dpr": 1,
+      "textScale": 1,
+      "logicalViewport": "3840x2160",
+      "referenceScale": 2,
+      "logo": "logo",
+      "dvr": false,
+      "scene": "dark"
+    },
+    {
+      "path": "build/desktop-ui/scaling/osd-final-2160-dpr1-failed-text200/osd-player-osd-failed-bright-capture.png",
+      "sha256": "5014b16ce2014ae9b7eb1f049ab9dc387531fa8f02efc79374739f76a23da0f5",
+      "physicalViewport": "3840x2160",
+      "dpr": 1,
+      "textScale": 2,
+      "logicalViewport": "3840x2160",
+      "referenceScale": 2,
+      "logo": "failed",
+      "dvr": false,
+      "scene": "bright"
+    },
+    {
+      "path": "build/desktop-ui/scaling/osd-final-2160-dpr1-failed-text200/osd-player-osd-failed-dark-capture.png",
+      "sha256": "da2eefc06f2d098ec55beb996441a8a4b2b24a6ef1cec71584bd6d4e86f380e3",
+      "physicalViewport": "3840x2160",
+      "dpr": 1,
+      "textScale": 2,
+      "logicalViewport": "3840x2160",
+      "referenceScale": 2,
+      "logo": "failed",
+      "dvr": false,
+      "scene": "dark"
+    },
+    {
+      "path": "build/desktop-ui/scaling/osd-final-720-text200/osd-player-osd-default-bright-capture.png",
+      "sha256": "9fce338a61ec8233ee83eca0f84da21a64eeece360442073a1bee7a76bd3f967",
+      "physicalViewport": "1280x720",
+      "dpr": 1,
+      "textScale": 2,
+      "logicalViewport": "1280x720",
+      "referenceScale": 1,
+      "logo": "default",
+      "dvr": false,
+      "scene": "bright"
+    },
+    {
+      "path": "build/desktop-ui/scaling/osd-final-720-text200/osd-player-osd-default-dark-capture.png",
+      "sha256": "1090f951b636f5bec375559c6d9dc2f77ac17367ee5a3c3a7144784d828103a9",
+      "physicalViewport": "1280x720",
+      "dpr": 1,
+      "textScale": 2,
+      "logicalViewport": "1280x720",
+      "referenceScale": 1,
+      "logo": "default",
+      "dvr": false,
+      "scene": "dark"
+    },
+    {
+      "path": "build/desktop-ui/scaling/osd-final-800x600-text200/osd-player-osd-default-bright-capture.png",
+      "sha256": "41c07903c6fc6d879dc6189d60cdc17ed182333fccc3b2598e6f6e4757c5c518",
+      "physicalViewport": "800x600",
+      "dpr": 1,
+      "textScale": 2,
+      "logicalViewport": "800x600",
+      "referenceScale": 1,
+      "logo": "default",
+      "dvr": false,
+      "scene": "bright"
+    },
+    {
+      "path": "build/desktop-ui/scaling/osd-final-800x600-text200/osd-player-osd-default-dark-capture.png",
+      "sha256": "823e5917cd39ce86859baa346df96a044c24ee17e3b0ba545510e903c58a3b4a",
+      "physicalViewport": "800x600",
+      "dpr": 1,
+      "textScale": 2,
+      "logicalViewport": "800x600",
+      "referenceScale": 1,
+      "logo": "default",
+      "dvr": false,
+      "scene": "dark"
+    },
+    {
+      "path": "build/desktop-ui/scaling/osd-final-2160-dpr1-text200-long/osd-player-osd-default-bright-capture.png",
+      "sha256": "eb8a98d04e895d3047f9e140053b4d2ae215e9521856b9e56a1c54348aa64576",
+      "physicalViewport": "3840x2160",
+      "dpr": 1,
+      "textScale": 2,
+      "logicalViewport": "3840x2160",
+      "referenceScale": 2,
+      "logo": "default",
+      "dvr": false,
+      "tracks": "long-selected-audio-and-subtitle-labels",
+      "scene": "bright"
+    },
+    {
+      "path": "build/desktop-ui/scaling/osd-final-2160-dpr1-text200-long/osd-player-osd-default-dark-capture.png",
+      "sha256": "e6f71c61ed1e388d226aa45d03b86d01ca3105899f056d90e85feba9615cc5ce",
+      "physicalViewport": "3840x2160",
+      "dpr": 1,
+      "textScale": 2,
+      "logicalViewport": "3840x2160",
+      "referenceScale": 2,
+      "logo": "default",
+      "dvr": false,
+      "tracks": "long-selected-audio-and-subtitle-labels",
+      "scene": "dark"
+    },
+    {
+      "path": "build/desktop-ui/scaling/osd-final-720-text200-disabled/osd-player-osd-default-bright-capture.png",
+      "sha256": "1f6305261d2d14aa5da0b282e50ec96842437f768383e79ec92602af0c112c73",
+      "physicalViewport": "1280x720",
+      "dpr": 1,
+      "textScale": 2,
+      "logicalViewport": "1280x720",
+      "referenceScale": 1,
+      "logo": "default",
+      "dvr": false,
+      "tracks": "audio-only",
+      "disabledSubtitles": true,
+      "scene": "bright"
+    },
+    {
+      "path": "build/desktop-ui/scaling/osd-final-720-text200-disabled/osd-player-osd-default-dark-capture.png",
+      "sha256": "708769aa3b7e4fbaf40309b06f24de16e0f3c3c6a427d53b27fb4a72c88c2ba2",
+      "physicalViewport": "1280x720",
+      "dpr": 1,
+      "textScale": 2,
+      "logicalViewport": "1280x720",
+      "referenceScale": 1,
+      "logo": "default",
+      "dvr": false,
+      "tracks": "audio-only",
+      "disabledSubtitles": true,
+      "scene": "dark"
+    }
+  ],
+  "baselineComparisons": [
+    {
+      "final": "build/desktop-ui/scaling/osd-final-1080-default/osd-player-osd-default-bright-capture.png",
+      "base": "build/desktop-ui/scaling/osd-before-1080/osd-player-osd-default-bright-capture.png",
+      "result": "byte-identical"
+    },
+    {
+      "final": "build/desktop-ui/scaling/osd-final-1080-default/osd-player-osd-default-dark-capture.png",
+      "base": "build/desktop-ui/scaling/osd-before-1080/osd-player-osd-default-dark-capture.png",
+      "result": "byte-identical"
+    },
+    {
+      "finalDirectory": "build/desktop-ui/scaling/osd-final-1080-logo",
+      "preEditDirectory": "build/desktop-ui/scaling/osd-before-1080-logo",
+      "result": "bright and dark logo pairs byte-identical"
+    },
+    {
+      "finalDirectory": "build/desktop-ui/scaling/osd-final-1080-text",
+      "preEditDirectory": "build/desktop-ui/scaling/osd-before-1080-text",
+      "result": "bright and dark text pairs byte-identical"
+    }
+  ],
+  "verification": [
+    {
+      "command": "flutter test --no-pub build/desktop-ui/scaling/osd_test.dart --plain-name='Player OSD scene'",
+      "runs": 13,
+      "checks": 26,
+      "result": "all passed"
+    },
+    {
+      "command": "flutter analyze lib/playback/player_view.dart",
+      "result": "no issues found"
+    },
+    {
+      "command": "dart format --output=none --set-exit-if-changed lib/playback/player_view.dart",
+      "result": "formatted, 0 files changed"
+    },
+    {
+      "command": "git diff --check",
+      "result": "passed"
+    },
+    {
+      "command": "flutter test --no-pub test/playback/player_view_test.dart --plain-name='OSD'",
+      "checks": 18,
+      "result": "all passed"
+    },
+    {
+      "command": "flutter test --no-pub test/ui/clear_logo_image_test.dart",
+      "checks": 1,
+      "result": "passed"
+    },
+    {
+      "command": "flutter test --no-pub test/guide/guide_view_test.dart --plain-name='clear logo'",
+      "checks": 2,
+      "result": "all passed"
+    },
+    {
+      "command": "flutter test --no-pub test/app/desktop_navigation_test.dart",
+      "checks": 6,
+      "result": "all passed"
+    },
+    {
+      "command": "flutter test --no-pub test/playback/player_view_test.dart",
+      "checksPassed": 66,
+      "checksFailed": 1,
+      "result": "one pre-existing failure: track panel scales its reading rail and soft fade through 4K expects the retired 1.35 shared scale cap at 3840x2160/DPR2; actual shared helper scale is 2 at the delegated base"
+    }
+  ],
+  "rationale": [
+    "Reused LineupLayout.scaleFor(Size) without multiplying by DPR.",
+    "Scaled _osdAction itself and wrapped individual option actions for enlarged system text so the real button geometry remains proportional and bounded.",
+    "Scaled only Player OSD geometry, typography, artwork caller bounds, progress lane, channel bug, and native button hit regions.",
+    "Kept gradient colors, stops, opacity, callbacks, focus nodes, overlay transitions, artwork loading and fallback policy unchanged.",
+    "Preserved the normal-text Row action layout; enlarged system text uses a width-constrained Wrap of the existing action groups."
+  ],
+  "limitations": [
+    "Captures are synthetic portable macOS Flutter widget evidence with portable test fonts, not physical Windows evidence.",
+    "Moving video, DirectComposition/native layering, native Windows input/focus, monitor-DPI transitions, HDR and packaging remain unvalidated.",
+    "No tracked tests or documentation were added; the capture harness and this report are ignored evidence artifacts.",
+    "The full PlayerView suite's track-panel assertion remains stale relative to the already-integrated uncapped shared scaling helper and was not changed under the OSD-only lease."
+  ],
+  "rootIntegration": {
+    "normal1080": "Astra confirmed six default/logo/text captures byte-identical",
+    "visualInspection": "Final native4K logo/actions and native4K text200 DVR",
+    "knownFailure": "Astra reproduced track-panel font assertion expected21.6 actual32 on base a376a9ca; fixture injects logical3840x2160/DPR2. Remaining track family owns correction."
+  }
+}

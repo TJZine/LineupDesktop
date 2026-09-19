@@ -1,0 +1,82 @@
+{
+  "status": "Locked at1080p by explicit conditional user approval; condition completed",
+  "implementation_commit": "baec2d04fb76afcc60aa3e3579a2718880a7165b",
+  "approval_message": "id like to reign in the horizontal width of the transparency part to be closer to where the text starts and maybe inscrease overall transparency very very slightly then if you have no further refinements we can lock it. ill defer to you on text size. we dont need another visual comparison after this pass of changes. once they are in we are locked and can move on",
+  "sources": {
+    "lib/playback/player_view.dart": "6868024ea5a63a8153b2406d52a2878f65ab66ce57ba6b8b84b57550fe4e163b",
+    "test/playback/player_view_test.dart": "5b18011bfff907420188cb7576c14ff1fe12c78ed3ad128f4adf1768865e503f"
+  },
+  "images": {
+    "audio-bright-1920x1080.png": {
+      "sha256": "743c75e6f569b9f3e75f2f7a64c0544c9383aa9ff5b55c819d995b6b255e853c",
+      "capture": "candidate-04",
+      "acceptance": "Final authorized correction, repeat comparison explicitly waived"
+    },
+    "audio-dark-1920x1080.png": {
+      "sha256": "4a855f1b721d0615bd00611913a2cdcc9db0e4711f3075fa54ce516f69163e3e",
+      "capture": "candidate-04",
+      "acceptance": "Final authorized correction, repeat comparison explicitly waived"
+    },
+    "subtitles-bright-1920x1080.png": {
+      "sha256": "9e87640710aabee5d7ad593335c977a64f49648613166e34f5754e699b23551f",
+      "capture": "candidate-04",
+      "acceptance": "Final authorized correction, repeat comparison explicitly waived"
+    },
+    "subtitles-dark-1920x1080.png": {
+      "sha256": "a9472e60405be041042b837b568ad159391ad7b217db298f3fb722dd9227d2a4",
+      "capture": "candidate-04",
+      "acceptance": "Final authorized correction, repeat comparison explicitly waived"
+    },
+    "sleep-bright-1920x1080.png": {
+      "sha256": "0bbf06f4bdb5b6bd916c6ff4f05753765ef0957a10a3c983cbd2eca843944e4d",
+      "capture": "candidate-03",
+      "acceptance": "Unchanged presented candidate03"
+    },
+    "sleep-dark-1920x1080.png": {
+      "sha256": "0910be1a8d69beb08fd8df9903f0116fdb79dcbdf8f8e758828607ac1f3764ac",
+      "capture": "candidate-03",
+      "acceptance": "Unchanged presented candidate03"
+    },
+    "sleep-active-bright-1920x1080.png": {
+      "sha256": "aa242b10e23b547fdde2c8e1852e508e53fdd4a86a334341d2f77c1015491c37",
+      "capture": "candidate-03",
+      "acceptance": "Unchanged presented candidate03"
+    },
+    "sleep-active-dark-1920x1080.png": {
+      "sha256": "8393564a5272375a4ebeb5a18258eedb4a671f0d1fb5a9bd15fc62a1838b6a33",
+      "capture": "candidate-03",
+      "acceptance": "Unchanged presented candidate03"
+    }
+  },
+  "viewport": [
+    1920,
+    1080
+  ],
+  "dpr": 1,
+  "text_scale": 1,
+  "final_adjustment": {
+    "track_rail_width_1080": 600,
+    "track_fade_extension_1080": 100,
+    "gradient_alphas": [
+      0,
+      0.34,
+      0.74,
+      0.82
+    ],
+    "gradient_stops": [
+      0,
+      0.1,
+      0.22,
+      1
+    ],
+    "text_size": "Retained production typography; judgment delegated to root",
+    "timer": "Unchanged from presented candidate03"
+  },
+  "checks": "67 PlayerView tests, focused analyzer, formatting and diff checks passed;4 final track capture cases passed;4 unchanged timer captures reused",
+  "fixture": "Real Flutter widgets over synthetic painted scenes;6 audio tracks,8 subtitle tracks plus Off; timer Off/30-minute active preset",
+  "pending": [
+    "Grouped adaptive visual/DPI/text/accessibility checks",
+    "Exact-commit physical Windows moving-video/native overlay and input/focus validation"
+  ],
+  "independent_review": "Not specifically recommended"
+}

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
@@ -18,7 +19,7 @@ abstract final class LineupLayout {
   static bool isCompactWidth(double width) => width < compact;
 
   static double scaleFor(Size size) =>
-      math.min(size.width / 1920, size.height / 1080).clamp(1.0, 1.35);
+      math.max(1.0, math.min(size.width / 1920, size.height / 1080));
 
   static EdgeInsets pageInsets(Size size) => EdgeInsets.all(
     (isCompactWidth(size.width) ? 20.0 : 32.0) * scaleFor(size),
@@ -34,12 +35,13 @@ class LineupNotice extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = Theme.of(context).colorScheme.error;
     final radius = LineupTheme.of(context).panelRadius;
+    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
     return Semantics(
       liveRegion: true,
       container: true,
       child: Container(
         width: double.infinity,
-        padding: const EdgeInsets.all(14),
+        padding: EdgeInsets.all(14 * scale),
         decoration: BoxDecoration(
           color: color.withValues(alpha: 0.09),
           borderRadius: BorderRadius.circular(radius),
@@ -47,8 +49,8 @@ class LineupNotice extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Icon(Icons.error_outline, color: color),
-            const SizedBox(width: 12),
+            Icon(Icons.error_outline, color: color, size: 24 * scale),
+            SizedBox(width: 12 * scale),
             Expanded(child: Text(message)),
           ],
         ),
@@ -190,42 +192,50 @@ class LineupEmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, constraints) => SingleChildScrollView(
-      child: ConstrainedBox(
-        constraints: BoxConstraints(
-          minHeight: constraints.maxHeight.isFinite ? constraints.maxHeight : 0,
-        ),
-        child: Center(
-          child: Card(
-            child: Padding(
-              padding: const EdgeInsets.all(32),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    icon,
-                    size: 48,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
-                  const SizedBox(height: 16),
-                  Semantics(
-                    header: true,
-                    child: Text(
-                      title,
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.headlineSmall,
+    builder: (context, constraints) {
+      final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
+      return SingleChildScrollView(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            minHeight: constraints.maxHeight.isFinite
+                ? constraints.maxHeight
+                : 0,
+          ),
+          child: Center(
+            child: Card(
+              child: Padding(
+                padding: EdgeInsets.all(32 * scale),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      icon,
+                      size: 48 * scale,
+                      color: Theme.of(context).colorScheme.primary,
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(message, textAlign: TextAlign.center),
-                  if (action != null) ...[const SizedBox(height: 24), action!],
-                ],
+                    SizedBox(height: 16 * scale),
+                    Semantics(
+                      header: true,
+                      child: Text(
+                        title,
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.headlineSmall,
+                      ),
+                    ),
+                    SizedBox(height: 8 * scale),
+                    Text(message, textAlign: TextAlign.center),
+                    if (action != null) ...[
+                      SizedBox(height: 24 * scale),
+                      action!,
+                    ],
+                  ],
+                ),
               ),
             ),
           ),
         ),
-      ),
-    ),
+      );
+    },
   );
 }
 
@@ -351,6 +361,8 @@ class ClearLogoImage extends StatefulWidget {
     this.imageKey,
     this.semanticLabel,
     this.excludeFromSemantics = false,
+    this.maximumSize,
+    this.minimumVisibleSize,
     super.key,
   });
 
@@ -359,6 +371,8 @@ class ClearLogoImage extends StatefulWidget {
   final Key? imageKey;
   final String? semanticLabel;
   final bool excludeFromSemantics;
+  final Size? maximumSize;
+  final Size? minimumVisibleSize;
 
   @override
   State<ClearLogoImage> createState() => _ClearLogoImageState();
@@ -366,41 +380,95 @@ class ClearLogoImage extends StatefulWidget {
 
 class _ClearLogoImageState extends State<ClearLogoImage> {
   Future<Size?>? _intrinsicSize;
+  Future<Rect?>? _visibleFraction;
 
   @override
   void didUpdateWidget(covariant ClearLogoImage oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.bytes != widget.bytes) {
       _intrinsicSize = null;
+      _visibleFraction = null;
     }
   }
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, constraints) => FutureBuilder<Size?>(
-      future: _intrinsicSize ??= _decodeImageSize(
-        widget.bytes,
-        createLocalImageConfiguration(context),
-      ),
-      builder: (context, snapshot) {
-        final size = snapshot.data;
-        if (snapshot.connectionState != ConnectionState.done ||
-            size == null ||
-            !clearLogoIsUsable(size, constraints)) {
-          return widget.fallback;
-        }
-        return Image.memory(
+    builder: (context, available) {
+      final constraints = widget.maximumSize == null
+          ? available
+          : BoxConstraints(
+              maxWidth: math.min(available.maxWidth, widget.maximumSize!.width),
+              maxHeight: math.min(
+                available.maxHeight,
+                widget.maximumSize!.height,
+              ),
+            );
+      return FutureBuilder<Size?>(
+        future: _intrinsicSize ??= _decodeImageSize(
           widget.bytes,
-          key: widget.imageKey,
-          fit: BoxFit.contain,
-          alignment: Alignment.centerLeft,
-          gaplessPlayback: true,
-          semanticLabel: widget.semanticLabel,
-          excludeFromSemantics: widget.excludeFromSemantics,
-          errorBuilder: (_, _, _) => widget.fallback,
-        );
-      },
-    ),
+          createLocalImageConfiguration(context),
+        ),
+        builder: (context, snapshot) {
+          final size = snapshot.data;
+          if (snapshot.connectionState != ConnectionState.done ||
+              size == null ||
+              !clearLogoIsUsable(size, constraints)) {
+            return widget.fallback;
+          }
+          Widget image() => ConstrainedBox(
+            constraints: constraints,
+            child: Image.memory(
+              widget.bytes,
+              key: widget.imageKey,
+              fit: BoxFit.contain,
+              alignment: Alignment.centerLeft,
+              gaplessPlayback: true,
+              semanticLabel: widget.semanticLabel,
+              excludeFromSemantics: widget.excludeFromSemantics,
+              errorBuilder: (_, _, _) => widget.fallback,
+            ),
+          );
+          final minimum = widget.minimumVisibleSize;
+          if (minimum == null) return image();
+          return FutureBuilder<Rect?>(
+            future: _visibleFraction ??= _decodeVisibleFraction(widget.bytes),
+            builder: (context, visible) {
+              final fraction = visible.data;
+              if (visible.connectionState != ConnectionState.done ||
+                  fraction == null) {
+                return widget.fallback;
+              }
+              final fitted = applyBoxFit(
+                BoxFit.contain,
+                size,
+                constraints.biggest,
+              ).destination;
+              if (fitted.width * fraction.width < minimum.width ||
+                  fitted.height * fraction.height < minimum.height) {
+                return widget.fallback;
+              }
+              // Keep the original fit scale; remove padding without enlarging
+              // the artwork or moving the independent text fallback.
+              return SizedBox(
+                width: fitted.width * fraction.width,
+                height: fitted.height * fraction.height,
+                child: Stack(
+                  children: [
+                    Positioned(
+                      left: -fitted.width * fraction.left,
+                      top: -fitted.height * fraction.top,
+                      width: fitted.width,
+                      height: fitted.height,
+                      child: image(),
+                    ),
+                  ],
+                ),
+              );
+            },
+          );
+        },
+      );
+    },
   );
 }
 
@@ -425,4 +493,45 @@ Future<Size?> _decodeImageSize(
   );
   stream.addListener(listener);
   return completer.future;
+}
+
+// Bound the alpha scan; only OSD callers opt into visible-content validation.
+Future<Rect?> _decodeVisibleFraction(Uint8List bytes) async {
+  ui.Codec? codec;
+  ui.Image? image;
+  try {
+    codec = await ui.instantiateImageCodec(
+      bytes,
+      targetWidth: 512,
+      targetHeight: 512,
+      allowUpscaling: false,
+    );
+    image = (await codec.getNextFrame()).image;
+    final pixels = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+    if (pixels == null) return null;
+    var left = image.width, right = -1, top = image.height, bottom = -1;
+    for (var y = 0; y < image.height; y++) {
+      for (var x = 0; x < image.width; x++) {
+        if (pixels.getUint8((y * image.width + x) * 4 + 3) >= 32) {
+          left = math.min(left, x);
+          right = math.max(right, x);
+          top = math.min(top, y);
+          bottom = math.max(bottom, y);
+        }
+      }
+    }
+    if (right < left || bottom < top) return null;
+    // Retain a sample around the detected ink to protect antialiased edges.
+    return Rect.fromLTRB(
+      math.max(0, left - 1) / image.width,
+      math.max(0, top - 1) / image.height,
+      math.min(image.width, right + 2) / image.width,
+      math.min(image.height, bottom + 2) / image.height,
+    );
+  } catch (_) {
+    return null;
+  } finally {
+    image?.dispose();
+    codec?.dispose();
+  }
 }

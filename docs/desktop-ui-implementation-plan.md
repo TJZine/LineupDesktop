@@ -50,7 +50,7 @@ flows and callers before editing, especially the shared controller and shell.
 
 | Responsibility | Existing owners | Existing coverage to extend/reuse |
 | --- | --- | --- |
-| Shared appearance/layout | `lib/ui/app_theme.dart`, `lib/ui/app_ui.dart`, `lib/app/lineup_app.dart` | `test/app/theme_shell_test.dart`, `test/app/ui_acceptance_golden_test.dart` |
+| Shared appearance/layout | `lib/ui/app_theme.dart`, `lib/ui/app_ui.dart`, `lib/app/lineup_app.dart` | `test/app/theme_shell_test.dart`, `tool/visual/ui_acceptance_golden_test.dart` |
 | Global routes, menu, contextual Back | `LineupShell` in `lib/app/lineup_shell.dart`; Player input in `lib/playback/player_view.dart` | theme shell, product spine and player-view tests |
 | Linking, profiles, PIN, servers | `lib/app/onboarding_view.dart`; attempt/scope owners in `lib/app/lineup_controller.dart`; `lib/plex/plex_client.dart` | `test/app/product_spine_test.dart`, app acceptance goldens, Plex transport/parser tests |
 | Libraries, setup, Review and results | `lib/app/channel_setup_view.dart`; scan/apply in controller; `lib/channels/channel_builder.dart` | product spine, channel builder tests, app acceptance goldens |
@@ -58,7 +58,7 @@ flows and callers before editing, especially the shared controller and shell.
 | Studio draft and preview | `lib/app/channel_studio_view.dart`, `lib/app/channel_air_check.dart` | `test/app/channel_studio_view_test.dart`, scheduler/resolver tests, app goldens |
 | Source membership and persistence | `lib/channels/channel.dart`, `lib/channels/content_resolver.dart`, `lib/plex/plex_models.dart`, `lib/persistence/app_store.dart` | `test/channels/content_resolver_test.dart`, `test/persistence/app_store_test.dart`, product spine |
 | Shared schedules/projections | `lib/channels/scheduler.dart`, `lib/channels/schedule_worker.dart`; Guide/Player/Air Check consumers | `test/channels/scheduler_test.dart`, `test/channels/schedule_worker_test.dart`, Guide and player coordinator tests |
-| Full Guide/filtering/recovery | `lib/guide/guide_view.dart`, `lib/guide/guide_controller.dart`; shell presentation composition | `test/guide/guide_view_test.dart`, `test/app/guide_sparse_golden_test.dart`, theme shell |
+| Full Guide/filtering/recovery | `lib/guide/guide_view.dart`, `lib/guide/guide_controller.dart`; shell presentation composition | `test/guide/guide_view_test.dart`, `tool/visual/guide_sparse_golden_test.dart`, theme shell |
 | Tickers | `lib/guide/focused_ticker.dart`; Guide and Mini Guide consumers | existing ticker coverage in Guide tests; player-view tests |
 | Mini Guide/tracks/timer | `_MiniGuide`, `_Tracks`, OSD moon/key handling in player view; `lib/playback/player_coordinator.dart` | `test/playback/player_view_test.dart`, `test/playback/player_coordinator_test.dart` |
 | Settings and migration | `SettingsView` in shell, `lib/settings/lineup_settings.dart`, controller/store | `test/settings/lineup_settings_test.dart`, persistence, theme shell |
@@ -381,12 +381,13 @@ flutter analyze
 TZ=America/New_York flutter test
 ```
 
-Use the documented macOS environment for the two golden suites. Do not update
-images merely to make tests pass: inspect against the spec with matching content,
-clock, artwork, focus and playback states. Existing tests may need replacement
-when they encode retired modes, but shared behavior must retain coverage. Native
-changes, if justified by an actual boundary need, require the documented native
-and physical verification rather than only Dart tests.
+Use the documented macOS environment for the required exact alpha suite and the
+optional local visual checks. Do not update images merely to make tests pass:
+inspect optional renders against the spec with matching content, clock, artwork,
+focus and playback states. Existing tests may need replacement when they encode
+retired modes, but shared behavior must retain coverage. Native changes, if
+justified by an actual boundary need, require the documented native and physical
+verification rather than only Dart tests.
 
 Every major surface needs synthetic normal/loading/empty/failure where applicable,
 full names/long episode titles, no/missing artwork, keyboard focus, reduced motion

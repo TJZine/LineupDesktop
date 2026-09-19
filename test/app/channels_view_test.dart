@@ -63,8 +63,17 @@ void main() {
       expect(find.byKey(const ValueKey('channel-row-second')), findsOneWidget);
       await tester.tap(find.text('Delete selected'));
       await tester.pumpAndSettle();
-      expect(find.text('1 custom · 0 generated'), findsNothing);
-      expect(find.text('2 custom · 0 generated'), findsOneWidget);
+      final confirmation = find.byType(Dialog);
+      for (final name in ['First', 'Second']) {
+        expect(
+          find.descendant(of: confirmation, matching: find.text(name)),
+          findsOneWidget,
+        );
+      }
+      expect(
+        find.descendant(of: confirmation, matching: find.text('Third')),
+        findsNothing,
+      );
       await tester.tap(find.text('Delete 2 channels'));
       await tester.pumpAndSettle();
 

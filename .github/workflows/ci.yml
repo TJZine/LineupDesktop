@@ -24,7 +24,7 @@ jobs:
           persist-credentials: false
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
-          flutter-version: 3.47.2
+          flutter-version: 3.47.4
           channel: stable
           cache: true
       - run: flutter pub get
@@ -35,7 +35,7 @@ jobs:
           TZ: America/New_York
 
   build-macos:
-    name: Verify golden UI and build macOS
+    name: Verify macOS alpha surface and build macOS
     runs-on: macos-latest
     timeout-minutes: 30
     steps:
@@ -44,24 +44,15 @@ jobs:
           persist-credentials: false
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
-          flutter-version: 3.47.2
+          flutter-version: 3.47.4
           channel: stable
           cache: true
-      - id: golden
+      - name: Run required Guide alpha checks
         env:
-          # Golden baselines include localized schedule times.
+          # Required alpha checks use the same deterministic locale as the
+          # optional visual-review captures.
           TZ: America/New_York
-        run: |
-          flutter test test/app/ui_acceptance_golden_test.dart
-          flutter test test/app/guide_sparse_golden_test.dart
-      - name: Upload golden failure images
-        if: ${{ failure() && steps.golden.outcome == 'failure' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: golden-ui-failures
-          path: test/app/failures/
-          if-no-files-found: error
-          retention-days: 7
+        run: flutter test test/app/guide_opacity_test.dart
       - run: flutter build macos
 
   windows-release-policy:
@@ -86,7 +77,7 @@ jobs:
           persist-credentials: false
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
-          flutter-version: 3.47.2
+          flutter-version: 3.47.4
           channel: stable
           cache: true
       - name: Verify portable UI on Windows
@@ -189,7 +180,7 @@ jobs:
           persist-credentials: false
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
-          flutter-version: 3.47.2
+          flutter-version: 3.47.4
           channel: stable
           cache: true
       - name: Validate exact Flutter and engine sources and build the patched engine

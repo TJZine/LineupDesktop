@@ -763,8 +763,25 @@ void main() {
     expect(find.text('View lineup'), findsNothing);
     expect(controller.stage, SetupStage.channelSetup);
 
-    controller.finishApply();
+    addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
+    tester.platformDispatcher.accessibilityFeaturesTestValue =
+        FakeAccessibilityFeatures(disableAnimations: true);
     await tester.pumpAndSettle();
+    expect(tester.binding.hasScheduledFrame, isFalse);
+    expect(find.text('Creating your lineup…'), findsOneWidget);
+    tester.platformDispatcher.accessibilityFeaturesTestValue =
+        FakeAccessibilityFeatures();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(tester.binding.hasScheduledFrame, isTrue);
+
+    controller.finishApply();
+    await tester.pump();
+    // Completion and its action are available while the backdrop coasts to rest.
+    expect(find.text('Your lineup is ready'), findsOneWidget);
+    expect(find.text('View lineup'), findsOneWidget);
+    await tester.pumpAndSettle();
+    expect(tester.binding.hasScheduledFrame, isFalse);
 
     expect(find.text('Your lineup is ready'), findsOneWidget);
     expect(find.text('1 channel in your lineup'), findsOneWidget);

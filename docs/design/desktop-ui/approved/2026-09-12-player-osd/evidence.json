@@ -1,0 +1,28 @@
+{
+  "status": "User visually approved and locked",
+  "base_commit": "cfb4eb7dffdef966e38053301a363ecdb1f6ff70",
+  "sources": {
+    "lib/playback/player_view.dart": "e5783d06037a3e657366091a6e1c2aebd08c044bca10a8f2720642a1f35a7408",
+    "lib/ui/app_ui.dart": "b2b4561679e9858d88a11c297793e8647bed890a665cb8e39cb84c7ccb5edabc"
+  },
+  "images": {
+    "player-osd-logo-bright-1920x1080.png": "1d84737ecd68fbce348f815e1d932628395c060a90ee9b42b27701541e2a6286",
+    "player-osd-logo-dark-1920x1080.png": "75196cda5a3297b0b4ad9096a84e134c62728cc5c807bf8429371eaa9e91572e",
+    "player-osd-text-dark-1920x1080.png": "206c2011c1981db7cd0d8a54efeaf28b44f781165c40a77a8f917f3d5e3441a2",
+    "player-osd-text-bright-1920x1080.png": "0933f1058f726f5136eb6b2a24cf4c33597d77ac1989e2e3eb4cd5625b121a97"
+  },
+  "viewport": [
+    1920,
+    1080
+  ],
+  "dpr": 1,
+  "text_scale": 1,
+  "changes": "Trim alpha padding for OSD at existing fit scale; retain one scan sample for antialiased edges; fallback unchanged",
+  "checks": "67 behavior checks and 4 capture cases passed; analyzer and whitespace clean",
+  "fixture": "Production Flutter over synthetic scenes, not Windows moving video",
+  "pending": [
+    "Grouped adaptive/accessibility including final720p artwork trim",
+    "Physical Windows moving video/native overlay checks"
+  ],
+  "implementation_commit": "10750c5a3b099e56dcdfbbbe03c798a34b1c78e5"
+}

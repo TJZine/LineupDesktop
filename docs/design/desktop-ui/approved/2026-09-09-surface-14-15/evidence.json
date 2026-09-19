@@ -1,0 +1,20 @@
+{
+  "implementation_commit": "22743fd6262773bf96e6295c06504a2923ba1de4",
+  "approval": "yes looks great. locked. ready for 7,8,and 9 the linking surface.",
+  "scope": "Surfaces14/15 candidate02 state family, 1920x1080/DPR1/text100%; transition sampled20fps",
+  "source_sha256": {
+    "lib/app/channel_setup_view.dart": "787379dff4853c95e866efb656b0e28ff0bcebe06e10978e9373290622ce0d19",
+    "lib/app/setup_result_atmosphere.dart": "744405b113085be021bb99b29dca6802a2aa97a91c2991edfced381200e3fcbc"
+  },
+  "files_sha256": {
+    "candidate-02-progress.png": "a9ab2cb6fec9d17807c9bf3367208feee571e2f4d01f0dee015867c116ffb3de",
+    "candidate-02-complete.png": "fbdafd08d257a22e255ece55c241fc840151d1ee094fe67e6fc1d0b1127e2430",
+    "candidate-02-existing-complete.png": "61cf48a41d661d0be847eb130f0d9e0d957b6a7db398b0c6b6b4364a3827d35b",
+    "candidate-02-failed.png": "925e984d3b147c96eff514c63b9167a0925ab6e0790f1f2a6707244731dd4143",
+    "candidate-02-reduced-complete.png": "b5262ab1e747e3efe7906836b7cc8af696a975bd99a66c1ad024faf35832c378",
+    "candidate-02-transition.mp4": "cad2f74de71b61b8d367563d37ea4916c3e7b0600c4afccf77dc8d49859d4f34",
+    "candidate-02-transition.json": "17ff0a0acd44d9c76079fbc0efec6f0868adc7b9c9c440300d86b0b36a2872a6"
+  },
+  "verification": "75 existing behavior checks, full Flutter analysis, formatting and diff checks passed; no new layout tests.",
+  "outstanding": "Grouped resolution/DPI/enlarged-text/accessibility and physical Windows Segoe UI/input/focus/motion performance validation. No independent review specifically recommended."
+}

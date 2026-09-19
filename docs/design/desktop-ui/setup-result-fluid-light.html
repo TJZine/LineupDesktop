@@ -1,0 +1,100 @@
+<div id="lineup-gathering-light" aria-label="Lineup creation atmosphere proposal">
+  <section class="lg-screen" data-state="progress">
+    <div class="lg-atmosphere" aria-hidden="true"><div class="lg-drift lg-one"></div><div class="lg-drift lg-two"></div><div class="lg-drift lg-three"></div></div>
+    <header><span class="lg-brand">LINEUP</span><span class="lg-steps">1 Libraries &nbsp; / &nbsp; 2 Configure &nbsp; / &nbsp; <strong>3 Review</strong></span></header>
+    <main>
+      <div class="lg-mark" aria-hidden="true"><i data-lucide="circle-alert" class="lg-failure"></i></div>
+      <div class="lg-copy" aria-live="polite"><h2>Creating your lineup…</h2><p class="lg-total"></p><p class="lg-detail"></p></div>
+      <div class="lg-actions"><button class="lg-primary" type="button">View lineup</button><button class="lg-secondary" type="button">Add a custom channel</button></div>
+    </main>
+  </section>
+  <div class="lg-preview"><span>Motion concept · synthetic content</span><button type="button" class="lg-demo">Preview completion</button></div>
+</div>
+<style>
+#lineup-gathering-light{max-width:1024px;margin-inline:auto;--lg-film:#090806;--lg-paper:#f3e8d2;--lg-support:#c7b99f;--lg-amber:#cc9f5b;--lg-light:#f0d39a;--lg-strength:1;color-scheme:dark}
+#lineup-gathering-light *{box-sizing:border-box}
+#lineup-gathering-light .lg-screen{position:relative;isolation:isolate;overflow:hidden;background:var(--lg-film);color:var(--lg-paper);min-height:480px;aspect-ratio:16/9;font:16px/1.5 'Segoe UI',Arial,sans-serif;display:flex;flex-direction:column}
+#lineup-gathering-light header{position:relative;z-index:2;display:flex;justify-content:space-between;align-items:center;gap:24px;padding:28px 32px}
+#lineup-gathering-light .lg-brand{font:18px Arial,sans-serif;letter-spacing:1.5px;color:var(--lg-amber)}
+#lineup-gathering-light .lg-steps{font-size:13px;color:var(--lg-support)}
+#lineup-gathering-light strong{color:var(--lg-paper);font-weight:600}
+#lineup-gathering-light main{position:relative;z-index:2;flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:16px 28px 44px}
+#lineup-gathering-light h2{font:600 clamp(30px,4.3vw,48px)/1.18 'Segoe UI',Arial,sans-serif;letter-spacing:-1.2px;margin:20px 0 0}
+#lineup-gathering-light .lg-total{font-size:20px;color:var(--lg-support);margin:18px 0 0;min-height:30px}
+#lineup-gathering-light .lg-detail{font-size:15px;color:var(--lg-support);margin:4px 0 0;min-height:23px}
+#lineup-gathering-light .lg-copy{min-height:128px}
+#lineup-gathering-light .lg-mark{width:36px;height:0;display:grid;place-items:center;color:var(--lg-light)}
+#lineup-gathering-light .lg-mark svg{width:30px;height:30px}
+#lineup-gathering-light .lg-failure{display:none}
+#lineup-gathering-light .lg-atmosphere{position:absolute;inset:0;transform:translateY(-5%);z-index:0;opacity:var(--lg-strength);transition:opacity 1.3s cubic-bezier(.22,1,.36,1);pointer-events:none}
+#lineup-gathering-light .lg-drift{position:absolute;inset:-30%;background-repeat:no-repeat;will-change:transform}
+#lineup-gathering-light .lg-one{background:radial-gradient(ellipse 48% 22% at 35% 64%,#bc813cbd 0%,#95603270 35%,transparent 74%);animation:lg-sweep 7.5s ease-in-out -3s infinite alternate}
+#lineup-gathering-light .lg-two{background:radial-gradient(ellipse 35% 24% at 68% 57%,#ebc78694 0%,#ba87575c 35%,transparent 74%);animation:lg-return 10s ease-in-out -5s infinite alternate}
+#lineup-gathering-light .lg-three{background:radial-gradient(ellipse 52% 28% at 49% 39%,transparent 45%,#ba8b4320 53%,#f5d79a68 60%,#ba8b4338 69%,transparent 84%);animation:lg-sweep 6.7s ease-in-out -2s infinite alternate}
+#lineup-gathering-light .lg-screen:after{content:'';position:absolute;inset:0;z-index:1;pointer-events:none;background:radial-gradient(ellipse at 50% 47%,#09080618 20%,#09080600 40%,#090806ad 95%),linear-gradient(#09080680,transparent 45%,#09080640)}
+#lineup-gathering-light .lg-actions{display:flex;flex-direction:column;align-items:center;gap:12px;min-height:108px;visibility:hidden;opacity:0;transform:translateY(8px);transition:opacity .4s ease,transform .4s ease}
+#lineup-gathering-light button{font:600 15px/1.4 'Segoe UI',Arial,sans-serif;cursor:pointer;border:0;border-radius:8px;padding:13px 24px;min-height:46px}
+#lineup-gathering-light .lg-primary{background:var(--lg-amber);color:#060504;min-width:170px}
+#lineup-gathering-light .lg-primary:hover{background:var(--lg-light)}
+#lineup-gathering-light .lg-secondary{background:transparent;color:var(--lg-support);padding:8px 16px}
+#lineup-gathering-light .lg-secondary:hover{color:var(--lg-paper);background:#1a171280}
+#lineup-gathering-light .lg-screen[data-state="success"] .lg-atmosphere{opacity:calc(var(--lg-strength) * .38)}
+#lineup-gathering-light .lg-screen[data-state="failure"] .lg-atmosphere{opacity:0}
+#lineup-gathering-light .lg-screen[data-state="failure"] .lg-failure{display:block}
+#lineup-gathering-light .lg-screen[data-state="failure"] .lg-mark{color:#ff7768;height:36px}
+#lineup-gathering-light .lg-screen:not([data-state="progress"]) .lg-actions{visibility:visible;opacity:1;transform:none}
+#lineup-gathering-light .lg-screen[data-state="failure"] .lg-secondary{visibility:hidden}
+#lineup-gathering-light .lg-preview{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;padding:12px 0;color:var(--foreground);font:13px Arial,sans-serif}
+#lineup-gathering-light .lg-demo{color:var(--foreground);background:transparent;border:1px solid var(--border);font:500 13px Arial,sans-serif;padding:8px 14px;min-height:36px}
+#lineup-gathering-light[data-reduced="true"] .lg-drift{animation:none}
+#lineup-gathering-light[data-reduced="true"] *{transition:none!important}
+@keyframes lg-sweep{from{transform:translate(-12%,8%) rotate(-14deg) scale(.92)}to{transform:translate(12%,-8%) rotate(12deg) scale(1.12)}}
+@keyframes lg-return{from{transform:translate(12%,-7%) rotate(12deg)}to{transform:translate(-12%,8%) rotate(-12deg) scale(1.08,.94)}}
+@media(prefers-reduced-motion:reduce){#lineup-gathering-light .lg-drift{animation:none}#lineup-gathering-light *{transition:none!important}}
+@media(max-width:600px){#lineup-gathering-light header{padding:24px;align-items:flex-start;flex-direction:column;gap:12px}#lineup-gathering-light .lg-screen{aspect-ratio:auto;min-height:520px}#lineup-gathering-light .lg-steps{font-size:12px}#lineup-gathering-light h2{letter-spacing:-.6px}#lineup-gathering-light .lg-copy{min-height:154px}#lineup-gathering-light .lg-total{font-size:18px}}
+</style>
+<script>
+(()=>{
+const root=document.getElementById('lineup-gathering-light');
+const screen=root.querySelector('.lg-screen');
+const state={phase:'progress',atmosphere:'rich',context:'first',reduced:false};
+const demo=root.querySelector('.lg-demo');
+let settlingFrame=0;
+let previousPhase=state.phase;
+const reducedQuery=matchMedia('(prefers-reduced-motion: reduce)');
+function settleMotion(){
+  cancelAnimationFrame(settlingFrame);
+  const animations=[...root.querySelectorAll('.lg-drift')].flatMap(layer=>layer.getAnimations());
+  if(state.reduced||reducedQuery.matches){animations.forEach(animation=>animation.pause());return;}
+  if(state.phase==='progress'){animations.forEach(animation=>{animation.updatePlaybackRate(1);animation.play();});return;}
+  const rates=animations.map(animation=>animation.playbackRate);
+  const start=performance.now();
+  function coast(now){
+    const remaining=Math.max(0,1-(now-start)/1300);
+    animations.forEach((animation,index)=>animation.updatePlaybackRate(rates[index]*remaining*remaining));
+    if(remaining>0&&root.isConnected)settlingFrame=requestAnimationFrame(coast);
+    else animations.forEach(animation=>animation.pause());
+  }
+  settlingFrame=requestAnimationFrame(coast);
+}
+function render(){
+screen.dataset.state=state.phase;root.dataset.reduced=String(state.reduced);
+root.style.setProperty('--lg-strength',{soft:.55,balanced:.78,rich:1}[state.atmosphere]);
+const first=state.context==='first';
+root.querySelector('h2').textContent=state.phase==='progress'?(first?'Creating your lineup…':'Updating your lineup…'):state.phase==='success'?(first?'Your lineup is ready':'Your lineup is updated'):(first?'We couldn’t create your lineup':'We couldn’t update your lineup');
+root.querySelector('.lg-total').textContent=state.phase==='success'?'390 channels in your lineup':state.phase==='failure'?(first?'Your lineup wasn’t saved.':'Your existing lineup hasn’t changed.'):'';
+root.querySelector('.lg-detail').textContent=state.phase==='failure'?'Your setup choices are still here.':state.phase==='success'&&!first?'30 added · 60 updated':'';
+root.querySelector('.lg-primary').textContent=state.phase==='failure'?'Back to review':'View lineup';
+demo.textContent=state.phase==='progress'?'Preview completion':'Replay creation';
+if(previousPhase!==state.phase&&!state.reduced&&!reducedQuery.matches){
+  root.querySelector('.lg-copy').animate([{opacity:.25,transform:'translateY(3px)'},{opacity:1,transform:'translateY(0)'}],{duration:420,easing:'cubic-bezier(.22,1,.36,1)'});
+}
+previousPhase=state.phase;
+settleMotion();
+}
+demo.onclick=()=>{state.phase=state.phase==='progress'?'success':'progress';render();};
+reducedQuery.addEventListener('change',render);
+render();
+if(globalThis.Tweak){const tweak=new Tweak({container:root,onChange:render});tweak.addSelect(state,'phase',{label:'State',options:[{label:'Creating',value:'progress'},{label:'Complete',value:'success'},{label:'Save failed',value:'failure'}]});tweak.addSelect(state,'atmosphere',{label:'Light intensity',options:['soft','balanced','rich']});tweak.addSelect(state,'context',{label:'Setup context',options:[{label:'First lineup',value:'first'},{label:'Existing lineup',value:'existing'}]});tweak.addToggle(state,'reduced',{label:'Reduce motion'});}
+})();
+</script>

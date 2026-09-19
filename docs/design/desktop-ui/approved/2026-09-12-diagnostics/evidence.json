@@ -1,0 +1,62 @@
+{
+  "status": "approved-at-1080p",
+  "implementation_commit": "7193d52eab16d85567127706cccfc9ea2cfad9a1",
+  "surfaces": [
+    42,
+    43,
+    44,
+    45
+  ],
+  "approval": "okay lets make those and lock it",
+  "approval_scope": "User conditionally approved the reviewed Diagnostics family with two final changes: one inline unavailable per-stream statement and horizontal wrapping expanded-event facts. Root personally verified both final captures. No additional user comparison was required.",
+  "menu_amendment": "yes anywhere that ellipsis is present in this way should be replaced by the hamburger type icon",
+  "viewport": [
+    1920,
+    1080
+  ],
+  "dpr": 1,
+  "text_scale": 1,
+  "source_sha256": {
+    "lib/app/diagnostics_view.dart": "5106e274798ed0fe95ece8d149d6da7dec43be6d4ab3d64989c9297d3cf50eb4",
+    "lib/app/lineup_shell.dart": "602f505cebf7cfe71ceb97a357483b3c8118d5953f0dc18d744c5ba9b20e5baa",
+    "lib/diagnostics/diagnostics.dart": "45f1c8543c9ef4989c18be3b95bef44e254df7d500defe01fb2becd559173506",
+    "test/app/desktop_diagnostics_test.dart": "7cc1c5250f3cb7f221b8cbad990de532c3ae0e12f24d289f526858f68b0d975e",
+    "test/diagnostics/diagnostics_test.dart": "bd26b84f9897b771cf748fa2a87f4829697f42bafc75509a0ee1b5113f45faba"
+  },
+  "captures": {
+    "empty.png": {
+      "sha256": "ed60fe8c7a6dc0f9e964857c705086c4d72674fc0550aa89fef0fd5c9e4710ca",
+      "source": "unchanged candidate01"
+    },
+    "event-expanded.png": {
+      "sha256": "7bc94934ebbf2850f50e494e5c09f1944e4e66c72dc5f4c6eb2c30565f95fdcf",
+      "source": "final candidate02"
+    },
+    "events.png": {
+      "sha256": "5511f6eba901428e8fd2b406c9be960748d16479e1c24f3e79b721e7edafcc24",
+      "source": "unchanged candidate01"
+    },
+    "off.png": {
+      "sha256": "9992bd46e0bf15512a48004096488cdca443b60b13da51bc40479df4c7276c23",
+      "source": "unchanged candidate01"
+    },
+    "technical.png": {
+      "sha256": "68c6e6be72cb5b531343709d3bf6ee35fbd1fee5597dd89f9107bcccf1e8075f",
+      "source": "final candidate02"
+    }
+  },
+  "fixtures": "Real Flutter DiagnosticsView with synthetic fixed UTC event timestamps, typed media facts, app version1.2.3/build42 and Windows target-platform override. Pinned Roboto mapped to Segoe UI for portable capture; not physical Windows rendering or telemetry evidence. No retouching/resizing.",
+  "verification": [
+    "21 existing Diagnostics/report/navigation/parity tests passed after root integration.",
+    "Final two presentation refinements: 3 Diagnostics behavior tests, focused analysis, formatting and diff check passed.",
+    "Five initial capture cases passed; two affected final cases regenerated and passed.",
+    "Timestamp seconds/semantics, copy failure/retry, event arrival reading stability, and restricted export checks retained or extended."
+  ],
+  "limitations": [
+    "Grouped adaptive/DPI/enlarged-text/accessibility visual validation pending.",
+    "Physical Windows input/native video/HDR validation pending.",
+    "Playback method and per-stream handling remain unavailable when not supplied by current telemetry.",
+    "Unknown report strings remain excluded by explicit allowlists."
+  ],
+  "independent_review": "Not specifically recommended for this bounded approved pass."
+}

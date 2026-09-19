@@ -1025,10 +1025,15 @@ void main() {
       final guide = GuideController(lineup: lineup);
 
       guide.setLibraryFilter('library-1');
+      expect(guide.libraryFilterId, 'library-1');
       expect(guide.channels.map((channel) => channel.id), contains('mixed'));
       expect(guide.channels.map((channel) => channel.number), contains(900));
 
       guide.setLibraryFilter(null);
+      expect(guide.libraryFilterId, isNull);
+      expect(guide.channels, hasLength(3));
+
+      guide.setLibraryFilter('unavailable-library');
       expect(guide.libraryFilterId, isNull);
       expect(guide.channels, hasLength(3));
 

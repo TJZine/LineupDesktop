@@ -1,0 +1,26 @@
+{
+  "status": "Locked per explicit user approval conditional on compact long names; condition completed",
+  "implementation_commit": "dc9de6072cf8889c9404adef5e8fc95bfbbc7918",
+  "sources": {
+    "lib/playback/player_view.dart": "f2634e36c9f046478ba1a94933a55a23e82c75b30f49faf639eb9eba74f9aa54",
+    "lib/ui/app_ui.dart": "b2b4561679e9858d88a11c297793e8647bed890a665cb8e39cb84c7ccb5edabc"
+  },
+  "images": {
+    "now-playing-logo-dark-1920x1080.png": "a42868d6a442d15b97a9c45997add8caa1b73bdcd53f2c2810d12a5c58b931f4",
+    "now-playing-text-bright-1920x1080.png": "44bd2550dc52c62d272b801a568895fac286bfb30057e5d1e5926e2a4924ea64",
+    "now-playing-text-dark-1920x1080.png": "55b38496f33c5649105c99b01b307afae6fe8983a4861a2c592a41d9c77c1efa",
+    "now-playing-logo-bright-1920x1080.png": "3436f75d70a82dd614f4a61dedeb0343cc15200e46cdb7aa935f944dd7e29305"
+  },
+  "viewport": [
+    1920,
+    1080
+  ],
+  "dpr": 1,
+  "text_scale": 1,
+  "checks": "68 focused checks passed including compact name/full tooltip/full semantics;4 final capture cases passed; analyzer clean",
+  "fixture": "Synthetic episode over painted bright/dark scenes; actual Flutter, not Windows video",
+  "pending": [
+    "Grouped adaptive/accessibility, final compact-name720p",
+    "Physical Windows moving-video/native overlay checks"
+  ]
+}

@@ -109,6 +109,7 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
   @override
   Widget build(BuildContext context) {
     final roles = LineupTheme.of(context);
+    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
     final refinedStage = switch (widget.controller.stage) {
       SetupStage.linking || SetupStage.profiles || SetupStage.servers => true,
       _ => false,
@@ -130,7 +131,7 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
         child: SafeArea(
           child: Center(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.all(32),
+              padding: EdgeInsets.all(32 * scale),
               child: ConstrainedBox(
                 key: const ValueKey('onboarding-content'),
                 constraints: const BoxConstraints(maxWidth: double.infinity),
@@ -160,17 +161,40 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
       SetupStage.servers => _servers(),
       SetupStage.channelSetup || SetupStage.ready => const SizedBox.shrink(),
     };
-    return _OnboardingPanel(
+    final compactWidth = switch (controller.stage) {
+      SetupStage.linking => 736.0,
+      SetupStage.profiles => 1080.0,
+      SetupStage.servers => 880.0,
+      _ => null,
+    };
+    if (compactWidth != null) {
+      return Theme(
+        key: key,
+        data: _onboardingButtonTheme(context),
+        child: _OnboardingCompactPanel(
+          maxWidth: compactWidth,
+          busy: controller.busy,
+          error: controller.stage == SetupStage.servers && _serverError != null
+              ? null
+              : controller.error,
+          child: content,
+        ),
+      );
+    }
+    return Theme(
       key: key,
-      busy: controller.busy,
-      error: controller.stage == SetupStage.servers && _serverError != null
-          ? null
-          : controller.error,
-      refinedSurface:
-          controller.stage == SetupStage.linking ||
-          controller.stage == SetupStage.profiles ||
-          controller.stage == SetupStage.servers,
-      child: content,
+      data: _onboardingButtonTheme(context),
+      child: _OnboardingPanel(
+        busy: controller.busy,
+        error: controller.stage == SetupStage.servers && _serverError != null
+            ? null
+            : controller.error,
+        refinedSurface:
+            controller.stage == SetupStage.linking ||
+            controller.stage == SetupStage.profiles ||
+            controller.stage == SetupStage.servers,
+        child: content,
+      ),
     );
   }
 
@@ -255,25 +279,44 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
         '${seconds ~/ 60}:${(seconds % 60).toString().padLeft(2, '0')}';
     final feedback = _feedbackPinId == pin?.id ? _linkFeedback : null;
     final roles = LineupTheme.of(context);
+    final size = MediaQuery.sizeOf(context);
+    final scale = LineupLayout.scaleFor(size);
+    final narrow =
+        size.width <= 720 * scale ||
+        MediaQuery.textScalerOf(context).scale(1) >= 1.6;
+    final theme = Theme.of(context);
+    final bodyFontSize = (narrow ? 14.0 : 18.0) * scale;
+    final bodyStyle = theme.textTheme.bodyMedium?.copyWith(
+      fontSize: bodyFontSize,
+      height: 1.45,
+    );
+    final actionStyle = theme.textTheme.labelLarge?.copyWith(
+      fontSize: bodyFontSize,
+    );
     final instructions = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(
           'Sign in to Plex',
-          style: Theme.of(context).textTheme.headlineMedium,
+          style: theme.textTheme.headlineMedium?.copyWith(
+            fontSize: (narrow ? 26.0 : 36.0) * scale,
+            height: 1.2,
+            fontWeight: FontWeight.w600,
+          ),
         ),
-        const SizedBox(height: 12),
+        SizedBox(height: 12 * scale),
         Text(
           pin == null || expired
               ? 'Request a fresh code to finish signing in.'
               : 'Open plex.tv/link and enter this code.',
+          style: bodyStyle,
         ),
-        const SizedBox(height: 20),
+        SizedBox(height: 20 * scale),
         if (pin != null)
           Wrap(
-            spacing: 16,
-            runSpacing: 12,
+            spacing: 16 * scale,
+            runSpacing: 12 * scale,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               Semantics(
@@ -281,28 +324,31 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
                 excludeSemantics: true,
                 child: SelectableText(
                   pin.code,
-                  style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                    letterSpacing: 6,
-                    fontWeight: FontWeight.w700,
+                  style: theme.textTheme.headlineLarge?.copyWith(
+                    fontSize: (narrow ? 32.0 : 40.0) * scale,
+                    letterSpacing: 6 * scale,
+                    fontWeight: FontWeight.w500,
                     color: usable ? roles.primaryText : roles.mutedText,
                   ),
                 ),
               ),
               OutlinedButton.icon(
                 onPressed: usable ? _copyCode : null,
+                style: OutlinedButton.styleFrom(textStyle: actionStyle),
                 icon: const Icon(Icons.copy),
                 label: const Text('Copy code'),
               ),
             ],
           ),
-        const SizedBox(height: 16),
+        SizedBox(height: 16 * scale),
         Wrap(
-          spacing: 12,
-          runSpacing: 12,
+          spacing: 12 * scale,
+          runSpacing: 12 * scale,
           children: [
             if (usable)
               FilledButton.icon(
                 onPressed: _openingBrowser ? null : _openBrowser,
+                style: FilledButton.styleFrom(textStyle: actionStyle),
                 icon: const Icon(Icons.open_in_browser),
                 label: const Text('Open browser'),
               )
@@ -315,6 +361,7 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
                     : controller.secureCancellationRequired
                     ? controller.cancelLinking
                     : controller.startLinking,
+                style: FilledButton.styleFrom(textStyle: actionStyle),
                 child: Text(
                   controller.secureCancellationRequired
                       ? 'Retry secure cancellation'
@@ -324,30 +371,28 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
           ],
         ),
         if (feedback != null) ...[
-          const SizedBox(height: 12),
-          Semantics(liveRegion: true, child: Text(feedback)),
+          SizedBox(height: 12 * scale),
+          Semantics(liveRegion: true, child: Text(feedback, style: bodyStyle)),
         ],
       ],
     );
-    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
+    final hasQr = usable || expired;
     return Center(
       child: ConstrainedBox(
         constraints: BoxConstraints(maxWidth: 736 * scale),
         child: SizedBox(
           width: double.infinity,
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,
             children: [
               Center(
                 child: ConstrainedBox(
-                  constraints: BoxConstraints(maxWidth: 560 * scale),
+                  constraints: BoxConstraints(maxWidth: 736 * scale),
                   child: LayoutBuilder(
                     builder: (context, bodyConstraints) {
-                      final narrow =
-                          bodyConstraints.maxWidth <= 520 ||
-                          MediaQuery.textScalerOf(context).scale(1) >= 1.6;
-                      final qrSize = (narrow ? 140.0 : 172.0) * scale;
-                      final qr = (usable || expired)
+                      final qrSize = (narrow ? 172.0 : 200.0) * scale;
+                      final qr = hasQr
                           ? Column(
                               mainAxisSize: MainAxisSize.min,
                               crossAxisAlignment: CrossAxisAlignment.center,
@@ -355,7 +400,7 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
                                 Container(
                                   width: qrSize,
                                   height: qrSize,
-                                  padding: const EdgeInsets.all(12),
+                                  padding: EdgeInsets.all(12 * scale),
                                   decoration: BoxDecoration(
                                     color: usable
                                         ? Colors.white
@@ -369,7 +414,7 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
                                   child: usable
                                       ? QrImageView(
                                           data: 'https://plex.tv/link',
-                                          size: qrSize - 24,
+                                          size: qrSize - 24 * scale,
                                           padding: EdgeInsets.zero,
                                           semanticsLabel:
                                               'QR code for plex.tv/link',
@@ -380,23 +425,33 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
                                           child: Text(
                                             'Code expired',
                                             textAlign: TextAlign.center,
-                                            style: Theme.of(context)
-                                                .textTheme
-                                                .bodyMedium
+                                            style: theme.textTheme.bodyMedium
                                                 ?.copyWith(
+                                                  fontSize:
+                                                      (theme
+                                                              .textTheme
+                                                              .bodyMedium
+                                                              ?.fontSize ??
+                                                          14) *
+                                                      scale,
                                                   color: roles.secondaryText,
                                                 ),
                                           ),
                                         ),
                                 ),
-                                const SizedBox(height: 8),
+                                SizedBox(height: 8 * scale),
                                 Text(
                                   expired
                                       ? 'Request a new code'
                                       : 'Or scan with your phone',
                                   textAlign: TextAlign.center,
-                                  style: Theme.of(context).textTheme.bodySmall
-                                      ?.copyWith(color: roles.secondaryText),
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    fontSize:
+                                        (theme.textTheme.bodySmall?.fontSize ??
+                                            12) *
+                                        scale,
+                                    color: roles.secondaryText,
+                                  ),
                                 ),
                               ],
                             )
@@ -406,26 +461,28 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 instructions,
-                                if (usable || expired) ...[
-                                  const SizedBox(height: 24),
+                                if (hasQr) ...[
+                                  SizedBox(height: 24 * scale),
                                   Align(alignment: Alignment.center, child: qr),
                                 ],
                               ],
                             )
-                          : Row(
+                          : hasQr
+                          ? Row(
                               children: [
                                 Expanded(child: instructions),
-                                if (usable || expired) ...[
-                                  const SizedBox(width: 40),
-                                  qr,
-                                ],
+                                if (hasQr) ...[SizedBox(width: 40 * scale), qr],
                               ],
+                            )
+                          : SizedBox(
+                              width: double.infinity,
+                              child: instructions,
                             );
                     },
                   ),
                 ),
               ),
-              const SizedBox(height: 28),
+              SizedBox(height: 20 * scale),
               const Divider(),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
@@ -437,15 +494,23 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
                           : expired
                           ? 'This code has expired'
                           : 'This code is no longer active.',
+                      style: bodyStyle?.copyWith(
+                        fontSize: (narrow ? 14.0 : 16.0) * scale,
+                        color: roles.secondaryText,
+                      ),
                     ),
                   ),
                   if (!controller.secureCancellationRequired)
                     Padding(
-                      padding: const EdgeInsets.only(left: 12),
+                      padding: EdgeInsets.only(left: 12 * scale),
                       child: TextButton(
                         onPressed: controller.busy
                             ? null
                             : controller.cancelLinking,
+                        style: TextButton.styleFrom(
+                          foregroundColor: roles.secondaryText,
+                          textStyle: actionStyle,
+                        ),
                         child: const Text('Cancel'),
                       ),
                     ),
@@ -462,35 +527,109 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
     title: "Who's watching?",
     subtitle: 'Choose a Plex Home profile to continue.',
     compact: true,
+    titleFontSize: 36,
+    subtitleFontSize: 18,
+    titleWeight: FontWeight.w600,
     child: Column(
       children: [
-        Wrap(
-          alignment: WrapAlignment.center,
-          spacing: 16,
-          runSpacing: 16,
-          children: [
-            for (final user in widget.controller.profiles)
-              _ProfileCard(
-                user: user,
-                active: user.id == widget.controller.profile?.id,
-                autofocus: user == widget.controller.profiles.first,
-                onPressed: widget.controller.busy
-                    ? null
-                    : () => _selectProfile(user),
-              ),
-          ],
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
+            final textScale = MediaQuery.textScalerOf(context)
+                .scale(1)
+                .clamp(1.0, 1.75);
+            final availableWidth = constraints.maxWidth.isFinite
+                ? constraints.maxWidth
+                : 1080 * scale;
+            final gap = 16 * scale;
+            final itemWidth = 200 * scale * textScale;
+            final count = widget.controller.profiles.length;
+            final targetColumns = count <= 3
+                ? count.clamp(1, 3)
+                : ((count + 1) ~/ 2).clamp(1, 5);
+            final fittingColumns = ((availableWidth + gap) / (itemWidth + gap))
+                .floor()
+                .clamp(1, targetColumns);
+            final columns = fittingColumns.toInt();
+            final rows = <Widget>[];
+            for (var start = 0; start < count; start += columns) {
+              final rowCount = (count - start).clamp(0, columns).toInt();
+              final rowWidth = ((rowCount * itemWidth) + ((rowCount - 1) * gap))
+                  .clamp(0.0, availableWidth);
+              rows.add(
+                Padding(
+                  padding: EdgeInsets.only(top: start == 0 ? 0 : gap),
+                  child: Center(
+                    child: SizedBox(
+                      width: rowWidth,
+                      child: IntrinsicHeight(
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            for (
+                              var column = 0;
+                              column < rowCount;
+                              column++
+                            ) ...[
+                              if (column > 0) SizedBox(width: gap),
+                              Expanded(
+                                child: _ProfileCard(
+                                  user: widget
+                                      .controller
+                                      .profiles[start + column],
+                                  active:
+                                      widget
+                                          .controller
+                                          .profiles[start + column]
+                                          .id ==
+                                      widget.controller.profile?.id,
+                                  autofocus: start + column == 0,
+                                  onPressed: widget.controller.busy
+                                      ? null
+                                      : () => _selectProfile(
+                                          widget.controller.profiles[start +
+                                              column],
+                                        ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }
+            return Center(child: Column(children: rows));
+          },
         ),
-        const SizedBox(height: 28),
+        SizedBox(
+          height: 28 * LineupLayout.scaleFor(MediaQuery.sizeOf(context)),
+        ),
         OutlinedButton.icon(
           onPressed: widget.controller.busy ? null : widget.onLogout,
+          style: OutlinedButton.styleFrom(
+            textStyle: Theme.of(context).textTheme.labelLarge?.copyWith(
+              fontSize: 18 * LineupLayout.scaleFor(MediaQuery.sizeOf(context)),
+            ),
+          ),
           icon: const Icon(Icons.logout),
           label: const Text('Sign out'),
         ),
         if (widget.controller.profileSelectionCanCancel) ...[
-          const SizedBox(height: 12),
+          SizedBox(
+            height: 12 * LineupLayout.scaleFor(MediaQuery.sizeOf(context)),
+          ),
           TextButton(
             focusNode: _profileCancelFocus,
             onPressed: widget.controller.cancelProfileSelection,
+            style: TextButton.styleFrom(
+              textStyle: Theme.of(context).textTheme.labelLarge?.copyWith(
+                fontSize:
+                    18 * LineupLayout.scaleFor(MediaQuery.sizeOf(context)),
+              ),
+            ),
             child: const Text('Back'),
           ),
         ],
@@ -503,17 +642,37 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
     subtitle: 'Select the Plex server you want to watch from.',
     centered: false,
     maxWidth: 880,
+    titleFontSize: 36,
+    subtitleFontSize: 18,
+    titleWeight: FontWeight.w600,
     child: Column(
       children: [
         if (widget.controller.servers.isEmpty && !widget.controller.busy)
-          const LineupEmptyState(
-            icon: Icons.dns_outlined,
-            title: 'No servers found',
-            message: 'Make sure Plex Media Server is online and reachable, then retry discovery.',
+          Builder(
+            builder: (context) {
+              final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
+              final theme = Theme.of(context);
+              return Theme(
+                data: theme.copyWith(
+                  textTheme: theme.textTheme.apply(fontSizeFactor: scale),
+                ),
+                child: DefaultTextStyle.merge(
+                  style: DefaultTextStyle.of(context).style
+                      .apply(fontSizeFactor: scale),
+                  child: const LineupEmptyState(
+                    icon: Icons.dns_outlined,
+                    title: 'No servers found',
+                    message: 'Make sure Plex Media Server is online and reachable, then retry discovery.',
+                  ),
+                ),
+              );
+            },
           ),
         for (final server in widget.controller.servers)
           Padding(
-            padding: const EdgeInsets.only(bottom: 12),
+            padding: EdgeInsets.only(
+              bottom: 12 * LineupLayout.scaleFor(MediaQuery.sizeOf(context)),
+            ),
             child: _ServerCard(
               server: server,
               connection: widget.controller.server?.id == server.id
@@ -527,27 +686,47 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
               error: _failedServerId == server.id ? _serverError : null,
             ),
           ),
-        const SizedBox(height: 12),
+        SizedBox(
+          height: 12 * LineupLayout.scaleFor(MediaQuery.sizeOf(context)),
+        ),
         Wrap(
-          spacing: 12,
-          runSpacing: 12,
+          spacing: 12 * LineupLayout.scaleFor(MediaQuery.sizeOf(context)),
+          runSpacing: 12 * LineupLayout.scaleFor(MediaQuery.sizeOf(context)),
           alignment: WrapAlignment.center,
           children: [
             OutlinedButton.icon(
               autofocus: widget.controller.servers.isEmpty,
               onPressed: widget.controller.busy ? null : _refreshServers,
+              style: OutlinedButton.styleFrom(
+                textStyle: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  fontSize:
+                      18 * LineupLayout.scaleFor(MediaQuery.sizeOf(context)),
+                ),
+              ),
               icon: const Icon(Icons.refresh),
               label: const Text('Refresh servers'),
             ),
             if (widget.controller.profiles.length > 1)
               OutlinedButton.icon(
                 onPressed: widget.controller.busy ? null : _showProfiles,
+                style: OutlinedButton.styleFrom(
+                  textStyle: Theme.of(context).textTheme.labelLarge?.copyWith(
+                    fontSize:
+                        18 * LineupLayout.scaleFor(MediaQuery.sizeOf(context)),
+                  ),
+                ),
                 icon: const Icon(Icons.switch_account),
                 label: const Text('Switch profile'),
               ),
             if (widget.controller.serverSelectionCanCancel)
               TextButton(
                 onPressed: widget.controller.cancelServerSelection,
+                style: TextButton.styleFrom(
+                  textStyle: Theme.of(context).textTheme.labelLarge?.copyWith(
+                    fontSize:
+                        18 * LineupLayout.scaleFor(MediaQuery.sizeOf(context)),
+                  ),
+                ),
                 child: const Text('Back'),
               ),
           ],
@@ -613,13 +792,159 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
   }
 }
 
+ThemeData _onboardingButtonTheme(BuildContext context) {
+  final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
+  final theme = Theme.of(context);
+  return theme.copyWith(
+    filledButtonTheme: FilledButtonThemeData(
+      style: _scaledOnboardingButtonStyle(
+        theme.filledButtonTheme.style,
+        scale: scale,
+        minimumSize: const Size(148, 54),
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+        iconSize: 18,
+      ),
+    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: _scaledOnboardingButtonStyle(
+        theme.outlinedButtonTheme.style,
+        scale: scale,
+        minimumSize: const Size(148, 54),
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+        iconSize: 18,
+      ),
+    ),
+    textButtonTheme: TextButtonThemeData(
+      style: _scaledOnboardingButtonStyle(
+        theme.textButtonTheme.style,
+        scale: scale,
+        minimumSize: const Size(64, 40),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        iconSize: 18,
+      ),
+    ),
+  );
+}
+
+ButtonStyle _scaledOnboardingButtonStyle(
+  ButtonStyle? source, {
+  required double scale,
+  required Size minimumSize,
+  required EdgeInsets padding,
+  required double iconSize,
+}) {
+  final base = source ?? const ButtonStyle();
+  var scaled = base.copyWith(
+    minimumSize: WidgetStatePropertyAll(
+      Size(minimumSize.width * scale, minimumSize.height * scale),
+    ),
+    padding: WidgetStatePropertyAll(
+      EdgeInsets.fromLTRB(
+        padding.left * scale,
+        padding.top * scale,
+        padding.right * scale,
+        padding.bottom * scale,
+      ),
+    ),
+    iconSize: WidgetStatePropertyAll(iconSize * scale),
+  );
+  final textStyle = base.textStyle;
+  if (textStyle == null) return scaled;
+  scaled = scaled.copyWith(
+    textStyle: WidgetStateProperty.resolveWith((states) {
+      final resolved = textStyle.resolve(states);
+      final fontSize = resolved?.fontSize;
+      return resolved == null || fontSize == null
+          ? resolved
+          : resolved.copyWith(fontSize: fontSize * scale);
+    }),
+  );
+  return scaled;
+}
+
+class _OnboardingCompactPanel extends StatelessWidget {
+  const _OnboardingCompactPanel({
+    required this.busy,
+    required this.error,
+    required this.child,
+    this.maxWidth = 736,
+  });
+
+  final bool busy;
+  final String? error;
+  final Widget child;
+  final double maxWidth;
+
+  @override
+  Widget build(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    final scale = LineupLayout.scaleFor(size);
+    final narrow =
+        size.width <= 720 * scale ||
+        MediaQuery.textScalerOf(context).scale(1) >= 1.6;
+    final roles = LineupTheme.of(context);
+    final bodyFontSize = (narrow ? 14.0 : 18.0) * scale;
+    final content = ConstrainedBox(
+      constraints: BoxConstraints(maxWidth: maxWidth * scale),
+      child: SizedBox(
+        width: double.infinity,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Image.asset(
+                  'assets/branding/lineup-logo-mark.png',
+                  height: 24 * scale,
+                  width: 24 * scale,
+                ),
+                SizedBox(width: 8 * scale),
+                Text(
+                  'LINEUP',
+                  style: TextStyle(
+                    color: roles.progressFill,
+                    fontFamily: 'Arial',
+                    fontSize: 18 * scale,
+                    letterSpacing: 1.5 * scale,
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: 20 * scale),
+            if (busy) ...[
+              LinearProgressIndicator(semanticsLabel: 'Working'),
+              SizedBox(height: 16 * scale),
+            ],
+            if (error != null) ...[
+              DefaultTextStyle(
+                style: Theme.of(context).textTheme.bodyMedium!
+                    .copyWith(fontSize: bodyFontSize, height: 1.45),
+                child: LineupNotice(message: error!),
+              ),
+              SizedBox(height: 16 * scale),
+            ],
+            child,
+          ],
+        ),
+      ),
+    );
+    return Center(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: maxWidth * scale),
+        child: content,
+      ),
+    );
+  }
+}
+
 class _OnboardingPanel extends StatelessWidget {
   const _OnboardingPanel({
     required this.busy,
     required this.error,
     required this.refinedSurface,
     required this.child,
-    super.key,
   });
   final bool busy;
   final String? error;
@@ -689,12 +1014,18 @@ class _HeroContent extends StatelessWidget {
     this.compact = false,
     this.centered = true,
     this.maxWidth,
+    this.titleFontSize,
+    this.subtitleFontSize,
+    this.titleWeight,
   });
   final String title;
   final String subtitle;
   final bool compact;
   final bool centered;
   final double? maxWidth;
+  final double? titleFontSize;
+  final double? subtitleFontSize;
+  final FontWeight? titleWeight;
   final Widget child;
 
   @override
@@ -710,18 +1041,24 @@ class _HeroContent extends StatelessWidget {
           child: Text(
             title,
             textAlign: centered ? TextAlign.center : TextAlign.left,
-            style: Theme.of(context).textTheme.headlineMedium
-                ?.copyWith(fontWeight: FontWeight.w800),
+            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+              fontSize: titleFontSize == null ? null : titleFontSize! * scale,
+              fontWeight: titleWeight ?? FontWeight.w800,
+            ),
           ),
         ),
-        const SizedBox(height: 10),
+        SizedBox(height: 10 * scale),
         Text(
           subtitle,
           textAlign: centered ? TextAlign.center : TextAlign.left,
-          style: Theme.of(context).textTheme.titleMedium
-              ?.copyWith(color: LineupTheme.of(context).secondaryText),
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+            fontSize: subtitleFontSize == null
+                ? null
+                : subtitleFontSize! * scale,
+            color: LineupTheme.of(context).secondaryText,
+          ),
         ),
-        SizedBox(height: compact ? 16 : 30),
+        SizedBox(height: (compact ? 16 : 30) * scale),
         child,
       ],
     );
@@ -748,131 +1085,126 @@ class _ProfileCard extends StatelessWidget {
   final VoidCallback? onPressed;
 
   @override
-  Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, constraints) {
-      final size = MediaQuery.sizeOf(context);
-      final scale = LineupLayout.scaleFor(size);
-      final textScale = MediaQuery.textScalerOf(context)
-          .scale(1)
-          .clamp(1.0, 1.75);
-      final width = 176 * scale * textScale;
-      final availableWidth = constraints.maxWidth.isFinite
-          ? constraints.maxWidth
-          : width;
-      final maxGroupWidth = availableWidth.clamp(1.0, double.infinity);
-      final groupWidth = width.clamp(1.0, maxGroupWidth).toDouble();
-      final roles = LineupTheme.of(context);
-      final buttonStyle = ButtonStyle(
-        padding: const WidgetStatePropertyAll(EdgeInsets.zero),
-        minimumSize: const WidgetStatePropertyAll(Size.zero),
-        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        shape: WidgetStatePropertyAll(
-          RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(roles.panelRadius),
-          ),
+  Widget build(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    final scale = LineupLayout.scaleFor(size);
+    final roles = LineupTheme.of(context);
+    final buttonStyle = ButtonStyle(
+      alignment: Alignment.topCenter,
+      padding: const WidgetStatePropertyAll(EdgeInsets.zero),
+      minimumSize: const WidgetStatePropertyAll(Size.zero),
+      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      shape: WidgetStatePropertyAll(
+        RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(roles.panelRadius),
         ),
-        backgroundColor: WidgetStateProperty.resolveWith((states) {
-          if (states.contains(WidgetState.pressed)) {
-            return roles.progressFill.withValues(alpha: 0.14);
-          }
-          if (active) return roles.selectedSurface;
-          if (states.contains(WidgetState.focused)) {
-            return roles.focusedSurface;
-          }
-          if (states.contains(WidgetState.hovered)) {
-            return roles.primarySurface.withValues(alpha: 0.7);
-          }
-          return Colors.transparent;
-        }),
-        foregroundColor: WidgetStateProperty.resolveWith((states) {
-          if (states.contains(WidgetState.disabled)) return roles.mutedText;
-          if (states.contains(WidgetState.focused)) return roles.focusedText;
-          return roles.primaryText;
-        }),
-        side: WidgetStateProperty.resolveWith((states) {
-          if (states.contains(WidgetState.focused)) {
-            return BorderSide(
-              color: roles.focusBorder,
-              width: _onboardingFocusWidth(roles),
-            );
-          }
-          if (states.contains(WidgetState.hovered)) {
-            return BorderSide(color: roles.defaultBorder);
-          }
-          return BorderSide.none;
-        }),
-        overlayColor: WidgetStatePropertyAll(
-          roles.progressFill.withValues(alpha: 0.12),
-        ),
-      );
-      return SizedBox(
-        width: groupWidth,
-        child: MergeSemantics(
-          child: Semantics(
-            button: true,
-            selected: active,
-            enabled: onPressed != null,
-            child: TextButton(
-              autofocus: autofocus,
-              onPressed: onPressed,
-              style: buttonStyle,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 16, 12, 16),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    CircleAvatar(
-                      radius: 42,
-                      backgroundColor: roles.elevatedSurface,
-                      foregroundColor: roles.secondaryText,
-                      backgroundImage: user.thumb?.isAbsolute == true
-                          ? NetworkImage(user.thumb.toString())
-                          : null,
-                      child: user.thumb?.isAbsolute == true
-                          ? null
-                          : Text(
-                              user.name.characters.first.toUpperCase(),
-                              style: const TextStyle(fontSize: 30),
-                            ),
+      ),
+      backgroundColor: WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.pressed)) {
+          return roles.progressFill.withValues(alpha: 0.14);
+        }
+        if (active) return roles.selectedSurface;
+        if (states.contains(WidgetState.focused)) {
+          return roles.focusedSurface;
+        }
+        if (states.contains(WidgetState.hovered)) {
+          return roles.primarySurface.withValues(alpha: 0.7);
+        }
+        return Colors.transparent;
+      }),
+      foregroundColor: WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.disabled)) return roles.mutedText;
+        if (states.contains(WidgetState.focused)) return roles.focusedText;
+        return roles.primaryText;
+      }),
+      side: WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.focused)) {
+          return BorderSide(
+            color: roles.focusBorder,
+            width: _onboardingFocusWidth(roles) * scale,
+          );
+        }
+        if (states.contains(WidgetState.hovered)) {
+          return BorderSide(color: roles.defaultBorder);
+        }
+        return BorderSide.none;
+      }),
+      overlayColor: WidgetStatePropertyAll(
+        roles.progressFill.withValues(alpha: 0.12),
+      ),
+    );
+    return SizedBox(
+      width: double.infinity,
+      child: MergeSemantics(
+        child: Semantics(
+          button: true,
+          selected: active,
+          enabled: onPressed != null,
+          child: TextButton(
+            autofocus: autofocus,
+            onPressed: onPressed,
+            style: buttonStyle,
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(
+                12 * scale,
+                16 * scale,
+                12 * scale,
+                16 * scale,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircleAvatar(
+                    radius: 48 * scale,
+                    backgroundColor: roles.elevatedSurface,
+                    foregroundColor: roles.secondaryText,
+                    backgroundImage: user.thumb?.isAbsolute == true
+                        ? NetworkImage(user.thumb.toString())
+                        : null,
+                    child: user.thumb?.isAbsolute == true
+                        ? null
+                        : Text(
+                            user.name.characters.first.toUpperCase(),
+                            style: TextStyle(fontSize: 32 * scale),
+                          ),
+                  ),
+                  SizedBox(height: 12 * scale),
+                  Text(
+                    user.name,
+                    textAlign: TextAlign.center,
+                    softWrap: true,
+                    style: TextStyle(
+                      fontSize: 18 * scale,
+                      fontWeight: FontWeight.w600,
                     ),
-                    const SizedBox(height: 12),
-                    Text(
-                      user.name,
-                      textAlign: TextAlign.center,
-                      softWrap: true,
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
+                  ),
+                  if (user.protected ||
+                      user.admin ||
+                      user.restricted == true ||
+                      active)
+                    Padding(
+                      padding: EdgeInsets.only(top: 4 * scale),
+                      child: Wrap(
+                        alignment: WrapAlignment.center,
+                        spacing: 4 * scale,
+                        runSpacing: 4 * scale,
+                        children: [
+                          if (user.protected) const _ProfileBadge('PIN'),
+                          if (user.admin) const _ProfileBadge('Admin'),
+                          if (user.restricted == true)
+                            const _ProfileBadge('Restricted'),
+                          if (active) const _ProfileBadge('Active'),
+                        ],
                       ),
                     ),
-                    if (user.protected ||
-                        user.admin ||
-                        user.restricted == true ||
-                        active)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 4),
-                        child: Wrap(
-                          alignment: WrapAlignment.center,
-                          spacing: 4,
-                          runSpacing: 4,
-                          children: [
-                            if (user.protected) const _ProfileBadge('PIN'),
-                            if (user.admin) const _ProfileBadge('Admin'),
-                            if (user.restricted == true)
-                              const _ProfileBadge('Restricted'),
-                            if (active) const _ProfileBadge('Active'),
-                          ],
-                        ),
-                      ),
-                  ],
-                ),
+                ],
               ),
             ),
           ),
         ),
-      );
-    },
-  );
+      ),
+    );
+  }
 }
 
 class _ProfileBadge extends StatelessWidget {
@@ -883,19 +1215,11 @@ class _ProfileBadge extends StatelessWidget {
   Widget build(BuildContext context) => Semantics(
     label: label,
     child: ExcludeSemantics(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-        decoration: BoxDecoration(
-          color: LineupTheme.of(context).elevatedSurface.withValues(alpha: 0.7),
-          borderRadius: BorderRadius.circular(999),
-          border: Border.all(color: LineupTheme.of(context).subtleBorder),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: LineupTheme.of(context).secondaryText,
-            fontSize: 10,
-          ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: LineupTheme.of(context).secondaryText,
+          fontSize: 12 * LineupLayout.scaleFor(MediaQuery.sizeOf(context)),
         ),
       ),
     ),
@@ -920,6 +1244,13 @@ class _ServerCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
+    final supportStyle = TextStyle(
+      color: LineupTheme.of(context).secondaryText,
+      fontSize: 16 * scale,
+    );
+    final actionStyle = Theme.of(context).textTheme.labelLarge
+        ?.copyWith(fontSize: 18 * scale);
     final actionLabel = pending
         ? 'Connecting…'
         : error != null
@@ -928,23 +1259,54 @@ class _ServerCard extends StatelessWidget {
     final details = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          server.name,
-          softWrap: true,
-          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+        Wrap(
+          spacing: 12 * scale,
+          runSpacing: 8 * scale,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Text(
+              server.name,
+              softWrap: true,
+              style: TextStyle(
+                fontSize: 22 * scale,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            if (connection != null)
+              Container(
+                padding: EdgeInsets.symmetric(
+                  horizontal: 8 * scale,
+                  vertical: 4 * scale,
+                ),
+                decoration: BoxDecoration(
+                  color: LineupTheme.of(context).progressFill
+                      .withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(6 * scale),
+                ),
+                child: Text(
+                  'Current',
+                  style: TextStyle(
+                    color: LineupTheme.of(context).progressFill,
+                    fontSize: 12 * scale,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+          ],
         ),
-        const SizedBox(height: 4),
+        SizedBox(height: 4 * scale),
         Text(
           server.owned ? 'Owned server' : 'Shared server',
-          style: TextStyle(color: LineupTheme.of(context).secondaryText),
+          style: supportStyle,
         ),
-        if (previouslyUsed && connection == null) const Text('Previously used'),
+        if (previouslyUsed && connection == null)
+          Text('Previously used', style: supportStyle),
         if (connection != null) ...[
-          const SizedBox(height: 8),
+          SizedBox(height: 8 * scale),
           Text(
             'Current connection: ${plexConnectionDescription(connection!)}',
             softWrap: true,
-            style: const TextStyle(fontWeight: FontWeight.w600),
+            style: supportStyle,
           ),
         ],
       ],
@@ -955,6 +1317,7 @@ class _ServerCard extends StatelessWidget {
               label: actionLabel,
               child: FilledButton(
                 onPressed: onPressed,
+                style: FilledButton.styleFrom(textStyle: actionStyle),
                 child: ExcludeSemantics(
                   child: Text(
                     pending
@@ -967,39 +1330,37 @@ class _ServerCard extends StatelessWidget {
               ),
             ),
           )
-        : Text(
-            'Current',
-            style: TextStyle(
-              color: LineupTheme.of(context).secondaryText,
-              fontWeight: FontWeight.w600,
-            ),
-          );
+        : null;
 
     return LayoutBuilder(
       builder: (context, constraints) {
         final stacked =
-            constraints.maxWidth < 520 ||
+            constraints.maxWidth < 520 * scale ||
             MediaQuery.textScalerOf(context).scale(1) >= 1.6;
         final content = stacked
             ? Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   details,
-                  const SizedBox(height: 12),
-                  Align(alignment: Alignment.centerLeft, child: trailing),
+                  if (trailing != null) ...[
+                    SizedBox(height: 12 * scale),
+                    Align(alignment: Alignment.centerLeft, child: trailing),
+                  ],
                 ],
               )
             : Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(child: details),
-                  const SizedBox(width: 24),
-                  trailing,
+                  if (trailing != null) ...[
+                    SizedBox(width: 24 * scale),
+                    trailing,
+                  ],
                 ],
               );
         return Container(
           width: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: 20),
+          padding: EdgeInsets.symmetric(vertical: 20 * scale),
           decoration: BoxDecoration(
             border: Border(
               bottom: BorderSide(color: LineupTheme.of(context).subtleBorder),
@@ -1010,13 +1371,14 @@ class _ServerCard extends StatelessWidget {
             children: [
               content,
               if (error != null) ...[
-                const SizedBox(height: 12),
+                SizedBox(height: 12 * scale),
                 Semantics(
                   liveRegion: true,
                   child: Text(
                     error!,
                     style: TextStyle(
                       color: Theme.of(context).colorScheme.error,
+                      fontSize: 16 * scale,
                     ),
                   ),
                 ),

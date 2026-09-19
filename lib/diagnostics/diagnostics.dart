@@ -154,6 +154,16 @@ class Diagnostics extends ChangeNotifier {
         'Received video codec: $codec',
       if (_recognized(_dynamicRanges, telemetry?.gamma) case final signal?)
         'Reported media transfer: $signal',
+      if (_recognized(_pixelFormats, telemetry?.pixelFormat) case final format?)
+        'Reported pixel format: $format',
+      if (_recognized(_primaries, telemetry?.primaries) case final primaries?)
+        'Reported color primaries: $primaries',
+      if (_recognized(_colorMatrices, telemetry?.colorMatrix)
+          case final matrix?)
+        'Reported color matrix: $matrix',
+      if (telemetry?.signalPeak case final peak?
+          when peak.isFinite && peak >= 0 && peak <= 10000)
+        'Reported signal peak: $peak',
       if (_recognized(_videoOutputs, telemetry?.videoOutput) case final output?)
         'Video output: $output',
       if (_recognized(_hardwareDecoders, telemetry?.hardwareDecoder)
@@ -301,6 +311,41 @@ class Diagnostics extends ChangeNotifier {
   static const _videoCodecs = {'h264', 'hevc', 'av1', 'mpeg2video', 'vp9'};
   static const _audioCodecs = {'aac', 'ac3', 'eac3', 'dts', 'truehd', 'opus'};
   static const _dynamicRanges = {'pq', 'hlg', 'smpte-st-2084', 'hdr10', 'sdr'};
+  // Explicit media-value vocabularies: unknown strings must never enter reports.
+  static const _pixelFormats = {
+    'yuv420p',
+    'yuv420p10le',
+    'yuv422p',
+    'yuv422p10le',
+    'yuv444p',
+    'yuv444p10le',
+    'nv12',
+    'p010',
+    'p010le',
+    'rgb24',
+    'rgba',
+    'bgra',
+  };
+  static const _primaries = {
+    'bt.601-525',
+    'bt.601-625',
+    'bt.709',
+    'bt.2020',
+    'bt709',
+    'bt2020',
+    'dci-p3',
+    'display-p3',
+  };
+  static const _colorMatrices = {
+    'bt.601',
+    'bt.709',
+    'bt.2020-ncl',
+    'bt.2020-cl',
+    'bt709',
+    'bt2020nc',
+    'bt2020c',
+    'rgb',
+  };
   static const _videoOutputs = {'gpu-next', 'gpu'};
   static const _hardwareDecoders = {'d3d11va', 'nvdec', 'videotoolbox'};
 }
