@@ -1,15 +1,20 @@
 # Audio and Subtitle Track Label Implementation Plan
 
-**Status:** Planning-only implementation handoff, September 19, 2026. This
-document records the approved UI direction for finding 4 in
+**Status:** P0 evidence recorded with the production gate blocked, September 19,
+2026. This document records the approved UI direction for finding 4 in
 [`ux-functionality-audit.md`](ux-functionality-audit.md). It does not authorize
-implementation, establish physical Windows behavior, or mark the audit finding
-verified.
+later-package implementation, establish physical Windows behavior, or mark the
+audit finding verified.
 
-**Starting point:** `dev/desktop-ui-refinement` at
-`424673484a82b2db897c8f52213a92432cc742b7`. Resolve and record the actual target
-commit before implementation. Preserve the unrelated untracked review packet at
+**Planning baseline:** `dev/desktop-ui-refinement` at
+`424673484a82b2db897c8f52213a92432cc742b7`. Preserve the unrelated untracked
+review packet at
 `docs/design/desktop-ui/review-packets/lineup-1080p-cbf3dbd5/`.
+
+P0 began on `dev/desktop-ui-refinement` at
+`2338654c01cfdbb3529852b69572cbaa21c935dc`. The working tree contained only the
+expected unrelated untracked review packet above. No production or test source
+was changed by P0.
 
 ## Goal
 
@@ -176,6 +181,204 @@ decoder identity, or other neighboring fields without a separately approved
 current UI use. Carry `demux-channels` only for the concrete source-layout label
 policy below; unknown layout strings remain bounded facts and are never interpreted
 as system-output topology.
+
+### P0 evidence record — September 19, 2026
+
+#### Pinned identities and evidence boundary
+
+- Package start: branch `dev/desktop-ui-refinement`, commit
+  `2338654c01cfdbb3529852b69572cbaa21c935dc`. The plan's original
+  `424673484a82b2db897c8f52213a92432cc742b7` starting point remains historical.
+- Portable toolchain: Flutter `3.47.4`, framework
+  `9584c6713b324636289d067944a46fd6b49df14b`, engine
+  `06a2e2a110089dff50fe635cffd2a61e1b24fbcd`, and Dart `3.13.3`, as pinned by
+  [`build-metadata.psd1`](../tool/windows/build-metadata.psd1) and
+  [`DEVELOPMENT.md`](DEVELOPMENT.md#portable-commands). The only local Flutter
+  checkout found was unpinned `3.47.0` at framework
+  `4cf24164269a5ebf0c16a028a00727d0e77bbb05`; it was not used as evidence.
+- Windows media runtime: mpv `v0.41.0-1044-g14f2d48cb`, full source commit
+  `14f2d48cbc7dda61adb4bd181e107a1f3f76e533`, release asset SHA-256
+  `455965297BA3F5906A63CD2B219442685BE45528A1FE806E4B228147881E41CB`, and DLL
+  SHA-256 `B507529D99A4DFFDEAEC85ECEFF7661A7E3C6CA4EFD09C2014E11A1441B83EAA`, as
+  pinned by [`windows-runtime.md`](windows-runtime.md#media-runtime) and the
+  Windows CMake integrity checks.
+- Exact source evidence below is from the detached full commit, not a moving
+  manual. It establishes the source contract but is not a query of the packaged
+  DLL. No Windows host, prepared DLL, redacted runtime payload, live Plex server,
+  or private acceptance-media inventory was available to this macOS package.
+
+#### Exact pinned mpv contract
+
+The authoritative implementation is
+[`player/command.c` at the pinned commit](https://github.com/mpv-player/mpv/blob/14f2d48cbc7dda61adb4bd181e107a1f3f76e533/player/command.c#L2133-L2187).
+It constructs each native `track-list` map as follows; `m_property_read_sub` then
+omits only entries whose `.unavailable` member is true
+([source](https://github.com/mpv-player/mpv/blob/14f2d48cbc7dda61adb4bd181e107a1f3f76e533/options/m_property.c#L482-L512)).
+
+| Candidate | Exact native value | Absence behavior at the pinned commit | P0 disposition |
+| --- | --- | --- | --- |
+| `demux-channel-count` | `MPV_FORMAT_INT64`, sourced from `p.channels.num` | Key omitted when the count is zero | Accept for P1, still nullable and positive-only in Dart |
+| `demux-channels` | `MPV_FORMAT_STRING`, sourced from `mp_chmap_to_str(&p.channels)` | Key omitted when the count is zero | Accept for P1 as a bounded fact; no friendly layout mapping until observed values are captured |
+| `forced` | `MPV_FORMAT_FLAG` | Always present in the native node; false is explicit | Accept for P1; bridge absence/malformed remains `null` |
+| `external` | `MPV_FORMAT_FLAG` | Always present in the native node; false is explicit | Accept for P1; bridge absence/malformed remains `null` |
+| `hearing-impaired` | `MPV_FORMAT_FLAG` | Always present in the native node; false is explicit | Accept for P1; bridge absence/malformed remains `null` |
+| `visual-impaired` | `MPV_FORMAT_FLAG` | Always present in the native node; false is explicit | Accept for P1; bridge absence/malformed remains `null` |
+| `commentary` | `MPV_FORMAT_FLAG` | Always present in the native node; false is explicit | Accept for P1; bridge absence/malformed remains `null` |
+
+This corrects an ambiguity in the prose manual, which describes some false flags
+as potentially unavailable. At this exact commit the implementation gives these
+five fields no `.unavailable` condition, so a native node contains `true` or
+`false`. Nullable Dart values still matter at the Lineup trust boundary: omitted,
+null, or wrong-typed bridge data is unknown and must not be coerced to false.
+
+`title`, `lang`, `codec`, and `codec-desc` are strings and are omitted when their
+source pointer is absent. mpv passes container language strings through without
+BCP 47 normalization. Its lavf and Matroska demuxers suppress exact `und`; the
+Matroska demuxer prefers `LanguageBCP47`, otherwise uses the legacy language value,
+and supplies legacy `eng` when neither exists
+([lavf source](https://github.com/mpv-player/mpv/blob/14f2d48cbc7dda61adb4bd181e107a1f3f76e533/demux/demux_lavf.c#L874-L882),
+[Matroska source](https://github.com/mpv-player/mpv/blob/14f2d48cbc7dda61adb4bd181e107a1f3f76e533/demux/demux_mkv.c#L942-L950)).
+Pinned mpv source tests contain three-letter examples (`eng`, `fra`, and `jpn`),
+but those fixtures are not Lineup Windows runtime observations.
+
+Keep `codec-desc` and all neighboring non-goal fields out of P1. The source proves
+they exist, not that the approved chooser needs them. In particular, never project
+`default`, `external-filename`, `ff-index`, program/stream indices, bitrate, sample
+rate, decoder identity, `codec-profile`, or unlisted nodes without a separately
+approved current consumer.
+
+#### Redacted Windows field and code-shape matrix
+
+No redacted Windows capture was supplied or present in the repository. The table
+therefore records unavailable proof rather than synthetic passes. “Not captured”
+means neither presence nor absence has been observed in the pinned packaged DLL or
+through Lineup's Plex path.
+
+| Required category | Redacted observed fields/code shapes | Evidence state |
+| --- | --- | --- |
+| Ordinary stereo audio | None | Not captured |
+| Ordinary multichannel audio | None | Not captured |
+| Commentary audio | None | Representative media availability unknown; not captured |
+| Audio-description audio | None | Representative media availability unknown; not captured |
+| Equal counts with different layouts | None | Representative media availability unknown; not captured |
+| Two-letter language code | None | Code shape not observed |
+| Three-letter language code | None | Code shape not observed; pinned mpv tests are source fixtures only |
+| Regional or script language tag | None | Representative media availability unknown; code shape not observed |
+| Ordinary text subtitle | None | Not captured |
+| SDH/hearing-impaired subtitle | None | Representative media availability unknown; not captured |
+| Forced subtitle | None | Representative media availability unknown; not captured |
+| External/Plex-managed subtitle | None | Representative media availability unknown; not captured |
+| Image subtitle | None | Representative media availability unknown; not captured |
+| Missing title/language/codec | None | Not captured |
+| Identical visible metadata | None | Representative media availability unknown; not captured |
+
+The required follow-up is one bounded capture made with the pinned runtime on
+Windows. Record, per synthetic media alias, only track type, positive synthetic ID,
+selected state, candidate-field presence and native type, normalized language-code
+shape, normalized channel-layout token, and synthetic values. Record unavailable
+media categories explicitly. Do not include filenames, paths, private titles,
+Plex/server responses, URLs, tokens, or an unredacted payload. A standalone mpv
+capture can establish DLL field behavior; external/Plex-managed availability must
+also be distinguished from the actual Lineup/Plex application path.
+
+#### Language resolver decision
+
+Use [`language_code` `0.7.1`](https://pub.dev/packages/language_code/versions/0.7.1)
+in P2, but do not add it in P0. Its published source is MIT-licensed, supports Dart
+`>=3.9.0 <4.0.0` and Flutter `>=3.35.0`, and has no third-party runtime dependency
+beyond the Flutter SDK already required by Lineup. Version `0.7.1` was published
+May 25, 2026; its archive SHA-256 is
+`bcfe7a2c88741b68f88e648c28e64d1198cf0dc3ecf9ae21cb274e5e99e2f0a3`. Its
+deterministic offline enum contains the required two-letter, three-letter
+terminology/bibliographic, regional, script, and special fixture codes, including
+`es_419`, `pt_BR`, `zh_Hans`, `zh_Hant`, `und`, `mul`, and `zxx`. The published
+archive is about 136 KiB and its five Dart library files total about 315 KiB, with
+the generated table accounting for about 304 KiB.
+
+The alternative
+[`sealed_languages` `3.3.0`](https://pub.dev/packages/sealed_languages/versions/3.3.0)
+is also MIT and actively maintained, but it resolves only base ISO 639-1/639-2
+language identities. Regional and script display would require a second repo-owned
+dataset, while the package also brings `l10n_languages`; that is more data and
+adapter ownership for this contract.
+A hand-written language table is smaller in bytes but would duplicate maintained
+ISO aliases and the required regional/script cases. `language_code` is therefore
+the smallest complete current choice.
+
+The P2 adapter remains small and deterministic: trim input; normalize `_`/`-`,
+primary/script/region casing only for lookup; perform an exact enum-code match;
+and return `null` on unknown or unsupported suffixes. It must never use device
+locale fallback. Use the package's native name. Preserve the cleaned original tag
+when lookup returns `null`. Treat `und` as unavailable rather than a language name;
+render `mul` as `Multiple languages` and `zxx` as `No linguistic content`. Lock
+fixtures for `en`/`eng`, terminology/bibliographic pairs such as `fra`/`fre` and
+`deu`/`ger`, mixed separators/case, `es-419`, `pt-BR`, `zh-Hans`, `zh-Hant`, an
+unknown suffix, `und`, `mul`, `zxx`, and blank input before UI integration.
+
+The dependency decision satisfies the known plan fixtures, but the missing Windows
+code-shape matrix remains a gate blocker. Recheck every captured shape against this
+adapter before adding the package; an unsupported recurring shape reopens this
+decision instead of being guessed or silently reduced to a base language.
+
+#### P1 encoder seam and bounded identity contract
+
+Use one production function, not a test-only duplicate: extract the current pure
+track projection and its UTF-8 helper from `native_player.cpp` into a small
+`track_list_encoder.h/.cpp`, then have `WindowsNativePlayer::EncodeTrackList`
+delegate to it. Add one assertion-based `track_list_encoder_test.cpp` executable,
+register it with CTest, and compile the same `track_list_encoder.cpp` into the
+runner and test targets. Link only the existing Flutter C++ wrapper needed for
+`EncodableValue`; construct `mpv_node` fixtures directly, so no live mpv handle,
+general test framework, fixture library, or new dependency is needed.
+
+The production function must enforce this exact contract:
+
+- inspect at most 256 input entries and project only map entries;
+- admit a track only when `id` is a positive `MPV_FORMAT_INT64`, `type` is exactly
+  fixed literal `video`, `audio`, or `sub`, and `selected` is an
+  `MPV_FORMAT_FLAG`; project those three required values without charging the
+  optional-string counter;
+- keep the existing 4096-byte per-string cap and preserve valid UTF-8 when
+  truncating;
+- keep 64 KiB as one shared optional-string-content budget across accepted
+  tracks, not as a claim about total `EncodableValue` or MethodChannel message
+  size; only accepted optional strings decrement it;
+- after exhaustion, omit optional string values rather than emitting empty
+  strings that imply known empty metadata, while continuing to project later
+  valid identities and fixed-size accepted numeric/boolean facts;
+- whitelist only the accepted current fields; malformed optional facts become
+  absent, and sentinel/non-whitelisted keys never cross the boundary; and
+- keep field names, container overhead, fixed scalars, list/map overhead, and
+  MethodChannel serialization outside this counter. Any need for a total message
+  bound is a separate design with separate measurement.
+
+The focused test must exercise multiple oversized strings, a selected track late
+in the list after exhaustion, 256/257 entries, truncation adjacent to 2/3/4-byte
+UTF-8 sequences and invalid bytes, malformed maps/required fields/optional facts,
+false versus absent descriptive flags, and a non-whitelisted sentinel. CTest must
+run the produced executable from the actual generated Windows build directory and
+configuration; Dart messenger tests remain adapter-only evidence.
+
+#### Privacy and P0 gate verdict
+
+Privacy is structural, not a cleanup step: the production whitelist excludes
+`external-filename` and neighboring path/stream fields; tracked fixtures use only
+synthetic titles and aliases; captures contain normalized presence/type/code-shape
+facts only; and ordinary verbose logs, private titles, filenames, local paths,
+server payloads, credentials, authorization headers, and token-bearing URLs are
+never recorded.
+
+**P0 gate: blocked.** Exact pinned-source field types, absence behavior, the
+language dependency decision, the identity-preserving optional-string contract,
+the focused native test seam, and privacy limits are settled. Production native
+field expansion must not begin until the bounded redacted Windows matrix above is
+captured from the pinned runtime and its actual language/layout values are checked
+against the selected resolver and proposed exact channel-layout mapping. Missing
+rare commentary, accessibility, regional, external, or image-subtitle media may
+remain explicitly unverified; ordinary stereo/multichannel audio, at least one
+available subtitle class, missing optional metadata, and the actual code shapes
+for available multilingual media may not be replaced by source fixtures. No safe
+production implementation remains inside P0 while that evidence is absent.
 
 ### Typed model target
 
