@@ -659,3 +659,78 @@ listed tests/visual checks is proportionate for the included local UI changes.
 Independent review is specifically recommended before accepting subsequent
 series/persistence migration or application-wide native fullscreen work because
 those touch saved schedules, asynchronous ownership, and native presentation.
+
+## 2026-09-19 playlist review remediation (R1–R3)
+
+Focused remediation of `docs/lineup-three-commit-review-and-fix-plan.md`
+sections 3–5 on `dev/desktop-ui-refinement`. Reviewed head `d2b99893`;
+final head `4d2470c5`, via three local conventional commits (one per
+increment; nothing pushed). C1 library pagination and C3 track-label
+normalization were retained unchanged. This remediation is not a collections
+claim: the builder still derives collection proposals from `item.collections`
+tags, and no unpushed local collection implementation was found or modified.
+
+### Evidence boundary
+
+Portable Dart contracts only, executed on macOS with the repository-pinned
+Flutter framework revision `9584c6713b324636289d067944a46fd6b49df14b`
+(Dart `3.13.3`) through a detached worktree (the checkout on PATH reported
+`3.47.0`, so the pinned revision was selected explicitly rather than
+silently using PATH). Full portable suite `TZ=America/New_York flutter test`
+passed 887 tests; `flutter analyze` reported no issues; `git diff --check`
+is clean and every changed Dart file is format-clean (the remaining format
+drift is confined to gitignored `build/` capture artifacts). No live Plex
+server, physical Windows session, or patched-engine rebuild was part of this
+remediation, and none is claimed.
+
+### Increments and regression evidence
+
+- R1 `9d747a18` `fix(plex): preserve canonical playlist failure identities`
+  (`lib/plex/plex_client.dart`, `test/plex/plex_transport_test.dart`,
+  `test/app/lineup_controller_test.dart`). The playlist catalog now carries
+  one normalized ID per row: unidentifiable rows fail the catalog with fixed
+  `playlist-page-invalid` before any member request, and requests, models,
+  and every `failedIds` branch reuse the canonical ID. Fail-before: 6
+  unidentifiable-identity cases plus the second-page and padded-ID cases
+  failed on unfixed code (empty success / `failedIds == {' p1 '}`); both
+  controller cases committed a replacement inventory (`setLibraries`
+  returned true). Passing-after: all new cases green, including blank-title
+  per-playlist failure, padded-duplicate rejection, numeric normalization,
+  and explicit-empty-catalog guards.
+- R2 `f6bdae5b` `fix(plex): reject repeated playlist occurrence identities`
+  (`lib/plex/plex_client.dart`, `test/plex/plex_transport_test.dart`).
+  Repeated media ratingKeys (including identical blocks) stay preserved in
+  order, while a repeated or malformed supplied `playlistItemID` fails that
+  playlist under its canonical ID; absent occurrence identity stays
+  compatible and occurrence state is scan-local per playlist. Fail-before:
+  5 duplicate/invalid-occurrence cases returned success on unfixed code.
+  Passing-after: all 8 new cases plus the retained no-occurrence
+  repeat-preservation tests green.
+- R3 `4d2470c5` `fix(plex): abort sibling loads after fatal playlist errors`
+  (`lib/plex/plex_client.dart`, `test/plex/plex_transport_test.dart`,
+  `test/app/lineup_controller_test.dart`). Each `playlists()` invocation owns
+  one attempt-local lifetime: the first fatal authorization failure is
+  recorded with its stack and aborts active sibling IO through the existing
+  abortable transport, stopping subsequent pages and batches; already-started
+  futures are drained and the original error reaches the existing controller
+  recovery path. Fail-before: both fatal-abort cases and the first-wins and
+  controller-recovery cases hung or surfaced the wrong error on unfixed code
+  (10-second deadlock backstops, no sleeps). Passing-after: 401/403 abort
+  with the original code, first-fatal wins, 500-among-success, fresh-retry,
+  external-cancellation-still-throws, and controller recovery with refreshed
+  access all green. Adversarial review caught one must-fix during R3
+  (external-only `cancelled` reaching `failedIds`); fixed and locked with the
+  external-cancellation regression before commit.
+
+### Remaining acceptance
+
+Live Plex behavior (real 401/403 timing, real `playlistItemID` values,
+concurrent-edit snapshot limits) and physical Windows acceptance at the exact
+tested commit are still outstanding and must follow the repository's native
+validation procedure. Existing CI results predate these fixes and are not
+evidence for them.
+
+**Independent review:** not automatically launched. The per-increment
+adversarial reviews above are recorded with dispositions; no separate
+independent review is requested by this remediation beyond Tristan's normal
+push/return-for-review flow.
