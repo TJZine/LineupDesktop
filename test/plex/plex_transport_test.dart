@@ -1798,6 +1798,294 @@ void main() {
     );
   });
 
+  for (final entry in <(String, List<Object?>)>[
+    (
+      'missing catalog id',
+      [
+        {'title': 'Synthetic broken playlist'},
+      ],
+    ),
+    (
+      'null catalog id',
+      [
+        {'ratingKey': null, 'title': 'Synthetic broken playlist'},
+      ],
+    ),
+    (
+      'empty catalog id',
+      [
+        {'ratingKey': '', 'title': 'Synthetic broken playlist'},
+      ],
+    ),
+    (
+      'whitespace catalog id',
+      [
+        {'ratingKey': '   ', 'title': 'Synthetic broken playlist'},
+      ],
+    ),
+    ('null catalog row', [null]),
+    ('scalar catalog row', ['oops']),
+  ]) {
+    test(
+      'playlist catalog with ${entry.$1} fails instead of an empty success',
+      () async {
+        var itemRequests = 0;
+        final client = PlexClient(
+          clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+          httpClient: MockClient((request) async {
+            if (request.url.path.endsWith('/items')) itemRequests++;
+            return http.Response(
+              jsonEncode({
+                'MediaContainer': {
+                  'offset': 0,
+                  'size': 1,
+                  'totalSize': 1,
+                  'Metadata': entry.$2,
+                },
+              }),
+              200,
+            );
+          }),
+        );
+        addTearDown(client.close);
+
+        await expectLater(
+          client.playlists(
+            Uri.parse('https://plex.example:32400'),
+            'secret',
+            isCurrent: () => true,
+          ),
+          _plexError('playlist-page-invalid'),
+        );
+        expect(itemRequests, 0);
+      },
+    );
+  }
+
+  test(
+    'playlist catalog with an unidentifiable second page returns no prefix',
+    () async {
+      var itemRequests = 0;
+      final client = PlexClient(
+        clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+        httpClient: MockClient((request) async {
+          if (request.url.path.endsWith('/items')) itemRequests++;
+          final start = int.parse(
+            request.url.queryParameters['X-Plex-Container-Start']!,
+          );
+          return http.Response(
+            jsonEncode({
+              'MediaContainer': {
+                'offset': start,
+                'totalSize': 3,
+                'Metadata': start == 0
+                    ? [
+                        {'ratingKey': 'p0', 'title': 'Playlist p0'},
+                        {'ratingKey': 'p1', 'title': 'Playlist p1'},
+                      ]
+                    : [
+                        {'title': 'Synthetic broken playlist'},
+                      ],
+              },
+            }),
+            200,
+          );
+        }),
+      );
+      addTearDown(client.close);
+
+      await expectLater(
+        client.playlists(
+          Uri.parse('https://plex.example:32400'),
+          'secret',
+          isCurrent: () => true,
+        ),
+        _plexError('playlist-page-invalid'),
+      );
+      expect(itemRequests, 0);
+    },
+  );
+
+  for (final title in <String?>[null, '', '   ']) {
+    test(
+      'playlist catalog entry with a ${title == null ? 'missing' : 'blank'} title fails that playlist canonically',
+      () async {
+        var itemRequests = 0;
+        final client = PlexClient(
+          clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+          httpClient: MockClient((request) async {
+            if (request.url.path.endsWith('/items')) itemRequests++;
+            return http.Response(
+              jsonEncode({
+                'MediaContainer': {
+                  'totalSize': 1,
+                  'Metadata': [
+                    {'ratingKey': 'p1', if (title != null) 'title': title},
+                  ],
+                },
+              }),
+              200,
+            );
+          }),
+        );
+        addTearDown(client.close);
+
+        final catalog = await client.playlists(
+          Uri.parse('https://plex.example:32400'),
+          'secret',
+          isCurrent: () => true,
+        );
+
+        expect(catalog.playlists, isEmpty);
+        expect(catalog.failedIds, {'p1'});
+        expect(itemRequests, 0);
+      },
+    );
+  }
+
+  test(
+    'playlist failure uses the canonical id for padded catalog identities',
+    () async {
+      final itemPaths = <String>[];
+      final client = PlexClient(
+        clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+        httpClient: MockClient((request) async {
+          if (request.url.path == '/playlists/all') {
+            return http.Response(
+              jsonEncode({
+                'MediaContainer': {
+                  'totalSize': 1,
+                  'Metadata': [
+                    {'ratingKey': ' p1 ', 'title': 'Padded'},
+                  ],
+                },
+              }),
+              200,
+            );
+          }
+          itemPaths.add(request.url.path);
+          return http.Response('', 500);
+        }),
+      );
+      addTearDown(client.close);
+
+      final catalog = await client.playlists(
+        Uri.parse('https://plex.example:32400'),
+        'secret',
+        isCurrent: () => true,
+      );
+
+      expect(itemPaths, ['/playlists/p1/items']);
+      expect(catalog.playlists, isEmpty);
+      expect(catalog.failedIds, {'p1'});
+    },
+  );
+
+  test('playlist catalog rejects padded duplicate identities', () async {
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      httpClient: MockClient((request) async {
+        return http.Response(
+          jsonEncode({
+            'MediaContainer': {
+              'offset': 0,
+              'totalSize': 2,
+              'Metadata': [
+                {'ratingKey': 'p1', 'title': 'Playlist p1'},
+                {'ratingKey': ' p1 ', 'title': 'Playlist padded'},
+              ],
+            },
+          }),
+          200,
+        );
+      }),
+    );
+    addTearDown(client.close);
+
+    await expectLater(
+      client.playlists(
+        Uri.parse('https://plex.example:32400'),
+        'secret',
+        isCurrent: () => true,
+      ),
+      _plexError('playlist-page-not-progressing'),
+    );
+  });
+
+  test(
+    'playlist numeric identities use one normalized representation',
+    () async {
+      final itemPaths = <String>[];
+      final client = PlexClient(
+        clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+        httpClient: MockClient((request) async {
+          if (request.url.path == '/playlists/all') {
+            return http.Response(
+              jsonEncode({
+                'MediaContainer': {
+                  'totalSize': 2,
+                  'Metadata': [
+                    {'ratingKey': 7, 'title': 'Seven'},
+                    {'ratingKey': '8', 'title': 'Eight'},
+                  ],
+                },
+              }),
+              200,
+            );
+          }
+          itemPaths.add(request.url.path);
+          if (request.url.path == '/playlists/7/items') {
+            return http.Response('', 500);
+          }
+          return http.Response(
+            jsonEncode({
+              'MediaContainer': {
+                'totalSize': 1,
+                'Metadata': [_playablePlaylistItem('m8')],
+              },
+            }),
+            200,
+          );
+        }),
+      );
+      addTearDown(client.close);
+
+      final catalog = await client.playlists(
+        Uri.parse('https://plex.example:32400'),
+        'secret',
+        isCurrent: () => true,
+      );
+
+      expect(itemPaths, ['/playlists/7/items', '/playlists/8/items']);
+      expect(catalog.playlists.map((playlist) => playlist.id), ['8']);
+      expect(catalog.failedIds, {'7'});
+    },
+  );
+
+  test('playlist explicit empty catalog remains a successful empty', () async {
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      httpClient: MockClient((request) async {
+        return http.Response(
+          jsonEncode({
+            'MediaContainer': {'totalSize': 0, 'Metadata': <Object?>[]},
+          }),
+          200,
+        );
+      }),
+    );
+    addTearDown(client.close);
+
+    final catalog = await client.playlists(
+      Uri.parse('https://plex.example:32400'),
+      'secret',
+      isCurrent: () => true,
+    );
+
+    expect(catalog.playlists, isEmpty);
+    expect(catalog.failedIds, isEmpty);
+  });
+
   test('playlist catalog exceeding the work bound fails visibly', () async {
     var requests = 0;
     final client = PlexClient(

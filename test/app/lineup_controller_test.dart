@@ -2476,6 +2476,238 @@ void main() {
     },
   );
 
+  test('canonical playlist failure cannot replace committed inventory with a required nested source', () async {
+    var catalogMode = 'padded-failure';
+    final transport = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      httpClient: MockClient((request) async {
+        if (request.url.path == '/playlists/all') {
+          return http.Response(
+            jsonEncode({
+              'MediaContainer': {
+                'totalSize': 1,
+                'Metadata': catalogMode == 'valid'
+                    ? [
+                        {'ratingKey': 'p1', 'title': 'Playlist'},
+                      ]
+                    : [
+                        {'ratingKey': ' p1 ', 'title': 'Padded'},
+                      ],
+              },
+            }),
+            200,
+          );
+        }
+        if (catalogMode == 'valid') {
+          return http.Response(
+            jsonEncode({
+              'MediaContainer': {
+                'totalSize': 1,
+                'Metadata': [
+                  {
+                    'ratingKey': 'm1',
+                    'key': '/library/metadata/m1',
+                    'title': 'Playlist movie',
+                    'type': 'movie',
+                    'duration': 1000,
+                    'Media': [
+                      {
+                        'Part': [
+                          {'key': '/library/parts/m1'},
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+            }),
+            200,
+          );
+        }
+        return http.Response('', 500);
+      }),
+    );
+    addTearDown(transport.close);
+    final selected = _server('server');
+    final store = _CountingMemoryStore(
+      const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+    );
+    final plex = _FakePlex()
+      ..serversResult = [selected]
+      ..connectionResult = selected.connections.single
+      ..librariesResult = const [
+        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
+      ]
+      ..libraryItemsHandler = (_, _, _, _) async {
+        return [_playableMovie];
+      }
+      ..playlistsScanHandler = (server, token, isCurrent, cancelled) =>
+          transport.playlists(
+            server,
+            token,
+            isCurrent: isCurrent,
+            cancelled: cancelled,
+          );
+    final controller = LineupController(
+      store: store,
+      credentials: _MemoryCredentials(accountToken: 'token'),
+      plex: plex,
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+    final previousMedia = [_playableMovie];
+    const previousPlaylists = [
+      PlexPlaylist(id: 'p1', title: 'Playlist', items: []),
+    ];
+    final previousGeneration = controller.contentGeneration;
+    final previousChannels = [
+      Channel(
+        id: 'saved',
+        number: 1,
+        name: 'Saved channel',
+        source: const MixedSource(
+          sources: [
+            LibrarySource(
+              libraryId: 'movies',
+              libraryType: PlexLibraryType.movie,
+            ),
+            MixedSource(sources: [PlaylistSource('p1')]),
+          ],
+        ),
+        playbackMode: PlaybackMode.sequential,
+        anchor: DateTime.utc(2026),
+        shuffleSeed: 1,
+      ),
+    ];
+    controller
+      ..selectedLibraryIds = const {'movies'}
+      ..availableMedia = previousMedia
+      ..availablePlaylists = previousPlaylists
+      ..channels = previousChannels
+      ..currentChannelId = 'saved'
+      ..diagnostics.enabled = true;
+    final savedBefore = store.saveCalls;
+
+    expect(await controller.setLibraries({'movies'}), isFalse);
+
+    expect(controller.availableMedia, same(previousMedia));
+    expect(controller.availablePlaylists, same(previousPlaylists));
+    expect(controller.channels, same(previousChannels));
+    expect(controller.currentChannelId, 'saved');
+    expect(controller.selectedLibraryIds, {'movies'});
+    expect(controller.contentGeneration, previousGeneration);
+    expect(
+      controller.error,
+      'A playlist used by this lineup could not be loaded. Retry setup.',
+    );
+    expect(store.saveCalls, savedBefore);
+
+    catalogMode = 'valid';
+    expect(await controller.setLibraries({'movies'}), isTrue);
+    expect(controller.availablePlaylists.map((playlist) => playlist.id), [
+      'p1',
+    ]);
+    expect(controller.libraryScanStatus, LibraryScanStatus.complete);
+    expect(store.saveCalls, savedBefore + 1);
+  });
+
+  test(
+    'unidentifiable playlist catalog cannot replace committed inventory',
+    () async {
+      final transport = PlexClient(
+        clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+        httpClient: MockClient((request) async {
+          return http.Response(
+            jsonEncode({
+              'MediaContainer': {
+                'totalSize': 1,
+                'Metadata': [
+                  {'title': 'Synthetic broken playlist'},
+                ],
+              },
+            }),
+            200,
+          );
+        }),
+      );
+      addTearDown(transport.close);
+      final selected = _server('server');
+      final store = _CountingMemoryStore(
+        const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+      );
+      final plex = _FakePlex()
+        ..serversResult = [selected]
+        ..connectionResult = selected.connections.single
+        ..librariesResult = const [
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+        ]
+        ..libraryItemsHandler = (_, _, _, _) async {
+          return [_playableMovie];
+        }
+        ..playlistsScanHandler = (server, token, isCurrent, cancelled) =>
+            transport.playlists(
+              server,
+              token,
+              isCurrent: isCurrent,
+              cancelled: cancelled,
+            );
+      final controller = LineupController(
+        store: store,
+        credentials: _MemoryCredentials(accountToken: 'token'),
+        plex: plex,
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+      final previousMedia = [_playableMovie];
+      const previousPlaylists = [
+        PlexPlaylist(id: 'p1', title: 'Playlist', items: []),
+      ];
+      final previousGeneration = controller.contentGeneration;
+      final previousChannels = [
+        Channel(
+          id: 'saved',
+          number: 1,
+          name: 'Saved channel',
+          source: const PlaylistSource('p1'),
+          playbackMode: PlaybackMode.sequential,
+          anchor: DateTime.utc(2026),
+          shuffleSeed: 1,
+        ),
+      ];
+      controller
+        ..selectedLibraryIds = const {'movies'}
+        ..availableMedia = previousMedia
+        ..availablePlaylists = previousPlaylists
+        ..channels = previousChannels
+        ..currentChannelId = 'saved'
+        ..diagnostics.enabled = true;
+      final savedBefore = store.saveCalls;
+
+      expect(await controller.setLibraries({'movies'}), isFalse);
+
+      expect(controller.availableMedia, same(previousMedia));
+      expect(controller.availablePlaylists, same(previousPlaylists));
+      expect(controller.channels, same(previousChannels));
+      expect(controller.currentChannelId, 'saved');
+      expect(controller.selectedLibraryIds, {'movies'});
+      expect(controller.contentGeneration, previousGeneration);
+      expect(controller.libraryScanStatus, LibraryScanStatus.transientFailure);
+      expect(
+        controller.error,
+        'A playlist used by this lineup could not be loaded. Retry setup.',
+      );
+      expect(store.saveCalls, savedBefore);
+      final playlistDiagnostic = controller.diagnostics.entries
+          .where((entry) => entry.message == 'Playlist discovery unavailable')
+          .single;
+      expect(playlistDiagnostic.context, {'code': 'playlist-page-invalid'});
+    },
+  );
+
   test(
     'playlist diagnostics retain Plex code and bounded failure count',
     () async {

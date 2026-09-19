@@ -509,9 +509,9 @@ class PlexClient {
 
     checkCurrent();
     // A catalog failure throws and never becomes a successful empty catalog.
-    // A later contents-page failure for one playlist marks that playlist's id
-    // in failedIds without publishing its accumulated prefix.
-    final catalogRaws = await _playlistCatalogRaws(
+    // A later contents-page failure for one playlist marks that playlist's
+    // canonical id in failedIds without publishing its accumulated prefix.
+    final catalogRecords = await _playlistCatalogRaws(
       server,
       token,
       cancelled: cancelled,
@@ -520,13 +520,14 @@ class PlexClient {
     checkCurrent();
     final output = <PlexPlaylist>[];
     final failed = <String>{};
-    for (var start = 0; start < catalogRaws.length; start += 4) {
+    for (var start = 0; start < catalogRecords.length; start += 4) {
       checkCurrent();
-      final batch = catalogRaws.skip(start).take(4).map((raw) async {
+      final batch = catalogRecords.skip(start).take(4).map((record) async {
+        // The catalog carries one normalized identity per row; requests,
+        // models, and failure accounting all reuse it.
+        final id = record.id;
         try {
-          final playlist = _record(raw, 'playlist');
-          final id = _id(playlist['ratingKey'], 'playlist id');
-          final title = _text(playlist['title'], 'playlist title');
+          final title = _text(record.playlist['title'], 'playlist title');
           final itemRaws = await _playlistItemRaws(
             server,
             token,
@@ -555,13 +556,11 @@ class PlexClient {
           }.contains(exception.code)) {
             rethrow;
           }
-          final value = raw is Map ? raw['ratingKey'] : null;
-          if (value != null) failed.add('$value');
+          failed.add(id);
           return null;
         } catch (_) {
           checkCurrent();
-          final value = raw is Map ? raw['ratingKey'] : null;
-          if (value != null) failed.add('$value');
+          failed.add(id);
           return null;
         }
       });
@@ -577,19 +576,27 @@ class PlexClient {
     );
   }
 
-  /// Pages the complete video-playlist catalog in raw-record order.
+  /// Pages the complete video-playlist catalog as identified records.
   ///
-  /// Catalog entries carry unique identities, so a repeated playlist id is a
-  /// non-progressing page. Playlist *contents* use [_playlistItemRaws], which
-  /// deliberately has no such guard because member repeats are legitimate.
-  Future<List<Object?>> _playlistCatalogRaws(
+  /// Every row must carry a usable identity before the catalog can complete:
+  /// an unidentifiable row fails the whole catalog instead of becoming a
+  /// successful absence. Catalog entries carry unique identities, so a
+  /// repeated playlist id is a non-progressing page. Playlist *contents* use
+  /// [_playlistItemRaws], which deliberately has no such guard because member
+  /// repeats are legitimate.
+  Future<List<({String id, Map<String, Object?> playlist})>>
+  _playlistCatalogRaws(
     Uri server,
     String token, {
     required void Function() checkCurrent,
     Future<void>? cancelled,
   }) async {
     const pageSize = 100;
-    final raws = <Object?>[];
+    const invalidRow = PlexException(
+      'playlist-page-invalid',
+      'Plex returned an invalid playlist page.',
+    );
+    final records = <({String id, Map<String, Object?> playlist})>[];
     final seenIds = <String>{};
     var start = 0;
     var rawConsumed = 0;
@@ -619,22 +626,30 @@ class PlexClient {
       );
       knownTotal = validated.knownTotal;
       for (final raw in validated.metadata) {
-        final id = raw is Map ? _optionalId(raw['ratingKey']) : null;
-        if (id != null && !seenIds.add(id)) {
+        if (raw is! Map) throw invalidRow;
+        late final Map<String, Object?> playlist;
+        try {
+          playlist = Map<String, Object?>.from(raw);
+        } catch (_) {
+          throw invalidRow;
+        }
+        final id = _optionalId(playlist['ratingKey']);
+        if (id == null) throw invalidRow;
+        if (!seenIds.add(id)) {
           throw const PlexException(
             'playlist-page-not-progressing',
             'Plex returned a playlist page without progress.',
           );
         }
+        records.add((id: id, playlist: playlist));
       }
-      raws.addAll(validated.metadata);
       rawConsumed += validated.metadata.length;
       checkCurrent();
       final known = knownTotal;
       if (known != null) {
-        if (rawConsumed == known) return raws;
+        if (rawConsumed == known) return records;
       } else if (validated.metadata.isEmpty) {
-        return raws;
+        return records;
       }
       start += validated.metadata.length;
     }
