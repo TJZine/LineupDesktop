@@ -537,8 +537,9 @@ class PlexClient {
           );
           checkCurrent();
           // Playable filtering applies after raw paging so unplayable records
-          // never shift pagination offsets. Repeated member occurrences are
-          // intentional programming and keep their order.
+          // never shift pagination offsets. Repeated media is intentional
+          // programming and keeps its order; repeated supplied occurrence
+          // identities fail the playlist inside [_playlistItemRaws].
           final items = itemRaws
               .map(parseMediaItem)
               .where((item) => item.isPlayable)
@@ -582,8 +583,8 @@ class PlexClient {
   /// an unidentifiable row fails the whole catalog instead of becoming a
   /// successful absence. Catalog entries carry unique identities, so a
   /// repeated playlist id is a non-progressing page. Playlist *contents* use
-  /// [_playlistItemRaws], which deliberately has no such guard because member
-  /// repeats are legitimate.
+  /// [_playlistItemRaws], which preserves repeated media but rejects repeated
+  /// supplied occurrence identities.
   Future<List<({String id, Map<String, Object?> playlist})>>
   _playlistCatalogRaws(
     Uri server,
@@ -661,10 +662,13 @@ class PlexClient {
 
   /// Pages one playlist's complete ordered item stream.
   ///
-  /// Member ids are intentionally not deduplicated: repeats, including
-  /// identical blocks straddling a page boundary, are preserved in order.
-  /// Non-progress is detected from pagination metadata and the work bound,
-  /// never from repeated occurrences.
+  /// Repeated media is intentional programming and is preserved in order,
+  /// including identical blocks straddling a page boundary. When Plex supplies
+  /// a playlist occurrence identity (`playlistItemID`), that identity must be
+  /// unique within the stream: a repeated occurrence contradicts the offsets
+  /// and fails the whole playlist. Without occurrence identity the
+  /// offset/count checks cannot prove an immutable snapshot through every
+  /// concurrent edit; they detect available contradictions only.
   Future<List<Object?>> _playlistItemRaws(
     Uri server,
     String token,
@@ -673,7 +677,12 @@ class PlexClient {
     Future<void>? cancelled,
   }) async {
     const pageSize = 100;
+    const invalidOccurrence = PlexException(
+      'playlist-page-invalid',
+      'Plex returned an invalid playlist page.',
+    );
     final raws = <Object?>[];
+    final seenOccurrences = <String>{};
     var start = 0;
     var rawConsumed = 0;
     int? knownTotal;
@@ -700,6 +709,13 @@ class PlexClient {
         knownTotal: knownTotal,
       );
       knownTotal = validated.knownTotal;
+      for (final raw in validated.metadata) {
+        final occurrence = raw is Map ? raw['playlistItemID'] : null;
+        if (occurrence == null) continue;
+        if (!seenOccurrences.add(_playlistOccurrenceId(occurrence))) {
+          throw invalidOccurrence;
+        }
+      }
       raws.addAll(validated.metadata);
       rawConsumed += validated.metadata.length;
       checkCurrent();
@@ -1348,6 +1364,31 @@ const _maxExactJsonInteger = 0x1fffffffffffff;
     if (metadata.isEmpty && rawConsumed < total) throw invalid;
   }
   return (metadata: metadata, knownTotal: known);
+}
+
+/// Normalizes a supplied playlist occurrence identity to its canonical form.
+///
+/// The documented numeric occurrence id arrives as an integral JSON number or
+/// its ordinary decimal-string form. Any other supplied value is contradictory
+/// identity evidence and fails the page. Absent identity never reaches this
+/// helper; the caller skips it to stay compatible.
+String _playlistOccurrenceId(Object? value) {
+  const invalid = PlexException(
+    'playlist-page-invalid',
+    'Plex returned an invalid playlist page.',
+  );
+  final number = switch (value) {
+    num number => number,
+    String text => num.tryParse(text.trim()),
+    _ => null,
+  };
+  if (number == null ||
+      !number.isFinite ||
+      number.abs() > _maxExactJsonInteger ||
+      number.toInt() != number) {
+    throw invalid;
+  }
+  return number.toInt().toString();
 }
 
 /// Validates an optional playlist container count. Absent values stay absent;

@@ -1703,6 +1703,395 @@ void main() {
     ]);
   });
 
+  test(
+    'playlist repeated media with distinct occurrence ids are preserved',
+    () async {
+      final client = PlexClient(
+        clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+        httpClient: MockClient((request) async {
+          if (request.url.path == '/playlists/all') {
+            return http.Response(
+              jsonEncode({
+                'MediaContainer': {
+                  'totalSize': 1,
+                  'Metadata': [
+                    {'ratingKey': 'p1', 'title': 'Playlist'},
+                  ],
+                },
+              }),
+              200,
+            );
+          }
+          return http.Response(
+            jsonEncode({
+              'MediaContainer': {
+                'totalSize': 4,
+                'Metadata': [
+                  {..._playablePlaylistItem('a'), 'playlistItemID': 101},
+                  {..._playablePlaylistItem('b'), 'playlistItemID': 102},
+                  {..._playablePlaylistItem('b'), 'playlistItemID': 103},
+                  {..._playablePlaylistItem('d'), 'playlistItemID': 104},
+                ],
+              },
+            }),
+            200,
+          );
+        }),
+      );
+      addTearDown(client.close);
+
+      final catalog = await client.playlists(
+        Uri.parse('https://plex.example:32400'),
+        'secret',
+        isCurrent: () => true,
+      );
+
+      expect(catalog.failedIds, isEmpty);
+      expect(catalog.playlists.single.items.map((item) => item.id), [
+        'a',
+        'b',
+        'b',
+        'd',
+      ]);
+    },
+  );
+
+  test(
+    'playlist repeated blocks with distinct occurrence ids are preserved',
+    () async {
+      final client = PlexClient(
+        clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+        httpClient: MockClient((request) async {
+          if (request.url.path == '/playlists/all') {
+            return http.Response(
+              jsonEncode({
+                'MediaContainer': {
+                  'totalSize': 1,
+                  'Metadata': [
+                    {'ratingKey': 'p1', 'title': 'Playlist'},
+                  ],
+                },
+              }),
+              200,
+            );
+          }
+          final start = int.parse(
+            request.url.queryParameters['X-Plex-Container-Start']!,
+          );
+          final base = start == 0 ? 101 : 103;
+          return http.Response(
+            jsonEncode({
+              'MediaContainer': {
+                'offset': start,
+                'totalSize': 4,
+                'Metadata': [
+                  {..._playablePlaylistItem('a'), 'playlistItemID': base},
+                  {..._playablePlaylistItem('b'), 'playlistItemID': base + 1},
+                ],
+              },
+            }),
+            200,
+          );
+        }),
+      );
+      addTearDown(client.close);
+
+      final catalog = await client.playlists(
+        Uri.parse('https://plex.example:32400'),
+        'secret',
+        isCurrent: () => true,
+      );
+
+      expect(catalog.failedIds, isEmpty);
+      expect(catalog.playlists.single.items.map((item) => item.id), [
+        'a',
+        'b',
+        'a',
+        'b',
+      ]);
+    },
+  );
+
+  test(
+    'playlist repeated occurrence ids across pages fail that playlist',
+    () async {
+      final client = PlexClient(
+        clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+        httpClient: MockClient((request) async {
+          if (request.url.path == '/playlists/all') {
+            return http.Response(
+              jsonEncode({
+                'MediaContainer': {
+                  'totalSize': 1,
+                  'Metadata': [
+                    {'ratingKey': 'p1', 'title': 'Playlist'},
+                  ],
+                },
+              }),
+              200,
+            );
+          }
+          final start = int.parse(
+            request.url.queryParameters['X-Plex-Container-Start']!,
+          );
+          return http.Response(
+            jsonEncode({
+              'MediaContainer': {
+                'offset': start,
+                'totalSize': 4,
+                'Metadata': start == 0
+                    ? [
+                        {..._playablePlaylistItem('a'), 'playlistItemID': 101},
+                        {..._playablePlaylistItem('b'), 'playlistItemID': 102},
+                      ]
+                    : [
+                        {..._playablePlaylistItem('b'), 'playlistItemID': 102},
+                        {..._playablePlaylistItem('d'), 'playlistItemID': 104},
+                      ],
+              },
+            }),
+            200,
+          );
+        }),
+      );
+      addTearDown(client.close);
+
+      final catalog = await client.playlists(
+        Uri.parse('https://plex.example:32400'),
+        'secret',
+        isCurrent: () => true,
+      );
+
+      expect(catalog.playlists, isEmpty);
+      expect(catalog.failedIds, {'p1'});
+    },
+  );
+
+  test(
+    'playlist repeated occurrence ids within one page fail that playlist',
+    () async {
+      final client = PlexClient(
+        clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+        httpClient: MockClient((request) async {
+          if (request.url.path == '/playlists/all') {
+            return http.Response(
+              jsonEncode({
+                'MediaContainer': {
+                  'totalSize': 1,
+                  'Metadata': [
+                    {'ratingKey': 'p1', 'title': 'Playlist'},
+                  ],
+                },
+              }),
+              200,
+            );
+          }
+          return http.Response(
+            jsonEncode({
+              'MediaContainer': {
+                'totalSize': 2,
+                'Metadata': [
+                  {..._playablePlaylistItem('a'), 'playlistItemID': 101},
+                  {..._playablePlaylistItem('b'), 'playlistItemID': 101},
+                ],
+              },
+            }),
+            200,
+          );
+        }),
+      );
+      addTearDown(client.close);
+
+      final catalog = await client.playlists(
+        Uri.parse('https://plex.example:32400'),
+        'secret',
+        isCurrent: () => true,
+      );
+
+      expect(catalog.playlists, isEmpty);
+      expect(catalog.failedIds, {'p1'});
+    },
+  );
+
+  test('playlist numeric and decimal-string occurrence ids collide', () async {
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      httpClient: MockClient((request) async {
+        if (request.url.path == '/playlists/all') {
+          return http.Response(
+            jsonEncode({
+              'MediaContainer': {
+                'totalSize': 1,
+                'Metadata': [
+                  {'ratingKey': 'p1', 'title': 'Playlist'},
+                ],
+              },
+            }),
+            200,
+          );
+        }
+        return http.Response(
+          jsonEncode({
+            'MediaContainer': {
+              'totalSize': 2,
+              'Metadata': [
+                {..._playablePlaylistItem('a'), 'playlistItemID': 102},
+                {..._playablePlaylistItem('b'), 'playlistItemID': '102'},
+              ],
+            },
+          }),
+          200,
+        );
+      }),
+    );
+    addTearDown(client.close);
+
+    final catalog = await client.playlists(
+      Uri.parse('https://plex.example:32400'),
+      'secret',
+      isCurrent: () => true,
+    );
+
+    expect(catalog.playlists, isEmpty);
+    expect(catalog.failedIds, {'p1'});
+  });
+
+  test('playlist invalid occurrence ids fail that playlist', () async {
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      httpClient: MockClient((request) async {
+        if (request.url.path == '/playlists/all') {
+          return http.Response(
+            jsonEncode({
+              'MediaContainer': {
+                'totalSize': 1,
+                'Metadata': [
+                  {'ratingKey': 'p1', 'title': 'Playlist'},
+                ],
+              },
+            }),
+            200,
+          );
+        }
+        return http.Response(
+          jsonEncode({
+            'MediaContainer': {
+              'totalSize': 2,
+              'Metadata': [
+                {..._playablePlaylistItem('a'), 'playlistItemID': 'not-an-id'},
+                {..._playablePlaylistItem('b'), 'playlistItemID': 102},
+              ],
+            },
+          }),
+          200,
+        );
+      }),
+    );
+    addTearDown(client.close);
+
+    final catalog = await client.playlists(
+      Uri.parse('https://plex.example:32400'),
+      'secret',
+      isCurrent: () => true,
+    );
+
+    expect(catalog.playlists, isEmpty);
+    expect(catalog.failedIds, {'p1'});
+  });
+
+  test('playlist occurrence ids do not collide across playlists', () async {
+    final client = PlexClient(
+      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+      httpClient: MockClient((request) async {
+        if (request.url.path == '/playlists/all') {
+          return http.Response(
+            jsonEncode({
+              'MediaContainer': {
+                'totalSize': 2,
+                'Metadata': [
+                  {'ratingKey': 'p1', 'title': 'First'},
+                  {'ratingKey': 'p2', 'title': 'Second'},
+                ],
+              },
+            }),
+            200,
+          );
+        }
+        return http.Response(
+          jsonEncode({
+            'MediaContainer': {
+              'totalSize': 1,
+              'Metadata': [
+                {..._playablePlaylistItem('m'), 'playlistItemID': 101},
+              ],
+            },
+          }),
+          200,
+        );
+      }),
+    );
+    addTearDown(client.close);
+
+    final catalog = await client.playlists(
+      Uri.parse('https://plex.example:32400'),
+      'secret',
+      isCurrent: () => true,
+    );
+
+    expect(catalog.failedIds, isEmpty);
+    expect(catalog.playlists.map((playlist) => playlist.id), ['p1', 'p2']);
+  });
+
+  test(
+    'playlist exact repeated terminal page with occurrence ids fails',
+    () async {
+      final client = PlexClient(
+        clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
+        httpClient: MockClient((request) async {
+          if (request.url.path == '/playlists/all') {
+            return http.Response(
+              jsonEncode({
+                'MediaContainer': {
+                  'totalSize': 1,
+                  'Metadata': [
+                    {'ratingKey': 'p1', 'title': 'Playlist'},
+                  ],
+                },
+              }),
+              200,
+            );
+          }
+          final start = int.parse(
+            request.url.queryParameters['X-Plex-Container-Start']!,
+          );
+          return http.Response(
+            jsonEncode({
+              'MediaContainer': {
+                'offset': start,
+                'totalSize': 4,
+                'Metadata': [
+                  {..._playablePlaylistItem('a'), 'playlistItemID': 101},
+                  {..._playablePlaylistItem('b'), 'playlistItemID': 102},
+                ],
+              },
+            }),
+            200,
+          );
+        }),
+      );
+      addTearDown(client.close);
+
+      final catalog = await client.playlists(
+        Uri.parse('https://plex.example:32400'),
+        'secret',
+        isCurrent: () => true,
+      );
+
+      expect(catalog.playlists, isEmpty);
+      expect(catalog.failedIds, {'p1'});
+    },
+  );
+
   test('playlist playable filtering applies after raw paging', () async {
     Map<String, Object?> unplayableItem(String id) => {
       'ratingKey': id,
