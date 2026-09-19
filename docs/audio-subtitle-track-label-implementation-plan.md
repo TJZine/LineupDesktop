@@ -841,3 +841,9 @@ the change crosses the native MethodChannel boundary and finalizes a protected,
 high-use Player UI contract. The requested GPT Pro plan review satisfies the
 planning-stage review; concrete code and physical Windows evidence still require
 normal implementation self-review and acceptance.
+
+## Execution ledger
+
+| Package | Accepted commit | Controller acceptance | Verification | Proof unavailable or deferred | Remaining risk | Next permitted package |
+| --- | --- | --- | --- | --- | --- | --- |
+| P0 — evidence and exact contract (blocked record accepted; gate not passed) | `11d62562d90d7adb4f9d0d4969141022adf79e29` | September 19, 2026 | Confirmed ancestry from `2338654c01cfdbb3529852b69572cbaa21c935dc`; reviewed every changed line; ran `git show --check` and range `git diff --check`; independently checked the repository runtime pins, pinned mpv field construction, and the `language_code` 0.7.1 archive hash, license, SDK bounds, and required code entries. | No Windows host, prepared pinned DLL, bounded redacted runtime payload, live Lineup/Plex path, or authorized representative-media inventory was available. Ordinary stereo/multichannel audio, an available subtitle class, missing optional metadata, actual language-code shapes, and actual channel-layout tokens remain uncaptured. | Source and dependency evidence cannot establish packaged-DLL behavior or actual-media code/layout shapes. Rare commentary, accessibility, regional, external, and image-subtitle cases may remain explicitly unavailable, but mandatory available-media capture may not be replaced with fixtures. | P0 Windows evidence capture and resolver/layout recheck only. P1 production field expansion is not permitted until the P0 gate passes. |
