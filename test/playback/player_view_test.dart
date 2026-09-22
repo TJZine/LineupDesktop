@@ -1844,10 +1844,10 @@ void main() {
     // A whitespace-only title falls back to the meaningful language, and the
     // detail drops the duplicated language instead of repeating it.
     expect(find.text('English'), findsOneWidget);
-    expect(find.text('eac3'), findsOneWidget);
+    expect(find.text('Dolby Digital Plus'), findsOneWidget);
     expect(find.text('English • eac3'), findsNothing);
-    // Fully blank metadata falls back to a readable type/ID label with no
-    // secondary row or stray separators.
+    // Fully blank metadata falls back to a readable type/ID label, and
+    // identical peers expose Track N as the final discriminator.
     expect(find.text('Audio track 2'), findsOneWidget);
     expect(find.text('Audio track 3'), findsOneWidget);
     for (final id in [2, 3]) {
@@ -1855,13 +1855,15 @@ void main() {
         tester
             .widget<ListTile>(find.byKey(Key('playback-track-audio-$id')))
             .subtitle,
-        isNull,
-        reason: 'track $id has no meaningful detail',
+        isNotNull,
+        reason: 'track $id needs its stable ID discriminator',
       );
+      expect(find.text('Track $id'), findsOneWidget);
     }
-    // A custom title keeps its trimmed text and full language/codec detail.
-    expect(find.text('Director commentary'), findsOneWidget);
-    expect(find.text('en • aac'), findsOneWidget);
+    // A custom title keeps its trimmed text, resolved language, and friendly
+    // codec detail.
+    expect(find.text('English — Director commentary'), findsOneWidget);
+    expect(find.text('AAC'), findsOneWidget);
     expect(find.text('   '), findsNothing);
     // Formatting and metadata display emit no native selection command.
     expect(fixture.native.selectedTracks, isEmpty);
@@ -1902,10 +1904,10 @@ void main() {
       );
       await tester.pump();
 
-      expect(find.text('監督コメンタリー 🎬'), findsOneWidget);
-      expect(find.text('ja • ass'), findsOneWidget);
-      // An unknown language code is used as-is once the blank title is absent.
-      expect(find.text('tlh'), findsOneWidget);
+      expect(find.text('日本語 — 監督コメンタリー 🎬'), findsOneWidget);
+      expect(find.text('ASS (styled text)'), findsOneWidget);
+      // language_code resolves the Klingon code to its self-name.
+      expect(find.text('Klingon'), findsOneWidget);
       expect(
         tester
             .widget<ListTile>(
@@ -1918,7 +1920,7 @@ void main() {
       expect(find.text('Off'), findsOneWidget);
       expect(
         tester.getTopLeft(find.text('Off')).dy,
-        lessThan(tester.getTopLeft(find.text('監督コメンタリー 🎬')).dy),
+        lessThan(tester.getTopLeft(find.text('日本語 — 監督コメンタリー 🎬')).dy),
       );
       expect(fixture.native.selectedTracks, isEmpty);
 
@@ -2040,6 +2042,14 @@ void main() {
           language: 'English',
           codec: 'truehd',
         ),
+        PlayerTrack(
+          id: 12,
+          type: PlayerTrackType.audio,
+          selected: false,
+          title: 'Alternate mix',
+          language: 'English',
+          codec: 'aac',
+        ),
       ],
     );
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -2054,7 +2064,7 @@ void main() {
       ),
     );
     await tester.pump();
-    final osdLabel = find.text('Audio • $longTitle');
+    final osdLabel = find.text('Audio • English — $longTitle');
     expect(osdLabel, findsOneWidget);
     final osdText = tester.widget<Text>(osdLabel);
     expect(osdText.maxLines, 1);
@@ -2075,8 +2085,8 @@ void main() {
     await tester.pump();
     fixture.player.showTracks(PlayerTrackType.audio);
     await tester.pump();
-    expect(find.text(longTitle), findsOneWidget);
-    expect(find.text('English • truehd'), findsOneWidget);
+    expect(find.text('English — $longTitle'), findsOneWidget);
+    expect(find.text('Dolby TrueHD'), findsOneWidget);
     expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(const SizedBox.shrink());
@@ -2439,7 +2449,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final selected = find.text('Subtitle track 24');
+    final selected = find.text('English — Subtitle track 24');
     final list = find.byKey(const Key('playback-options-list'));
     expect(Focus.of(tester.element(selected)).hasFocus, isTrue);
     expect(tester.getRect(list).contains(tester.getCenter(selected)), isTrue);
@@ -2551,8 +2561,9 @@ void main() {
       expect(find.text('PLAYBACK OPTIONS'), findsNothing);
       expect(
         find.byTooltip(
-          'A long descriptive English surround audio track label\n'
-          'English • eac3',
+          'Audio track: English — '
+          'A long descriptive English surround audio track label; '
+          'Dolby Digital Plus',
         ),
         findsOneWidget,
       );
@@ -2560,7 +2571,7 @@ void main() {
         tester
             .getSemantics(
               find.text(
-                'A long descriptive English surround audio track label',
+                'English — A long descriptive English surround audio track label',
               ),
             )
             .label,
@@ -2570,7 +2581,7 @@ void main() {
         tester
             .widget<Text>(
               find.text(
-                'A long descriptive English surround audio track label',
+                'English — A long descriptive English surround audio track label',
               ),
             )
             .style
@@ -2578,7 +2589,9 @@ void main() {
         closeTo(16 * layout.scale, 0.01),
       );
       final label = tester.getRect(
-        find.text('A long descriptive English surround audio track label'),
+        find.text(
+          'English — A long descriptive English surround audio track label',
+        ),
       );
       expect(rail.overlaps(label), isTrue);
       expect(tester.takeException(), isNull, reason: '${layout.viewport}');

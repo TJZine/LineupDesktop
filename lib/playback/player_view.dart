@@ -14,6 +14,7 @@ import '../ui/app_ui.dart';
 import 'native_player.dart';
 import 'native_video_surface.dart';
 import 'player_coordinator.dart';
+import 'player_track_label.dart';
 
 class PlayerView extends StatefulWidget {
   const PlayerView({
@@ -681,10 +682,23 @@ class _Osd extends StatelessWidget {
           (track) => track.type == PlayerTrackType.subtitle && track.selected,
         )
         .firstOrNull;
-    final audioLabel = _osdTrackLabel('Audio', selectedAudio);
+    final audioDisplay = selectedAudio == null
+        ? null
+        : formatPlayerTrackDisplay(selectedAudio, peers: controller.tracks);
+    final audioLabel = audioDisplay == null || audioDisplay.compactText == null
+        ? 'Audio'
+        : 'Audio • ${audioDisplay.compactText}';
     final subtitlesLabel = selectedSubtitles == null
         ? '${expanded ? 'Subtitles' : 'Subs'} • Off'
-        : _osdTrackLabel(expanded ? 'Subtitles' : 'Subs', selectedSubtitles);
+        : () {
+            final display = formatPlayerTrackDisplay(
+              selectedSubtitles,
+              peers: controller.tracks,
+            );
+            return display.compactText == null
+                ? (expanded ? 'Subtitles' : 'Subs')
+                : '${expanded ? 'Subtitles' : 'Subs'} • ${display.compactText}';
+          }();
     final sleepRemaining = controller.sleepRemaining;
     final remainingMinutes = sleepRemaining == null
         ? null
@@ -3047,24 +3061,25 @@ class _TracksState extends State<_Tracks> {
                                               final selected = off
                                                   ? selectedTrack == null
                                                   : track!.selected;
+                                              final display = track == null
+                                                  ? null
+                                                  : formatPlayerTrackDisplay(
+                                                      track,
+                                                      peers: tracks,
+                                                    );
                                               final title = off
                                                   ? 'Off'
-                                                  : _railTrackTitle(track!);
-                                              final metadata = track == null
-                                                  ? const <String>[]
-                                                  : _railTrackDetail(
-                                                      track,
-                                                      title,
-                                                    );
+                                                  : display!.primaryText;
+                                              final metadata =
+                                                  display?.secondaryFacts ??
+                                                  const <String>[];
                                               final metadataText = metadata
                                                   .join(' • ');
                                               final minTileHeight =
                                                   (metadata.isEmpty ? 56 : 72) *
                                                   scale;
                                               final tooltip =
-                                                  metadataText.isEmpty
-                                                  ? title
-                                                  : '$title\n$metadataText';
+                                                  display?.tooltipText ?? title;
                                               final pending =
                                                   widget
                                                           .controller
@@ -3484,49 +3499,6 @@ String? _wholeMinutesLeft(Duration position, Duration duration) {
       (remaining.inMilliseconds + millisecondsPerMinute - 1) ~/
       millisecondsPerMinute;
   return '${minutes}m left';
-}
-
-String _osdTrackLabel(String category, PlayerTrack? track) {
-  final detail = track == null ? null : _compactTrackLabel(track);
-  return detail == null ? category : '$category • $detail';
-}
-
-/// Trims an optional native track field; whitespace-only counts as absent.
-String? _meaningfulTrackText(String? value) {
-  final trimmed = value?.trim();
-  if (trimmed == null || trimmed.isEmpty) return null;
-  return trimmed;
-}
-
-/// Compact fallback shared by the options rail and the OSD: a meaningful
-/// title, otherwise a meaningful language. The rail adds a type/ID label when
-/// this is absent; the OSD keeps its bare category instead.
-String? _compactTrackLabel(PlayerTrack track) =>
-    _meaningfulTrackText(track.title) ?? _meaningfulTrackText(track.language);
-
-/// Rail primary label: the shared compact fallback, otherwise a readable
-/// type/ID label such as `Audio track 3` or `Subtitle track 2`.
-String _railTrackTitle(PlayerTrack track) =>
-    _compactTrackLabel(track) ?? _fallbackTrackLabel(track.type, track.id);
-
-String _fallbackTrackLabel(PlayerTrackType type, int id) {
-  final kind = switch (type) {
-    PlayerTrackType.audio => 'Audio',
-    PlayerTrackType.subtitle => 'Subtitle',
-    PlayerTrackType.video => 'Video',
-  };
-  return '$kind track $id';
-}
-
-/// Rail detail components: normalized language/codec with blanks omitted and
-/// exact duplicates of the shown title (or each other) removed.
-List<String> _railTrackDetail(PlayerTrack track, String title) {
-  final language = _meaningfulTrackText(track.language);
-  final codec = _meaningfulTrackText(track.codec);
-  return [
-    if (language != null && language != title) language,
-    if (codec != null && codec != title && codec != language) codec,
-  ];
 }
 
 Widget _osdAction(
