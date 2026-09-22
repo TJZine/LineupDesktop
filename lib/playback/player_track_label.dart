@@ -35,20 +35,15 @@ PlayerTrackDisplay formatPlayerTrackDisplay(
     if (peer.id == track.id) return false;
     final peerFacts = _TrackFacts.from(peer);
     final peerBase = _baseDisplay(peer, peerFacts);
-    return peerBase.visibleKey == base.visibleKey ||
-        _factKey(peer, peerFacts) == _factKey(track, facts);
+    return peerBase.visibleKey == base.visibleKey;
   });
   final secondaryFacts = [
     if (needsTrackDiscriminator) 'Track ${track.id}',
     ...base.secondaryFacts,
   ];
   final compactText = _compactText(track, facts, sameType, base);
-  final description = _description(track, base.primaryText, secondaryFacts);
-  final semanticsDescription = _semanticsDescription(
-    track,
-    base,
-    secondaryFacts,
-  );
+  final description = _description(base.primaryText, secondaryFacts);
+  final semanticsDescription = _semanticsDescription(base, secondaryFacts);
   final typeName = _typeName(track.type);
   return PlayerTrackDisplay(
     primaryText: base.primaryText,
@@ -144,7 +139,7 @@ _BaseDisplay _baseDisplay(PlayerTrack track, _TrackFacts facts) {
       : '${facts.language} — $qualifier';
   final secondary = <String>[];
   final seen = <String>{};
-  for (final value in [facts.language, facts.title]) {
+  for (final value in [facts.language, title]) {
     final key = _equivalenceKey(value);
     if (key != null) seen.add(key);
   }
@@ -202,21 +197,12 @@ String? _compactText(
 String _compactKey(_TrackFacts facts) =>
     _visibleKey(facts.language ?? '', facts.purposes);
 
-String _description(
-  PlayerTrack track,
-  String primary,
-  List<String> secondaryFacts,
-) {
-  final details = _withoutFallbackIdDuplicate(track, primary, secondaryFacts);
-  if (details.isEmpty) return primary;
-  return '$primary; ${details.join('; ')}';
+String _description(String primary, List<String> secondaryFacts) {
+  if (secondaryFacts.isEmpty) return primary;
+  return '$primary; ${secondaryFacts.join('; ')}';
 }
 
-String _semanticsDescription(
-  PlayerTrack track,
-  _BaseDisplay base,
-  List<String> secondaryFacts,
-) {
+String _semanticsDescription(_BaseDisplay base, List<String> secondaryFacts) {
   final primary = switch (base.primaryPurpose) {
     'SDH' => base.primaryText.replaceFirst(
       'SDH',
@@ -225,7 +211,7 @@ String _semanticsDescription(
     'Forced' => base.primaryText.replaceFirst('Forced', 'marked as forced'),
     _ => base.primaryText,
   };
-  final secondary = _withoutFallbackIdDuplicate(track, primary, secondaryFacts)
+  final secondary = secondaryFacts
       .map(
         (fact) => switch (fact) {
           'SDH' => 'subtitles for deaf and hard-of-hearing viewers',
@@ -235,17 +221,6 @@ String _semanticsDescription(
       )
       .join('; ');
   return secondary.isEmpty ? primary : '$primary; $secondary';
-}
-
-List<String> _withoutFallbackIdDuplicate(
-  PlayerTrack track,
-  String primary,
-  List<String> secondaryFacts,
-) {
-  final fallback = _fallbackTrackLabel(track.type, track.id);
-  return secondaryFacts
-      .where((fact) => !(primary == fallback && fact == 'Track ${track.id}'))
-      .toList(growable: false);
 }
 
 String? _language(String? value) {
@@ -324,15 +299,6 @@ String _visibleKey(String primary, Iterable<String> secondary) => <String>[
   primary,
   ...secondary,
 ].map((value) => _equivalenceKey(value)).join('|');
-
-String _factKey(PlayerTrack track, _TrackFacts facts) =>
-    _visibleKey(facts.language ?? '', <String>[
-      facts.title ?? '',
-      ...facts.purposes,
-      facts.channels ?? '',
-      facts.codec ?? '',
-      if (track.external == true) 'External',
-    ]);
 
 String _fallbackTrackLabel(PlayerTrackType type, int id) {
   final kind = _typeName(type);

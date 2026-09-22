@@ -114,6 +114,24 @@ void main() {
       expect(subtitle.primaryText, 'English — Audio description');
       expect(subtitle.secondaryFacts, isEmpty);
     });
+
+    test('does not generate purposes from explicit false flags', () {
+      final audio = formatPlayerTrackDisplay(
+        _track(language: 'en', visualImpaired: false, commentary: false),
+      );
+      final subtitle = formatPlayerTrackDisplay(
+        _track(
+          type: PlayerTrackType.subtitle,
+          language: 'en',
+          hearingImpaired: false,
+          forced: false,
+        ),
+      );
+      expect(audio.primaryText, 'English');
+      expect(audio.secondaryFacts, isEmpty);
+      expect(subtitle.primaryText, 'English');
+      expect(subtitle.secondaryFacts, isEmpty);
+    });
   });
 
   group('formatPlayerTrackDisplay channels and codecs', () {
@@ -235,6 +253,22 @@ void main() {
       expect(display.secondaryFacts, ['AAC']);
     });
 
+    test(
+      'retains the canonical generated fact after removing a duplicate title',
+      () {
+        final codec = formatPlayerTrackDisplay(
+          _track(title: 'AAC', codec: 'aac'),
+        );
+        final purpose = formatPlayerTrackDisplay(
+          _track(title: 'Commentary', commentary: true),
+        );
+        expect(codec.primaryText, 'Audio track 1');
+        expect(codec.secondaryFacts, ['AAC']);
+        expect(purpose.primaryText, 'Audio track 1');
+        expect(purpose.secondaryFacts, ['Commentary']);
+      },
+    );
+
     test('uses the smallest available visible peer difference', () {
       final peers = [
         _track(id: 1, language: 'en', title: 'Original', codec: 'aac'),
@@ -284,14 +318,42 @@ void main() {
       );
     });
 
-    test('keeps all-absent peers distinguishable in supporting facts', () {
-      final peers = [_track(id: 1), _track(id: 2)];
-      expect(formatPlayerTrackDisplay(peers[0], peers: peers).secondaryFacts, [
-        'Track 1',
-      ]);
-      expect(formatPlayerTrackDisplay(peers[1], peers: peers).secondaryFacts, [
-        'Track 2',
-      ]);
+    test(
+      'keeps all-absent peers distinguishable by their fallback primaries',
+      () {
+        final peers = [_track(id: 1), _track(id: 2)];
+        expect(
+          formatPlayerTrackDisplay(peers[0], peers: peers).primaryText,
+          'Audio track 1',
+        );
+        expect(
+          formatPlayerTrackDisplay(peers[1], peers: peers).primaryText,
+          'Audio track 2',
+        );
+        expect(
+          formatPlayerTrackDisplay(peers[0], peers: peers).secondaryFacts,
+          isEmpty,
+        );
+        expect(
+          formatPlayerTrackDisplay(peers[1], peers: peers).secondaryFacts,
+          isEmpty,
+        );
+      },
+    );
+
+    test('keeps titleless same-language peers null-safe and distinct', () {
+      final peers = [
+        _track(id: 1, language: 'en', title: 'Original'),
+        _track(id: 2, language: 'en'),
+      ];
+      expect(
+        formatPlayerTrackDisplay(peers[0], peers: peers).compactText,
+        'English — Original',
+      );
+      expect(
+        formatPlayerTrackDisplay(peers[1], peers: peers).compactText,
+        'English',
+      );
     });
 
     test('keeps long title tails distinct without changing identity', () {

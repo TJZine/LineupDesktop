@@ -1846,8 +1846,8 @@ void main() {
     expect(find.text('English'), findsOneWidget);
     expect(find.text('Dolby Digital Plus'), findsOneWidget);
     expect(find.text('English • eac3'), findsNothing);
-    // Fully blank metadata falls back to a readable type/ID label, and
-    // identical peers expose Track N as the final discriminator.
+    // Fully blank metadata falls back to distinct readable type/ID labels
+    // without inventing a redundant secondary fact.
     expect(find.text('Audio track 2'), findsOneWidget);
     expect(find.text('Audio track 3'), findsOneWidget);
     for (final id in [2, 3]) {
@@ -1855,10 +1855,9 @@ void main() {
         tester
             .widget<ListTile>(find.byKey(Key('playback-track-audio-$id')))
             .subtitle,
-        isNotNull,
-        reason: 'track $id needs its stable ID discriminator',
+        isNull,
+        reason: 'track $id has no meaningful detail',
       );
-      expect(find.text('Track $id'), findsOneWidget);
     }
     // A custom title keeps its trimmed text, resolved language, and friendly
     // codec detail.
