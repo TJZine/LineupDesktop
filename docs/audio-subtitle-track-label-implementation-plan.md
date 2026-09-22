@@ -1,7 +1,8 @@
 # Audio and Subtitle Track Label Implementation Plan
 
-**Status:** P0 evidence recorded with the production gate blocked, September 19,
-2026. This document records the approved UI direction for finding 4 in
+**Status:** P0 Windows evidence proposed-satisfied on September 22, 2026,
+pending controller acceptance. This document records the approved UI direction
+for finding 4 in
 [`ux-functionality-audit.md`](ux-functionality-audit.md). It does not authorize
 later-package implementation, establish physical Windows behavior, or mark the
 audit finding verified.
@@ -182,7 +183,7 @@ current UI use. Carry `demux-channels` only for the concrete source-layout label
 policy below; unknown layout strings remain bounded facts and are never interpreted
 as system-output topology.
 
-### P0 evidence record — September 19, 2026
+### P0 evidence record — September 19 and 22, 2026
 
 #### Pinned identities and evidence boundary
 
@@ -206,6 +207,26 @@ as system-output topology.
   manual. It establishes the source contract but is not a query of the packaged
   DLL. No Windows host, prepared DLL, redacted runtime payload, live Plex server,
   or private acceptance-media inventory was available to this macOS package.
+
+The September 22 Windows follow-up started from clean branch
+`dev/desktop-ui-refinement` at
+`e9697fba1b13b9632c4181f519fdd02404e7cf61`. It verified Flutter framework
+`9584c6713b324636289d067944a46fd6b49df14b`, engine
+`06a2e2a110089dff50fe635cffd2a61e1b24fbcd`, the repository patch SHA-256
+`3A6AA524780826F250352425BE146C6D2549FCCB11B87F993F250EFD4DBC1DCB`, and the
+applied patch. The prepared mpv asset provenance matched release-asset SHA-256
+`455965297BA3F5906A63CD2B219442685BE45528A1FE806E4B228147881E41CB`;
+`libmpv-2.dll` matched
+`B507529D99A4DFFDEAEC85ECEFF7661A7E3C6CA4EFD09C2014E11A1441B83EAA`, and
+`include/mpv/client.h` matched
+`1ACF99EE77C8C2A6F1D1993BD81BBC8A91D27FB5924E80171670E6139A4BD353`.
+
+The standalone pinned-libmpv probe ran on Windows 10 Home `10.0.19045`, AMD
+Ryzen 9 5900X, NVIDIA GeForce RTX 5080 driver `32.0.16.1692`, one reported
+3840x2160 display at 96 DPI/100% system scaling, with `vulkan-1.dll` present.
+This machine identity interprets only the metadata capture. No Lineup/Plex
+application path, UI label, audible/rendered output, Narrator, HDR, or P4
+acceptance scenario was exercised.
 
 #### Exact pinned mpv contract
 
@@ -249,37 +270,54 @@ approved current consumer.
 
 #### Redacted Windows field and code-shape matrix
 
-No redacted Windows capture was supplied or present in the repository. The table
-therefore records unavailable proof rather than synthetic passes. “Not captured”
-means neither presence nor absence has been observed in the pinned packaged DLL or
-through Lineup's Plex path.
+The September 22 capture queried `track-list` directly through the verified
+standalone DLL. Synthetic aliases replace media identity; titles are recorded only
+as present or absent. Every recorded identity was a positive native
+`MPV_FORMAT_INT64`, `type` was `MPV_FORMAT_STRING`, and `selected` was an explicit
+`MPV_FORMAT_FLAG`. The synthetic IDs below preserve within-alias order without
+recording private media or native stream identity.
 
-| Required category | Redacted observed fields/code shapes | Evidence state |
-| --- | --- | --- |
-| Ordinary stereo audio | None | Not captured |
-| Ordinary multichannel audio | None | Not captured |
-| Commentary audio | None | Representative media availability unknown; not captured |
-| Audio-description audio | None | Representative media availability unknown; not captured |
-| Equal counts with different layouts | None | Representative media availability unknown; not captured |
-| Two-letter language code | None | Code shape not observed |
-| Three-letter language code | None | Code shape not observed; pinned mpv tests are source fixtures only |
-| Regional or script language tag | None | Representative media availability unknown; code shape not observed |
-| Ordinary text subtitle | None | Not captured |
-| SDH/hearing-impaired subtitle | None | Representative media availability unknown; not captured |
-| Forced subtitle | None | Representative media availability unknown; not captured |
-| External/Plex-managed subtitle | None | Representative media availability unknown; not captured |
-| Image subtitle | None | Representative media availability unknown; not captured |
-| Missing title/language/codec | None | Not captured |
-| Identical visible metadata | None | Representative media availability unknown; not captured |
+| Synthetic alias / ID | Track and selected state | Optional strings | Candidate fields | Evidence use |
+| --- | --- | --- | --- | --- |
+| `stereo-01` / 1 | audio; selected `true` | title absent; `lang=eng` (`MPV_FORMAT_STRING`, three-letter); `codec=aac` (`MPV_FORMAT_STRING`) | count `2` (`MPV_FORMAT_INT64`); layout `stereo` (`MPV_FORMAT_STRING`); all five disposition fields present as `MPV_FORMAT_FLAG=false` | Ordinary stereo and missing-title case |
+| `missing-language-01` / 1 | audio; selected `true` | title and language absent; `codec=aac` (`MPV_FORMAT_STRING`) | count `2`; layout `stereo`; all disposition flags false with the types above | Pinned mpv omitted the source's exact `und`; missing optional title/language case |
+| `multichannel-sdh-01` / 1 | audio; selected `true` | title absent; `lang=en` (two-letter); `codec=eac3` | count `6`; layout `5.1`; all disposition flags false | Ordinary multichannel case |
+| `multichannel-sdh-01` / 2 | subtitle; selected `false` | title absent; `lang=en-US` (regional); `codec=subrip` | channel count/layout absent; all disposition flags false | Ordinary embedded text subtitle |
+| `multichannel-sdh-01` / 3 | subtitle; selected `false` | title present; `lang=en-US` (regional); `codec=subrip` | channel count/layout absent; `hearing-impaired=true`; other disposition flags false | Embedded SDH/hearing-impaired text subtitle |
+| `multichannel-forced-01` / 1 | audio; selected `true` | title present; `lang=en-US` (regional); `codec=ac3` | count `6`; layout `5.1(side)`; all disposition flags false | Equal count with a different exact layout token |
+| `multichannel-forced-01` / 2 | subtitle; selected `true` | title present; `lang=en` (two-letter); `codec=subrip` | channel count/layout absent; `forced=true`; other disposition flags false | Selected embedded forced text subtitle |
+| `multichannel-forced-01` / 3 | subtitle; selected `false` | title present; `lang=en` (two-letter); `codec=subrip` | channel count/layout absent; all disposition flags false | Second ordinary embedded text subtitle |
 
-The required follow-up is one bounded capture made with the pinned runtime on
-Windows. Record, per synthetic media alias, only track type, positive synthetic ID,
-selected state, candidate-field presence and native type, normalized language-code
-shape, normalized channel-layout token, and synthetic values. Record unavailable
-media categories explicitly. Do not include filenames, paths, private titles,
-Plex/server responses, URLs, tokens, or an unredacted payload. A standalone mpv
-capture can establish DLL field behavior; external/Plex-managed availability must
-also be distinguished from the actual Lineup/Plex application path.
+For every row, `forced`, `external`, `hearing-impaired`, `visual-impaired`, and
+`commentary` were present as `MPV_FORMAT_FLAG`. Audio rows carried
+`demux-channel-count` as `MPV_FORMAT_INT64` and `demux-channels` as
+`MPV_FORMAT_STRING`; subtitle rows omitted both. Every present `title`, `lang`,
+and `codec` value was `MPV_FORMAT_STRING`. These observations match the pinned
+source contract and preserve bridge-level nullable handling for absent or malformed
+data.
+
+The bounded authorized inventory contained nine user-video candidates. A further
+technical-only scan probed 294 of at most 300 media candidates across five
+non-system fixed drives without retaining names or paths. It found no additional
+non-English language, script tag, commentary, visual-impaired audio, or image
+subtitle case. Therefore commentary audio, audio-description audio, script tags,
+image subtitles, external/Plex-managed subtitles, missing codec, and provably
+identical visible metadata remain unavailable, not passed. No actual Lineup/Plex
+path was exercised, so the capture makes no claim that Lineup exposes external or
+Plex-managed subtitles.
+
+The observed resolver inputs `en`, `eng`, and `en-US` are exact supported
+`language_code` `0.7.1` cases. The source value `und` became an absent `lang` in
+the pinned runtime, consistent with the recorded demux contract. No recurring
+unsupported shape was observed, so the selected resolver remains proportionate;
+script and non-English behavior remain fixture-backed rather than Windows-media
+observations.
+
+The exact observed source-layout mapping for P2 may recognize `stereo` as
+`Stereo`, and both `5.1` and `5.1(side)` as `5.1 surround`. The two six-channel
+tokens prove that count alone is not a layout identity. All other tokens must
+remain unknown and fall back to a positive `N channels`; this evidence does not
+describe decoded Windows output or passthrough.
 
 #### Language resolver decision
 
@@ -315,10 +353,10 @@ fixtures for `en`/`eng`, terminology/bibliographic pairs such as `fra`/`fre` and
 `deu`/`ger`, mixed separators/case, `es-419`, `pt-BR`, `zh-Hans`, `zh-Hant`, an
 unknown suffix, `und`, `mul`, `zxx`, and blank input before UI integration.
 
-The dependency decision satisfies the known plan fixtures, but the missing Windows
-code-shape matrix remains a gate blocker. Recheck every captured shape against this
-adapter before adding the package; an unsupported recurring shape reopens this
-decision instead of being guessed or silently reduced to a base language.
+The dependency decision satisfies both the known plan fixtures and the observed
+Windows shapes `en`, `eng`, and `en-US`. Recheck any later unsupported recurring
+shape against this adapter instead of guessing or silently reducing it to a base
+language.
 
 #### P1 encoder seam and bounded identity contract
 
@@ -368,17 +406,15 @@ facts only; and ordinary verbose logs, private titles, filenames, local paths,
 server payloads, credentials, authorization headers, and token-bearing URLs are
 never recorded.
 
-**P0 gate: blocked.** Exact pinned-source field types, absence behavior, the
-language dependency decision, the identity-preserving optional-string contract,
-the focused native test seam, and privacy limits are settled. Production native
-field expansion must not begin until the bounded redacted Windows matrix above is
-captured from the pinned runtime and its actual language/layout values are checked
-against the selected resolver and proposed exact channel-layout mapping. Missing
-rare commentary, accessibility, regional, external, or image-subtitle media may
-remain explicitly unverified; ordinary stereo/multichannel audio, at least one
-available subtitle class, missing optional metadata, and the actual code shapes
-for available multilingual media may not be replaced by source fixtures. No safe
-production implementation remains inside P0 while that evidence is absent.
+**P0 gate: proposed-satisfied, pending controller acceptance.** The verified
+pinned Windows DLL supplied ordinary stereo and multichannel audio, embedded text
+subtitles, missing optional metadata, selected and unselected positive identities,
+two-letter/three-letter/regional language shapes, exact channel tokens, equal
+counts with different layouts, SDH, and forced examples. Those observed values
+fit the recorded resolver and narrow exact layout policy. Rare unavailable cases
+remain explicit and do not become passes. This evidence authorizes no P1 work in
+this package and does not establish application-path selection, physical
+label-to-output agreement, Narrator, final UI, or P4 acceptance.
 
 ### Typed model target
 
