@@ -1,8 +1,7 @@
 # Audio and Subtitle Track Label Implementation Plan
 
-**Status:** P0 Windows evidence proposed-satisfied on September 22, 2026,
-pending controller acceptance. This document records the approved UI direction
-for finding 4 in
+**Status:** P0 accepted on September 22, 2026; P1 is permitted. This document
+records the approved UI direction for finding 4 in
 [`ux-functionality-audit.md`](ux-functionality-audit.md). It does not authorize
 later-package implementation, establish physical Windows behavior, or mark the
 audit finding verified.
@@ -406,15 +405,15 @@ facts only; and ordinary verbose logs, private titles, filenames, local paths,
 server payloads, credentials, authorization headers, and token-bearing URLs are
 never recorded.
 
-**P0 gate: proposed-satisfied, pending controller acceptance.** The verified
-pinned Windows DLL supplied ordinary stereo and multichannel audio, embedded text
-subtitles, missing optional metadata, selected and unselected positive identities,
-two-letter/three-letter/regional language shapes, exact channel tokens, equal
-counts with different layouts, SDH, and forced examples. Those observed values
-fit the recorded resolver and narrow exact layout policy. Rare unavailable cases
-remain explicit and do not become passes. This evidence authorizes no P1 work in
-this package and does not establish application-path selection, physical
-label-to-output agreement, Narrator, final UI, or P4 acceptance.
+**P0 gate: satisfied.** The verified pinned Windows DLL supplied ordinary stereo
+and multichannel audio, embedded text subtitles, missing optional metadata,
+selected and unselected positive identities, two-letter/three-letter/regional
+language shapes, exact channel tokens, equal counts with different layouts, SDH,
+and forced examples. Those observed values fit the recorded resolver and narrow
+exact layout policy. Rare unavailable cases remain explicit and do not become
+passes. P1 may proceed; this evidence does not establish application-path
+selection, physical label-to-output agreement, Narrator, final UI, or P4
+acceptance.
 
 ### Typed model target
 
@@ -882,4 +881,4 @@ normal implementation self-review and acceptance.
 
 | Package | Accepted commit | Controller acceptance | Verification | Proof unavailable or deferred | Remaining risk | Next permitted package |
 | --- | --- | --- | --- | --- | --- | --- |
-| P0 — evidence and exact contract (blocked record accepted; gate not passed) | `11d62562d90d7adb4f9d0d4969141022adf79e29` | September 19, 2026 | Confirmed ancestry from `2338654c01cfdbb3529852b69572cbaa21c935dc`; reviewed every changed line; ran `git show --check` and range `git diff --check`; independently checked the repository runtime pins, pinned mpv field construction, and the `language_code` 0.7.1 archive hash, license, SDK bounds, and required code entries. | No Windows host, prepared pinned DLL, bounded redacted runtime payload, live Lineup/Plex path, or authorized representative-media inventory was available. Ordinary stereo/multichannel audio, an available subtitle class, missing optional metadata, actual language-code shapes, and actual channel-layout tokens remain uncaptured. | Source and dependency evidence cannot establish packaged-DLL behavior or actual-media code/layout shapes. Rare commentary, accessibility, regional, external, and image-subtitle cases may remain explicitly unavailable, but mandatory available-media capture may not be replaced with fixtures. | P0 Windows evidence capture and resolver/layout recheck only. P1 production field expansion is not permitted until the P0 gate passes. |
+| P0 — evidence and exact contract | `11d62562d90d7adb4f9d0d4969141022adf79e29`, `d6ae442592c5ffa1ce380135ed0c9fc2b15439e9` | September 22, 2026 | Confirmed both commits descend from the expected package starts; reviewed every changed line; ran `git show --check` and range `git diff --check`; independently checked repository runtime/toolchain hashes, pinned mpv field construction, the `language_code` 0.7.1 archive, the bounded matrix against the mandatory P0 cases, and added-line privacy calibration. | No Lineup/Plex application path, audible/rendered output, Narrator, HDR, external/Plex-managed subtitle, commentary, audio-description, image-subtitle, script-language, non-English, missing-codec, or identical-visible-metadata proof. These remain explicit P4, fixture, or unavailable cases as applicable. | Standalone metadata proves the bounded native facts but not application exposure or label-to-output agreement. Later packages must preserve the exact whitelist, unknown-versus-false contract, narrow layout mapping, and calibrated evidence claims. | P1 — typed native projection. |
