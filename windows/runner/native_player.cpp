@@ -1,5 +1,7 @@
 #include "native_player.h"
 
+#include "track_list_encoder.h"
+
 #include <algorithm>
 #include <cctype>
 #include <chrono>
@@ -26,7 +28,7 @@ constexpr size_t kMaxPlexTokenBytes = 8 * 1024;
 constexpr size_t kMaxCorrelatedPlaylistEntries = 1024;
 constexpr size_t kMaxMetadataBytes = 64 * 1024;
 constexpr size_t kMaxMetadataStringBytes = 4096;
-constexpr int kMaxTracks = 256;
+using lineup::BoundedUtf8;
 
 enum PropertyId : uint64_t {
   kPause = 1,
@@ -167,40 +169,6 @@ const mpv_node* FindNode(const mpv_node& map, const char* key) {
     }
   }
   return nullptr;
-}
-
-std::string BoundedUtf8(const char* input, size_t limit) {
-  std::string value;
-  for (size_t offset = 0; input && input[offset] && value.size() < limit;) {
-    const auto lead = static_cast<unsigned char>(input[offset]);
-    size_t length = lead < 0x80 ? 1 : lead >= 0xC2 && lead <= 0xDF ? 2
-                               : lead >= 0xE0 && lead <= 0xEF ? 3
-                               : lead >= 0xF0 && lead <= 0xF4 ? 4 : 0;
-    bool valid = length != 0;
-    for (size_t index = 1; valid && index < length; ++index) {
-      const auto byte = static_cast<unsigned char>(input[offset + index]);
-      valid = input[offset + index] && (byte & 0xC0) == 0x80;
-    }
-    if (valid && length == 3) {
-      const auto second = static_cast<unsigned char>(input[offset + 1]);
-      valid = !(lead == 0xE0 && second < 0xA0) &&
-              !(lead == 0xED && second >= 0xA0);
-    } else if (valid && length == 4) {
-      const auto second = static_cast<unsigned char>(input[offset + 1]);
-      valid = !(lead == 0xF0 && second < 0x90) &&
-              !(lead == 0xF4 && second >= 0x90);
-    }
-    if (valid && value.size() + length <= limit) {
-      value.append(input + offset, length);
-      offset += length;
-    } else if (!valid && value.size() + 3 <= limit) {
-      value.append("\xEF\xBF\xBD", 3);
-      ++offset;
-    } else {
-      break;
-    }
-  }
-  return value;
 }
 
 flutter::EncodableValue EncodeWhitelistedNode(const mpv_node* node,
@@ -1426,26 +1394,7 @@ void WindowsNativePlayer::SetParentMinimized(bool minimized) {
 
 flutter::EncodableValue WindowsNativePlayer::EncodeTrackList(
     const mpv_node& node) const {
-  flutter::EncodableList tracks;
-  size_t remaining_bytes = kMaxMetadataBytes;
-  if (node.format != MPV_FORMAT_NODE_ARRAY || !node.u.list) {
-    return flutter::EncodableValue(tracks);
-  }
-  const int count = std::min(node.u.list->num, kMaxTracks);
-  for (int index = 0; index < count; ++index) {
-    const mpv_node& track = node.u.list->values[index];
-    if (track.format != MPV_FORMAT_NODE_MAP) {
-      continue;
-    }
-    flutter::EncodableMap value;
-    for (const char* key : {"id", "type", "title", "lang", "codec",
-                            "selected"}) {
-      value[flutter::EncodableValue(key)] =
-          EncodeWhitelistedNode(FindNode(track, key), remaining_bytes);
-    }
-    tracks.emplace_back(value);
-  }
-  return flutter::EncodableValue(tracks);
+  return lineup::EncodeTrackList(node);
 }
 
 flutter::EncodableValue WindowsNativePlayer::EncodeVideoParameters(

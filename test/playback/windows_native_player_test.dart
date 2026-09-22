@@ -12,6 +12,252 @@ void main() {
   final messenger =
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
 
+  group('typed track snapshots', () {
+    late WindowsNativePlayer player;
+    late int loadId;
+    const identity = <String, Object?>{
+      'id': 7,
+      'type': 'audio',
+      'selected': true,
+    };
+    const facts = <String, Object?>{
+      'title': 'Synthetic mix',
+      'lang': 'eng',
+      'codec': 'aac',
+      'demux-channel-count': 6,
+      'demux-channels': '5.1(side)',
+      'forced': true,
+      'external': false,
+      'hearing-impaired': true,
+      'visual-impaired': false,
+      'commentary': true,
+    };
+
+    Map<String, Object?> readFacts(PlayerTrack track) => {
+      'title': track.title,
+      'lang': track.language,
+      'codec': track.codec,
+      'demux-channel-count': track.channelCount,
+      'demux-channels': track.channelLayout,
+      'forced': track.forced,
+      'external': track.external,
+      'hearing-impaired': track.hearingImpaired,
+      'visual-impaired': track.visualImpaired,
+      'commentary': track.commentary,
+    };
+
+    Future<void> snapshot(List<Object?> tracks) => _sendNativeEvent(messenger, {
+      'type': 'property',
+      'loadId': loadId,
+      'name': 'track-list',
+      'value': tracks,
+    });
+
+    setUp(() async {
+      final dispatched = Completer<int>();
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        if (call.method == 'load') {
+          dispatched.complete(
+            (call.arguments as Map<Object?, Object?>)['loadId'] as int,
+          );
+        }
+        return null;
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+      player = WindowsNativePlayer();
+      addTearDown(player.dispose);
+      await player.initialize();
+      final load = player.load(Uri(scheme: 'lineup-test'));
+      loadId = await dispatched.future;
+      await _sendNativeEvent(messenger, {
+        'type': 'state',
+        'loadId': loadId,
+        'state': 'playing',
+      });
+      await load;
+    });
+
+    test('old fields do not fabricate new facts', () async {
+      const oldFacts = {
+        'title': 'Synthetic mix',
+        'lang': 'eng',
+        'codec': 'aac',
+      };
+      await snapshot([
+        {...identity, ...oldFacts},
+      ]);
+      final track = player.tracks.single;
+      expect(track.id, 7);
+      expect(track.type, PlayerTrackType.audio);
+      expect(track.selected, isTrue);
+      expect(readFacts(track), {
+        for (final key in facts.keys) key: oldFacts[key],
+      });
+    });
+
+    test('all accepted facts preserve values and descriptive false', () async {
+      await snapshot([
+        {...identity, ...facts},
+      ]);
+      expect(readFacts(player.tracks.single), facts);
+      final inverted = {
+        for (final entry in facts.entries)
+          entry.key: entry.value is bool ? !(entry.value as bool) : entry.value,
+      };
+      await snapshot([
+        {...identity, ...inverted},
+      ]);
+      expect(readFacts(player.tracks.single), inverted);
+    });
+
+    test('absent and null optional facts stay unknown', () async {
+      for (final optional in [
+        <String, Object?>{},
+        {for (final key in facts.keys) key: null},
+      ]) {
+        await snapshot([
+          {...identity, ...optional},
+        ]);
+        expect(readFacts(player.tracks.single).values, everyElement(isNull));
+        expect(player.tracks.single.selected, isTrue);
+      }
+    });
+
+    test('wrong optional types lose only that fact', () async {
+      for (final entry in facts.entries) {
+        for (final wrong in <Object?>[
+          null,
+          'wrong',
+          1,
+          1.5,
+          false,
+          <Object?>[],
+          <String, Object?>{},
+        ]) {
+          if ((entry.value is String && wrong is String) ||
+              (entry.value is bool && wrong is bool) ||
+              (entry.value is int && wrong is int)) {
+            continue;
+          }
+          await snapshot([
+            {...identity, ...facts, entry.key: wrong},
+          ]);
+          expect(readFacts(player.tracks.single), {
+            ...facts,
+            entry.key: null,
+          }, reason: 'Malformed ${entry.key} must be absent');
+        }
+      }
+    });
+
+    test('channel counts accept only positive integers', () async {
+      for (final count in <Object?>[0, -1, '6', 6.0, 1.5, null, true]) {
+        await snapshot([
+          {...identity, ...facts, 'demux-channel-count': count},
+        ]);
+        expect(player.tracks.single.channelCount, isNull);
+        expect(player.tracks.single.channelLayout, '5.1(side)');
+      }
+      for (final count in [1, 2, 6, 8, 123]) {
+        await snapshot([
+          {...identity, 'demux-channel-count': count},
+        ]);
+        expect(player.tracks.single.channelCount, count);
+        expect(player.tracks.single.channelLayout, isNull);
+      }
+    });
+
+    test('rejects malformed identity before a valid selected track', () async {
+      await snapshot([
+        null,
+        'invalid',
+        <Object?>[],
+        <String, Object?>{},
+        for (final id in <Object?>[0, -1, '7', 7.0, 1.5, null, true])
+          {...identity, 'id': id},
+        {'type': 'audio', 'selected': true},
+        for (final type in <Object?>[
+          'Audio',
+          'subtitle',
+          'audio ',
+          '',
+          null,
+          1,
+        ])
+          {...identity, 'type': type},
+        {'id': 7, 'selected': true},
+        for (final selected in <Object?>[null, 'true', 0, 1, 1.0])
+          {...identity, 'selected': selected},
+        {'id': 7, 'type': 'audio'},
+        identity,
+      ]);
+      expect(player.tracks, hasLength(1));
+      expect(player.tracks.single.id, 7);
+      expect(player.tracks.single.selected, isTrue);
+      await snapshot([
+        {...identity, 'type': 'video', 'selected': false},
+        {...identity, 'type': 'sub'},
+      ]);
+      expect(player.tracks.map((track) => track.type), [
+        PlayerTrackType.video,
+        PlayerTrackType.subtitle,
+      ]);
+      expect(player.tracks.first.selected, isFalse);
+    });
+
+    test(
+      'successive snapshots remove facts and preserve immutable old state',
+      () async {
+        final events = <PlayerEvent>[];
+        final subscription = player.events.listen(events.add);
+        addTearDown(subscription.cancel);
+        await snapshot([
+          {...identity, ...facts},
+        ]);
+        final previous = player.tracks;
+        expect(() => previous.clear(), throwsUnsupportedError);
+        expect(() => events.last.tracks.clear(), throwsUnsupportedError);
+        await snapshot([identity]);
+        expect(readFacts(player.tracks.single).values, everyElement(isNull));
+        expect(
+          readFacts(events.last.tracks.single).values,
+          everyElement(isNull),
+        );
+        expect(readFacts(previous.single), facts);
+        expect(
+          () => player.tracks.add(previous.single),
+          throwsUnsupportedError,
+        );
+      },
+    );
+
+    test('non-whitelisted sentinels do not supply fallback facts', () async {
+      await snapshot([
+        {
+          ...identity,
+          for (final key in [
+            'codec-desc',
+            'codec-profile',
+            'default',
+            'external-filename',
+            'ff-index',
+            'src-id',
+            'program-id',
+            'demux-bitrate',
+            'demux-samplerate',
+            'decoder',
+            'unlisted-sentinel',
+          ])
+            key: 'excluded-sentinel',
+        },
+      ]);
+      expect(readFacts(player.tracks.single).values, everyElement(isNull));
+      expect(player.tracks.single.id, 7);
+      expect(player.tracks.single.type, PlayerTrackType.audio);
+      expect(player.tracks.single.selected, isTrue);
+    });
+  });
+
   test(
     'projects bounded native playback facts and completes a loaded file',
     () async {

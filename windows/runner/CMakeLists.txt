@@ -10,6 +10,7 @@ add_executable(${BINARY_NAME} WIN32
   "flutter_window.cpp"
   "main.cpp"
   "native_player.cpp"
+  "track_list_encoder.cpp"
   "utils.cpp"
   "win32_window.cpp"
   "${FLUTTER_MANAGED_DIR}/generated_plugin_registrant.cc"
@@ -92,6 +93,16 @@ verify_lineup_mpv_file("${LINEUP_MPV_LIBRARY}"
 target_include_directories(${BINARY_NAME} PRIVATE "${LINEUP_MPV_INCLUDE_DIR}")
 target_link_libraries(${BINARY_NAME} PRIVATE "${LINEUP_MPV_LIBRARY}")
 set(LINEUP_MPV_RUNTIME_LIBRARY "${LINEUP_MPV_DLL}" PARENT_SCOPE)
+
+# Exercise the production projection directly, without a live mpv instance.
+add_executable(track_list_encoder_test EXCLUDE_FROM_ALL
+  "track_list_encoder.cpp"
+  "track_list_encoder_test.cpp"
+)
+apply_standard_settings(track_list_encoder_test)
+target_include_directories(track_list_encoder_test PRIVATE "${LINEUP_MPV_INCLUDE_DIR}")
+target_link_libraries(track_list_encoder_test PRIVATE flutter_wrapper_app)
+add_test(NAME track_list_encoder COMMAND track_list_encoder_test)
 
 # Run the Flutter tool portions of the build. This must not be removed.
 add_dependencies(${BINARY_NAME} flutter_assemble)

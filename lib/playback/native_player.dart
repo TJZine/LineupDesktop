@@ -141,6 +141,13 @@ class PlayerTrack {
     this.title,
     this.language,
     this.codec,
+    this.channelCount,
+    this.channelLayout,
+    this.forced,
+    this.external,
+    this.hearingImpaired,
+    this.visualImpaired,
+    this.commentary,
   });
 
   final int id;
@@ -149,6 +156,13 @@ class PlayerTrack {
   final String? title;
   final String? language;
   final String? codec;
+  final int? channelCount;
+  final String? channelLayout;
+  final bool? forced;
+  final bool? external;
+  final bool? hearingImpaired;
+  final bool? visualImpaired;
+  final bool? commentary;
 }
 
 class PlayerTelemetry {
