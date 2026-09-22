@@ -8,7 +8,7 @@ agent dispatch and acceptance for this pass.
 ## September 12 workflow amendment — current authority
 
 The user replaced subagents with fresh user-facing implementation tasks using
-GPT-5.6 Luna / xhigh. Tasks share this existing branch/checkout; do not create
+GPT-6 Luna / xhigh. Tasks share this existing branch/checkout; do not create
 isolated worktrees. Work sequentially: root makes no parallel edits while the
 implementation task holds the file lease. Supply the same bounded file ownership, current excerpts,
 settled visual decisions and checks. Do not poll or monitor their progress; resume
@@ -21,7 +21,7 @@ inspection and final user approval.
 
 Use **GPT-6 Astra as the root orchestrator and visual reviewer**, alongside the
 user. For this user-authorized campaign, dispatch settled implementation to fresh
-user-facing **GPT-5.6 Luna / xhigh** tasks under the September 12 amendment.
+user-facing **GPT-6 Luna / xhigh** tasks under the September 12 amendment.
 Report actual assignments. Preserve the configured model and reasoning;
 if unavailable, explain the limitation before assigning a substitute.
 Do not change global model configuration.
@@ -192,7 +192,7 @@ comparison packet; it is a frozen baseline, not automatically current after edit
 
 Work with me on one surface at a time. Personally inspect the mock and actual
 current UI, take my feedback, and settle a concrete correction brief. Dispatch
-one fresh user-facing GPT-5.6 Luna / xhigh task per surface family, reusing it for
+one fresh user-facing GPT-6 Luna / xhigh task per surface family, reusing it for
 related follow-ups. Work sequentially in this existing checkout with exclusive
 files, current relevant code excerpts, exact visual corrections, preserved
 behavior and bounded checks. Make no parallel edits and do not poll or monitor
