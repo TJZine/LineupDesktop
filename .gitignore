@@ -32,3 +32,6 @@ worktrees/
 # Generated platform files
 macos/Flutter/ephemeral/
 windows/flutter/ephemeral/
+
+# Claude Code personal settings
+.claude/settings.local.json
