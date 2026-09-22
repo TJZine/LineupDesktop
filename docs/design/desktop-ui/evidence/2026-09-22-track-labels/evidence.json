@@ -1,0 +1,93 @@
+{
+  "status": "Candidate evidence only; not user-approved",
+  "package": "P3 — drawer, OSD, accessibility semantics, and visual proof",
+  "source_identity": {
+    "product_commit": "ddcbe8211cfe833064b76698bffe571ec39f86c2",
+    "description": "Exact pre-P2/P3 product baseline rendered from a temporary git archive, not a worktree"
+  },
+  "candidate_identity": {
+    "parent_commit": "39b54085845f6a1b1389df5106c2b19e1f99ca44",
+    "description": "P3 candidate committed together with this record; final commit SHA is reported by package closeout"
+  },
+  "toolchain": {
+    "flutter": "3.47.4",
+    "framework_revision": "9584c6713b324636289d067944a46fd6b49df14b",
+    "engine_revision": "06a2e2a110089dff50fe635cffd2a61e1b24fbcd",
+    "dart": "3.13.3",
+    "host": "macOS Flutter widget-test renderer"
+  },
+  "capture": {
+    "test": "tool/visual/player_track_label_visual_test.dart",
+    "viewports": [
+      "1280x720",
+      "1920x1080"
+    ],
+    "device_pixel_ratio": 1,
+    "text_scale": 1,
+    "scenes": [
+      "bright synthetic painted video still",
+      "dark synthetic painted video still"
+    ],
+    "drawers": [
+      "audio",
+      "subtitles"
+    ],
+    "fixture": "Real PlayerView and PlayerCoordinator widgets; six synthetic audio tracks, six synthetic subtitle tracks plus Off; selected rows audio 1 and subtitle 11; no pending request; selected row receives initial focus; paused 32:00/2:00:00 playback; fixed 2026-09-22T20:00:00Z clock; no real artwork or media",
+    "matched_inputs": "Before and after use the same capture test, fixture, viewport, DPR, text scale, scene, playback state, focus, selection, pending state, and fonts",
+    "background_match": "Exact pixel comparison of a left-side crop outside the drawer/fade returned zero differing pixels for all eight before/after pairs"
+  },
+  "images": {
+    "before/audio-bright-1280x720.png": "c542ff9ee49172e92eecbc11697892c07813efaea1c4dd6f72a6d099412e5118",
+    "before/audio-bright-1920x1080.png": "bb5e438d5a6fe6eb72d99dc85b6798d04a3b73a93a93a90e4a29537fd1447ad8",
+    "before/audio-dark-1280x720.png": "bafd9c831cdd48276a100e219c6203a78febd25932655a21f720402d690b0c03",
+    "before/audio-dark-1920x1080.png": "50742b723f135a5d7702ec2ba0777b443892767716c41c9aa7eba7f353c1dcef",
+    "before/subtitles-bright-1280x720.png": "bce7465f93f8207b6139ed17a311564f037a009b8ec67bceedd376936c332bc2",
+    "before/subtitles-bright-1920x1080.png": "e99ad690f4ffda11017bcd33f34423f99a6c07d5d5616b7f0971d376291e71ba",
+    "before/subtitles-dark-1280x720.png": "21d6f5cab79f57b1ce2d7087139895d789c976e4fae7707e188dd63e1e99be42",
+    "before/subtitles-dark-1920x1080.png": "520d94ab33940f30c7a6f4297616f171d3d120f16372598d7e0392efe47c9f1d",
+    "after/audio-bright-1280x720.png": "13694883be319b02ccd175194d01efeff58ce4ff513669677b1bf1333b9843b5",
+    "after/audio-bright-1920x1080.png": "761f339801ee1c68478e9f382a6475e74004e4a7061ed00a3c6fdd812eefddca",
+    "after/audio-dark-1280x720.png": "fcb5be9c08da348706d0c9ee2d595b8ca365f41038ed1a92f499eaefe22c6883",
+    "after/audio-dark-1920x1080.png": "141e098cb060898b79d3743602ef3e8927075d1566513e2ce12522f5fb60705a",
+    "after/subtitles-bright-1280x720.png": "e62c757555c5b2c6a36eacf3aa27d5fa383cf1a87db05ecc27dbfd2c907db158",
+    "after/subtitles-bright-1920x1080.png": "debbd63359fb12226c44a7f008e68bfa63d826f158e0757848d2f34e7c891cd6",
+    "after/subtitles-dark-1280x720.png": "98c79871e0e6cbd303839baed373cfb3eb552a372141c997f04de31aec8281c4",
+    "after/subtitles-dark-1920x1080.png": "8912556e8a93b4c9d7cc791de372fa69b5df3856f44e93b3ad963da4689b8aa3"
+  },
+  "inspection": {
+    "reviewed": "All 16 images inspected in four matched before/after contact sheets and at original resolution",
+    "differences": "Only track copy and its resulting line wrapping changed: raw language/codec labels became the approved primary/supporting hierarchy. Drawer width, fade, gradient, header, close control, dividers, selected fill, checkmark, footer, and scene placement remained unchanged.",
+    "legibility": "Primary/supporting hierarchy remains legible over both bright and dark scenes at both required sizes. The selected row and focus remain visually distinct.",
+    "long_peers": "The theatrical and commentary tails of both long identical-prefix audio and subtitle peers remain visible and distinguishable at 1280x720 and 1920x1080.",
+    "limits": "Static portable widget renders do not establish moving-video contrast, native overlay composition, physical DPI, Windows focus/input, or Narrator behavior."
+  },
+  "adaptive_widget_proof": {
+    "test": "track panel scales its reading rail and soft fade through 4K",
+    "cases": [
+      {
+        "viewport": "800x600",
+        "dpr": 1,
+        "text_scale": 2
+      },
+      {
+        "viewport": "1360x840",
+        "dpr": 1,
+        "text_scale": 2
+      },
+      {
+        "viewport": "1600x900",
+        "dpr": 1,
+        "text_scale": 2
+      },
+      {
+        "viewport": "3840x2160",
+        "dpr": 2,
+        "text_scale": 2
+      }
+    ],
+    "assertions": "No layout exception; protected rail/fade geometry and gradient retained; long visible label stays inside the rail and scroll viewport; selected row remains focused; complete tooltip and semantics identity remain available.",
+    "reachability": "A separate 256-row widget test scrolls to row 256 at 800x600 and 1280x720 while retaining Close and without overflow."
+  },
+  "privacy": "All names, labels, scenes, paths, timing, and metadata are synthetic. No Plex credentials, tokens, private media metadata, filenames, server responses, or real playback logs are present.",
+  "claims_boundary": "Portable Flutter widget composition, geometry, focus, interaction, semantics-tree, and deterministic static-render evidence only. No physical Windows, Narrator, moving-video, native overlay, label-to-output, packaging, or user visual-approval claim."
+}
