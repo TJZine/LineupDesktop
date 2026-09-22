@@ -3237,6 +3237,7 @@ class _TracksState extends State<_Tracks> {
                                   ),
                           ),
                         ),
+                        SizedBox(height: 24 * geometryScale),
                         if (widget.controller.trackSelectionError
                             case final error?)
                           Padding(
@@ -3252,6 +3253,7 @@ class _TracksState extends State<_Tracks> {
                             ),
                           ),
                         Padding(
+                          key: const Key('playback-options-footer'),
                           padding: EdgeInsets.only(top: 20 * geometryScale),
                           child: Text(
                             'Up/Down Browse · Enter Select · Esc Close',
@@ -3555,6 +3557,7 @@ Widget _osdAction(
       child: Semantics(
         label: semanticLabel,
         button: semanticLabel == null ? null : true,
+        enabled: semanticLabel == null ? null : onPressed != null,
         onTap: semanticLabel == null ? null : onPressed,
         excludeSemantics: semanticLabel != null,
         child: TextButton(

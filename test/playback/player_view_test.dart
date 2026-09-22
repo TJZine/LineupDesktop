@@ -806,6 +806,7 @@ void main() {
         final semantics = tester
             .getSemantics(find.bySemanticsLabel(label))
             .getSemanticsData();
+        expect(semantics.flagsCollection.isEnabled, Tristate.isFalse);
         expect(semantics.hasAction(SemanticsAction.tap), isFalse);
       }
 
@@ -2294,11 +2295,16 @@ void main() {
           .getSemantics(audioFinder)
           .getSemanticsData();
       expect(audioSemantics.flagsCollection.isButton, isTrue);
+      expect(audioSemantics.flagsCollection.isEnabled, Tristate.isTrue);
       expect(audioSemantics.hasAction(SemanticsAction.tap), isTrue);
 
       expect(find.text('Subtitles • Off'), findsOneWidget);
       expect(find.byTooltip('Subtitle tracks: Off'), findsOneWidget);
-      expect(find.bySemanticsLabel('Subtitle tracks: Off'), findsOneWidget);
+      final subtitlesSemantics = tester
+          .getSemantics(find.bySemanticsLabel('Subtitle tracks: Off'))
+          .getSemanticsData();
+      expect(subtitlesSemantics.flagsCollection.isEnabled, Tristate.isTrue);
+      expect(subtitlesSemantics.hasAction(SemanticsAction.tap), isTrue);
       await tester.pumpWidget(const SizedBox.shrink());
       fixture.dispose();
     },
@@ -2790,6 +2796,186 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     fixture.dispose();
   });
+
+  testWidgets(
+    '1280 track drawers keep wrapped rows clear of the fixed footer',
+    (tester) async {
+      const audioTracks = [
+        PlayerTrack(
+          id: 1,
+          type: PlayerTrackType.audio,
+          selected: true,
+          title: 'Original theatrical mix',
+          language: 'en',
+          codec: 'truehd',
+          channelLayout: '5.1',
+        ),
+        PlayerTrack(
+          id: 2,
+          type: PlayerTrackType.audio,
+          selected: false,
+          title: 'Director commentary',
+          language: 'en',
+          codec: 'aac',
+          channelLayout: 'stereo',
+          commentary: true,
+        ),
+        PlayerTrack(
+          id: 3,
+          type: PlayerTrackType.audio,
+          selected: false,
+          language: 'es-419',
+          codec: 'eac3',
+          channelLayout: '5.1(side)',
+        ),
+        PlayerTrack(
+          id: 4,
+          type: PlayerTrackType.audio,
+          selected: false,
+          title: 'Descriptive restoration',
+          language: 'fr',
+          codec: 'ac3',
+          channelCount: 6,
+          channelLayout: 'unknown-layout',
+          visualImpaired: true,
+        ),
+        PlayerTrack(
+          id: 5,
+          type: PlayerTrackType.audio,
+          selected: false,
+          title: 'Long shared archival presentation title ending in theatrical',
+          language: 'en',
+          codec: 'flac',
+          channelLayout: 'stereo',
+        ),
+        PlayerTrack(
+          id: 6,
+          type: PlayerTrackType.audio,
+          selected: false,
+          title: 'Long shared archival presentation title ending in commentary',
+          language: 'en',
+          codec: 'flac',
+          channelLayout: 'stereo',
+        ),
+      ];
+      const subtitleTracks = [
+        PlayerTrack(
+          id: 11,
+          type: PlayerTrackType.subtitle,
+          selected: true,
+          language: 'en',
+          codec: 'subrip',
+          hearingImpaired: true,
+        ),
+        PlayerTrack(
+          id: 12,
+          type: PlayerTrackType.subtitle,
+          selected: false,
+          language: 'en',
+          codec: 'hdmv_pgs_subtitle',
+          forced: true,
+        ),
+        PlayerTrack(
+          id: 13,
+          type: PlayerTrackType.subtitle,
+          selected: false,
+          title: 'Festival edition',
+          language: 'fr',
+          codec: 'ass',
+        ),
+        PlayerTrack(
+          id: 14,
+          type: PlayerTrackType.subtitle,
+          selected: false,
+          language: 'es-419',
+          codec: 'subrip',
+          external: true,
+        ),
+        PlayerTrack(
+          id: 15,
+          type: PlayerTrackType.subtitle,
+          selected: false,
+          title:
+              'Long shared restored subtitle presentation ending in theatrical',
+          language: 'en',
+          codec: 'subrip',
+        ),
+        PlayerTrack(
+          id: 16,
+          type: PlayerTrackType.subtitle,
+          selected: false,
+          title:
+              'Long shared restored subtitle presentation ending in commentary',
+          language: 'en',
+          codec: 'subrip',
+        ),
+      ];
+      await tester.binding.setSurfaceSize(const Size(1280, 720));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      for (final scenario in [
+        (type: PlayerTrackType.audio, tracks: audioTracks),
+        (type: PlayerTrackType.subtitle, tracks: subtitleTracks),
+      ]) {
+        final fixture = _Fixture(PlayerState.playing, tracks: scenario.tracks);
+        fixture.player.showTracks(scenario.type);
+        await tester.pumpWidget(
+          MaterialApp(
+            home: MediaQuery(
+              data: const MediaQueryData(size: Size(1280, 720)),
+              child: PlayerView(controller: fixture.player, openGuide: () {}),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final rail = tester.getRect(
+          find.byKey(const Key('playback-options-rail')),
+        );
+        final list = tester.getRect(
+          find.byKey(const Key('playback-options-list')),
+        );
+        final footer = tester.getRect(
+          find.byKey(const Key('playback-options-footer')),
+        );
+        expect(rail.contains(footer.topLeft), isTrue);
+        expect(
+          rail.contains(footer.bottomRight - const Offset(0.1, 0.1)),
+          isTrue,
+        );
+        expect(list.bottom, lessThan(footer.top));
+
+        for (final track in scenario.tracks) {
+          final row = tester.getRect(
+            find.byKey(Key('playback-track-${scenario.type.name}-${track.id}')),
+          );
+          final visible = row.intersect(list);
+          if (!visible.isEmpty) {
+            expect(visible.overlaps(footer), isFalse);
+          }
+        }
+
+        for (var index = 0; index < 5; index++) {
+          await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+          await tester.pump();
+        }
+        final prefix = scenario.type == PlayerTrackType.audio
+            ? 'English — Long shared archival presentation title ending in '
+            : 'English — Long shared restored subtitle presentation ending in ';
+        final theatrical = find.text('${prefix}theatrical');
+        final commentary = find.text('${prefix}commentary');
+        expect(theatrical, findsOneWidget);
+        expect(commentary, findsOneWidget);
+        expect(list.contains(tester.getRect(theatrical).center), isTrue);
+        expect(list.contains(tester.getRect(commentary).center), isTrue);
+        expect(Focus.of(tester.element(commentary)).hasFocus, isTrue);
+        expect(tester.takeException(), isNull, reason: '${scenario.type}');
+
+        await tester.pumpWidget(const SizedBox.shrink());
+        fixture.dispose();
+      }
+    },
+  );
 
   testWidgets('selected subtitle in a long list is focused and visible', (
     tester,

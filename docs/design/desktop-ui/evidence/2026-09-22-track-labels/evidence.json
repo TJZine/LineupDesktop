@@ -7,7 +7,8 @@
   },
   "candidate_identity": {
     "parent_commit": "39b54085845f6a1b1389df5106c2b19e1f99ca44",
-    "description": "P3 candidate committed together with this record; final commit SHA is reported by package closeout"
+    "initial_commit": "02330deb5a96e24e452bbf6ffc80921b5584e4ce",
+    "description": "P3 candidate plus a separate footer-clearance and enabled-semantics repair; the repair commit SHA is reported by package closeout"
   },
   "toolchain": {
     "flutter": "3.47.4",
@@ -45,21 +46,32 @@
     "before/subtitles-bright-1920x1080.png": "e99ad690f4ffda11017bcd33f34423f99a6c07d5d5616b7f0971d376291e71ba",
     "before/subtitles-dark-1280x720.png": "21d6f5cab79f57b1ce2d7087139895d789c976e4fae7707e188dd63e1e99be42",
     "before/subtitles-dark-1920x1080.png": "520d94ab33940f30c7a6f4297616f171d3d120f16372598d7e0392efe47c9f1d",
-    "after/audio-bright-1280x720.png": "13694883be319b02ccd175194d01efeff58ce4ff513669677b1bf1333b9843b5",
+    "after/audio-bright-1280x720.png": "39dfd863b0f6f0be9a058bb73a689488ca412ef0d67d9fced37eb5b4e0ec1772",
     "after/audio-bright-1920x1080.png": "761f339801ee1c68478e9f382a6475e74004e4a7061ed00a3c6fdd812eefddca",
-    "after/audio-dark-1280x720.png": "fcb5be9c08da348706d0c9ee2d595b8ca365f41038ed1a92f499eaefe22c6883",
+    "after/audio-dark-1280x720.png": "beb0da72de4e11f1ba44a00bd10a5195f1f8c9a187eef3d6f0a2ae70e3b1f9bf",
     "after/audio-dark-1920x1080.png": "141e098cb060898b79d3743602ef3e8927075d1566513e2ce12522f5fb60705a",
-    "after/subtitles-bright-1280x720.png": "e62c757555c5b2c6a36eacf3aa27d5fa383cf1a87db05ecc27dbfd2c907db158",
+    "after/subtitles-bright-1280x720.png": "40f5e17ea0e6a6ad94c969a3b6da2a7d01d992dd07e02533015ebefc9fda5ac1",
     "after/subtitles-bright-1920x1080.png": "debbd63359fb12226c44a7f008e68bfa63d826f158e0757848d2f34e7c891cd6",
-    "after/subtitles-dark-1280x720.png": "98c79871e0e6cbd303839baed373cfb3eb552a372141c997f04de31aec8281c4",
+    "after/subtitles-dark-1280x720.png": "d3e7b334c78246f3fcd7038c580b0baf5b56b6e69a2de2f215569b44aa0e1472",
     "after/subtitles-dark-1920x1080.png": "8912556e8a93b4c9d7cc791de372fa69b5df3856f44e93b3ad963da4689b8aa3"
   },
   "inspection": {
     "reviewed": "All 16 images inspected in four matched before/after contact sheets and at original resolution",
-    "differences": "Only track copy and its resulting line wrapping changed: raw language/codec labels became the approved primary/supporting hierarchy. Drawer width, fade, gradient, header, close control, dividers, selected fill, checkmark, footer, and scene placement remained unchanged.",
+    "differences": "Track copy and its resulting line wrapping changed: raw language/codec labels became the approved primary/supporting hierarchy. The repair reserves scroll-viewport clearance above the fixed footer at 1280x720. Drawer width, fade, gradient, header, close control, dividers, selected fill, checkmark, footer placement and styling, and scene placement remain unchanged.",
     "legibility": "Primary/supporting hierarchy remains legible over both bright and dark scenes at both required sizes. The selected row and focus remain visually distinct.",
-    "long_peers": "The theatrical and commentary tails of both long identical-prefix audio and subtitle peers remain visible and distinguishable at 1280x720 and 1920x1080.",
+    "long_peers": "At 1920x1080, both long identical-prefix peers and their theatrical/commentary tails are visible. At 1280x720, the matched initial frame shows the theatrical subtitle peer and only the leading portion of the next audio peer; it does not show both subtitle peers. The 1280 widget proof scrolls/focuses both peers, verifies both full tails are rendered and inside the viewport, and leaves the commentary peer focused.",
     "limits": "Static portable widget renders do not establish moving-video contrast, native overlay composition, physical DPI, Windows focus/input, or Narrator behavior."
+  },
+  "repair": {
+    "reason": "Wrapped rows could consume the footer's bottom region at 1280x720 because the scroll viewport used all space above the footer without dedicated clearance.",
+    "change": "Reserve 24 geometry-scale points below the track scroll viewport while retaining the approved rail geometry, typography, colors, and footer placement; expose explicit enabled state on labeled OSD action semantics.",
+    "recapture": "All eight after images were regenerated from the same fixture. Only the four 1280x720 images changed; all four 1920x1080 hashes remained stable.",
+    "initial_1280_hashes": {
+      "after/audio-bright-1280x720.png": "13694883be319b02ccd175194d01efeff58ce4ff513669677b1bf1333b9843b5",
+      "after/audio-dark-1280x720.png": "fcb5be9c08da348706d0c9ee2d595b8ca365f41038ed1a92f499eaefe22c6883",
+      "after/subtitles-bright-1280x720.png": "e62c757555c5b2c6a36eacf3aa27d5fa383cf1a87db05ecc27dbfd2c907db158",
+      "after/subtitles-dark-1280x720.png": "98c79871e0e6cbd303839baed373cfb3eb552a372141c997f04de31aec8281c4"
+    }
   },
   "adaptive_widget_proof": {
     "test": "track panel scales its reading rail and soft fade through 4K",
@@ -86,7 +98,8 @@
       }
     ],
     "assertions": "No layout exception; protected rail/fade geometry and gradient retained; long visible label stays inside the rail and scroll viewport; selected row remains focused; complete tooltip and semantics identity remain available.",
-    "reachability": "A separate 256-row widget test scrolls to row 256 at 800x600 and 1280x720 while retaining Close and without overflow."
+    "reachability": "A separate 256-row widget test scrolls to row 256 at 800x600 and 1280x720 while retaining Close and without overflow.",
+    "footer_clearance": "The 1280 audio/subtitle test `1280 track drawers keep wrapped rows clear of the fixed footer` verifies the footer is inside the rail, visible row intersections do not overlap it, both identical-prefix peers become fully visible through keyboard focus scrolling with distinguishable tails, the last peer retains focus, and no layout exception occurs."
   },
   "privacy": "All names, labels, scenes, paths, timing, and metadata are synthetic. No Plex credentials, tokens, private media metadata, filenames, server responses, or real playback logs are present.",
   "claims_boundary": "Portable Flutter widget composition, geometry, focus, interaction, semantics-tree, and deterministic static-render evidence only. No physical Windows, Narrator, moving-video, native overlay, label-to-output, packaging, or user visual-approval claim."
