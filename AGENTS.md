@@ -22,6 +22,21 @@ to adjacent contracts or the full document when a material question remains.
   the change. Resolve routine uncertainty from source and existing decisions; ask
   only for consequential unresolved choices outside the approved scope. Preserve
   collaborative approval of new UI direction and protected design changes.
+- Explicit user instructions take precedence over skill guidelines. Reuse
+  authorization already granted for the current scope. If a skill requires
+  pausing authorized work, link and quote the exact instruction and explain
+  the unresolved decision; do not infer an approval gate from general advice.
+- Treat follow-up questions and corrections as steering the active task
+  unless the user cancels or replaces it. Preserve the objective, approvals,
+  completed work, and remaining checks across interruptions and compaction.
+  Answer side questions, then resume authorized work.
+- Keep progress updates focused on findings, decisions, and blockers.
+  Close out with the outcome, relevant verification, and material limits;
+  use plain language and avoid repeated plans or administrative checklists.
+- Delegate only when the user or an applicable active workflow authorizes it.
+  Preserve configured models, reasoning settings, and cost-based assignment.
+  Use bounded ownership and parallel work only when independent work exists
+  and the active workflow permits it.
 - Use Codanna for unknown native-code owners, callers, and impact when available;
   confirm important results in source and use `rg`/direct reads for exact queries.
   Codanna does not currently parse Dart, so never treat its native-only index as

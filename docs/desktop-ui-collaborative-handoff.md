@@ -13,19 +13,18 @@ isolated worktrees. Work sequentially: root makes no parallel edits while the
 implementation task holds the file lease. Supply the same bounded file ownership, current excerpts,
 settled visual decisions and checks. Do not poll or monitor their progress; resume
 integration after their final completion is available or the user reports done.
-The older worker/subagent and no-extra-task wording below is superseded for these
-explicitly requested implementation tasks. Astra retains complex contracts,
-playback-state wiring, personal visual inspection and final user approval.
+This amendment governs dispatch for these explicitly requested implementation
+tasks. Astra retains complex contracts, playback-state wiring, personal visual
+inspection and final user approval.
 
 ## Start here
 
 Use **GPT-6 Astra as the root orchestrator and visual reviewer**, alongside the
-user. Use the exposed **worker_luna** role for settled, bounded implementation.
-Its repository configuration is `gpt-5.6-luna` / `xhigh`. Report the actual exposed
-role/model assignment; never claim a fallback is Luna without evidence. If that
-role is absent, use the documented worker/Luna override only when the runtime
-supports it. Otherwise explain the limitation before assigning a substitute.
-Do not change global model configuration or create additional user-facing tasks.
+user. For this user-authorized campaign, dispatch settled implementation to fresh
+user-facing **GPT-5.6 Luna / xhigh** tasks under the September 12 amendment.
+Report actual assignments. Preserve the configured model and reasoning;
+if unavailable, explain the limitation before assigning a substitute.
+Do not change global model configuration.
 
 Read `AGENTS.md`, this handoff, the [approval ledger](desktop-ui-surface-approvals.md),
 [interface system](../.interface-design/system.md), relevant
@@ -45,8 +44,9 @@ Later documentation-only commits do not invalidate its screenshots. Inspect
 later code changes for visual impact and recapture only affected surfaces.
 
 Open the [portable review packet](design/desktop-ui/review-packets/README.md).
-Ask the user which surface to review first, then review it together. Do not begin
-another autonomous project-wide corrective sweep or infer approval from the
+Resume the surface already selected in current user instructions or the active
+handoff; ask only when no next surface is established. Review it together. Do not
+begin another autonomous project-wide corrective sweep or infer approval from the
 user saying the comparison viewer looks good.
 
 ## Portable baseline and honest comparison
@@ -84,14 +84,13 @@ instruction to recapture all surfaces on every iteration.
    Ask only about consequential new direction, typography changes, protected
    Player structure, behavior/ownership conflicts or missing reference intent.
    Give the user a concrete comparison for such choices, not an abstract question.
-3. **Dispatch bounded Luna work.** Default to one active worker and one surface
-   owner. Start a fresh Luna worker for each new surface family/type so unrelated
-   surfaces do not accumulate in its context. Reuse that worker only for follow-ups
-   within the same family. Studio surfaces 20–24 completed under the user’s
-   explicit exception allowing the existing worker. Two workers are reasonable only for
-   explicitly settled independent files while root has useful work to do. Give
-   exclusive file leases and the detailed brief below. Do not delegate
-   root's personal visual audit or launch reviewer agents for small tasks.
+3. **Dispatch bounded Luna work.** Dispatch one fresh Luna / xhigh implementation
+   task per surface family, reusing it for related follow-ups. Work sequentially
+   in the existing checkout with exclusive file ownership and the detailed brief
+   below. Follow the amendment's no-parallel-edit and no-polling rules. Root
+   retains personal visual inspection and integration. Studio surfaces 20–24
+   completed under the user's explicit exception allowing the existing worker.
+   Do not launch reviewer agents for small tasks.
 4. **Astra integrates and reviews.** Inspect the returned diff and behavior
    evidence. Capture only changed surfaces/states at 1080p/DPR1/text1 using real
    Flutter widgets, stable synthetic content and the same relevant state. Include
@@ -193,9 +192,13 @@ comparison packet; it is a frozen baseline, not automatically current after edit
 
 Work with me on one surface at a time. Personally inspect the mock and actual
 current UI, take my feedback, and settle a concrete correction brief. Dispatch
-small worker_luna units with exclusive files, current relevant code excerpts,
-exact visual corrections, preserved behavior and bounded checks. Keep difficult
-logic and contracts with Astra/strong workers. Report actual assignments.
+one fresh user-facing GPT-5.6 Luna / xhigh task per surface family, reusing it for
+related follow-ups. Work sequentially in this existing checkout with exclusive
+files, current relevant code excerpts, exact visual corrections, preserved
+behavior and bounded checks. Make no parallel edits and do not poll or monitor
+progress; resume integration after final completion is available or I report done.
+Keep difficult logic and contracts with Astra/strong workers. Report actual
+assignments.
 
 Review results yourself before showing them to me. Use fresh affected-surface
 1920x1080/DPR1/text100% captures; no upscaled screenshots or whole-app recapture
@@ -205,6 +208,8 @@ and group remaining resolution/accessibility checks at appropriate checkpoints.
 Wait for my explicit visual approval before marking each surface/state locked.
 Record the approved evidence/commit and outstanding adaptive/Windows checks.
 Make coherent conventional commits for accepted work; do not push, deploy or
-publish. Do not launch independent reviewers or extra user-facing tasks unless
-I ask. Start by asking which surface I want to review first.
+publish. Do not launch independent reviewers or user-facing tasks beyond the
+authorized implementation tasks unless I ask. Resume the surface already selected
+in current user instructions or the active handoff; ask only when no next surface
+is established.
 ```

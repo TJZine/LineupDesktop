@@ -34,6 +34,9 @@ and relevant environment are unchanged. Rerun affected checks when edits or
 integration invalidate them, and add proof for uncovered interactions. Nonbehavioral
 edits need only the relevant structural or formatting check. Physical Windows
 evidence requirements for native behavior and support claims remain unchanged.
+Once affected checks and required gates pass, continue to closeout. Broaden
+or repeat verification only when changed inputs, a failure, or a concrete
+unresolved risk justifies it.
 
 ## Architecture practice
 
