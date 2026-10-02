@@ -159,6 +159,21 @@ void main() {
         year: 1998,
         addedAt: DateTime.utc(2021),
       ),
+      PlexMediaItem(
+        id: 'unmatched',
+        title: 'Unmatched',
+        type: 'movie',
+        duration: const Duration(minutes: 1),
+        libraryId: 'movies',
+        parts: [PlexMediaPart(path: '/unmatched')],
+        genres: const ['Drama'],
+        collections: const ['Archive'],
+        studio: 'Other Studio',
+        actors: const ['Other Actor'],
+        directors: const ['Other Director'],
+        year: 2004,
+        addedAt: DateTime.utc(2019),
+      ),
     ];
     for (final filter in const <LibraryFilter, List<String>>{
       LibraryFilter.genre: ['Comedy'],
@@ -176,8 +191,9 @@ void main() {
             filters: {filter.key: filter.value},
           ),
           dated,
-        ).length,
-        2,
+        ).map((item) => item.id),
+        ['older', 'newer'],
+        reason: '${filter.key}',
       );
     }
     expect(
@@ -189,7 +205,7 @@ void main() {
         ),
         dated,
       ).map((item) => item.id),
-      ['newer', 'older'],
+      ['newer', 'older', 'unmatched'],
     );
     for (final filters in const <Map<LibraryFilter, List<String>>>[
       {
