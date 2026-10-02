@@ -80,9 +80,10 @@ They do not add a mandatory review pass or a new workflow.
 
 ## Quality and safety
 
-- Test pure policies and public seams. Add widget/integration/manual proof when
-  behavior depends on focus, accessibility, rendering, lifecycle, or native
-  platform integration. Do not use brittle tests merely to increase coverage.
+- Follow [the testing rules](../AGENTS.md#testing) and
+  [Flutter Test Design](../.agents/skills/flutter-test-design/SKILL.md) before
+  adding proof. Select the strongest owner of user-visible behavior; isolated
+  tests need a justified gap. Coverage is a local diagnostic, never a gate.
 - Evaluate each dependency for current need, activity, license, desktop support,
   transitive cost, debuggability, and standard-library alternatives. Record
   material license obligations before shipping bundled native libraries.
@@ -115,6 +116,32 @@ portable work; report the specific unverified behavior and required scenario.
 | Windows package policy | PowerShell 7.4+ on a portable host; `pwsh -File ./tool/windows/verify-release-policy.ps1` | Script parsing and pinned policy inputs; no Windows runtime or package execution proof |
 | Native player contract / C++ integration | Dart adapter/coordinator tests, lifetime/currentness inspection, Windows C++ toolchain and prepared libmpv; `flutter build windows` | Contract and stock-engine compile/link proof; not a runnable or packageable Lineup player |
 | Patched engine / portable package | Full Windows provisioning below; release wrapper and [package acceptance](windows-native-validation.md#8-portable-package-acceptance) | Artifact-bound build/package checks; launch, media, HDR, layering, fullscreen, input, and support claims require [physical Windows acceptance](windows-native-validation.md) |
+
+### Current test tiers and gaps
+
+`test/` contains Dart policy, boundary, widget, and public-seam integration
+tests using `flutter_test`. The product-spine test uses fake Plex/native
+boundaries; `test_driver/ui_harness.dart` is a synthetic development composition
+root. Neither is an automated real-app E2E harness with checked artifacts;
+that harness is currently absent, and CI does not launch the app. Prefer E2E
+where feasible; for behavior impractical to automate, use the strongest existing
+widget/public-contract owner and state remaining platform acceptance. A missing
+harness alone is not evidence that E2E is infeasible.
+
+`flutter analyze` includes `test/`, `tool/visual/`, and `test_driver/` under the
+same analyzer configuration as `lib/`. There is no coverage-percentage floor;
+`TZ=America/New_York flutter test --coverage` is available for local diagnosis.
+Optional visual suites run explicitly as described below. Native runtime and
+hardware proof follows [physical Windows acceptance](windows-native-validation.md).
+
+The assertion-based `track_list_encoder_test` CTest target exercises the real
+encoder, not the app. It is excluded from the default build and is not run in
+CI. After configuring the Windows build with the prerequisites below, run:
+
+```powershell
+cmake --build .\build\windows\x64 --config Release --target track_list_encoder_test
+ctest --test-dir .\build\windows\x64 -C Release -R '^track_list_encoder$' --output-on-failure --timeout 30
+```
 
 ## Portable commands
 

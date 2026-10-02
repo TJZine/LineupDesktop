@@ -61,3 +61,12 @@ to adjacent contracts or the full document when a material question remains.
   personal paths, or unredacted logs/screenshots in documentation or evidence.
 - Independent review is user-controlled, never automatic. At closeout, state
   whether independent review is specifically recommended.
+
+## Testing
+
+- Prefer real-app E2E on generated/fixture inputs with a checked artifact where feasible; otherwise use the strongest widget/public-contract owner and name remaining physical acceptance; gate heavy runtimes.
+- Before adding a test, identify its user-visible behavior, credible failing regression, gap in existing E2E/owner coverage, and need for a test-only production seam; if the gap has no answer or the seam is needed, do not add it.
+- Give each user-visible behavior one strongest, least-faked owner test; add a parameter row only for a distinct case that some mutation fails while the existing cases do not.
+- A bug regression must fail on the pre-fix code, once, at the highest seam that reproduces the bug.
+- Assertions on internals are never a reason for a test to exist.
+- Load `.agents/skills/flutter-test-design/SKILL.md` before writing, changing or reviewing tests.

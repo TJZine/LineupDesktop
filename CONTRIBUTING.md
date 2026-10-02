@@ -63,6 +63,12 @@ cost.
 
 ## Tests and validation
 
+Follow [AGENTS.md's testing rules](AGENTS.md#testing) and the full
+[Flutter Test Design standard](.agents/skills/flutter-test-design/SKILL.md):
+prefer feasible real-app E2E, otherwise the strongest widget/public-contract
+owner with explicit platform limits; isolated tests need justified gaps.
+Coverage is a local diagnostic, never a percentage gate.
+
 Use [Development](docs/DEVELOPMENT.md#verification-by-task) to select focused
 tests and the relevant full checks. Reuse inspected results while their tested
 code, inputs, dependencies, and relevant environment remain unchanged; rerun
