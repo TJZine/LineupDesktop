@@ -30,7 +30,7 @@ void main() {
     );
   });
 
-  test('accepts, validates, and omits retired preference keys', () {
+  test('accepts and omits retired preference keys', () {
     final legacy = const LineupSettings().toJson()
       ..addAll({
         'guideLayoutMode': 'overlay',
@@ -72,8 +72,13 @@ void main() {
     );
   });
 
-  test('rejects an option outside the supported range', () {
-    final invalid = const LineupSettings().toJson()..['guideHours'] = 5;
-    expect(() => LineupSettings.fromJson(invalid), throwsFormatException);
+  test('rejects unsupported option and enum values', () {
+    final canonical = const LineupSettings().toJson();
+    for (final invalid in [
+      {...canonical, 'guideHours': 5},
+      {...canonical, 'theme': 'future-theme'},
+    ]) {
+      expect(() => LineupSettings.fromJson(invalid), throwsFormatException);
+    }
   });
 }

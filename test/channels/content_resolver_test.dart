@@ -748,7 +748,7 @@ void main() {
     );
   });
 
-  test('channels round-trip and reject unknown persisted fields', () {
+  test('channels round-trip and reject unknown fields and enum values', () {
     final channel = Channel(
       id: 'channel',
       number: 7,
@@ -764,6 +764,10 @@ void main() {
 
     expect(
       () => Channel.fromJson({...channel.toJson(), 'future': true}),
+      throwsFormatException,
+    );
+    expect(
+      () => Channel.fromJson({...channel.toJson(), 'playbackMode': 'future'}),
       throwsFormatException,
     );
   });
