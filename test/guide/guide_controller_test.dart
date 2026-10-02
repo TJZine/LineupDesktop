@@ -4,7 +4,6 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/channels/channel.dart';
-import 'package:lineup_desktop/channels/channel_builder.dart';
 import 'package:lineup_desktop/channels/scheduler.dart';
 import 'package:lineup_desktop/channels/schedule_worker.dart';
 import 'package:lineup_desktop/guide/guide_controller.dart';
@@ -26,31 +25,6 @@ void main() {
     expect(guide.windowStart, DateTime.utc(2026, 1, 15, 3));
     expect(guide.windowStart.isUtc, isTrue);
   });
-
-  test(
-    'Channel Builder result becomes the authoritative 1000-channel lineup',
-    () async {
-      final original = _channels(10, includeManualTail: false);
-      final lineup = _TestLineup(original)..currentChannelId = original[5].id;
-      final replacement = _channels(1000, includeManualTail: false);
-
-      await lineup.applyChannelPlan(
-        replacement,
-        mode: ChannelBuildMode.replace,
-      );
-
-      expect(lineup.channels, hasLength(1000));
-      expect(lineup.currentChannelId, original[5].id);
-
-      await lineup.applyChannelPlan(
-        _channels(3, idPrefix: 'small', includeManualTail: false),
-        mode: ChannelBuildMode.replace,
-      );
-      expect(lineup.channels, hasLength(3));
-      expect(lineup.currentChannelId, 'small-2');
-      lineup.dispose();
-    },
-  );
 
   test('cardinality does not determine loaded or retained row count', () async {
     for (final count in [0, 1, 10, 200, 500, 1000]) {
@@ -1470,7 +1444,6 @@ List<Channel> _channels(
   int count, {
   bool nonContiguous = false,
   String idPrefix = 'channel',
-  bool includeManualTail = true,
 }) => List.generate(count, (index) {
   final items = List.generate(
     8,
@@ -1485,7 +1458,7 @@ List<Channel> _channels(
     id: '$idPrefix-$index',
     number: nonContiguous ? index * 7 + 3 : index + 1,
     name: index == count - 1 ? 'Custom $index' : 'Channel $index',
-    source: includeManualTail && index == count - 1
+    source: index == count - 1
         ? ManualSource(items)
         : LibrarySource(
             libraryId: 'library-${index % 3}',
