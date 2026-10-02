@@ -17,8 +17,6 @@ class PlayerTrackDisplay {
   final String? compactText;
   final String tooltipText;
   final String semanticsText;
-
-  String get secondaryText => secondaryFacts.join(' • ');
 }
 
 /// Pure, shared presentation policy for audio and subtitle track choices.

@@ -384,7 +384,7 @@ void main() {
       () => display.secondaryFacts.add('unexpected'),
       throwsUnsupportedError,
     );
-    expect(display.secondaryText, 'AAC');
+    expect(display.secondaryFacts, ['AAC']);
     expect(display.tooltipText, 'Audio track: English — Original; AAC');
     expect(
       display.semanticsText,
