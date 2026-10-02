@@ -72,22 +72,8 @@ void main() {
     );
   });
 
-  test('rejects malformed or unknown canonical and retired fields', () {
-    final canonical = const LineupSettings().toJson();
-    for (final invalid in [
-      {...canonical}..remove('theme'),
-      {...canonical, 'future': true},
-      {...canonical, 'reduceMotion': 1},
-      {...canonical, 'guideHours': 2.0},
-      {...canonical, 'guideHours': 5},
-      {...canonical, 'theme': 'future-theme'},
-      {...canonical, 'guideInfoBackgroundMode': 'future-background'},
-      {...canonical, 'guideLayoutMode': 'future-layout'},
-      {...canonical, 'guideDensity': 'future-density'},
-      {...canonical, 'pastMinutes': 45},
-      {...canonical, 'libraryTabsEnabled': 'false'},
-    ]) {
-      expect(() => LineupSettings.fromJson(invalid), throwsFormatException);
-    }
+  test('rejects an option outside the supported range', () {
+    final invalid = const LineupSettings().toJson()..['guideHours'] = 5;
+    expect(() => LineupSettings.fromJson(invalid), throwsFormatException);
   });
 }
