@@ -368,3 +368,373 @@ Gate: the maintainer accepts the evidence and confirms the **[confirm]** items.
 - **Protected Player surfaces.** Track data source and badges need separate
   approvals. Without them, track changes are unavailable during a session.
 - **Downgrade** quarantines the whole state file (P4).
+
+## 2026-10-03 P0 results
+
+**Evidence baseline:** `4e0b365b57c4b1caf5798c4d107b48d6450e27ef`,
+on `codex/libmpv-reference-security-report`, after fetching the matching remote.
+This section records a temporary headless Windows client, not implemented
+Lineup transcoding or physical Windows acceptance. The plan decisions and
+Security design above have not been changed.
+
+Pinned runtime: libmpv `3186d369`, from the preparation contract in
+`tool/windows/prepare-mpv.ps1`; DLL SHA-256
+`4BA364226FD2EA5DD2C6F2333F0118462DA549FEED92360FB766A3924E313A51`.
+The DLL was checked before creating each client and again before loads in the
+final client. Null audio/video replaced presentation; all production global
+initialization options were checked for acceptance, including
+`tls-verify=yes`, `access-references=no` and `autoload-files=no`.
+
+The client read only Lineup's `plex.account-token` entry in memory. The
+installed `flutter_secure_storage` backend stores that entry in its existing
+DPAPI-encrypted storage file, rather than the legacy Credential Manager
+entry. The maintainer explicitly authorized continuation using that same
+Lineup entry. Resources discovery used the existing `plex-client-identity`;
+PMS access used only the discovered resource token. Each HTTPS connection's
+unauthenticated `/identity` matched the discovered machine identifier before
+any authenticated request. TLS verification and redirect refusal remained on.
+
+Four discovery calls were made in total: setup/terminal exits required
+replacement discovery after the maintainer's written continuation
+authorization. This departs from the initial single-call procedure; each used
+the existing Lineup identity and no account credential was used elsewhere.
+An array-valued native header experiment was rejected by libmpv; that run
+and an interrupted pause run are excluded from playback conclusions. Final
+controls used the production single token header and a synthetic client
+identifier query; token-free session loads used the synthetic identifier
+header only. Early token-free child/native probes had no identifier header;
+the non-local, rapid-tuning and final ladder runs supplied it. All PMS request
+identity values that were supplied were `lineup-p0-probe`. PMS may list a
+`lineup-p0-probe` device, which the maintainer can remove afterwards.
+
+Session IDs were client-generated and retained only in memory. No credential,
+real session ID/URL, media title/ID/path, total item duration, raw server
+response, media bytes or native diagnostics were retained. No stream-selection
+PUT, timeline, watched-state, preference or library writes were made.
+
+Unless stated otherwise, timing cells are **median / maximum in seconds over
+three valid runs**. Start timing begins at the authenticated master request,
+includes validation and separate token-free variant/segment/init probes, and
+ends after at least 0.4 seconds of native position advance. It excludes the
+decision request and is not an application tune-time benchmark. Start/advance
+waits were bounded to 30 seconds, stop requests to 10 seconds, and reap
+observation to 15 minutes. Timed-out seeks are failures, not successful
+latencies. Pause and reap scenarios ran once in the valid client.
+
+### 1. Server context and available items
+
+| Field | Observed result |
+| --- | --- |
+| PMS version | `1.43.4.10903-e5521bd8c` |
+| Plex Pass | Not exposed by the allowed discovery/identity responses; not independently verified. Hardware encoding operated. |
+| Hardware acceleration | On: `HardwareAcceleratedCodecs=1`; transcodes reported NVDEC/NVENC. |
+| Tone mapping | On: `TranscoderToneMapping=1`; application to a particular session is discussed in question 9. |
+| Concurrency limit | Not measured: bounded single-preference lookups for candidate concurrency keys returned 404. No preference writes or overload experiment. |
+| LAN networks configured | No: `LanNetworksBandwidth` was empty. |
+| Other household streams | None observed in sampled status/transcoder listings; this is not continuous household monitoring. |
+| Item A | MKV, H.264 8-bit SDR, 1080p; two audio tracks (E-AC-3 6 channels, AAC 2 channels), 15 PGS and one SRT subtitle tracks, one part. Exact requested type available. |
+| Item B | MKV, HEVC 10-bit, 4K, PQ with Dolby Vision present; metadata advertises 8-channel audio, three audio tracks, PGS and SRT subtitles, one part. Dolby Vision/PQ source; HDR10 fallback and presentation not checked. |
+| Item C | No multipart item found in the movie/episode catalog scan (first Media only). |
+
+### 2. Decisions per quality tier and response shapes
+
+| Tier | Decision | Decision resolution | Decoded resolution | Decision video kbps | Start→advance median / max | Outcome |
+| --- | --- | --- | --- | --- | --- | --- |
+| Original | Direct Play | 1788 × 1080 | not captured | 11422 | not measured | DP original plays |
+| 4K 50 | Transcode | 3840 × 1600 | 3840 × 1600 | 20000 | 6.100 / 6.402 | 3/3 advance |
+| 4K 35 | Transcode | 3840 × 1600 | 3840 × 1600 | 16485 | 6.162 / 6.165 | 3/3 advance |
+| 1080p 40 | Direct Play | 1788 × 1080 | not captured | 11422 | not measured | DP original plays; HLS start 400 |
+| 1080p 20 | Transcode | 1788 × 1080 | 1788 × 1080 | 18218 | 6.494 / 6.605 | 3/3 advance |
+| 1080p 12 | Transcode | 1788 × 1080 | 1788 × 1080 | 10845 | 6.164 / 6.196 | 3/3 advance |
+| 1080p 10 | Transcode | 1788 × 1080 | 1788 × 1080 | 9070 | 6.045 / 6.150 | 3/3 advance |
+| 1080p 8 | Transcode | 1788 × 1080 | 1788 × 1080 | 7158 | 6.057 / 6.063 | 3/3 advance |
+| 720p 4 | Transcode | 1192 × 720 | 1192 × 720 | 3419 | 6.225 / 6.341 | 3/3 advance |
+| 720p 3 | Transcode | 718 × 434 | 718 × 434 | 1721 | 6.623 / 7.072 | 3/3 advance |
+| 720p 2 | Transcode | 718 × 434 | 718 × 434 | 1236 | 6.659 / 6.694 | 3/3 advance |
+| 480p 1.5 | Transcode | 720 × 434 | 720 × 434 | 994 | 6.602 / 6.617 | 3/3 advance |
+
+The live `/transcode/sessions` response confirmed video/audio conversion
+and codecs, but omitted output bitrate and, for video transcodes, output width
+and height. Direct Stream included dimensions. Initial libmpv `video-bitrate`
+samples were unavailable. A single additional A / 1080p 8 Mbps control,
+sampled at least 20 seconds after advance, returned 6,724,077 bits/s (about
+6.724 Mbps), versus its decision target of 7.158 Mbps. Other delayed tier
+samples were not measured. Consequently the bitrate column is the **decision
+target**, not measured live bitrate; the requested per-tier live cross-check
+remains incomplete. Final decoded dimensions were collected independently with
+libmpv `video-params/w` and `video-params/h`.
+
+PMS selected output below several ceilings (including both 4K tiers and
+720p at 3/2 Mbps); the precise source/server/profile cap reason was not
+measured. An earlier 720p / 2 Mbps batch returned 1,721 kbps at 718 × 434;
+the final batch above returned 1,236 kbps at the same dimensions. The reason
+for this decision-target variation was not established.
+Every decision-only listing check, including the non-local calls,
+found no matching transcode entry. Stops for unused decision IDs returned 404.
+No supported tier was refused for capacity in these runs.
+
+- **Direct Play decision:** HTTP 200 XML `MediaContainer`; `generalDecisionCode=1000`, `directPlayDecisionCode=1000`, text `Direct play OK.`; `Part decision=directplay` in the final probe.
+- **Conversion allowed:** HTTP 200 XML `MediaContainer`; `generalDecisionCode=1001`, `transcodeDecisionCode=1001`, text `Direct play not available; Conversion OK.`
+- **Direct Play rejection within a successful conversion decision:** `directPlayDecisionCode=3001` for bandwidth, or `3000` for profile/resolution/explicit directPlay=0. These are not overall conversion failures.
+- **HLS start after Direct Play decision:** HTTP 400; HTML; root `html`; title `Bad Request`; h1 `400 Bad Request`. No transcode entry. Branch to the original instead.
+- **Capacity / transcoding unavailable:** Not measured: not encountered; no fabricated response fixture or configuration write.
+- **Non-local Direct Play original:** Independent authenticated one-byte range control returned HTTP 503, no redirect; libmpv END_FILE reason 4/error -13. Body not retained; this is an original-file failure, not a session-child failure.
+
+### 3. Request-local client profile
+
+| Profile experiment | Result |
+| --- | --- |
+| Direct Play declaration + HLS target | Smallest tested directive set that permits Direct Play when A fits, video-copy/audio-conversion when Direct Play is disabled, and video conversion below the source ceiling. |
+| Remove Direct Play declaration | Original is converted; decision explains that no direct-play profile exists for HTTP/MKV/H.264. |
+| Remove audio-channel limitation only | The three A decision cases remain valid; this does not prove all multichannel source cases. |
+| Explicit multichannel declaration | `audioChannelCount=8`; `add-limitation(scope=videoAudioCodec&scopeName=*&type=upperBound&name=audio.channels&value=8&replace=true)`. Accept decoded PCM without declaring passthrough. |
+| Direct Stream playback | Video copy, E-AC-3→AAC audio conversion; HLS fragmented MP4; 2.450 / 2.563 seconds start→advance, 3/3 success. |
+
+`X-Plex-Client-Profile-Extra` is request-local, with `+` joining directives:
+
+```text
+add-direct-play-profile(type=videoProfile&container=mkv,mp4,mpegts,avi,mov&videoCodec=h264,hevc,mpeg4,mpeg2video,vc1&audioCodec=aac,ac3,eac3,dca,truehd,flac,mp3,pcm&protocol=http)
++add-transcode-target(type=videoProfile&context=streaming&protocol=hls&container=mp4&videoCodec=h264,hevc&audioCodec=aac&replace=true)
++add-limitation(scope=videoAudioCodec&scopeName=*&type=upperBound&name=audio.channels&value=8&replace=true)
+```
+
+The broad codec/container lists are declarations, not an exhaustive playback
+matrix. The smallest tested working reduction retained two directive types;
+removing the HLS target was not tested, and absolute minimal lists across all
+codecs were not measured. The SDR control replaces
+the target's `videoCodec=h264,hevc` with `videoCodec=h264`.
+
+Common parameters: `path` (private metadata reference, never retained),
+`mediaIndex=0`, explicit `partIndex`, fresh `session`, `protocol=hls`, `offset`,
+`fastSeek=1`, `directPlay=1`, `directStream=1`, `directStreamAudio=1`,
+`maxVideoBitrate` and `videoBitrate` in kbps, `videoResolution=WIDTHxHEIGHT`,
+`videoQuality=100`, `audioChannelCount=8`, `subtitles=none`. The controlled
+audio-conversion case uses `directPlay=0`, `directStreamAudio=0`. No profile
+file or server setting was written. The
+[PMS API documentation](https://developer.plex.tv/pms/) describes request-local
+profile augmentations and `replace=true`; observations here remain specific
+to this PMS.
+
+### 4. Master and child structure
+
+| Case | Variants / renditions / other URI-bearing master tags | URIs and token-free children |
+| --- | --- | --- |
+| Started local transcodes | 1 / 0 / 0 | Relative, same origin; variant, fragmented-MP4 init and media segment succeed token-free. |
+| Direct Stream | 1 / 0 / 0 | Same structure; video copy/audio conversion; variant/init/segment succeed token-free. |
+| Non-local 8 and 4 Mbps | 1 / 0 / 0, all six runs | Relative, same origin; variant/init/segment succeed token-free. |
+| Keys | Absent | Encrypted HLS not tested. |
+| Selected subtitle masters | Not tested | Requested subtitle selection did not take effect; no conclusion about rendition masters. |
+
+The normalized variant path is exactly:
+
+```text
+/video/:/transcode/universal/session/<session>/base/index.m3u8
+```
+
+No inspected master/variant referred to another origin. These inspected
+masters satisfy the existing rule; this does not validate that rule for
+selected subtitle/audio renditions, encrypted HLS, other PMS versions or relay.
+Every native session load used node-map `loadfile`, a token-free variant,
+per-file `access-references=yes` and `curl-max-redirects=0`. No session was
+loaded with a token header and references enabled.
+
+### 5. Offset and position
+
+| Measurement | Result |
+| --- | --- |
+| Requested offset | 600 seconds; PMS `minOffsetAvailable` began near 600.017; playlist `EXT-X-START:TIME-OFFSET=600.000000`. |
+| Initial libmpv time-pos | 0.459 / 0.459 / 0.459 seconds (three runs). |
+| 20 seconds later | 20.437 / 20.521 / 20.479 seconds. |
+| libmpv duration at both observations | Matches full original duration, unchanged (delta 0); does not match original minus 600. Actual private item durations omitted by the task privacy rule. |
+| Start→advance | 6.496 / 6.647 seconds. |
+| Initial mapping | Program position ≈ requested offset + time-pos; program duration is the original duration, not offset + duration. Post-seek mapping is unresolved (question 6). |
+
+### 6. Seeking and offset restart
+
+| Operation on an offset-600 session | Advancing | Median / max seconds | Boundary |
+| --- | --- | --- | --- |
+| 30 s | 0/3 | 30.044 / 30.046 | 30 s advance deadline exceeded |
+| 0 s | 3/3 | 0.405 / 0.405 | advancing after seek |
+| 630 s | 0/3 | 30.011 / 30.025 | 30 s advance deadline exceeded |
+| 300 s | 3/3 | 20.631 / 20.796 | advancing after seek |
+| Restart 600→900, new_id | 3/3 | 6.571 / 6.591 | old ID explicitly stopped; absent after new start |
+| Restart 600→900, same_id | 3/3 | 6.618 / 6.700 | one entry using same ID; internal generation replacement not proven |
+
+The repeated seek sequence was 30→0→630→300 in native absolute time.
+Earlier single-run exploration reached 630 and 900 but failed at 300 and
+1200; it is not included in the repeated timing table. Position jumps alone
+did not establish successful seeks: failure cases had `time-pos` at the
+requested value but no advance. The repeated sequence changed PMS's available
+window, including a minimum near 30 seconds after seeking to 30, while native
+`demuxer-start-time` remained near 610.142. It therefore does not establish a
+stable source/session coordinate rule after seeking or a safe reachable range.
+Do not derive an in-session seek guarantee from the initial mapping. A new-ID
+restart remains the preferred measured path; decide the P3 policy before use.
+An additional untimed window control for each restart mode moved PMS's minimum
+from about 600.017 to 900.025 seconds, with native time-pos near 0.417 after
+the restart. The same-ID entry reflected the new window, but its internal
+transcoder generation cannot be distinguished from these listings.
+
+### 7. Multipart
+
+| Question | Result |
+| --- | --- |
+| Multipart item | No multipart item found in the movie/episode catalog scan (first Media only). |
+| partIndex, part start/end | Not tested; explicit partIndex=0 used for A/B. No multipart substitute was simulated. |
+
+### 8. Streams and subtitles
+
+| Probe | Observed result | Attempt start median / max seconds | Limit |
+| --- | --- | --- | --- |
+| Audio alternate | Requested selection not confirmed in 3/3 | 6.480 / 6.497 | needs server write / selection mechanism unresolved |
+| PGS with subtitles=burn | Requested selection not confirmed in 3/3 | 6.576 / 6.633 | needs server write / selection mechanism unresolved |
+| SRT with subtitles=auto | Requested selection not confirmed in 3/3 | 6.479 / 6.500 | needs server write / selection mechanism unresolved |
+| SRT with subtitles=burn | Requested selection not confirmed in 3/3 | 6.481 / 6.526 | needs server write / selection mechanism unresolved |
+| Original decision, audioStreamID / audioStreamIndex | Requested AAC stereo; selected E-AC-3 6 channels retained | not a stream-change latency | Both parameters ignored in bounded controls. |
+| Image burn-in confirmation | Not measured | not measured | No subtitleDecision or equivalent; zero native subtitle tracks does not prove burn-in. |
+| Text-subtitle delivery / token-free rendition / sub-add | Not tested | not measured | No selected text stream, rendition or sidecar was produced. |
+| Actual stream-change restart | Not tested | not measured | Timings above are unchanged-stream start attempts, not successful track changes. |
+
+Metadata stream selection remained unchanged for A/B in the before/after
+comparison. The documented alternative is `PUT /library/parts/{partId}`;
+**needs server write** is the boundary for completing these sub-items, not a
+claim that every undocumented per-request mechanism is impossible. No PUT was
+attempted. Selected-subtitle delivery and image burn-in remain unestablished.
+
+### 9. HDR→SDR
+
+| 1080p / 8 Mbps target for B | Decoded output | Start median / max seconds | Tone-mapping evidence |
+| --- | --- | --- | --- |
+| H.264/HEVC target | 1920 × 800, HEVC, BT.2020/PQ HDR | 6.075 / 6.325 | HDR preserved; enabling the server setting alone did not force SDR. |
+| H.264-only target | 1920 × 800, H.264, BT.709/BT.1886 SDR | 6.277 / 6.577 | SDR metadata confirmed; session listing has no tone-mapping attribution field. |
+| Visual fidelity | Not tested | not measured | Headless metadata cannot validate tone-mapped appearance or Dolby Vision/HDR presentation. |
+
+### 10. Keep-alive, pause, reaping and stop
+
+| Scenario | Observed result | Boundary |
+| --- | --- | --- |
+| Pause 2 min, no ping/timeline | PMS listed at resume: True; native advance: True | Once; default cache/read-ahead may still request segments. |
+| Pause 5 min, no ping/timeline | PMS listed at resume: False; native advance: True | Once; default cache/read-ahead may still request segments. |
+| Pause 10 min, no ping/timeline | PMS listed at resume: False; native advance: True | Once; default cache/read-ahead may still request segments. |
+| Ping every 30 s, no libmpv for 5 min | HTTP statuses [200]; listed: True; reload advances: True | Once; no segment client during the ping observation. |
+| Abandon after native stop, no PMS stop | 180.15 < reap ≤ 210.19 seconds | Once; 30-second listing interval. |
+| Stop active session twice | First statuses [200, 200, 200]; second statuses [200, 200, 200] | Three runs; cleanup confirmed absent. |
+| Stop request latency | First: 0.003 / 0.003; second: 0.002 / 0.003 | Each pair is median / maximum seconds over three runs. |
+
+**Keep-alive requirement:** the unpinged pause tests lost server state;
+cached native resumption does not establish continuing playback after cached
+segments are exhausted. A session ping kept state alive in the bounded test.
+Use a transcode ping for each live session, including pauses, and bounded restart recovery;
+30 seconds is the tested interval, not a measured minimum. No timeline writes
+are needed for the measured keep-alive case.
+
+### 11. Rapid tuning
+
+| Start index (three five-session batches) | Start→advance median / max seconds |
+| --- | --- |
+| 1 | 6.535 / 7.153 |
+| 2 | 6.517 / 6.565 |
+| 3 | 6.513 / 6.529 |
+| 4 | 6.553 / 6.563 |
+| 5 | 6.519 / 6.549 |
+
+All 15 starts advanced. Ordering was native stop/END_FILE → PMS stop →
+confirmed absence → next start, with no intervening original load within a
+batch. Peak sampled concurrency was one in every batch; no capacity refusal.
+The configured server limit and behavior at that limit are still not measured.
+Direct Play was checked after the batches rather than between their starts.
+
+### 12. Non-local and relay
+
+| Discovered local=false connection | Decision / playback | Output | Start median / max seconds | Sustainable playback check | Child probes |
+| --- | --- | --- | --- | --- | --- |
+| 1080p 8 | Transcode; 3/3 advance | 1788 × 1080; 7158 kbps decision target | 7.536 / 8.163 | 3 × 60 s; zero ≥2 s stalls and zero cache-pause samples | variant / init / segment: token-free in all runs |
+| 720p 4 | Transcode; 3/3 advance | 1192 × 720; 3419 kbps decision target | 7.184 / 7.277 | 3 × 60 s; zero ≥2 s stalls and zero cache-pause samples | variant / init / segment: token-free in all runs |
+
+Both non-local tiers retained the initial session-relative time-pos rule
+and full-original duration (unchanged over the observation). At 8 Mbps,
+initial time-pos was 0.500–0.542 and at 20 seconds 20.521–20.604; at 4 Mbps,
+0.459 and 20.479. Position advanced approximately 60 seconds during each
+60-second observation. This establishes tested playback headroom, not an
+independent network throughput measurement or support for an off-LAN client.
+
+The discovered non-local connection was used while on the LAN. PMS
+`/status/sessions` exposed no playback entries/location/bandwidth fields in
+these no-timeline probes, so its LAN/remote classification and agreement with
+Lineup's `local=false` flag are **not measured**. Discovery provided no relay
+connection: relay is **not tested**, with no simulation.
+
+**Proposed Remote default: 720p · 4 Mbps.** Both tested tiers sustained
+playback; 4 Mbps is the conservative proposed ceiling for an unmeasured remote
+uplink and is not a Plex-official default claim. The maintainer must confirm
+the product choice. The non-local original-file HTTP 503 reinforces treating
+a Direct Play decision and successful original playback as distinct results.
+
+### 13. Direct Play and reference restoration
+
+| Check | Result |
+| --- | --- |
+| Every recorded native restoration check | 132 final-client observations; 0 restored-to-no failures; 0 active stops missing END_FILE. |
+| Local original in same instance, without reference override | Advances; original remains access-references=no. Final ladder/ordinary session cleanup checked a subsequent original; rapid batches checked it afterwards. |
+| Corrected non-local original control | 0/3 advance; independent original HTTP range request is 503, no redirect. References remain no; END_FILE reason=4/error=-13. |
+| Exact per-END_FILE original-load procedure | Not followed at every intermediate restart/rapid/pause/abandon stop. Those stops checked restoration; originals were checked at final session cleanup or group boundaries. |
+| Containment / physical presentation | Existing feasibility evidence retained; no new off-origin fixture or physical Windows acceptance claimed here. |
+
+### Cleanup and evidence limits
+
+Both issuing clients ran finally cleanup over their in-memory ID lists
+(161 issued IDs in total, including decision-only IDs). Each also swept
+`/status/sessions` and `/transcode/sessions` for exposed synthetic identifiers.
+Final observation: **zero issued sessions remaining, zero attributable
+`lineup-p0-probe` entries, zero cleanup errors**. Session URLs/IDs were never
+persisted. Both temporary clients exited. The outside-repository harness and
+normalized scratch evidence remain: automatic approval review rejected their
+deletion with "blocked by policy," including a single-file deletion attempt.
+They contain no credentials, real session capabilities or private media
+identity, and are not included in the documentation commit.
+
+Limits: headless Windows only; one PMS version; one tested SDR movie and one
+HDR movie; local and discovered non-local connections on the LAN; multipart
+coverage as qualified in question 7; no relay,
+selected-subtitle delivery, encrypted HLS, actual capacity refusal,
+or physical presentation. Per-tier delayed native bitrate was not measured;
+full server limit context and PMS network classification were unavailable.
+The discovery/header departures and per-END_FILE original sampling are
+recorded above.
+No production code, existing plan decisions, Security design or CI gate changed.
+
+### Open issues for the maintainer
+
+1. **Stream selection and subtitles block the unchanged track plan.** The
+   tested start parameters do not choose alternate audio or subtitles. Resolve
+   a verified per-request mechanism, or explicitly decide whether server-side
+   stream preference writes are acceptable. Do not infer image burn-in or
+   text-subtitle master compatibility from masters with no selected subtitles.
+2. **Seeking needs a new agreed policy or stronger evidence.** Initial
+   time-pos is session-relative while duration is the full original, but seek
+   requests change PMS's available window and repeated forward seeks can time
+   out. Prefer new-session offset restart until the source-coordinate mapping
+   and safe in-session range are established. This contradicts assuming a
+   broadly usable in-session seek from the earlier 30-second feasibility case.
+3. **Choose HDR preservation versus SDR output in the client profile.** The
+   broad HEVC target retains HDR at 1080p; the H.264-only target produces SDR.
+   Tone-mapping attribution and visible fidelity remain physical acceptance.
+4. **Handle Direct Play decisions explicitly.** Calling the HLS start endpoint
+   after Direct Play OK gives 400. On the discovered non-local connection, the
+   original itself gives 503 even though both transcode tiers play. Server
+   cause/limits were not measured under the allowed preference-read scope.
+5. **Close context/coverage gaps before claiming support.** Confirm Plex Pass
+   and concurrency limit, capacity/unavailable error shapes, relay and
+   multipart when available, and selected-subtitle masters. Complete delayed
+   native bitrate cross-checks if per-tier live measurements are required;
+   the session listing did not expose live output bitrate.
+
+**P1 cannot start unchanged as an accepted full-plan handoff.** Its token-free
+transport/master path evidence is viable on the two tested connections, but
+the maintainer must accept the bounded evidence and settle stream-selection
+scope, seeking/position assumptions, HDR profile direction and the remaining
+product confirmations. The existing credential boundary must remain intact;
+no token fallback is proposed. No observed token-free child or master result
+contradicted the Security design. **Independent review is not specifically
+recommended for these results;** seek review if resolving a future subtitle
+or transport issue changes that design.
