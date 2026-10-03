@@ -1,5 +1,13 @@
 # Post-refresh maintenance
 
+> **Current workflow authority:** This record preserves its product scope,
+> completed work, and dated evidence. Its model assignments, sequential-task
+> rules, and review directives are historical execution policy. New or resumed
+> work follows [AGENTS.md](../AGENTS.md), [the project profile](../.agents/project.md),
+> and the shared skills. Parallel work is eligible when ownership and resources
+> permit it. This notice does not authorize dependency upgrades or other product
+> work, change UI approvals, or establish new platform acceptance.
+
 User authorization: improve Windows launch/package usability, repair the current
 non-golden CI failure, reduce goldens to a small useful set, and update dependencies
 as far as current compatibility evidence supports. Use sequential fresh Luna/xhigh

@@ -1,5 +1,18 @@
 # Collaborative desktop visual correction handoff
 
+> **Workflow transition:** The execution instructions below are a historical
+> campaign record. For new or resumed work, use [AGENTS.md](../AGENTS.md),
+> [the project profile](../.agents/project.md), and the shared skills. Model
+> rosters, Ponytail invocation, mandatory sequential dispatch, file-lease rituals, fixed review
+> batches, and old new-session prompts below do not override that workflow.
+> Independent tasks may run in parallel under explicit ownership and stable
+> integration/check conditions. This transition does not rescind approved
+> product or UI decisions, confer new visual approval, or change what the
+> recorded evidence actually observed. Consult the current interface system,
+> target specification, and approval ledger for still-applicable requirements.
+
+## Historical campaign text
+
 Active workflow requested September 9, 2026. This is a new **user-led visual
 correction pass**, not a restart of the original P0/implementation campaign.
 The original campaign handoff remains historical context; this document governs

@@ -29,9 +29,11 @@ reviews:
 
     - path: "test/**/*.dart"
       instructions: |
-        Require regression coverage for meaningful behavior changes. Prefer
-        public seams and stable behavior over private implementation probes,
-        duplicated constants, excessive mocks, or screenshot churn.
+        Use .agents/project.md and docs/DEVELOPMENT.md for verification policy
+        and available checks. Identify a credible unprotected regression before
+        requesting a new test. Different boundary obligations may need distinct
+        evidence; avoid duplicate proof, private probes, excessive mocks, and
+        screenshot churn. Do not require new tests for prose-only changes.
 
     - path: "windows/runner/**"
       instructions: |
@@ -70,5 +72,5 @@ reviews:
 knowledge_base:
   code_guidelines:
     filePatterns:
-      - files: "docs/DEVELOPMENT.md,docs/architecture.md"
+      - files: "AGENTS.md,.agents/project.md,docs/DEVELOPMENT.md,docs/architecture.md"
         applyTo: "**/*"

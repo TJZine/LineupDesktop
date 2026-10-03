@@ -1,110 +1,59 @@
 # Development
 
-Lineup Desktop work normally moves through five activities in one session:
+This document owns Lineup's toolchain, commands, build prerequisites, and
+evidence boundaries. Start at [AGENTS.md](../AGENTS.md) for agent workflow and
+the [project profile](../.agents/project.md) for task-specific routing. The
+shared skills own general implementation, design, review, and verification
+procedures; they do not require separate agents or sessions for each activity.
 
-1. **Inspect** the current flow, its owners, tests, and platform constraints.
-   Use `git show bfaee636748f2a0d442f3690b7ba5262d32ff17c:<path>` when the
-   preserved Electron implementation is provenance evidence. The mutable
-   `origin/electron-ui` branch is suitable only for non-evidentiary exploration.
-   Use `git show origin/initial-build:<path>` for the later historical Flutter
-   milestone only when that evidence is relevant.
-2. **Decide** the responsibility owner, dependency direction, failure behavior,
-   and proportionate proof before editing.
-3. **Implement** the smallest cohesive change that meets current requirements.
-   Delete displaced alternatives and keep commits coherent.
-4. **Verify** with fresh, observed evidence matched to the risk.
-5. **Self-review and close out** the complete diff, remaining platform limits,
-   and whether independent review is specifically worthwhile.
+Read the affected owner and relevant document sections; expand when a material
+question remains. Independent investigation, checks, and implementation may
+run in parallel when their contracts, ownership, worktrees or shared-tree
+write scopes, and runtime resources permit it. The controller owns Git
+integration and ensures checks observe a stable source state. Historical UI
+campaign handoffs do not prescribe model choices or review batches for new work.
 
-These are not mandatory separate agents, sessions, tracked plans, Tiers, or
-handoff formats. Independent review is optional and never launched
-automatically. Recommend it for novel security boundaries, credential or data
-loss risks, complex concurrency, native ABI/lifetime work, or Windows media and
-presentation changes whose proof deserves a second specialist.
-
-Read the relevant sections and affected owners first; broaden to callers, adjacent
-contracts, or complete documents when invariants or behavior remain unclear.
-Continue authorized implementation and repair failures caused by the change without
-requesting approval at each step. Ask when investigation leaves a consequential
-product, design, security, data-loss, or scope decision unresolved. Preserve existing
-UI design approvals in `.interface-design/system.md`.
-
-Reuse inspected verification results when the tested code, inputs, dependencies,
-and relevant environment are unchanged. Rerun affected checks when edits or
-integration invalidate them, and add proof for uncovered interactions. Nonbehavioral
-edits need only the relevant structural or formatting check. Physical Windows
-evidence requirements for native behavior and support claims remain unchanged.
-Once affected checks and required gates pass, continue to closeout. Broaden
-or repeat verification only when changed inputs, a failure, or a concrete
-unresolved risk justifies it.
+Use the task or PR's resolved target and base. For Electron provenance only,
+use `git show bfaee636748f2a0d442f3690b7ba5262d32ff17c:<path>`; the historical
+`initial-build` milestone is relevant only to an explicitly identified older
+observation. Neither historical branch is a compatibility target.
 
 ## Architecture practice
 
-Use a feature-oriented modular monolith. A feature owns its models, policies,
-state, and UI where that improves cohesion. The application bootstrap is the
-single composition root; dependencies point from that root into features and
-are passed explicitly through constructors. Avoid repeated
-`data/domain/presentation` ceremonies and generic `core` or `utils` dumping
-grounds. Local widget state stays local. Adopt one state-management package only
-when a concrete cross-feature asynchronous state graph shows a material
-debugging, testing, or correctness advantage over Flutter/Dart built-ins.
+[Architecture](architecture.md#accepted-ownership) owns the current
+Flutter/Dart and native responsibilities. Use the shared `design-code` skill
+when an unresolved domain or architecture decision warrants it. The project
+profile maps the affected owners and obligations; a coherent redesign may
+replace current private structure while preserving or explicitly migrating
+those obligations. Existing files, queues, and abstractions are not permanent
+design constraints merely because they already exist.
 
-Current requirements outrank hypothetical compatibility. Keep one owner per
-responsibility and make cancellation/currentness explicit for asynchronous
-work. Bound queues and caches whose inputs can grow.
-
-Apply SOLID, DRY, KISS, and YAGNI as design judgment:
-
-- Group behavior by shared invariants and reason to change. Split an independent
-  policy or resource lifetime when that improves ownership; file length alone
-  does not justify either splitting or accumulating responsibilities.
-- Keep one authoritative implementation of each business rule, such as schedule
-  resolution. Extract shared knowledge, not merely similar syntax whose callers
-  may evolve independently.
-- Keep interfaces small at real boundaries. Substitutes must preserve errors,
-  ordering, and cleanup as well as successful results. Prefer composition and
-  explicit collaborators; SOLID does not require an interface per class,
-  inheritance, or speculative extension points.
-- Prefer established repository and platform conventions. Judge simplicity by
-  readability and total maintenance cost, not the fewest lines or files.
-- Make scoped refactors and regression protection part of completing the change.
-  YAGNI rules out speculative capability, not work that keeps current code safe
-  to change. Remove obsolete paths replaced by the change; report concrete
-  remaining debt with its consequence rather than adding vague future-proofing.
-
-These interpretations use the maintainer's
-[SOLID/DRY/KISS reference](https://scalastic.io/en/solid-dry-kiss/),
-[Fowler's YAGNI clarification](https://martinfowler.com/bliki/Yagni.html), and
-[Google's design/complexity review guidance](https://google.github.io/eng-practices/review/reviewer/looking-for.html).
-They do not add a mandatory review pass or a new workflow.
+Preserve still-approved [UI decisions](../.interface-design/system.md) unless
+the current task authorizes changing them. Workflow maintenance alone does not
+approve a new visual direction or a platform migration.
 
 ## Quality and safety
 
-- Follow [the testing rules](../AGENTS.md#testing) and
-  [Flutter Test Design](../.agents/skills/flutter-test-design/SKILL.md) before
-  adding proof. Select the strongest owner of user-visible behavior; isolated
-  tests need a justified gap. Coverage is a local diagnostic, never a gate.
-- Evaluate each dependency for current need, activity, license, desktop support,
-  transitive cost, debuggability, and standard-library alternatives. Record
-  material license obligations before shipping bundled native libraries.
-- Never commit Plex credentials, authorization headers, tokenized media URLs,
-  private media metadata, or unredacted diagnostics. Diagnostic producers use
-  fixed messages and normalized structured facts; never log raw exceptions,
-  native messages, headers, or playback descriptors. Redaction is defense in
-  depth. Preserve the credential and diagnostic contracts in
-  [Architecture](architecture.md#implemented-now).
-- Keep scheduling deterministic and pure. Cancel or reject stale network and
-  playback results. Avoid blocking the UI isolate; measure before optimizing,
-  then isolate CPU-heavy work and bound large guide/channel workloads.
-- Use coherent conventional commits. Keep generated platform scaffolding with
-  the feature that requires it, and do not mix unrelated cleanup.
+Use the shared `verify-code` procedure and
+[project-specific verification selection](../.agents/project.md#verification-selection)
+to choose evidence. Coverage remains a local diagnostic, not a percentage gate.
+Existing risk-matched checks are reused until changed code, fixtures,
+dependencies, build settings, or relevant environment invalidate them.
+
+Preserve the credential, diagnostic, cancellation, and persistence contracts in
+[Architecture](architecture.md). Producers emit fixed safe messages and
+normalized facts; do not put tokens, tokenized URLs, raw exceptions, native
+messages, headers, or private media data in shared evidence. Redaction remains
+defense in depth. Native dependency changes retain their provenance, license,
+and redistribution obligations.
 
 ## Verification by task
 
-Choose the affected checks below; reuse still-current results under the rule
-above. Native behavior and support claims retain their exact-commit physical
-Windows requirements. Missing Windows evidence does not block unrelated
-portable work; report the specific unverified behavior and required scenario.
+Choose the affected checks below using the
+[evidence identity and reuse rules](../.agents/project.md#native-evidence-and-reuse).
+Native behavior and support claims require the relevant physical Windows
+evidence with its actual tested identity. Missing Windows evidence does not
+block unrelated portable work; report the specific unverified scenario.
 
 | Task or evidence | Prerequisites and checks | What the result establishes |
 | --- | --- | --- |
@@ -123,10 +72,11 @@ portable work; report the specific unverified behavior and required scenario.
 tests using `flutter_test`. The product-spine test uses fake Plex/native
 boundaries; `test_driver/ui_harness.dart` is a synthetic development composition
 root. Neither is an automated real-app E2E harness with checked artifacts;
-that harness is currently absent, and CI does not launch the app. Prefer E2E
-where feasible; for behavior impractical to automate, use the strongest existing
-widget/public-contract owner and state remaining platform acceptance. A missing
-harness alone is not evidence that E2E is infeasible.
+that harness is currently absent, and CI does not launch the app. Select
+additional evidence by the changed obligation and credible failure, using the
+shared verification procedure and existing owners in the project profile.
+Building a new harness requires an actual task need; these synthetic checks
+do not establish physical media, platform input, or package behavior.
 
 `flutter analyze` includes `test/`, `tool/visual/`, and `test_driver/` under the
 same analyzer configuration as `lib/`. There is no coverage-percentage floor;

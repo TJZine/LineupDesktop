@@ -1,5 +1,15 @@
 # Desktop proportional scaling pass
 
+> **Current workflow authority:** This document retains its product decisions,
+> approvals, scope constraints, and dated evidence. Historical execution policy
+> below does not activate Ponytail, select models, require sequential work,
+> prescribe worker leases or review batches, or prohibit independent review.
+> New or resumed work follows [AGENTS.md](../AGENTS.md),
+> [the project profile](../.agents/project.md), and the shared skills. Parallel
+> work is allowed when contracts, ownership, and runtime resources permit it.
+> This transition does not approve new product work or UI changes, remove an
+> acceptance gate, or turn a recorded observation into fresh verification.
+
 September 12, 2026. The user authorized preserving the approved overall
 composition across resolution and OS display scaling, with fresh sequential
 Luna implementation tasks. This extends the adaptive work; it does not reopen

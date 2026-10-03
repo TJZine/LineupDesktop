@@ -46,7 +46,7 @@ Completion means that:
   baseline, so any change to their structure or **data** needs matched renders
   and separate approval.
 - [Windows native acceptance](windows-native-validation.md).
-- [Flutter Test Design](../.agents/skills/flutter-test-design/SKILL.md).
+- [Verification selection](../.agents/project.md#verification-selection) and the shared `verify-code` skill.
 
 ## Evidence already established
 

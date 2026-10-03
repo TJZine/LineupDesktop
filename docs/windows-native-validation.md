@@ -10,8 +10,10 @@ package identity, media set, and transition results were not captured. The
 deeper campaign below remains the support/release record, not an urgent
 precondition for continuing product-completeness work.
 
-**Target:** The exact commit requested for acceptance. `flutter-mvp` is the
-default development branch, not a substitute for a requested feature commit.
+**Target:** Resolve the current task or PR's requested candidate to an exact
+commit. A historical development branch is not a substitute for that candidate.
+Record the actual tested identity and use the project profile when deciding
+whether earlier evidence remains relevant to a later candidate.
 
 This is the authoritative physical-Windows campaign for native presentation,
 libmpv playback, focus/input integration, and portable packaging. It is a
@@ -86,9 +88,10 @@ Safety rules:
 Use the full Windows prerequisites and pinned environment from
 [Development](DEVELOPMENT.md#patched-engine-provisioning). Before the campaign,
 select a clean checkout at the requested commit and put its full SHA below.
-If the request explicitly targets the latest `flutter-mvp`, fetch and
-fast-forward that branch during setup, then record the resolved SHA. Do not
-switch branches or update the checkout during acceptance.
+If the request targets a branch, resolve its intended current remote revision
+and prepare that exact candidate during setup, preserving unrelated local work.
+Record the resolved SHA. Do not switch branches or update the checkout during
+acceptance.
 
 ```powershell
 $Repo = 'C:\src\LineupDesktop'

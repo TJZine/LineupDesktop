@@ -1,5 +1,15 @@
 # Resume collaborative desktop UI review — surfaces 30–32
 
+> **Current workflow authority:** This document retains its product decisions,
+> approvals, scope constraints, and dated evidence. Historical execution policy
+> below does not activate Ponytail, select models, require sequential work,
+> prescribe worker leases or review batches, or prohibit independent review.
+> New or resumed work follows [AGENTS.md](../AGENTS.md),
+> [the project profile](../.agents/project.md), and the shared skills. Parallel
+> work is allowed when contracts, ownership, and runtime resources permit it.
+> This transition does not approve new product work or UI changes, remove an
+> acceptance gate, or turn a recorded observation into fresh verification.
+
 > Completed September12: surfaces30/31/32 are locked at1080p after the
 > user-authorized final fade adjustment, implementation `baec2d04`.
 > See the current approval ledger and
