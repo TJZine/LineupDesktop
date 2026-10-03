@@ -1,10 +1,12 @@
 # Plex Transcoding and Direct Stream Implementation Plan
 
-**Status:** Draft, revised after adversarial review and P0 evidence on 2026-10-03. The
-maintainer answered the first product decisions on 2026-10-03. Items marked
-**[confirm]** still need maintainer confirmation. The Settings design is a
-proposal awaiting design agreement. Nothing here is implemented, and P1 starts
-only after P0 evidence is accepted.
+**Status:** Product decisions settled on 2026-10-03, after adversarial review
+and P0 evidence. Still open:
+- the Settings design (a proposal awaiting design agreement);
+- the Remote default, to check against a current official app before P4;
+- P0b evidence.
+
+Nothing here is implemented. P1 starts after P0b.
 
 **Planning baseline:** `codex/libmpv-reference-security-report` at
 `510c91d2d8a30c12505e996a060241fb0862b649`.
@@ -88,12 +90,16 @@ The maintainer chose to match the official Plex apps. Plex's support site could
 not be read programmatically, so where this plan describes official-app
 behavior it is labelled an assumption until confirmed.
 
-1. **When to transcode: user-selected.** Automatic quality adjustment is out of
-   scope. **[confirm]** Whether **Original** skips the decision API (today's
-   Direct Play path), or asks for a decision like the official apps. Asking
-   lets the server enforce remote bitrate limits and per-user restrictions.
-   Recommended: ask for a decision only when the quality is below Original, and
-   record server limits as a P0 question.
+1. **Direct Play by default; transcode only by user choice: decided
+   2026-10-03.** Automatic quality adjustment is out of scope.
+   - **Original** (the default) always uses today's Direct Play path, with no
+     decision request.
+   - Below Original, Lineup asks for a decision, and still uses Direct Play
+     whenever the decision allows it (the original fits the chosen ceiling).
+   - Transcoding or Direct Stream happens only when the user has chosen a
+     lower quality and the decision requires it.
+   - Server-enforced remote limits are therefore not consulted at Original;
+     the maintainer accepted this trade-off.
 2. **Separate Home and Remote quality.** Lineup chooses by the connection's
    `local` flag; relay uses Remote. This is not identical to the server's own
    LAN classification, which uses the client IP and the server's "LAN networks"
@@ -114,9 +120,8 @@ behavior it is labelled an assumption until confirmed.
    - 720p at 4, 3 and 2 Mbps;
    - 480p at 1.5 Mbps.
 
-   **[confirm]** The maintainer supplies the official app's Remote Quality list
-   (e.g. a screenshot) to replace or confirm it. Tiers stay fixed regardless of
-   any one server; the server caps by source and capability.
+   **Decided 2026-10-03:** keep this proposed ladder. Tiers stay fixed
+   regardless of any one server; the server caps by source and capability.
 
    **Output codec and HDR: decided 2026-10-03.**
    - Follow the server's own setting. Lineup's transcode target always declares
@@ -161,11 +166,11 @@ behavior it is labelled an assumption until confirmed.
    each live session, including while paused. P0 measured reaping at about
    3–3.5 minutes without one. No timeline reports, so channel surfing never
    writes watch state.
-7. **Badges during a session. [confirm]** Source-format badges ("4K HDR10
-   TRUEHD 7.1") are misleading for a 1080p SDR AAC transcode. Showing output
-   format changes a protected surface, so it needs approval. Recommended:
-   source badges unchanged, plus the playback method in Diagnostics, until a
-   Player proposal is approved.
+7. **Badges during a session: decided 2026-10-03.** Keep source-format badges
+   unchanged, and report the playback method in Diagnostics. Showing output
+   format ("1080p SDR AAC" for a transcode of a "4K HDR10 TRUEHD 7.1" source)
+   changes a protected surface, so it is deferred to a separately approved
+   Player proposal.
 8. **Server can't transcode.** When the decision is transcoder at capacity,
    transcoding disabled, or 4K unsupported, show a clear Player error naming
    the cause, with Retry. Never silently fall back to Direct Play, because the
@@ -255,7 +260,7 @@ No production code. See the P0 handoff for the procedure. It must establish:
   the `local` flag, sustainable bitrate, and a proposed Remote default.
 - **Direct Play:** unchanged afterwards.
 
-Gate: the maintainer accepts the evidence and confirms the **[confirm]** items.
+Gate: the maintainer accepts the evidence and settles the product decisions.
 P0 ran on 2026-10-03 (see [P0 results](#2026-10-03-p0-results)); decisions 2–6
 were updated from it.
 
@@ -375,10 +380,9 @@ Direct Play path, to be fixed separately from transcoding.
 - Persist `homeStreamingQuality` and `remoteStreamingQuality` as optional
   `LineupSettings` fields with stable string keys (e.g. `original`,
   `1080p-8000`).
-- **[confirm]** An unknown key either quarantines the whole state, as strict
-  decoding does today, or falls back to `original`. Recommended: fallback for
+- **Decided 2026-10-03:** an unknown quality key falls back to `original`, for
   these two fields only, so a future ladder change cannot wipe channels and
-  selections.
+  selections. Every other field keeps strict decoding.
 - Add old-serialized-state and unknown-key cases to the store owner test
   (`test/persistence/app_store_test.dart`).
 - **Downgrade risk:** an older build rejects the new keys and quarantines the
