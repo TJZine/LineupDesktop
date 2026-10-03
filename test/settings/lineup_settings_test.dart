@@ -72,11 +72,12 @@ void main() {
     );
   });
 
-  test('rejects unsupported option and enum values', () {
+  test('rejects unsupported option, enum, and Boolean values', () {
     final canonical = const LineupSettings().toJson();
     for (final invalid in [
       {...canonical, 'guideHours': 5},
       {...canonical, 'theme': 'future-theme'},
+      {...canonical, 'reduceMotion': 1},
     ]) {
       expect(() => LineupSettings.fromJson(invalid), throwsFormatException);
     }

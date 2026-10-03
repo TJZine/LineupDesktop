@@ -721,20 +721,28 @@ void main() {
     }
   });
 
-  test('library sources reject a decade the app never generates', () {
-    expect(
-      () => ContentSource.fromJson({
+  test(
+    'library sources reject an ungenerated decade and non-Boolean flags',
+    () {
+      const valid = {
         'type': 'library',
         'libraryId': 'movies',
         'libraryType': 'movie',
         'includeWatched': true,
-        'filters': {
-          'decade': ['0990s'],
+      };
+      for (final invalid in [
+        {
+          ...valid,
+          'filters': {
+            'decade': ['0990s'],
+          },
         },
-      }),
-      throwsFormatException,
-    );
-  });
+        {...valid, 'includeWatched': 1},
+      ]) {
+        expect(() => ContentSource.fromJson(invalid), throwsFormatException);
+      }
+    },
+  );
 
   test('channel items reject mistyped persisted values', () {
     expect(
