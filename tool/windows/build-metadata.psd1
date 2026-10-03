@@ -13,7 +13,7 @@
 
   # Descriptive component revisions. Integrity hashes remain independently
   # pinned at each build consumer so generated provenance is never trusted.
-  MpvVersion = 'mpv-v0.41.0-1044-g14f2d48cb'
-  FfmpegVersion = 'N-126523-g884590dd4'
-  LibplaceboVersion = '7.371.0'
+  MpvVersion = 'mpv-v0.41.0-1092-g3186d369f'
+  FfmpegVersion = 'N-127094-gf68e1afc1'
+  LibplaceboVersion = '7.374.0'
 }

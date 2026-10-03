@@ -9,11 +9,11 @@ binaries; `tool/windows/prepare-mpv.ps1` downloads and verifies them.
 
 | Component | Exact source/build | License and distribution decision |
 | --- | --- | --- |
-| libmpv | mpv `v0.41.0-1044-g14f2d48cb`, full commit `14f2d48cbc7dda61adb4bd181e107a1f3f76e533`; configured with `-Dgpl=false`; DLL SHA-256 `B507529D99A4DFFDEAEC85ECEFF7661A7E3C6CA4EFD09C2014E11A1441B83EAA` | LGPL-2.1-or-later; selected for dynamic bundling with license, source/build links, and replacement permitted. |
-| FFmpeg | `N-126523-g884590dd4`, full commit `884590dd4aad5fcc7a91fbbb7af8a5da80b61d96`; successful LGPL x86-64 build reports `License: LGPL version 3 or later` | LGPLv3; statically combined into the replaceable libmpv DLL. Package the LGPLv3 and GPLv3 texts plus the exact source/build recipe. |
-| libplacebo | Embedded build version `7.371.0`; full source commit `3330a515d62139259c26239014f286e233bd3a5c` | LGPL-2.1-or-later; statically combined into the replaceable libmpv DLL. Package its license and exact source/build link. |
-| Windows build | zhongfly/mpv-winbuild commit `423ffd555dddc9b7fceae22eb303eebc2dc47574`, successful run `34692529514`, LGPL x86-64 job `103550228585` | Reproducible public build recipe. Its LGPL patch disables x264, x265, Rubber Band, DVD navigation, and other incompatible components while retaining decode, D3D11, gpu-next, hardware decode, HDR/tone mapping, and subtitles. |
-| Release asset | `mpv-dev-lgpl-x86_64-20260912-git-14f2d48cbc.7z` | SHA-256 `455965297BA3F5906A63CD2B219442685BE45528A1FE806E4B228147881E41CB`; pinned acquisition. |
+| libmpv | mpv `v0.41.0-1092-g3186d369f`, full commit `3186d369f9f090cd1363be0ac46a037824b702c6`; configured with `-Dgpl=false`; DLL SHA-256 `4BA364226FD2EA5DD2C6F2333F0118462DA549FEED92360FB766A3924E313A51` | LGPL-2.1-or-later; selected for dynamic bundling with license, source/build links, and replacement permitted. |
+| FFmpeg | `N-127094-gf68e1afc1`, full commit `f68e1afc1b7cf4275d09f1a9026ff80228cf99a8`; companion LGPL x86-64 FFmpeg executable reports LGPL version 3 or later | LGPLv3; statically combined into the replaceable libmpv DLL. Package the LGPLv3 and GPLv3 texts plus the exact source/build recipe. |
+| libplacebo | Embedded build version `7.374.0` (`v7.360.0-149-g92b5ac6-dirty`); base source commit `92b5ac6db79f4d680eb656692f7bf51e9606f42a` | LGPL-2.1-or-later; statically combined into the replaceable libmpv DLL. Package its license and exact source/build link. |
+| Windows build | zhongfly/mpv-winbuild commit `88bdc4db67bb476a7606921eb2d68b273440d59b`, successful run `37004200613`, LGPL x86-64 job `110828586306` | Reproducible public build recipe. Its LGPL patch disables x264, x265, Rubber Band, DVD navigation, and other incompatible components while retaining decode, D3D11, gpu-next, hardware decode, HDR/tone mapping, and subtitles. |
+| Release asset | `mpv-dev-lgpl-x86_64-20261002-git-3186d369f9.7z` | SHA-256 `322CB0040B97B15F97069F631F665FD63DA331CED92705F757DA13B99380DA5F`; pinned acquisition. |
 
 The release asset is monolithic. Its maintained build recipe includes the
 remaining permissive/LGPL codec, subtitle, color, archive, font, crypto, and
@@ -77,9 +77,9 @@ package excludes it.
 
 ## Source and license locations
 
-- mpv source and LGPL text: <https://github.com/mpv-player/mpv/tree/14f2d48cbc7dda61adb4bd181e107a1f3f76e533>
-- FFmpeg source, LGPLv3 text, and GPLv3 text: <https://github.com/FFmpeg/FFmpeg/tree/884590dd4aad5fcc7a91fbbb7af8a5da80b61d96>
-- libplacebo source and LGPL text: <https://github.com/haasn/libplacebo/tree/3330a515d62139259c26239014f286e233bd3a5c>
-- exact builder and LGPL patch: <https://github.com/zhongfly/mpv-winbuild/tree/423ffd555dddc9b7fceae22eb303eebc2dc47574>
-- exact successful build: <https://github.com/zhongfly/mpv-winbuild/actions/runs/34692529514>
+- mpv source and LGPL text: <https://github.com/mpv-player/mpv/tree/3186d369f9f090cd1363be0ac46a037824b702c6>
+- FFmpeg source, LGPLv3 text, and GPLv3 text: <https://github.com/FFmpeg/FFmpeg/tree/f68e1afc1b7cf4275d09f1a9026ff80228cf99a8>
+- libplacebo source and LGPL text: <https://github.com/haasn/libplacebo/tree/92b5ac6db79f4d680eb656692f7bf51e9606f42a>
+- exact builder and LGPL patch: <https://github.com/zhongfly/mpv-winbuild/tree/88bdc4db67bb476a7606921eb2d68b273440d59b>
+- exact successful build: <https://github.com/zhongfly/mpv-winbuild/actions/runs/37004200613>
 - Microsoft VC runtime redistribution terms: <https://learn.microsoft.com/en-us/visualstudio/releases/2022/redistribution>

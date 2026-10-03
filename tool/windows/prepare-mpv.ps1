@@ -28,9 +28,9 @@ function Invoke-DownloadWithRetry {
 
 $repository = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $metadata = Import-PowerShellDataFile -LiteralPath (Join-Path $repository 'tool/windows/build-metadata.psd1')
-$asset = 'mpv-dev-lgpl-x86_64-20260912-git-14f2d48cbc.7z'
-$sha256 = '455965297BA3F5906A63CD2B219442685BE45528A1FE806E4B228147881E41CB'
-$url = "https://github.com/zhongfly/mpv-winbuild/releases/download/2026-09-12-14f2d48cbc/$asset"
+$asset = 'mpv-dev-lgpl-x86_64-20261002-git-3186d369f9.7z'
+$sha256 = '322CB0040B97B15F97069F631F665FD63DA331CED92705F757DA13B99380DA5F'
+$url = "https://github.com/zhongfly/mpv-winbuild/releases/download/2026-10-02-3186d369f9/$asset"
 $Destination = [IO.Path]::GetFullPath($Destination)
 if (Test-Path -LiteralPath $Destination) {
   if (Get-ChildItem -LiteralPath $Destination -Force | Select-Object -First 1) {
@@ -69,7 +69,7 @@ if (-not (Test-Path -LiteralPath $header) -or -not (Test-Path -LiteralPath $dll)
 if ((Get-FileHash -Algorithm SHA256 -LiteralPath $header).Hash -ne
   '1ACF99EE77C8C2A6F1D1993BD81BBC8A91D27FB5924E80171670E6139A4BD353' -or
   (Get-FileHash -Algorithm SHA256 -LiteralPath $dll).Hash -ne
-  'B507529D99A4DFFDEAEC85ECEFF7661A7E3C6CA4EFD09C2014E11A1441B83EAA') {
+  '4BA364226FD2EA5DD2C6F2333F0118462DA549FEED92360FB766A3924E313A51') {
   throw 'The verified archive contents do not match the pinned Lineup runtime.'
 }
 
