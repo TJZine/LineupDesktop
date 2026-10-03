@@ -329,17 +329,20 @@ void main() {
       await tester.pumpWidget(_airCheck(controller, channel, clock: () => now));
       await tester.pumpAndSettle();
       await tester.ensureVisible(find.text('Show next 6 hours'));
+      await tester.pump();
       await tester.tap(find.text('Show next 6 hours'));
       await tester.pump();
       final futureRow = find.byKey(ValueKey('air-check-program-${future.id}'));
       await tester.scrollUntilVisible(
         futureRow,
-        240,
+        230,
         scrollable: find.descendant(
           of: find.byKey(const Key('air-check-schedule-list')),
           matching: find.byType(Scrollable),
         ),
       );
+      // scrollUntilVisible jumps both nested scrollables; lay out before tapping.
+      await tester.pump();
       await tester.tap(futureRow);
       await tester.pump();
       expect(

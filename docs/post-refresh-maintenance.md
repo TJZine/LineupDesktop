@@ -318,12 +318,24 @@ changed to hide a failure.
 | macOS alpha | `flutter test test/app/guide_opacity_test.dart` | Not run; macOS host unavailable |
 | Physical Windows | App/media/package scenarios below | Not run; no new supported-runtime claim |
 
-The full-suite failure is `channel_air_check_test.dart`, "Air Check hides
+The recorded full-suite failure was `channel_air_check_test.dart`, "Air Check hides
 ended retained entries and preserves a future inspection": a scroll/tap misses
 the intended row and the selection assertion fails. The complete original-lock
 suite fails identically (936/1), while the isolated case passes with both
 original and upgraded locks. This pre-existing Windows suite interaction was
-reported without broadening the dependency scope. The new raw Windows build still has an empty native-assets manifest, so
+reported without broadening the dependency scope. The scroll/tap fragility is
+resolved by the fix commit `test(air-check): flush scroll layout before tapping`
+(locate with `git show ':/flush scroll layout before tapping'`). On 2026-10-03,
+the original case, file, and full suite each passed three Windows runs; the
+historical 240-pixel-step failure did not reproduce. A 230-pixel-step fixture
+deterministically reproduced a tap using stale layout, including at `575ab62c`
+before the slimming changes. Pumping the layout after each visibility jump fixes
+that case without changing production behavior or assertions. Windows verification
+passed five consecutive file runs, seeds 17, 42, and 20261003, and the full portable
+suite (937 passed), plus analysis and changed-file formatting. These runs used
+Flutter 3.47.6 and the Windows Eastern timezone; macOS was unavailable.
+
+The new raw Windows build still has an empty native-assets manifest, so
 `dartjni.dll` remains excluded under the existing package policy. The two
 macOS-only alpha
 checks are excluded from this Windows suite; the 939 macOS baseline was not
