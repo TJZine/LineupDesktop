@@ -115,3 +115,78 @@ Lineup owns the decision to supply a Plex credential, but a Dart check of the in
 3. **Verify compatibility and confidentiality before release.** Use synthetic two-origin and same-origin HLS controls; add representative DASH, ordered-chapter, MOV-reference, archive, and sidecar cases where supported. Recheck real PMS part samples and physical Lineup playback against the exact new DLL hash and commit. Follow the relevant [Windows native acceptance](windows-native-validation.md) scenarios. Independent review is specifically recommended for any credential/header transport change.
 
 No fixture, harness, certificate, proxy, server, media copy, or synthetic credential from the tests was committed or retained. All temporary test processes were stopped and the created temporary directories were removed. The initial test left the pre-existing three documentation edits unchanged. This report and its documentation-index link are the only intended changes in the report commit.
+
+
+## 2026-10-03 addendum: refreshed Windows runtime
+
+The dependency refresh was rechecked at Lineup commit
+`978b5eb2b8cece501ec13224d1ac209d20e97e4c` on Windows x64 using the
+baseline x86-64 LGPL dev asset from the
+[2026-10-02 release](https://github.com/zhongfly/mpv-winbuild/releases/tag/2026-10-02-3186d369f9).
+The original evidence above is unchanged.
+
+| Refreshed runtime identity | Verified value |
+| --- | --- |
+| mpv build | `v0.41.0-1092-g3186d369f` |
+| mpv source commit | `3186d369f9f090cd1363be0ac46a037824b702c6` |
+| `libmpv-2.dll` SHA-256 | `4BA364226FD2EA5DD2C6F2333F0118462DA549FEED92360FB766A3924E313A51` |
+| Release archive SHA-256 | `322CB0040B97B15F97069F631F665FD63DA331CED92705F757DA13B99380DA5F` |
+
+A recreated temporary C++ harness used the verified header, generated MSVC
+import library, and exact new DLL. It retained the initial experiment's null
+outputs, TLS verification, temporary CA, per-file option map, and synthetic
+MPEG-TS/HLS fixture. Both HTTPS servers bound only to loopback, on different
+ports. No real Plex credential or media was used. Options were checked for
+successful acceptance. Each run had a 12-second event deadline and an
+18-second process timeout. Playlist handoffs were followed through the final
+file outcome rather than treating `MPV_END_FILE_REASON_REDIRECT` as a completed
+playback result. Request observations contained only origin, fixture path,
+counts, and synthetic-token-seen booleans; full headers were not captured.
+
+| Cross-origin HLS case | A requests | A synthetic token seen | B segment requests | B synthetic token seen | Null-output harness outcome |
+| --- | ---: | --- | ---: | --- | --- |
+| Per-file header, `curl-max-redirects=0`, default references | 1 | Yes | 1 | **Yes** | Loaded; normal end |
+| No-header control | 1 | No | 1 | No | Loaded; normal end |
+| `access-references=no` | 1 | Yes | 0 | No | Did not load; error end |
+| `demuxer-lavf-propagate-opts=no` | 1 | Yes | 1 | **Yes** | Loaded; normal end |
+| `curl-enabled=no` | 1 | Yes | 1 | **Yes** | Loaded; normal end |
+| Both preceding switches | 1 | Yes | 1 | No | Loaded; normal end after playlist handoff |
+
+A second fixture pointed the segment back to A and required the synthetic
+header on both the manifest and segment. It established the compatibility
+control that a token-free cross-origin request alone does not establish:
+
+| Authenticated same-origin HLS case | Segment requests | Segment synthetic token seen | Null-output harness outcome |
+| --- | ---: | --- | --- |
+| Current options/default references | 1 | Yes | Loaded; normal end |
+| No-header control | 0 | No | Manifest rejected; error end |
+| `access-references=no` | 0 | No | Did not load; error end |
+| `demuxer-lavf-propagate-opts=no` | 1 | Yes | Loaded; normal end |
+| `curl-enabled=no` | 1 | Yes | Loaded; normal end |
+| Both preceding switches | 1 | No | Segment rejected; error end |
+
+For a direct comparison, the same completed harness and fixtures were rerun
+against the original DLL after verifying its recorded SHA-256. All six
+credential/playback outcomes in each fixture were the same. Request patterns
+changed: the old DLL fetched the cross-origin fixture's manifest twice for
+default references and the option-switch cases, while the new DLL fetched it
+once. With both switches, the old DLL made three token-free B segment requests
+and the new DLL made one. This is consistent with
+[the HLS/DASH stream-open change](https://github.com/mpv-player/mpv/commit/13a4bfbc1a184c0576ca69c2de486a972aeb2407),
+which removes the duplicate manifest fetch; the request counts are observations
+of this fixture, not a general request-count contract.
+
+**The libmpv bump did not fix the nested-reference finding or change the tested
+credential-delivery outcomes.** Default references still sent the synthetic
+per-file credential to B. Neither single switch scoped it, and the combined
+switches also removed the credential needed for authenticated same-origin
+playback. No production option, security fix, or fix design was changed.
+
+This is executed Windows DLL/harness evidence, not physical Lineup playback,
+HDR, audio output, DirectComposition, fullscreen, input, or package acceptance.
+Practical Plex library reachability and the original evidence limits remain
+unproven. Separate options research and the maintainer's decision still precede
+any remediation. Independent review is specifically recommended for the
+runtime/provenance bump and this security re-check. The temporary servers were
+stopped, and the harness, fixtures, certificates, keys, and synthetic value
+were removed after recording these normalized results.
