@@ -200,7 +200,9 @@ def main():
                     counts = (len(a.requests), len(b.requests))
                 passed = (result.returncode == 0 and not a.failed and not b.failed and a_token and not b_token and
                           not sidecar_token and
-                          (positive is None or (outcomes.get("progressed") == "1" if positive else outcomes.get("rejected") == "1")))
+                          (positive is None or
+                           ((outcomes.get("progressed") == "1" and outcomes.get("rejected") == "0")
+                            if positive else outcomes.get("rejected") == "1")))
                 if name == "vobsub":
                     passed = passed and not sidecar_token
                 if name == "hls-same-origin":
