@@ -101,7 +101,7 @@ behavior it is labelled an assumption until confirmed.
    Remote default comes from P0 evidence.
 3. **Quality ladder: proposed, not confirmed official.** The ladder matches
    PlexKodiConnect's own
-   [transcode quality list](https://github.com/croneter/PlexKodiConnect/blob/master/resources/settings.xml):
+   [transcode quality list](https://github.com/croneter/PlexKodiConnect/blob/aab8dbf3945e194b6bb4122f188f4ac2cfe8aaec/resources/settings.xml#L1058-L1077):
    - Original;
    - 4K at 50 and 35 Mbps;
    - 1080p at 40, 20, 12, 10 and 8 Mbps;
@@ -175,7 +175,7 @@ behavior it is labelled an assumption until confirmed.
   - it has exactly one variant (`EXT-X-STREAM-INF`);
   - it has no `EXT-X-MEDIA` renditions and no other URI-bearing master tags;
   - the variant resolves to the validated server (`_isSameServerUri`), under
-    the transcoder session path;
+    the transcoder session path prefix recorded in P0;
   - it is HTTPS, with no user info and no `X-Plex-Token` query.
 
   Refuse anything else as a session error. P0 records whether real Plex masters
@@ -283,8 +283,10 @@ Gate: the maintainer accepts the evidence and confirms the **[confirm]** items.
     bounded restart, then a Player error.
 - **Session lifecycle.** For replace, channel change, program end, stop and
   dispose:
-  - order: native stop (END_FILE) → PMS stop (bounded) → next start, so a
-    single-transcode server limit cannot reject the new start;
+  - order: native stop (END_FILE) → PMS stop → next start. Bound the PMS stop
+    to about 2 s before a **session** start, so a single-transcode server limit
+    cannot reject the new start. A Direct Play load never waits for it, and an
+    unreachable PMS delays a session tune by at most that bound;
   - orphaned sessions after a crash or network loss rely on PMS reaping, with
     the time P0 measured;
   - stops include decision-only calls if P0 shows they create state.
