@@ -104,5 +104,31 @@ target_include_directories(track_list_encoder_test PRIVATE "${LINEUP_MPV_INCLUDE
 target_link_libraries(track_list_encoder_test PRIVATE flutter_wrapper_app)
 add_test(NAME track_list_encoder COMMAND track_list_encoder_test)
 
+# Explicit opt-in only: real pinned DLL, synthetic loopback HTTPS fixtures.
+add_executable(authenticated_reference_test EXCLUDE_FROM_ALL
+  "authenticated_reference_test.cpp"
+  "track_list_encoder.cpp"
+)
+apply_standard_settings(authenticated_reference_test)
+target_compile_definitions(authenticated_reference_test PRIVATE "NOMINMAX")
+target_include_directories(authenticated_reference_test PRIVATE "${LINEUP_MPV_INCLUDE_DIR}")
+target_link_libraries(authenticated_reference_test PRIVATE
+  flutter_wrapper_app "${LINEUP_MPV_LIBRARY}" "dwmapi.lib")
+add_custom_command(TARGET authenticated_reference_test POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    "${LINEUP_MPV_DLL}" "$<TARGET_FILE_DIR:authenticated_reference_test>")
+find_program(LINEUP_REFERENCE_PYTHON NAMES python python3)
+if(NOT LINEUP_REFERENCE_PYTHON)
+  # Keep production builds independent of test tools, but never silently omit
+  # the requested test when its Python prerequisite is missing.
+  set(LINEUP_REFERENCE_PYTHON "python")
+endif()
+add_test(NAME authenticated_reference
+  COMMAND "${LINEUP_REFERENCE_PYTHON}"
+    "${CMAKE_SOURCE_DIR}/../tool/windows/authenticated-reference-test.py"
+    --harness "$<TARGET_FILE:authenticated_reference_test>"
+    --dll "${LINEUP_MPV_DLL}")
+set_tests_properties(authenticated_reference PROPERTIES TIMEOUT 180)
+
 # Run the Flutter tool portions of the build. This must not be removed.
 add_dependencies(${BINARY_NAME} flutter_assemble)

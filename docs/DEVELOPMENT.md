@@ -143,6 +143,38 @@ cmake --build .\build\windows\x64 --config Release --target track_list_encoder_t
 ctest --test-dir .\build\windows\x64 -C Release -R '^track_list_encoder$' --output-on-failure --timeout 30
 ```
 
+The gated `authenticated_reference_test` target compiles the production native
+player and drives its existing method channel against the exact prepared DLL.
+It is `EXCLUDE_FROM_ALL`, with no CI gate change. Python 3, an FFmpeg executable
+with the `libx264` encoder and DASH muxer, and OpenSSL are required. Put them on
+PATH before configuring/running CTest; the runner also recognizes Git for
+Windows' bundled OpenSSL. `LINEUP_MPV_ROOT` must be the prepared pinned runtime.
+No Python packages or system trust-store changes are needed.
+
+```powershell
+cmake --build .\build\windows\x64 --config Release --target authenticated_reference_test
+ctest --test-dir .\build\windows\x64 -C Release -R '^authenticated_reference$' --repeat until-fail:3 --verbose --timeout 180
+```
+
+The test verifies both prepared and copied DLL hashes, creates authenticated
+loopback HTTPS fixtures and a temporary CA, and leaves TLS verification enabled.
+Test-local forwarding around libmpv creation/initialization supplies only the CA
+and null audio/video outputs; the production option list and authenticated
+`loadfile` command are reused directly. The hidden window and supplied engine
+marker allow the channel boundary to run without a live Flutter engine. This
+does not validate presentation, hardware, real Plex playback, or packaging.
+Option-rejection injection exercises fail-closed initialization, and an
+untrusted-CA control verifies TLS refusal. All subprocesses, native observation
+waits, socket operations and server joins are bounded; an overall 150-second
+runner deadline leaves cleanup time before CTest's 180-second timeout.
+Only normalized request counts, token-presence booleans and playback outcomes
+are emitted. Servers, media, keys and certificates are removed after each run.
+The [dated reference mitigation record](libmpv-authenticated-reference-investigation.md#2026-10-03-mitigation-disable-reference-following)
+records the before/after evidence and source-audit limits. To reproduce the
+negative comparison locally, remove only the two reference-hardening options,
+rebuild the same test target, observe containment failure, then restore them and
+rebuild. Do not distribute or commit that unhardened configuration.
+
 ## Portable commands
 
 Flutter SDK `3.47.6` (revision
