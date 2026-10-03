@@ -25,6 +25,9 @@ abstract interface class NativePlayer {
   /// `X-Plex-Token` request header. They must not follow redirects while the
   /// header is attached unless every target is proven to retain the original
   /// HTTPS origin. They must never log it or append it to [media].
+  /// Windows disables libmpv reference following and automatic external-file
+  /// loading. Nested-reference media (including same-server HLS, DASH, MOV
+  /// references, and external-segment ordered chapters) is unsupported.
   Future<void> load(Uri media, {String? plexToken, int? generation});
   Future<void> play();
   Future<void> pause();

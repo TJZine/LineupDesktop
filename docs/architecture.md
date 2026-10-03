@@ -172,6 +172,11 @@ is emergency cleanup, not the normal path. See
   from the URL and is applied as a per-load header, never as a global mpv
   credential option. Authenticated mpv loads reject redirects because custom
   headers can otherwise follow them; Dart Plex requests also disable redirects.
+  Windows sets `access-references=no` and `autoload-files=no` globally and fails
+  initialization if either is rejected. Nested references, including same-server
+  HLS/DASH, MOV references, and ordered chapters requiring external segments,
+  are unsupported. These options do not implement an origin-scoped transport;
+  see the [bounded reference audit](libmpv-authenticated-reference-investigation.md).
   Preserve native header-buffer clearing after command execution and queue
   cleanup. See [Dart load validation](../lib/playback/windows_native_player.dart),
   [native load options](../windows/runner/native_player.cpp), and the
