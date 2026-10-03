@@ -177,6 +177,17 @@ is emergency cleanup, not the normal path. See
   HLS/DASH, MOV references, and ordered chapters requiring external segments,
   are unsupported. These options do not implement an origin-scoped transport;
   see the [bounded reference audit](libmpv-authenticated-reference-investigation.md).
+  **Planned, not implemented:** Plex transcode and Direct Stream HLS/DASH
+  sessions will use a Dart-selected per-load reference policy. Direct Play
+  keeps references off; only Plex transcoder session playlists on the same
+  validated server receive per-file `access-references=yes`, restored by mpv
+  on unload. `autoload-files=no` remains global. Extend the gated
+  `authenticated_reference` test with authenticated session playback and
+  restoration after completion, stop and replacement when this is built,
+  retaining containment for Direct Play originals. The
+  [per-load feasibility check](libmpv-authenticated-reference-investigation.md#2026-10-03-per-load-reference-policy-feasibility)
+  establishes headless HLS feasibility, not implemented transcoding or
+  physical Windows acceptance.
   Preserve native header-buffer clearing after command execution and queue
   cleanup. See [Dart load validation](../lib/playback/windows_native_player.dart),
   [native load options](../windows/runner/native_player.cpp), and the

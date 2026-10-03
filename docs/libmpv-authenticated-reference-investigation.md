@@ -305,3 +305,193 @@ channels; controlled reference-bearing rejection/containment and recovery.
 Representative ordered-chapter and MOV library items were not physically
 tested. **Independent review is specifically recommended** because this change
 modifies the credential boundary. Nothing was pushed and no CI gate changed.
+
+## 2026-10-03 per-load reference policy feasibility
+
+**Purpose and scope:** test whether planned Plex transcode/Direct Stream
+session loads can enable references per file while Direct Play retains the
+global hardening. The application still implements Direct Play originals only;
+no production source, permanent harness, runtime pin or CI gate changed.
+Execution used checkout `de27f033655095d8f0a6ee46fb9024a27b6dfe7a` and the pinned
+Windows DLL with SHA-256
+`4BA364226FD2EA5DD2C6F2333F0118462DA549FEED92360FB766A3924E313A51`.
+Only this record and the architecture note are committed for this task.
+
+### Check 1: option lifetime and synthetic containment
+
+The source trace at mpv `3186d369f9f090cd1363be0ac46a037824b702c6` is:
+
+1. [`cmd_loadfile`](https://github.com/mpv-player/mpv/blob/3186d369f9f090cd1363be0ac46a037824b702c6/player/command.c#L6474)
+   copies the command's option pairs into the new playlist entry. The
+   `loadfile` node-map option argument therefore belongs to that entry.
+2. [`load_per_file_options`](https://github.com/mpv-player/mpv/blob/3186d369f9f090cd1363be0ac46a037824b702c6/player/loadfile.c#L1253)
+   sets those pairs with `M_SETOPT_BACKUP`; its
+   [call at line 1866](https://github.com/mpv-player/mpv/blob/3186d369f9f090cd1363be0ac46a037824b702c6/player/loadfile.c#L1866)
+   precedes `open_demux_reentrant`. The
+   [configuration setter](https://github.com/mpv-player/mpv/blob/3186d369f9f090cd1363be0ac46a037824b702c6/options/m_config_frontend.c#L408)
+   saves the old value and marks the option local.
+3. [`access-references`](https://github.com/mpv-player/mpv/blob/3186d369f9f090cd1363be0ac46a037824b702c6/demux/demux.c#L114)
+   is a boolean demux option with no global-only restriction. The new demuxer's
+   [configuration snapshot](https://github.com/mpv-player/mpv/blob/3186d369f9f090cd1363be0ac46a037824b702c6/demux/demux.c#L3539)
+   supplies `opts->access_references` to `demuxer->access_references` at line
+   3558. [Lavf initialization](https://github.com/mpv-player/mpv/blob/3186d369f9f090cd1363be0ac46a037824b702c6/demux/demux_lavf.c#L1498)
+   chooses `nested_io_open` when true and `block_io_open` when false.
+4. The common
+   [unload path](https://github.com/mpv-player/mpv/blob/3186d369f9f090cd1363be0ac46a037824b702c6/player/loadfile.c#L2094)
+   destroys the demuxer and calls `m_config_restore_backups` at line 2132,
+   before emitting `END_FILE`. The
+   [restore implementation](https://github.com/mpv-player/mpv/blob/3186d369f9f090cd1363be0ac46a037824b702c6/options/m_config_frontend.c#L213)
+   reinstates the saved value and clears the local flag.
+   [`stop`](https://github.com/mpv-player/mpv/blob/3186d369f9f090cd1363be0ac46a037824b702c6/player/command.c#L6638)
+   sets `PT_STOP`; replacement uses
+   [`mp_set_playlist_entry`](https://github.com/mpv-player/mpv/blob/3186d369f9f090cd1363be0ac46a037824b702c6/player/loadfile.c#L2322)
+   and `PT_CURRENT_ENTRY`. Both reach that unload path, including cancellation
+   while opening. Its explicit same-entry internal-reload exception preserves
+   options for that logical file; it does not apply to these new-entry loads.
+
+The traced source regions were compared with the pinned upstream files.
+Runtime evidence used a temporary standalone Python/ctypes libmpv client,
+permitted by this feasibility task, rather than modifying the gated test or
+production player. It read the production initialization option list directly
+from the unchanged `native_player.cpp`, substituting null video/audio outputs
+and suppressing raw diagnostics. Presentation/window creation was omitted.
+All options were checked for acceptance. Authenticated loads used the production
+five-argument `loadfile` node form, per-file `http-header-fields` and
+`curl-max-redirects=0`; only authorized fixture/session loads added per-file
+`access-references=yes`. Globally, `access-references=no`, `autoload-files=no`
+and `tls-verify=yes` remained set.
+
+The synthetic run reused the gated runner's fixture/certificate helpers: two
+loopback HTTPS origins, a temporary CA, verification enabled, synthetic token
+only and generated H.264 MPEG-TS. A required the token on both manifests and
+segments. The blocked manifest referenced a segment at B and another at A.
+All cases below used **one mpv instance in this order**. Mid-load stop followed
+observed position advancement; pre-ready replacement gated the first manifest
+response until the replacement command had been issued. Unload completion was
+observed through `END_FILE`, not just stop-command acceptance or `idle-active`,
+which can precede option restoration.
+
+| Case | A / B requests | A token seen | A segment requests / token seen | B token seen | Outcome |
+| --- | --- | --- | --- | --- | --- |
+| a: same-origin HLS, per-file override | 2 / 0 | Yes | 1 / Yes | No | Played to normal completion; references restored to No |
+| b: next reference-bearing HLS, no override | 1 / 0 | Yes | 0 / No | No | Rejected; neither A nor B segment requested |
+| c: repeat a, stop mid-load | 2 / 0 | Yes | 1 / Yes | No | Stopped; references restored to No |
+| c: following b, no override | 1 / 0 | Yes | 0 / No | No | Rejected; neither referenced segment requested |
+| c: overridden a replaced before ready by b without override | 2 / 0 | Yes | 0 / No | No | Replacement rejected; no segment requested; references restored to No |
+| d: local HLS manifest with matching subtitle, reference override only | 1 / 0 | Yes | 1 / Yes | No | `autoload-files` remained No; no external subtitle discovered |
+| d: discovery positive control, temporary per-file autoload override | 1 / 0 | Yes | 1 / Yes | No | Matching subtitle discovered; both options restored to No after stop |
+
+For d, a local copy of the manifest referenced authenticated HTTPS segments at A
+and had a generated matching `.srt` beside it. The positive control established
+that the subtitle was discoverable: track count changed from one to two only
+with the additional temporary per-file `autoload-files=yes`. That control is
+not the planned application policy. The source's independent
+[`autoload_files` guard](https://github.com/mpv-player/mpv/blob/3186d369f9f090cd1363be0ac46a037824b702c6/player/loadfile.c#L1081)
+also remains unaffected by reference permission.
+
+Native event waits were bounded to 5–18 seconds, the held server response to
+8 seconds, socket operations to 3 seconds, fixture subprocesses to 30 seconds
+and server joins to 3 seconds. The temporary clients terminated, both HTTPS
+servers stopped, and generated media, certificate/key material and fixtures
+were removed. No trust-store changes were made.
+
+### Check 2: authorized local PMS sessions
+
+The maintainer authorized this check's in-memory, read-only use of the locally
+stored Plex credential. The temporary client verified that the HTTPS endpoint's
+identity matched the installed local PMS before authenticated discovery.
+Requests disabled redirects, checked the exact scheme/host/port, and supplied
+the credential only as a header to that PMS. No credential went to a synthetic
+test origin, Plex.tv or another server. No credential, private media identifiers,
+raw playlist, real segment bytes or native diagnostics were written by the
+client or retained as evidence. One ordinary library item served both variants.
+
+Each variant first used the universal decision API, then
+`/video/:/transcode/universal/start.m3u8` with `protocol=hls`, a stable synthetic
+client identifier and its own synthetic session identifier. Transcode used
+`directPlay=0`, `directStream=0`, `maxVideoBitrate=2000` and reduced quality.
+Direct Stream used `directPlay=0`, `directStream=1` and original-quality limits.
+The returned decision was checked, rather than inferring Direct Stream from
+the request flag alone.
+
+The temporary client initially advertised an incomplete transcode target;
+those decision-only requests returned video transcode for the Direct Stream
+variant and were not counted as Direct Stream playback. The
+[PMS profile augmentation contract](https://developer.plex.tv/pms/)
+requires `replace=true` to replace an existing target. Correcting that
+request-local declaration to advertise the supported HLS fragmented-MP4 video
+format yielded a video-copy decision for the same item. No server preference
+or library metadata was changed. Subtitle delivery was disabled for the final
+session probes; subtitle playlists and burn-in compatibility were not exercised.
+
+| Variant | Decision | Normalized playlist structure | Other origin referenced | Subtitle playlist present |
+| --- | --- | --- | --- | --- |
+| Transcode | Video transcode; audio transcode | Start returned a master; relative variant and MPEG-TS segment URLs, all resolving to the same PMS origin | No | No |
+| Direct Stream | Video copy; audio transcode | Start returned a master; relative variant, fragmented-MP4 initialization and media-segment URLs, all resolving to the same PMS origin | No | No |
+
+Direct Stream here proves video-preserving remux with audio conversion; it does
+not prove an audio-copy-only remux. Every manifest URI line and URI-bearing tag
+in the inspected master/variant playlists was checked before libmpv loading.
+Actual URLs, session paths and media durations are omitted from this record.
+
+A separate HTTP client made authenticated and token-free probes. The
+token-free client had no Plex headers, cookies or authenticated connection
+state. The booleans below apply to these generated URLs after authenticated
+session start, on this PMS; they are not a universal Plex authentication rule.
+The start query still contained the synthetic client/session identifiers, which
+did not substitute for its token.
+
+| Request type | Transcode: with token succeeds | Transcode: token required | Transcode: session URL without token succeeds | Direct Stream: with token succeeds | Direct Stream: token required | Direct Stream: session URL without token succeeds |
+| --- | --- | --- | --- | --- | --- | --- |
+| Start/master | Yes | Yes | No | Yes | Yes | No |
+| Variant playlist | Yes | No | Yes | Yes | No | Yes |
+| Media segment | Yes | No | Yes | Yes | No | Yes |
+| Initialization resource | Not present | Not present | Not present | Yes | No | Yes |
+
+The pinned libmpv used the same production-equivalent global options and
+per-file header/redirect map described above, null video/audio outputs and the
+reference override for each session playlist. It left TLS verification enabled
+using the PMS's normally trusted HTTPS certificate.
+
+| Variant | Playback over a 30-second observation; position advanced at least 25 seconds | Forward seek by 30 seconds | Stop observed through END_FILE | Subsequent Direct Play original in the same instance, no override | References restored to No |
+| --- | --- | --- | --- | --- | --- |
+| Transcode | Yes | Yes | Yes | Yes; position advanced | Yes |
+| Direct Stream | Yes | Yes | Yes | Yes; position advanced | Yes |
+
+The forward seek completed with `seeking` false and playback advancing more
+than two seconds beyond its target within a bounded observation. Both loads
+also retained `autoload-files=no`. The final combined run used one mpv instance
+for both session/original sequences. Each transcode session was observed in
+`/transcode/sessions`, stopped through
+`/video/:/transcode/universal/stop?session=<synthetic-id>`, and confirmed absent
+from `/transcode/sessions` afterward. Cleanup also covered the earlier
+transcode proof and the decision-only attempts; final session absence was
+confirmed, and neither synthetic session left a PMS transcode scratch
+directory. The client retained no media. HTTP operations were bounded to
+15 seconds, file readiness to 25 seconds, seek to 20 seconds, stop to 10 seconds
+and server-release observation to 12 seconds. All temporary clients and
+harness files were removed after recording normalized outcomes.
+
+### Conclusion and remaining limits
+
+**The per-load design is viable for the tested HLS sessions as specified:**
+Direct Play keeps references off, and explicitly authorized PMS-generated
+session playlists can enable them per file without carrying permission into
+later loads. No production mitigation needs to be removed for this feature.
+The future implementation must identify actual transcoder session loads in
+Dart and extend the gated `authenticated_reference` test as named in
+[Architecture](architecture.md#implemented-now). This task does not implement
+that policy, session management or transcode selection.
+
+This is pinned-DLL headless evidence on Windows, **not physical acceptance**
+for Lineup, video/audio presentation, DirectComposition, HDR, focus/input,
+fullscreen or packages. Real DASH, subtitle playlists, encrypted HLS, other
+PMS versions/items/topologies and all codec combinations were not exercised.
+mpv's enabled reference option is not an origin filter; the observed
+same-origin generated playlists do not establish such a filter or guarantee
+the structure of every future PMS playlist. Authentication observations are
+limited to the tested server/session lifecycle.
+
+**Independent review is not specifically recommended for these docs-only
+changes.** Review remains appropriate when the future implementation changes
+the credential boundary. Nothing was pushed and no CI gate changed.
