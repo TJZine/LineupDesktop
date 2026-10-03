@@ -56,7 +56,7 @@ regions reveal it. Frames do not cross the Dart boundary and are not copied
 through a Flutter texture. The native baseline explicitly requests
 `vo=gpu-next`, the D3D11 GPU API/context, and `hwdec=auto`.
 
-Stock Flutter 3.47.4 does not request ANGLE's DirectComposition EGL window
+Stock Flutter 3.47.6 does not request ANGLE's DirectComposition EGL window
 surface mode, so it cannot provide the required transparent composition
 reliably. Lineup therefore owns the single-file patch in
 `tool/flutter_engine`, targeting the exact framework and engine identities in
@@ -172,6 +172,22 @@ is emergency cleanup, not the normal path. See
   from the URL and is applied as a per-load header, never as a global mpv
   credential option. Authenticated mpv loads reject redirects because custom
   headers can otherwise follow them; Dart Plex requests also disable redirects.
+  Windows sets `access-references=no` and `autoload-files=no` globally and fails
+  initialization if either is rejected. Nested references, including same-server
+  HLS/DASH, MOV references, and ordered chapters requiring external segments,
+  are unsupported. These options do not implement an origin-scoped transport;
+  see the [bounded reference audit](libmpv-authenticated-reference-investigation.md).
+  **Planned, not implemented:** Plex transcode and Direct Stream HLS/DASH
+  sessions will use a Dart-selected per-load reference policy. Direct Play
+  keeps references off; only Plex transcoder session playlists on the same
+  validated server receive per-file `access-references=yes`, restored by mpv
+  on unload. `autoload-files=no` remains global. Extend the gated
+  `authenticated_reference` test with authenticated session playback and
+  restoration after completion, stop and replacement when this is built,
+  retaining containment for Direct Play originals. The
+  [per-load feasibility check](libmpv-authenticated-reference-investigation.md#2026-10-03-per-load-reference-policy-feasibility)
+  establishes headless HLS feasibility, not implemented transcoding or
+  physical Windows acceptance.
   Preserve native header-buffer clearing after command execution and queue
   cleanup. See [Dart load validation](../lib/playback/windows_native_player.dart),
   [native load options](../windows/runner/native_player.cpp), and the

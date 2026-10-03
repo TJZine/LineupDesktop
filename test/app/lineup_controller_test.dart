@@ -1140,27 +1140,52 @@ void main() {
 
   test('replace falls back near a removed generated current channel', () async {
     final custom = _channel('custom');
-    final removed = _generatedChannel('removed', 2);
-    final replacement = _generatedChannel('replacement', 3);
-    final controller = LineupController(
-      store: _MemoryStore(),
-      credentials: _MemoryCredentials(),
-      plex: _FakePlex(),
-    );
-    addTearDown(controller.dispose);
-    await controller.initialize();
-    controller
-      ..connection = _server('server').connections.single
-      ..availableMedia = [_playableMovie]
-      ..channels = [custom, removed]
-      ..currentChannelId = removed.id;
+    final cases = [
+      (
+        name: 'old index beyond the shorter lineup selects the last channel',
+        old: [
+          _generatedChannel('old-generated', 2),
+          _generatedChannel('removed', 3),
+        ],
+        planned: [_generatedChannel('replacement', 4)],
+        expected: 'replacement',
+      ),
+      (
+        name: 'old index inside the new lineup keeps its position',
+        old: [
+          _generatedChannel('removed', 2),
+          _generatedChannel('old-generated', 3),
+        ],
+        planned: [
+          for (var number = 4; number <= 6; number++)
+            _generatedChannel('replacement-$number', number),
+        ],
+        expected: 'replacement-4',
+      ),
+    ];
 
-    await controller.applyChannelPlan([
-      replacement,
-    ], mode: ChannelBuildMode.replace);
+    for (final row in cases) {
+      final controller = LineupController(
+        store: _MemoryStore(),
+        credentials: _MemoryCredentials(),
+        plex: _FakePlex(),
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+      controller
+        ..connection = _server('server').connections.single
+        ..availableMedia = [_playableMovie]
+        ..channels = [custom, ...row.old]
+        ..currentChannelId = 'removed';
 
-    expect(controller.channels, [custom, replacement]);
-    expect(controller.currentChannelId, replacement.id);
+      await controller.applyChannelPlan(
+        row.planned,
+        mode: ChannelBuildMode.replace,
+      );
+
+      expect(controller.channels, [custom, ...row.planned], reason: row.name);
+      expect(controller.currentChannelId, row.expected, reason: row.name);
+    }
   });
 
   test(

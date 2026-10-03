@@ -172,7 +172,7 @@ comparing. Differing movie/episode fixtures previously confused review: explicit
 match content when comparing artwork enabled/disabled or backgrounds.
 
 Pinned tools:
-`/Users/tristan/.cache/lineup-flutter/3.47.2/flutter/bin/flutter`
+`<pinned Flutter SDK>/bin/flutter` (Flutter 3.47.2 at the time; see `docs/DEVELOPMENT.md`)
 (and sibling dart). Run TZ=America/New_York, --no-pub.
 Use existing meaningful behavior tests, focused analysis/format/diff checks.
 NO new UI layout tests/goldens. Do not run broad suites repeatedly for tiny changes.

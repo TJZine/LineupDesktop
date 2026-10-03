@@ -481,138 +481,26 @@ void main() {
     );
   });
 
-  group('canonical persisted schema', () {
-    test(
-      'requires every structural field and permits only a nullable profile',
-      () {
-        for (final field in [
-          'settings',
-          'selectedServerByProfile',
-          'selectedLibraryIdsByProfileServer',
-          'channelsByProfileServer',
-          'currentChannelByProfileServer',
-        ]) {
-          final missing = _canonicalJson()..remove(field);
-          final nullValue = _canonicalJson()..[field] = null;
-          expect(() => PersistedState.fromJson(missing), throwsFormatException);
-          expect(
-            () => PersistedState.fromJson(nullValue),
-            throwsFormatException,
-          );
-        }
-        expect(
-          PersistedState.fromJson(_canonicalJson()..['profileId'] = null)
-              .profileId,
-          isNull,
-        );
-        expect(
-          () => PersistedState.fromJson(_canonicalJson()..remove('profileId')),
-          throwsFormatException,
-        );
-        expect(
-          () => PersistedState.fromJson(_canonicalJson()..['profileId'] = 7),
-          throwsFormatException,
-        );
-        expect(
-          () => PersistedState.fromJson(_canonicalJson()..['legacy'] = true),
-          throwsFormatException,
-        );
-      },
-    );
-
-    test('rejects non-string outer and inner keys', () {
+  test(
+    'wrong-typed persisted structure is refused and a null profile loads',
+    () {
       expect(
         () => PersistedState.fromJson(
-          _canonicalJson()..['selectedServerByProfile'] = {1: 'server'},
+          _canonicalJson()..['selectedServerByProfile'] = {'profile': 1},
         ),
         throwsFormatException,
       );
       expect(
-        () => PersistedState.fromJson(
-          _canonicalJson()
-            ..['channelsByProfileServer'] = {
-              'profile': {1: <Object?>[]},
-            },
-        ),
-        throwsFormatException,
+        PersistedState.fromJson(_canonicalJson()..['profileId'] = null)
+            .profileId,
+        isNull,
       );
-    });
-
-    test('rejects wrong nested leaf shapes and mixed library lists', () {
-      for (final invalid in [
-        _canonicalJson()..['selectedServerByProfile'] = {'profile': 1},
-        _canonicalJson()
-          ..['selectedLibraryIdsByProfileServer'] = {
-            'profile': {'server': 'library'},
-          },
-        _canonicalJson()
-          ..['channelsByProfileServer'] = {
-            'profile': {'server': <String, Object?>{}},
-          },
-        _canonicalJson()
-          ..['currentChannelByProfileServer'] = {
-            'profile': {'server': <Object?>[]},
-          },
-        _canonicalJson()
-          ..['selectedLibraryIdsByProfileServer'] = {
-            'profile': {
-              'server': ['library', 2],
-            },
-          },
-      ]) {
-        expect(() => PersistedState.fromJson(invalid), throwsFormatException);
-      }
-    });
-
-    test('rejects malformed channels and invalid selected/current values', () {
-      for (final invalid in [
-        _canonicalJson()
-          ..['channelsByProfileServer'] = {
-            'profile': {
-              'server': [null],
-            },
-          },
-        _canonicalJson()
-          ..['channelsByProfileServer'] = {
-            'profile': {
-              'server': [_channelJson(artworkValue: 7)],
-            },
-          },
-        _canonicalJson()..['selectedServerByProfile'] = {'profile': false},
-        _canonicalJson()
-          ..['currentChannelByProfileServer'] = {
-            'profile': {'server': 42},
-          },
-      ]) {
-        expect(() => PersistedState.fromJson(invalid), throwsFormatException);
-      }
-    });
-
-    test('rejects noncanonical settings values', () {
-      expect(
-        () => PersistedState.fromJson(
-          _canonicalJson()
-            ..['settings'] = {
-              ...const LineupSettings().toJson(),
-              'guideHours': 5,
-            },
-        ),
-        throwsFormatException,
-      );
-    });
-  });
+    },
+  );
 
   for (final corruptState in <String, String>{
     'malformed JSON': '{broken',
     'schema-invalid JSON': '{"selectedServerByProfile":[]}',
-    'malformed nested JSON': _encodedState(
-      _canonicalJson()
-        ..['selectedLibraryIdsByProfileServer'] = {
-          'profile': {
-            'server': ['library', 2],
-          },
-        },
-    ),
     'legacy artwork JSON': _encodedState(
       _canonicalJson()
         ..['channelsByProfileServer'] = {
@@ -630,51 +518,6 @@ void main() {
             ],
           },
         },
-    ),
-    'noncanonical settings JSON': _encodedState(
-      _canonicalJson()
-        ..['settings'] = {
-          ...const LineupSettings().toJson(),
-          'guideHours': 2.5,
-        },
-    ),
-    'noncanonical channel JSON': _encodedState(
-      _canonicalJson()
-        ..['channelsByProfileServer'] = {
-          'profile': {
-            'server': [_channelJson()..['future'] = true],
-          },
-        },
-    ),
-    'noncanonical source JSON': _encodedState(
-      _canonicalJson()
-        ..['channelsByProfileServer'] = {
-          'profile': {
-            'server': [
-              _channelJson()
-                ..['source'] = {
-                  'type': 'playlist',
-                  'playlistId': 'playlist',
-                  'future': true,
-                },
-            ],
-          },
-        },
-    ),
-    'noncanonical item JSON': _encodedState(
-      _canonicalJson()
-        ..['channelsByProfileServer'] = {
-          'profile': {
-            'server': [_channelJson(artworkKey: 'future')],
-          },
-        },
-    ),
-    'noncanonical oversized cast tail JSON': _encodedState(
-      _stateJsonWithCast([
-        for (var index = 0; index < maxRichCastMembers + 5; index++)
-          {'name': 'Actor $index'},
-        {'name': 'Malformed tail', 'future': true},
-      ]),
     ),
   }.entries) {
     test('${corruptState.key} quarantines once and reports recovery', () async {

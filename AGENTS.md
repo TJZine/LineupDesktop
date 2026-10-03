@@ -22,6 +22,21 @@ to adjacent contracts or the full document when a material question remains.
   the change. Resolve routine uncertainty from source and existing decisions; ask
   only for consequential unresolved choices outside the approved scope. Preserve
   collaborative approval of new UI direction and protected design changes.
+- Explicit user instructions take precedence over skill guidelines. Reuse
+  authorization already granted for the current scope. If a skill requires
+  pausing authorized work, link and quote the exact instruction and explain
+  the unresolved decision; do not infer an approval gate from general advice.
+- Treat follow-up questions and corrections as steering the active task
+  unless the user cancels or replaces it. Preserve the objective, approvals,
+  completed work, and remaining checks across interruptions and compaction.
+  Answer side questions, then resume authorized work.
+- Keep progress updates focused on findings, decisions, and blockers.
+  Close out with the outcome, relevant verification, and material limits;
+  use plain language and avoid repeated plans or administrative checklists.
+- Delegate only when the user or an applicable active workflow authorizes it.
+  Preserve configured models, reasoning settings, and cost-based assignment.
+  Use bounded ownership and parallel work only when independent work exists
+  and the active workflow permits it.
 - Use Codanna for unknown native-code owners, callers, and impact when available;
   confirm important results in source and use `rg`/direct reads for exact queries.
   Codanna does not currently parse Dart, so never treat its native-only index as
@@ -46,3 +61,12 @@ to adjacent contracts or the full document when a material question remains.
   personal paths, or unredacted logs/screenshots in documentation or evidence.
 - Independent review is user-controlled, never automatic. At closeout, state
   whether independent review is specifically recommended.
+
+## Testing
+
+- Prefer real-app E2E on generated/fixture inputs with a checked artifact where feasible; otherwise use the strongest widget/public-contract owner and name remaining physical acceptance; gate heavy runtimes.
+- Before adding a test, identify its user-visible behavior, credible failing regression, gap in existing E2E/owner coverage, and need for a test-only production seam; if the gap has no answer or the seam is needed, do not add it.
+- Give each user-visible behavior one strongest, least-faked owner test; add a parameter row only for a distinct case that some mutation fails while the existing cases do not.
+- A bug regression must fail on the pre-fix code, once, at the highest seam that reproduces the bug.
+- Assertions on internals are never a reason for a test to exist.
+- Load `.agents/skills/flutter-test-design/SKILL.md` before writing, changing or reviewing tests.

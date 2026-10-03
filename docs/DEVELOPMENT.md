@@ -34,6 +34,9 @@ and relevant environment are unchanged. Rerun affected checks when edits or
 integration invalidate them, and add proof for uncovered interactions. Nonbehavioral
 edits need only the relevant structural or formatting check. Physical Windows
 evidence requirements for native behavior and support claims remain unchanged.
+Once affected checks and required gates pass, continue to closeout. Broaden
+or repeat verification only when changed inputs, a failure, or a concrete
+unresolved risk justifies it.
 
 ## Architecture practice
 
@@ -77,9 +80,10 @@ They do not add a mandatory review pass or a new workflow.
 
 ## Quality and safety
 
-- Test pure policies and public seams. Add widget/integration/manual proof when
-  behavior depends on focus, accessibility, rendering, lifecycle, or native
-  platform integration. Do not use brittle tests merely to increase coverage.
+- Follow [the testing rules](../AGENTS.md#testing) and
+  [Flutter Test Design](../.agents/skills/flutter-test-design/SKILL.md) before
+  adding proof. Select the strongest owner of user-visible behavior; isolated
+  tests need a justified gap. Coverage is a local diagnostic, never a gate.
 - Evaluate each dependency for current need, activity, license, desktop support,
   transitive cost, debuggability, and standard-library alternatives. Record
   material license obligations before shipping bundled native libraries.
@@ -113,17 +117,75 @@ portable work; report the specific unverified behavior and required scenario.
 | Native player contract / C++ integration | Dart adapter/coordinator tests, lifetime/currentness inspection, Windows C++ toolchain and prepared libmpv; `flutter build windows` | Contract and stock-engine compile/link proof; not a runnable or packageable Lineup player |
 | Patched engine / portable package | Full Windows provisioning below; release wrapper and [package acceptance](windows-native-validation.md#8-portable-package-acceptance) | Artifact-bound build/package checks; launch, media, HDR, layering, fullscreen, input, and support claims require [physical Windows acceptance](windows-native-validation.md) |
 
+### Current test tiers and gaps
+
+`test/` contains Dart policy, boundary, widget, and public-seam integration
+tests using `flutter_test`. The product-spine test uses fake Plex/native
+boundaries; `test_driver/ui_harness.dart` is a synthetic development composition
+root. Neither is an automated real-app E2E harness with checked artifacts;
+that harness is currently absent, and CI does not launch the app. Prefer E2E
+where feasible; for behavior impractical to automate, use the strongest existing
+widget/public-contract owner and state remaining platform acceptance. A missing
+harness alone is not evidence that E2E is infeasible.
+
+`flutter analyze` includes `test/`, `tool/visual/`, and `test_driver/` under the
+same analyzer configuration as `lib/`. There is no coverage-percentage floor;
+`TZ=America/New_York flutter test --coverage` is available for local diagnosis.
+Optional visual suites run explicitly as described below. Native runtime and
+hardware proof follows [physical Windows acceptance](windows-native-validation.md).
+
+The assertion-based `track_list_encoder_test` CTest target exercises the real
+encoder, not the app. It is excluded from the default build and is not run in
+CI. After configuring the Windows build with the prerequisites below, run:
+
+```powershell
+cmake --build .\build\windows\x64 --config Release --target track_list_encoder_test
+ctest --test-dir .\build\windows\x64 -C Release -R '^track_list_encoder$' --output-on-failure --timeout 30
+```
+
+The gated `authenticated_reference_test` target compiles the production native
+player and drives its existing method channel against the exact prepared DLL.
+It is `EXCLUDE_FROM_ALL`, with no CI gate change. Python 3, an FFmpeg executable
+with the `libx264` encoder and DASH muxer, and OpenSSL are required. Put them on
+PATH before configuring/running CTest; the runner also recognizes Git for
+Windows' bundled OpenSSL. `LINEUP_MPV_ROOT` must be the prepared pinned runtime.
+No Python packages or system trust-store changes are needed.
+
+```powershell
+cmake --build .\build\windows\x64 --config Release --target authenticated_reference_test
+ctest --test-dir .\build\windows\x64 -C Release -R '^authenticated_reference$' --repeat until-fail:3 --verbose --timeout 180
+```
+
+The test verifies both prepared and copied DLL hashes, creates authenticated
+loopback HTTPS fixtures and a temporary CA, and leaves TLS verification enabled.
+Test-local forwarding around libmpv creation/initialization supplies only the CA
+and null audio/video outputs; the production option list and authenticated
+`loadfile` command are reused directly. The hidden window and supplied engine
+marker allow the channel boundary to run without a live Flutter engine. This
+does not validate presentation, hardware, real Plex playback, or packaging.
+Option-rejection injection exercises fail-closed initialization, and an
+untrusted-CA control verifies TLS refusal. All subprocesses, native observation
+waits, socket operations and server joins are bounded; an overall 150-second
+runner deadline leaves cleanup time before CTest's 180-second timeout.
+Only normalized request counts, token-presence booleans and playback outcomes
+are emitted. Servers, media, keys and certificates are removed after each run.
+The [dated reference mitigation record](libmpv-authenticated-reference-investigation.md#2026-10-03-mitigation-disable-reference-following)
+records the before/after evidence and source-audit limits. To reproduce the
+negative comparison locally, remove only the two reference-hardening options,
+rebuild the same test target, observe containment failure, then restore them and
+rebuild. Do not distribute or commit that unhardened configuration.
+
 ## Portable commands
 
-Flutter SDK `3.47.4` (revision
-`9584c6713b324636289d067944a46fd6b49df14b`, Dart `3.13.3`) is the reproducible
+Flutter SDK `3.47.6` (revision
+`5fc346839b5d0eef006ed8404392afb4dfae428d`, Dart `3.13.5`) is the reproducible
 toolchain for macOS, Windows, and CI.
 
 Select the exact Flutter checkout rather than a different SDK already on PATH:
 
 ```sh
 git clone https://github.com/flutter/flutter.git /path/to/flutter
-git -C /path/to/flutter checkout 9584c6713b324636289d067944a46fd6b49df14b
+git -C /path/to/flutter checkout 5fc346839b5d0eef006ed8404392afb4dfae428d
 export PATH=/path/to/flutter/bin:$PATH
 flutter doctor -v
 ```
@@ -218,7 +280,7 @@ x86-64 LGPL libmpv directory before configuring the application:
 
 ```powershell
 Set-Location C:\path\to\LineupDesktop
-$mpvRoot = 'C:\local\lineup-mpv-20260912-14f2d48cbc' # New or empty directory.
+$mpvRoot = 'C:\local\lineup-mpv-20261002-3186d369f9' # New or empty directory.
 & .\tool\windows\prepare-mpv.ps1 -Destination $mpvRoot
 $env:LINEUP_MPV_ROOT = $mpvRoot
 flutter build windows
@@ -239,7 +301,7 @@ package machines also need a GPU driver or Vulkan Runtime providing
 When the pinned runtime changes, provision it into a fresh unique destination;
 do not reuse or overwrite an older prepared directory. Rebuild the Lineup
 application against the new runtime. This refresh also upgrades Flutter to
-3.47.4, so reprovision its patched `host_debug` and `host_release` outputs
+3.47.6, so reprovision its patched `host_debug` and `host_release` outputs
 before launching or packaging; the older SDK outputs cannot be reused.
 
 ### Patched engine provisioning
@@ -297,7 +359,7 @@ in the current session as well:
 
 ```powershell
 $engineSource = 'C:\path\to\flutter\engine\src'
-$mpvRoot = 'C:\local\lineup-mpv-20260912-14f2d48cbc'
+$mpvRoot = 'C:\local\lineup-mpv-20261002-3186d369f9'
 [Environment]::SetEnvironmentVariable('LINEUP_ENGINE_SOURCE', $engineSource, 'User')
 [Environment]::SetEnvironmentVariable('LINEUP_MPV_ROOT', $mpvRoot, 'User')
 $env:LINEUP_ENGINE_SOURCE = $engineSource
@@ -347,7 +409,7 @@ package the portable application:
 
 ```powershell
 Set-Location C:\path\to\LineupDesktop
-$env:LINEUP_MPV_ROOT = 'C:\local\lineup-mpv-20260912-14f2d48cbc'
+$env:LINEUP_MPV_ROOT = 'C:\local\lineup-mpv-20261002-3186d369f9'
 .\tool\windows\build-release.ps1 -EngineSource 'C:\path\to\flutter\engine\src'
 .\tool\windows\package.ps1
 ```

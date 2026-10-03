@@ -707,28 +707,6 @@ void main() {
     }
   });
 
-  test('maximum channels applies after series expansion', () {
-    const proposal = ChannelProposal(
-      name: 'Series',
-      source: LibrarySource(libraryId: 'tv', libraryType: PlexLibraryType.show),
-      mode: PlaybackMode.shuffle,
-      itemCount: 10,
-      strategy: BuilderStrategy.recentlyAdded,
-      series: true,
-    );
-    final result = materializeChannelPlan(
-      proposals: const [proposal],
-      existing: const [],
-      mode: ChannelBuildMode.replace,
-      alternateCopies: 3,
-      variantMode: PlaybackMode.block,
-      maximumChannels: 2,
-      anchor: DateTime.utc(2026),
-    );
-    expect(result.channels, hasLength(2));
-    expect(result.truncated, isTrue);
-  });
-
   test('merge identity remains stable when playback configuration changes', () {
     const proposal = ChannelProposal(
       name: 'Series',

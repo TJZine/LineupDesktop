@@ -151,23 +151,20 @@ void main() {
   ) async {
     final controller = _AirController(controlled: true);
     addTearDown(controller.dispose);
-    final key = GlobalKey<ChannelAirCheckState>();
     final first = _channel(items: [_item('one')]);
     final second = _channel(items: [_item('two')]);
     final latest = _channel(items: [_item('three')]);
 
-    await tester.pumpWidget(_airCheck(controller, first, key: key));
-    expect(key.currentState!.activeRequestCount, 1);
-    await tester.pumpWidget(_airCheck(controller, second, key: key));
+    await tester.pumpWidget(_airCheck(controller, first));
+    expect(controller.requests, 1);
+    await tester.pumpWidget(_airCheck(controller, second));
     await tester.pump(
       channelAirCheckDebounce + const Duration(milliseconds: 1),
     );
-    await tester.pumpWidget(_airCheck(controller, latest, key: key));
+    await tester.pumpWidget(_airCheck(controller, latest));
     await tester.pump(
       channelAirCheckDebounce + const Duration(milliseconds: 1),
     );
-    expect(key.currentState!.activeRequestCount, 1);
-    expect(key.currentState!.pendingRequestCount, 1);
     expect(controller.requests, 1);
 
     controller.completeNext();
@@ -175,6 +172,7 @@ void main() {
     expect(controller.requests, 2);
     controller.completeNext();
     await tester.pump();
+    expect(controller.requests, 2);
     expect(find.text('Three'), findsWidgets);
     expect(find.text('One'), findsNothing);
     expect(find.text('Two'), findsNothing);
@@ -185,24 +183,16 @@ void main() {
   ) async {
     final controller = _AirController(controlled: true);
     addTearDown(controller.dispose);
-    final key = GlobalKey<ChannelAirCheckState>();
     final channel = _channel(items: [_item('latest')]);
-    await tester.pumpWidget(_airCheck(controller, channel, key: key));
+    await tester.pumpWidget(_airCheck(controller, channel));
     await tester.pumpWidget(
-      _airCheck(
-        controller,
-        channel,
-        key: key,
-        sourceIssue: 'Incomplete source choice',
-      ),
+      _airCheck(controller, channel, sourceIssue: 'Incomplete source choice'),
     );
-    await tester.pumpWidget(_airCheck(controller, channel, key: key));
+    await tester.pumpWidget(_airCheck(controller, channel));
     await tester.pump(
       channelAirCheckDebounce + const Duration(milliseconds: 1),
     );
 
-    expect(key.currentState!.activeRequestCount, 1);
-    expect(key.currentState!.pendingRequestCount, 1);
     expect(controller.requests, 1);
     controller.completeNext();
     await tester.pump();
@@ -218,17 +208,17 @@ void main() {
   ) async {
     final controller = _AirController(controlled: true);
     addTearDown(controller.dispose);
-    final key = GlobalKey<ChannelAirCheckState>();
     final channel = _channel(items: [_item('one')]);
-    await tester.pumpWidget(_airCheck(controller, channel, key: key));
+    await tester.pumpWidget(_airCheck(controller, channel));
     controller.generation++;
-    await tester.pumpWidget(_airCheck(controller, channel, key: key));
+    await tester.pumpWidget(_airCheck(controller, channel));
     await tester.pump(
       channelAirCheckDebounce + const Duration(milliseconds: 1),
     );
-    expect(key.currentState!.pendingRequestCount, 1);
+    expect(controller.requests, 1);
     controller.completeNext();
     await tester.pump();
+    expect(controller.requests, 2);
     controller.failNext(StateError('synthetic worker failure'));
     await tester.pump();
     expect(find.textContaining('could not verify'), findsOneWidget);
@@ -339,17 +329,20 @@ void main() {
       await tester.pumpWidget(_airCheck(controller, channel, clock: () => now));
       await tester.pumpAndSettle();
       await tester.ensureVisible(find.text('Show next 6 hours'));
+      await tester.pump();
       await tester.tap(find.text('Show next 6 hours'));
       await tester.pump();
       final futureRow = find.byKey(ValueKey('air-check-program-${future.id}'));
       await tester.scrollUntilVisible(
         futureRow,
-        240,
+        230,
         scrollable: find.descendant(
           of: find.byKey(const Key('air-check-schedule-list')),
           matching: find.byType(Scrollable),
         ),
       );
+      // scrollUntilVisible jumps both nested scrollables; lay out before tapping.
+      await tester.pump();
       await tester.tap(futureRow);
       await tester.pump();
       expect(
@@ -432,7 +425,6 @@ void main() {
     var now = DateTime.utc(2026, 1, 1, 0, 10);
     final controller = _AirController();
     addTearDown(controller.dispose);
-    final key = GlobalKey<ChannelAirCheckState>();
     final channel = _channel(items: [_item('one'), _item('two')]);
     final schedule = buildSchedule(
       (channel.source as ManualSource).items,
@@ -449,9 +441,7 @@ void main() {
       ),
     );
 
-    await tester.pumpWidget(
-      _airCheck(controller, channel, key: key, clock: () => now),
-    );
+    await tester.pumpWidget(_airCheck(controller, channel, clock: () => now));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(ValueKey('air-check-program-${future.id}')));
     await tester.pump();
@@ -464,9 +454,7 @@ void main() {
     );
 
     controller.generation++;
-    await tester.pumpWidget(
-      _airCheck(controller, channel, key: key, clock: () => now),
-    );
+    await tester.pumpWidget(_airCheck(controller, channel, clock: () => now));
     await tester.pump(
       channelAirCheckDebounce + const Duration(milliseconds: 1),
     );
@@ -929,7 +917,6 @@ void main() {
       final controller = _AirController(controlled: true);
       addTearDown(controller.dispose);
       var validity = ChannelAirCheckValidity.valid;
-      final key = GlobalKey<ChannelAirCheckState>();
       final original = _channel(items: [_item('one'), _item('two')]);
       final changed = Channel.fromJson({
         ...original.toJson(),
@@ -940,11 +927,10 @@ void main() {
           controller,
           changed,
           originalChannel: original,
-          key: key,
           onValidityChanged: (value) => validity = value,
         ),
       );
-      expect(key.currentState!.activeRequestCount, 1);
+      expect(controller.requests, 1);
       controller.failNext(StateError('baseline worker unavailable'));
       await tester.pump();
       expect(controller.requests, 2);
@@ -960,15 +946,14 @@ void main() {
       expect(find.text('Retry comparison'), findsOneWidget);
       expect(find.text('Updating — preview is stale'), findsNothing);
       expect(validity, ChannelAirCheckValidity.unknown);
-      expect(key.currentState!.activeRequestCount, 0);
-      expect(key.currentState!.pendingRequestCount, 0);
+      expect(controller.requests, 2);
 
       await tester.ensureVisible(find.text('Retry comparison'));
       await tester.tap(find.text('Retry comparison'));
       await tester.pump(
         channelAirCheckDebounce + const Duration(milliseconds: 1),
       );
-      expect(key.currentState!.activeRequestCount, 1);
+      expect(controller.requests, 3);
       controller.completeNext();
       await tester.pump();
       expect(controller.requests, 4);
@@ -1022,20 +1007,19 @@ void main() {
   ) async {
     final controller = _AirController(controlled: true);
     addTearDown(controller.dispose);
-    final key = GlobalKey<ChannelAirCheckState>();
     final original = _channel(items: [_item('one'), _item('two')]);
     final changed = Channel.fromJson({
       ...original.toJson(),
       'source': ManualSource([_item('two'), _item('one')]).toJson(),
     });
     await tester.pumpWidget(
-      _airCheck(controller, original, originalChannel: original, key: key),
+      _airCheck(controller, original, originalChannel: original),
     );
     controller.completeNext();
     await tester.pump();
     await tester.pump();
     await tester.pumpWidget(
-      _airCheck(controller, changed, originalChannel: original, key: key),
+      _airCheck(controller, changed, originalChannel: original),
     );
     await tester.pump(
       channelAirCheckDebounce + const Duration(milliseconds: 1),
@@ -1047,13 +1031,12 @@ void main() {
 
     controller.generation++;
     await tester.pumpWidget(
-      _airCheck(controller, changed, originalChannel: original, key: key),
+      _airCheck(controller, changed, originalChannel: original),
     );
     await tester.pump(
       channelAirCheckDebounce + const Duration(milliseconds: 1),
     );
-    expect(key.currentState!.activeRequestCount, 1);
-    expect(key.currentState!.pendingRequestCount, lessThanOrEqualTo(1));
+    expect(controller.requests, 3);
     controller.completeNext();
     await tester.pump();
     await tester.pump();
