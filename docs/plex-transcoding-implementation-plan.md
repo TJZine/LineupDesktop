@@ -284,8 +284,9 @@ No production code. It closes the gaps P0 left open:
   - token-free variant, segment and init requests;
   - two transcode tiers;
   - the Direct Play original request that returned HTTP 503 on the LAN
-    "non-local" path in P0 (question 13). Record its cause from the response
-    and the PMS log, without private details.
+    "non-local" path in P0 (question 13). Record the seedbox's response shape.
+    The cause of the local server's 503 comes from that server's own log, read
+    through a sanitizing filter; the seedbox's log is not read.
 - **HEVC setting.** Read the "Enable HEVC video Encoding" preference value on
   each server (read-only), and confirm the decision output follows it.
 
