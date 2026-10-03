@@ -145,15 +145,15 @@ ctest --test-dir .\build\windows\x64 -C Release -R '^track_list_encoder$' --outp
 
 ## Portable commands
 
-Flutter SDK `3.47.4` (revision
-`9584c6713b324636289d067944a46fd6b49df14b`, Dart `3.13.3`) is the reproducible
+Flutter SDK `3.47.6` (revision
+`5fc346839b5d0eef006ed8404392afb4dfae428d`, Dart `3.13.5`) is the reproducible
 toolchain for macOS, Windows, and CI.
 
 Select the exact Flutter checkout rather than a different SDK already on PATH:
 
 ```sh
 git clone https://github.com/flutter/flutter.git /path/to/flutter
-git -C /path/to/flutter checkout 9584c6713b324636289d067944a46fd6b49df14b
+git -C /path/to/flutter checkout 5fc346839b5d0eef006ed8404392afb4dfae428d
 export PATH=/path/to/flutter/bin:$PATH
 flutter doctor -v
 ```
@@ -269,7 +269,7 @@ package machines also need a GPU driver or Vulkan Runtime providing
 When the pinned runtime changes, provision it into a fresh unique destination;
 do not reuse or overwrite an older prepared directory. Rebuild the Lineup
 application against the new runtime. This refresh also upgrades Flutter to
-3.47.4, so reprovision its patched `host_debug` and `host_release` outputs
+3.47.6, so reprovision its patched `host_debug` and `host_release` outputs
 before launching or packaging; the older SDK outputs cannot be reused.
 
 ### Patched engine provisioning

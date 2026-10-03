@@ -32,7 +32,7 @@ a rebuilt archive under the existing provenance identity.
 
 | Component | Provenance | Package policy |
 | --- | --- | --- |
-| Flutter Windows engine | Flutter 3.47.4 framework `9584c6713b324636289d067944a46fd6b49df14b`, engine `06a2e2a110089dff50fe635cffd2a61e1b24fbcd`, plus the repository-owned DirectComposition patch | BSD-3-Clause and upstream third-party notices. Include Flutter's generated `NOTICES.Z` and `tool/flutter_engine/NOTICE`. |
+| Flutter Windows engine | Flutter 3.47.6 framework `5fc346839b5d0eef006ed8404392afb4dfae428d`, engine `692136cb6582dbfc5af3fb33c2515a069f2f66d0`, plus the repository-owned DirectComposition patch | BSD-3-Clause and upstream third-party notices. Include Flutter's generated `NOTICES.Z` and `tool/flutter_engine/NOTICE`. |
 | flutter_secure_storage_windows | Version 4.2.2 from the locked Dart dependency graph | BSD-3-Clause; its notice is generated into Flutter `NOTICES.Z`. |
 | Microsoft Visual C++ runtime | Retail x64 VC143 runtime matching the build toolset | Microsoft redistributable code. A portable package uses unmodified app-local retail DLLs from `VC/Redist`; never include debug/nonredistributable files. |
 | Khronos Vulkan loader | `vulkan-1.dll` supplied by the installed GPU driver or Vulkan Runtime | System prerequisite. The selected libmpv DLL imports the loader even though Lineup selects D3D11. The portable package records this requirement instead of copying a machine-specific display-driver file. |
