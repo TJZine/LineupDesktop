@@ -315,7 +315,7 @@ changed to hide a failure.
 | Step 3, native CTest | `ctest --test-dir ./build/windows/x64 -C Release -R '^track_list_encoder$' --output-on-failure --timeout 30` | 1/1 passed |
 | Step 4, exact DLL experiment | Temporary C++/HTTPS harness, six cases plus same-origin controls on each DLL | [Results and limits](libmpv-authenticated-reference-investigation.md#2026-10-03-addendum-refreshed-windows-runtime) |
 | Patched engine and release wrapper | Pinned `gclient sync`, GN debug/release, Ninja, `build-release.ps1` | Release engine (7,189 actions), debug engine (6,941 actions), and wrappers at the exact Step 2 and Step 3 commits passed |
-| macOS alpha | `flutter test test/app/guide_opacity_test.dart` | Not run; macOS host unavailable |
+| macOS alpha | `flutter test test/app/guide_opacity_test.dart` | Passed on 2026-10-03 within the full macOS suite at `5509a5a3`, Flutter 3.47.6 |
 | Physical Windows | App/media/package scenarios below | Not run; no new supported-runtime claim |
 
 The recorded full-suite failure was `channel_air_check_test.dart`, "Air Check hides
@@ -333,13 +333,16 @@ before the slimming changes. Pumping the layout after each visibility jump fixes
 that case without changing production behavior or assertions. Windows verification
 passed five consecutive file runs, seeds 17, 42, and 20261003, and the full portable
 suite (937 passed), plus analysis and changed-file formatting. These runs used
-Flutter 3.47.6 and the Windows Eastern timezone; macOS was unavailable.
+Flutter 3.47.6 and the Windows Eastern timezone. On macOS at `5509a5a3`, the
+Air Check file passed three consecutive runs and the full portable suite passed
+939 tests with `TZ=America/New_York` on both Flutter 3.47.4 and the pinned
+3.47.6; `pubspec.lock` was unchanged by `flutter pub get`, and formatting and
+analysis were clean.
 
 The new raw Windows build still has an empty native-assets manifest, so
 `dartjni.dll` remains excluded under the existing package policy. The two
-macOS-only alpha
-checks are excluded from this Windows suite; the 939 macOS baseline was not
-rerun here.
+macOS-only alpha checks are excluded from this Windows suite; they passed in the
+939-test macOS run recorded above.
 
 Fresh SDK dependency synchronization initially hit Git's Windows filename-length
 limit in an upstream plugin fixture. The checkout was repaired with
@@ -366,7 +369,7 @@ available, AUDIO-1/2 (including channel placement and decode-to-PCM), SUB-1/2,
 OPEN-1, remote/relay when available; portable-package acceptance, including
 loader-present/absent/restored behavior and redirect checks from the package.
 The nested-reference harness is not acceptance of the app's authenticated
-redirect row. macOS Guide alpha verification also remains outstanding.
+redirect row.
 
 The libmpv bump leaves the tested nested-reference credential outcomes
 unchanged: B still receives the header by default and with either single
