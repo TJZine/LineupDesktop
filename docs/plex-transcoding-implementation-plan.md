@@ -1,6 +1,6 @@
 # Plex Transcoding and Direct Stream Implementation Plan
 
-**Status:** Draft, revised after adversarial review on 2026-10-03. The
+**Status:** Draft, revised after adversarial review and P0 evidence on 2026-10-03. The
 maintainer answered the first product decisions on 2026-10-03. Items marked
 **[confirm]** still need maintainer confirmation. The Settings design is a
 proposal awaiting design agreement. Nothing here is implemented, and P1 starts
@@ -97,8 +97,14 @@ behavior it is labelled an assumption until confirmed.
 2. **Separate Home and Remote quality.** Lineup chooses by the connection's
    `local` flag; relay uses Remote. This is not identical to the server's own
    LAN classification, which uses the client IP and the server's "LAN networks"
-   setting. P0 records whether the two disagree. Home defaults to Original; the
-   Remote default comes from P0 evidence.
+   setting. P0 did not measure that classification (see P0 results, question
+   12). Home defaults to Original.
+   - **Remote default: decided 2026-10-03**, to match the official apps:
+     **720p · 2 Mbps**. Community reports describe it as the long-standing
+     official default
+     ([forum thread](https://forums.plex.tv/t/bug-plex-app-defaults-to-2mbps-720p/449537)).
+     The maintainer confirms it against a current official app's settings
+     before P4. P0's 720p · 4 Mbps proposal is superseded.
 3. **Quality ladder: proposed, not confirmed official.** The ladder matches
    PlexKodiConnect's own
    [transcode quality list](https://github.com/croneter/PlexKodiConnect/blob/aab8dbf3945e194b6bb4122f188f4ac2cfe8aaec/resources/settings.xml#L1058-L1077):
@@ -111,32 +117,50 @@ behavior it is labelled an assumption until confirmed.
    **[confirm]** The maintainer supplies the official app's Remote Quality list
    (e.g. a screenshot) to replace or confirm it. Tiers stay fixed regardless of
    any one server; the server caps by source and capability.
+
+   **Output codec and HDR: decided 2026-10-03.**
+   - Follow the server's own setting. Lineup's transcode target always declares
+     both H.264 and HEVC.
+   - When the server has "Enable HEVC video Encoding" on (Plex Pass and
+     hardware encoding;
+     [Plex forum announcement](https://forums.plex.tv/t/hevc-encoding-forum-preview/888127)),
+     it sends HEVC and preserves HDR.
+   - Otherwise it sends H.264 and tone-maps to SDR itself.
+   - P0 observed both outcomes (question 9).
+   - libmpv decodes either and tone-maps HDR locally for SDR displays. HDR
+     presentation stays a physical acceptance item.
 4. **Track changes during a session.** In a session, the server chooses the
    audio and subtitle streams, so the Player drawer must list **Plex streams**
    (parsed from metadata) instead of libmpv tracks. A change restarts the
    session at the current position.
    - Changing the drawer's data source changes a protected surface, so it needs
      its own approval with renders.
-   - **[confirm]** P0 determines whether stream choice can be passed per
-     request, or needs `PUT /library/parts/{id}`. The PUT writes the user's
-     server-side stream preference, which other clients also see. Recommended:
-     per-request only, and no server-side writes without approval.
+   - **Stream selection: decided 2026-10-03.**
+     - P0 showed per-request selection parameters are ignored.
+     - For **transcode sessions only**, Lineup sets the user's choice with
+       `PUT /library/parts/{id}` before restarting the session. That is the
+       official apps' mechanism; it persists as the user's server-side default
+       for that item, as in the official apps.
+     - Direct Play keeps local libmpv track switching with no server write.
+     - P0b verifies the PUT's effect, burn-in and text-subtitle delivery.
    - Image subtitles are burned in.
    - Text subtitles: a session load hands libmpv a single variant (see Security
      design), so an HLS subtitle rendition is not reachable. Burn text
      subtitles in at first. A later P2 extension may add a validated,
      token-free native `sub-add`.
-5. **Seeking during a session (assumption, not confirmed official behavior).**
-   Seek within the generated session when the target is inside it; the
-   feasibility run showed a 30 s forward in-session seek working. Restart the
-   session at the target offset otherwise, debouncing repeated `seekBy` presses
-   into one restart. Seeking needs the existing DVR controls; live tuning
-   always starts at the program offset.
-6. **Keep-alive. [confirm]** Plex timeline reports (`/:/timeline`) update watch
-   progress, On Deck and watched state, so channel surfing would mark items
-   watched. Recommended: no timeline reports. Use a transcode ping or segment
-   activity if P0 shows one is needed, and treat watch-state writes as a
-   separate product decision.
+5. **Seeking during a session: decided 2026-10-03.**
+   - Always restart the session at the target offset, with a new session id.
+     Debounce repeated `seekBy` presses into one restart.
+   - Never seek in-session: P0 showed in-session seeks stall and shift the
+     server's window (question 6).
+   - Program position = start offset + libmpv `time-pos`. Program duration
+     comes from metadata (libmpv reports the full original duration).
+   - Seeking needs the existing DVR controls. Live tuning always starts at the
+     program offset.
+6. **Keep-alive: decided by P0 evidence.** Send a transcode ping every 30 s for
+   each live session, including while paused. P0 measured reaping at about
+   3–3.5 minutes without one. No timeline reports, so channel surfing never
+   writes watch state.
 7. **Badges during a session. [confirm]** Source-format badges ("4K HDR10
    TRUEHD 7.1") are misleading for a 1080p SDR AAC transcode. Showing output
    format changes a protected surface, so it needs approval. Recommended:
@@ -171,11 +195,14 @@ behavior it is labelled an assumption until confirmed.
   only as a header. It uses a client-generated session id, so a superseded or
   timed-out start can still be stopped. It pins `mediaIndex=0`, to match the
   Direct Play version selection.
+- **Direct Play decisions.** When the decision returns Direct Play
+  (`directPlayDecisionCode=1000`), Lineup never calls the HLS start (P0: HTTP
+  400). It uses the existing Direct Play load instead.
 - **Master validation.** Accept a master only if:
   - it has exactly one variant (`EXT-X-STREAM-INF`);
   - it has no `EXT-X-MEDIA` renditions and no other URI-bearing master tags;
   - the variant resolves to the validated server (`_isSameServerUri`), under
-    the transcoder session path prefix recorded in P0;
+    the P0-recorded path `/video/:/transcode/universal/session/<session>/base/index.m3u8`;
   - it is HTTPS, with no user info and no `X-Plex-Token` query.
 
   Refuse anything else as a session error. P0 records whether real Plex masters
@@ -229,6 +256,37 @@ No production code. See the P0 handoff for the procedure. It must establish:
 - **Direct Play:** unchanged afterwards.
 
 Gate: the maintainer accepts the evidence and confirms the **[confirm]** items.
+P0 ran on 2026-10-03 (see [P0 results](#2026-10-03-p0-results)); decisions 2–6
+were updated from it.
+
+### P0b — Stream selection and true-remote evidence (Windows, maintainer-authorized)
+
+No production code. It closes the gaps P0 left open:
+
+- **Stream selection.** With the maintainer's authorization for server writes
+  on one test item, run `PUT /library/parts/{id}` for audio and subtitle
+  selection, then start a session. Confirm:
+  - the selected audio track plays;
+  - image subtitles are burned in, from the decision response;
+  - how a selected text subtitle is delivered: a master rendition, a sidecar,
+    or burned in. If a rendition appears, record whether it is still
+    single-variant, and whether the rendition is token-free.
+
+  Measure the restart latency. Restore the item's original selections
+  afterwards.
+- **True remote.** Use the maintainer's seedbox server (a separate, genuinely
+  remote PMS on the same account):
+  - token-free variant, segment and init requests;
+  - two transcode tiers;
+  - the Direct Play original request that returned HTTP 503 on the LAN
+    "non-local" path in P0 (question 13). Record its cause from the response
+    and the PMS log, without private details.
+- **HEVC setting.** Read the "Enable HEVC video Encoding" preference value on
+  each server (read-only), and confirm the decision output follows it.
+
+The maintainer is also investigating the remote Direct Play 503 independently.
+If it reproduces against a genuinely remote server, it is a defect in today's
+Direct Play path, to be fixed separately from transcoding.
 
 ### P1 — Dart Plex session client and stream metadata
 
@@ -237,7 +295,9 @@ Gate: the maintainer accepts the evidence and confirms the **[confirm]** items.
   - session start with a client-generated session id, returning the validated
     variant URI;
   - stop (idempotent);
-  - keep-alive, if P0 requires it;
+  - a transcode ping (keep-alive, decision 6);
+  - stream selection by `PUT /library/parts/{id}`, for sessions only
+    (decision 4);
   - client-profile construction;
   - all master validation;
   - parsing of Plex audio and subtitle streams from item metadata.
