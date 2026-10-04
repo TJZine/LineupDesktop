@@ -5,14 +5,9 @@ import 'package:flutter/material.dart';
 import 'native_player.dart';
 
 class NativeVideoSurface extends StatefulWidget {
-  const NativeVideoSurface({
-    required this.player,
-    this.presentationEpoch = 0,
-    super.key,
-  });
+  const NativeVideoSurface({required this.player, super.key});
 
   final NativePlayer player;
-  final int presentationEpoch;
 
   @override
   State<NativeVideoSurface> createState() => _NativeVideoSurfaceState();
@@ -32,8 +27,7 @@ class _NativeVideoSurfaceState extends State<NativeVideoSurface>
   @override
   void didUpdateWidget(NativeVideoSurface oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!identical(oldWidget.player, widget.player) ||
-        oldWidget.presentationEpoch != widget.presentationEpoch) {
+    if (!identical(oldWidget.player, widget.player)) {
       _lastRect = null;
     }
     _scheduleBoundsUpdate();

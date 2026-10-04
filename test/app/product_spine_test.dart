@@ -166,9 +166,10 @@ void main() {
         (index) => _channel(index + 1, anchor: _ProductPlex.now),
         growable: false,
       );
-      await controller.applyChannelPlan(
+      await controller.applyReviewedChannelPlan(
         largeLineup,
         mode: ChannelBuildMode.replace,
+        expectedBase: controller.channels,
       );
       expect(controller.channels, hasLength(1000));
       expect(

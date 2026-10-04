@@ -736,12 +736,6 @@ class LineupController extends ChangeNotifier {
     if (_serverTargetId == selected.id) _serverTargetId = null;
   }
 
-  Future<bool> setLibraries(Set<String> ids) async {
-    if (!await scanLibraries(ids)) return false;
-    if (libraryScanRetryIds.isNotEmpty) return false;
-    return _commitScannedLibraries(ids, allowUnusable: true);
-  }
-
   Future<bool> scanLibraries(
     Set<String> ids, {
     bool retryFailedOnly = false,
@@ -786,17 +780,14 @@ class LineupController extends ChangeNotifier {
   Future<bool> commitLibraryScan(Set<String> readyIds) =>
       _commitScannedLibraries(readyIds);
 
-  Future<bool> _commitScannedLibraries(
-    Set<String> ids, {
-    bool allowUnusable = false,
-  }) async {
+  Future<bool> _commitScannedLibraries(Set<String> ids) async {
     final operation = _epoch;
     final pending = _pendingScan;
     if (pending == null ||
         _pendingScanEpoch != operation ||
         ids.isEmpty ||
         !_scanIds.containsAll(ids) ||
-        (!allowUnusable && !libraryScanReadyIds.containsAll(ids))) {
+        !libraryScanReadyIds.containsAll(ids)) {
       return false;
     }
     return _run(
@@ -1191,13 +1182,6 @@ class LineupController extends ChangeNotifier {
     );
   }
 
-  Future<void> applyChannelPlan(
-    List<Channel> planned, {
-    required ChannelBuildMode mode,
-  }) async {
-    await _applyChannelPlan(planned, mode: mode);
-  }
-
   Future<ChannelPlanApplyResult> applyReviewedChannelPlan(
     List<Channel> planned, {
     required ChannelBuildMode mode,
@@ -1423,14 +1407,6 @@ class LineupController extends ChangeNotifier {
         }
     }
     validatedSources?.add(sourceKey);
-  }
-
-  ScheduleIndex scheduleFor(Channel channel) {
-    _ensurePlayableInventory();
-    return buildChannelSchedule(
-      channel,
-      resolveContent(channel.source, _playableMedia, _playablePlaylists),
-    );
   }
 
   Future<ScheduleIndex> loadScheduleFor(Channel channel) {
@@ -1724,11 +1700,6 @@ class LineupController extends ChangeNotifier {
       currentChannelId = id;
       notifyListeners();
     });
-  }
-
-  Future<void> deleteChannel(String id) async {
-    final channel = channels.where((channel) => channel.id == id).firstOrNull;
-    if (channel != null) await deleteChannels(expectedChannels: [channel]);
   }
 
   Future<void> updateSettings(
