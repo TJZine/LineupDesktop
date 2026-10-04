@@ -165,7 +165,7 @@ void main() {
     expect(tester.widget<DropdownButton<int>>(guideHours).value, 2);
 
     await fixture.controller.updateSettings(
-      fixture.controller.settings.copyWith(guideHours: 4),
+      (current) => current.copyWith(guideHours: 4),
     );
     await tester.pumpAndSettle();
 
@@ -336,7 +336,9 @@ class _DelayedSettingsController extends FixtureController {
   final _update = Completer<void>();
 
   @override
-  Future<void> updateSettings(LineupSettings value) async {
+  Future<void> updateSettings(
+    LineupSettings Function(LineupSettings) change,
+  ) async {
     await _update.future;
   }
 

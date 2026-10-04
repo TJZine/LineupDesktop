@@ -153,7 +153,15 @@ class LineupController extends ChangeNotifier {
   int? libraryScanTotalItems;
   Map<String, LibraryScanFact> _libraryScanFacts = const {};
   String? error;
+  // Request cancellation is independent of the retained playback/content scope.
   int _epoch = 0;
+  int _authorizationScope = 0;
+  int _mutationScope = 0;
+  // Logout rejects queued work immediately, while started commits finish
+  // against the retained content scope before successful runtime retirement.
+  int _mutationEligibility = 0;
+  Future<PlexConnection>? _playbackRefresh;
+  int? _playbackRefreshScope;
   Completer<void>? _scanCancelled;
   final Map<String, List<PlexMediaItem>> _scanResults = {};
   Set<String> _scanIds = const {};
@@ -233,6 +241,7 @@ class LineupController extends ChangeNotifier {
   Map<String, LibraryScanFact> get libraryScanFacts => _libraryScanFacts;
 
   Future<void> initialize() async {
+    _retireScope();
     final operation = _invalidateOperation();
     final loadResult = await store.load();
     if (!_isCurrent(operation)) return;
@@ -305,6 +314,7 @@ class LineupController extends ChangeNotifier {
       await cancelLinking();
       return;
     }
+    _retireScope();
     final operation = _invalidateOperation();
     _pinTimer?.cancel();
     await _run(
@@ -524,6 +534,7 @@ class LineupController extends ChangeNotifier {
           final oldCanCancel = profileSelectionCanCancel;
           profileSelectionCanCancel = false;
           notifyListeners();
+          _retireScope();
           profile = selected;
           _profileToken = token;
           _serverAccess = const {};
@@ -652,6 +663,7 @@ class LineupController extends ChangeNotifier {
           final oldCanCancel = serverSelectionCanCancel;
           serverSelectionCanCancel = false;
           notifyListeners();
+          _retireScope();
           server = _serverAccess[selected.id]!.server;
           connection = workingConnection;
           _pmsToken = _serverAccess[selected.id]!.token;
@@ -1197,11 +1209,11 @@ class LineupController extends ChangeNotifier {
     required ChannelBuildMode mode,
     List<Channel>? expectedBase,
   }) async {
-    final operation = _epoch;
+    final operation = _mutationScope;
     final expected = expectedBase?.map((channel) => channel.toJson()).toList();
     final plan = List<Channel>.unmodifiable(planned);
     var result = ChannelPlanApplyResult.stale;
-    await _queueStateOperation(operation, () async {
+    await _queueScopeOperation(operation, () async {
       if (expected != null &&
           !canonicalChannelValueEquals(
             channels.map((channel) => channel.toJson()).toList(),
@@ -1229,20 +1241,22 @@ class LineupController extends ChangeNotifier {
         );
       }
       await _commitChannelList(next, operation);
-      if (_isCurrent(operation)) result = ChannelPlanApplyResult.applied;
+      if (_isCurrentMutationScope(operation)) {
+        result = ChannelPlanApplyResult.applied;
+      }
     });
     return result;
   }
 
   Future<void> deleteChannels({required List<Channel> expectedChannels}) async {
-    final operation = _epoch;
+    final operation = _mutationScope;
     final expected = {
       for (final channel in expectedChannels) channel.id: channel.toJson(),
     };
     if (expected.isEmpty || expected.length != expectedChannels.length) {
       throw const FormatException('Select distinct channels to delete');
     }
-    await _queueStateOperation(operation, () async {
+    await _queueScopeOperation(operation, () async {
       final current = {for (final channel in channels) channel.id: channel};
       for (final entry in expected.entries) {
         if (current[entry.key] == null ||
@@ -1264,10 +1278,10 @@ class LineupController extends ChangeNotifier {
     required List<Channel> expectedLineup,
     required List<String> orderedChannelIds,
   }) async {
-    final operation = _epoch;
+    final operation = _mutationScope;
     final expected = expectedLineup.map((channel) => channel.toJson()).toList();
     final order = List<String>.of(orderedChannelIds);
-    await _queueStateOperation(operation, () async {
+    await _queueScopeOperation(operation, () async {
       if (!canonicalChannelValueEquals(
         channels.map((channel) => channel.toJson()).toList(),
         expected,
@@ -1310,7 +1324,9 @@ class LineupController extends ChangeNotifier {
       channelsOverride: next,
       currentChannelOverride: (id: nextCurrent),
     );
-    if (!_isCurrent(operation)) return;
+    if (!_isCurrentMutationScope(operation)) {
+      throw StateError('Channel mutation was superseded');
+    }
     channels = List.unmodifiable(next);
     currentChannelId = nextCurrent;
     _recordChannelChanges(previous);
@@ -1329,9 +1345,9 @@ class LineupController extends ChangeNotifier {
     Channel channel, {
     required Channel? expectedBase,
   }) async {
-    final operation = _epoch;
+    final operation = _mutationScope;
     Channel? committed;
-    await _queueStateOperation(operation, () async {
+    await _queueScopeOperation(operation, () async {
       final expected = expectedBase?.toJson();
       final current = channels
           .where((candidate) => candidate.id == channel.id)
@@ -1362,7 +1378,7 @@ class LineupController extends ChangeNotifier {
         operation,
         initialCurrentId: savedChannel.id,
       );
-      if (_isCurrent(operation)) committed = savedChannel;
+      if (_isCurrentMutationScope(operation)) committed = savedChannel;
     });
     if (committed == null) {
       throw StateError('Channel save was superseded');
@@ -1516,6 +1532,7 @@ class LineupController extends ChangeNotifier {
   }
 
   Future<void> _migrateLegacySchedules(int operation) async {
+    final scope = _mutationScope;
     await _queueStateOperation(operation, () async {
       final old = channels;
       final migrated = _migratedLegacyChannels(_scheduleClock().toUtc());
@@ -1528,7 +1545,7 @@ class LineupController extends ChangeNotifier {
       } catch (_) {
         rethrow;
       }
-      if (_isCurrent(operation)) {
+      if (_isCurrentMutationScope(scope)) {
         channels = migrated;
         _recordChannelChanges(old);
       }
@@ -1546,7 +1563,13 @@ class LineupController extends ChangeNotifier {
         'This program is not available from the current Plex session.',
       );
     }
-    return _playbackRequest(item, endpoint, token, serverId, _epoch);
+    return _playbackRequest(
+      item,
+      endpoint,
+      token,
+      serverId,
+      _authorizationScope,
+    );
   }
 
   PlexMediaItem? _playbackItem(String itemId) {
@@ -1644,8 +1667,9 @@ class LineupController extends ChangeNotifier {
       ],
       plexToken: token,
       authorizationRecovery: () async {
-        await _refreshPmsAccess(operation, serverId);
-        if (!_isCurrent(operation) || server?.id != serverId) {
+        await _refreshPlaybackAccess(operation, serverId);
+        if (!_isCurrentAuthorizationScope(operation) ||
+            server?.id != serverId) {
           throw const PlexException(
             'playback-unavailable',
             'This program is not available from the current Plex session.',
@@ -1687,22 +1711,18 @@ class LineupController extends ChangeNotifier {
   }
 
   Future<void> setCurrentChannel(String? id) async {
-    final operation = _epoch;
-    await _queueStateOperation(operation, () async {
+    final operation = _mutationScope;
+    await _queueScopeOperation(operation, () async {
       if (id == currentChannelId ||
           (id != null && !channels.any((channel) => channel.id == id))) {
         return;
       }
-      final old = currentChannelId;
-      currentChannelId = id;
-      try {
-        await _save();
-        if (_disposed) return;
-        notifyListeners();
-      } catch (_) {
-        currentChannelId = old;
-        rethrow;
+      await _save(currentChannelOverride: (id: id));
+      if (!_isCurrentMutationScope(operation)) {
+        throw StateError('Current channel mutation was superseded');
       }
+      currentChannelId = id;
+      notifyListeners();
     });
   }
 
@@ -1711,20 +1731,16 @@ class LineupController extends ChangeNotifier {
     if (channel != null) await deleteChannels(expectedChannels: [channel]);
   }
 
-  Future<void> updateSettings(LineupSettings value) async {
-    final operation = _epoch;
-    await _queueStateOperation(operation, () async {
-      final old = settings;
-      settings = value;
-      try {
-        await _save();
-        if (_disposed) return;
-        diagnostics.enabled = value.diagnosticsEnabled;
-        notifyListeners();
-      } catch (_) {
-        settings = old;
-        rethrow;
-      }
+  Future<void> updateSettings(
+    LineupSettings Function(LineupSettings committed) change,
+  ) async {
+    await _queueGlobalStateOperation(() async {
+      final proposed = change(settings);
+      await _save(settingsOverride: proposed);
+      if (_disposed) return;
+      settings = proposed;
+      diagnostics.enabled = proposed.diagnosticsEnabled;
+      notifyListeners();
     });
   }
 
@@ -1752,6 +1768,8 @@ class LineupController extends ChangeNotifier {
   }
 
   Future<bool> _performLogout() async {
+    _retireAuthorizationScope();
+    _mutationEligibility++;
     _invalidateOperation();
     final stateBeforeLogout = _stateOperations;
     final releaseStateOperations = Completer<void>();
@@ -1779,6 +1797,7 @@ class LineupController extends ChangeNotifier {
       await stateBeforeLogout;
       if (_disposed) return false;
       _invalidateOperation();
+      _mutationScope++;
       account = null;
       profile = null;
       profiles = const [];
@@ -1823,6 +1842,7 @@ class LineupController extends ChangeNotifier {
   }
 
   Future<void> _save({
+    LineupSettings? settingsOverride,
     List<Channel>? channelsOverride,
     Set<String>? selectedLibraryIdsOverride,
     ({String? id})? currentChannelOverride,
@@ -1866,7 +1886,7 @@ class LineupController extends ChangeNotifier {
       }
     }
     final next = PersistedState(
-      settings: settings,
+      settings: settingsOverride ?? settings,
       profileId: profile?.id,
       selectedServerByProfile: selectedServers,
       selectedLibraryIdsByProfileServer: librarySelections,
@@ -1900,6 +1920,45 @@ class LineupController extends ChangeNotifier {
     return queued;
   }
 
+  Future<void> _queueScopeOperation(int scope, Future<void> Function() body) {
+    final eligibility = _mutationEligibility;
+    return _queueGlobalStateOperation(() async {
+      if (!_isCurrentMutationScope(scope) ||
+          eligibility != _mutationEligibility ||
+          _logoutFuture != null) {
+        throw StateError('State mutation was superseded');
+      }
+      await body();
+    });
+  }
+
+  void _retireScope() {
+    _mutationScope++;
+    _mutationEligibility++;
+    _retireAuthorizationScope();
+  }
+
+  void _retireAuthorizationScope() {
+    _authorizationScope++;
+    _playbackRefresh = null;
+    _playbackRefreshScope = null;
+  }
+
+  bool _isCurrentMutationScope(int scope) =>
+      !_disposed && scope == _mutationScope;
+
+  bool _isCurrentAuthorizationScope(int scope) =>
+      !_disposed && scope == _authorizationScope;
+
+  Future<void> _queueGlobalStateOperation(Future<void> Function() body) {
+    final queued = _stateOperations.then((_) async {
+      if (_disposed) throw StateError('Controller was disposed');
+      await body();
+    });
+    _stateOperations = queued.then<void>((_) {}, onError: (_, _) {});
+    return queued;
+  }
+
   Future<bool> _writeCredential(
     int operation,
     Future<void> Function() write,
@@ -1922,6 +1981,7 @@ class LineupController extends ChangeNotifier {
   }
 
   void _clearServerRuntime() {
+    _retireScope();
     server = null;
     connection = null;
     _pmsToken = null;
@@ -2032,6 +2092,35 @@ class LineupController extends ChangeNotifier {
     _pmsRefreshServerId = null;
   }
 
+  Future<PlexConnection> _refreshPlaybackAccess(int scope, String serverId) {
+    bool current() =>
+        _isCurrentAuthorizationScope(scope) &&
+        server?.id == serverId &&
+        _logoutFuture == null;
+    if (!current()) {
+      throw const PlexException(
+        'authorization-unavailable',
+        'Plex server authorization is unavailable.',
+      );
+    }
+    final active = _playbackRefresh;
+    if (active != null && _playbackRefreshScope == scope) return active;
+    final refresh = _performPmsRefresh(
+      _epoch,
+      serverId,
+      isCurrent: current,
+      forPlayback: true,
+    );
+    _playbackRefresh = refresh;
+    _playbackRefreshScope = scope;
+    return refresh.whenComplete(() {
+      if (identical(_playbackRefresh, refresh)) {
+        _playbackRefresh = null;
+        _playbackRefreshScope = null;
+      }
+    });
+  }
+
   Future<PlexConnection> _refreshPmsAccess(int operation, String serverId) {
     final active = _pmsRefresh;
     if (active != null &&
@@ -2052,8 +2141,10 @@ class LineupController extends ChangeNotifier {
 
   Future<PlexConnection> _performPmsRefresh(
     int operation,
-    String serverId,
-  ) async {
+    String serverId, {
+    bool Function()? isCurrent,
+    bool forPlayback = false,
+  }) async {
     final profileToken = _profileToken ?? _accountToken;
     if (profileToken == null) {
       throw const PlexException('auth-required', 'Link Plex first.');
@@ -2068,11 +2159,18 @@ class LineupController extends ChangeNotifier {
         'Plex server authorization is unavailable.',
       );
     }
+    if (!(isCurrent?.call() ?? _isCurrentPmsTarget(operation, serverId)) ||
+        (_profileToken ?? _accountToken) != profileToken) {
+      throw const PlexException(
+        'authorization-unavailable',
+        'Plex server authorization is unavailable.',
+      );
+    }
     final selectedConnection = await plex.selectConnection(
       refreshed.server,
       refreshed.token,
     );
-    if (!_isCurrentPmsTarget(operation, serverId) ||
+    if (!(isCurrent?.call() ?? _isCurrentPmsTarget(operation, serverId)) ||
         (_profileToken ?? _accountToken) != profileToken) {
       throw const PlexException(
         'authorization-unavailable',
@@ -2081,7 +2179,7 @@ class LineupController extends ChangeNotifier {
     }
     _serverAccess = {for (final access in discovered) access.server.id: access};
     servers = List.unmodifiable(discovered.map((access) => access.server));
-    if (_serverTargetId != serverId) {
+    if (forPlayback || _serverTargetId != serverId) {
       _pmsToken = refreshed.token;
       connection = selectedConnection;
     }

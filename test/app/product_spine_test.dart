@@ -146,10 +146,8 @@ void main() {
       await player.retry();
 
       await controller.updateSettings(
-        controller.settings.copyWith(
-          nowWatchingBanner: false,
-          osdAutoHideSeconds: 8,
-        ),
+        (current) =>
+            current.copyWith(nowWatchingBanner: false, osdAutoHideSeconds: 8),
       );
       expect(controller.settings.nowWatchingBanner, isFalse);
 
