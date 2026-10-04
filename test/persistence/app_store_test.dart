@@ -536,25 +536,18 @@ void main() {
 
       expect(restored.state.channelsByProfileServer, isEmpty);
       expect(restored.recoveredCorruptState, isTrue);
-      expect(
-        await directory
-            .list()
-            .where((entry) => entry.path.contains('state.json.corrupt-'))
-            .length,
-        1,
-      );
+      expect(await _quarantineContainers(directory), hasLength(1));
       expect(await stateFile.exists(), isFalse);
+      final quarantine = (await _quarantineContainers(directory)).single;
+      expect(
+        await File('${quarantine.path}/state.json').readAsString(),
+        corruptState.value,
+      );
 
       final restart = await store.load();
       expect(restart.recoveredCorruptState, isFalse);
       expect(restart.state.toJson(), const PersistedState().toJson());
-      expect(
-        await directory
-            .list()
-            .where((entry) => entry.path.contains('state.json.corrupt-'))
-            .length,
-        1,
-      );
+      expect(await _quarantineContainers(directory), hasLength(1));
     });
   }
 
@@ -576,10 +569,9 @@ void main() {
       expect(restored.recoveredCorruptState, isTrue);
       expect(restored.state.toJson(), const PersistedState().toJson());
       expect(await stateFile.exists(), isFalse);
-      final quarantine = File(
-        '${stateFile.path}.corrupt-${instant.millisecondsSinceEpoch}',
-      );
-      expect(await quarantine.readAsBytes(), invalidBytes);
+      final quarantine = (await _quarantineContainers(directory)).single;
+      final quarantinedState = File('${quarantine.path}/state.json');
+      expect(await quarantinedState.readAsBytes(), invalidBytes);
 
       const replacement = PersistedState(
         settings: LineupSettings(reduceMotion: true),
@@ -590,7 +582,117 @@ void main() {
 
       expect(reloaded.recoveredCorruptState, isFalse);
       expect(reloaded.state.toJson(), replacement.toJson());
-      expect(await quarantine.readAsBytes(), invalidBytes);
+      expect(await quarantinedState.readAsBytes(), invalidBytes);
+    },
+  );
+
+  test(
+    'a pre-existing flat quarantine artifact survives corrupt-state recovery',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'lineup-store-test',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      final stateFile = File('${directory.path}/state.json');
+      await stateFile.writeAsString('{broken');
+      final instant = DateTime.utc(2026, 8, 23);
+      final existing = File(
+        '${stateFile.path}.corrupt-${instant.millisecondsSinceEpoch}',
+      );
+      final existingBytes = [0x66, 0x6c, 0x61, 0x74];
+      await existing.writeAsBytes(existingBytes);
+
+      final restored = await FileAppStore(
+        directory,
+        clock: () => instant,
+      ).load();
+
+      expect(restored.recoveredCorruptState, isTrue);
+      expect(await existing.readAsBytes(), existingBytes);
+      expect(await stateFile.exists(), isFalse);
+      final containers = await _quarantineContainers(directory);
+      expect(containers, hasLength(1));
+      expect(
+        await File('${containers.single.path}/state.json').readAsString(),
+        '{broken',
+      );
+    },
+  );
+
+  test('a pre-existing directory quarantine artifact survives corrupt-state recovery', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'lineup-store-test',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+    final stateFile = File('${directory.path}/state.json');
+    await stateFile.writeAsString('{broken');
+    final instant = DateTime.utc(2026, 8, 23);
+    final existing = Directory(
+      '${stateFile.path}.corrupt-${instant.millisecondsSinceEpoch}',
+    );
+    await existing.create();
+    final marker = File('${existing.path}/marker');
+    final markerBytes = [0x64, 0x69, 0x72];
+    await marker.writeAsBytes(markerBytes);
+
+    final restored = await FileAppStore(directory, clock: () => instant).load();
+
+    expect(restored.recoveredCorruptState, isTrue);
+    expect(await existing.exists(), isTrue);
+    expect(await marker.readAsBytes(), markerBytes);
+    expect(await stateFile.exists(), isFalse);
+    final containers = (await _quarantineContainers(directory))
+        .where((container) => container.path != existing.path)
+        .toList();
+    expect(containers, hasLength(1));
+    expect(
+      await File('${containers.single.path}/state.json').readAsString(),
+      '{broken',
+    );
+  });
+
+  test(
+    'repeated fixed-clock recovery preserves both original byte sequences',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'lineup-store-test',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      final stateFile = File('${directory.path}/state.json');
+      final instant = DateTime.utc(2026, 8, 23);
+      final store = FileAppStore(directory, clock: () => instant);
+      final firstBytes = [0x7b, 0x22, 0x66, 0x69, 0x72, 0x73, 0x74, 0x7d];
+      final secondBytes = [
+        0x7b,
+        0x22,
+        0x73,
+        0x65,
+        0x63,
+        0x6f,
+        0x6e,
+        0x64,
+        0x7d,
+      ];
+
+      await stateFile.writeAsBytes(firstBytes);
+      expect((await store.load()).recoveredCorruptState, isTrue);
+      await stateFile.writeAsBytes(secondBytes);
+      expect((await store.load()).recoveredCorruptState, isTrue);
+
+      final containers = await _quarantineContainers(directory);
+      expect(containers, hasLength(2));
+      final quarantinedBytes = [
+        for (final container in containers)
+          await File('${container.path}/state.json').readAsBytes(),
+      ];
+      expect(
+        quarantinedBytes.any((bytes) => _sameBytes(bytes, firstBytes)),
+        isTrue,
+      );
+      expect(
+        quarantinedBytes.any((bytes) => _sameBytes(bytes, secondBytes)),
+        isTrue,
+      );
     },
   );
 
@@ -608,30 +710,6 @@ void main() {
   });
 
   test(
-    'a quarantine collision fails instead of hiding corrupt state',
-    () async {
-      final directory = await Directory.systemTemp.createTemp(
-        'lineup-store-test',
-      );
-      addTearDown(() => directory.delete(recursive: true));
-      final stateFile = File('${directory.path}/state.json');
-      await stateFile.writeAsString('{broken');
-      final instant = DateTime.utc(2026, 8, 23);
-      final quarantinePath =
-          '${stateFile.path}.corrupt-${instant.millisecondsSinceEpoch}';
-      await Directory(quarantinePath).create();
-
-      await expectLater(
-        FileAppStore(directory, clock: () => instant).load(),
-        throwsA(isA<FileSystemException>()),
-      );
-
-      expect(await stateFile.readAsString(), '{broken');
-      expect(await Directory(quarantinePath).exists(), isTrue);
-    },
-  );
-
-  test(
     'transient directory read failure preserves state without quarantine',
     () async {
       final directory = await Directory.systemTemp.createTemp(
@@ -647,15 +725,26 @@ void main() {
       );
 
       expect(await stateDirectory.exists(), isTrue);
-      expect(
-        await directory
-            .list()
-            .where((entry) => entry.path.contains('state.json.corrupt-'))
-            .isEmpty,
-        isTrue,
-      );
+      expect(await _quarantineContainers(directory), isEmpty);
     },
   );
+}
+
+Future<List<Directory>> _quarantineContainers(Directory directory) async {
+  final prefix =
+      '${directory.path}${Platform.pathSeparator}state.json.corrupt-';
+  return [
+    for (final entry in await directory.list().toList())
+      if (entry is Directory && entry.path.startsWith(prefix)) entry,
+  ];
+}
+
+bool _sameBytes(List<int> left, List<int> right) {
+  if (left.length != right.length) return false;
+  for (var index = 0; index < left.length; index++) {
+    if (left[index] != right[index]) return false;
+  }
+  return true;
 }
 
 Map<String, Object?> _canonicalJson() => {
