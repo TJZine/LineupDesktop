@@ -234,6 +234,30 @@ behavior it is labelled an assumption until confirmed.
 
 ## Implementation packages
 
+The packages are units of ownership, not a required sequence. Run independent
+work in parallel with explicit ownership, and serialize only these
+dependencies:
+
+| Package | Depends on | Can run alongside |
+| --- | --- | --- |
+| P0b evidence | — | P2; P4 persistence |
+| P1 Dart session client | P0b for stream selection and the subtitle/master rules; the rest can start earlier | P2; P4 persistence |
+| P2 native load kind | The load-kind contract below (no P0b dependency) | P1; P4 persistence |
+| P3 playback integration | P1 and P2 | P4 persistence |
+| P4 persistence (quality fields, fallback, store evidence) | — | P1, P2, P3 |
+| P4 Settings UI | Design agreement on decision 9 | P3 |
+| P5 physical acceptance and docs | P3 and P4 | — |
+
+The load-kind contract that P1 and P2 share is fixed here, so they can proceed
+in parallel. `NativePlayer.load` takes an explicit kind:
+
+- **Direct Play:** today's behavior, with the token header.
+- **Plex session:** no token, per-file `access-references=yes` and
+  `curl-max-redirects=0`.
+
+Dart enforces HTTPS for both. P1 and P2 have separate writers (Dart client
+versus native runner). One integration owner verifies them together in P3.
+
 ### P0 — Plex session contract evidence (Windows, maintainer-authorized PMS)
 
 No production code. See the P0 handoff for the procedure. It must establish:
@@ -307,18 +331,22 @@ Direct Play path, to be fixed separately from transcoding.
   - client-profile construction;
   - all master validation;
   - parsing of Plex audio and subtitle streams from item metadata.
-- Tests: strict HTTP fixtures that reject unexpected requests. Assert the
-  method, path, parameters and headers, and that no token appears in any URL.
-  Refuse masters with multiple variants, renditions, an off-origin or HTTP
-  variant, user info or a token query. These are the transport owner's
-  `network` and `security` cases.
+- **Evidence**, at the HTTP boundary, using fakes that reject unexpected
+  requests:
+  - every request's method, path, parameters and headers, as the server
+    observes them, with no token in any URL;
+  - refusal of masters with multiple variants, renditions, an off-origin or
+    HTTP variant, user info or a token query;
+  - the PUT's request shape, as recorded by P0b.
+
+  These are external-boundary and security obligations; a source trace alone
+  cannot prove them.
 
 ### P2 — Native session load kind
 
-- Extend `NativePlayer.load` with an explicit load kind: Direct Play or Plex
-  session. A session load always uses node-map `loadfile` with
-  `access-references=yes` and `curl-max-redirects=0` and no header. Dart
-  enforces HTTPS for both kinds.
+- Implement the load-kind contract above in the native runner. A session load
+  always uses node-map `loadfile` with `access-references=yes` and
+  `curl-max-redirects=0`, and no header.
 - Extend the gated `authenticated_reference` test (a gated native test on the
   pinned DLL):
   - a session-style HLS plays with the override and no token header;
@@ -327,17 +355,28 @@ Direct Play path, to be fixed separately from transcoding.
   - a session variant with an off-origin segment sends no token to B;
   - Direct Play containment still passes.
 
-  Prove the session case fails without the override.
+  Negative control: the session case must fail when the per-load override is
+  absent, then pass with it restored, so the check is shown to observe the
+  override.
 - Update the `native_player.dart` contract comment and the architecture note,
   calibrated as "gated native test on pinned DLL".
 
 ### P3 — Playback integration
 
-- **Request model.** A session request carries a controller-owned start
-  function `(partIndex, offset) → (variant URI, session handle)`, because a
-  session URI depends on the offset. The four load sites call it instead of
-  load-then-seek: tune, `_advancePart`, part-changing seek, and authorization
-  recovery.
+- **One "load part at position" operation.** Today four coordinator sites each
+  repeat "load `parts[i].uri`, then seek": tune (`_loadPlayback`),
+  `_advancePart`, the part-changing seek, and `_recoverAuthorization`.
+  - First consolidate them into a single coordinator operation that loads a
+    part at a position, with one owner for load ordering, currentness and
+    recovery. Then add sessions to that one place.
+  - The playback request supplies how a part is loaded at a position:
+    - **Direct Play:** load the part URI, then seek;
+    - **session:** a controller-owned start `(partIndex, offset) → (variant
+      URI, session handle)`, because a session URI depends on the offset.
+  - Existing coordinator evidence for these four paths carries over to the
+    consolidated operation. Map each path's current behavior (ordering,
+    currentness, authorization recovery) to the evidence that keeps proving it
+    before removing the duplicated code.
 - **Recovery.**
   - A native 401/403 on a session load is not a token problem; it gets one
     bounded session restart at the current position. A repeated 401/403 means
@@ -353,28 +392,36 @@ Direct Play path, to be fixed separately from transcoding.
     to about 2 s before a **session** start, so a single-transcode server limit
     cannot reject the new start. A Direct Play load never waits for it, and an
     unreachable PMS delays a session tune by at most that bound;
-  - orphaned sessions after a crash or network loss rely on PMS reaping, with
-    the time P0 measured;
-  - stops include decision-only calls if P0 shows they create state.
-- **Positions.** Map session positions to program positions per the P0 rule;
-  `seekBy` uses the mapped duration.
-- **Seeking.** In-session seek when the target is inside the session, otherwise
-  a debounced restart (decision 5).
-- **Track changes.** Plex-stream track changes restart the session (decision
-  4, after its approval).
+  - orphaned sessions after a crash or network loss rely on PMS reaping, about
+    3–3.5 minutes per P0;
+  - decision-only calls need no stop (P0: they create no session entry).
+- **Positions.** Program position = start offset + libmpv `time-pos`; program
+  duration comes from metadata (P0, question 5). `seekBy` uses that duration.
+- **Seeking.** Always a debounced restart at the target offset with a new
+  session id (decision 5); no in-session seek.
+- **Track changes.** For a session: PUT the stream selection, then restart at
+  the current position (decision 4). The drawer listing Plex streams still
+  needs its own Player approval.
+- **Keep-alive.** A transcode ping every 30 s while a session is live,
+  including when paused (decision 6).
 - **Diagnostics.** Report the playback method, with session ids and URLs
   redacted.
-- **Tests.** Coordinator lifecycle tests use the **real `PlexClient` over a
-  strict HTTP fake**, because stop requests are user-visible requests, and a
-  native fake. Cover:
-  - offset start;
+- **Evidence.** The coordinator lifecycle is observed through the **real
+  `PlexClient` over an HTTP fake that rejects unexpected requests**, because
+  start, ping and stop are requests the server sees. Use a native fake for
+  playback. Distinct obligations:
+  - offset start and position mapping;
   - part advance;
-  - in-session seek versus restart;
-  - debounce;
+  - debounced seek restart;
+  - track-change restart (PUT, then restart);
+  - pings while live and paused, stopping after the session ends;
   - rapid channel changes with no leaked sessions and no stray starts;
   - start failure and recovery;
   - a mid-session failure restart;
   - a stale completion after replacement.
+
+  Reuse existing coordinator coverage for unchanged Direct Play behavior
+  rather than duplicating it.
 
 ### P4 — Settings and UI (after design agreement)
 
@@ -384,13 +431,14 @@ Direct Play path, to be fixed separately from transcoding.
 - **Decided 2026-10-03:** an unknown quality key falls back to `original`, for
   these two fields only, so a future ladder change cannot wipe channels and
   selections. Every other field keeps strict decoding.
-- Add old-serialized-state and unknown-key cases to the store owner test
-  (`test/persistence/app_store_test.dart`).
+- Evidence for compatibility: old serialized state without the new fields
+  still loads, and an unknown quality key falls back to `original`. Add these
+  as rows to the existing store tests (`test/persistence/app_store_test.dart`).
 - **Downgrade risk:** an older build rejects the new keys and quarantines the
   whole `state.json` (channels, profiles, selections), not just settings.
   Acceptable before MVP; record it.
-- Implement the agreed Settings rows (decision 9). Tests own visible selection,
-  persistence and reload, through the existing settings UI owner.
+- Implement the agreed Settings rows (decision 9). Evidence: visible
+  selection, persistence and reload, through the existing settings UI tests.
 
 ### P5 — Windows physical acceptance and docs
 
@@ -400,7 +448,7 @@ Direct Play path, to be fixed separately from transcoding.
   - Direct Stream;
   - live-offset tune;
   - part advance;
-  - seek (in-session and restart);
+  - seek restart;
   - track-change restart;
   - burned-in image subtitles;
   - rapid channel changes with no leaked PMS sessions;
@@ -412,13 +460,13 @@ Direct Play path, to be fixed separately from transcoding.
 
 ## Regression matrix (summary)
 
-| Behavior | Owner |
+| Obligation | Evidence (boundary observed) |
 | --- | --- |
-| Decision/start/stop requests, master validation, stream parsing | P1 strict HTTP tests |
-| Session load kind, redirect refusal, token-free off-origin, restoration, Direct Play containment | P2 gated native test |
-| Session lifecycle, offsets, restarts, cleanup, failures | P3 coordinator tests (real `PlexClient` over strict HTTP fake) |
-| Quality persistence, unknown/old state, UI | P4 store and settings UI owners |
-| Visible and audible playback, bandwidth, relay | P5 physical acceptance |
+| Decision/start/ping/stop/PUT requests, master validation, stream parsing | P1 HTTP-boundary tests with an unexpected-request-rejecting fake |
+| Session load kind, redirect refusal, token-free off-origin, restoration, Direct Play containment | P2 gated native test on the pinned DLL, with a negative control |
+| Single load-at-position operation, session lifecycle, offsets, restarts, cleanup, failures | P3 coordinator tests (real `PlexClient` over the HTTP fake; native fake) |
+| Quality persistence, old/unknown state, Settings UI | P4 store tests and existing settings UI tests |
+| Visible and audible playback, bandwidth, relay | P5 physical Windows acceptance |
 
 ## Risks
 
@@ -427,8 +475,9 @@ Direct Play path, to be fixed separately from transcoding.
   design). Diagnostics name the cause.
 - **Session churn on the server.** Mitigation: client-generated ids, ordered
   stop-before-start, P0 load measurements.
-- **Restart latency** on track changes and out-of-session seeks. Mitigation:
-  in-session seeks, debounce, and a loading state.
+- **Restart latency** on track changes and every seek: about 6.5 s per restart
+  in P0. Mitigation: debounce, and a loading state. In-session seeking was
+  unreliable in P0, so it isn't a mitigation.
 - **Subtitle fidelity.** Text subtitles are burned in at first.
 - **Protected Player surfaces.** Track data source and badges need separate
   approvals. Without them, track changes are unavailable during a session.
