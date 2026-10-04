@@ -51,6 +51,12 @@ audience and purpose.
 
 ### Evidence and design records
 
+- [Workflow refresh report for GPT Pro](reviews/workflow-refresh-2026-10-03/REPORT.md)
+  reconciles the shared-skill migration with restored optional Codex presets,
+  the user's reviewer-model adjustment and separate-chat delegation preferences.
+  It includes dated personal orchestration source snapshots for connector review;
+  these are evidence, not additional workflow entry points or runtime acceptance.
+
 - [Collaborative desktop visual correction handoff](desktop-ui-collaborative-handoff.md)
   preserves the earlier user-led campaign and its provenance. Its dispatch,
   model, and sequential-work rules are historical execution policy. Still-
