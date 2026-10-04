@@ -251,3 +251,89 @@ host authorization constraints. Treat historical retirement lists and model
 settings as dated evidence. Identify concrete gaps in context, ownership,
 integration or proof; do not assume either measured savings or reliable live
 callback behavior from configuration and tabletop checks alone.
+
+## Follow-up: dependency clarification
+
+October 4, 2026. The actual checkout is `TJZine/LineupDesktop` on
+`codex/libmpv-reference-security-report`, with HEAD
+`5e116f0bf0aa9467b217c3462bafcf643ce294bf`, matching the reviewed baseline.
+There were no later commits or staged/unstaged tracked changes to reconcile.
+Pre-existing untracked `.claude/launch.json`, the
+`docs/design/desktop-ui/review-packets/lineup-1080p-cbf3dbd5/` packet,
+`docs/reviews/test-slimming-2026-10-02/` and `tool/windows/__pycache__/` remain
+untouched. At documentation-task completion, this follow-up consisted of three
+local, unstaged changes at that HEAD, with no new committed SHA or publication.
+The human subsequently authorized committing the three verified documents as
+one dependency-clarification change. The earlier working-state description is
+the pre-commit observation; the containing commit identifies these source bytes.
+That later authorization does not include publication.
+
+The corrected instruction owners are the
+[transcoding plan](../../plex-transcoding-implementation-plan.md) and
+[project profile](../../../.agents/project.md#current-planning-and-verification-status).
+Their status wording now distinguishes a separately authorized P1 foundation
+that may proceed alongside P0b from full P1 completion. The foundation boundary
+is defined once under the plan's P1 heading. Stream-selection PUT behavior and
+request shape, selected-subtitle delivery, dependent subtitle/master rules and
+final session-start compatibility/acceptance still await P0b evidence. P1 remains
+incomplete until those obligations are resolved and verified; P3 requires
+completed P1 and P2. Eligibility starts no implementation package.
+
+The [package table](../../plex-transcoding-implementation-plan.md#implementation-packages)
+also makes decision 2's existing Remote-default confirmation prerequisite visible
+for P4 persistence and Settings UI. This adds no P0b dependency to P4 and chooses
+no new default. The settled 720p · 2 Mbps value, pending official-app confirmation,
+original-quality fallback, decision 9's Settings design agreement, protected
+Player approvals, security design and physical acceptance requirements remain
+unchanged.
+
+Changed files: `docs/plex-transcoding-implementation-plan.md`,
+`.agents/project.md` and this `docs/reviews/workflow-refresh-2026-10-03/REPORT.md`.
+Documentation-only checks passed: `git diff --check`; local link/heading target
+validation; exact comparison of the prescribed plan/profile replacements with
+the follow-up prompt; joint status/table/P1/profile dependency reading and active
+contradiction search; complete integrated diff inspection; preservation of all
+other plan/profile bytes, the original report prefix, snapshots, presets, index
+and unrelated untracked file identities. The remaining historical "P1 cannot
+start unchanged as an accepted full-plan handoff" quotation stays in the dated P0
+results; it is not an active blanket prohibition on the defined foundation.
+All eventual P1 HTTP evidence bullets, P0b procedure, load-kind contract, P2/P3/P5
+obligations and authenticated-reference positive-control paragraph are retained.
+
+### Existing hosted evidence
+
+A single GET-only inspection at **2026-10-04 19:12:02 UTC (15:12:02 EDT)** found
+[run 37169468242](https://github.com/TJZine/LineupDesktop/actions/runs/37169468242)
+completed with conclusion **cancelled**. Its head is
+`5e116f0bf0aa9467b217c3462bafcf643ce294bf`, event `pull_request`, attempt 1;
+the run's last update was 2026-10-04 04:56:30 UTC.
+
+| Job | Observed conclusion |
+| --- | --- |
+| Verify Dart | Success |
+| Verify and build Windows player | Success |
+| Verify macOS alpha surface and build macOS | Success |
+| Verify Windows release policy | Success |
+| Detect Windows release inputs | Success |
+| Build patched Flutter engine and package | Cancelled: engine-source validation/patched-engine build succeeded; compile against the patched engine was cancelled; package upload was skipped |
+
+The run's artifact listing returned no artifacts. The cancellation reason and
+actual per-job checkout SHA are not exposed by the inspected run/job summaries;
+the run head is not claimed as an independently verified tested checkout. The
+inspected workflow has no explicit checkout `ref` override, and this is a PR run.
+No package completion, physical playback/HDR/composition/input acceptance or
+acceptance of these uncommitted documentation edits follows from this older run.
+No run was rerun, dispatched, cancelled or repeatedly polled by this task.
+The current CodeRabbit commit status is `success`, with description
+"Review skipped: reviews are disabled for this base branch" (updated
+2026-10-04 01:55:32 UTC); this is not an executed independent review.
+
+### Remaining acceptance owners
+
+This documentation task is complete. The maintainer and separately
+authorized product packages still own P0b observations, completed P1/P2 and P3
+integration, Remote-default confirmation, Settings/Player approvals and P5
+physical acceptance. The single global owner retains Codex/Claude installation
+and model/effort/callback acceptance; no second host campaign was launched here.
+No product probe, product/native test or build, personal-installation/callback
+acceptance, or measured cost-savings result is newly claimed by this follow-up.

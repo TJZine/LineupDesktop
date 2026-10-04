@@ -6,7 +6,12 @@ and P0 evidence. Still open:
 - the Remote default, to check against a current official app before P4;
 - P0b evidence.
 
-Nothing here is implemented. P1 starts after P0b.
+Production implementation remains pending. Within a separately authorized
+implementation task, the P1 foundation defined below may proceed alongside
+P0b; stream selection, subtitle/master rules, and final session-start
+acceptance await the required P0b evidence. P3 requires completed P1 and P2.
+The package table expresses dependency eligibility, not authorization to
+begin work.
 
 **Planning baseline:** `codex/libmpv-reference-security-report` at
 `510c91d2d8a30c12505e996a060241fb0862b649`.
@@ -240,13 +245,18 @@ dependencies:
 
 | Package | Depends on | Can run alongside |
 | --- | --- | --- |
-| P0b evidence | — | P2; P4 persistence |
-| P1 Dart session client | P0b for stream selection and the subtitle/master rules; the rest can start earlier | P2; P4 persistence |
-| P2 native load kind | The load-kind contract below (no P0b dependency) | P1; P4 persistence |
-| P3 playback integration | P1 and P2 | P4 persistence |
-| P4 persistence (quality fields, fallback, store evidence) | — | P1, P2, P3 |
-| P4 Settings UI | Design agreement on decision 9 | P3 |
+| P0b evidence | — | P1 foundation; P2; eligible P4 persistence |
+| P1 Dart session client | P0b for stream selection, subtitle/master rules, and final session-start acceptance; only the foundation defined under P1 may start earlier | P0b (foundation only); P2; eligible P4 persistence |
+| P2 native load kind | The load-kind contract below (no P0b dependency) | P1; eligible P4 persistence |
+| P3 playback integration | Completed P1, including its P0b-dependent obligations, and P2 | Eligible P4 persistence |
+| P4 persistence (quality fields, fallback, store evidence) | No earlier implementation-package dependency; Remote-default confirmation required by decision 2 | P1, P2, P3 |
+| P4 Settings UI | Remote-default confirmation required by decision 2 and Settings design agreement on decision 9 | P3 |
 | P5 physical acceptance and docs | P3 and P4 | — |
+
+Parallel eligibility preserves every product, security, UI, and platform
+prerequisite. P1's foundation is a subunit, not a new mandatory phase or
+agent. P4's independent persistence work remains subject to its existing
+Remote-default prerequisite. This documentation change starts no package.
 
 The load-kind contract that P1 and P2 share is fixed here, so they can proceed
 in parallel. `NativePlayer.load` takes an explicit kind:
@@ -319,6 +329,24 @@ If it reproduces against a genuinely remote server, it is a defect in today's
 Direct Play path, to be fixed separately from transcoding.
 
 ### P1 — Dart Plex session client and stream metadata
+
+**Dependency boundary.** Before P0b, a separately authorized P1 foundation
+assignment is limited to decision requests, client-profile construction,
+client-generated session identities, idempotent stop, keep-alive ping,
+parsing already specified Plex audio/subtitle metadata, and HTTP-boundary
+checks for those established contracts. Stream-selection PUT behavior and
+request shape, selected-subtitle delivery, the subtitle/master rules that
+depend on those observations, and final session-start compatibility and
+acceptance remain dependent on the required P0b evidence. P1 is not complete
+until those obligations are resolved and verified; P3 requires completed P1
+and P2.
+
+Metadata selection does not prove delivered audio or subtitles. Do not infer
+selected-subtitle master compatibility from no-subtitle observations, or
+true-remote support from the P0 LAN/non-local probe. Preserve the security
+design's HTTPS, same-server, token-header, token-free-child, redirect, and
+redaction restrictions. Do not invent unobserved request shapes, successful
+fixtures, or a relaxed master validator to complete an early foundation unit.
 
 - `PlexClient`:
   - decision;

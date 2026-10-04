@@ -48,15 +48,18 @@ them report completion or blockers back to this orchestrator chat."
 
 The [Plex transcoding plan](../docs/plex-transcoding-implementation-plan.md)
 records product decisions settled on October 3, 2026 and bounded P0
-observations. Production implementation remains pending: P1 starts after P0b
-stream-selection and true-remote evidence. Settings design agreement, protected
-Player proposals, and confirmation of the Remote default before P4 remain
-required. Consult the plan for current decisions and acceptance gates rather
-than treating its recorded headless observations as integrated Lineup support
-or physical acceptance. Workflow maintenance does not implement the plan,
-approve UI changes, or authorize P1. Recorded source/runtime identities and
-limits remain intact. A historical independent-review recommendation is
-evidence of that assessment, not a permanent ban on future focused review.
+observations. Production implementation remains pending. Its P1 foundation
+can proceed before P0b only under a separate implementation assignment;
+stream selection, subtitle/master rules, and final session-start acceptance
+remain P0b-dependent. P3 requires completed P1 and P2. Use the plan's P1
+dependency boundary and package table for the exact eligible scope. Settings
+design agreement, protected Player proposals, and confirmation of the Remote
+default before P4 remain required. The plan's headless observations do not
+establish integrated Lineup support or physical acceptance. Workflow
+maintenance does not implement the plan, approve UI changes, or authorize a
+product package. Preserve recorded source/runtime identities and limits. A
+historical independent-review recommendation describes that assessment; it
+is not a permanent ban on a future focused review.
 
 The authenticated-reference positive controls now require both playback
 progress and absence of a later rejection. Earlier passes of weaker assertions
