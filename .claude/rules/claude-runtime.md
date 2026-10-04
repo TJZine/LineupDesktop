@@ -17,7 +17,9 @@ describes host discovery and adds no orchestration policy.
 - `.codex/config.toml` and `.codex/agents/*.toml` configure Codex. Claude uses
   `.claude/agents/`; do not infer cross-host feature or effort parity from names.
 - Codex discovers personal `code_reviewer` and `code_investigator` agents;
-  the project does not shadow them with duplicate procedures or model-bound
-  aliases. Respect effective runtime permissions and delegation restrictions.
+  the project's optional `planner`, `reviewer`, `worker`, and `worker_luna`
+  presets are separate Codex shortcuts described in `.agents/project.md`.
+  They do not configure Claude models or shadow the personal read-only roles.
+  Respect effective runtime permissions and delegation restrictions.
   A concurrency ceiling is not a target roster; parallel work requires
   independent ownership and stable check inputs.

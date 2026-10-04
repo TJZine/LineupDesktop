@@ -9,6 +9,41 @@ Recheck the referenced commands, owners, and active branch for the current
 task. The paths below are starting points, not permanent restrictions on an
 authorized redesign.
 
+## Optional delegation presets
+
+The project provides Codex role shortcuts for user-requested delegation. Their
+current TOML files own model and reasoning settings; shared skills own the
+engineering procedure. Use a named preset when requested, or select among the
+presets when the user authorizes that choice. No role is a mandatory phase.
+
+| Shortcut | Configuration | Suitable responsibility |
+| --- | --- | --- |
+| `worker_luna` | [worker-luna.toml](../.codex/agents/worker-luna.toml) | Bounded implementation with a decision-complete plan and all relevant context |
+| `worker` | [worker.toml](../.codex/agents/worker.toml) | Approved implementation requiring more judgment, complex diagnosis, or cross-boundary comprehension |
+| `planner` | [planner.toml](../.codex/agents/planner.toml) | Planning and self-contained handoffs; write only requested planning artifacts |
+| `reviewer` | [reviewer.toml](../.codex/agents/reviewer.toml) | Independent read-only review of the supplied contract and source state |
+
+`worker` intentionally overrides Codex's built-in role with this project's
+preset. Personal `code_reviewer` and `code_investigator` remain available and
+inherit model/effort unless explicitly overridden.
+
+For user-requested separate implementation chats, use the personal
+`orchestrate-implementation-chats` skill. The controller uses high reasoning or
+above and chooses `worker_luna` for a fully specified unit, or `worker` when the
+unit needs more implementation judgment. Resolve consequential product, design,
+and ownership decisions before dispatch. Supply an accessible detailed plan plus
+the exact unit and any additional context, instructions, and proof requirements;
+a fresh child does not inherit this conversation. Read the selected preset and
+pass its model and effort explicitly to `create_thread`, with its responsibility
+instructions in the handoff. Role names alone do not configure separate chats.
+Honor the user's original creation/callback authorization and actual host
+restrictions. `sandbox_mode` in a role file does not enforce permissions on a
+separate chat. The controller inspects returned work and owns integration.
+
+Example request: "Execute this approved plan in separate chats using
+orchestrate-implementation-chats. Choose worker_luna or worker per unit and have
+them report completion or blockers back to this orchestrator chat."
+
 ## Current planning and verification status
 
 The [Plex transcoding plan](../docs/plex-transcoding-implementation-plan.md)
