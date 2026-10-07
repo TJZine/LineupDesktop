@@ -270,8 +270,43 @@ class PlayerCoordinator extends ChangeNotifier {
     super.notifyListeners();
   }
 
+  // Native position remains exact; only its UI publication is bucketed.
+  Object get _eventVisibleFacts => (
+    (
+      _status.state,
+      _status.message,
+      _status.recoverable,
+      _status.failureCode,
+      _status.httpStatus,
+    ),
+    _position.inMicroseconds ~/
+        const Duration(milliseconds: 250).inMicroseconds,
+    _duration,
+    (
+      _telemetry.videoOutput,
+      _telemetry.hardwareDecoder,
+      _telemetry.videoCodec,
+      _telemetry.videoFormat,
+      _telemetry.width,
+      _telemetry.height,
+      _telemetry.pixelFormat,
+      _telemetry.hardwarePixelFormat,
+      _telemetry.primaries,
+      _telemetry.gamma,
+      _telemetry.colorMatrix,
+      _telemetry.signalPeak,
+    ),
+    _tracks,
+    _overlay,
+    _overlayPresentationGeneration,
+    _error,
+    _pendingTrackType,
+    _pendingTrackId,
+  );
+
   void _event(PlayerEvent event) {
     if (event.generation != _activeLoadGeneration) return;
+    final previousFacts = _eventVisibleFacts;
     final previousState = _status.state;
     _status = event.status.state == PlayerState.error
         ? PlayerStatus(
@@ -447,7 +482,7 @@ class PlayerCoordinator extends ChangeNotifier {
           break;
       }
     }
-    if (!_disposed) notifyListeners();
+    if (!_disposed && previousFacts != _eventVisibleFacts) notifyListeners();
   }
 
   Future<bool> tune(String channelId) {

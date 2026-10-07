@@ -751,7 +751,7 @@ class WindowsNativePlayer implements NativePlayer {
         position: _position,
         duration: _duration,
         telemetry: _telemetry,
-        tracks: List.unmodifiable(_tracks),
+        tracks: _tracks,
         generation: _activeGeneration,
       ),
     );

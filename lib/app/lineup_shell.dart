@@ -65,6 +65,7 @@ class _LineupShellState extends State<LineupShell> {
   bool _onboardingFromAccount = false;
   SettingsCategory _settingsCategory = SettingsCategory.appearance;
   bool _guideOpenedFromPlayer = false;
+  Object? _lastPlayerFacts;
   late SetupStage _lastStage = widget.controller.stage;
   @override
   void initState() {
@@ -83,10 +84,31 @@ class _LineupShellState extends State<LineupShell> {
     if (initialMediaPath != null) {
       unawaited(_player.loadInitialMedia(_mediaUri(initialMediaPath)));
     }
-    _player.addListener(_changed);
+    _lastPlayerFacts = _shellPlayerFacts;
+    _player.addListener(_playerChanged);
     if (_selectedIndex == 0) _player.showFullGuide();
     widget.controller.addListener(_changed);
     WidgetsBinding.instance.addPostFrameCallback((_) => _restoreRouteFocus());
+  }
+
+  Object get _shellPlayerFacts => (
+    _player.hasPlaybackIntent,
+    _player.tuning,
+    _player.error,
+    _player.canRetry,
+    _player.status.state,
+    _player.status.message,
+    _player.currentChannel?.id,
+    _player.currentProgram?.scheduled.item.title,
+    // Only Diagnostics consumes telemetry at the shell boundary.
+    _selectedIndex == 3 ? _player.telemetry : null,
+  );
+
+  void _playerChanged() {
+    final facts = _shellPlayerFacts;
+    if (_lastPlayerFacts == facts) return;
+    _lastPlayerFacts = facts;
+    if (mounted) setState(() {});
   }
 
   void _changed() {
@@ -113,7 +135,7 @@ class _LineupShellState extends State<LineupShell> {
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_trackKeyboardInput);
     widget.controller.removeListener(_changed);
-    _player.removeListener(_changed);
+    _player.removeListener(_playerChanged);
     _player.dispose();
     _guide.dispose();
     _guideFocus.dispose();
@@ -631,6 +653,7 @@ class _LineupShellState extends State<LineupShell> {
 
   @override
   Widget build(BuildContext context) {
+    _lastPlayerFacts = _shellPlayerFacts;
     final controller = widget.controller;
     if (controller.stage != SetupStage.ready) {
       final onboardingMenuAvailable = _onboardingMenuAvailable;

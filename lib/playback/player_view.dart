@@ -41,7 +41,7 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
   var _overlayTransitionDuration = const Duration(milliseconds: 350);
   final _menuFocus = FocusNode(debugLabel: 'Player Lineup menu');
   final _sleepFocus = FocusNode(debugLabel: 'Player sleep timer');
-  Timer? _sleepCountdownTimer;
+  Timer? _visibleClockTimer;
   var _appActive = true;
   var _keyboardInput = false;
   final _internalRootFocus = FocusNode(debugLabel: 'Player root');
@@ -55,14 +55,14 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     widget.controller.addListener(_changed);
     HardwareKeyboard.instance.addHandler(_trackKeyboardInput);
-    _syncSleepCountdownTimer();
+    _syncVisibleClockTimer();
   }
 
   @override
   void dispose() {
     widget.controller.removeListener(_changed);
     WidgetsBinding.instance.removeObserver(this);
-    _sleepCountdownTimer?.cancel();
+    _visibleClockTimer?.cancel();
     HardwareKeyboard.instance.removeHandler(_trackKeyboardInput);
     _internalRootFocus.dispose();
     _menuFocus.dispose();
@@ -75,13 +75,13 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
     final active = state == AppLifecycleState.resumed;
     if (_appActive == active) return;
     setState(() => _appActive = active);
-    _syncSleepCountdownTimer();
+    _syncVisibleClockTimer();
     if (active) unawaited(widget.controller.checkSleepDeadline());
   }
 
   void _changed() {
     if (!mounted) return;
-    _syncSleepCountdownTimer();
+    _syncVisibleClockTimer();
     final nextOverlay = widget.controller.overlay;
     final bottomPanelChanged =
         _renderedOverlay != nextOverlay &&
@@ -136,26 +136,27 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
     }
   }
 
-  void _syncSleepCountdownTimer() {
-    final showCountdown =
-        _appActive &&
-        (widget.controller.overlay == PlayerOverlay.sleepTimer ||
-            widget.controller.overlay == PlayerOverlay.osd ||
-            widget.controller.overlay == PlayerOverlay.nowPlaying) &&
-        widget.controller.sleepDeadline != null;
-    if (!showCountdown) {
-      _sleepCountdownTimer?.cancel();
-      _sleepCountdownTimer = null;
+  bool get _needsVisibleClock =>
+      _appActive &&
+      switch (widget.controller.overlay) {
+        PlayerOverlay.miniGuide ||
+        PlayerOverlay.osd ||
+        PlayerOverlay.nowPlaying => true,
+        PlayerOverlay.sleepTimer => widget.controller.sleepDeadline != null,
+        _ => false,
+      };
+
+  void _syncVisibleClockTimer() {
+    if (!_needsVisibleClock) {
+      _visibleClockTimer?.cancel();
+      _visibleClockTimer = null;
       return;
     }
-    _sleepCountdownTimer ??= Timer.periodic(const Duration(seconds: 30), (_) {
+    // Schedule clocks and progress must advance even without native events.
+    _visibleClockTimer ??= Timer.periodic(const Duration(seconds: 30), (_) {
       if (!mounted) return;
-      if (!_appActive ||
-          (widget.controller.overlay != PlayerOverlay.sleepTimer &&
-              widget.controller.overlay != PlayerOverlay.osd &&
-              widget.controller.overlay != PlayerOverlay.nowPlaying) ||
-          widget.controller.sleepDeadline == null) {
-        _syncSleepCountdownTimer();
+      if (!_needsVisibleClock) {
+        _syncVisibleClockTimer();
         return;
       }
       setState(() {});

@@ -40,6 +40,93 @@ final _extremeWideArtwork = base64Decode(
 
 void main() {
   testWidgets(
+    'paused Mini Guide clock refreshes without player events and stops in background',
+    (tester) async {
+      var now = DateTime(2026, 1, 15, 12);
+      final fixture = _Fixture(
+        PlayerState.paused,
+        guideClock: () => now,
+        shortPrograms: true,
+      );
+      await fixture.guide.ensureCurrentProgram('channel');
+      fixture.player.showMiniGuide();
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: LineupCanvas.builder,
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('12:00 PM'), findsOneWidget);
+      final beforeProgress = tester
+          .widget<LinearProgressIndicator>(find.byType(LinearProgressIndicator))
+          .value!;
+      now = now.add(const Duration(minutes: 1));
+      await tester.pump(const Duration(seconds: 30));
+      expect(find.text('12:01 PM'), findsOneWidget);
+      expect(
+        tester
+            .widget<LinearProgressIndicator>(
+              find.byType(LinearProgressIndicator),
+            )
+            .value!,
+        greaterThan(beforeProgress),
+      );
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      await tester.pump();
+      now = now.add(const Duration(minutes: 1));
+      await tester.pump(const Duration(seconds: 30));
+      expect(find.text('12:01 PM'), findsOneWidget);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pump();
+      expect(find.text('12:02 PM'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    },
+  );
+
+  for (final overlay in [PlayerOverlay.osd, PlayerOverlay.nowPlaying]) {
+    testWidgets(
+      'paused ${overlay.name} schedule changes without player events',
+      (tester) async {
+        var now = DateTime(2026, 1, 15, 12);
+        final fixture = _Fixture(
+          PlayerState.paused,
+          guideClock: () => now,
+          shortPrograms: true,
+          overlayTimeout: const Duration(hours: 1),
+        );
+        await fixture.guide.ensureCurrentProgram('channel');
+        if (overlay == PlayerOverlay.osd) {
+          fixture.player.showOsd();
+        } else {
+          fixture.player.showNowPlaying();
+        }
+        await tester.pumpWidget(
+          MaterialApp(
+            builder: LineupCanvas.builder,
+            home: PlayerView(controller: fixture.player, openGuide: () {}),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final title = find.byKey(
+          Key(
+            overlay == PlayerOverlay.osd
+                ? 'player-osd-title'
+                : 'player-now-playing-title',
+          ),
+        );
+        expect(tester.widget<Text>(title).data, 'Program');
+        now = now.add(const Duration(minutes: 31));
+        await tester.pump(const Duration(seconds: 30));
+        expect(tester.widget<Text>(title).data, 'Replacement Program');
+        await tester.pumpWidget(const SizedBox.shrink());
+        fixture.dispose();
+      },
+    );
+  }
+
+  testWidgets(
     'stopped slate stays opaque at every level with working Browse and Close',
     (tester) async {
       final fixture = _Fixture(PlayerState.stopped);

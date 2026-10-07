@@ -77,6 +77,24 @@ void main() {
       await load;
     });
 
+    test('position events reuse the immutable track snapshot', () async {
+      final events = <PlayerEvent>[];
+      final subscription = player.events.listen(events.add);
+      addTearDown(subscription.cancel);
+      await snapshot([identity]);
+      final tracks = player.tracks;
+      await _sendNativeEvent(messenger, {
+        'type': 'property',
+        'loadId': loadId,
+        'name': 'time-pos',
+        'value': 1.25,
+      });
+      expect(events, hasLength(2));
+      expect(identical(events.first.tracks, tracks), isTrue);
+      expect(identical(events.last.tracks, tracks), isTrue);
+      expect(() => tracks.clear(), throwsUnsupportedError);
+    });
+
     test('old fields do not fabricate new facts', () async {
       const oldFacts = {
         'title': 'Synthetic mix',

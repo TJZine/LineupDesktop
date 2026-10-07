@@ -17,6 +17,84 @@ import 'package:lineup_desktop/settings/lineup_settings.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  testWidgets(
+    'position publication is bucketed while seek and recovery stay exact',
+    (tester) async {
+      final lineup = _TestLineup(recoverAuthorization: true);
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => _schedule(channel),
+      );
+      final player = _EventPlayer();
+      final coordinator = PlayerCoordinator(
+        player: player,
+        lineup: lineup,
+        guide: guide,
+      );
+      addTearDown(player.close);
+      addTearDown(lineup.dispose);
+      addTearDown(guide.dispose);
+      addTearDown(coordinator.dispose);
+      await coordinator.tune('channel-b');
+      final generation = player.loadGenerations.single;
+      player.position = const Duration(minutes: 10);
+      player.emitStatus(PlayerState.playing, generation: generation);
+      await tester.pump();
+      var notifications = 0;
+      coordinator.addListener(() => notifications++);
+      for (var frame = 1; frame <= 60; frame++) {
+        player.position = Duration(milliseconds: 600000 + frame * 1000 ~/ 60);
+        player.emitStatus(PlayerState.playing, generation: generation);
+        await tester.pump();
+      }
+      expect(notifications, 4);
+      player.position = const Duration(milliseconds: 601007);
+      player.emitStatus(PlayerState.playing, generation: generation);
+      await tester.pump();
+      expect(notifications, 4);
+      expect(coordinator.position, player.position);
+      player.emitError(
+        recoverable: true,
+        generation: generation,
+        failureCode: 'http_error',
+        httpStatus: 401,
+      );
+      await tester.pump();
+      await tester.pump();
+      expect(lineup.recoveryCalls, 1);
+      expect(player.seeks.last, const Duration(milliseconds: 601007));
+      final replacement = player.loadGenerations.last;
+      player.emitStatus(PlayerState.playing, generation: replacement);
+      await tester.pump();
+      await coordinator.seekBy(const Duration(seconds: 5));
+      expect(player.seeks.last, const Duration(milliseconds: 606007));
+      final beforeStatus = notifications;
+      player.emitStatus(PlayerState.paused, generation: replacement);
+      await tester.pump();
+      expect(notifications, greaterThan(beforeStatus));
+      final beforeTracks = notifications;
+      player.tracks = const [
+        PlayerTrack(id: 1, type: PlayerTrackType.audio, selected: true),
+      ];
+      player.emitStatus(PlayerState.paused, generation: replacement);
+      await tester.pump();
+      expect(notifications, beforeTracks + 1);
+      final beforeTelemetry = notifications;
+      player.telemetry = const PlayerTelemetry(videoCodec: 'h264');
+      player.emitStatus(PlayerState.paused, generation: replacement);
+      await tester.pump();
+      expect(notifications, beforeTelemetry + 1);
+      final beforeDuration = notifications;
+      player.duration = const Duration(hours: 2);
+      player.emitStatus(PlayerState.paused, generation: replacement);
+      await tester.pump();
+      expect(notifications, beforeDuration + 1);
+      final beforeOverlay = notifications;
+      coordinator.showMiniGuide();
+      expect(notifications, beforeOverlay + 1);
+    },
+  );
+
   testWidgets('number notices expire and newer input and tunes replace them', (
     tester,
   ) async {

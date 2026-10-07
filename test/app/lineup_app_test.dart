@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/ui/lineup_canvas.dart';
 import 'package:lineup_desktop/app/lineup_app.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
+import 'package:lineup_desktop/app/lineup_shell.dart';
 import 'package:lineup_desktop/app/onboarding_view.dart';
 import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/channels/scheduler.dart';
@@ -21,6 +22,38 @@ import 'package:lineup_desktop/settings/lineup_settings.dart';
 import '../support/ui_fixture.dart';
 
 void main() {
+  testWidgets('position-only player events do not rebuild the Guide route', (
+    tester,
+  ) async {
+    final controller = _FakeController()..stage = SetupStage.ready;
+    final player = _PositionEventPlayer();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LineupShell(player: player, controller: controller),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final guide = tester.widget<GuideView>(find.byType(GuideView));
+    for (var step = 1; step <= 4; step++) {
+      player.emitPosition(Duration(milliseconds: step * 250));
+      await tester.pump();
+      await tester.pump();
+      expect(
+        identical(tester.widget<GuideView>(find.byType(GuideView)), guide),
+        isTrue,
+      );
+    }
+    player.emitPosition(const Duration(seconds: 1), paused: true);
+    await tester.pump();
+    await tester.pump();
+    expect(
+      identical(tester.widget<GuideView>(find.byType(GuideView)), guide),
+      isFalse,
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+    controller.dispose();
+  });
+
   testWidgets(
     'startup mounts a progress surface while composition is pending',
     (tester) async {
@@ -2009,5 +2042,31 @@ class _TypedRequiredEngineFailingPlayer extends _FakePlayer {
       _requiredEngineNativeFailureMessage,
       failureCode: 'required_engine_unavailable',
     );
+  }
+}
+
+class _PositionEventPlayer extends _PlayingPlayer {
+  final _events = StreamController<PlayerEvent>.broadcast();
+  @override
+  Stream<PlayerEvent> get events => _events.stream;
+
+  void emitPosition(Duration position, {bool paused = false}) {
+    _events.add(
+      PlayerEvent(
+        status: paused
+            ? const PlayerStatus(state: PlayerState.paused, message: 'Paused')
+            : status,
+        position: position,
+        duration: duration,
+        telemetry: telemetry,
+        tracks: tracks,
+      ),
+    );
+  }
+
+  @override
+  Future<void> dispose() async {
+    await _events.close();
+    await super.dispose();
   }
 }
