@@ -44,6 +44,7 @@ void main() {
     await show(tester, controller);
     await tester.pumpAndSettle();
     expect(find.text('Copy redacted report'), findsOneWidget);
+    expect(find.text('Recording off'), findsOneWidget);
     await tester.tap(find.text('Technical details'));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
@@ -59,6 +60,8 @@ void main() {
           connections: [],
         );
       addTearDown(controller.dispose);
+      controller.diagnostics.enabled = true;
+      controller.diagnostics.add('plex-auth', 'PIN cancellation failed');
       var failures = true;
       String? copied;
       tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
@@ -88,6 +91,7 @@ void main() {
       expect(find.text('Report copied'), findsOneWidget);
       expect(copied, contains('Playback state: stopped'));
       expect(copied, contains('Playback method: Unknown'));
+      expect(copied, contains('plex-auth: PIN cancellation failed'));
       expect(copied, isNot(contains(controller.server!.name)));
     },
   );
@@ -117,18 +121,29 @@ void main() {
       expect(find.text(timestamp), findsOneWidget);
       expect(
         find.bySemanticsLabel(
-          RegExp('${RegExp.escape(timestamp)}.*application: Operation failed'),
+          RegExp('${RegExp.escape(timestamp)}.*Application: Operation failed'),
         ),
         findsOneWidget,
       );
+      expect(find.text('Application'), findsOneWidget);
+      expect(find.text('Recording on'), findsOneWidget);
       semantics.dispose();
       await tester.tap(find.text('Operation failed'));
       await tester.pumpAndSettle();
       expect(find.text('Code: unexpected', findRichText: true), findsOneWidget);
       final oldPosition = tester.getTopLeft(find.text('Operation failed'));
+      final reservedSlot = tester.getRect(
+        find.byKey(const ValueKey('diagnostics-new-events-slot')),
+      );
       controller.diagnostics.add('plex-auth', 'PIN cancellation failed');
       await tester.pumpAndSettle();
       expect(find.text('1 new event'), findsOneWidget);
+      expect(
+        tester.getRect(
+          find.byKey(const ValueKey('diagnostics-new-events-slot')),
+        ),
+        reservedSlot,
+      );
       expect(find.text('Code: unexpected', findRichText: true), findsOneWidget);
       expect(tester.getTopLeft(find.text('Operation failed')), oldPosition);
       expect(find.text('PIN cancellation failed'), findsNothing);
@@ -141,4 +156,138 @@ void main() {
       expect(find.text('Diagnostic recording is off'), findsOneWidget);
     },
   );
+
+  for (final size in [const Size(1280, 720), const Size(1920, 1080)]) {
+    testWidgets(
+      'new event count does not move the expanded reader at ${size.width}x${size.height} with enlarged text',
+      (tester) async {
+        tester.view
+          ..physicalSize = size
+          ..devicePixelRatio = 1;
+        tester.platformDispatcher.textScaleFactorTestValue = 1.5;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+        final controller = FixtureController();
+        addTearDown(controller.dispose);
+        controller.diagnostics.enabled = true;
+        controller.diagnostics.add('application', 'Operation failed', {
+          'code': 'unexpected',
+        });
+        await show(tester, controller);
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(find.text('Operation failed'));
+        await tester.tap(find.text('Operation failed'));
+        await tester.pumpAndSettle();
+
+        final readerPosition = tester.getTopLeft(
+          find.text('Code: unexpected', findRichText: true),
+        );
+        final slotFinder = find.byKey(
+          const ValueKey('diagnostics-new-events-slot'),
+        );
+        final initialSlot = tester.getRect(slotFinder);
+        expect(initialSlot.height, greaterThan(0));
+
+        for (var count = 1; count <= 10; count++) {
+          controller.diagnostics.add('plex-auth', 'Synthetic event $count');
+          await tester.pumpAndSettle();
+          expect(
+            find.text('$count new ${count == 1 ? 'event' : 'events'}'),
+            findsOneWidget,
+          );
+          expect(tester.getRect(slotFinder), initialSlot);
+          expect(
+            tester.getTopLeft(
+              find.text('Code: unexpected', findRichText: true),
+            ),
+            readerPosition,
+          );
+        }
+      },
+    );
+  }
+
+  testWidgets('technical details reuse the summary grid and media subcolumns', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 2000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final controller = FixtureController();
+    addTearDown(controller.dispose);
+    controller.diagnostics.enabled = true;
+    controller.diagnostics.add('guide', 'Guide refreshed');
+    await show(tester, controller);
+    await tester.tap(find.text('Technical details'));
+    await tester.pumpAndSettle();
+
+    final summaryPlayback = tester.getRect(
+      find.byKey(const ValueKey('diagnostics-summary-Playback')),
+    );
+    final summaryVideo = tester.getRect(
+      find.byKey(const ValueKey('diagnostics-summary-Video')),
+    );
+    final summarySignal = tester.getRect(
+      find.byKey(const ValueKey('diagnostics-summary-Media signal')),
+    );
+    final application = tester.getRect(
+      find.byKey(const ValueKey('diagnostics-technical-Application')),
+    );
+    final videoOutput = tester.getRect(
+      find.byKey(const ValueKey('diagnostics-technical-Video output')),
+    );
+    final mediaSignal = tester.getRect(
+      find.byKey(const ValueKey('diagnostics-technical-Media signal')),
+    );
+
+    expect(application.left, closeTo(summaryPlayback.left, 0.1));
+    expect(videoOutput.left, closeTo(summaryVideo.left, 0.1));
+    expect(mediaSignal.left, closeTo(summarySignal.left, 0.1));
+    expect(
+      tester
+          .getRect(
+            find.byKey(const ValueKey('diagnostics-technical-fact-Transfer')),
+          )
+          .width,
+      closeTo(
+        tester
+            .getRect(
+              find.byKey(
+                const ValueKey('diagnostics-technical-fact-Pixel format'),
+              ),
+            )
+            .width,
+        0.1,
+      ),
+    );
+    expect(
+      tester
+          .getRect(
+            find.byKey(const ValueKey('diagnostics-technical-fact-Transfer')),
+          )
+          .left,
+      lessThan(
+        tester
+            .getRect(
+              find.byKey(
+                const ValueKey('diagnostics-technical-fact-Pixel format'),
+              ),
+            )
+            .left,
+      ),
+    );
+
+    final technicalTile = tester.getRect(
+      find.byKey(const PageStorageKey('diagnostic-technical-details')),
+    );
+    final event = controller.diagnostics.entries.single;
+    await tester.ensureVisible(find.byKey(ObjectKey(event)));
+    expect(
+      tester.getRect(find.byKey(ObjectKey(event))).right,
+      closeTo(technicalTile.right, 0.1),
+    );
+  });
 }

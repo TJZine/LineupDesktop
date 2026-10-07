@@ -513,6 +513,7 @@ DropdownButtonFormField<T> lineupDropdownField<T>({
   required BuildContext context,
   required List<DropdownMenuItem<T>>? items,
   required ValueChanged<T?>? onChanged,
+  List<Widget>? selectedItemChildren,
   Key? key,
   T? initialValue,
   bool isExpanded = true,
@@ -530,6 +531,7 @@ DropdownButtonFormField<T> lineupDropdownField<T>({
   onChanged: onChanged,
   items: lineupMenuItems(items, initialValue),
   selectedItemBuilder: (_) =>
+      selectedItemChildren ??
       (items ?? <DropdownMenuItem<T>>[]).map((item) => item.child).toList(),
   dropdownColor: LineupTheme.of(context).elevatedSurface,
   borderRadius: BorderRadius.circular(8),

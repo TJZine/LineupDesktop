@@ -598,6 +598,15 @@ final Map<String, Scene> _scenes = {
     ]) {
       await _tap(tester, find.text(category).first);
       await shot(category.toLowerCase());
+      if (category == 'Guide') {
+        await _tap(
+          tester,
+          find.byKey(const ValueKey('settings-field-Visible hours')),
+        );
+        await shot('visible-hours-menu');
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        await _settle(tester);
+      }
     }
   },
   'settings-over-playback': (tester, shot) async {
@@ -625,6 +634,24 @@ final Map<String, Scene> _scenes = {
     await shot('summary-events');
     await _tap(tester, find.text('Technical details'));
     await shot('technical-details');
+    await tester.scrollUntilVisible(
+      find.text('Schedule request timed out'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await _tap(tester, find.text('Schedule request timed out'));
+    await shot('expanded-event');
+    final readerPosition = tester.getTopLeft(
+      find.text('Schedule request timed out'),
+    );
+    f.controller.diagnostics.add('guide', 'Schedule refresh completed');
+    await _settle(tester);
+    expect(
+      tester.getTopLeft(find.text('Schedule request timed out')),
+      readerPosition,
+    );
+    expect(find.text('Schedule refresh completed'), findsNothing);
+    await shot('new-events-reserved');
   },
 
   for (final theme in LineupThemeName.values)
@@ -1159,10 +1186,12 @@ class _RejectedPinController extends FixtureController {
 }
 
 class _CaptureDiagnostics extends Diagnostics {
+  final _fixedEntries = Expando<DiagnosticEntry>();
+
   @override
   List<DiagnosticEntry> get entries => [
     for (final (index, entry) in super.entries.indexed)
-      DiagnosticEntry(
+      _fixedEntries[entry] ??= DiagnosticEntry(
         _fixedNow.add(Duration(seconds: index)),
         entry.area,
         entry.message,

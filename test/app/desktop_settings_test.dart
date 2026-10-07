@@ -8,6 +8,7 @@ import 'package:lineup_desktop/app/lineup_shell.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 import 'package:lineup_desktop/ui/app_theme.dart';
+import 'package:lineup_desktop/ui/lineup_controls.dart';
 
 import '../support/ui_fixture.dart';
 
@@ -118,6 +119,7 @@ void main() {
       await tester.ensureVisible(contentFinder);
       expect(contentFinder, findsOneWidget);
       if (category == SettingsCategory.account) {
+        expect(find.byType(LineupProfileAvatar), findsOneWidget);
         expect(find.text(_longProfileName), findsOneWidget);
         expect(find.text(_longAccountName), findsOneWidget);
         expect(find.textContaining(_longServerName), findsOneWidget);
@@ -162,6 +164,80 @@ void main() {
     semantics = tester.getSemantics(diagnostics).getSemanticsData();
     expect(semantics.flagsCollection.isToggled, Tristate.isTrue);
   }, semanticsEnabled: true);
+
+  testWidgets('settings controls share one right edge across categories', (
+    tester,
+  ) async {
+    final controller = FixtureController()
+      ..account = const PlexAccount(
+        id: 'account',
+        name: _longAccountName,
+        email: 'synthetic@example.invalid',
+      )
+      ..profile = const PlexHomeUser(
+        id: 'profile',
+        name: _longProfileName,
+        protected: false,
+      )
+      ..server = const PlexServer(
+        id: 'server',
+        name: _longServerName,
+        connections: [],
+      );
+    addTearDown(controller.dispose);
+
+    await _showSettings(tester, controller);
+    final dropdown = find.byKey(const ValueKey('settings-field-Theme'));
+    await tester.ensureVisible(dropdown);
+    final dropdownRight = tester.getRect(dropdown).right;
+
+    final appearanceSwitch = find.byType(Switch).first;
+    await tester.ensureVisible(appearanceSwitch);
+    expect(tester.getRect(appearanceSwitch).right, closeTo(dropdownRight, 0.1));
+
+    await _openCategory(tester, SettingsCategory.account);
+    final profileButton = find.widgetWithText(OutlinedButton, 'Switch profile');
+    await tester.ensureVisible(profileButton);
+    expect(tester.getRect(profileButton).right, closeTo(dropdownRight, 0.1));
+  });
+
+  testWidgets(
+    'visible hours menu keeps all choices and readable descriptions',
+    (tester) async {
+      tester.view
+        ..physicalSize = const Size(1280, 720)
+        ..devicePixelRatio = 1;
+      tester.platformDispatcher.textScaleFactorTestValue = 1.5;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      final controller = FixtureController();
+      addTearDown(controller.dispose);
+
+      await _showSettings(tester, controller);
+      await _openCategory(tester, SettingsCategory.guide);
+      final field = find.byKey(const ValueKey('settings-field-Visible hours'));
+      await tester.ensureVisible(field);
+      expect(find.text('Detailed (2 hours)'), findsOneWidget);
+      await tester.tap(field);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Detailed (2 hours)'), findsNWidgets(2));
+      expect(find.text('Less schedule at once'), findsOneWidget);
+      expect(find.text('Wide (3 hours)'), findsOneWidget);
+      expect(find.text('Balanced schedule at once'), findsOneWidget);
+      expect(find.text('Extended (4 hours)'), findsOneWidget);
+      expect(find.text('More schedule at once'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: field,
+          matching: find.text('Less schedule at once'),
+        ),
+        findsNothing,
+      );
+      expect(find.text('Saved setting'), findsNothing);
+    },
+  );
 }
 
 Future<void> _showSettings(

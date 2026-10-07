@@ -303,12 +303,12 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
         side: BorderSide(color: roles.subtleBorder),
         borderRadius: BorderRadius.circular(roles.panelRadius),
       ),
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(28, 24, 28, 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            LayoutBuilder(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: EdgeInsets.fromLTRB(28, 24, 28, 0),
+            child: LayoutBuilder(
               builder: (context, constraints) {
                 final double gap = 28;
                 final effectiveTextScale = _effectiveTextScale(context);
@@ -331,26 +331,28 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
                 );
               },
             ),
-            SizedBox(height: 16),
-            Divider(height: 1, color: roles.subtleBorder),
-            ExpansionTile(
-              key: const PageStorageKey('diagnostic-technical-details'),
-              tilePadding: EdgeInsets.zero,
-              minTileHeight: 48,
-              title: Text(
-                'Technical details',
-                style: TextStyle(
-                  color: roles.primaryText,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w500,
-                ),
+          ),
+          Padding(
+            padding: EdgeInsets.fromLTRB(28, 16, 28, 0),
+            child: Divider(height: 1, color: roles.subtleBorder),
+          ),
+          ExpansionTile(
+            key: const PageStorageKey('diagnostic-technical-details'),
+            tilePadding: EdgeInsets.only(left: 28),
+            minTileHeight: 48,
+            title: Text(
+              'Technical details',
+              style: TextStyle(
+                color: roles.primaryText,
+                fontSize: 18,
+                fontWeight: FontWeight.w500,
               ),
-              childrenPadding: EdgeInsets.only(bottom: 20),
-              expandedCrossAxisAlignment: CrossAxisAlignment.start,
-              children: [_technicalDetails(context, snapshot, telemetry)],
             ),
-          ],
-        ),
+            childrenPadding: EdgeInsets.fromLTRB(28, 0, 28, 28),
+            expandedCrossAxisAlignment: CrossAxisAlignment.start,
+            children: [_technicalDetails(context, snapshot, telemetry)],
+          ),
+        ],
       ),
     );
   }
@@ -363,12 +365,21 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final roles = LineupTheme.of(context);
-        final wide =
-            constraints.maxWidth >= 1100 * _effectiveTextScale(context);
-        final double gap = 24;
-        final narrowGroup = wide
-            ? (constraints.maxWidth - 2 * gap) / 4
-            : constraints.maxWidth;
+        final effectiveTextScale = _effectiveTextScale(context);
+        final gap = 28.0;
+        final columns = constraints.maxWidth >= 1100 * effectiveTextScale
+            ? 4
+            : constraints.maxWidth >= 600 * effectiveTextScale
+            ? 2
+            : 1;
+        final columnWidth = columns == 1
+            ? constraints.maxWidth
+            : (constraints.maxWidth - gap * (columns - 1)) / columns;
+        final mediaWidth = columns == 1
+            ? constraints.maxWidth
+            : columns == 2
+            ? constraints.maxWidth
+            : columnWidth * 2 + gap;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -377,7 +388,8 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
               runSpacing: 20,
               children: [
                 SizedBox(
-                  width: narrowGroup,
+                  key: const ValueKey('diagnostics-technical-Application'),
+                  width: columnWidth,
                   child: _technicalGroup(context, 'Application', [
                     _technicalFact(
                       'Lineup',
@@ -387,7 +399,8 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
                   ]),
                 ),
                 SizedBox(
-                  width: narrowGroup,
+                  key: const ValueKey('diagnostics-technical-Video output'),
+                  width: columnWidth,
                   child: _technicalGroup(context, 'Video output', [
                     _technicalFact(
                       'Hardware decoder',
@@ -400,7 +413,8 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
                   ]),
                 ),
                 SizedBox(
-                  width: wide ? 2 * narrowGroup : constraints.maxWidth,
+                  key: const ValueKey('diagnostics-technical-Media signal'),
+                  width: mediaWidth,
                   child: _technicalGroup(context, 'Media signal', [
                     _technicalFact(
                       'Transfer',
@@ -422,7 +436,7 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
                       'Reported signal peak',
                       telemetry?.signalPeak?.toString() ?? 'Unavailable',
                     ),
-                  ]),
+                  ], twoColumns: true),
                 ),
               ],
             ),
@@ -459,8 +473,9 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
   Widget _technicalGroup(
     BuildContext context,
     String title,
-    List<Widget> facts,
-  ) {
+    List<Widget> facts, {
+    bool twoColumns = false,
+  }) {
     final roles = LineupTheme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -474,44 +489,49 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
           ),
         ),
         SizedBox(height: 10),
-        LayoutBuilder(
-          builder: (context, constraints) {
-            final double gap = 24;
-            final effectiveTextScale = _effectiveTextScale(context);
-            final columns = constraints.maxWidth >= 800 * effectiveTextScale
-                ? 3
-                : constraints.maxWidth >= 500 * effectiveTextScale
-                ? 2
-                : 1;
-            final width = columns == 1
-                ? constraints.maxWidth
-                : (constraints.maxWidth - gap * (columns - 1)) / columns;
-            return Wrap(
-              spacing: gap,
-              runSpacing: 16,
-              children: [
-                for (final fact in facts) SizedBox(width: width, child: fact),
-              ],
-            );
-          },
-        ),
+        if (twoColumns)
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final gap = 28.0;
+              final columns =
+                  constraints.maxWidth >= 600 * _effectiveTextScale(context)
+                  ? 2
+                  : 1;
+              final width = columns == 1
+                  ? constraints.maxWidth
+                  : (constraints.maxWidth - gap) / 2;
+              return Wrap(
+                key: const ValueKey('diagnostics-media-signal-values'),
+                spacing: gap,
+                runSpacing: 16,
+                children: [
+                  for (final fact in facts) SizedBox(width: width, child: fact),
+                ],
+              );
+            },
+          )
+        else
+          Column(crossAxisAlignment: CrossAxisAlignment.start, children: facts),
       ],
     );
   }
 
-  Widget _technicalFact(String label, String value) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Text(
-        label,
-        style: TextStyle(
-          color: LineupTheme.of(context).secondaryText,
-          fontSize: 14,
+  Widget _technicalFact(String label, String value) => KeyedSubtree(
+    key: ValueKey('diagnostics-technical-fact-$label'),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            color: LineupTheme.of(context).secondaryText,
+            fontSize: 14,
+          ),
         ),
-      ),
-      SizedBox(height: 4),
-      Text(value, style: TextStyle(fontSize: 18)),
-    ],
+        SizedBox(height: 4),
+        Text(value, style: TextStyle(fontSize: 18)),
+      ],
+    ),
   );
 
   Widget _eventsHeader(
@@ -536,33 +556,68 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
       ],
     );
 
+    final newEvents = SizedBox(
+      key: const ValueKey('diagnostics-new-events-slot'),
+      width: 170,
+      height: 44,
+      child: Visibility(
+        visible: unseen > 0,
+        maintainSize: true,
+        maintainAnimation: true,
+        maintainState: true,
+        child: Align(
+          alignment: Alignment.centerRight,
+          child: LineupCompactControls(
+            child: TextButton(
+              style: ButtonStyle(
+                padding: const WidgetStatePropertyAll(
+                  EdgeInsets.symmetric(horizontal: 12),
+                ),
+              ),
+              onPressed: () => setState(
+                () => _visibleEvents = currentEvents.reversed.toList(),
+              ),
+              child: Text(
+                '$unseen new ${unseen == 1 ? 'event' : 'events'}',
+                maxLines: 1,
+                softWrap: false,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    final recording = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 6,
+          height: 6,
+          decoration: BoxDecoration(
+            color: snapshot.recordingEnabled
+                ? roles.progressFill
+                : roles.mutedText,
+            shape: BoxShape.circle,
+          ),
+        ),
+        SizedBox(width: 8),
+        Text(
+          'Recording ${snapshot.recordingEnabled ? 'on' : 'off'}',
+          style: TextStyle(color: roles.secondaryText, fontSize: 14),
+        ),
+      ],
+    );
     final actions = Wrap(
       spacing: 16,
       runSpacing: 8,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
-        Text(
-          'Recording ${snapshot.recordingEnabled ? 'On' : 'Off'}',
-          style: TextStyle(color: roles.secondaryText, fontSize: 14),
-        ),
+        newEvents,
+        recording,
         TextButton(
           onPressed: widget.onRecordingSettings,
           child: const Text('Recording settings'),
-        ),
-        SizedBox(
-          width: 170,
-          child: Visibility(
-            visible: unseen > 0,
-            maintainSize: true,
-            maintainAnimation: true,
-            maintainState: true,
-            child: TextButton(
-              onPressed: () => setState(
-                () => _visibleEvents = currentEvents.reversed.toList(),
-              ),
-              child: Text('$unseen new ${unseen == 1 ? 'event' : 'events'}'),
-            ),
-          ),
         ),
       ],
     );
@@ -616,76 +671,79 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
     ].map((part) => part.toString().padLeft(2, '0')).join(':');
   }
 
-  Widget _eventTile(DiagnosticEntry event) => Semantics(
-    label:
-        '${MaterialLocalizations.of(context).formatFullDate(event.time.toLocal())}, ${_eventTime(event.time)}. ${event.area}: ${event.message}',
-    child: DecoratedBox(
-      decoration: BoxDecoration(
-        border: Border(
-          bottom: BorderSide(color: LineupTheme.of(context).subtleBorder),
-        ),
-      ),
-      child: ExpansionTile(
-        key: ObjectKey(event),
-        tilePadding: EdgeInsets.symmetric(horizontal: 16),
-        minTileHeight: 64,
-        title: ExcludeSemantics(
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final eventScale = 1.0 * _effectiveTextScale(context);
-              final double gap = 16 * eventScale;
-              final time = Text(
-                _eventTime(event.time),
-                style: TextStyle(
-                  color: LineupTheme.of(context).secondaryText,
-                  fontSize: 14,
-                ),
-              );
-              final area = Text(
-                event.area,
-                style: TextStyle(
-                  color: LineupTheme.of(context).secondaryText,
-                  fontSize: 14,
-                ),
-              );
-              final message = Text(
-                event.message,
-                style: TextStyle(fontSize: 18),
-              );
-              if (constraints.maxWidth < 520 * eventScale) {
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Wrap(
-                      spacing: gap,
-                      runSpacing: 4 * eventScale,
-                      children: [time, area],
-                    ),
-                    SizedBox(height: 4 * eventScale),
-                    message,
-                  ],
-                );
-              }
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.baseline,
-                textBaseline: TextBaseline.alphabetic,
-                children: [
-                  SizedBox(width: 104 * eventScale, child: time),
-                  SizedBox(width: gap),
-                  SizedBox(width: 120 * eventScale, child: area),
-                  SizedBox(width: gap),
-                  Expanded(child: message),
-                ],
-              );
-            },
+  Widget _eventTile(DiagnosticEntry event) {
+    final area = _eventAreaLabel(event.area);
+    return Semantics(
+      label:
+          '${MaterialLocalizations.of(context).formatFullDate(event.time.toLocal())}, ${_eventTime(event.time)}. $area: ${event.message}',
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border(
+            bottom: BorderSide(color: LineupTheme.of(context).subtleBorder),
           ),
         ),
-        childrenPadding: EdgeInsets.zero,
-        expandedCrossAxisAlignment: CrossAxisAlignment.start,
-        children: [_eventDetails(event)],
+        child: ExpansionTile(
+          key: ObjectKey(event),
+          tilePadding: EdgeInsets.zero,
+          minTileHeight: 64,
+          title: ExcludeSemantics(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final eventScale = 1.0 * _effectiveTextScale(context);
+                final double gap = 16 * eventScale;
+                final time = Text(
+                  _eventTime(event.time),
+                  style: TextStyle(
+                    color: LineupTheme.of(context).secondaryText,
+                    fontSize: 14,
+                  ),
+                );
+                final area = Text(
+                  _eventAreaLabel(event.area),
+                  style: TextStyle(
+                    color: LineupTheme.of(context).secondaryText,
+                    fontSize: 14,
+                  ),
+                );
+                final message = Text(
+                  event.message,
+                  style: TextStyle(fontSize: 18),
+                );
+                if (constraints.maxWidth < 520 * eventScale) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Wrap(
+                        spacing: gap,
+                        runSpacing: 4 * eventScale,
+                        children: [time, area],
+                      ),
+                      SizedBox(height: 4 * eventScale),
+                      message,
+                    ],
+                  );
+                }
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  children: [
+                    SizedBox(width: 104 * eventScale, child: time),
+                    SizedBox(width: gap),
+                    SizedBox(width: 120 * eventScale, child: area),
+                    SizedBox(width: gap),
+                    Expanded(child: message),
+                  ],
+                );
+              },
+            ),
+          ),
+          childrenPadding: EdgeInsets.zero,
+          expandedCrossAxisAlignment: CrossAxisAlignment.start,
+          children: [_eventDetails(event)],
+        ),
       ),
-    ),
-  );
+    );
+  }
 
   Widget _eventDetails(DiagnosticEntry event) => LayoutBuilder(
     builder: (context, constraints) {
@@ -754,12 +812,26 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
     _ => key,
   };
 
+  String _eventAreaLabel(String area) {
+    final words = area.split('-').where((word) => word.isNotEmpty).toList();
+    if (words.isEmpty) return area;
+    final formatted = <String>[];
+    for (var index = 0; index < words.length; index++) {
+      final word = words[index].toLowerCase();
+      formatted.add(
+        index == 0 ? '${word[0].toUpperCase()}${word.substring(1)}' : word,
+      );
+    }
+    return formatted.join(' ');
+  }
+
   Widget _fact(
     BuildContext context,
     String title,
     String value,
     double width,
   ) => SizedBox(
+    key: ValueKey('diagnostics-summary-$title'),
     width: width,
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,

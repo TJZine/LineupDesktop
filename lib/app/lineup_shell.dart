@@ -1199,6 +1199,11 @@ class _SettingsViewState extends State<SettingsView> {
                   3 => 'Wide (3 hours)',
                   _ => 'Extended ($item hours)',
                 },
+                choiceDescription: (item) => switch (item) {
+                  2 => 'Less schedule at once',
+                  3 => 'Balanced schedule at once',
+                  _ => 'More schedule at once',
+                },
                 _pendingSettingKeys.contains('guideHours')
                     ? null
                     : (item) => _update(
@@ -1289,7 +1294,7 @@ class _SettingsViewState extends State<SettingsView> {
               _SettingsSwitchTile(
                 title: const Text('Large focus indicators'),
                 subtitle: const Text(
-                  'Use thicker outlines for keyboard and controller focus.',
+                  'Use thicker outlines when navigating with a keyboard or remote.',
                 ),
                 value: value.largeFocusIndicators,
                 onChanged: _pendingSettingKeys.contains('largeFocusIndicators')
@@ -1305,10 +1310,35 @@ class _SettingsViewState extends State<SettingsView> {
             SettingsCategory.account => [
               _SettingsRow(
                 label: const Text('Plex Home profile'),
-                helper: Text(
-                  widget.controller.profile?.name ??
-                      widget.controller.account?.name ??
-                      'Plex account',
+                helper: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    LineupProfileAvatar(
+                      name:
+                          widget.controller.profile?.name ??
+                          widget.controller.account?.name ??
+                          'Plex account',
+                      identity:
+                          widget.controller.profile?.id ??
+                          widget.controller.account?.id ??
+                          'account',
+                      photo:
+                          widget.controller.profile?.thumb?.isAbsolute == true
+                          ? NetworkImage(
+                              widget.controller.profile!.thumb.toString(),
+                            )
+                          : null,
+                      size: 48,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        widget.controller.profile?.name ??
+                            widget.controller.account?.name ??
+                            'Plex account',
+                      ),
+                    ),
+                  ],
                 ),
                 control: OutlinedButton(
                   onPressed: widget.controller.profiles.isEmpty
@@ -1547,6 +1577,7 @@ class _SettingsRow extends StatelessWidget {
       final reflow =
           constraints.maxWidth < 900 ||
           MediaQuery.textScalerOf(context).scale(1) >= 1.5;
+      final controlWidth = math.min(280.0, constraints.maxWidth);
       final theme = Theme.of(context);
       final roles = LineupTheme.of(context);
       final description = Column(
@@ -1584,7 +1615,10 @@ class _SettingsRow extends StatelessWidget {
                 children: [
                   description,
                   SizedBox(height: 16),
-                  Align(alignment: Alignment.centerLeft, child: control),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: SizedBox(width: controlWidth, child: control),
+                  ),
                 ],
               )
             : Row(
@@ -1592,12 +1626,7 @@ class _SettingsRow extends StatelessWidget {
                 children: [
                   Expanded(child: description),
                   SizedBox(width: 32),
-                  ConstrainedBox(
-                    constraints: BoxConstraints(
-                      maxWidth: constraints.maxWidth * 0.45,
-                    ),
-                    child: control,
-                  ),
+                  SizedBox(width: controlWidth, child: control),
                 ],
               ),
       );
@@ -1627,17 +1656,17 @@ class _SettingsSwitchTile extends StatelessWidget {
       helper: subtitle,
       control: Builder(
         builder: (context) {
-          final controlScale = math.max(
-            1.0,
-            MediaQuery.textScalerOf(context).scale(1),
-          );
           return SizedBox(
-            width: 60 * controlScale,
-            height: 48 * controlScale,
-            child: Center(
-              child: Transform.scale(
-                scale: controlScale,
-                child: Switch(value: value, onChanged: onChanged),
+            height: 48,
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: SizedBox(
+                width: 56,
+                child: Switch(
+                  value: value,
+                  onChanged: onChanged,
+                  padding: EdgeInsets.zero,
+                ),
               ),
             ),
           );
@@ -1656,6 +1685,7 @@ class _Dropdown<T> extends StatelessWidget {
     this.values,
     this.display,
     this.changed, {
+    this.choiceDescription,
     this.first = false,
   });
   final String label;
@@ -1664,33 +1694,59 @@ class _Dropdown<T> extends StatelessWidget {
   final List<T> values;
   final String Function(T) display;
   final ValueChanged<T>? changed;
+  final String Function(T)? choiceDescription;
   final bool first;
   @override
   Widget build(BuildContext context) {
-    final controlScale = math.max(
-      1.0,
-      MediaQuery.textScalerOf(context).scale(1),
-    );
     final theme = Theme.of(context);
+    final items = <DropdownMenuItem<T>>[];
+    final selectedItems = <Widget>[];
+    for (final item in values) {
+      final label = display(item);
+      items.add(
+        DropdownMenuItem(
+          value: item,
+          child: choiceDescription == null
+              ? Text(label)
+              : Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(label),
+                    Text(
+                      choiceDescription!(item),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: LineupTheme.of(context).secondaryText,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                ),
+        ),
+      );
+      selectedItems.add(Text(label));
+    }
     return MergeSemantics(
       child: _SettingsRow(
         label: Text(label),
         helper: Text(description),
         control: SizedBox(
-          width: 248 * controlScale,
+          width: double.infinity,
           child: lineupDropdownField<T>(
             context: context,
             key: ValueKey('settings-field-$label'),
             initialValue: value,
             isExpanded: true,
-            itemHeight: 48 * controlScale,
-            icon: Icon(Icons.arrow_drop_down, size: 20 * controlScale),
+            itemHeight: null,
+            icon: const Icon(Icons.arrow_drop_down, size: 20),
             style: theme.textTheme.bodyLarge?.copyWith(fontSize: 18),
             decoration: InputDecoration(),
-            items: [
-              for (final item in values)
-                DropdownMenuItem(value: item, child: Text(display(item))),
-            ],
+            items: items,
+            selectedItemChildren: choiceDescription == null
+                ? null
+                : selectedItems,
             onChanged: changed == null
                 ? null
                 : (item) {
