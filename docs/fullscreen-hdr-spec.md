@@ -1,7 +1,9 @@
 # Fullscreen HDR Presentation Specification
 
-**Status:** Planned native-media work. Defer implementation until the current
-UI refresh has landed and its Player surfaces are stable.
+**Status:** Planned native-media work. Discovery proceeds under the
+[Fullscreen HDR Discovery Plan](fullscreen-hdr-discovery-plan.md). Defer
+production implementation until that discovery is complete and the
+desktop UI second pass has settled the Player surfaces.
 
 ## Goal
 
@@ -51,15 +53,22 @@ alternative; it may not silently regress them.
 
 ## Feasibility gate
 
-Before implementation, prove the behavior on the target Windows 10 HDR machine
-with known SDR and HDR10 material. Compare:
+Before implementation, prove the behavior on the Windows 10 22H2 HDR test
+machine with known SDR and HDR10 material, following the
+[discovery plan](fullscreen-hdr-discovery-plan.md). It evaluates the current
+composited D3D11/libmpv path first: its negotiated colorspace and HDR output
+when fullscreen, its behavior across manual and programmatic Windows HDR
+transitions, and the resulting overlay, focus, video stacking, and normal
+restoration behavior.
 
-1. The current composited D3D11/libmpv path, including its negotiated
-   colorspace and HDR output behavior when fullscreen.
-2. A supported application-managed fullscreen presentation path, including
-   whether it can activate HDR output without a persistent global desktop-mode
-   change.
-3. The resulting overlay, focus, video stacking, and recovery behavior.
+An application-managed or exclusive fullscreen presentation path is evaluated
+only if that discovery escalates an evidence-backed renderer/composition
+blocker; it is not a parallel comparison.
+
+Windows 10 evidence covers only the legacy DisplayConfig advanced-color route.
+Windows 11 24H2 and later separate HDR from automatic color management and need
+their own route verification on Windows 11 hardware. Until then, no Windows 11
+support claim may be made.
 
 Record source and output colorspace, bit depth, monitor/driver details,
 fullscreen state, and visual observations. Do not infer output HDR from Plex

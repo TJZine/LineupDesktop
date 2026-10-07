@@ -18,7 +18,7 @@ audience and purpose.
 | Windows media, runner, or packaging work | [Development verification map](DEVELOPMENT.md#verification-by-task) | [Architecture](architecture.md#windows-presentation-and-ownership), [Windows Runtime Provenance](windows-runtime.md), and relevant [physical acceptance](windows-native-validation.md) scenarios |
 | Authenticated libmpv reference investigation | [Windows reference investigation](libmpv-authenticated-reference-investigation.md) | [Windows Runtime Provenance](windows-runtime.md) and [Windows Native Acceptance](windows-native-validation.md); investigation evidence is not release acceptance |
 | Planned audio passthrough work | [Architecture](architecture.md) and current source | [Windows Native Acceptance](windows-native-validation.md); the previously indexed passthrough specification is absent, so do not infer an approved plan from this index |
-| Planned automatic fullscreen HDR work | [Fullscreen HDR Presentation Specification](fullscreen-hdr-spec.md) | [Windows Native Acceptance](windows-native-validation.md), [Architecture](architecture.md), and the current source |
+| Planned automatic fullscreen HDR work | [Fullscreen HDR Presentation Specification](fullscreen-hdr-spec.md) | [Fullscreen HDR Discovery Plan](fullscreen-hdr-discovery-plan.md), [Windows Native Acceptance](windows-native-validation.md), [Architecture](architecture.md), and the current source |
 | Deferred Guide freshness / collection investigation | [Guide Freshness and Collection Revalidation Investigation](guide-freshness-collection-investigation.md) | [Architecture](architecture.md), the current source, and its cited upstream evidence |
 | Guide/PiP implementation or investigation | [Desktop UI target specification](desktop-ui-design-spec.md) | [Architecture](architecture.md), [interface system](../.interface-design/system.md) and current source; target design is not implemented evidence |
 | Security report | [Security Policy](../SECURITY.md) | Use the private reporting route; never open a public issue containing secrets |
@@ -102,6 +102,9 @@ audience and purpose.
 - [Fullscreen HDR Presentation Specification](fullscreen-hdr-spec.md) records
   the planned automatic HDR/SDR fullscreen contract, composition decision gate,
   ownership boundary, and required physical Windows evidence.
+- [Fullscreen HDR Discovery Plan](fullscreen-hdr-discovery-plan.md) is the
+  Windows 10 discovery procedure, pinned-source pre-analysis, and Codex
+  handoff that precede the HDR implementation plan.
 - [Guide Freshness and Collection Revalidation Investigation](guide-freshness-collection-investigation.md)
   records two deferred, evidence-led Guide risks: collection/source freshness
   after cold start or automation, and shuffled schedule continuity across Plex
