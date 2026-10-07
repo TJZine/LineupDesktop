@@ -142,7 +142,6 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
         PlayerOverlay.miniGuide ||
         PlayerOverlay.osd ||
         PlayerOverlay.nowPlaying => true,
-        PlayerOverlay.sleepTimer => widget.controller.sleepDeadline != null,
         _ => false,
       };
 
@@ -210,7 +209,7 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
         controller.showFullGuide();
         widget.openGuide();
       } else {
-        final restoreSleep = controller.overlay == PlayerOverlay.sleepTimer;
+        final restoreSleep = controller.sleepPickerOpen;
         controller.overlay == PlayerOverlay.nowPlaying
             ? controller.showOsd()
             : controller.closeOverlay();
@@ -280,6 +279,7 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
     if (controller.overlay == PlayerOverlay.channelNumber) {
       final digit = _digit(key);
       if (digit != null) {
+        controller.closeSleepPicker();
         controller.appendChannelDigit(digit);
         return KeyEventResult.handled;
       }
@@ -292,6 +292,7 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
       return KeyEventResult.ignored;
     }
     if (key == LogicalKeyboardKey.keyG || key == LogicalKeyboardKey.f2) {
+      controller.closeSleepPicker();
       controller.showFullGuide();
       widget.openGuide();
     } else if (controller.overlay == PlayerOverlay.miniGuide &&
@@ -301,10 +302,12 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
         key == LogicalKeyboardKey.arrowDown) {
       controller.moveMiniGuide(1);
     } else if (key == LogicalKeyboardKey.pageUp) {
+      controller.closeSleepPicker();
       controller.overlay == PlayerOverlay.miniGuide
           ? controller.moveMiniGuide(-7)
           : unawaited(controller.previousChannel());
     } else if (key == LogicalKeyboardKey.pageDown) {
+      controller.closeSleepPicker();
       controller.overlay == PlayerOverlay.miniGuide
           ? controller.moveMiniGuide(7)
           : unawaited(controller.nextChannel());
@@ -328,6 +331,7 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
           !showingNowPlaying) {
         return KeyEventResult.ignored;
       }
+      controller.closeSleepPicker();
       unawaited(controller.togglePlayback());
       controller.showOsd();
     } else if (key == LogicalKeyboardKey.arrowLeft ||
@@ -337,58 +341,74 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
           !showingNowPlaying) {
         return KeyEventResult.ignored;
       }
+      controller.closeSleepPicker();
       unawaited(controller.seekBy(const Duration(seconds: -10)));
       controller.showOsd();
     } else if (key == LogicalKeyboardKey.arrowRight ||
         key == LogicalKeyboardKey.keyL) {
       if (controller.overlay == PlayerOverlay.miniGuide) {
+        controller.closeSleepPicker();
         controller.showFullGuide();
         widget.openGuide();
       } else if (controller.overlay == PlayerOverlay.none ||
           controller.overlay == PlayerOverlay.osd ||
           showingNowPlaying) {
+        controller.closeSleepPicker();
         unawaited(controller.seekBy(const Duration(seconds: 30)));
         controller.showOsd();
       } else {
         return KeyEventResult.ignored;
       }
     } else if (key == LogicalKeyboardKey.arrowUp &&
-        controller.overlay == PlayerOverlay.none) {
+        (controller.overlay == PlayerOverlay.none ||
+            controller.overlay == PlayerOverlay.osd)) {
+      controller.closeSleepPicker();
       controller.showMiniGuide();
     } else if (key == LogicalKeyboardKey.arrowDown &&
         (controller.overlay == PlayerOverlay.none ||
             controller.overlay == PlayerOverlay.osd)) {
+      controller.closeSleepPicker();
       controller.currentProgram == null
           ? controller.showOsd()
           : controller.showNowPlaying();
     } else if (initialPress && key == LogicalKeyboardKey.keyI) {
+      controller.closeSleepPicker();
       showingNowPlaying ? controller.showOsd() : controller.showNowPlaying();
     } else if (initialPress &&
         (key == LogicalKeyboardKey.keyF || key == LogicalKeyboardKey.f11)) {
+      controller.closeSleepPicker();
       unawaited(controller.toggleFullscreen());
     } else if (initialPress && key == LogicalKeyboardKey.keyS) {
       controller.showSleepTimer();
     } else if (key == LogicalKeyboardKey.keyA) {
+      controller.closeSleepPicker();
       controller.showTracks(PlayerTrackType.audio);
     } else if (key == LogicalKeyboardKey.keyC) {
+      controller.closeSleepPicker();
       controller.showTracks(PlayerTrackType.subtitle);
     } else if (key == LogicalKeyboardKey.mediaPlay) {
+      controller.closeSleepPicker();
       unawaited(controller.play());
       if (showingNowPlaying) controller.showOsd();
     } else if (key == LogicalKeyboardKey.mediaPause) {
+      controller.closeSleepPicker();
       unawaited(controller.pause());
       if (showingNowPlaying) controller.showOsd();
     } else if (key == LogicalKeyboardKey.mediaStop) {
+      controller.closeSleepPicker();
       unawaited(controller.requestStop());
     } else if (key == LogicalKeyboardKey.mediaRewind) {
+      controller.closeSleepPicker();
       unawaited(controller.seekBy(const Duration(seconds: -10)));
       if (showingNowPlaying) controller.showOsd();
     } else if (key == LogicalKeyboardKey.mediaFastForward) {
+      controller.closeSleepPicker();
       unawaited(controller.seekBy(const Duration(seconds: 30)));
       if (showingNowPlaying) controller.showOsd();
     } else {
       final digit = _digit(key);
       if (digit == null) return KeyEventResult.ignored;
+      controller.closeSleepPicker();
       controller.appendChannelDigit(digit);
     }
     return KeyEventResult.handled;
@@ -414,9 +434,7 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
       bottomPanel ? PlayerOverlay.osd : overlay,
       bottomPanel ? _bottomPanelGeneration : presentationGeneration,
     ));
-    final transitionDuration =
-        (MediaQuery.disableAnimationsOf(context) ||
-            overlay == PlayerOverlay.sleepTimer)
+    final transitionDuration = MediaQuery.disableAnimationsOf(context)
         ? Duration.zero
         : _overlayTransitionDuration;
     return Material(
@@ -438,7 +456,7 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
               onTap: () {
                 if (controller.overlay == PlayerOverlay.miniGuide) {
                   controller.closeOverlay();
-                } else if (controller.overlay == PlayerOverlay.sleepTimer) {
+                } else if (controller.sleepPickerOpen) {
                   controller.closeOverlay();
                   _restoreSleepFocus();
                 } else {
@@ -537,7 +555,8 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
                             openMenu: widget.openMenu,
                             menuFocus: _menuFocus,
                             sleepFocus: _sleepFocus,
-                            sleepAnchor: LayerLink(),
+                            sleepAnchor: sleepAnchor,
+                            restoreSleepFocus: _restoreSleepFocus,
                           ),
                           PlayerOverlay.miniGuide => _MiniGuide(
                             controller: controller,
@@ -551,24 +570,6 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
                           PlayerOverlay.subtitleTracks => _Tracks(
                             controller: controller,
                             type: PlayerTrackType.subtitle,
-                          ),
-                          PlayerOverlay.sleepTimer => Stack(
-                            children: [
-                              ExcludeFocus(
-                                child: _Osd(
-                                  controller: controller,
-                                  openMenu: widget.openMenu,
-                                  menuFocus: _menuFocus,
-                                  sleepFocus: _sleepFocus,
-                                  sleepAnchor: sleepAnchor,
-                                ),
-                              ),
-                              _SleepTimerPicker(
-                                controller: controller,
-                                restoreFocus: _restoreSleepFocus,
-                                anchor: sleepAnchor,
-                              ),
-                            ],
                           ),
                           PlayerOverlay.channelNumber => _ChannelNumber(
                             controller: controller,
@@ -720,6 +721,7 @@ class _Osd extends StatelessWidget {
     required this.menuFocus,
     required this.sleepFocus,
     required this.sleepAnchor,
+    required this.restoreSleepFocus,
     this.openMenu,
     this.detailsExpanded = false,
   });
@@ -729,6 +731,7 @@ class _Osd extends StatelessWidget {
   final FocusNode menuFocus;
   final FocusNode sleepFocus;
   final LayerLink sleepAnchor;
+  final VoidCallback restoreSleepFocus;
 
   @override
   Widget build(BuildContext context) {
@@ -778,7 +781,12 @@ class _Osd extends StatelessWidget {
       IconButton(
         style: actionStyle,
         tooltip: 'Previous channel',
-        onPressed: unsupported ? null : controller.previousChannel,
+        onPressed: unsupported
+            ? null
+            : () {
+                controller.closeSleepPicker();
+                unawaited(controller.previousChannel());
+              },
         padding: null,
         iconSize: 28,
         icon: const Icon(Icons.skip_previous),
@@ -788,7 +796,12 @@ class _Osd extends StatelessWidget {
         tooltip: controller.status.state == PlayerState.playing
             ? 'Pause'
             : 'Play',
-        onPressed: unsupported ? null : controller.togglePlayback,
+        onPressed: unsupported
+            ? null
+            : () {
+                controller.closeSleepPicker();
+                unawaited(controller.togglePlayback());
+              },
         padding: null,
         iconSize: 36,
         icon: Icon(
@@ -800,7 +813,12 @@ class _Osd extends StatelessWidget {
       IconButton(
         style: actionStyle,
         tooltip: 'Next channel',
-        onPressed: unsupported ? null : controller.nextChannel,
+        onPressed: unsupported
+            ? null
+            : () {
+                controller.closeSleepPicker();
+                unawaited(controller.nextChannel());
+              },
         padding: null,
         iconSize: 28,
         icon: const Icon(Icons.skip_next),
@@ -852,7 +870,10 @@ class _Osd extends StatelessWidget {
         semanticLabel: subtitlesDescription,
         icon: Icons.subtitles_outlined,
         onPressed: subtitlesAvailable
-            ? () => controller.showTracks(PlayerTrackType.subtitle)
+            ? () {
+                controller.closeSleepPicker();
+                controller.showTracks(PlayerTrackType.subtitle);
+              }
             : null,
       ),
       _osdAction(
@@ -863,7 +884,10 @@ class _Osd extends StatelessWidget {
         semanticLabel: audioDescription,
         icon: Icons.audiotrack,
         onPressed: audioAvailable
-            ? () => controller.showTracks(PlayerTrackType.audio)
+            ? () {
+                controller.closeSleepPicker();
+                controller.showTracks(PlayerTrackType.audio);
+              }
             : null,
       ),
       CompositedTransformTarget(
@@ -887,7 +911,10 @@ class _Osd extends StatelessWidget {
             key: const Key('player-app-menu'),
             focusNode: menuFocus,
             tooltip: 'Lineup menu',
-            onPressed: () => openMenu!(invokerContext, menuFocus),
+            onPressed: () {
+              controller.closeSleepPicker();
+              openMenu!(invokerContext, menuFocus);
+            },
             padding: null,
             iconSize: 20,
             icon: const Icon(Icons.menu),
@@ -896,7 +923,12 @@ class _Osd extends StatelessWidget {
       IconButton(
         style: actionStyle,
         tooltip: controller.fullscreen ? 'Exit full screen' : 'Full screen',
-        onPressed: unsupported ? null : controller.toggleFullscreen,
+        onPressed: unsupported
+            ? null
+            : () {
+                controller.closeSleepPicker();
+                unawaited(controller.toggleFullscreen());
+              },
         padding: null,
         iconSize: 20,
         icon: Icon(
@@ -1262,6 +1294,12 @@ class _Osd extends StatelessWidget {
               controller: controller,
               osdPresentation: true,
             ),
+          ),
+        if (controller.sleepPickerOpen)
+          _SleepTimerPicker(
+            controller: controller,
+            restoreFocus: restoreSleepFocus,
+            anchor: sleepAnchor,
           ),
         progressLine,
       ],

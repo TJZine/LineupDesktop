@@ -17,7 +17,6 @@ enum PlayerOverlay {
   fullGuide,
   audioTracks,
   subtitleTracks,
-  sleepTimer,
   channelNumber,
   error,
 }
@@ -84,6 +83,7 @@ class PlayerCoordinator extends ChangeNotifier {
   bool _canRetry = false;
   Duration? _sleepDuration;
   DateTime? _sleepDeadline;
+  bool _sleepPickerOpen = false;
   PlayerTrackType? _pendingTrackType;
   int? _pendingTrackId;
   String? _trackSelectionError;
@@ -191,6 +191,7 @@ class PlayerCoordinator extends ChangeNotifier {
       };
   Duration? get sleepDuration => _sleepDuration;
   DateTime? get sleepDeadline => _sleepDeadline;
+  bool get sleepPickerOpen => _sleepPickerOpen;
   Duration? get sleepRemaining {
     final deadline = _sleepDeadline;
     if (deadline == null) return null;
@@ -1214,7 +1215,10 @@ class PlayerCoordinator extends ChangeNotifier {
     _showNotice('Playback controls are temporarily unavailable. Try again.');
   }
 
-  void showOsd() => _setOverlay(PlayerOverlay.osd);
+  void showOsd() {
+    _sleepPickerOpen = false;
+    _setOverlay(PlayerOverlay.osd);
+  }
 
   void showNowPlaying() {
     if (currentProgram == null) return;
@@ -1243,7 +1247,17 @@ class PlayerCoordinator extends ChangeNotifier {
     _setOverlay(PlayerOverlay.fullGuide, timed: false);
   }
 
-  void showSleepTimer() => _setOverlay(PlayerOverlay.sleepTimer, timed: false);
+  void showSleepTimer() {
+    // The picker belongs to the OSD presentation. Keep the mounted OSD (and
+    // its presentation generation) stable when it is opened from the OSD.
+    if (_overlay != PlayerOverlay.osd) {
+      _setOverlay(PlayerOverlay.osd, timed: false);
+    } else {
+      _cancelOverlayTimer();
+    }
+    _sleepPickerOpen = true;
+    notifyListeners();
+  }
 
   void showTracks(PlayerTrackType type) {
     if (_overlay != PlayerOverlay.none &&
@@ -1297,14 +1311,31 @@ class PlayerCoordinator extends ChangeNotifier {
       _numberTimer = null;
       _channelNumber = '';
     }
+    if (_sleepPickerOpen) {
+      closeSleepPicker();
+      return;
+    }
     if (_overlay == PlayerOverlay.audioTracks ||
-        _overlay == PlayerOverlay.subtitleTracks ||
-        _overlay == PlayerOverlay.sleepTimer) {
+        _overlay == PlayerOverlay.subtitleTracks) {
       showOsd();
       return;
     }
     _cancelOverlayTimer();
     _presentOverlay(PlayerOverlay.none);
+    notifyListeners();
+  }
+
+  /// Dismiss the sleep picker before another OSD action runs.
+  ///
+  /// The picker is a sub-state of the OSD, so dismissing it must not create a
+  /// new overlay presentation. Its normal OSD timeout resumes after the
+  /// action, while focus-driven suspension remains authoritative.
+  void closeSleepPicker() {
+    if (!_sleepPickerOpen) return;
+    _sleepPickerOpen = false;
+    if (_overlay == PlayerOverlay.osd) {
+      _scheduleOverlayHide(PlayerOverlay.osd);
+    }
     notifyListeners();
   }
 
@@ -1468,7 +1499,9 @@ class PlayerCoordinator extends ChangeNotifier {
   void _scheduleOverlayHide(PlayerOverlay value, {Duration? timeout}) {
     _overlayTimer?.cancel();
     _overlayTimer = null;
-    if (_overlayFocusSuspended && _overlay == value) return;
+    if ((_overlayFocusSuspended || _sleepPickerOpen) && _overlay == value) {
+      return;
+    }
     final epoch = ++_overlayEpoch;
     _overlayTimer = Timer(
       timeout ??
@@ -1489,6 +1522,7 @@ class PlayerCoordinator extends ChangeNotifier {
   void _presentOverlay(PlayerOverlay value) {
     _overlayPresentationGeneration++;
     _overlayFocusSuspended = false;
+    _sleepPickerOpen = false;
     _overlay = value;
   }
 

@@ -1936,12 +1936,6 @@ void main() {
         },
       ),
       (
-        PlayerOverlay.sleepTimer,
-        (coordinator) {
-          coordinator.showSleepTimer();
-        },
-      ),
-      (
         PlayerOverlay.channelNumber,
         (coordinator) {
           coordinator.appendChannelDigit('9');
@@ -3357,6 +3351,34 @@ void main() {
       },
     );
   }
+
+  test('sleep picker is a sub-state of the OSD presentation', () {
+    final lineup = _TestLineup();
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    final coordinator = PlayerCoordinator(
+      player: _Player(),
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(coordinator.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(lineup.dispose);
+
+    coordinator.showOsd();
+    final generation = coordinator.overlayPresentationGeneration;
+    coordinator.showSleepTimer();
+    expect(coordinator.overlay, PlayerOverlay.osd);
+    expect(coordinator.sleepPickerOpen, isTrue);
+    expect(coordinator.overlayPresentationGeneration, generation);
+
+    coordinator.closeOverlay();
+    expect(coordinator.overlay, PlayerOverlay.osd);
+    expect(coordinator.sleepPickerOpen, isFalse);
+    expect(coordinator.overlayPresentationGeneration, generation);
+  });
 
   test('a tune supersedes a pending initial media load', () async {
     final lineup = _TestLineup();

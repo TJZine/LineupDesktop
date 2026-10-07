@@ -561,7 +561,12 @@ void main() {
   testWidgets('sleep popover is above its real button and remains clickable', (
     tester,
   ) async {
-    final fixture = _Fixture(PlayerState.playing);
+    final fixture = _Fixture(
+      PlayerState.playing,
+      tracks: const [
+        PlayerTrack(id: 1, type: PlayerTrackType.subtitle, selected: false),
+      ],
+    );
     await tester.binding.setSurfaceSize(const Size(1280, 720));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     fixture.player.showOsd();
@@ -573,8 +578,12 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    final generation = fixture.player.overlayPresentationGeneration;
     await tester.tap(find.byKey(const Key('player-osd-sleep')));
     await tester.pumpAndSettle();
+    expect(fixture.player.overlay, PlayerOverlay.osd);
+    expect(fixture.player.sleepPickerOpen, isTrue);
+    expect(fixture.player.overlayPresentationGeneration, generation);
     final popup = _drawnRect(
       tester,
       find.byKey(const Key('sleep-timer-picker')),
@@ -587,9 +596,137 @@ void main() {
     expect(popup.right, closeTo(button.right, .1));
     expect(popup.left, greaterThanOrEqualTo(0));
     expect(popup.top, greaterThanOrEqualTo(0));
+    await tester.tap(find.byKey(const Key('player-osd-subtitles')));
+    await tester.pumpAndSettle();
+    expect(fixture.player.overlay, PlayerOverlay.subtitleTracks);
+    expect(fixture.player.sleepPickerOpen, isFalse);
+    fixture.player.closeOverlay();
+    await tester.pumpAndSettle();
+    fixture.player.showSleepTimer();
+    await tester.pumpAndSettle();
     await tester.tap(find.text('30 minutes'));
     await tester.pumpAndSettle();
     expect(find.text('Sleep · 30m'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
+  testWidgets(
+    'video click closes the sleep picker and restarts the OSD timer',
+    (tester) async {
+      final fixture = _Fixture(
+        PlayerState.playing,
+        overlayTimeout: const Duration(seconds: 1),
+      );
+      await tester.binding.setSurfaceSize(const Size(1280, 720));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      fixture.player.showOsd();
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: LineupCanvas.builder,
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('player-osd-sleep')));
+      await tester.pumpAndSettle();
+      expect(fixture.player.sleepPickerOpen, isTrue);
+
+      await tester.tapAt(const Offset(8, 8), kind: PointerDeviceKind.mouse);
+      await tester.pump();
+      expect(fixture.player.overlay, PlayerOverlay.osd);
+      expect(fixture.player.sleepPickerOpen, isFalse);
+      await tester.pump(const Duration(milliseconds: 999));
+      expect(fixture.player.overlay, PlayerOverlay.osd);
+      await tester.pump(const Duration(milliseconds: 1));
+      expect(fixture.player.overlay, PlayerOverlay.none);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    },
+  );
+
+  testWidgets(
+    'pointer activity and timeout changes do not dismiss an open picker',
+    (tester) async {
+      final fixture = _Fixture(PlayerState.playing);
+      await tester.binding.setSurfaceSize(const Size(1280, 720));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      fixture.player.showOsd();
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: LineupCanvas.builder,
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const Key('player-osd-sleep')),
+        kind: PointerDeviceKind.mouse,
+      );
+      await tester.pumpAndSettle();
+
+      await tester.sendEventToBinding(
+        PointerHoverEvent(position: const Offset(8, 8)),
+      );
+      fixture.lineup.settings = fixture.lineup.settings.copyWith(
+        osdAutoHideSeconds: 2,
+      );
+      fixture.lineup.notifyListeners();
+      await tester.pump(const Duration(seconds: 3));
+      expect(fixture.player.overlay, PlayerOverlay.osd);
+      expect(fixture.player.sleepPickerOpen, isTrue);
+
+      fixture.player.closeOverlay();
+      await tester.pump(const Duration(milliseconds: 1999));
+      expect(fixture.player.overlay, PlayerOverlay.osd);
+      await tester.pump(const Duration(milliseconds: 1));
+      expect(fixture.player.overlay, PlayerOverlay.none);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    },
+  );
+
+  testWidgets('OSD menu and fullscreen actions close the picker first', (
+    tester,
+  ) async {
+    final fixture = _Fixture(PlayerState.playing);
+    var menuOpened = false;
+    await tester.binding.setSurfaceSize(const Size(1280, 720));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    fixture.player.showOsd();
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: LineupCanvas.builder,
+        home: PlayerView(
+          controller: fixture.player,
+          openGuide: () {},
+          openMenu: (_, _) => menuOpened = true,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final generation = fixture.player.overlayPresentationGeneration;
+
+    await tester.tap(find.byKey(const Key('player-osd-sleep')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('player-app-menu')));
+    await tester.pump();
+    expect(menuOpened, isTrue);
+    expect(fixture.player.overlay, PlayerOverlay.osd);
+    expect(fixture.player.sleepPickerOpen, isFalse);
+    expect(fixture.player.overlayPresentationGeneration, generation);
+
+    fixture.player.showSleepTimer();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Full screen'));
+    await tester.pumpAndSettle();
+    expect(fixture.native.fullscreenValues, [true]);
+    expect(fixture.player.overlay, PlayerOverlay.osd);
+    expect(fixture.player.sleepPickerOpen, isFalse);
+    expect(fixture.player.overlayPresentationGeneration, generation);
+
     await tester.pumpWidget(const SizedBox.shrink());
     fixture.dispose();
   });
@@ -754,7 +891,8 @@ void main() {
     await tester.sendKeyDownEvent(LogicalKeyboardKey.keyS);
     await tester.sendKeyRepeatEvent(LogicalKeyboardKey.keyS);
     await tester.pump();
-    expect(fixture.player.overlay, PlayerOverlay.sleepTimer);
+    expect(fixture.player.overlay, PlayerOverlay.osd);
+    expect(fixture.player.sleepPickerOpen, isTrue);
     expect(find.byKey(const Key('sleep-timer-picker')), findsOneWidget);
 
     await tester.sendKeyUpEvent(LogicalKeyboardKey.keyI);
@@ -795,9 +933,11 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.f11);
     expect(fixture.native.fullscreenValues, [true]);
     await tester.sendKeyEvent(LogicalKeyboardKey.keyS);
-    await tester.pump();
-    expect(fixture.player.overlay, PlayerOverlay.sleepTimer);
-    await tester.tap(find.text('30 minutes'));
+    await tester.pumpAndSettle();
+    expect(fixture.player.overlay, PlayerOverlay.osd);
+    expect(fixture.player.sleepPickerOpen, isTrue);
+    final sleepChoice = find.text('30 minutes');
+    await tester.tap(sleepChoice);
     await tester.pump();
     expect(fixture.player.sleepDuration, const Duration(minutes: 30));
     await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
@@ -1089,6 +1229,25 @@ void main() {
     await tester.pump();
 
     expect(find.bySemanticsLabel(RegExp('Playback controls')), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pumpAndSettle();
+    expect(fixture.player.overlay, PlayerOverlay.miniGuide);
+    expect(find.byKey(const Key('mini-guide-shelf')), findsOneWidget);
+
+    fixture.player.closeOverlay();
+    fixture.player.showOsd();
+    await tester.pumpAndSettle();
+    final sleepButton = tester.widget<TextButton>(
+      find.byKey(const Key('player-osd-sleep')),
+    );
+    sleepButton.focusNode!.requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pumpAndSettle();
+    expect(fixture.player.overlay, PlayerOverlay.miniGuide);
+
+    fixture.player.closeOverlay();
+    fixture.player.showOsd();
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
     await tester.pump();
