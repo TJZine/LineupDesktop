@@ -47,7 +47,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Create a channel to build your Guide'), findsOneWidget);
+      expect(find.text('No channels yet'), findsOneWidget);
     },
   );
 
@@ -99,7 +99,7 @@ void main() {
 
     expect(
       MediaQuery.disableAnimationsOf(
-        tester.element(find.text('Create a channel to build your Guide')),
+        tester.element(find.text('No channels yet')),
       ),
       isTrue,
     );
@@ -273,7 +273,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Create a channel to build your Guide'), findsOneWidget);
+    expect(find.text('No channels yet'), findsOneWidget);
 
     await openDestination(tester, 'Settings');
 

@@ -696,6 +696,11 @@ class _LineupShellState extends State<LineupShell> {
             ),
       onOpenPlayer: guideHasPicture ? () => unawaited(_select(4)) : null,
       onTune: _tuneFromGuide,
+      onSetUpChannels: () => unawaited(controller.enterChannelSetup()),
+      showIdleArtwork:
+          _player.status.state == PlayerState.idle &&
+          !hasPlaybackSurface &&
+          !guidePlaybackUnavailable,
     );
     final settingsView = SettingsView(
       controller: controller,
@@ -1203,6 +1208,22 @@ class _SettingsViewState extends State<SettingsView> {
                 first: true,
               ),
               _settingFeedback('guideHours'),
+              _SettingsSwitchTile(
+                title: const Text('Show channel sources'),
+                subtitle: const Text(
+                  "Show where each channel's programs come from under its name in the Guide.",
+                ),
+                value: value.guideShowChannelSources,
+                onChanged:
+                    _pendingSettingKeys.contains('guideShowChannelSources')
+                    ? null
+                    : (item) => _update(
+                        'guideShowChannelSources',
+                        (current) =>
+                            current.copyWith(guideShowChannelSources: item),
+                      ),
+              ),
+              _settingFeedback('guideShowChannelSources'),
               _SettingsSwitchTile(
                 title: const Text('Show now playing in Guide'),
                 subtitle: const Text(

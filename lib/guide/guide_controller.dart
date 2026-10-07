@@ -375,6 +375,22 @@ class GuideController extends ChangeNotifier {
     _request(channel, prioritize: true, retrying: true);
   }
 
+  /// Retries the authoritative failed rows, including filtered and offscreen rows.
+  void retryFailedRows() {
+    final failed = _rows.entries
+        .where((entry) => entry.value.state == GuideLoadState.error)
+        .map((entry) => _channelById[entry.key])
+        .nonNulls
+        .toList();
+    for (final channel in failed) {
+      _rows[channel.id] = const GuideRowData(state: GuideLoadState.retrying);
+      _request(channel, retrying: true, pump: false);
+    }
+    if (failed.isEmpty) return;
+    notifyListeners();
+    _pump();
+  }
+
   void focusProgram(GuideProgram program) {
     _focusedChannelId = program.channelId;
     _focusedProgramId = program.id;

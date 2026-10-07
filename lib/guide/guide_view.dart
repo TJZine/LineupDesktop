@@ -24,8 +24,7 @@ class GuideLayoutPolicy {
     required this.pictureWidth,
     required this.rowHeight,
     required this.minimumRows,
-    required this.showSecondaryMetadata,
-    required this.showSummary,
+    required this.compactLogo,
   });
 
   factory GuideLayoutPolicy.forSize(
@@ -86,8 +85,7 @@ class GuideLayoutPolicy {
       pictureWidth: pictureWidth,
       rowHeight: rowHeight,
       minimumRows: minimumRows,
-      showSecondaryMetadata: showcaseHeight >= 180 * textScale,
-      showSummary: showcaseHeight >= 210 * textScale,
+      compactLogo: showcaseHeight < 180 * textScale,
     );
   }
 
@@ -128,8 +126,7 @@ class GuideLayoutPolicy {
   final double pictureWidth;
   final double rowHeight;
   final int minimumRows;
-  final bool showSecondaryMetadata;
-  final bool showSummary;
+  final bool compactLogo;
 }
 
 class GuideView extends StatefulWidget {
@@ -138,6 +135,8 @@ class GuideView extends StatefulWidget {
     required this.onClose,
     required this.onTune,
     this.onOpenMenu,
+    this.onSetUpChannels,
+    this.showIdleArtwork = false,
     this.pictureInPicture,
     this.onOpenPlayer,
     this.playbackMessage,
@@ -151,6 +150,8 @@ class GuideView extends StatefulWidget {
   final Future<void> Function(String channelId) onTune;
   final LineupMenuCallback? onOpenMenu;
   final Widget? pictureInPicture;
+  final VoidCallback? onSetUpChannels;
+  final bool showIdleArtwork;
   final VoidCallback? onOpenPlayer;
   final String? playbackMessage;
   final String? watchingChannelId;
@@ -162,6 +163,9 @@ class GuideView extends StatefulWidget {
 
 class _GuideViewState extends State<GuideView>
     with SingleTickerProviderStateMixin {
+  final _retryFocus = FocusNode(debugLabel: 'Guide retry all schedules');
+  final _setupFocus = FocusNode(debugLabel: 'Guide set up channels');
+  bool _allVisibleFailed = false;
   final _menuFocus = FocusNode(debugLabel: 'Guide Lineup menu');
   final _guideFocus = FocusNode(debugLabel: 'Guide grid');
   final _searchFocus = FocusNode(debugLabel: 'Guide channel search');
@@ -195,6 +199,8 @@ class _GuideViewState extends State<GuideView>
 
   @override
   void dispose() {
+    _retryFocus.dispose();
+    _setupFocus.dispose();
     _menuFocus.dispose();
     _guideFocus.dispose();
     _searchFocus.dispose();
@@ -205,7 +211,7 @@ class _GuideViewState extends State<GuideView>
     widget.controller.removeListener(_changed);
     _clockTimer?.cancel();
     _scroll
-      ?..removeListener(_requestViewport)
+      ?..removeListener(_scrolled)
       ..dispose();
     super.dispose();
   }
@@ -240,7 +246,7 @@ class _GuideViewState extends State<GuideView>
       _effectiveRowHeight = rowHeight;
       final created = ScrollController(
         initialScrollOffset: widget.controller.verticalOffsetFor(rowHeight),
-      )..addListener(_requestViewport);
+      )..addListener(_scrolled);
       _scroll = created;
       return created;
     }
@@ -339,6 +345,11 @@ class _GuideViewState extends State<GuideView>
     }
   }
 
+  void _scrolled() {
+    if (mounted) setState(() {});
+    _requestViewport();
+  }
+
   void _requestViewport() {
     final scroll = _scroll;
     final rowHeight = _effectiveRowHeight;
@@ -361,6 +372,20 @@ class _GuideViewState extends State<GuideView>
       return KeyEventResult.ignored;
     }
     final key = event.logicalKey;
+    if (_retryFocus.hasFocus) {
+      if (key == LogicalKeyboardKey.enter ||
+          key == LogicalKeyboardKey.numpadEnter ||
+          key == LogicalKeyboardKey.space ||
+          key == LogicalKeyboardKey.select) {
+        widget.controller.retryFailedRows();
+        (widget.focusNode ?? _guideFocus).requestFocus();
+        return KeyEventResult.handled;
+      }
+      if (key == LogicalKeyboardKey.arrowUp ||
+          key == LogicalKeyboardKey.arrowDown) {
+        (widget.focusNode ?? _guideFocus).requestFocus();
+      }
+    }
     final keyboard = HardwareKeyboard.instance;
     final commandModified =
         keyboard.isControlPressed ||
@@ -376,7 +401,13 @@ class _GuideViewState extends State<GuideView>
     } else if (key == LogicalKeyboardKey.arrowLeft) {
       widget.controller.moveHorizontal(-1);
     } else if (key == LogicalKeyboardKey.arrowRight) {
-      widget.controller.moveHorizontal(1);
+      if (_allVisibleFailed) {
+        _retryFocus.requestFocus();
+      } else if (widget.controller.lineup.channels.isEmpty) {
+        _setupFocus.requestFocus();
+      } else {
+        widget.controller.moveHorizontal(1);
+      }
     } else if (key == LogicalKeyboardKey.pageUp) {
       widget.controller.page(-1, _visibleRows);
     } else if (key == LogicalKeyboardKey.pageDown) {
@@ -389,6 +420,10 @@ class _GuideViewState extends State<GuideView>
         key == LogicalKeyboardKey.numpadEnter ||
         key == LogicalKeyboardKey.space ||
         key == LogicalKeyboardKey.select) {
+      if (_setupFocus.hasFocus) {
+        widget.onSetUpChannels?.call();
+        return KeyEventResult.handled;
+      }
       final selected = widget.controller.selectFocusedProgram();
       if (selected?.isCurrentAt(widget.controller.now) == true) {
         unawaited(widget.onTune(selected!.channelId));
@@ -419,10 +454,9 @@ class _GuideViewState extends State<GuideView>
     child: _GuideShowcase(
       controller: widget.controller,
       picture: widget.pictureInPicture,
+      showIdleArtwork: widget.showIdleArtwork,
       pictureWidth: policy.pictureWidth,
-      compact: policy.compact,
-      showSecondaryMetadata: policy.showSecondaryMetadata,
-      showSummary: policy.showSummary,
+      compactLogo: policy.compactLogo,
       playbackMessage: widget.playbackMessage,
       onOpenPlayer: widget.onOpenPlayer,
     ),
@@ -443,12 +477,29 @@ class _GuideViewState extends State<GuideView>
           child: LayoutBuilder(
             builder: (context, constraints) {
               final now = widget.controller.now;
-              _visibleRows = GuideGeometry.visibleRows(
+              final visible = GuideGeometry.visibleRows(
                 scrollOffset: scroll.hasClients ? scroll.offset : 0,
-                viewportHeight: constraints.maxHeight,
+                viewportHeight: constraints.maxHeight - policy.timeHeaderHeight,
                 rowHeight: policy.rowHeight,
                 totalRows: channels.length,
-              ).count;
+              );
+              _visibleRows = visible.count;
+              final offset = scroll.hasClients ? scroll.offset : 0.0;
+              final lastVisible =
+                  ((offset + constraints.maxHeight - policy.timeHeaderHeight) /
+                          policy.rowHeight)
+                      .ceil()
+                      .clamp(0, channels.length);
+              _allVisibleFailed =
+                  lastVisible > visible.first &&
+                  channels
+                      .skip(visible.first)
+                      .take(lastVisible - visible.first)
+                      .every(
+                        (channel) =>
+                            widget.controller.row(channel.id).state ==
+                            GuideLoadState.error,
+                      );
               WidgetsBinding.instance.addPostFrameCallback(
                 (_) => _requestViewport(),
               );
@@ -493,6 +544,8 @@ class _GuideViewState extends State<GuideView>
                       Expanded(
                         child: channels.isEmpty
                             ? _NoMatchingChannels(
+                                onSetUpChannels: widget.onSetUpChannels,
+                                setupFocus: _setupFocus,
                                 filtered: widget
                                     .controller
                                     .lineup
@@ -509,6 +562,7 @@ class _GuideViewState extends State<GuideView>
                                   watchingChannelId: widget.watchingChannelId,
                                   controller: widget.controller,
                                   railWidth: policy.channelRailWidth,
+                                  hideSchedule: _allVisibleFailed,
                                   showProvenance:
                                       policy.rowHeight >=
                                       78 *
@@ -522,6 +576,59 @@ class _GuideViewState extends State<GuideView>
                       ),
                     ],
                   ),
+                  if (_allVisibleFailed)
+                    Positioned(
+                      left: policy.channelRailWidth + _guideTimelineGutter,
+                      right: 0,
+                      top: policy.timeHeaderHeight,
+                      bottom: 0,
+                      child: Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Semantics(
+                              header: true,
+                              child: Text(
+                                "Schedules couldn't load",
+                                style: Theme.of(context).textTheme.titleLarge,
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Focus(
+                              onKeyEvent: (node, event) {
+                                if (event is! KeyDownEvent) {
+                                  return KeyEventResult.ignored;
+                                }
+                                if (event.logicalKey ==
+                                    LogicalKeyboardKey.arrowLeft) {
+                                  (widget.focusNode ?? _guideFocus)
+                                      .requestFocus();
+                                  return KeyEventResult.handled;
+                                }
+                                if (event.logicalKey ==
+                                    LogicalKeyboardKey.select) {
+                                  widget.controller.retryFailedRows();
+                                  (widget.focusNode ?? _guideFocus)
+                                      .requestFocus();
+                                  return KeyEventResult.handled;
+                                }
+                                return KeyEventResult.ignored;
+                              },
+                              child: OutlinedButton(
+                                focusNode: _retryFocus,
+                                onPressed: () {
+                                  widget.controller.retryFailedRows();
+                                  (widget.focusNode ?? _guideFocus)
+                                      .requestFocus();
+                                },
+                                child: const Text('Retry'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                 ],
               );
             },
@@ -992,29 +1099,141 @@ class _GuideControls extends StatelessWidget {
   }
 }
 
-class _GuideShowcase extends StatelessWidget {
+class _GuideShowcase extends StatefulWidget {
   const _GuideShowcase({
     required this.controller,
     required this.picture,
+    required this.showIdleArtwork,
     required this.pictureWidth,
-    required this.compact,
-    required this.showSecondaryMetadata,
-    required this.showSummary,
+    required this.compactLogo,
     required this.playbackMessage,
     required this.onOpenPlayer,
   });
 
   final GuideController controller;
   final Widget? picture;
+  final bool showIdleArtwork;
   final double pictureWidth;
-  final bool compact;
-  final bool showSecondaryMetadata;
-  final bool showSummary;
+  final bool compactLogo;
   final String? playbackMessage;
   final VoidCallback? onOpenPlayer;
 
   @override
+  State<_GuideShowcase> createState() => _GuideShowcaseState();
+}
+
+class _GuideShowcaseState extends State<_GuideShowcase> {
+  String? _artworkProgramId;
+  Uint8List? _backdrop;
+  Uint8List? _clearLogo;
+  Color? _dynamicColor;
+  int _artworkToken = 0;
+
+  @override
+  void dispose() {
+    _artworkToken++;
+    super.dispose();
+  }
+
+  void _ensureArtwork(GuideProgram? program) {
+    final settings = widget.controller.lineup.settings;
+    final item = program?.scheduled.item;
+    final artworkKey = program == null
+        ? null
+        : '${program.id}|${widget.controller.lineup.contentGeneration}|${item?.showThumb}|${item?.poster}|${item?.backdrop}|${item?.clearLogo}|${settings.guideInfoBackgroundMode.name}|${settings.preferClearLogos}|${widget.showIdleArtwork}';
+    if (artworkKey == _artworkProgramId) return;
+    _artworkProgramId = artworkKey;
+    _backdrop = null;
+    _clearLogo = null;
+    _dynamicColor = null;
+    final token = ++_artworkToken;
+    if (program == null) return;
+    unawaited(_loadArtwork(program, token));
+  }
+
+  Future<void> _loadArtwork(GuideProgram program, int token) async {
+    final settings = widget.controller.lineup.settings;
+    final artwork = await Future.wait([
+      widget.controller.artworkFor(program),
+      if (settings.guideInfoBackgroundMode == GuideInfoBackgroundMode.artwork ||
+          widget.showIdleArtwork)
+        widget.controller.artworkFor(program, GuideArtworkKind.backdrop)
+      else
+        Future<Uint8List?>.value(),
+      if (settings.preferClearLogos)
+        widget.controller.artworkFor(program, GuideArtworkKind.clearLogo)
+      else
+        Future<Uint8List?>.value(),
+    ]);
+    if (!mounted || token != _artworkToken) return;
+    final poster = artwork[0];
+    setState(() {
+      _backdrop = artwork[1];
+      _clearLogo = artwork[2];
+      _dynamicColor = poster == null ? null : _artworkHashColor(poster);
+    });
+    if (poster == null) return;
+    final color = await _artworkColor(poster);
+    if (!mounted || token != _artworkToken || color == null) return;
+    setState(() => _dynamicColor = color);
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final controller = widget.controller;
+    final channel = controller.focusedChannel;
+    final focusedProgram = controller.focusedProgram;
+    final selectedProgram = controller.selectedProgram;
+    final program =
+        focusedProgram ??
+        (channel != null &&
+                controller.row(channel.id).state == GuideLoadState.ready &&
+                selectedProgram?.channelId == channel.id
+            ? selectedProgram
+            : null);
+    _ensureArtwork(program);
+    final idlePicture =
+        widget.showIdleArtwork && _backdrop != null && channel != null;
+    final picture = widget.showIdleArtwork
+        ? AnimatedSwitcher(
+            duration: controller.lineup.settings.reduceMotion
+                ? Duration.zero
+                : const Duration(milliseconds: 400),
+            child: idlePicture
+                ? KeyedSubtree(
+                    key: ValueKey(_artworkProgramId),
+                    child: Image.memory(
+                      _backdrop!,
+                      key: const Key('guide-idle-backdrop'),
+                      fit: BoxFit.cover,
+                      excludeFromSemantics: true,
+                      errorBuilder: (_, _, _) =>
+                          widget.picture ?? const SizedBox.shrink(),
+                      frameBuilder: (context, image, frame, synchronous) =>
+                          Stack(
+                            key: const Key('guide-idle-artwork'),
+                            fit: StackFit.expand,
+                            children: [
+                              image,
+                              ColoredBox(
+                                color: Colors.black.withValues(alpha: .6),
+                              ),
+                              Center(
+                                child: Text(
+                                  'Select to watch · ${channel.name}',
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                            ],
+                          ),
+                    ),
+                  )
+                : KeyedSubtree(
+                    key: const ValueKey('idle-picture-fallback'),
+                    child: widget.picture ?? const SizedBox.shrink(),
+                  ),
+          )
+        : widget.picture;
     final double radius = 12;
     final pictureFrame = Stack(
       fit: StackFit.expand,
@@ -1029,15 +1248,15 @@ class _GuideShowcase extends StatelessWidget {
         ),
       ],
     );
-    final pictureContent = onOpenPlayer == null
+    final pictureContent = widget.onOpenPlayer == null
         ? pictureFrame
         : Semantics(
             button: true,
             label: 'Now playing picture in picture. Open full player.',
-            onTap: onOpenPlayer,
+            onTap: widget.onOpenPlayer,
             child: InkWell(
               excludeFromSemantics: true,
-              onTap: onOpenPlayer,
+              onTap: widget.onOpenPlayer,
               borderRadius: BorderRadius.circular(radius),
               child: pictureFrame,
             ),
@@ -1047,7 +1266,7 @@ class _GuideShowcase extends StatelessWidget {
       children: [
         if (picture != null) ...[
           SizedBox(
-            width: pictureWidth,
+            width: widget.pictureWidth,
             child: Align(
               child: AspectRatio(
                 key: const Key('guide-picture-in-picture'),
@@ -1071,10 +1290,12 @@ class _GuideShowcase extends StatelessWidget {
             color: LineupTheme.of(context).deepBackground,
             child: _Details(
               controller: controller,
-              compact: compact,
-              showSecondaryMetadata: showSecondaryMetadata,
-              showSummary: showSummary,
-              playbackMessage: playbackMessage,
+              program: program,
+              backdrop: _backdrop,
+              clearLogo: _clearLogo,
+              dynamicColor: _dynamicColor,
+              compactLogo: widget.compactLogo,
+              playbackMessage: widget.playbackMessage,
             ),
           ),
         ),
@@ -1261,6 +1482,7 @@ class _GuideRow extends StatelessWidget {
     required this.watchingChannelId,
     required this.railWidth,
     required this.showProvenance,
+    required this.hideSchedule,
     required this.onTune,
     required this.now,
     required this.activityPulse,
@@ -1270,6 +1492,7 @@ class _GuideRow extends StatelessWidget {
   final String? watchingChannelId;
   final double railWidth;
   final bool showProvenance;
+  final bool hideSchedule;
   final Future<void> Function(String channelId) onTune;
   final DateTime now;
   final Animation<double> activityPulse;
@@ -1282,8 +1505,8 @@ class _GuideRow extends StatelessWidget {
         focusedChannel && controller.focusedProgram == null;
     final selectedChannel = channel.id == controller.selectedChannelId;
     final tunedChannel = watchingChannelId == channel.id;
-    final largeFocusIndicators =
-        controller.lineup.settings.largeFocusIndicators;
+    final showSource =
+        showProvenance && controller.lineup.settings.guideShowChannelSources;
     final focusFill = roles.focusedText == roles.onFocus
         ? roles.focusedSurface
         : Color.alphaBlend(
@@ -1293,7 +1516,16 @@ class _GuideRow extends StatelessWidget {
     final data = controller.row(channel.id);
     void focusCurrentProgram() {
       final current = controller.currentProgram(channel.id);
-      if (current != null) controller.focusProgram(current);
+      if (current != null) {
+        controller.focusProgram(current);
+      } else {
+        final index = controller.channels.indexWhere(
+          (row) => row.id == channel.id,
+        );
+        if (index >= 0) {
+          controller.moveVertical(index - controller.focusedChannelIndex);
+        }
+      }
     }
 
     return Padding(
@@ -1320,14 +1552,6 @@ class _GuideRow extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: focusChannelRail ? focusFill : roles.primarySurface,
                   border: Border(
-                    left: BorderSide(
-                      color: focusChannelRail && largeFocusIndicators
-                          ? roles.focusBorder
-                          : Colors.transparent,
-                      width: focusChannelRail && largeFocusIndicators
-                          ? roles.focusBorderWidth
-                          : 1,
-                    ),
                     bottom: BorderSide(
                       color: LineupTheme.of(context).subtleBorder,
                     ),
@@ -1387,14 +1611,17 @@ class _GuideRow extends StatelessWidget {
                               ? 'Watching'
                               : _channelProvenance(controller, channel);
                           final availableLines =
-                              ((constraints.maxHeight - supportHeight) /
+                              ((constraints.maxHeight -
+                                          ((tunedChannel || showSource)
+                                              ? supportHeight
+                                              : 0)) /
                                       lineHeight)
                                   .floor()
                                   .clamp(1, 1000);
                           final nameHeight = painter.height.ceilToDouble();
                           painter.dispose();
                           final showSupport =
-                              (tunedChannel || showProvenance) &&
+                              (tunedChannel || showSource) &&
                               nameHeight + supportHeight <=
                                   constraints.maxHeight;
                           return Column(
@@ -1454,15 +1681,16 @@ class _GuideRow extends StatelessWidget {
           ),
           const SizedBox(width: _guideTimelineGutter),
           Expanded(
-            child: _Programs(
-              channel: channel,
-              data: data,
-              controller: controller,
-              onTune: onTune,
-              now: now,
-              activityPulse: activityPulse,
-              largeFocusIndicators: largeFocusIndicators,
-            ),
+            child: hideSchedule
+                ? const SizedBox.expand()
+                : _Programs(
+                    channel: channel,
+                    data: data,
+                    controller: controller,
+                    onTune: onTune,
+                    now: now,
+                    activityPulse: activityPulse,
+                  ),
           ),
         ],
       ),
@@ -1478,7 +1706,6 @@ class _Programs extends StatelessWidget {
     required this.onTune,
     required this.now,
     required this.activityPulse,
-    required this.largeFocusIndicators,
   });
   final Channel channel;
   final GuideRowData data;
@@ -1486,7 +1713,6 @@ class _Programs extends StatelessWidget {
   final Future<void> Function(String channelId) onTune;
   final DateTime now;
   final Animation<double> activityPulse;
-  final bool largeFocusIndicators;
 
   @override
   Widget build(BuildContext context) {
@@ -1507,7 +1733,7 @@ class _Programs extends StatelessWidget {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Text('Schedule unavailable'),
+            const Text('Schedule unavailable ·'),
             SizedBox(width: 8),
             LineupInlineLink(
               onPressed: () => controller.retry(channel.id),
@@ -1630,7 +1856,6 @@ class _Programs extends StatelessWidget {
         unawaited(onTune(channel.id));
       },
       reduceMotion: controller.lineup.settings.reduceMotion,
-      largeFocusIndicators: largeFocusIndicators,
     );
   }
 }
@@ -1685,21 +1910,52 @@ class _ScheduleStatus extends StatelessWidget {
 }
 
 class _NoMatchingChannels extends StatelessWidget {
-  const _NoMatchingChannels({required this.filtered});
+  const _NoMatchingChannels({
+    required this.filtered,
+    this.onSetUpChannels,
+    this.setupFocus,
+  });
 
   final bool filtered;
+  final VoidCallback? onSetUpChannels;
+  final FocusNode? setupFocus;
 
   @override
   Widget build(BuildContext context) => Center(
-    child: Semantics(
-      label: filtered ? 'No matching channels' : 'Guide has no channels',
-      child: Text(
-        filtered
-            ? 'No matching channels\nTry another channel name or number.'
-            : 'Create a channel to build your Guide',
-        textAlign: TextAlign.center,
-      ),
-    ),
+    child: filtered
+        ? const Text(
+            'No matching channels\nTry another channel name or number.',
+            textAlign: TextAlign.center,
+          )
+        : SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Semantics(
+                  header: true,
+                  child: Text(
+                    'No channels yet',
+                    style: Theme.of(context).textTheme.titleLarge,
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Set up your channels to start watching.',
+                  style: Theme.of(context).textTheme.bodyMedium
+                      ?.copyWith(color: LineupTheme.of(context).secondaryText),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+                FilledButton(
+                  focusNode: setupFocus,
+                  onPressed: onSetUpChannels,
+                  child: const Text('Set up channels'),
+                ),
+              ],
+            ),
+          ),
   );
 }
 
@@ -1714,7 +1970,6 @@ class _ProgramCell extends StatefulWidget {
     required this.width,
     required this.onTap,
     required this.reduceMotion,
-    required this.largeFocusIndicators,
     this.onDoubleTap,
     this.nowOffset,
     super.key,
@@ -1728,7 +1983,6 @@ class _ProgramCell extends StatefulWidget {
   final double width;
   final VoidCallback onTap;
   final bool reduceMotion;
-  final bool largeFocusIndicators;
   final VoidCallback? onDoubleTap;
   final double? nowOffset;
 
@@ -1755,9 +2009,8 @@ class _ProgramCellState extends State<_ProgramCell> {
         : widget.past
         ? roles.primarySurface.withValues(alpha: 0.56)
         : roles.primarySurface.withValues(alpha: 0.55);
-    final border = widget.focused && widget.largeFocusIndicators
-        ? Border.all(color: roles.focusBorder, width: roles.focusBorderWidth)
-        : Border.all(color: Colors.transparent, width: 1);
+    // Guide focus is deliberately fill-only, including Large focus indicators.
+    final border = Border.all(color: Colors.transparent, width: 1);
 
     return Positioned(
       left: widget.left,
@@ -1921,6 +2174,18 @@ class _ProgramCellContent extends StatelessWidget {
             children: [
               Row(
                 children: [
+                  if (current) ...[
+                    Container(
+                      key: const Key('guide-airing-dot'),
+                      width: 7,
+                      height: 7,
+                      decoration: BoxDecoration(
+                        color: LineupTheme.of(context).liveAccent,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    SizedBox(width: gap),
+                  ],
                   Expanded(
                     child: FocusedTicker(
                       text: primaryTitle,
@@ -1933,32 +2198,36 @@ class _ProgramCellContent extends StatelessWidget {
                     SizedBox(width: gap),
                     Text(episodeCode, style: tagStyle),
                   ],
-                  if (current) ...[
-                    SizedBox(width: gap),
-                    Container(
-                      width: 7,
-                      height: 7,
-                      decoration: BoxDecoration(
-                        color: LineupTheme.of(context).liveAccent,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                  ],
                 ],
               ),
               if (showBottom && (episodeTitle != null || showTime))
                 Row(
                   children: [
                     if (episodeTitle != null)
-                      Expanded(
-                        child: FocusedTicker(
-                          text: episodeTitle,
-                          focused: focused,
-                          reduceMotion: reduceMotion,
-                          style: secondaryStyle,
+                      if (showTime)
+                        SizedBox(
+                          width: subtitleWidth,
+                          child: FocusedTicker(
+                            text: episodeTitle,
+                            focused: focused,
+                            reduceMotion: reduceMotion,
+                            style: secondaryStyle,
+                          ),
+                        )
+                      else
+                        Expanded(
+                          child: FocusedTicker(
+                            text: episodeTitle,
+                            focused: focused,
+                            reduceMotion: reduceMotion,
+                            style: secondaryStyle,
+                          ),
                         ),
+                    if (episodeTitle != null && showTime)
+                      SizedBox(
+                        width: gap,
+                        child: Center(child: Text('·', style: secondaryStyle)),
                       ),
-                    if (episodeTitle != null && showTime) SizedBox(width: gap),
                     if (showTime)
                       Text(
                         time,
@@ -2007,95 +2276,29 @@ double _textWidth(
   );
 }
 
-class _Details extends StatefulWidget {
+class _Details extends StatelessWidget {
   const _Details({
     required this.controller,
-    required this.compact,
-    required this.showSecondaryMetadata,
-    required this.showSummary,
+    required this.program,
+    required this.backdrop,
+    required this.clearLogo,
+    required this.dynamicColor,
+    required this.compactLogo,
     required this.playbackMessage,
   });
+  final GuideProgram? program;
+  final Uint8List? backdrop;
+  final Uint8List? clearLogo;
+  final Color? dynamicColor;
   final GuideController controller;
-  final bool compact;
-  final bool showSecondaryMetadata;
-  final bool showSummary;
+  final bool compactLogo;
   final String? playbackMessage;
 
   @override
-  State<_Details> createState() => _DetailsState();
-}
-
-class _DetailsState extends State<_Details> {
-  String? _artworkProgramId;
-  Uint8List? _backdrop;
-  Uint8List? _clearLogo;
-  Color? _dynamicColor;
-  int _artworkToken = 0;
-
-  @override
-  void dispose() {
-    _artworkToken++;
-    super.dispose();
-  }
-
-  void _ensureArtwork(GuideProgram? program) {
-    final settings = widget.controller.lineup.settings;
-    final item = program?.scheduled.item;
-    final artworkKey = program == null
-        ? null
-        : '${program.id}|${widget.controller.lineup.contentGeneration}|${item?.showThumb}|${item?.poster}|${item?.backdrop}|${item?.clearLogo}|${settings.guideInfoBackgroundMode.name}|${settings.preferClearLogos}';
-    if (artworkKey == _artworkProgramId) return;
-    _artworkProgramId = artworkKey;
-    _backdrop = null;
-    _clearLogo = null;
-    _dynamicColor = null;
-    final token = ++_artworkToken;
-    if (program == null) return;
-    unawaited(_loadArtwork(program, token));
-  }
-
-  Future<void> _loadArtwork(GuideProgram program, int token) async {
-    final settings = widget.controller.lineup.settings;
-    final artwork = await Future.wait([
-      widget.controller.artworkFor(program),
-      if (settings.guideInfoBackgroundMode == GuideInfoBackgroundMode.artwork)
-        widget.controller.artworkFor(program, GuideArtworkKind.backdrop)
-      else
-        Future<Uint8List?>.value(),
-      if (settings.preferClearLogos)
-        widget.controller.artworkFor(program, GuideArtworkKind.clearLogo)
-      else
-        Future<Uint8List?>.value(),
-    ]);
-    if (!mounted || token != _artworkToken) return;
-    final poster = artwork[0];
-    setState(() {
-      _backdrop = artwork[1];
-      _clearLogo = artwork[2];
-      _dynamicColor = poster == null ? null : _artworkHashColor(poster);
-    });
-    if (poster == null) return;
-    final color = await _artworkColor(poster);
-    if (!mounted || token != _artworkToken || color == null) return;
-    setState(() => _dynamicColor = color);
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final controller = widget.controller;
     final channel = controller.focusedChannel;
-    final focusedProgram = controller.focusedProgram;
-    final selectedProgram = controller.selectedProgram;
-    final program =
-        focusedProgram ??
-        (channel != null &&
-                controller.row(channel.id).state == GuideLoadState.ready &&
-                selectedProgram?.channelId == channel.id
-            ? selectedProgram
-            : null);
-    _ensureArtwork(program);
     final roles = LineupTheme.of(context);
-    final dynamicColor = _dynamicColor ?? roles.progressFill;
+    final bleedColor = dynamicColor ?? roles.progressFill;
     final settings = controller.lineup.settings;
     final backgroundMode = settings.guideInfoBackgroundMode;
     final backgroundGradient = switch (backgroundMode) {
@@ -2104,7 +2307,7 @@ class _DetailsState extends State<_Details> {
         radius: 1.7,
         colors: [
           Color.alphaBlend(
-            dynamicColor.withValues(alpha: 0.65),
+            bleedColor.withValues(alpha: 0.65),
             roles.primarySurface,
           ),
           roles.primarySurface,
@@ -2130,10 +2333,10 @@ class _DetailsState extends State<_Details> {
           fit: StackFit.expand,
           children: [
             if (backgroundMode == GuideInfoBackgroundMode.artwork &&
-                _backdrop != null) ...[
+                backdrop != null) ...[
               Positioned.fill(
                 child: Image.memory(
-                  _backdrop!,
+                  backdrop!,
                   key: const Key('guide-info-backdrop'),
                   fit: BoxFit.cover,
                   alignment: Alignment.centerRight,
@@ -2159,29 +2362,34 @@ class _DetailsState extends State<_Details> {
             ],
             Padding(
               padding: EdgeInsets.symmetric(horizontal: 20.0, vertical: 14.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Expanded(
-                    child: program == null
-                        ? _GuideDetailsPlaceholder(
-                            controller: controller,
-                            channel: channel,
-                            playbackMessage: widget.playbackMessage,
-                          )
-                        : _ProgramDetails(
-                            program: program,
-                            channel: channel,
-                            clearLogo: settings.preferClearLogos
-                                ? _clearLogo
-                                : null,
-                            showSecondaryMetadata: widget.showSecondaryMetadata,
-                            showSummary: widget.showSummary,
-                            playbackMessage: widget.playbackMessage,
-                            now: controller.now,
-                          ),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: SizedBox(
+                  width: 920,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(
+                        child: program == null
+                            ? _GuideDetailsPlaceholder(
+                                controller: controller,
+                                channel: channel,
+                                playbackMessage: playbackMessage,
+                              )
+                            : _ProgramDetails(
+                                program: program!,
+                                channel: channel,
+                                clearLogo: settings.preferClearLogos
+                                    ? clearLogo
+                                    : null,
+                                compactLogo: compactLogo,
+                                playbackMessage: playbackMessage,
+                                now: controller.now,
+                              ),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
           ],
@@ -2216,7 +2424,9 @@ class _GuideDetailsPlaceholder extends StatelessWidget {
     if (inspected == null) {
       return Align(
         alignment: Alignment.centerLeft,
-        child: Text(playbackMessage ?? 'Move to a program for details.'),
+        child: controller.lineup.channels.isEmpty
+            ? const SizedBox.shrink()
+            : Text(playbackMessage ?? 'Move to a program for details.'),
       );
     }
     final data = controller.row(inspected.id);
@@ -2252,8 +2462,7 @@ class _ProgramDetails extends StatelessWidget {
     required this.program,
     required this.channel,
     required this.clearLogo,
-    required this.showSecondaryMetadata,
-    required this.showSummary,
+    required this.compactLogo,
     required this.playbackMessage,
     required this.now,
   });
@@ -2261,8 +2470,7 @@ class _ProgramDetails extends StatelessWidget {
   final GuideProgram program;
   final Channel? channel;
   final Uint8List? clearLogo;
-  final bool showSecondaryMetadata;
-  final bool showSummary;
+  final bool compactLogo;
   final String? playbackMessage;
   final DateTime now;
 
@@ -2346,8 +2554,8 @@ class _ProgramDetails extends StatelessWidget {
                   alignment: Alignment.centerLeft,
                   child: ConstrainedBox(
                     constraints: BoxConstraints(
-                      maxWidth: (showSecondaryMetadata ? 420 : 280),
-                      maxHeight: (showSecondaryMetadata ? 64 : 42),
+                      maxWidth: (compactLogo ? 280 : 420),
+                      maxHeight: (compactLogo ? 42 : 64),
                     ),
                     child: ClearLogoImage(
                       clearLogo!,
@@ -2387,6 +2595,7 @@ class _ProgramDetails extends StatelessWidget {
                     '${_time(context, program.scheduled.start)}–${_time(context, program.scheduled.end)}',
                     _duration(item.duration),
                     if (item.year != null) '${item.year}',
+                    ...item.genres.take(3),
                     ?contextLabel,
                   ].join('  ·  '),
                   key: const Key('guide-program-meta'),
@@ -2395,33 +2604,26 @@ class _ProgramDetails extends StatelessWidget {
                   style: metadataStyle,
                 ),
               ),
-              if (showSecondaryMetadata && item.genres.isNotEmpty)
+              if (badges.isNotEmpty)
                 Padding(
                   padding: EdgeInsets.only(top: gap),
-                  child: Text(
-                    item.genres.take(3).join(' • '),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: bodyStyle,
-                  ),
-                ),
-              if (showSecondaryMetadata && badges.isNotEmpty)
-                Padding(
-                  padding: EdgeInsets.only(top: gap),
-                  child: Text(
-                    badges.join('  ·  '),
+                  child: Wrap(
                     key: const Key('guide-program-badges'),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: metadataStyle,
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: [
+                      for (final badge in badges)
+                        _GuideMediaBadge(label: badge),
+                    ],
                   ),
                 ),
-              if (showSummary && item.summary != null)
+              if (item.summary?.trim().isNotEmpty == true)
                 Padding(
                   padding: EdgeInsets.only(top: gap),
                   child: Text(
                     item.summary!,
-                    maxLines: 2,
+                    key: const Key('guide-program-synopsis'),
+                    maxLines: 3,
                     overflow: TextOverflow.ellipsis,
                     style: bodyStyle,
                   ),
@@ -2431,7 +2633,7 @@ class _ProgramDetails extends StatelessWidget {
                 Align(
                   alignment: Alignment.centerLeft,
                   child: ConstrainedBox(
-                    constraints: BoxConstraints(maxWidth: 740.0),
+                    constraints: BoxConstraints(maxWidth: 920.0),
                     child: Semantics(
                       label:
                           '${_duration(elapsed)} elapsed, ${_duration(scheduledDuration - elapsed)} remaining',
@@ -2449,7 +2651,7 @@ class _ProgramDetails extends StatelessWidget {
                   style: metadataStyle,
                 ),
               ],
-              if (playbackMessage != null && showSecondaryMetadata)
+              if (playbackMessage != null)
                 Text(
                   playbackMessage!,
                   maxLines: 1,
@@ -2459,6 +2661,26 @@ class _ProgramDetails extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _GuideMediaBadge extends StatelessWidget {
+  const _GuideMediaBadge({required this.label});
+  final String label;
+  @override
+  Widget build(BuildContext context) {
+    final roles = LineupTheme.of(context);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: roles.elevatedSurface.withValues(alpha: .82),
+        border: Border.all(color: roles.subtleBorder),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        child: Text(label, style: Theme.of(context).textTheme.labelMedium),
       ),
     );
   }

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show RenderParagraph;
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -31,6 +32,522 @@ final _narrowLogoPng = base64Decode(
 );
 
 void main() {
+  testWidgets(
+    'short and long synopsis retain media facts in bounded small and enlarged Guide details',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      for (final (size, textScale) in [
+        (const Size(1280, 720), 1.0),
+        (const Size(1920, 1080), 1.0),
+        (const Size(1920, 1080), 1.5),
+      ]) {
+        tester.view.physicalSize = size;
+        double? infoHeight;
+        double? rowHeight;
+        double? shortHeight;
+        for (final summary in [
+          'A signal arrives.',
+          List.filled(80, 'A signal reaches the crew.').join(' '),
+        ]) {
+          final lineup = _Lineup(1)
+            ..settings = const LineupSettings(preferClearLogos: false);
+          final channel = lineup.channels.single;
+          lineup.channels = [
+            Channel(
+              id: channel.id,
+              number: 1,
+              name: 'Drama',
+              source: ManualSource([
+                ChannelItem(
+                  id: 'episode',
+                  title: 'The Last Frequency',
+                  showTitle: 'Signal House',
+                  duration: const Duration(hours: 24),
+                  summary: summary,
+                  year: 2026,
+                  genres: const ['Drama', 'Science Fiction'],
+                  contentRating: 'TV-14',
+                  resolution: '4k',
+                  audioCodec: 'eac3',
+                ),
+              ]),
+              playbackMode: PlaybackMode.sequential,
+              anchor: channel.anchor,
+              shuffleSeed: 1,
+            ),
+          ];
+          final guide = GuideController(
+            lineup: lineup,
+            loadSchedule: (c) async => _schedule(c),
+          );
+          await tester.pumpWidget(
+            MaterialApp(
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(context)
+                    .copyWith(textScaler: TextScaler.linear(textScale)),
+                child: LineupCanvas(child: child!),
+              ),
+              theme: LineupTheme.forName(
+                LineupThemeName.emberSteel,
+                largeFocusIndicators: false,
+              ),
+              home: GuideView(
+                controller: guide,
+                pictureInPicture: const ColoredBox(color: Colors.black),
+                onClose: () {},
+                onTune: (_) async {},
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          final synopsis = find.byKey(const Key('guide-program-synopsis'));
+          expect(synopsis, findsOneWidget, reason: '$size, text $textScale');
+          final text = tester.widget<Text>(synopsis);
+          expect(text.maxLines, 3);
+          expect(text.overflow, TextOverflow.ellipsis);
+          final paragraph = tester.renderObject<RenderParagraph>(synopsis);
+          final element = tester.element(synopsis);
+          final natural = TextPainter(
+            text: TextSpan(
+              text: summary,
+              style: DefaultTextStyle.of(element).style.merge(text.style),
+            ),
+            textScaler: MediaQuery.textScalerOf(element),
+            textDirection: Directionality.of(element),
+            maxLines: 3,
+            ellipsis: '…',
+          )..layout(maxWidth: tester.getSize(synopsis).width);
+          expect(tester.getSize(synopsis).height, closeTo(natural.height, .1));
+          natural.dispose();
+          if (shortHeight == null) {
+            shortHeight = tester.getSize(synopsis).height;
+            expect(paragraph.didExceedMaxLines, isFalse);
+          } else {
+            expect(paragraph.didExceedMaxLines, isTrue);
+            expect(tester.getSize(synopsis).height, greaterThan(shortHeight));
+          }
+          final area = find.byKey(const Key('guide-information-area'));
+          final currentHeight = tester.getSize(area).height;
+          final list = tester.widget<ListView>(
+            find.byKey(const Key('guide-schedule-list')),
+          );
+          if (infoHeight == null) {
+            infoHeight = currentHeight;
+            rowHeight = list.itemExtent;
+          } else {
+            expect(currentHeight, infoHeight);
+            expect(list.itemExtent, rowHeight);
+          }
+          expect(
+            tester
+                .widget<Text>(find.byKey(const Key('guide-program-meta')))
+                .data,
+            contains('2026  ·  Drama  ·  Science Fiction'),
+          );
+          for (final badge in ['TV-14', '4K', 'EAC3']) {
+            expect(find.text(badge), findsOneWidget);
+          }
+          await tester.ensureVisible(synopsis);
+          await tester.pumpAndSettle();
+          expect(synopsis.hitTestable(), findsOneWidget);
+          expect(tester.getSize(area).height, infoHeight);
+          expect(tester.takeException(), isNull);
+          await tester.pumpWidget(const SizedBox.shrink());
+          guide.dispose();
+          lineup.dispose();
+        }
+      }
+    },
+  );
+
+  testWidgets(
+    'Guide details share a 920 column and fitted cell times follow the episode',
+    (tester) async {
+      tester.view.physicalSize = const Size(1920, 1080);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final lineup = _Lineup(1)
+        ..settings = const LineupSettings(
+          preferClearLogos: false,
+          largeFocusIndicators: true,
+        );
+      final channel = lineup.channels.single;
+      lineup.channels = [
+        Channel(
+          id: channel.id,
+          number: 1,
+          name: 'Drama',
+          source: const ManualSource([
+            ChannelItem(
+              id: 'episode',
+              title: 'The Last Frequency',
+              showTitle: 'Signal House',
+              duration: Duration(hours: 24),
+              year: 2026,
+              genres: ['Drama', 'Science Fiction'],
+              contentRating: 'TV-14',
+              resolution: '4k',
+              audioCodec: 'eac3',
+              summary: 'A signal reaches the crew. A signal reaches the crew. A signal reaches the crew. A signal reaches the crew. A signal reaches the crew. A signal reaches the crew. A signal reaches the crew. A signal reaches the crew. A signal reaches the crew. A signal reaches the crew.',
+            ),
+          ]),
+          playbackMode: PlaybackMode.sequential,
+          anchor: channel.anchor,
+          shuffleSeed: 1,
+        ),
+      ];
+      addTearDown(lineup.dispose);
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (c) async => _schedule(c),
+      );
+      addTearDown(guide.dispose);
+      for (final theme in [
+        LineupThemeName.slatePine,
+        LineupThemeName.directv,
+      ]) {
+        await tester.pumpWidget(
+          MaterialApp(
+            builder: LineupCanvas.builder,
+            theme: LineupTheme.forName(theme, largeFocusIndicators: true),
+            home: GuideView(
+              controller: guide,
+              pictureInPicture: const ColoredBox(color: Colors.black),
+              onClose: () {},
+              onTune: (_) async {},
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final meta = find.byKey(const Key('guide-program-meta'));
+        final progress = find.byKey(const Key('guide-program-progress'));
+        final synopsis = find.byKey(const Key('guide-program-synopsis'));
+        expect(tester.getSize(meta).width, lessThanOrEqualTo(920));
+        expect(tester.getSize(progress).width, 920);
+        expect(tester.getTopLeft(meta).dx, tester.getTopLeft(progress).dx);
+        final summary = tester.widget<Text>(synopsis);
+        expect(summary.maxLines, 3);
+        expect(summary.overflow, TextOverflow.ellipsis);
+        final metadata = tester.widget<Text>(meta);
+        expect(metadata.maxLines, 1);
+        expect(metadata.data, contains('2026  ·  Drama  ·  Science Fiction'));
+        final cell = find.byKey(ValueKey(guide.focusedProgram!.id));
+        final episode = find.descendant(
+          of: cell,
+          matching: find.text('The Last Frequency'),
+        );
+        final time = find.descendant(
+          of: cell,
+          matching: find.byWidgetPredicate(
+            (w) => w is Text && (w.data?.contains('–') ?? false),
+          ),
+        );
+        final dot = find.descendant(
+          of: cell,
+          matching: find.byKey(const Key('guide-airing-dot')),
+        );
+        final title = find.descendant(
+          of: cell,
+          matching: find.text('Signal House'),
+        );
+        expect(
+          tester.getTopLeft(time).dx - tester.getTopRight(episode).dx,
+          closeTo(12, .1),
+        );
+        expect(
+          tester.getTopLeft(dot).dx,
+          lessThan(tester.getTopLeft(title).dx),
+        );
+        final container = tester.widget<AnimatedContainer>(
+          find.descendant(of: cell, matching: find.byType(AnimatedContainer)),
+        );
+        final decoration = container.decoration! as BoxDecoration;
+        expect((decoration.border! as Border).top.color, Colors.transparent);
+        final roles = LineupTheme.of(tester.element(cell));
+        expect(
+          decoration.color!.computeLuminance(),
+          greaterThan(roles.primarySurface.computeLuminance()),
+        );
+        if (theme == LineupThemeName.directv) {
+          expect(decoration.color, roles.focusedSurface);
+          expect(tester.widget<Text>(title).style!.color, roles.onFocus);
+        }
+        expect(tester.takeException(), isNull);
+      }
+    },
+  );
+
+  for (final activation in [
+    LogicalKeyboardKey.enter,
+    LogicalKeyboardKey.select,
+  ]) {
+    testWidgets(
+      'single timeline retry is reachable with $activation and returns to row failures',
+      (tester) async {
+        tester.view.physicalSize = const Size(1920, 1080);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        final lineup = _Lineup(12)
+          ..settings = const LineupSettings(reduceMotion: true);
+        addTearDown(lineup.dispose);
+        final attempts = <String, int>{};
+        final guide = GuideController(
+          lineup: lineup,
+          loadSchedule: (channel) async {
+            final attempt = attempts.update(
+              channel.id,
+              (n) => n + 1,
+              ifAbsent: () => 1,
+            );
+            if (attempt == 2 && channel.id == 'channel-0') {
+              return _schedule(channel);
+            }
+            throw StateError('offline');
+          },
+        );
+        addTearDown(guide.dispose);
+        guide.requestChannels(lineup.channels);
+        await tester.pumpWidget(
+          MaterialApp(
+            builder: LineupCanvas.builder,
+            home: GuideView(
+              controller: guide,
+              onClose: () {},
+              onTune: (_) async {},
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text("Schedules couldn't load"), findsOneWidget);
+        final failureHeading = find.text("Schedules couldn't load");
+        expect(
+          tester.widget<Text>(failureHeading).style,
+          Theme.of(tester.element(failureHeading)).textTheme.titleLarge,
+        );
+        expect(
+          tester
+              .getSemantics(failureHeading)
+              .getSemanticsData()
+              .flagsCollection
+              .isHeader,
+          isTrue,
+        );
+        expect(find.text('Retry'), findsOneWidget);
+        expect(find.text('Schedule unavailable ·'), findsNothing);
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+        await tester.pump();
+        expect(guide.focusedChannelId, 'channel-1');
+        expect(find.text('2 • Channel 1'), findsOneWidget);
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+        await tester.pump();
+        expect(
+          FocusManager.instance.primaryFocus?.debugLabel,
+          'Guide retry all schedules',
+        );
+        await tester.sendKeyEvent(activation);
+        await tester.pumpAndSettle();
+        expect(attempts.length, 12);
+        expect(attempts.values, everyElement(2));
+        expect(find.text("Schedules couldn't load"), findsNothing);
+        expect(find.text('Schedule unavailable ·'), findsWidgets);
+        expect(guide.row('channel-0').state, GuideLoadState.ready);
+        expect(guide.row('channel-1').state, GuideLoadState.error);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  testWidgets(
+    'empty Guide setup action and filtered empty state remain distinct',
+    (tester) async {
+      final lineup = _Lineup(0);
+      addTearDown(lineup.dispose);
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (c) async => _schedule(c),
+      );
+      addTearDown(guide.dispose);
+      var setups = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: LineupCanvas.builder,
+          home: GuideView(
+            controller: guide,
+            onClose: () {},
+            onTune: (_) async {},
+            onSetUpChannels: () => setups++,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('No channels yet'), findsOneWidget);
+      final emptyHeading = find.text('No channels yet');
+      expect(
+        tester.widget<Text>(emptyHeading).style,
+        Theme.of(tester.element(emptyHeading)).textTheme.titleLarge,
+      );
+      expect(
+        tester
+            .getSemantics(emptyHeading)
+            .getSemanticsData()
+            .flagsCollection
+            .isHeader,
+        isTrue,
+      );
+      expect(find.text('Move to a program for details.'), findsNothing);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pump();
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        'Guide set up channels',
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.select);
+      expect(setups, 1);
+      await tester.tap(find.text('Set up channels'));
+      expect(setups, 2);
+    },
+  );
+
+  testWidgets('sources default hidden and Watching remains independent', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1920, 1080);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final lineup = _Lineup(2);
+    addTearDown(lineup.dispose);
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (c) async => _schedule(c),
+    );
+    addTearDown(guide.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: LineupCanvas.builder,
+        home: GuideView(
+          controller: guide,
+          onClose: () {},
+          onTune: (_) async {},
+          watchingChannelId: 'channel-0',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Manual lineup'), findsNothing);
+    expect(find.text('Watching'), findsOneWidget);
+    await lineup.updateSettings(
+      (s) => s.copyWith(guideShowChannelSources: true),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Manual lineup'), findsOneWidget);
+    expect(find.text('Watching'), findsOneWidget);
+  });
+
+  testWidgets(
+    'shared idle backdrop rejects stale focus artwork and honors Reduce Motion',
+    (tester) async {
+      tester.view.physicalSize = const Size(1920, 1080);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final pending = <String, Completer<Uint8List?>>{};
+      final lineup =
+          _Lineup(
+              2,
+              artworkLoader: (path) =>
+                  (pending[path.path] = Completer<Uint8List?>()).future,
+            )
+            ..settings = const LineupSettings(
+              guideInfoBackgroundMode: GuideInfoBackgroundMode.artwork,
+              preferClearLogos: false,
+              reduceMotion: true,
+            );
+      lineup.channels = [
+        for (var i = 0; i < 2; i++)
+          Channel(
+            id: 'channel-$i',
+            number: i + 1,
+            name: 'Channel $i',
+            source: ManualSource([
+              ChannelItem(
+                id: 'item-$i',
+                title: 'Program $i',
+                duration: const Duration(hours: 24),
+                backdrop: Uri.parse('/backdrop-$i'),
+              ),
+            ]),
+            playbackMode: PlaybackMode.sequential,
+            anchor: DateTime.now().subtract(const Duration(hours: 1)),
+            shuffleSeed: i,
+          ),
+      ];
+      addTearDown(lineup.dispose);
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (c) async => _schedule(c),
+      );
+      addTearDown(guide.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: LineupCanvas.builder,
+          home: GuideView(
+            controller: guide,
+            onClose: () {},
+            onTune: (_) async {},
+            showIdleArtwork: true,
+            pictureInPicture: const Text('Choose a channel to watch'),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Choose a channel to watch'), findsOneWidget);
+      guide.moveVertical(1);
+      await tester.pump();
+      expect(lineup.artworkLoads, 2);
+      pending['/backdrop-1']!.complete(_wideLogoPng);
+      await tester.pumpAndSettle();
+      await tester.runAsync(
+        () => precacheImage(
+          MemoryImage(_wideLogoPng),
+          tester.element(find.byType(GuideView)),
+        ),
+      );
+      await tester.pumpAndSettle();
+      pending['/backdrop-0']!.complete(_tinyPng);
+      await tester.pumpAndSettle();
+      final idle = tester.widget<Image>(
+        find.byKey(const Key('guide-idle-backdrop')),
+      );
+      final info = tester.widget<Image>(
+        find.byKey(const Key('guide-info-backdrop')),
+      );
+      expect((idle.image as MemoryImage).bytes, same(_wideLogoPng));
+      expect(
+        (info.image as MemoryImage).bytes,
+        same((idle.image as MemoryImage).bytes),
+      );
+      expect(find.text('Select to watch · Channel 1'), findsOneWidget);
+      final switcher = find.descendant(
+        of: find.byKey(const Key('guide-picture-in-picture')),
+        matching: find.byType(AnimatedSwitcher),
+      );
+      expect(tester.widget<AnimatedSwitcher>(switcher).duration, Duration.zero);
+      await lineup.updateSettings((s) => s.copyWith(reduceMotion: false));
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<AnimatedSwitcher>(switcher).duration,
+        const Duration(milliseconds: 400),
+      );
+      expect(lineup.artworkLoads, 2);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   test('16:10 height extends information without enlarging five rows', () {
     final reference = GuideLayoutPolicy.forSize(
       const Size(1920, 1080),
@@ -447,10 +964,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(
-      find.bySemanticsLabel(RegExp('Schedule failed to load')),
-      findsOneWidget,
-    );
+    expect(find.text("Schedules couldn't load"), findsOneWidget);
     fail = false;
     await tester.tap(find.text('Retry'));
     await tester.pumpAndSettle();
@@ -756,7 +1270,10 @@ void main() {
       tester.widget<Text>(find.byKey(const Key('guide-program-meta'))).data,
       contains('2026'),
     );
-    expect(find.text('Drama • Science Fiction'), findsOneWidget);
+    expect(
+      tester.widget<Text>(find.byKey(const Key('guide-program-meta'))).data,
+      contains('Drama  ·  Science Fiction'),
+    );
     for (final badge in ['TV-14', '4K', 'HDR10', 'EAC3', '5.1']) {
       expect(find.textContaining(badge), findsOneWidget);
     }
@@ -1862,7 +2379,7 @@ String _testTime(DateTime value) =>
     );
 
 class _Lineup extends LineupController {
-  _Lineup(int count, {this.artworkBytes, DateTime? anchor})
+  _Lineup(int count, {this.artworkBytes, this.artworkLoader, DateTime? anchor})
     : super(
         store: _Store(),
         credentials: _Credentials(),
@@ -1892,12 +2409,13 @@ class _Lineup extends LineupController {
   }
 
   final Uint8List? artworkBytes;
+  final Future<Uint8List?> Function(Uri)? artworkLoader;
   int artworkLoads = 0;
 
   @override
   Future<Uint8List?> artworkForPath(Uri path) async {
     artworkLoads++;
-    return artworkBytes;
+    return artworkLoader == null ? artworkBytes : await artworkLoader!(path);
   }
 }
 

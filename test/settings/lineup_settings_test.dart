@@ -2,6 +2,34 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 
 void main() {
+  test(
+    'channel source setting defaults compatibly and rejects wrong types',
+    () {
+      final old = const LineupSettings().toJson()
+        ..remove('guideShowChannelSources');
+      expect(LineupSettings.fromJson(old).guideShowChannelSources, isFalse);
+      expect(
+        LineupSettings.fromJson(old).toJson(),
+        containsPair('guideShowChannelSources', false),
+      );
+      for (final value in [null, 1, 'true']) {
+        expect(
+          () => LineupSettings.fromJson({
+            ...old,
+            'guideShowChannelSources': value,
+          }),
+          throwsFormatException,
+        );
+      }
+      expect(
+        const LineupSettings()
+            .copyWith(guideShowChannelSources: true)
+            .guideShowChannelSources,
+        isTrue,
+      );
+    },
+  );
+
   test('uses the two-hour Guide default and final desktop options', () {
     const settings = LineupSettings();
     expect(settings.theme, LineupThemeName.emberSteel);
@@ -23,6 +51,7 @@ void main() {
       profilePickerOnStartup: true,
       diagnosticsEnabled: true,
       dvrControlsEnabled: true,
+      guideShowChannelSources: true,
     );
     expect(
       LineupSettings.fromJson(original.toJson()).toJson(),

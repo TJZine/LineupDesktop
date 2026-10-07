@@ -9,6 +9,19 @@ import 'package:lineup_desktop/plex/plex_models.dart';
 import '../support/ui_fixture.dart';
 
 void main() {
+  testWidgets('empty Guide Set up channels enters existing cancellable setup', (
+    tester,
+  ) async {
+    final fixture = UiFixture()..controller.stage = SetupStage.ready;
+    await tester.pumpWidget(fixture.build());
+    await tester.pumpAndSettle();
+    expect(find.text('No channels yet'), findsOneWidget);
+    await tester.tap(find.text('Set up channels'));
+    await tester.pumpAndSettle();
+    expect(fixture.controller.stage, SetupStage.channelSetup);
+    expect(fixture.controller.channelSetupCanCancel, isTrue);
+  });
+
   testWidgets('ready-state updates keep the open Lineup menu and focus', (
     tester,
   ) async {

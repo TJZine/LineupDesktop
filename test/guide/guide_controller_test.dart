@@ -13,6 +13,64 @@ import 'package:lineup_desktop/plex/plex_models.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 
 void main() {
+  test(
+    'bulk retry includes offscreen failures and preserves concurrency bound',
+    () async {
+      final lineup = _TestLineup(_channels(20));
+      final attempts = <String, int>{};
+      final pending = <String, Completer<ScheduleIndex>>{};
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) {
+          final attempt = attempts.update(
+            channel.id,
+            (value) => value + 1,
+            ifAbsent: () => 1,
+          );
+          if (attempt == 1) return Future.error(StateError('offline'));
+          return (pending[channel.id] = Completer<ScheduleIndex>()).future;
+        },
+      );
+      addTearDown(guide.dispose);
+      addTearDown(lineup.dispose);
+      guide.requestChannels(lineup.channels);
+      for (var i = 0; i < 25; i++) {
+        await _settle();
+      }
+      expect(
+        lineup.channels.every(
+          (c) => guide.row(c.id).state == GuideLoadState.error,
+        ),
+        isTrue,
+      );
+      guide.setSearchQuery('Channel 0');
+      guide.retryFailedRows();
+      guide.retryFailedRows();
+      expect(
+        guide.activeLoadCount,
+        lessThanOrEqualTo(guide.maximumConcurrentLoads),
+      );
+      for (var i = 0; i < 25; i++) {
+        for (final entry in pending.entries.toList()) {
+          if (!entry.value.isCompleted) {
+            entry.value.complete(
+              _schedule(lineup.channels.firstWhere((c) => c.id == entry.key)),
+            );
+          }
+        }
+        await _settle();
+      }
+      expect(attempts.values, everyElement(2));
+      expect(attempts.length, 20);
+      expect(
+        lineup.channels.every(
+          (c) => guide.row(c.id).state == GuideLoadState.ready,
+        ),
+        isTrue,
+      );
+    },
+  );
+
   test('window rounding preserves a UTC clock', () {
     final lineup = _TestLineup(_channels(1));
     addTearDown(lineup.dispose);

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui' show SemanticsAction, Tristate;
 
 import 'package:flutter/material.dart';
@@ -18,6 +19,42 @@ const _longServerName =
     'A deliberately long Plex Media Server name for the desktop settings acceptance fixture';
 
 void main() {
+  testWidgets('Guide source switch uses optimistic save and failure rollback', (
+    tester,
+  ) async {
+    final store = _DelayedSettingsStore();
+    final controller = FixtureController(store: store);
+    addTearDown(controller.dispose);
+    await _showSettings(tester, controller);
+    await _openCategory(tester, SettingsCategory.guide);
+    final toggle = find.byType(Switch).first;
+    await tester.ensureVisible(toggle);
+    await tester.pumpAndSettle();
+    expect(tester.widget<Switch>(toggle).value, isFalse);
+    expect(
+      find.text(
+        "Show where each channel's programs come from under its name in the Guide.",
+      ),
+      findsOneWidget,
+    );
+    await tester.tap(toggle);
+    await tester.pump();
+    expect(tester.widget<Switch>(toggle).value, isTrue);
+    expect(tester.widget<Switch>(toggle).onChanged, isNull);
+    expect(controller.settings.guideShowChannelSources, isFalse);
+    store.pending.completeError(StateError('synthetic save failure'));
+    await tester.pumpAndSettle();
+    expect(tester.widget<Switch>(toggle).value, isFalse);
+    expect(tester.widget<Switch>(toggle).onChanged, isNotNull);
+    store.pending = Completer<void>();
+    await tester.tap(toggle);
+    await tester.pump();
+    store.pending.complete();
+    await tester.pumpAndSettle();
+    expect(controller.settings.guideShowChannelSources, isTrue);
+    expect(store.state.settings.guideShowChannelSources, isTrue);
+  });
+
   testWidgets('Settings categories and theme control remain accessible', (
     tester,
   ) async {
@@ -174,3 +211,12 @@ String _categoryContent(SettingsCategory category) => switch (category) {
   SettingsCategory.account => 'Signed-in Plex account',
   SettingsCategory.support => 'Diagnostics',
 };
+
+class _DelayedSettingsStore extends FixtureStore {
+  Completer<void> pending = Completer<void>();
+  @override
+  Future<void> save(value) async {
+    await pending.future;
+    await super.save(value);
+  }
+}

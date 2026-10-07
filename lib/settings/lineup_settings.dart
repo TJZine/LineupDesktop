@@ -19,6 +19,7 @@ class LineupSettings {
   const LineupSettings({
     this.theme = LineupThemeName.emberSteel,
     this.guideHours = 2,
+    this.guideShowChannelSources = false,
     this.guideInfoBackgroundMode = GuideInfoBackgroundMode.bleed,
     this.preferClearLogos = true,
     this.dvrControlsEnabled = false,
@@ -32,6 +33,7 @@ class LineupSettings {
 
   final LineupThemeName theme;
   final int guideHours;
+  final bool guideShowChannelSources;
   final GuideInfoBackgroundMode guideInfoBackgroundMode;
   final bool preferClearLogos;
   final bool dvrControlsEnabled;
@@ -45,6 +47,7 @@ class LineupSettings {
   LineupSettings copyWith({
     LineupThemeName? theme,
     int? guideHours,
+    bool? guideShowChannelSources,
     GuideInfoBackgroundMode? guideInfoBackgroundMode,
     bool? preferClearLogos,
     bool? dvrControlsEnabled,
@@ -57,6 +60,8 @@ class LineupSettings {
   }) => LineupSettings(
     theme: theme ?? this.theme,
     guideHours: guideHours ?? this.guideHours,
+    guideShowChannelSources:
+        guideShowChannelSources ?? this.guideShowChannelSources,
     guideInfoBackgroundMode:
         guideInfoBackgroundMode ?? this.guideInfoBackgroundMode,
     preferClearLogos: preferClearLogos ?? this.preferClearLogos,
@@ -73,6 +78,7 @@ class LineupSettings {
   Map<String, Object?> toJson() => {
     'theme': theme.storageKey,
     'guideHours': guideHours,
+    'guideShowChannelSources': guideShowChannelSources,
     'guideInfoBackgroundMode': guideInfoBackgroundMode.name,
     'preferClearLogos': preferClearLogos,
     'dvrControlsEnabled': dvrControlsEnabled,
@@ -98,6 +104,7 @@ class LineupSettings {
     const fields = {
       'theme',
       'guideHours',
+      'guideShowChannelSources',
       'pastMinutes',
       'guideDensity',
       'guideLayoutMode',
@@ -122,6 +129,7 @@ class LineupSettings {
     };
     final requiredFields = fields.difference({
       'dvrControlsEnabled',
+      'guideShowChannelSources',
       ...retiredFields,
     });
     if (!keys.containsAll(requiredFields) ||
@@ -191,6 +199,10 @@ class LineupSettings {
               (theme) => theme.storageKey,
             ),
       guideHours: persistedGuideHours > 4 ? 4 : persistedGuideHours,
+      guideShowChannelSources: optionalBoolean(
+        'guideShowChannelSources',
+        fallback: false,
+      ),
       guideInfoBackgroundMode: enumValue(
         GuideInfoBackgroundMode.values,
         'guideInfoBackgroundMode',

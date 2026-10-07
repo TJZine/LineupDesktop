@@ -18,6 +18,7 @@ import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/channels/channel_builder.dart';
 import 'package:lineup_desktop/channels/scheduler.dart';
 import 'package:lineup_desktop/diagnostics/diagnostics.dart';
+import 'package:lineup_desktop/guide/guide_view.dart';
 import 'package:lineup_desktop/playback/native_player.dart';
 import 'package:lineup_desktop/playback/player_view.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
@@ -270,6 +271,19 @@ final Map<String, Scene> _scenes = {
       ..controller.settings = const LineupSettings(reduceMotion: true);
     await _pump(tester, f.build());
     await shot('no-playback');
+    f.controller.settings = f.controller.settings.copyWith(
+      guideShowChannelSources: true,
+    );
+    f.controller.notifyListeners();
+    await _settle(tester);
+    final textScale = MediaQuery.textScalerOf(
+      tester.element(find.byType(GuideView)),
+    ).scale(1);
+    expect(
+      find.text('Manual lineup'),
+      textScale > 1 ? findsNothing : findsWidgets,
+    );
+    await shot('sources-visible');
   },
   'guide-pip': (tester, shot) async {
     final f = _readyFixture(
@@ -290,6 +304,9 @@ final Map<String, Scene> _scenes = {
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await _settle(tester);
     await shot('artwork-focus');
+    await tester.ensureVisible(find.byKey(const Key('guide-program-synopsis')));
+    await _settle(tester);
+    await shot('details-reachable');
   },
   'guide-loading': (tester, shot) async {
     final controller = _PendingScheduleController()
@@ -305,6 +322,7 @@ final Map<String, Scene> _scenes = {
   },
   'guide-error': (tester, shot) async {
     final controller = _FailingScheduleController()
+      ..recoverFirstOnRetry = true
       ..stage = SetupStage.ready
       ..channels = _channels
       ..currentChannelId = _channels[1].id
@@ -313,7 +331,12 @@ final Map<String, Scene> _scenes = {
       tester,
       UiFixture(controller: controller, guideClock: () => _fixedNow).build(),
     );
+    expect(find.text("Schedules couldn't load"), findsOneWidget);
     await shot('error');
+    await _tap(tester, find.text('Retry'));
+    expect(find.text("Schedules couldn't load"), findsNothing);
+    expect(find.textContaining('Schedule unavailable'), findsWidgets);
+    await shot('partial-retry');
   },
   'guide-empty': (tester, shot) async {
     final controller = _VisualController()
@@ -1245,9 +1268,23 @@ class _PendingScheduleController extends _VisualController {
 }
 
 class _FailingScheduleController extends _VisualController {
+  bool recoverFirstOnRetry = false;
+  final _attempts = <String, int>{};
+
   @override
-  Future<ScheduleIndex> loadScheduleFor(Channel channel) async =>
-      throw const SocketException('synthetic schedule failure');
+  Future<ScheduleIndex> loadScheduleFor(Channel channel) async {
+    final attempt = _attempts.update(
+      channel.id,
+      (value) => value + 1,
+      ifAbsent: () => 1,
+    );
+    if (recoverFirstOnRetry &&
+        channel.id == _channels.first.id &&
+        attempt > 1) {
+      return super.loadScheduleFor(channel);
+    }
+    throw const SocketException('synthetic schedule failure');
+  }
 }
 
 final _channels = List.generate(
