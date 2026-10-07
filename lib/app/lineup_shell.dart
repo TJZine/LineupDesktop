@@ -59,6 +59,7 @@ class _LineupShellState extends State<LineupShell> {
   );
   bool _selectionPending = false;
   bool _appMenuOpen = false;
+  bool _keyboardInput = false;
   Rect? _appMenuAnchor;
   FocusNode? _appMenuInvokerFocus;
   bool _onboardingFromAccount = false;
@@ -68,6 +69,7 @@ class _LineupShellState extends State<LineupShell> {
   @override
   void initState() {
     super.initState();
+    HardwareKeyboard.instance.addHandler(_trackKeyboardInput);
     _guide = GuideController(
       lineup: widget.controller,
       clock: widget.guideClock,
@@ -109,6 +111,7 @@ class _LineupShellState extends State<LineupShell> {
 
   @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_trackKeyboardInput);
     widget.controller.removeListener(_changed);
     _player.removeListener(_changed);
     _player.dispose();
@@ -272,6 +275,7 @@ class _LineupShellState extends State<LineupShell> {
 
   void _closeAppMenu({bool restoreInvoker = true}) {
     final invoker = _appMenuInvokerFocus;
+    final restoreControl = _selectedIndex != 4 || _keyboardInput;
     setState(() {
       _appMenuOpen = false;
       _appMenuAnchor = null;
@@ -279,7 +283,7 @@ class _LineupShellState extends State<LineupShell> {
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      if (restoreInvoker && invoker?.context != null) {
+      if (restoreInvoker && restoreControl && invoker?.context != null) {
         invoker!.requestFocus();
       } else {
         _restoreRouteFocus();
@@ -372,8 +376,17 @@ class _LineupShellState extends State<LineupShell> {
     return KeyEventResult.handled;
   }
 
-  Widget _withGlobalKeys(Widget child) =>
-      Focus(canRequestFocus: false, onKeyEvent: _globalKey, child: child);
+  bool _trackKeyboardInput(KeyEvent event) {
+    if (event is KeyDownEvent || event is KeyRepeatEvent) {
+      _keyboardInput = true;
+    }
+    return false;
+  }
+
+  Widget _withGlobalKeys(Widget child) => Listener(
+    onPointerDown: (_) => _keyboardInput = false,
+    child: Focus(canRequestFocus: false, onKeyEvent: _globalKey, child: child),
+  );
 
   Future<void> _completeSetup() async {
     widget.controller.completeChannelSetup();

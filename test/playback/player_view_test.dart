@@ -12,6 +12,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/ui/lineup_canvas.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
+import 'package:lineup_desktop/app/lineup_shell.dart';
 import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/channels/scheduler.dart';
 import 'package:lineup_desktop/guide/guide_controller.dart';
@@ -2256,6 +2257,123 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     fixture.dispose();
   });
+
+  for (final keyboard in [false, true]) {
+    testWidgets(
+      '${keyboard ? 'keyboard' : 'mouse'} Sleep choice restores appropriate focus and timeout',
+      (tester) async {
+        final fixture = _Fixture(
+          PlayerState.playing,
+          overlayTimeout: const Duration(seconds: 1),
+        );
+        fixture.player.showOsd();
+        await tester.pumpWidget(
+          MaterialApp(
+            builder: LineupCanvas.builder,
+            home: PlayerView(controller: fixture.player, openGuide: () {}),
+          ),
+        );
+        await tester.pumpAndSettle();
+        if (keyboard) {
+          await tester.sendKeyEvent(LogicalKeyboardKey.keyS);
+        } else {
+          await tester.tap(
+            find.byKey(const Key('player-osd-sleep')),
+            kind: PointerDeviceKind.mouse,
+          );
+        }
+        await tester.pump();
+        if (keyboard) {
+          // Enter traversal before activating the preset with the keyboard.
+          await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+          // The preset is a ListTile, so focus its nearest Focus descendant.
+          final choiceContext = tester.element(find.text('30 minutes'));
+          Focus.of(choiceContext).requestFocus();
+          await tester.pump();
+          await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        } else {
+          await tester.tap(
+            find.text('30 minutes'),
+            kind: PointerDeviceKind.mouse,
+          );
+        }
+        await tester.pump();
+        expect(fixture.player.sleepDuration, const Duration(minutes: 30));
+        await tester.pump(const Duration(seconds: 2));
+        expect(
+          fixture.player.overlay,
+          keyboard ? PlayerOverlay.osd : PlayerOverlay.none,
+        );
+        expect(
+          FocusManager.instance.primaryFocus?.debugLabel,
+          keyboard ? 'Player sleep timer' : 'Player root',
+        );
+        await tester.pumpWidget(const SizedBox.shrink());
+        fixture.dispose();
+      },
+    );
+
+    testWidgets(
+      '${keyboard ? 'keyboard' : 'mouse'} app menu dismissal restores appropriate Player focus and timeout',
+      (tester) async {
+        final fixture = _Fixture(
+          PlayerState.playing,
+          overlayTimeout: const Duration(seconds: 1),
+        );
+        fixture.lineup.stage = SetupStage.ready;
+        await tester.pumpWidget(
+          MaterialApp(
+            builder: LineupCanvas.builder,
+            home: LineupShell(
+              player: fixture.native,
+              controller: fixture.lineup,
+              initialMediaPath: '/synthetic.mp4',
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final player = tester
+            .widget<PlayerView>(find.byType(PlayerView))
+            .controller;
+        player.showOsd();
+        await tester.pump(const Duration(milliseconds: 400));
+        if (keyboard) {
+          await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+          final menu = tester.widget<IconButton>(
+            find.byKey(const Key('player-app-menu')),
+          );
+          menu.focusNode!.requestFocus();
+          await tester.pump();
+          await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        } else {
+          await tester.tap(
+            find.byKey(const Key('player-app-menu')),
+            kind: PointerDeviceKind.mouse,
+          );
+        }
+        await tester.pump();
+        expect(find.text('Plex account'), findsOneWidget);
+        if (keyboard) {
+          await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        } else {
+          await tester.tapAt(const Offset(5, 5), kind: PointerDeviceKind.mouse);
+        }
+        await tester.pump();
+        expect(find.text('Plex account'), findsNothing);
+        expect(
+          FocusManager.instance.primaryFocus?.debugLabel,
+          keyboard ? 'Player Lineup menu' : 'Player',
+        );
+        await tester.pump(const Duration(seconds: 5));
+        expect(
+          player.overlay,
+          keyboard ? PlayerOverlay.osd : PlayerOverlay.none,
+        );
+        await tester.pumpWidget(const SizedBox.shrink());
+        fixture.dispose();
+      },
+    );
+  }
 
   testWidgets('pointer and root focus do not suspend a timed OSD', (
     tester,

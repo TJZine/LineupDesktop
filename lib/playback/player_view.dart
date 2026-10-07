@@ -43,6 +43,9 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
   final _sleepFocus = FocusNode(debugLabel: 'Player sleep timer');
   Timer? _sleepCountdownTimer;
   var _appActive = true;
+  var _keyboardInput = false;
+  final _internalRootFocus = FocusNode(debugLabel: 'Player root');
+  FocusNode get _rootFocus => widget.focusNode ?? _internalRootFocus;
 
   @override
   void initState() {
@@ -51,6 +54,7 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
     _bottomPanelGeneration = widget.controller.overlayPresentationGeneration;
     WidgetsBinding.instance.addObserver(this);
     widget.controller.addListener(_changed);
+    HardwareKeyboard.instance.addHandler(_trackKeyboardInput);
     _syncSleepCountdownTimer();
   }
 
@@ -59,6 +63,8 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
     widget.controller.removeListener(_changed);
     WidgetsBinding.instance.removeObserver(this);
     _sleepCountdownTimer?.cancel();
+    HardwareKeyboard.instance.removeHandler(_trackKeyboardInput);
+    _internalRootFocus.dispose();
     _menuFocus.dispose();
     _sleepFocus.dispose();
     super.dispose();
@@ -121,8 +127,7 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
                     ?.findAncestorWidgetOfExactType<_Osd>()
                     ?.controller ==
                 widget.controller &&
-            FocusManager.instance.highlightMode ==
-                FocusHighlightMode.traditional) {
+            _keyboardInput) {
           // The shared panel retains focus across expansion, while the
           // coordinator retires each presentation's auto-hide suspension.
           widget.controller.overlayFocusChanged(nextOverlay, generation, true);
@@ -155,6 +160,25 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
       }
       setState(() {});
     });
+  }
+
+  bool _trackKeyboardInput(KeyEvent event) {
+    if (event is KeyDownEvent || event is KeyRepeatEvent) {
+      _keyboardInput = true;
+      if (_rootFocus.hasFocus && !_rootFocus.hasPrimaryFocus) {
+        widget.controller.overlayFocusChanged(
+          widget.controller.overlay,
+          widget.controller.overlayPresentationGeneration,
+          true,
+        );
+      }
+    }
+    return false;
+  }
+
+  void _trackPointerInput() {
+    _keyboardInput = false;
+    widget.controller.handlePointerActivity();
   }
 
   KeyEventResult _key(FocusNode node, KeyEvent event) {
@@ -371,7 +395,9 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
 
   void _restoreSleepFocus() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _sleepFocus.requestFocus();
+      if (mounted) {
+        (_keyboardInput ? _sleepFocus : _rootFocus).requestFocus();
+      }
     });
   }
 
@@ -395,163 +421,166 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
     return Material(
       color: Colors.transparent,
       child: Focus(
-        focusNode: widget.focusNode,
+        focusNode: _rootFocus,
         canRequestFocus: controller.overlay != PlayerOverlay.fullGuide,
         autofocus: true,
         onKeyEvent: _key,
-        child: MouseRegion(
-          cursor: controller.cursorVisible
-              ? SystemMouseCursors.basic
-              : SystemMouseCursors.none,
-          onHover: (_) => controller.handlePointerActivity(),
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () {
-              if (controller.overlay == PlayerOverlay.miniGuide) {
-                controller.closeOverlay();
-              } else if (controller.overlay == PlayerOverlay.sleepTimer) {
-                controller.closeOverlay();
-                _restoreSleepFocus();
-              } else {
-                controller.showOsd();
-              }
-            },
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                PlayerSurface(
-                  controller: controller,
-                  fullPlayer: true,
-                  onClose: () {
-                    controller.showFullGuide();
-                    widget.openGuide();
-                  },
-                ),
-                if (overlay != PlayerOverlay.channelNumber &&
-                    (controller.notice != null || controller.busyLabel != null))
-                  _StatusBug(
+        child: Listener(
+          onPointerDown: (_) => _trackPointerInput(),
+          child: MouseRegion(
+            cursor: controller.cursorVisible
+                ? SystemMouseCursors.basic
+                : SystemMouseCursors.none,
+            onHover: (_) => _trackPointerInput(),
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () {
+                if (controller.overlay == PlayerOverlay.miniGuide) {
+                  controller.closeOverlay();
+                } else if (controller.overlay == PlayerOverlay.sleepTimer) {
+                  controller.closeOverlay();
+                  _restoreSleepFocus();
+                } else {
+                  controller.showOsd();
+                }
+              },
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  PlayerSurface(
                     controller: controller,
-                    text: controller.notice ?? controller.busyLabel!,
+                    fullPlayer: true,
+                    onClose: () {
+                      controller.showFullGuide();
+                      widget.openGuide();
+                    },
                   ),
-                AnimatedSwitcher(
-                  duration: transitionDuration,
-                  reverseDuration: transitionDuration,
-                  layoutBuilder: (currentChild, previousChildren) => Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      for (final child in previousChildren)
-                        ExcludeFocus(child: ExcludeSemantics(child: child)),
-                      ?currentChild,
-                    ],
-                  ),
-                  transitionBuilder: (child, animation) {
-                    final fade = CurvedAnimation(
-                      parent: animation,
-                      curve: Curves.easeOut,
-                      reverseCurve: Curves.easeIn,
-                    );
-                    final transitioned = FadeTransition(
-                      opacity: fade,
-                      child: child,
-                    );
-                    final childOverlay =
-                        (child.key as ValueKey<(PlayerOverlay, int)>).value.$1;
-                    if (childOverlay == PlayerOverlay.audioTracks ||
-                        childOverlay == PlayerOverlay.subtitleTracks) {
+                  if (overlay != PlayerOverlay.channelNumber &&
+                      (controller.notice != null ||
+                          controller.busyLabel != null))
+                    _StatusBug(
+                      controller: controller,
+                      text: controller.notice ?? controller.busyLabel!,
+                    ),
+                  AnimatedSwitcher(
+                    duration: transitionDuration,
+                    reverseDuration: transitionDuration,
+                    layoutBuilder: (currentChild, previousChildren) => Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        for (final child in previousChildren)
+                          ExcludeFocus(child: ExcludeSemantics(child: child)),
+                        ?currentChild,
+                      ],
+                    ),
+                    transitionBuilder: (child, animation) {
+                      final fade = CurvedAnimation(
+                        parent: animation,
+                        curve: Curves.easeOut,
+                        reverseCurve: Curves.easeIn,
+                      );
+                      final transitioned = FadeTransition(
+                        opacity: fade,
+                        child: child,
+                      );
+                      final childOverlay =
+                          (child.key as ValueKey<(PlayerOverlay, int)>)
+                              .value
+                              .$1;
+                      if (childOverlay == PlayerOverlay.audioTracks ||
+                          childOverlay == PlayerOverlay.subtitleTracks) {
+                        return SlideTransition(
+                          position: Tween(
+                            begin: const Offset(1, 0),
+                            end: Offset.zero,
+                          ).animate(fade),
+                          child: transitioned,
+                        );
+                      }
+                      if (childOverlay == PlayerOverlay.miniGuide) {
+                        return SlideTransition(
+                          position: Tween(
+                            begin: const Offset(0, -1),
+                            end: Offset.zero,
+                          ).animate(fade),
+                          child: transitioned,
+                        );
+                      }
+                      if (childOverlay != PlayerOverlay.osd) {
+                        return transitioned;
+                      }
                       return SlideTransition(
                         position: Tween(
-                          begin: const Offset(1, 0),
+                          begin: const Offset(0, 1),
                           end: Offset.zero,
                         ).animate(fade),
                         child: transitioned,
                       );
-                    }
-                    if (childOverlay == PlayerOverlay.miniGuide) {
-                      return SlideTransition(
-                        position: Tween(
-                          begin: const Offset(0, -1),
-                          end: Offset.zero,
-                        ).animate(fade),
-                        child: transitioned,
-                      );
-                    }
-                    if (childOverlay != PlayerOverlay.osd) {
-                      return transitioned;
-                    }
-                    return SlideTransition(
-                      position: Tween(
-                        begin: const Offset(0, 1),
-                        end: Offset.zero,
-                      ).animate(fade),
-                      child: transitioned,
-                    );
-                  },
-                  child: _OverlayTextTheme(
-                    key: presentationKey,
-                    child: Focus(
-                      canRequestFocus: false,
-                      onFocusChange: (focused) {
-                        if (!focused ||
-                            FocusManager.instance.highlightMode ==
-                                FocusHighlightMode.traditional) {
+                    },
+                    child: _OverlayTextTheme(
+                      key: presentationKey,
+                      child: Focus(
+                        canRequestFocus: false,
+                        onFocusChange: (focused) {
                           controller.overlayFocusChanged(
                             overlay,
                             presentationGeneration,
-                            focused,
+                            focused && _keyboardInput,
                           );
-                        }
-                      },
-                      child: switch (overlay) {
-                        PlayerOverlay.osd || PlayerOverlay.nowPlaying => _Osd(
-                          detailsExpanded: overlay == PlayerOverlay.nowPlaying,
-                          controller: controller,
-                          openMenu: widget.openMenu,
-                          menuFocus: _menuFocus,
-                          sleepFocus: _sleepFocus,
-                          sleepAnchor: LayerLink(),
-                        ),
-                        PlayerOverlay.miniGuide => _MiniGuide(
-                          controller: controller,
-                          active: _appActive,
-                          openGuide: widget.openGuide,
-                        ),
-                        PlayerOverlay.audioTracks => _Tracks(
-                          controller: controller,
-                          type: PlayerTrackType.audio,
-                        ),
-                        PlayerOverlay.subtitleTracks => _Tracks(
-                          controller: controller,
-                          type: PlayerTrackType.subtitle,
-                        ),
-                        PlayerOverlay.sleepTimer => Stack(
-                          children: [
-                            ExcludeFocus(
-                              child: _Osd(
-                                controller: controller,
-                                openMenu: widget.openMenu,
-                                menuFocus: _menuFocus,
-                                sleepFocus: _sleepFocus,
-                                sleepAnchor: sleepAnchor,
+                        },
+                        child: switch (overlay) {
+                          PlayerOverlay.osd || PlayerOverlay.nowPlaying => _Osd(
+                            detailsExpanded:
+                                overlay == PlayerOverlay.nowPlaying,
+                            controller: controller,
+                            openMenu: widget.openMenu,
+                            menuFocus: _menuFocus,
+                            sleepFocus: _sleepFocus,
+                            sleepAnchor: LayerLink(),
+                          ),
+                          PlayerOverlay.miniGuide => _MiniGuide(
+                            controller: controller,
+                            active: _appActive,
+                            openGuide: widget.openGuide,
+                          ),
+                          PlayerOverlay.audioTracks => _Tracks(
+                            controller: controller,
+                            type: PlayerTrackType.audio,
+                          ),
+                          PlayerOverlay.subtitleTracks => _Tracks(
+                            controller: controller,
+                            type: PlayerTrackType.subtitle,
+                          ),
+                          PlayerOverlay.sleepTimer => Stack(
+                            children: [
+                              ExcludeFocus(
+                                child: _Osd(
+                                  controller: controller,
+                                  openMenu: widget.openMenu,
+                                  menuFocus: _menuFocus,
+                                  sleepFocus: _sleepFocus,
+                                  sleepAnchor: sleepAnchor,
+                                ),
                               ),
-                            ),
-                            _SleepTimerPicker(
-                              controller: controller,
-                              triggerFocus: _sleepFocus,
-                              anchor: sleepAnchor,
-                            ),
-                          ],
-                        ),
-                        PlayerOverlay.channelNumber => _ChannelNumber(
-                          controller: controller,
-                        ),
-                        PlayerOverlay.error => const SizedBox.shrink(),
-                        PlayerOverlay.none ||
-                        PlayerOverlay.fullGuide => const SizedBox.shrink(),
-                      },
+                              _SleepTimerPicker(
+                                controller: controller,
+                                restoreFocus: _restoreSleepFocus,
+                                anchor: sleepAnchor,
+                              ),
+                            ],
+                          ),
+                          PlayerOverlay.channelNumber => _ChannelNumber(
+                            controller: controller,
+                          ),
+                          PlayerOverlay.error => const SizedBox.shrink(),
+                          PlayerOverlay.none ||
+                          PlayerOverlay.fullGuide => const SizedBox.shrink(),
+                        },
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -2588,19 +2617,17 @@ class _MiniGuideFadePainter extends CustomPainter {
 class _SleepTimerPicker extends StatelessWidget {
   const _SleepTimerPicker({
     required this.controller,
-    required this.triggerFocus,
+    required this.restoreFocus,
     required this.anchor,
   });
 
   final PlayerCoordinator controller;
-  final FocusNode triggerFocus;
+  final VoidCallback restoreFocus;
   final LayerLink anchor;
 
   void _choose(Duration? duration) {
     controller.setSleepTimer(duration);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (triggerFocus.canRequestFocus) triggerFocus.requestFocus();
-    });
+    restoreFocus();
   }
 
   @override
@@ -2662,7 +2689,7 @@ class _SleepTimerPicker extends StatelessWidget {
                             TextButton(
                               onPressed: () {
                                 controller.closeOverlay();
-                                triggerFocus.requestFocus();
+                                restoreFocus();
                               },
                               child: const _OverlayCloseLabel(),
                             ),
