@@ -168,6 +168,63 @@ class LineupController extends ChangeNotifier {
   final Map<String, List<PlexMediaItem>> _scanResults = {};
   final Map<String, Set<String>> _failedCollectionTitles = {};
   final Set<String> _unavailableCollectionLibraryIds = {};
+  bool _playlistCatalogUnavailable = true;
+  Set<String> _failedPlaylistIds = const {};
+
+  bool get playlistCatalogUnavailable => _playlistCatalogUnavailable;
+  Set<String> get failedPlaylistIds => _failedPlaylistIds;
+
+  /// Absence is meaningful only after every dependency was scanned completely.
+  bool isGeneratedSourceConfirmedGone(Channel channel) {
+    if (channel.builderKey == null ||
+        libraryScanStatus == LibraryScanStatus.scanning ||
+        libraryScanStatus == LibraryScanStatus.cancelled ||
+        !_sourceDiscoveryComplete(channel.source)) {
+      return false;
+    }
+    // A retry may have settled before its inventory could be committed. Never
+    // infer absence from the previous inventory when the new scan found items.
+    final pending = _pendingScan;
+    if (pending != null &&
+        resolveContent(
+          channel.source,
+          pending.media,
+          pending.playlists,
+        ).isNotEmpty) {
+      return false;
+    }
+    final inventory = playableInventory;
+    return resolveContent(
+      channel.source,
+      inventory.media,
+      inventory.playlists,
+    ).isEmpty;
+  }
+
+  bool _sourceDiscoveryComplete(ContentSource source) => switch (source) {
+    LibrarySource(:final libraryId, :final filters) =>
+      selectedLibraryIds.contains(libraryId) &&
+          const {
+            LibraryScanStatus.complete,
+            LibraryScanStatus.empty,
+            LibraryScanStatus.unsupported,
+          }.contains(libraryScanFacts[libraryId]?.status) &&
+          !(filters[LibraryFilter.collection]?.isNotEmpty == true &&
+              (unavailableCollectionLibraryIds.contains(libraryId) ||
+                  filters[LibraryFilter.collection]!.any(
+                    (title) =>
+                        failedCollectionTitles[libraryId]?.contains(title) ??
+                        false,
+                  ))),
+    PlaylistSource(:final playlistId) =>
+      !playlistCatalogUnavailable &&
+          !failedPlaylistIds.contains(playlistId) &&
+          libraryScanStatus != LibraryScanStatus.scanning &&
+          libraryScanStatus != LibraryScanStatus.cancelled,
+    MixedSource(:final sources) =>
+      sources.isNotEmpty && sources.every(_sourceDiscoveryComplete),
+    ManualSource() => false,
+  };
 
   Map<String, Set<String>> get failedCollectionTitles =>
       Map.unmodifiable(_failedCollectionTitles);
@@ -886,6 +943,8 @@ class LineupController extends ChangeNotifier {
             ? _libraryScanFacts[id]!
             : const LibraryScanFact(status: LibraryScanStatus.idle),
     });
+    _playlistCatalogUnavailable = true;
+    _failedPlaylistIds = const {};
     libraryScanStatus = LibraryScanStatus.scanning;
     _updateLibraryScanAggregates();
     notifyListeners();
@@ -1020,6 +1079,7 @@ class LineupController extends ChangeNotifier {
           .expand((items) => items)
           .toList();
       PlexPlaylistCatalog catalog;
+      var catalogUnavailable = false;
       try {
         catalog = await _withPmsAuthorization(
           operation,
@@ -1037,6 +1097,7 @@ class LineupController extends ChangeNotifier {
             _isPmsAuthorizationError(exception)) {
           rethrow;
         }
+        catalogUnavailable = true;
         diagnostics.add('plex-library', 'Playlist discovery unavailable', {
           'code': exception.code,
         });
@@ -1058,6 +1119,8 @@ class LineupController extends ChangeNotifier {
           status: LibraryScanStatus.cancelled,
         );
       }
+      _playlistCatalogUnavailable = catalogUnavailable;
+      _failedPlaylistIds = Set.unmodifiable(catalog.failedIds);
       if (catalog.failedIds.isNotEmpty) {
         diagnostics.add('plex-library', 'Some playlists could not be loaded', {
           'count': catalog.failedIds.length,
@@ -1310,16 +1373,24 @@ class LineupController extends ChangeNotifier {
     List<Channel> planned, {
     required ChannelBuildMode mode,
     required List<Channel> expectedBase,
-  }) => _applyChannelPlan(planned, mode: mode, expectedBase: expectedBase);
+    Set<String> removeChannelIds = const {},
+  }) => _applyChannelPlan(
+    planned,
+    mode: mode,
+    expectedBase: expectedBase,
+    removeChannelIds: removeChannelIds,
+  );
 
   Future<ChannelPlanApplyResult> _applyChannelPlan(
     List<Channel> planned, {
     required ChannelBuildMode mode,
     List<Channel>? expectedBase,
+    Set<String> removeChannelIds = const {},
   }) async {
     final operation = _mutationScope;
     final expected = expectedBase?.map((channel) => channel.toJson()).toList();
     final plan = List<Channel>.unmodifiable(planned);
+    final removals = Set<String>.unmodifiable(removeChannelIds);
     var result = ChannelPlanApplyResult.stale;
     await _queueScopeOperation(operation, () async {
       if (expected != null &&
@@ -1334,8 +1405,25 @@ class LineupController extends ChangeNotifier {
           'Generated channel plans require builder ownership',
         );
       }
+      if (removals.isNotEmpty) {
+        final unmatched = channels.where(
+          (channel) =>
+              !plan.any((planned) => planned.builderKey == channel.builderKey),
+        );
+        final eligible = unmatched
+            .where(isGeneratedSourceConfirmedGone)
+            .map((channel) => channel.id)
+            .toSet();
+        if (mode != ChannelBuildMode.merge || !eligible.containsAll(removals)) {
+          throw const FormatException(
+            'Only confirmed missing generated sources can be removed',
+          );
+        }
+      }
       final next = composeChannelPlan(
-        existing: channels,
+        existing: channels
+            .where((channel) => !removals.contains(channel.id))
+            .toList(),
         planned: plan,
         mode: mode,
       );
@@ -2116,6 +2204,8 @@ class LineupController extends ChangeNotifier {
 
   void _resetLibraryScan() {
     _lastScanFailure = null;
+    _playlistCatalogUnavailable = true;
+    _failedPlaylistIds = const {};
     _scanResults.clear();
     _failedCollectionTitles.clear();
     _unavailableCollectionLibraryIds.clear();

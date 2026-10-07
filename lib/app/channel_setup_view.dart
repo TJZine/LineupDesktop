@@ -82,6 +82,8 @@ class _SetupState extends State<UpstreamChannelSetupView> {
   ChannelPlanAllocation? _plan;
   final _reviewStrategyBySource = <String, BuilderStrategy>{};
   List<Channel> _reviewBase = const [];
+  final _removeSourceIds = <String>{};
+  bool _discoveryRetry = false;
   List<_ReviewEntry> _appliedEntries = const [];
   String? _notice;
   String? _error;
@@ -150,6 +152,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
 
   ChannelPlanAllocation _allocateReview(List<Channel> existing) {
     final proposals = _proposals;
+    _removeSourceIds.clear();
     _reviewStrategyBySource.clear();
     for (final proposal in proposals) {
       _reviewStrategyBySource.putIfAbsent(
@@ -879,7 +882,15 @@ class _SetupState extends State<UpstreamChannelSetupView> {
         summary: _configurationSummary(allocation),
         trailing: FilledButton(
           key: const ValueKey('review-channels'),
-          onPressed: allocation.channels.isEmpty ? null : _prepareReview,
+          onPressed:
+              allocation.channels.isNotEmpty ||
+                  allocation.existingSkipped > 0 ||
+                  (_mode == ChannelBuildMode.merge &&
+                      allocation.unmatchedGenerated.any(
+                        widget.controller.isGeneratedSourceConfirmedGone,
+                      ))
+              ? _prepareReview
+              : null,
           child: const Text('Review channels'),
         ),
       ),
@@ -1251,6 +1262,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
   ) {
     final roles = LineupTheme.of(context);
     final enabled = _strategies.contains(strategy);
+    final discoveryFailure = _discoveryFailure(strategy);
     final eligible = enabled
         ? allocation.eligibleOriginalsByStrategy[strategy] ?? 0
         : buildChannelProposals(
@@ -1295,7 +1307,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
         Flexible(
           fit: FlexFit.tight,
           child: Text(
-            eligible == 0
+            eligible == 0 && discoveryFailure == null
                 ? 'None in your libraries'
                 : enabled && included < eligible
                 ? '$included of $eligible included'
@@ -1318,14 +1330,86 @@ class _SetupState extends State<UpstreamChannelSetupView> {
       }
     });
 
-    return CheckboxListTile(
-      value: enabled,
-      controlAffinity: ListTileControlAffinity.leading,
-      contentPadding: EdgeInsets.zero,
-      title: title,
-      subtitle: subtitle,
-      onChanged: changed,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        CheckboxListTile(
+          value: enabled,
+          controlAffinity: ListTileControlAffinity.leading,
+          contentPadding: EdgeInsets.zero,
+          title: title,
+          subtitle: subtitle,
+          onChanged: changed,
+        ),
+        if (discoveryFailure != null)
+          Padding(
+            padding: const EdgeInsets.only(left: 56, top: 4),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                style: TextButton.styleFrom(
+                  padding: EdgeInsets.zero,
+                  minimumSize: const Size(0, 48),
+                  alignment: Alignment.centerLeft,
+                ),
+                key: ValueKey('retry-discovery-${strategy.name}'),
+                onPressed: _discoveryRetry || widget.controller.busy
+                    ? null
+                    : () => _retryDiscovery(strategy),
+                icon: const Icon(Icons.refresh, size: 18),
+                label: Text('$discoveryFailure · Retry'),
+              ),
+            ),
+          ),
+      ],
     );
+  }
+
+  String? _discoveryFailure(BuilderStrategy strategy) {
+    final controller = widget.controller;
+    if (strategy == BuilderStrategy.playlists) {
+      if (controller.playlistCatalogUnavailable) {
+        return 'Playlists unavailable';
+      }
+      final count = controller.failedPlaylistIds.length;
+      if (count > 0) {
+        return '$count ${count == 1 ? 'playlist' : 'playlists'} unavailable';
+      }
+    }
+    if (strategy == BuilderStrategy.collections) {
+      final unavailable = controller.unavailableCollectionLibraryIds
+          .intersection(_selectedLibraries)
+          .length;
+      final failed = _selectedLibraries.fold<int>(
+        0,
+        (count, id) =>
+            count + (controller.failedCollectionTitles[id]?.length ?? 0),
+      );
+      if (unavailable > 0) {
+        return 'Collections unavailable in $unavailable ${unavailable == 1 ? 'library' : 'libraries'}${failed > 0 ? ' · $failed ${failed == 1 ? 'collection' : 'collections'} unavailable' : ''}';
+      }
+      if (failed > 0) {
+        return '$failed ${failed == 1 ? 'collection' : 'collections'} unavailable';
+      }
+    }
+    return null;
+  }
+
+  Future<void> _retryDiscovery(BuilderStrategy strategy) async {
+    final controller = widget.controller;
+    final ids = strategy == BuilderStrategy.collections
+        ? _selectedLibraries
+              .where(
+                (id) =>
+                    controller.unavailableCollectionLibraryIds.contains(id) ||
+                    (controller.failedCollectionTitles[id]?.isNotEmpty ??
+                        false),
+              )
+              .toSet()
+        : Set<String>.of(_selectedLibraries);
+    setState(() => _discoveryRetry = true);
+    await _scan(retryLibraryIds: ids);
+    if (mounted) setState(() => _discoveryRetry = false);
   }
 
   Widget _sourceGroupingControl(BuilderStrategy strategy) {
@@ -2294,7 +2378,9 @@ class _SetupState extends State<UpstreamChannelSetupView> {
     final entries = _reviewEntries(_plan!.channels);
     final counts = _counts(entries);
     final finalChannels = composeChannelPlan(
-      existing: _reviewBase,
+      existing: _reviewBase
+          .where((channel) => !_removeSourceIds.contains(channel.id))
+          .toList(),
       planned: _plan!.channels,
       mode: _mode,
     );
@@ -2349,6 +2435,10 @@ class _SetupState extends State<UpstreamChannelSetupView> {
               SizedBox(height: 8),
             ],
             _reviewOverview(entries, finalChannels, counts),
+            if (_missingSources.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              _missingSourceReview(),
+            ],
             SizedBox(height: 24),
           ];
           if (constraints.maxHeight < 650 ||
@@ -2370,6 +2460,92 @@ class _SetupState extends State<UpstreamChannelSetupView> {
             ],
           );
         },
+      ),
+    );
+  }
+
+  List<Channel> get _missingSources => _mode == ChannelBuildMode.merge
+      ? _plan!.unmatchedGenerated
+            .where(widget.controller.isGeneratedSourceConfirmedGone)
+            .toList()
+      : const [];
+
+  Widget _missingSourceReview() {
+    final roles = LineupTheme.of(context);
+    return DecoratedBox(
+      key: const ValueKey('source-not-found'),
+      decoration: BoxDecoration(
+        color: roles.primarySurface,
+        border: Border.all(color: roles.subtleBorder),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(28),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Source not found',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'These generated channels have no playable items after a complete scan. Keep them or remove them from your lineup.',
+              style: TextStyle(
+                color: roles.secondaryText,
+                fontSize: 18,
+                height: 1.4,
+              ),
+            ),
+            for (final channel in _missingSources)
+              Padding(
+                padding: const EdgeInsets.only(top: 16),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final choice = LineupSegmentedControl<bool>(
+                      key: ValueKey('missing-source-choice-${channel.id}'),
+                      segments: const [
+                        ButtonSegment(value: false, label: Text('Keep')),
+                        ButtonSegment(value: true, label: Text('Remove')),
+                      ],
+                      selected: {_removeSourceIds.contains(channel.id)},
+                      onSelectionChanged: (selected) => setState(() {
+                        if (selected.single) {
+                          _removeSourceIds.add(channel.id);
+                        } else {
+                          _removeSourceIds.remove(channel.id);
+                        }
+                        _removalConfirmed = false;
+                      }),
+                    );
+                    final title = Text(
+                      '${channel.number} · ${channel.name}',
+                      style: TextStyle(color: roles.primaryText, fontSize: 18),
+                    );
+                    if (constraints.maxWidth /
+                            MediaQuery.textScalerOf(context).scale(1) <
+                        600) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          title,
+                          const SizedBox(height: 8),
+                          Align(alignment: Alignment.centerLeft, child: choice),
+                        ],
+                      );
+                    }
+                    return Row(
+                      children: [
+                        Expanded(child: title),
+                        const SizedBox(width: 16),
+                        choice,
+                      ],
+                    );
+                  },
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -2638,6 +2814,15 @@ class _SetupState extends State<UpstreamChannelSetupView> {
             Divider(height: 1, color: roles.subtleBorder),
             SizedBox(height: 16),
             sourceBreakdown,
+            if (_mode == ChannelBuildMode.append && _plan!.existingSkipped > 0)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  '${_plan!.existingSkipped} already in your lineup',
+                  key: const ValueKey('existing-sources-skipped'),
+                  style: supportingStyle,
+                ),
+              ),
             if (_reviewBase.any((channel) => channel.builderKey == null))
               Padding(
                 padding: EdgeInsets.only(top: 8),
@@ -2915,6 +3100,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
     );
     final changes = _changedFields(entry.before, entry.channel);
     return DecoratedBox(
+      key: ValueKey('review-channel-${entry.channel.id}'),
       decoration: BoxDecoration(
         border: Border(
           bottom: BorderSide(color: LineupTheme.of(context).subtleBorder),
@@ -2957,6 +3143,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
         planned.channels,
         mode: _mode,
         expectedBase: _reviewBase,
+        removeChannelIds: _removeSourceIds,
       );
       if (!mounted) return;
       if (result == ChannelPlanApplyResult.stale) {
@@ -3172,7 +3359,9 @@ class _SetupState extends State<UpstreamChannelSetupView> {
 
   List<_ReviewEntry> _reviewEntries(List<Channel> planned) {
     final finalChannels = composeChannelPlan(
-      existing: _reviewBase,
+      existing: _reviewBase
+          .where((channel) => !_removeSourceIds.contains(channel.id))
+          .toList(),
       planned: planned,
       mode: _mode,
     );
@@ -3283,7 +3472,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
     ChannelBuildMode.merge =>
       'Update matching generated channels, add new ones, and keep the rest.',
     ChannelBuildMode.replace => 'Replace all generated channels with this selection. Custom channels will be kept.',
-    ChannelBuildMode.append => 'Keep your existing lineup and add every channel in this selection as a new channel.',
+    ChannelBuildMode.append => 'Keep your existing lineup and add channels whose sources are not already in it.',
   };
 
   bool _supportsGrouping(BuilderStrategy strategy) => const {

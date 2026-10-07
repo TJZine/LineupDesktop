@@ -4363,6 +4363,44 @@ void main() {
     },
   );
 
+  testWidgets('collection facet excludes playlist-only stale tags', (
+    tester,
+  ) async {
+    final controller = _RecordingSaveController()
+      ..libraries = const [
+        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
+      ]
+      ..selectedLibraryIds = {'movies'}
+      ..availableMedia = [
+        _media(
+          'member',
+          libraryId: 'movies',
+          collections: ['Library collection'],
+        ),
+      ]
+      ..availablePlaylists = [
+        PlexPlaylist(
+          id: 'playlist',
+          title: 'Playlist',
+          items: [
+            _media('playlist-only', collections: ['Stale playlist tag']),
+          ],
+        ),
+      ];
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      _studio(controller, ChannelStudioMode.createCustom),
+    );
+    await _settleAirCheck(tester);
+    await tester.ensureVisible(find.text('Hand-picked'));
+    await tester.tap(find.text('Hand-picked'));
+    await tester.pump();
+    await _openStudioFilter(tester, 'collection', browse: true);
+    await tester.pumpAndSettle();
+    expect(find.text('Library collection'), findsOneWidget);
+    expect(find.text('Stale playlist tag'), findsNothing);
+  });
+
   testWidgets('Library filter picker keeps pending values local until Done', (
     tester,
   ) async {

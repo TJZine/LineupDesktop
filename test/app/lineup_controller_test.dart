@@ -1892,6 +1892,265 @@ void main() {
   );
 
   test(
+    'missing-source classification requires every complete dependency',
+    () async {
+      final selected = _server('server');
+      final plex = _FakePlex()
+        ..serversResult = [selected]
+        ..connectionResult = selected.connections.single
+        ..librariesResult = const [
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+        ]
+        ..libraryItemsHandler = ((_, _, _, _) async => [_playableMovie]);
+      final controller = LineupController(
+        store: _MemoryStore(
+          const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+        ),
+        credentials: _MemoryCredentials(accountToken: 'token'),
+        plex: plex,
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+      const missing = LibrarySource(
+        libraryId: 'movies',
+        libraryType: PlexLibraryType.movie,
+        filters: {
+          LibraryFilter.collection: ['Retired'],
+        },
+      );
+      Channel candidate(ContentSource source, {String? key = 'generated'}) =>
+          Channel(
+            id: 'candidate',
+            number: 90,
+            name: 'Candidate',
+            source: source,
+            playbackMode: PlaybackMode.shuffle,
+            anchor: DateTime.utc(2026),
+            shuffleSeed: 90,
+            builderKey: key,
+          );
+      expect(
+        controller.isGeneratedSourceConfirmedGone(candidate(missing)),
+        isFalse,
+      );
+      expect(await controller.scanLibraries({'movies'}), isTrue);
+      expect(await controller.commitLibraryScan({'movies'}), isTrue);
+      expect(
+        controller.isGeneratedSourceConfirmedGone(candidate(missing)),
+        isTrue,
+      );
+      expect(
+        controller.isGeneratedSourceConfirmedGone(
+          candidate(missing, key: null),
+        ),
+        isFalse,
+      );
+      expect(
+        controller.isGeneratedSourceConfirmedGone(
+          candidate(const ManualSource([])),
+        ),
+        isFalse,
+      );
+      expect(
+        controller.isGeneratedSourceConfirmedGone(
+          candidate(
+            const LibrarySource(
+              libraryId: 'unscanned',
+              libraryType: PlexLibraryType.movie,
+            ),
+          ),
+        ),
+        isFalse,
+      );
+      expect(
+        controller.isGeneratedSourceConfirmedGone(
+          candidate(
+            const MixedSource(
+              sources: [
+                missing,
+                LibrarySource(
+                  libraryId: 'unscanned',
+                  libraryType: PlexLibraryType.movie,
+                ),
+              ],
+            ),
+          ),
+        ),
+        isFalse,
+      );
+      expect(
+        controller.isGeneratedSourceConfirmedGone(
+          candidate(
+            const MixedSource(sources: [missing, PlaylistSource('gone')]),
+          ),
+        ),
+        isTrue,
+      );
+      plex.libraryItemsHandler = ((_, _, _, _) async => [
+        PlexMediaItem(
+          id: 'returned',
+          title: 'Returned',
+          type: 'movie',
+          libraryId: 'movies',
+          collections: ['Retired'],
+          duration: Duration(minutes: 30),
+          parts: [PlexMediaPart(path: '/parts/returned')],
+        ),
+      ]);
+      expect(await controller.scanLibraries({'movies'}), isTrue);
+      expect(
+        controller.isGeneratedSourceConfirmedGone(candidate(missing)),
+        isFalse,
+      );
+      plex.libraryItemsHandler = ((_, _, _, _) async => [_playableMovie]);
+      plex.collectionMembership = const PlexCollectionMembership(
+        failedTitles: {'Retired'},
+      );
+      expect(await controller.scanLibraries({'movies'}), isTrue);
+      expect(
+        controller.isGeneratedSourceConfirmedGone(candidate(missing)),
+        isFalse,
+      );
+      plex.collectionMembership = const PlexCollectionMembership(
+        unavailable: true,
+      );
+      expect(await controller.scanLibraries({'movies'}), isTrue);
+      expect(
+        controller.isGeneratedSourceConfirmedGone(candidate(missing)),
+        isFalse,
+      );
+      plex.collectionMembership = const PlexCollectionMembership();
+      plex.playlistsHandler = ((_, _) async =>
+          const PlexPlaylistCatalog(playlists: [], failedIds: {'gone'}));
+      expect(await controller.scanLibraries({'movies'}), isTrue);
+      expect(controller.failedPlaylistIds, {'gone'});
+      expect(
+        controller.isGeneratedSourceConfirmedGone(
+          candidate(
+            const MixedSource(sources: [missing, PlaylistSource('gone')]),
+          ),
+        ),
+        isFalse,
+      );
+      expect(
+        controller.isGeneratedSourceConfirmedGone(
+          candidate(const PlaylistSource('other')),
+        ),
+        isTrue,
+      );
+      plex.playlistsHandler = ((_, _) async =>
+          throw const PlexException('offline', 'Unavailable'));
+      expect(await controller.scanLibraries({'movies'}), isTrue);
+      expect(controller.playlistCatalogUnavailable, isTrue);
+      expect(
+        controller.isGeneratedSourceConfirmedGone(
+          candidate(const PlaylistSource('gone')),
+        ),
+        isFalse,
+      );
+      plex.libraryItemsHandler = ((_, _, _, _) async =>
+          throw const PlexException('offline', 'Unavailable'));
+      expect(await controller.scanLibraries({'movies'}), isTrue);
+      expect(
+        controller.isGeneratedSourceConfirmedGone(candidate(missing)),
+        isFalse,
+      );
+    },
+  );
+
+  test(
+    'missing-source removal commits atomically and rolls back a failed save',
+    () async {
+      final selected = _server('server');
+      final plex = _FakePlex()
+        ..serversResult = [selected]
+        ..connectionResult = selected.connections.single
+        ..librariesResult = const [
+          PlexLibrary(
+            id: 'movies',
+            title: 'Movies',
+            type: PlexLibraryType.movie,
+          ),
+        ]
+        ..libraryItemsHandler = ((_, _, _, _) async => [_playableMovie]);
+      final store = _MemoryStore(
+        const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+      );
+      final controller = LineupController(
+        store: store,
+        credentials: _MemoryCredentials(accountToken: 'token'),
+        plex: plex,
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+      expect(await controller.scanLibraries({'movies'}), isTrue);
+      expect(await controller.commitLibraryScan({'movies'}), isTrue);
+      final missing = Channel(
+        id: 'missing',
+        number: 90,
+        name: 'Retired',
+        source: const LibrarySource(
+          libraryId: 'movies',
+          libraryType: PlexLibraryType.movie,
+          filters: {
+            LibraryFilter.collection: ['Retired'],
+          },
+        ),
+        playbackMode: PlaybackMode.shuffle,
+        anchor: DateTime.utc(2026),
+        shuffleSeed: 90,
+        builderKey: 'missing',
+      );
+      final custom = _channel('custom');
+      controller
+        ..channels = [custom, missing]
+        ..currentChannelId = missing.id;
+      expect(controller.isGeneratedSourceConfirmedGone(missing), isTrue);
+      final generation = controller.contentGeneration;
+      final saved = store.state;
+      store.failNextSave = true;
+      await expectLater(
+        controller.applyReviewedChannelPlan(
+          [_generatedChannel('new', 2)],
+          mode: ChannelBuildMode.merge,
+          expectedBase: controller.channels,
+          removeChannelIds: {'missing'},
+        ),
+        throwsStateError,
+      );
+      expect(controller.channels, [custom, missing]);
+      expect(controller.currentChannelId, missing.id);
+      expect(controller.contentGeneration, generation);
+      expect(store.state, same(saved));
+      expect(
+        await controller.applyReviewedChannelPlan(
+          [_generatedChannel('new', 2)],
+          mode: ChannelBuildMode.merge,
+          expectedBase: controller.channels,
+          removeChannelIds: {'missing'},
+        ),
+        ChannelPlanApplyResult.applied,
+      );
+      expect(controller.channels.map((channel) => channel.id), [
+        'custom',
+        'new',
+      ]);
+      expect(controller.contentGeneration, generation);
+      expect(controller.channelRevision('new'), greaterThan(0));
+      expect(
+        store.state.channelsByProfileServer['owner']!['server']!.map(
+          (channel) => channel.id,
+        ),
+        ['custom', 'new'],
+      );
+    },
+  );
+
+  test(
     'missing managed-profile token never falls back to owner scope',
     () async {
       final store = _MemoryStore(const PersistedState(profileId: 'child'));

@@ -2291,8 +2291,10 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     for (final item in (inventory ?? _playableInventory.byId.values).where(
       (item) => libraryId == null || item.libraryId == libraryId,
     )) {
-      for (final value in item.collections) {
-        add('collection', value);
+      if (item.libraryId != null) {
+        for (final value in item.collections) {
+          add('collection', value);
+        }
       }
       for (final value in item.genres) {
         add('genre', value);

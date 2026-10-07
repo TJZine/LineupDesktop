@@ -80,6 +80,16 @@ recreation and saved schedule/content continuity. Live-session refresh,
 source-order drift, real membership-change policy, and live Plex acceptance remain
 deferred.
 
+Channel Setup Update review distinguishes confirmed source absence from incomplete
+discovery. Only unmatched builder-owned channels whose every dependency has
+complete scan evidence and resolves to zero playable items are offered under
+**Source not found**. Keep is the default; removal is explicit and uses the
+existing atomic channel-save path. Failed collection titles, unavailable
+membership, failed/unavailable playlists, unscanned libraries, and incomplete
+`MixedSource` dependencies retain their channels. A source found by a newly
+settled retry cannot be removed using an older empty inventory. This foreground
+review adds neither live-session refresh nor collection rebinding.
+
 These observations are from the current source, not an assertion that they are
 sufficient or correct under the above scenarios.
 

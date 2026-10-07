@@ -1016,6 +1016,8 @@ class _ProfileFixtureController extends FixtureController {
 }
 
 abstract class _SetupScanFixtureController extends FixtureController {
+  @override
+  bool get playlistCatalogUnavailable => false;
   Set<String> _readyIds = const {};
   Map<String, LibraryScanFact> _scanFacts = const {};
 
@@ -1090,10 +1092,13 @@ class _PendingChannelSetupController extends _MediaChannelSetupController {
     List<Channel> planned, {
     required ChannelBuildMode mode,
     required List<Channel> expectedBase,
+    Set<String> removeChannelIds = const {},
   }) async {
     await _apply.future;
     channels = composeChannelPlan(
-      existing: channels,
+      existing: channels
+          .where((channel) => !removeChannelIds.contains(channel.id))
+          .toList(),
       planned: planned,
       mode: mode,
     );

@@ -476,7 +476,7 @@ Add the following methods.
   membership now comes from Plex, so a same-title recreation resolves after
   the next scan. Live-session refresh is still deferred.
 
-#### B1 implemented bounds and live measurement proposal
+#### B1 implemented bounds and approved live measurement budget
 
 Collection children use four sliding workers per library and a shared cap of
 eight active collection streams per `PlexClient`, across up to four simultaneous
@@ -487,25 +487,32 @@ aggregate member entries, counting repeated membership across collections and
 the reported total. A scale failure marks membership unavailable and publishes
 no partial index. These bounds have synthetic test coverage.
 
-**Proposed budget, awaiting user agreement; no live measurement performed:**
-median added scan time must be at most `max(60 seconds, item-only median)`, with
-no paired run adding more than twice that allowance. The absolute allowance
-avoids misleading ratios for fast item scans; the relative allowance scales with
-large libraries. The tail check exposes slow smart collections. This is an
-acceptance proposal, not a runtime timeout or permission to omit membership.
+**Approved budget (October 7, 2026); no live measurement performed:** added
+median scan time must be at most `max(20 seconds, 50% of the item-only median)`,
+with no single paired run adding more than twice that allowance. Measure launch
+and setup separately; a pass on one path does not establish the other. These are
+acceptance thresholds, not runtime timeouts or permission to omit membership.
 
 Use the same host, Plex profile/server, route, library selection, and unchanged
-contents. Time the existing public `libraryItems` and `scanLibrary` methods with
-a monotonic clock in a local debug harness; include collection and TV show-genre
-work. Discard a warm-up pair, then run five sequential pairs, alternating order,
-without overlapping scans. Count only fully successful scans with the same item
-set. Record each item-only and enriched duration and their difference, the
-item-only median, added-time median and maximum, candidate/runtime identity,
-route class, library type, and redacted item/show/collection/membership/page counts.
-Keep credentials in secure local state and log no URLs, titles, or identifiers.
+contents. Measure the largest library's item-only baseline and enriched candidate
+on each actual path: selected-server restoration at launch, and foreground setup
+scan/commit. Use monotonic timing around the equivalent operation boundaries;
+include collection and TV show-genre work. Discard a warm-up pair, then run five
+sequential pairs per path, alternating order, without overlapping scans. Count
+only fully successful scans with the same item set. For each path separately,
+record every item-only and enriched duration and their difference, the item-only
+median, added-time median and maximum, candidate/runtime identities, route class,
+library type, and redacted item/show/collection/membership/page counts. Keep
+credentials in secure local state and log no URLs, titles, or media identifiers.
 Repeat with the normal selected-library set to expose shared-cap contention and
-report it separately. A failed budget requires bottleneck investigation before
-performance acceptance; it changes neither membership completeness nor scope.
+report it separately.
+
+If live measurement exceeds the budget, report the measured path and results
+back to the user. The fallback to propose is to load collection membership on
+launch only for libraries with saved collection channels, and load the remaining
+libraries' membership during setup. This fallback is not implemented or approved
+for immediate activation; it is conditional on the live results. It must preserve
+saved-source resolution and cannot convert missing membership into source absence.
 
 ### B2: Builder rules (`channel_builder.dart`)
 

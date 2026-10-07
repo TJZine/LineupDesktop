@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'dart:ui' show CheckedState;
 
 import 'package:lineup_desktop/ui/app_ui.dart';
@@ -15,8 +16,305 @@ import 'package:lineup_desktop/channels/channel_builder.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
 
 import '../support/ui_fixture.dart';
+import '../support/golden_test_support.dart';
 
 void main() {
+  for (final partial in [false, true]) {
+    testWidgets(
+      'Playlists ${partial ? 'partial' : 'unavailable'} supports retry',
+      (tester) async {
+        final controller = _SetupController(
+          playlistUnavailable: !partial,
+          playlistFailures: partial ? {'one', 'two'} : {},
+          playlists: partial ? [_workingPlaylist] : [],
+        );
+        addTearDown(controller.dispose);
+        await _pump(tester, controller);
+        await _advanceToConfigure(tester);
+        await tester.ensureVisible(find.text('Playlists'));
+        expect(
+          find.text(
+            partial
+                ? '2 playlists unavailable · Retry'
+                : 'Playlists unavailable · Retry',
+          ),
+          findsOneWidget,
+        );
+        final tile = find.widgetWithText(CheckboxListTile, 'Playlists');
+        expect(
+          find.descendant(
+            of: tile,
+            matching: find.text(partial ? '1 channel' : '0 channels'),
+          ),
+          findsOneWidget,
+        );
+        final retry = find.byKey(const ValueKey('retry-discovery-playlists'));
+        expect(
+          tester
+              .getTopLeft(
+                find.descendant(
+                  of: retry,
+                  matching: find.byIcon(Icons.refresh),
+                ),
+              )
+              .dx,
+          closeTo(
+            tester
+                .getTopLeft(
+                  find.text('Create channels from your Plex playlists.'),
+                )
+                .dx,
+            0.01,
+          ),
+        );
+        await tester.tap(
+          find.byKey(const ValueKey('retry-discovery-playlists')),
+        );
+        await tester.pumpAndSettle();
+        expect(controller.rowRetryIds, {'movies', 'shows', 'archive'});
+        expect(
+          find.byKey(const ValueKey('retry-discovery-playlists')),
+          findsNothing,
+        );
+      },
+    );
+  }
+  for (final unavailable in [false, true]) {
+    testWidgets(
+      'Collections ${unavailable ? 'unavailable' : 'partial'} supports retry',
+      (tester) async {
+        final controller = _SetupController(
+          collectionUnavailable: unavailable ? {'movies'} : {},
+          media: unavailable ? _media : _partialMedia,
+          collectionFailures: unavailable
+              ? {}
+              : {
+                  'movies': {'Failed collection'},
+                },
+        );
+        addTearDown(controller.dispose);
+        await _pump(tester, controller);
+        await _advanceToConfigure(tester);
+        await tester.ensureVisible(find.text('Collections'));
+        expect(
+          find.text(
+            unavailable
+                ? 'Collections unavailable in 1 library · Retry'
+                : '1 collection unavailable · Retry',
+          ),
+          findsOneWidget,
+        );
+        final tile = find.widgetWithText(CheckboxListTile, 'Collections');
+        expect(
+          find.descendant(
+            of: tile,
+            matching: find.text(unavailable ? '0 channels' : '1 channel'),
+          ),
+          findsOneWidget,
+        );
+        final retry = find.byKey(const ValueKey('retry-discovery-collections'));
+        expect(
+          tester
+              .getTopLeft(
+                find.descendant(
+                  of: retry,
+                  matching: find.byIcon(Icons.refresh),
+                ),
+              )
+              .dx,
+          closeTo(
+            tester
+                .getTopLeft(
+                  find.text(
+                    'Create channels from collections in each selected library.',
+                  ),
+                )
+                .dx,
+            0.01,
+          ),
+        );
+        await tester.tap(
+          find.byKey(const ValueKey('retry-discovery-collections')),
+        );
+        await tester.pumpAndSettle();
+        expect(controller.rowRetryIds, {'movies'});
+        expect(
+          find.byKey(const ValueKey('retry-discovery-collections')),
+          findsNothing,
+        );
+      },
+    );
+  }
+  testWidgets('append review reports existing sources skipped', (tester) async {
+    final existing = materializeChannelPlan(
+      proposals: buildChannelProposals(
+        libraries: _libraries,
+        items: _media,
+        strategies: {BuilderStrategy.genres},
+        minimumItems: 5,
+      ),
+      existing: [],
+      mode: ChannelBuildMode.replace,
+      anchor: DateTime.utc(2026),
+    ).channels;
+    final controller = _SetupController(channels: existing);
+    addTearDown(controller.dispose);
+    await _pump(tester, controller);
+    await _advanceToReview(tester);
+    await tester.tap(find.text('Add as new channels'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text(
+        'Keep your existing lineup and add channels whose sources are not already in it.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('3 already in your lineup'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('back-to-configure')));
+    await tester.pumpAndSettle();
+    for (final strategy in BuilderStrategy.values.where(
+      (strategy) => strategy != BuilderStrategy.genres,
+    )) {
+      final tile = find.widgetWithText(
+        CheckboxListTile,
+        builderStrategyLabels[strategy]!,
+      );
+      final label = find.descendant(
+        of: tile,
+        matching: find.text(builderStrategyLabels[strategy]!),
+      );
+      await tester.ensureVisible(label);
+      await tester.pumpAndSettle();
+      await tester.tap(label);
+      await tester.pumpAndSettle();
+    }
+    await tester.tap(find.byKey(const ValueKey('review-channels')));
+    await tester.pumpAndSettle();
+    expect(find.text('3 already in your lineup'), findsOneWidget);
+    expect(find.text('Your lineup is already up to date'), findsOneWidget);
+  });
+  testWidgets(
+    'default keep preserves a missing generated source when applying',
+    (tester) async {
+      final controller = _SetupController(channels: [_missingChannel]);
+      addTearDown(controller.dispose);
+      await _pump(tester, controller);
+      await _advanceToReview(tester);
+      await tester.tap(find.byKey(const ValueKey('apply-reviewed-lineup')));
+      await tester.pumpAndSettle();
+      expect(controller.channels, contains(_missingChannel));
+      expect(controller.applyCalls, 1);
+    },
+  );
+  testWidgets('missing source defaults to keep and explicit remove applies', (
+    tester,
+  ) async {
+    final controller = _SetupController(channels: [_missingChannel]);
+    addTearDown(controller.dispose);
+    await _pump(tester, controller);
+    await _advanceToReview(tester);
+    final choice = find.byKey(const ValueKey('missing-source-choice-missing'));
+    await tester.ensureVisible(choice);
+    expect(find.text('Source not found'), findsOneWidget);
+    expect(tester.widget<LineupSegmentedControl<bool>>(choice).selected, {
+      false,
+    });
+    await tester.tap(
+      find.descendant(of: choice, matching: find.text('Remove')),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.widget<LineupSegmentedControl<bool>>(choice).selected, {
+      true,
+    });
+    await tester.tap(
+      find.byKey(const ValueKey('channel-setup-replace-confirmation')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('apply-reviewed-lineup')));
+    await tester.pumpAndSettle();
+    expect(
+      controller.channels.any((channel) => channel.id == 'missing'),
+      isFalse,
+    );
+  });
+  testWidgets(
+    'collection failure excludes unmatched channel from missing source review',
+    (tester) async {
+      final controller = _SetupController(
+        channels: [_missingChannel],
+        collectionFailures: {
+          'movies': {'Retired collection'},
+        },
+      );
+      addTearDown(controller.dispose);
+      await _pump(tester, controller);
+      await _advanceToReview(tester);
+      expect(find.text('Source not found'), findsNothing);
+    },
+  );
+  testWidgets(
+    'playlist and nested dependency failures never appear as missing sources',
+    (tester) async {
+      for (final unavailable in [false, true]) {
+        final channel = Channel(
+          id: 'missing-playlist',
+          number: 90,
+          name: 'Unavailable playlist',
+          source: const MixedSource(
+            sources: [
+              PlaylistSource('failed'),
+              LibrarySource(
+                libraryId: 'movies',
+                libraryType: PlexLibraryType.movie,
+                filters: {
+                  LibraryFilter.collection: ['Retired collection'],
+                },
+              ),
+            ],
+          ),
+          playbackMode: PlaybackMode.shuffle,
+          anchor: DateTime.utc(2026),
+          shuffleSeed: 90,
+          builderKey: 'missing-playlist',
+        );
+        final controller = _SetupController(
+          channels: [channel],
+          playlistUnavailable: unavailable,
+          playlistFailures: unavailable ? {} : {'failed'},
+        );
+        await _pump(tester, controller);
+        await _advanceToReview(tester);
+        expect(find.text('Source not found'), findsNothing);
+        await tester.pumpWidget(const SizedBox());
+        controller.dispose();
+      }
+    },
+  );
+  testWidgets('missing sources remain reviewable with no new proposals', (
+    tester,
+  ) async {
+    final controller = _SetupController(channels: [_missingChannel]);
+    addTearDown(controller.dispose);
+    await _pump(tester, controller);
+    await _advanceToConfigure(tester);
+    for (final strategy in BuilderStrategy.values) {
+      final tile = find.widgetWithText(
+        CheckboxListTile,
+        builderStrategyLabels[strategy]!,
+      );
+      final label = find.descendant(
+        of: tile,
+        matching: find.text(builderStrategyLabels[strategy]!),
+      );
+      await tester.ensureVisible(label);
+      await tester.pumpAndSettle();
+      await tester.tap(label);
+      await tester.pumpAndSettle();
+    }
+    await tester.tap(find.byKey(const ValueKey('review-channels')));
+    await tester.pumpAndSettle();
+    expect(find.text('Source not found'), findsOneWidget);
+  });
   testWidgets(
     '1366 canvas keeps setup stages reachable after interpolation retirement',
     (tester) async {
@@ -1074,6 +1372,67 @@ void main() {
       expect(viewed, 1);
     },
   );
+  testWidgets(
+    'Remove updates final count, removed summary, and channel table label',
+    (tester) async {
+      await tester.runAsync(loadPinnedTestFonts);
+      final controller = _SetupController(channels: [_missingChannel]);
+      addTearDown(controller.dispose);
+      await _pump(tester, controller);
+      tester.view.physicalSize = const Size(1920, 1080);
+      await tester.pumpAndSettle();
+      await _advanceToReview(tester);
+      expect(find.text('7 final'), findsOneWidget);
+      expect(find.text('0 Removed'), findsOneWidget);
+      final search = find.byKey(const ValueKey('channel-setup-review-search'));
+      await tester.ensureVisible(search);
+      await tester.enterText(search, 'Retired collection');
+      await tester.pumpAndSettle();
+      final row = find.byKey(const ValueKey('review-channel-missing'));
+      await tester.scrollUntilVisible(
+        row,
+        200,
+        scrollable: find
+            .descendant(
+              of: find.byKey(const ValueKey('channel-setup-review-roster')),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      expect(
+        find.descendant(of: row, matching: find.text('Unchanged')),
+        findsOneWidget,
+      );
+      final choice = find.byKey(
+        const ValueKey('missing-source-choice-missing'),
+      );
+      await tester.ensureVisible(choice);
+      await tester.tap(
+        find.descendant(of: choice, matching: find.text('Remove')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('6 final'), findsOneWidget);
+      expect(find.text('1 Removed'), findsOneWidget);
+      await tester.scrollUntilVisible(
+        row,
+        200,
+        scrollable: find
+            .descendant(
+              of: find.byKey(const ValueKey('channel-setup-review-roster')),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      expect(
+        find.descendant(of: row, matching: find.text('Removed')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: row, matching: find.text('Unchanged')),
+        findsNothing,
+      );
+    },
+  );
 }
 
 Container _cardPaint(WidgetTester tester, Finder card) =>
@@ -1147,13 +1506,35 @@ class _SetupController extends FixtureController {
     this.blockScan = false,
     this.staleOnce = false,
     this.failApply = false,
+    this.playlistUnavailable = false,
+    this.playlistFailures = const {},
+    this.collectionUnavailable = const {},
+    this.collectionFailures = const {},
     List<Channel> channels = const [],
+    List<PlexMediaItem>? media,
+    List<PlexPlaylist> playlists = const [],
   }) {
     libraries = _libraries;
     this.channels = channels;
-    availableMedia = _media;
+    _fixtureMedia = media ?? _media;
+    availableMedia = _fixtureMedia;
+    availablePlaylists = playlists;
   }
 
+  late final List<PlexMediaItem> _fixtureMedia;
+
+  bool playlistUnavailable;
+  Set<String> playlistFailures;
+  Set<String> collectionUnavailable;
+  Map<String, Set<String>> collectionFailures;
+  @override
+  bool get playlistCatalogUnavailable => playlistUnavailable;
+  @override
+  Set<String> get failedPlaylistIds => playlistFailures;
+  @override
+  Set<String> get unavailableCollectionLibraryIds => collectionUnavailable;
+  @override
+  Map<String, Set<String>> get failedCollectionTitles => collectionFailures;
   final bool mixedScan;
   final bool blockScan;
   final bool staleOnce;
@@ -1171,6 +1552,10 @@ class _SetupController extends FixtureController {
 
   @override
   Future<bool> retryLibraryScan(Set<String> ids, Set<String> retryIds) {
+    playlistUnavailable = false;
+    playlistFailures = {};
+    collectionUnavailable = {};
+    collectionFailures = {};
     rowRetryInventory = Set.of(ids);
     rowRetryIds = Set.of(retryIds);
     return scanLibraries(ids, retryFailedOnly: true);
@@ -1257,7 +1642,7 @@ class _SetupController extends FixtureController {
   Future<bool> commitLibraryScan(Set<String> readyIds) async {
     committedIds = Set.unmodifiable(readyIds);
     selectedLibraryIds = committedIds;
-    availableMedia = _media
+    availableMedia = _fixtureMedia
         .where((item) => readyIds.contains(item.libraryId))
         .toList();
     return true;
@@ -1268,13 +1653,16 @@ class _SetupController extends FixtureController {
     List<Channel> planned, {
     required ChannelBuildMode mode,
     required List<Channel> expectedBase,
+    Set<String> removeChannelIds = const {},
   }) async {
     applyCalls++;
     if (applyGate != null) await applyGate!.future;
     if (failApply) throw StateError('synthetic apply failure');
     if (staleOnce && applyCalls == 1) return ChannelPlanApplyResult.stale;
     channels = composeChannelPlan(
-      existing: channels,
+      existing: channels
+          .where((channel) => !removeChannelIds.contains(channel.id))
+          .toList(),
       planned: planned,
       mode: mode,
     );
@@ -1322,3 +1710,39 @@ Channel _generated(String id, int number, {required String builderKey}) =>
       shuffleSeed: number,
       builderKey: builderKey,
     );
+
+final _missingChannel = Channel(
+  id: 'missing',
+  number: 90,
+  name: 'Retired collection',
+  source: const LibrarySource(
+    libraryId: 'movies',
+    libraryType: PlexLibraryType.movie,
+    filters: {
+      LibraryFilter.collection: ['Retired collection'],
+    },
+  ),
+  playbackMode: PlaybackMode.shuffle,
+  anchor: DateTime.utc(2026),
+  shuffleSeed: 90,
+  builderKey: 'retired-collection',
+);
+
+final _workingPlaylist = PlexPlaylist(
+  id: 'working',
+  title: 'Working playlist',
+  items: _media.where((item) => item.libraryId == 'movies').toList(),
+);
+final _partialMedia = [
+  ..._media,
+  for (var index = 0; index < 5; index++)
+    PlexMediaItem(
+      id: 'member-$index',
+      title: 'Collection member $index',
+      type: 'movie',
+      duration: const Duration(minutes: 30),
+      libraryId: 'movies',
+      collections: const ['Working collection'],
+      parts: [PlexMediaPart(path: '/parts/member/$index')],
+    ),
+];
