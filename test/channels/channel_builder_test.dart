@@ -952,6 +952,73 @@ void main() {
     expect(result.excludedOriginals, 1);
   });
 
+  test(
+    'merge updates a surviving extra after its original runs out of numbers',
+    () {
+      const proposal = ChannelProposal(
+        name: 'Series',
+        source: LibrarySource(
+          libraryId: 'tv',
+          libraryType: PlexLibraryType.show,
+        ),
+        mode: PlaybackMode.shuffle,
+        itemCount: 10,
+        strategy: BuilderStrategy.recentlyAdded,
+        series: true,
+      );
+      final seeded = materializeChannelPlan(
+        proposals: const [proposal],
+        existing: const [],
+        mode: ChannelBuildMode.replace,
+        seriesMode: PlaybackMode.block,
+        alternateCopies: 1,
+        anchor: DateTime.utc(2026),
+      ).channels;
+      final survivingExtra = seeded.last;
+      final existing = [
+        for (var number = 1; number <= 1000; number++)
+          if (number != survivingExtra.number)
+            Channel(
+              id: 'existing-$number',
+              number: number,
+              name: 'Existing $number',
+              source: const LibrarySource(
+                libraryId: 'movies',
+                libraryType: PlexLibraryType.movie,
+              ),
+              playbackMode: PlaybackMode.shuffle,
+              anchor: DateTime.utc(2026),
+              shuffleSeed: number,
+            ),
+        survivingExtra,
+      ];
+
+      final result = materializeChannelPlan(
+        proposals: const [proposal],
+        existing: existing,
+        mode: ChannelBuildMode.merge,
+        seriesMode: PlaybackMode.block,
+        includeSpecials: true,
+        alternateCopies: 1,
+        anchor: DateTime.utc(2027),
+      );
+
+      expect(result.channels, hasLength(1));
+      expect(result.unmatchedGenerated, isEmpty);
+      final updated = result.channels.single;
+      expect(updated.id, survivingExtra.id);
+      expect(updated.number, survivingExtra.number);
+      expect(updated.builderKey, survivingExtra.builderKey);
+      expect(updated.includeSpecials, isTrue);
+      expect(updated.playbackMode, PlaybackMode.block);
+      expect(result.numberLimitExcluded, 1);
+      expect(result.allocatedOriginals, 0);
+      expect(result.allocatedExtras, 1);
+      expect(result.excludedOriginals, 1);
+      expect(result.excludedExtras, 0);
+    },
+  );
+
   test('append and merge report channel-number exhaustion', () {
     final existing = [
       for (var number = 1; number <= 1000; number++)

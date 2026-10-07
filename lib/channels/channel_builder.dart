@@ -440,6 +440,9 @@ ChannelPlanAllocation materializeChannelPlan({
     final channel = materialize(entry);
     if (channel == null) {
       numberLimitExcluded++;
+      // A merge can still match an existing extra for this source even when
+      // its original cannot receive a new channel number.
+      expansionOriginals.add(entry);
       continue;
     }
     output.add(channel);
