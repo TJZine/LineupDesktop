@@ -463,6 +463,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     final programmingError = draftResolution == null
         ? null
         : _programmingError(draftResolution);
+    final sourceExplanation = _sourceExplanationMessage(draftResolution);
     final hasShowGrouping =
         draftResolution?.content?.any(
           (item) =>
@@ -584,7 +585,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                               widget.controller,
                             ),
                             sourceIssue: programmingError,
-                            sourceIssueExplained: true,
+                            sourceIssueExplained: sourceExplanation != null,
                             playableById: _playableInventory.byId,
                             onValidityChanged: (status) {
                               if (!mounted || _airCheckStatus == status) return;
@@ -845,21 +846,24 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
   );
 
   Widget _sourceExplanation() {
-    final resolution = _resolveDraftContent();
-    final error = _programmingError(resolution);
-    final message =
-        error ??
-        (resolution.content?.isEmpty == true &&
-                resolution.source != null &&
-                hasNonemptyRetainedManualContent(resolution.source!)
-            ? 'No retained hand-picked programs are currently available. They remain saved and explicitly off air.'
-            : null);
+    final message = _sourceExplanationMessage();
     return message == null
         ? const SizedBox.shrink()
         : Semantics(
             liveRegion: true,
             child: Text(message, style: _studioSupportStyle()),
           );
+  }
+
+  String? _sourceExplanationMessage([_DraftResolution? resolution]) {
+    final resolved = resolution ?? _resolveDraftContent();
+    final error = _programmingError(resolved);
+    if (error != null) return error;
+    return resolved.content?.isEmpty == true &&
+            resolved.source != null &&
+            hasNonemptyRetainedManualContent(resolved.source!)
+        ? 'No retained hand-picked programs are currently available. They remain saved and explicitly off air.'
+        : null;
   }
 
   Widget _studioActions({

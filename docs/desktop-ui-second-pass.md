@@ -517,6 +517,9 @@ Studio
   the retained schedule is dimmed and labelled "Previous schedule · <source>".
   Retry appears beside the preview status only for failures a retry can fix
   (loading or comparison errors).
+  If the scheduler rejects programming without a source-side explanation, the
+  preview shows one fallback reason; deterministic empty or unsupported
+  programming still has no Retry action.
 - Preview summary is one sentence-case line with separators ("Ch 42 · 4 playable
   · 2h cycle · In order"). "Coverage through … · 6 future hours requested"
   becomes "Schedule through 4:00 AM", sharing a line with "Show next 6 hours".

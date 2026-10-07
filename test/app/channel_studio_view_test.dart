@@ -1565,6 +1565,79 @@ void main() {
   });
 
   testWidgets(
+    'Air Check explains scheduler-only empty specials and recovers when enabled',
+    (tester) async {
+      final specials = [
+        _media(
+          'special-1',
+          libraryId: 'shows',
+          type: 'episode',
+          showTitle: 'Synthetic show',
+          showThumb: '/library/metadata/show/thumb',
+          seasonNumber: 0,
+          episodeNumber: 1,
+        ),
+        _media(
+          'special-2',
+          libraryId: 'shows',
+          type: 'episode',
+          showTitle: 'Synthetic show',
+          showThumb: '/library/metadata/show/thumb',
+          seasonNumber: 0,
+          episodeNumber: 2,
+        ),
+      ];
+      final original = _channel(
+        id: 'specials-only',
+        number: 12,
+        name: 'Specials only',
+        source: const LibrarySource(
+          libraryId: 'shows',
+          libraryType: PlexLibraryType.show,
+        ),
+        mode: PlaybackMode.block,
+        blockSize: 2,
+      );
+      final controller = _RecordingSaveController()
+        ..channels = [original]
+        ..libraries = const [
+          PlexLibrary(id: 'shows', title: 'Shows', type: PlexLibraryType.show),
+        ]
+        ..selectedLibraryIds = {'shows'}
+        ..availableMedia = specials;
+      addTearDown(controller.dispose);
+
+      await tester.pumpWidget(
+        _studio(controller, ChannelStudioMode.editCustom, channel: original),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text(
+          'This source has no playable programs. Choose available programming.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Retry Air Check'), findsNothing);
+      expect(find.textContaining('2 playable'), findsNothing);
+
+      await tester.ensureVisible(
+        find.byKey(const Key('studio-include-specials')),
+      );
+      await tester.tap(find.byKey(const Key('studio-include-specials')));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text(
+          'This source has no playable programs. Choose available programming.',
+        ),
+        findsNothing,
+      );
+      expect(find.textContaining('2 playable'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
     'Mini-marathons distinguishes movie-only, episode, mixed, and loading sources',
     (tester) async {
       final controller = _RecordingSaveController();
@@ -5057,6 +5130,8 @@ ScheduleIndex _testSchedule(Channel channel, FixtureController controller) =>
       mode: channel.playbackMode,
       seed: channel.shuffleSeed,
       blockSize: channel.blockSize ?? 3,
+      includeSpecials: channel.includeSpecials,
+      scheduleVersion: channel.scheduleVersion,
     );
 
 class _RecoveryHarness extends StatefulWidget {
