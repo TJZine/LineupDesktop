@@ -14,7 +14,7 @@ challenged, not constraints. This log records only decisions the user made.
 - Every surface is reviewed across the resolution matrix: 1280×720, 1366×768,
   1536×864 at 125%, 1920×1080, 1920×1200, 2560×1440, 3440×1440, 3840×2160 and
   1920×1080 with 150% text.
-- All five themes receive a pass; expected to be mostly color work.
+- All four themes receive a pass; expected to be mostly color work.
 - Density may change, but proposals must not add negative space: a revision
   keeps or reduces the empty space of today's surface. Mock spacing that
   drifts looser is not part of any decision.
