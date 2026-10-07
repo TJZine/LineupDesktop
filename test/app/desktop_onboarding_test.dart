@@ -629,6 +629,65 @@ void main() {
     expect(controller.selectCalls, 0);
   });
 
+  testWidgets(
+    'pending and failed current selections keep one label and do not reconnect on Continue',
+    (tester) async {
+      final current = PlexServer(
+        id: 'current',
+        name: 'Current server',
+        connections: const [],
+      );
+      final other = PlexServer(
+        id: 'other',
+        name: 'Other server',
+        connections: const [],
+      );
+      final controller = _ServerController()
+        ..stage = SetupStage.servers
+        ..servers = [current, other]
+        ..server = current
+        ..promoteSelection = true;
+      addTearDown(controller.dispose);
+      await show(tester, controller);
+
+      final pending = Completer<void>();
+      controller.pendingSelection = pending;
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Connect'));
+      await tester.pump();
+      final pendingButton = tester.widget<FilledButton>(
+        find.widgetWithText(FilledButton, 'Connecting…'),
+      );
+      expect(pendingButton.onPressed, isNull);
+      expect(
+        tester
+            .getSemantics(find.widgetWithText(FilledButton, 'Connecting…'))
+            .getSemanticsData()
+            .label,
+        'Connecting…',
+      );
+
+      pending.complete();
+      await tester.pumpAndSettle();
+      controller.failSelection = true;
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Connect'));
+      await tester.pumpAndSettle();
+
+      expect(find.widgetWithText(FilledButton, 'Continue'), findsOneWidget);
+      expect(
+        tester
+            .getSemantics(find.widgetWithText(FilledButton, 'Continue'))
+            .getSemanticsData()
+            .label,
+        'Continue',
+      );
+      final calls = controller.selectCalls;
+      await tester.tap(find.widgetWithText(FilledButton, 'Continue'));
+      await tester.pump();
+      expect(controller.selectCalls, calls);
+    },
+    semanticsEnabled: true,
+  );
+
   test(
     'continue current server rejects busy, missing, and incorrect stages',
     () {
@@ -690,11 +749,16 @@ class _PinController extends FixtureController {
 class _ServerController extends FixtureController {
   Completer<void>? pendingSelection;
   bool failSelection = false;
+  bool promoteSelection = false;
   int selectCalls = 0;
 
   @override
   Future<void> selectServer(PlexServer server) async {
     selectCalls++;
+    if (promoteSelection) {
+      this.server = server;
+      notifyListeners();
+    }
     final pending = pendingSelection;
     if (pending != null) {
       await pending.future;

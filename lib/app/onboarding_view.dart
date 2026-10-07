@@ -823,7 +823,8 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
               connection: widget.controller.server?.id == server.id
                   ? widget.controller.connection
                   : null,
-              onPressed: widget.controller.busy
+              onPressed:
+                  widget.controller.busy || _connectingServerId == server.id
                   ? null
                   : widget.controller.server?.id == server.id
                   ? () => _continueServer(server)
@@ -1348,43 +1349,28 @@ class _ServerCard extends StatelessWidget {
         LineupConnectionStatus(connection: measuredConnection),
       ],
     );
-    final actionLabel = pending
+    final buttonLabel = pending
         ? 'Connecting…'
-        : error != null
-        ? 'Retry'
         : current
         ? 'Continue'
-        : 'Connect to ${server.name}';
+        : error != null
+        ? 'Retry'
+        : 'Connect';
+    final actionLabel = buttonLabel == 'Connect'
+        ? 'Connect to ${server.name}'
+        : buttonLabel;
     final trailing = MergeSemantics(
       child: Semantics(
         label: actionLabel,
         child: primary
             ? FilledButton(
                 onPressed: onPressed,
-                child: ExcludeSemantics(
-                  child: Text(
-                    current
-                        ? 'Continue'
-                        : pending
-                        ? 'Connecting…'
-                        : error != null
-                        ? 'Retry'
-                        : 'Connect',
-                  ),
-                ),
+                child: ExcludeSemantics(child: Text(buttonLabel)),
               )
             : LineupCompactControls(
                 child: OutlinedButton(
                   onPressed: onPressed,
-                  child: ExcludeSemantics(
-                    child: Text(
-                      pending
-                          ? 'Connecting…'
-                          : error != null
-                          ? 'Retry'
-                          : 'Connect',
-                    ),
-                  ),
+                  child: ExcludeSemantics(child: Text(buttonLabel)),
                 ),
               ),
       ),
