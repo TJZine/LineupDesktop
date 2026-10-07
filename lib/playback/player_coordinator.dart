@@ -79,6 +79,7 @@ class PlayerCoordinator extends ChangeNotifier {
   String? _error;
   bool _fullscreen = false;
   bool _cursorVisible = true;
+  bool _cursorIdle = false;
   bool _tuning = false;
   bool _canRetry = false;
   Duration? _sleepDuration;
@@ -271,6 +272,7 @@ class PlayerCoordinator extends ChangeNotifier {
 
   void _event(PlayerEvent event) {
     if (event.generation != _activeLoadGeneration) return;
+    final previousState = _status.state;
     _status = event.status.state == PlayerState.error
         ? PlayerStatus(
             state: PlayerState.error,
@@ -394,12 +396,16 @@ class PlayerCoordinator extends ChangeNotifier {
         case PlayerState.paused:
         case PlayerState.buffering:
         case PlayerState.seeking:
-          if (_overlay != PlayerOverlay.nowPlaying) {
+          if (event.status.state != previousState &&
+              _overlay != PlayerOverlay.nowPlaying) {
             _setOverlay(PlayerOverlay.osd);
           }
           break;
         case PlayerState.playing:
-          if (_overlay == PlayerOverlay.osd) _scheduleOverlayHide(_overlay);
+          if (previousState != PlayerState.playing &&
+              _overlay == PlayerOverlay.osd) {
+            _scheduleOverlayHide(_overlay);
+          }
           break;
         case PlayerState.ended:
         case PlayerState.stopped:
@@ -1386,11 +1392,13 @@ class PlayerCoordinator extends ChangeNotifier {
 
   void showCursor() {
     _cursorTimer?.cancel();
+    _cursorIdle = false;
     if (!_cursorVisible) {
       _cursorVisible = true;
       notifyListeners();
     }
     _cursorTimer = Timer(const Duration(seconds: 3), () {
+      _cursorIdle = true;
       if (_status.state == PlayerState.playing &&
           _overlay == PlayerOverlay.none) {
         _cursorVisible = false;
@@ -1403,8 +1411,8 @@ class PlayerCoordinator extends ChangeNotifier {
     showCursor();
     if (_overlay == PlayerOverlay.none) {
       showOsd();
-    } else if (_overlay == PlayerOverlay.osd &&
-        _status.state == PlayerState.playing) {
+    } else if (_overlay == PlayerOverlay.osd) {
+      _overlayFocusSuspended = false;
       _scheduleOverlayHide(PlayerOverlay.osd);
     }
   }
@@ -1435,6 +1443,9 @@ class PlayerCoordinator extends ChangeNotifier {
         if (_disposed || epoch != _overlayEpoch || _overlay != value) return;
         _overlayTimer = null;
         _presentOverlay(PlayerOverlay.none);
+        if (_status.state == PlayerState.playing && _cursorIdle) {
+          _cursorVisible = false;
+        }
         notifyListeners();
       },
     );
@@ -1581,6 +1592,7 @@ class PlayerCoordinator extends ChangeNotifier {
     _cursorTimer?.cancel();
     _cursorTimer = null;
     _cursorVisible = true;
+    _cursorIdle = false;
     _presentOverlay(PlayerOverlay.none);
     _miniGuideChannelId = null;
     _miniGuideWindowStart = null;

@@ -1666,6 +1666,448 @@ void main() {
     expect(coordinator.overlay, PlayerOverlay.none);
   });
 
+  testWidgets('steady playing events do not postpone the OSD timeout', (
+    tester,
+  ) async {
+    for (final timeout in [
+      const Duration(seconds: 4),
+      const Duration(seconds: 2),
+    ]) {
+      final lineup = _TestLineup();
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => _schedule(channel),
+      );
+      final player = _EventPlayer()
+        ..status = const PlayerStatus(
+          state: PlayerState.loading,
+          message: 'Loading',
+        );
+      final coordinator = PlayerCoordinator(
+        player: player,
+        lineup: lineup,
+        guide: guide,
+        overlayTimeout: timeout,
+      );
+
+      player.emitStatus(PlayerState.loading);
+      await tester.pump();
+      player.emitStatus(PlayerState.playing);
+      await tester.pump();
+      coordinator.showOsd();
+
+      final eventCount = timeout.inMilliseconds ~/ 250 - 1;
+      for (var index = 0; index < eventCount; index++) {
+        player.position = Duration(milliseconds: index * 250);
+        player.emitStatus(PlayerState.playing);
+        await tester.pump(const Duration(milliseconds: 250));
+      }
+      await tester.pump(const Duration(milliseconds: 249));
+      expect(coordinator.overlay, PlayerOverlay.osd);
+      await tester.pump(const Duration(milliseconds: 1));
+      expect(coordinator.overlay, PlayerOverlay.none);
+      coordinator.dispose();
+      await player.close();
+      guide.dispose();
+      lineup.dispose();
+    }
+  });
+
+  testWidgets('loading to playing arms the OSD hide timer', (tester) async {
+    final lineup = _TestLineup();
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    final player = _EventPlayer()
+      ..status = const PlayerStatus(
+        state: PlayerState.loading,
+        message: 'Loading',
+      );
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+      overlayTimeout: const Duration(seconds: 1),
+    );
+    addTearDown(player.close);
+    addTearDown(coordinator.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(lineup.dispose);
+
+    player.emitStatus(PlayerState.loading);
+    await tester.pump();
+    coordinator.showOsd();
+    player.position = const Duration(seconds: 1);
+    player.emitStatus(PlayerState.playing);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 999));
+    expect(coordinator.overlay, PlayerOverlay.osd);
+    await tester.pump(const Duration(milliseconds: 1));
+    expect(coordinator.overlay, PlayerOverlay.none);
+  });
+
+  testWidgets('playing, paused, and playing transitions re-arm the OSD timer', (
+    tester,
+  ) async {
+    final lineup = _TestLineup();
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    final player = _EventPlayer()
+      ..status = const PlayerStatus(
+        state: PlayerState.loading,
+        message: 'Loading',
+      );
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+      overlayTimeout: const Duration(seconds: 1),
+    );
+    addTearDown(player.close);
+    addTearDown(coordinator.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(lineup.dispose);
+
+    player.emitStatus(PlayerState.loading);
+    await tester.pump();
+    coordinator.showOsd();
+    player.position = const Duration(seconds: 1);
+    player.emitStatus(PlayerState.playing);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    player.position = const Duration(seconds: 2);
+    player.emitStatus(PlayerState.paused);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 800));
+    expect(coordinator.overlay, PlayerOverlay.osd);
+
+    player.position = const Duration(seconds: 3);
+    player.emitStatus(PlayerState.playing);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 999));
+    expect(coordinator.overlay, PlayerOverlay.osd);
+    await tester.pump(const Duration(milliseconds: 1));
+    expect(coordinator.overlay, PlayerOverlay.none);
+  });
+
+  testWidgets('repeated paused events do not postpone the OSD timeout', (
+    tester,
+  ) async {
+    final lineup = _TestLineup();
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    final player = _EventPlayer()
+      ..status = const PlayerStatus(
+        state: PlayerState.loading,
+        message: 'Loading',
+      );
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+      overlayTimeout: const Duration(seconds: 1),
+    );
+    addTearDown(player.close);
+    addTearDown(coordinator.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(lineup.dispose);
+
+    player.emitStatus(PlayerState.loading);
+    await tester.pump();
+    coordinator.showOsd();
+    player.position = const Duration(seconds: 1);
+    player.emitStatus(PlayerState.paused);
+    await tester.pump();
+    for (var index = 0; index < 4; index++) {
+      player.position = Duration(seconds: index + 2);
+      player.emitStatus(PlayerState.paused);
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(coordinator.overlay, PlayerOverlay.osd);
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(coordinator.overlay, PlayerOverlay.none);
+  });
+
+  testWidgets('repeated paused events do not replace persistent overlays', (
+    tester,
+  ) async {
+    final cases = <(PlayerOverlay, void Function(PlayerCoordinator))>[
+      (
+        PlayerOverlay.audioTracks,
+        (coordinator) {
+          coordinator.showTracks(PlayerTrackType.audio);
+        },
+      ),
+      (
+        PlayerOverlay.subtitleTracks,
+        (coordinator) {
+          coordinator.showTracks(PlayerTrackType.subtitle);
+        },
+      ),
+      (
+        PlayerOverlay.miniGuide,
+        (coordinator) {
+          coordinator.showMiniGuide();
+        },
+      ),
+      (
+        PlayerOverlay.sleepTimer,
+        (coordinator) {
+          coordinator.showSleepTimer();
+        },
+      ),
+      (
+        PlayerOverlay.channelNumber,
+        (coordinator) {
+          coordinator.appendChannelDigit('9');
+        },
+      ),
+    ];
+
+    for (final (expected, open) in cases) {
+      final lineup = _TestLineup();
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => _schedule(channel),
+      );
+      final player = _EventPlayer()
+        ..status = const PlayerStatus(
+          state: PlayerState.loading,
+          message: 'Loading',
+        )
+        ..tracks = const [
+          PlayerTrack(id: 1, type: PlayerTrackType.audio, selected: true),
+        ];
+      final coordinator = PlayerCoordinator(
+        player: player,
+        lineup: lineup,
+        guide: guide,
+        overlayTimeout: const Duration(seconds: 1),
+      );
+
+      player.emitStatus(PlayerState.loading);
+      await tester.pump();
+      player.position = const Duration(seconds: 1);
+      player.emitStatus(PlayerState.paused);
+      await tester.pump();
+      open(coordinator);
+      expect(coordinator.overlay, expected);
+
+      player.position = const Duration(seconds: 2);
+      player.emitStatus(PlayerState.paused);
+      await tester.pump();
+      expect(coordinator.overlay, expected);
+
+      coordinator.dispose();
+      await player.close();
+      guide.dispose();
+      lineup.dispose();
+    }
+  });
+
+  testWidgets(
+    'pointer activity re-arms the OSD while playing during repeated events',
+    (tester) async {
+      final lineup = _TestLineup();
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => _schedule(channel),
+      );
+      final player = _EventPlayer()
+        ..status = const PlayerStatus(
+          state: PlayerState.loading,
+          message: 'Loading',
+        );
+      final coordinator = PlayerCoordinator(
+        player: player,
+        lineup: lineup,
+        guide: guide,
+        overlayTimeout: const Duration(seconds: 1),
+      );
+      addTearDown(player.close);
+      addTearDown(coordinator.dispose);
+      addTearDown(guide.dispose);
+      addTearDown(lineup.dispose);
+
+      player.emitStatus(PlayerState.loading);
+      await tester.pump();
+      coordinator.showOsd();
+      player.position = const Duration(seconds: 1);
+      player.emitStatus(PlayerState.playing);
+      await tester.pump();
+      for (var index = 0; index < 3; index++) {
+        player.position = Duration(seconds: index + 2);
+        player.emitStatus(PlayerState.playing);
+        await tester.pump(const Duration(milliseconds: 250));
+        if (index == 1) coordinator.handlePointerActivity();
+      }
+      await tester.pump(const Duration(milliseconds: 749));
+      expect(coordinator.overlay, PlayerOverlay.osd);
+      await tester.pump(const Duration(milliseconds: 1));
+      expect(coordinator.overlay, PlayerOverlay.none);
+      coordinator.dispose();
+    },
+  );
+
+  testWidgets(
+    'pointer activity re-arms the OSD while paused during repeated events',
+    (tester) async {
+      final lineup = _TestLineup();
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => _schedule(channel),
+      );
+      final player = _EventPlayer()
+        ..status = const PlayerStatus(
+          state: PlayerState.loading,
+          message: 'Loading',
+        );
+      final coordinator = PlayerCoordinator(
+        player: player,
+        lineup: lineup,
+        guide: guide,
+        overlayTimeout: const Duration(seconds: 1),
+      );
+      addTearDown(player.close);
+      addTearDown(coordinator.dispose);
+      addTearDown(guide.dispose);
+      addTearDown(lineup.dispose);
+
+      player.emitStatus(PlayerState.loading);
+      await tester.pump();
+      coordinator.showOsd();
+      player.position = const Duration(seconds: 1);
+      player.emitStatus(PlayerState.paused);
+      await tester.pump();
+      for (var index = 0; index < 3; index++) {
+        player.position = Duration(seconds: index + 2);
+        player.emitStatus(PlayerState.paused);
+        await tester.pump(const Duration(milliseconds: 250));
+        if (index == 1) coordinator.handlePointerActivity();
+      }
+      await tester.pump(const Duration(milliseconds: 749));
+      expect(coordinator.overlay, PlayerOverlay.osd);
+      await tester.pump(const Duration(milliseconds: 1));
+      expect(coordinator.overlay, PlayerOverlay.none);
+      coordinator.dispose();
+    },
+  );
+
+  testWidgets('pointer activity ends OSD focus suspension', (tester) async {
+    final lineup = _TestLineup();
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    final player = _EventPlayer()
+      ..status = const PlayerStatus(
+        state: PlayerState.loading,
+        message: 'Loading',
+      );
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+      overlayTimeout: const Duration(seconds: 1),
+    );
+    addTearDown(player.close);
+    addTearDown(coordinator.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(lineup.dispose);
+
+    player.emitStatus(PlayerState.loading);
+    await tester.pump();
+    coordinator.showOsd();
+    player.position = const Duration(seconds: 1);
+    player.emitStatus(PlayerState.paused);
+    await tester.pump();
+    final generation = coordinator.overlayPresentationGeneration;
+    coordinator.overlayFocusChanged(PlayerOverlay.osd, generation, true);
+    coordinator.handlePointerActivity();
+    await tester.pump(const Duration(seconds: 3, milliseconds: 1));
+    expect(coordinator.overlay, PlayerOverlay.none);
+  });
+
+  testWidgets('cursor hides with the OSD after three seconds of idle playing', (
+    tester,
+  ) async {
+    final lineup = _TestLineup();
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    final player = _EventPlayer()
+      ..status = const PlayerStatus(
+        state: PlayerState.loading,
+        message: 'Loading',
+      );
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(player.close);
+    addTearDown(coordinator.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(lineup.dispose);
+
+    player.emitStatus(PlayerState.loading);
+    await tester.pump();
+    player.position = const Duration(seconds: 1);
+    player.emitStatus(PlayerState.playing);
+    await tester.pump();
+    coordinator.handlePointerActivity();
+    await tester.pump(const Duration(seconds: 3, milliseconds: 999));
+    expect(coordinator.overlay, PlayerOverlay.osd);
+    expect(coordinator.cursorVisible, isTrue);
+    await tester.pump(const Duration(milliseconds: 1));
+    expect(coordinator.overlay, PlayerOverlay.none);
+    expect(coordinator.cursorVisible, isFalse);
+
+    coordinator.handlePointerActivity();
+    expect(coordinator.cursorVisible, isTrue);
+    coordinator.dispose();
+  });
+
+  testWidgets('cursor stays visible while paused', (tester) async {
+    final lineup = _TestLineup();
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    final player = _EventPlayer()
+      ..status = const PlayerStatus(
+        state: PlayerState.loading,
+        message: 'Loading',
+      );
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(player.close);
+    addTearDown(coordinator.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(lineup.dispose);
+
+    player.emitStatus(PlayerState.loading);
+    await tester.pump();
+    player.position = const Duration(seconds: 1);
+    player.emitStatus(PlayerState.paused);
+    await tester.pump();
+    coordinator.handlePointerActivity();
+    await tester.pump(const Duration(seconds: 4));
+    expect(coordinator.overlay, PlayerOverlay.none);
+    expect(coordinator.cursorVisible, isTrue);
+  });
+
   testWidgets('OSD focus suspends timeout while Mini Guide never times out', (
     tester,
   ) async {
