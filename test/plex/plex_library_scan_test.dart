@@ -511,6 +511,7 @@ void main() {
   });
 
   test('scan annotates movie/show/season/episode membership, drops tags, and inherits show genres', () async {
+    final phases = <PlexLibraryScanPhase>[];
     final progress = <PlexLibraryPageProgress>[];
     final client = _client((request) async {
       if (request.url.path.contains('/collections/')) {
@@ -575,7 +576,9 @@ void main() {
       PlexLibraryType.show,
       isCurrent: () => true,
       onProgress: progress.add,
+      onPhase: phases.add,
     );
+    expect(phases, PlexLibraryScanPhase.values);
     expect(scanned.items.map((i) => i.collections).toList(), [
       ['Shared'],
       ['Shared'],

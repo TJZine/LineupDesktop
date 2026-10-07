@@ -283,3 +283,6 @@ class PlexException implements Exception {
   @override
   String toString() => message;
 }
+
+/// Item paging is followed by collection membership and (for TV) show genres.
+enum PlexLibraryScanPhase { items, collections, showGenres }

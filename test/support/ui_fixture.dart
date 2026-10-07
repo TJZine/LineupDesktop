@@ -74,6 +74,7 @@ class _FixturePlex extends PlexClient {
     PlexLibraryType libraryType, {
     required bool Function() isCurrent,
     required void Function(PlexLibraryPageProgress progress) onProgress,
+    void Function(PlexLibraryScanPhase phase)? onPhase,
     Future<void>? cancelled,
   }) async => const PlexLibraryScan(items: []);
 }

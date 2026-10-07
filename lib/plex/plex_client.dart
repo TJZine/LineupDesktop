@@ -510,9 +510,11 @@ class PlexClient {
     PlexLibraryType libraryType, {
     required bool Function() isCurrent,
     required void Function(PlexLibraryPageProgress progress) onProgress,
+    void Function(PlexLibraryScanPhase phase)? onPhase,
     Future<void>? cancelled,
   }) async {
     final phase = Stopwatch()..start();
+    onPhase?.call(PlexLibraryScanPhase.items);
     final items = await libraryItems(
       server,
       token,
@@ -524,6 +526,8 @@ class PlexClient {
     );
     final itemsElapsed = phase.elapsed;
     phase.reset();
+    if (!isCurrent()) throw _scanCancelledException;
+    onPhase?.call(PlexLibraryScanPhase.collections);
     final collections = await libraryCollectionMembership(
       server,
       token,
@@ -533,6 +537,10 @@ class PlexClient {
     );
     final collectionsElapsed = phase.elapsed;
     phase.reset();
+    if (!isCurrent()) throw _scanCancelledException;
+    if (libraryType == PlexLibraryType.show) {
+      onPhase?.call(PlexLibraryScanPhase.showGenres);
+    }
     final showGenres = libraryType == PlexLibraryType.show
         ? await libraryShowGenres(
             server,
