@@ -744,16 +744,27 @@ void main() {
     },
   );
 
+  test('content sources reject missing and unknown persisted values', () {
+    for (final invalid in [
+      {'type': 'playlist'},
+      {'type': 'future'},
+    ]) {
+      expect(() => ContentSource.fromJson(invalid), throwsFormatException);
+    }
+  });
+
   test('channel items reject mistyped persisted values', () {
-    expect(
-      () => ChannelItem.fromJson({
-        'id': 'item',
-        'title': 'Item',
-        'durationMs': 60000,
+    const canonical = {'id': 'item', 'title': 'Item', 'durationMs': 60000};
+    for (final invalid in [
+      {...canonical, 'durationMs': 60000.5},
+      {...canonical, 'summary': null},
+      {
+        ...canonical,
         'genres': ['Drama', 7],
-      }),
-      throwsFormatException,
-    );
+      },
+    ]) {
+      expect(() => ChannelItem.fromJson(invalid), throwsFormatException);
+    }
   });
 
   test('channels round-trip and reject unknown fields and enum values', () {
@@ -770,14 +781,15 @@ void main() {
     );
     expect(Channel.fromJson(channel.toJson()).toJson(), channel.toJson());
 
-    expect(
-      () => Channel.fromJson({...channel.toJson(), 'future': true}),
-      throwsFormatException,
-    );
-    expect(
-      () => Channel.fromJson({...channel.toJson(), 'playbackMode': 'future'}),
-      throwsFormatException,
-    );
+    final canonical = channel.toJson();
+    for (final invalid in [
+      {...canonical}..remove('anchor'),
+      {...canonical, 'future': true},
+      {...canonical, 'playbackMode': 'future'},
+      {...canonical, 'blockSize': null},
+    ]) {
+      expect(() => Channel.fromJson(invalid), throwsFormatException);
+    }
   });
 
   test('non-block channels normalize specials in persistence and identity', () {

@@ -647,14 +647,33 @@ void main() {
   });
 
   test(
-    'wrong-typed persisted structure is refused and a null profile loads',
+    'rejects malformed persisted state structure but allows null profile',
     () {
-      expect(
-        () => PersistedState.fromJson(
-          _canonicalJson()..['selectedServerByProfile'] = {'profile': 1},
-        ),
-        throwsFormatException,
-      );
+      final invalidStates = <String, Map<String, Object?>>{
+        'missing profile': _canonicalJson()..remove('profileId'),
+        'mistyped profile': _canonicalJson()..['profileId'] = 7,
+        'unknown field': _canonicalJson()..['legacy'] = true,
+        'null settings': _canonicalJson()..['settings'] = null,
+        'wrong selected server shape': _canonicalJson()
+          ..['selectedServerByProfile'] = {'profile': 1},
+        'mixed library IDs': _canonicalJson()
+          ..['selectedLibraryIdsByProfileServer'] = {
+            'profile': {
+              'server': ['library', 2],
+            },
+          },
+        'wrong channel list shape': _canonicalJson()
+          ..['channelsByProfileServer'] = {
+            'profile': {'server': <String, Object?>{}},
+          },
+      };
+      for (final invalid in invalidStates.entries) {
+        expect(
+          () => PersistedState.fromJson(invalid.value),
+          throwsFormatException,
+          reason: invalid.key,
+        );
+      }
       expect(
         PersistedState.fromJson(_canonicalJson()..['profileId'] = null)
             .profileId,
@@ -666,6 +685,40 @@ void main() {
   for (final corruptState in <String, String>{
     'malformed JSON': '{broken',
     'schema-invalid JSON': '{"selectedServerByProfile":[]}',
+    'invalid settings JSON': _encodedState(
+      _canonicalJson()
+        ..['settings'] = {
+          ...const LineupSettings().toJson(),
+          'theme': 'future-theme',
+        },
+    ),
+    'null manual items JSON': _encodedState(
+      _canonicalJson()
+        ..['channelsByProfileServer'] = {
+          'profile': {
+            'server': [
+              _channelJson()..['source'] = {'type': 'manual', 'items': null},
+            ],
+          },
+        },
+    ),
+    'null mixed source items JSON': _encodedState(
+      _canonicalJson()
+        ..['channelsByProfileServer'] = {
+          'profile': {
+            'server': [
+              _channelJson()
+                ..['source'] = {
+                  'type': 'mixed',
+                  'interleave': false,
+                  'sources': [
+                    {'type': 'manual', 'items': null},
+                  ],
+                },
+            ],
+          },
+        },
+    ),
     'legacy artwork JSON': _encodedState(
       _canonicalJson()
         ..['channelsByProfileServer'] = {
@@ -691,7 +744,8 @@ void main() {
       );
       addTearDown(() => directory.delete(recursive: true));
       final stateFile = File('${directory.path}/state.json');
-      await stateFile.writeAsString(corruptState.value);
+      final originalBytes = utf8.encode(corruptState.value);
+      await stateFile.writeAsBytes(originalBytes);
       final store = FileAppStore(
         directory,
         clock: () => DateTime.utc(2026, 8, 23),
@@ -705,8 +759,8 @@ void main() {
       expect(await stateFile.exists(), isFalse);
       final quarantine = (await _quarantineContainers(directory)).single;
       expect(
-        await File('${quarantine.path}/state.json').readAsString(),
-        corruptState.value,
+        await File('${quarantine.path}/state.json').readAsBytes(),
+        originalBytes,
       );
 
       final restart = await store.load();
@@ -789,7 +843,9 @@ void main() {
       'lineup-store-test',
     );
     addTearDown(() => directory.delete(recursive: true));
-    final stateFile = File('${directory.path}/state.json');
+    final stateFile = File(
+      '${directory.path}${Platform.pathSeparator}state.json',
+    );
     await stateFile.writeAsString('{broken');
     final instant = DateTime.utc(2026, 8, 23);
     final existing = Directory(

@@ -1463,7 +1463,9 @@ void main() {
       'lineup-bootstrap-test',
     );
     addTearDown(() => directory.deleteSync(recursive: true));
-    final stateFile = File('${directory.path}/state.json');
+    final stateFile = File(
+      '${directory.path}${Platform.pathSeparator}state.json',
+    );
     stateFile.writeAsStringSync('{broken');
     final instant = DateTime.utc(2026, 8, 23);
     final quarantine = Directory(

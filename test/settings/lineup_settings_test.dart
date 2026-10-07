@@ -129,11 +129,17 @@ void main() {
     );
   });
 
-  test('rejects unsupported option, enum, and Boolean values', () {
+  test('rejects malformed canonical and retired values', () {
     final canonical = const LineupSettings().toJson();
     for (final invalid in [
+      {...canonical}..remove('theme'),
+      {...canonical, 'future': true},
+      {...canonical, 'guideHours': 2.0},
       {...canonical, 'guideHours': 5},
       {...canonical, 'theme': 'future-theme'},
+      {...canonical, 'guideLayoutMode': 'future-layout'},
+      {...canonical, 'pastMinutes': 45},
+      {...canonical, 'libraryTabsEnabled': 'false'},
       {...canonical, 'reduceMotion': 1},
     ]) {
       expect(() => LineupSettings.fromJson(invalid), throwsFormatException);
