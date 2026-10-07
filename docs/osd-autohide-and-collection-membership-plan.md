@@ -496,19 +496,44 @@ with no single paired run adding more than twice that allowance. Measure launch
 and setup separately; a pass on one path does not establish the other. These are
 acceptance thresholds, not runtime timeouts or permission to omit membership.
 
+**Measurement instrument (added October 7, 2026, after implementation).** With
+Diagnostics recording enabled, every successful library scan records one
+`plex-library: Library scan timing` event. It holds:
+
+- `scanPath`: `launch` (selected-server restoration) or `setup` (Channel Setup
+  scan);
+- `libraryType`;
+- monotonic phase durations: `itemsMs`, `collectionsMs`, and `showGenresMs`;
+- redacted counts: `items`, `collections` (distinct titles with members),
+  `members`, and `shows`.
+
+The event never includes titles, keys, or URLs. It appears in the Diagnostics
+view and in the copied support report.
+
+`PlexClient.scanLibrary` runs its phases sequentially, so `itemsMs` is the
+item-only baseline. `collectionsMs + showGenresMs` is the added time for the
+same scan. Each successful scan is therefore one self-contained pair, and no
+second build is needed.
+
 Use the same host, Plex profile/server, route, library selection, and unchanged
-contents. Measure the largest library's item-only baseline and enriched candidate
-on each actual path: selected-server restoration at launch, and foreground setup
-scan/commit. Use monotonic timing around the equivalent operation boundaries;
-include collection and TV show-genre work. Discard a warm-up pair, then run five
-sequential pairs per path, alternating order, without overlapping scans. Count
-only fully successful scans with the same item set. For each path separately,
-record every item-only and enriched duration and their difference, the item-only
-median, added-time median and maximum, candidate/runtime identities, route class,
-library type, and redacted item/show/collection/membership/page counts. Keep
-credentials in secure local state and log no URLs, titles, or media identifiers.
-Repeat with the normal selected-library set to expose shared-cap contention and
-report it separately.
+contents.
+
+- **Launch:** relaunch the app; each relaunch with saved channels is one launch
+  sample.
+- **Setup:** run Channel Setup's scan; each run is one setup sample.
+
+Discard the first sample on each path as a warm-up. Then record five sequential
+samples per path for the largest library, without overlapping scans. Count only
+fully successful scans with the same `items` count. For each path, record:
+
+- every `itemsMs` and added duration;
+- the item-only median;
+- the added-time median and maximum;
+- the commit and route class (local or remote);
+- `libraryType` and the redacted counts.
+
+Repeat with the normal selected-library set, where libraries scan concurrently
+and share the collection request cap, and report that separately.
 
 If live measurement exceeds the budget, report the measured path and results
 back to the user. The fallback to propose is to load collection membership on
