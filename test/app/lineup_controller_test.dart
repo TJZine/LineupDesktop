@@ -5017,6 +5017,182 @@ void main() {
     expect(store.state.settings.nowWatchingBanner, isFalse);
   });
 
+  for (final scenario in [
+    (kind: 'profile', saveFails: false, targetDiscovered: true),
+    (kind: 'profile', saveFails: true, targetDiscovered: true),
+    (kind: 'server', saveFails: false, targetDiscovered: true),
+    (kind: 'server', saveFails: true, targetDiscovered: true),
+    (kind: 'server', saveFails: false, targetDiscovered: false),
+  ]) {
+    final selectionKind = scenario.kind;
+    final saveFails = scenario.saveFails;
+    test(
+      '$selectionKind own selection save preserves old lifetime until ${saveFails ? 'failure' : 'commit'}${scenario.targetDiscovered ? '' : ' with target absent from refresh'}',
+      () async {
+        const owner = PlexHomeUser(
+          id: 'owner',
+          name: 'Owner',
+          protected: false,
+        );
+        const child = PlexHomeUser(
+          id: 'child',
+          name: 'Child',
+          protected: false,
+        );
+        final selected = _server('server');
+        final target = _server('target');
+        final existing = _channel('existing');
+        final targetChannel = _channel('target-channel');
+        final store = _ControlledSaveStore(
+          PersistedState(
+            profileId: owner.id,
+            selectedServerByProfile: {'owner': selected.id},
+            selectedLibraryIdsByProfileServer: {
+              'owner': {
+                target.id: ['movies'],
+              },
+            },
+            channelsByProfileServer: {
+              'owner': {
+                selected.id: [existing],
+                target.id: [targetChannel],
+              },
+            },
+            currentChannelByProfileServer: {
+              'owner': {selected.id: existing.id},
+            },
+          ),
+        );
+        final plex = _FakePlex()
+          ..homeUsersResult = const [owner]
+          ..serversResult = [selected, target]
+          ..librariesResult = const [
+            PlexLibrary(
+              id: 'movies',
+              title: 'Movies',
+              type: PlexLibraryType.movie,
+            ),
+          ]
+          ..libraryItemsHandler = (_, _, _, _) async => [_playableMovie];
+        final originalToken = plex.resourceToken;
+        final controller = LineupController(
+          store: store,
+          credentials: _MemoryCredentials(accountToken: 'account-token'),
+          plex: plex,
+        );
+        addTearDown(controller.dispose);
+        await controller.initialize();
+        controller
+          ..profiles = const [owner, child]
+          ..availableMedia = [_playableMovie]
+          ..stage = SetupStage.ready;
+        final playback = controller.playbackFor('movie');
+        final oldConnection = controller.connection;
+        if (selectionKind == 'profile') {
+          controller.showProfiles();
+        } else {
+          controller.showServers();
+        }
+        store.blockNext(fail: saveFails);
+        final selecting = selectionKind == 'profile'
+            ? controller.selectProfile(child).then<void>((_) {})
+            : controller.selectServer(target);
+        await store.blockedSaveStarted.future;
+
+        expect(controller.profile, owner);
+        expect(controller.server, selected);
+        expect(controller.connection, oldConnection);
+        expect(controller.channels.map((channel) => channel.toJson()), [
+          existing.toJson(),
+        ]);
+        expect(controller.currentChannelId, existing.id);
+        expect(store.state.profileId, owner.id);
+        expect(store.state.selectedServerByProfile[owner.id], selected.id);
+        expect(
+          selectionKind == 'profile'
+              ? controller.profileSelectionCanCancel
+              : controller.serverSelectionCanCancel,
+          isFalse,
+        );
+        plex.resourceToken = 'refreshed-pms-token';
+        if (!scenario.targetDiscovered) plex.serversResult = [selected];
+        expect(
+          (await playback.authorizationRecovery!()).plexToken,
+          plex.resourceToken,
+        );
+        final queuedMutation = controller.reorderChannels(
+          expectedLineup: [existing],
+          orderedChannelIds: [existing.id],
+        );
+        final mutationResult = saveFails
+            ? queuedMutation
+            : expectLater(queuedMutation, throwsStateError);
+        final savesBeforeRelease = store.saveCalls;
+        store.releaseBlockedSave();
+        await selecting;
+        await mutationResult;
+
+        if (saveFails) {
+          expect(controller.profile, owner);
+          expect(controller.server, selected);
+          expect(controller.channels.map((channel) => channel.toJson()), [
+            existing.toJson(),
+          ]);
+          expect(store.saveCalls, savesBeforeRelease + 1);
+          expect(
+            selectionKind == 'profile'
+                ? controller.profileSelectionCanCancel
+                : controller.serverSelectionCanCancel,
+            isTrue,
+          );
+          expect(
+            (await playback.authorizationRecovery!()).plexToken,
+            plex.resourceToken,
+          );
+        } else {
+          expect(store.saveCalls, savesBeforeRelease);
+          expect(
+            controller.profile,
+            selectionKind == 'profile' ? child : owner,
+          );
+          expect(
+            controller.server,
+            selectionKind == 'profile' ? isNull : target,
+          );
+          if (selectionKind == 'server') {
+            final expectedToken = scenario.targetDiscovered
+                ? plex.resourceToken
+                : originalToken;
+            expect(controller.connection, target.connections.single);
+            expect(controller.channels.single.id, targetChannel.id);
+            expect(controller.playbackFor('movie').plexToken, expectedToken);
+            expect(plex.itemTokens.last, expectedToken);
+            await controller.artworkForPath(Uri.parse('/selected-target-art'));
+            expect(plex.artworkToken, expectedToken);
+            expect(plex.artworkServer, target.connections.single.uri);
+          }
+          await expectLater(
+            playback.authorizationRecovery!(),
+            throwsA(isA<PlexException>()),
+          );
+          if (selectionKind == 'profile') {
+            await controller.selectProfile(owner);
+          } else {
+            await controller.selectServer(selected);
+          }
+          expect(controller.profile, owner);
+          expect(controller.server, selected);
+          final discoveries = plex.discoveredTokens.length;
+          await expectLater(
+            playback.authorizationRecovery!(),
+            throwsA(isA<PlexException>()),
+          );
+          expect(plex.discoveredTokens.length, discoveries);
+        }
+      },
+    );
+  }
+
   test('captured playback recovery survives discovery but rejects leave and return', () async {
     final selected = _server('server');
     final other = _server('other');

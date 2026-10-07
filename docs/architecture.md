@@ -281,6 +281,18 @@ have their own ordered queue. Preserve these responsibilities when adding a
 mutation; see the delayed/failing state and credential tests in
 [lineup_controller_test.dart](../test/app/lineup_controller_test.dart).
 
+Profile and server selections stage their candidate from the latest committed
+state inside that queue, then persist it before publishing identity, credentials,
+connection, inventory, or lineup. The old runtime and its captured authorization
+and queued mutations remain valid while the selection's own save is pending and
+after a failed save. A successful save publishes synchronously and retires the old
+lifetime; returning to the same profile/server cannot revive captured work.
+Server publication uses any same-profile authorization refreshed during the save,
+retaining the chosen connection and validated access if discovery omits the target.
+Selection cancellation is hidden during the save and restored on failure. Once a
+save has started, a changed request epoch does not suppress its successful commit;
+logout still retires authorization immediately and clears runtime after its barrier.
+
 Settings transformations derive from committed settings inside the controller's
 queue. The controller persists the proposal before publishing it; a view may
 display a pending choice but does not own save ordering or settings merge policy.

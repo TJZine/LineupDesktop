@@ -519,21 +519,18 @@ class LineupController extends ChangeNotifier {
           return;
         }
         await _queueStateOperation(operation, () async {
-          final oldProfile = profile;
-          final oldProfileToken = _profileToken;
-          final oldServerAccess = _serverAccess;
-          final oldPmsToken = _pmsToken;
-          final oldServer = server;
-          final oldConnection = connection;
-          final oldLibraries = libraries;
-          final oldSelectedLibraries = selectedLibraryIds;
-          final oldMedia = availableMedia;
-          final oldPlaylists = availablePlaylists;
-          final oldChannels = channels;
-          final oldCurrent = currentChannelId;
           final oldCanCancel = profileSelectionCanCancel;
           profileSelectionCanCancel = false;
           notifyListeners();
+          final next = _stateSnapshot(profileId: selected.id, serverId: null);
+          try {
+            await _persistState(next);
+          } catch (_) {
+            profileSelectionCanCancel = oldCanCancel;
+            rethrow;
+          }
+          if (_disposed) return;
+          _persisted = next;
           _retireScope();
           profile = selected;
           _profileToken = token;
@@ -548,25 +545,6 @@ class LineupController extends ChangeNotifier {
           availablePlaylists = const [];
           channels = const [];
           currentChannelId = null;
-          try {
-            await _save();
-          } catch (_) {
-            profile = oldProfile;
-            _profileToken = oldProfileToken;
-            _serverAccess = oldServerAccess;
-            _pmsToken = oldPmsToken;
-            server = oldServer;
-            connection = oldConnection;
-            libraries = oldLibraries;
-            selectedLibraryIds = oldSelectedLibraries;
-            availableMedia = oldMedia;
-            availablePlaylists = oldPlaylists;
-            channels = oldChannels;
-            currentChannelId = oldCurrent;
-            profileSelectionCanCancel = oldCanCancel;
-            rethrow;
-          }
-          if (_disposed) return;
           _resetLibraryScan();
           _contentGeneration++;
           notifyListeners();
@@ -651,23 +629,7 @@ class LineupController extends ChangeNotifier {
         );
         if (!_isCurrent(operation)) return;
         await _queueStateOperation(operation, () async {
-          final oldServer = server;
-          final oldConnection = connection;
-          final oldPmsToken = _pmsToken;
-          final oldLibraries = libraries;
-          final oldSelectedLibraries = selectedLibraryIds;
-          final oldMedia = availableMedia;
-          final oldPlaylists = availablePlaylists;
-          final oldChannels = channels;
-          final oldCurrent = currentChannelId;
-          final oldCanCancel = serverSelectionCanCancel;
-          serverSelectionCanCancel = false;
-          notifyListeners();
-          _retireScope();
-          server = _serverAccess[selected.id]!.server;
-          connection = workingConnection;
-          _pmsToken = _serverAccess[selected.id]!.token;
-          libraries = loadedLibraries;
+          final access = _serverAccess[selected.id]!;
           final profileId = profile?.id ?? account?.id;
           final savedLibraries = profileId == null
               ? const <String>[]
@@ -678,39 +640,53 @@ class LineupController extends ChangeNotifier {
           final availableIds = loadedLibraries
               .map((library) => library.id)
               .toSet();
-          selectedLibraryIds = Set.unmodifiable(
+          final nextLibraryIds = Set<String>.unmodifiable(
             savedLibraries.where(availableIds.contains),
           );
-          availableMedia = const [];
-          availablePlaylists = const [];
-          channels = List.unmodifiable(
+          final nextChannels = List<Channel>.unmodifiable(
             profileId == null
                 ? const <Channel>[]
                 : _persisted.channelsByProfileServer[profileId]?[selected.id] ??
                       const <Channel>[],
           );
-          currentChannelId = profileId == null
+          final nextCurrent = profileId == null
               ? null
               : _persisted.currentChannelByProfileServer[profileId]?[selected
                     .id];
-          stage = SetupStage.channelSetup;
-          channelSetupCanCancel = false;
+          final next = _stateSnapshot(
+            profileId: profile?.id,
+            serverId: selected.id,
+            selectedLibraryIdsOverride: nextLibraryIds,
+            channelsOverride: nextChannels,
+            currentChannelOverride: (id: nextCurrent),
+          );
+          final oldCanCancel = serverSelectionCanCancel;
+          serverSelectionCanCancel = false;
+          notifyListeners();
           try {
-            await _save();
+            await _persistState(next);
           } catch (_) {
-            server = oldServer;
-            connection = oldConnection;
-            _pmsToken = oldPmsToken;
-            libraries = oldLibraries;
-            selectedLibraryIds = oldSelectedLibraries;
-            availableMedia = oldMedia;
-            availablePlaylists = oldPlaylists;
-            channels = oldChannels;
-            currentChannelId = oldCurrent;
             serverSelectionCanCancel = oldCanCancel;
             rethrow;
           }
           if (_disposed) return;
+          // Active playback may refresh this profile's access while saving.
+          // Discovery omission alone does not revoke the chosen working access.
+          final committedAccess = _serverAccess[selected.id] ?? access;
+          _serverAccess = {..._serverAccess, selected.id: committedAccess};
+          _persisted = next;
+          _retireScope();
+          server = access.server;
+          connection = workingConnection;
+          _pmsToken = committedAccess.token;
+          libraries = loadedLibraries;
+          selectedLibraryIds = nextLibraryIds;
+          availableMedia = const [];
+          availablePlaylists = const [];
+          channels = nextChannels;
+          currentChannelId = nextCurrent;
+          stage = SetupStage.channelSetup;
+          channelSetupCanCancel = false;
           _resetLibraryScan();
           _contentGeneration++;
           notifyListeners();
@@ -1870,7 +1846,27 @@ class LineupController extends ChangeNotifier {
     Set<String>? selectedLibraryIdsOverride,
     ({String? id})? currentChannelOverride,
   }) async {
-    final profileId = profile?.id ?? account?.id;
+    final next = _stateSnapshot(
+      profileId: profile?.id,
+      serverId: server?.id,
+      settingsOverride: settingsOverride,
+      channelsOverride: channelsOverride,
+      selectedLibraryIdsOverride: selectedLibraryIdsOverride,
+      currentChannelOverride: currentChannelOverride,
+    );
+    await _persistState(next);
+    if (!_disposed) _persisted = next;
+  }
+
+  PersistedState _stateSnapshot({
+    required String? profileId,
+    required String? serverId,
+    LineupSettings? settingsOverride,
+    List<Channel>? channelsOverride,
+    Set<String>? selectedLibraryIdsOverride,
+    ({String? id})? currentChannelOverride,
+  }) {
+    final scopeProfileId = profileId ?? account?.id;
     final selectedServers = Map<String, String>.of(
       _persisted.selectedServerByProfile,
     );
@@ -1892,32 +1888,30 @@ class LineupController extends ChangeNotifier {
       for (final entry in _persisted.currentChannelByProfileServer.entries)
         entry.key: Map<String, String>.of(entry.value),
     };
-    if (profileId != null && server != null) {
-      selectedServers[profileId] = server!.id;
-      librarySelections.putIfAbsent(profileId, () => {})[server!.id] =
+    if (scopeProfileId != null && serverId != null) {
+      selectedServers[scopeProfileId] = serverId;
+      librarySelections.putIfAbsent(scopeProfileId, () => {})[serverId] =
           (selectedLibraryIdsOverride ?? selectedLibraryIds).toList();
-      channelSelections.putIfAbsent(profileId, () => {})[server!.id] =
+      channelSelections.putIfAbsent(scopeProfileId, () => {})[serverId] =
           (channelsOverride ?? channels).toList();
       final current = currentChannelOverride == null
           ? currentChannelId
           : currentChannelOverride.id;
       if (current == null) {
-        currentSelections[profileId]?.remove(server!.id);
+        currentSelections[scopeProfileId]?.remove(serverId);
       } else {
-        currentSelections.putIfAbsent(profileId, () => {})[server!.id] =
+        currentSelections.putIfAbsent(scopeProfileId, () => {})[serverId] =
             current;
       }
     }
-    final next = PersistedState(
+    return PersistedState(
       settings: settingsOverride ?? settings,
-      profileId: profile?.id,
+      profileId: profileId,
       selectedServerByProfile: selectedServers,
       selectedLibraryIdsByProfileServer: librarySelections,
       channelsByProfileServer: channelSelections,
       currentChannelByProfileServer: currentSelections,
     );
-    await _persistState(next);
-    if (!_disposed) _persisted = next;
   }
 
   Future<void> _persistState(PersistedState state) async {
