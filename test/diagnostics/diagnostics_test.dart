@@ -184,6 +184,68 @@ void main() {
     );
   });
 
+  test('library scan timing keeps only bounded redacted scan facts', () {
+    final diagnostics = Diagnostics()..enabled = true;
+    diagnostics.add('plex-library', 'Library scan timing', {
+      'scanPath': 'launch',
+      'libraryType': 'show',
+      'itemsMs': 1200,
+      'collectionsMs': 3400,
+      'showGenresMs': 560,
+      'items': 5000,
+      'collections': 300,
+      'members': 4200,
+      'shows': 80,
+      'title': 'Private Collection',
+    });
+    diagnostics.add('plex-library', 'Library scan timing', {
+      'scanPath': 'Private Path',
+      'itemsMs': -1,
+      'collectionsMs': 86400001,
+      'members': 1000001,
+    });
+
+    expect(diagnostics.entries.first.context, {
+      'scanPath': 'launch',
+      'libraryType': 'show',
+      'itemsMs': 1200,
+      'collectionsMs': 3400,
+      'showGenresMs': 560,
+      'items': 5000,
+      'collections': 300,
+      'members': 4200,
+      'shows': 80,
+    });
+    expect(diagnostics.entries.last.context, {'scanPath': 'unexpected'});
+
+    final report = diagnostics.buildSupportReport(
+      diagnostics.snapshot(
+        reportTime: DateTime.utc(2026, 10, 7),
+        timeZone: 'UTC',
+        appVersion: '1.0.0',
+        appBuild: '1',
+        platform: 'windows',
+        plexServerSelected: true,
+        plexConnectionVerified: true,
+        playback: const PlaybackDiagnosticSnapshot(
+          state: PlayerState.idle,
+          receivedTelemetry: PlayerTelemetry(),
+        ),
+      ),
+    );
+    expect(
+      report,
+      contains(
+        'plex-library: Library scan timing (scanPath=launch, '
+        'libraryType=show, itemsMs=1200, collectionsMs=3400, '
+        'showGenresMs=560, items=5000, collections=300, members=4200, '
+        'shows=80)',
+      ),
+    );
+    expect(report, isNot(contains('Private')));
+    expect(report, isNot(contains('scanPath=unexpected')));
+  });
+
   test('support report rejects unsafe metadata independently', () {
     final diagnostics = Diagnostics();
     final snapshot = diagnostics.snapshot(

@@ -127,6 +127,82 @@ void main() {
     });
   }
 
+  test('library scans record launch and setup timing separately', () async {
+    final selected = _server('server');
+    const timing = (
+      items: Duration(milliseconds: 1500),
+      collections: Duration(milliseconds: 700),
+      showGenres: Duration.zero,
+      collectionTitles: 2,
+      collectionMembers: 9,
+      shows: 0,
+    );
+    final channel = Channel(
+      id: 'saved',
+      number: 1,
+      name: 'Saved',
+      source: const LibrarySource(
+        libraryId: 'movies',
+        libraryType: PlexLibraryType.movie,
+      ),
+      playbackMode: PlaybackMode.sequential,
+      anchor: DateTime.utc(2026),
+      shuffleSeed: 1,
+    );
+    final plex = _FakePlex()
+      ..serversResult = [selected]
+      ..connectionResult = selected.connections.single
+      ..librariesResult = const [
+        PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
+      ]
+      ..scanLibraryHandler = (_, _, _, _, _, _, _) async =>
+          PlexLibraryScan(items: [_playableMovie], timing: timing);
+    final controller = LineupController(
+      store: _MemoryStore(
+        PersistedState(
+          settings: const LineupSettings(diagnosticsEnabled: true),
+          selectedServerByProfile: const {'owner': 'server'},
+          selectedLibraryIdsByProfileServer: const {
+            'owner': {
+              'server': ['movies'],
+            },
+          },
+          channelsByProfileServer: {
+            'owner': {
+              'server': [channel],
+            },
+          },
+        ),
+      ),
+      credentials: _MemoryCredentials(accountToken: 'token'),
+      plex: plex,
+    );
+    addTearDown(controller.dispose);
+    // The persisted setting must enable recording before launch restoration.
+    await controller.initialize();
+    expect(controller.stage, SetupStage.ready);
+    expect(await controller.scanLibraries({'movies'}), isTrue);
+
+    final timings = controller.diagnostics.entries
+        .where((entry) => entry.message == 'Library scan timing')
+        .map((entry) => entry.context)
+        .toList();
+    expect(timings, [
+      for (final path in ['launch', 'setup'])
+        {
+          'scanPath': path,
+          'libraryType': 'movie',
+          'itemsMs': 1500,
+          'collectionsMs': 700,
+          'showGenresMs': 0,
+          'items': 1,
+          'collections': 2,
+          'members': 9,
+          'shows': 0,
+        },
+    ]);
+  });
+
   for (final membershipUnavailable in [false, true]) {
     test(
       'explicit retry refreshes ready collection failure (unavailable=$membershipUnavailable) and retains untargeted inventory',

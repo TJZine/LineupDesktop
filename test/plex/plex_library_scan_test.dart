@@ -586,6 +586,13 @@ void main() {
     expect(scanned.items[3].genres, ['Drama', 'Comedy']);
     expect(progress.single.completedItems, 5);
     expect(scanned.items[3].parentRatingKey, 'season');
+    final timing = scanned.timing!;
+    expect(timing.collectionTitles, 2);
+    expect(timing.collectionMembers, 3);
+    expect(timing.shows, 1);
+    for (final phase in [timing.items, timing.collections, timing.showGenres]) {
+      expect(phase, greaterThanOrEqualTo(Duration.zero));
+    }
   });
 
   test(

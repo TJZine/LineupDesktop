@@ -91,6 +91,9 @@ class Diagnostics extends ChangeNotifier {
           value >= 0 &&
           value <= 1000000) {
         safe[entry.key] = value;
+      } else if (_boundedIntegers[entry.key] case final maximum?
+          when value is int && value >= 0 && value <= maximum) {
+        safe[entry.key] = value;
       }
     }
     _entries.add(
@@ -224,7 +227,22 @@ class Diagnostics extends ChangeNotifier {
     'dynamicRange',
     'videoOutput',
     'hardwareDecoder',
+    'scanPath',
+    'libraryType',
   };
+  // Non-negative scan facts: phase milliseconds (up to one day) and redacted
+  // inventory counts. No titles, keys, or URLs are representable.
+  static const _boundedIntegers = {
+    'itemsMs': 86400000,
+    'collectionsMs': 86400000,
+    'showGenresMs': 86400000,
+    'items': 1000000,
+    'collections': 1000000,
+    'members': 1000000,
+    'shows': 1000000,
+  };
+  static const _scanPaths = {'launch', 'setup'};
+  static const _libraryTypes = {'movie', 'show'};
   static final _safeToken = RegExp(r'^[A-Za-z0-9._+-]{1,64}$');
 
   static String _safeFact(String value) =>
@@ -249,9 +267,21 @@ class Diagnostics extends ChangeNotifier {
         : null;
   }
 
-  static String? _reportContextValue(String key, Object value) => switch (key) {
+  static String? _reportContextValue(String key, Object value) {
+    if (_boundedIntegers[key] case final maximum?) {
+      return value is int && value >= 0 && value <= maximum ? '$value' : null;
+    }
+    return _reportNamedContextValue(key, value);
+  }
+
+  static String? _reportNamedContextValue(
+    String key,
+    Object value,
+  ) => switch (key) {
     'httpStatus' when value is int && value >= 100 && value <= 599 => '$value',
     'count' when value is int && value >= 0 && value <= 1000000 => '$value',
+    'scanPath' when value is String => _recognized(_scanPaths, value),
+    'libraryType' when value is String => _recognized(_libraryTypes, value),
     'operation' when value is String => _recognized(_operations, value),
     'code' ||
     'failureCode' when value is String => _recognized(_failureCodes, value),
@@ -276,6 +306,7 @@ class Diagnostics extends ChangeNotifier {
     ('plex-auth', 'PIN poll failed'),
     ('plex-library', 'Playlist discovery unavailable'),
     ('plex-library', 'Some playlists could not be loaded'),
+    ('plex-library', 'Library scan timing'),
     ('guide', 'Guide current program wait timed out'),
     ('guide', 'Guide schedule load timed out'),
     ('playback', 'Native playback failed'),

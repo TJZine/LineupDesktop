@@ -1011,6 +1011,21 @@ class LineupController extends ChangeNotifier {
             );
             if (!_isCurrent(operation)) return;
             final items = scanned.items;
+            if (scanned.timing case final timing?) {
+              // Launch restoration does not settle failures; Channel Setup
+              // does. Live scan-budget acceptance measures them separately.
+              diagnostics.add('plex-library', 'Library scan timing', {
+                'scanPath': settleFailures ? 'setup' : 'launch',
+                'libraryType': library.type.name,
+                'itemsMs': timing.items.inMilliseconds,
+                'collectionsMs': timing.collections.inMilliseconds,
+                'showGenresMs': timing.showGenres.inMilliseconds,
+                'items': items.length,
+                'collections': timing.collectionTitles,
+                'members': timing.collectionMembers,
+                'shows': timing.shows,
+              });
+            }
             _failedCollectionTitles[library.id] =
                 scanned.collections.failedTitles;
             if (scanned.collections.unavailable) {

@@ -151,14 +151,28 @@ class PlexCollectionMembership {
   final bool unavailable;
 }
 
+/// Phase durations and redacted counts for one successful library scan. Phases
+/// run sequentially, so [items] is the item-only baseline and the remaining
+/// phases are the time membership and show-genre enrichment add to it.
+typedef PlexLibraryScanTiming = ({
+  Duration items,
+  Duration collections,
+  Duration showGenres,
+  int collectionTitles,
+  int collectionMembers,
+  int shows,
+});
+
 class PlexLibraryScan {
   const PlexLibraryScan({
     required this.items,
     this.collections = const PlexCollectionMembership(),
+    this.timing,
   });
 
   final List<PlexMediaItem> items;
   final PlexCollectionMembership collections;
+  final PlexLibraryScanTiming? timing;
 }
 
 typedef PlexLibraryPageProgress = ({

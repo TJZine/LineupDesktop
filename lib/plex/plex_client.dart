@@ -512,6 +512,7 @@ class PlexClient {
     required void Function(PlexLibraryPageProgress progress) onProgress,
     Future<void>? cancelled,
   }) async {
+    final phase = Stopwatch()..start();
     final items = await libraryItems(
       server,
       token,
@@ -521,6 +522,8 @@ class PlexClient {
       onProgress: onProgress,
       cancelled: cancelled,
     );
+    final itemsElapsed = phase.elapsed;
+    phase.reset();
     final collections = await libraryCollectionMembership(
       server,
       token,
@@ -528,6 +531,8 @@ class PlexClient {
       isCurrent: isCurrent,
       cancelled: cancelled,
     );
+    final collectionsElapsed = phase.elapsed;
+    phase.reset();
     final showGenres = libraryType == PlexLibraryType.show
         ? await libraryShowGenres(
             server,
@@ -537,6 +542,7 @@ class PlexClient {
             cancelled: cancelled,
           )
         : const <String, List<String>>{};
+    final showGenresElapsed = phase.elapsed;
     if (!isCurrent()) throw _scanCancelledException;
     return PlexLibraryScan(
       items: List.unmodifiable([
@@ -544,6 +550,16 @@ class PlexClient {
           _annotateLibraryItem(item, collections.titlesByMember, showGenres),
       ]),
       collections: collections,
+      timing: (
+        items: itemsElapsed,
+        collections: collectionsElapsed,
+        showGenres: showGenresElapsed,
+        collectionTitles: {
+          for (final titles in collections.titlesByMember.values) ...titles,
+        }.length,
+        collectionMembers: collections.titlesByMember.length,
+        shows: showGenres.length,
+      ),
     );
   }
 
