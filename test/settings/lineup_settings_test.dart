@@ -3,6 +3,34 @@ import 'package:lineup_desktop/settings/lineup_settings.dart';
 
 void main() {
   test(
+    'overlay transparency defaults compatibly and round trips each level',
+    () {
+      final old = const LineupSettings().toJson()
+        ..remove('overlayTransparency');
+      expect(
+        LineupSettings.fromJson(old).overlayTransparency,
+        OverlayTransparency.standard,
+      );
+      for (final level in OverlayTransparency.values) {
+        final settings = const LineupSettings().copyWith(
+          overlayTransparency: level,
+        );
+        expect(
+          LineupSettings.fromJson(settings.toJson()).overlayTransparency,
+          level,
+        );
+        expect(settings.toJson()['overlayTransparency'], level.storageKey);
+      }
+      for (final invalid in [null, true, 'future']) {
+        expect(
+          () =>
+              LineupSettings.fromJson({...old, 'overlayTransparency': invalid}),
+          throwsFormatException,
+        );
+      }
+    },
+  );
+  test(
     'channel source setting defaults compatibly and rejects wrong types',
     () {
       final old = const LineupSettings().toJson()

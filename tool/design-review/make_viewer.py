@@ -12,7 +12,7 @@ families = [
     ('Onboarding', ['onboarding', 'linking', 'linking-failure', 'profiles', 'profile-pin', 'servers', 'account-pickers']),
     ('Channel setup', ['setup-libraries', 'setup-configure', 'setup-review', 'setup-review-removals', 'setup-apply']),
     ('Guide', ['guide', 'guide-pip', 'guide-rich', 'guide-loading', 'guide-error', 'guide-empty', 'lineup-menu']),
-    ('Player', ['player-osd', 'player-now-playing', 'mini-guide', 'player-tracks', 'player-sleep', 'player-states']),
+    ('Player', ['player-osd', 'player-now-playing', 'mini-guide', 'player-tracks', 'player-sleep', 'player-states', 'player-notices']),
     ('Channels & Studio', ['channels', 'studio']),
     ('Settings', ['settings', 'settings-over-playback']),
     ('Themes', ['theme-ember-steel', 'theme-slate-pine', 'theme-swiss', 'theme-directv']),

@@ -1,3 +1,13 @@
+enum OverlayTransparency {
+  moreTransparent('more-transparent', 'More transparent'),
+  standard('standard', 'Standard'),
+  reduced('reduced', 'Reduce transparency');
+
+  const OverlayTransparency(this.storageKey, this.label);
+  final String storageKey;
+  final String label;
+}
+
 enum GuideInfoBackgroundMode { bleed, themeDefault, artwork }
 
 enum LineupThemeName {
@@ -17,6 +27,7 @@ class LineupSettings {
   static const osdAutoHideSecondsOptions = [2, 4, 6, 8, 10, 15];
 
   const LineupSettings({
+    this.overlayTransparency = OverlayTransparency.standard,
     this.theme = LineupThemeName.emberSteel,
     this.guideHours = 2,
     this.guideShowChannelSources = false,
@@ -31,6 +42,7 @@ class LineupSettings {
     this.diagnosticsEnabled = false,
   });
 
+  final OverlayTransparency overlayTransparency;
   final LineupThemeName theme;
   final int guideHours;
   final bool guideShowChannelSources;
@@ -45,6 +57,7 @@ class LineupSettings {
   final bool diagnosticsEnabled;
 
   LineupSettings copyWith({
+    OverlayTransparency? overlayTransparency,
     LineupThemeName? theme,
     int? guideHours,
     bool? guideShowChannelSources,
@@ -58,6 +71,7 @@ class LineupSettings {
     bool? profilePickerOnStartup,
     bool? diagnosticsEnabled,
   }) => LineupSettings(
+    overlayTransparency: overlayTransparency ?? this.overlayTransparency,
     theme: theme ?? this.theme,
     guideHours: guideHours ?? this.guideHours,
     guideShowChannelSources:
@@ -76,6 +90,7 @@ class LineupSettings {
   );
 
   Map<String, Object?> toJson() => {
+    'overlayTransparency': overlayTransparency.storageKey,
     'theme': theme.storageKey,
     'guideHours': guideHours,
     'guideShowChannelSources': guideShowChannelSources,
@@ -102,6 +117,7 @@ class LineupSettings {
       throw FormatException('Invalid settings', error);
     }
     const fields = {
+      'overlayTransparency',
       'theme',
       'guideHours',
       'guideShowChannelSources',
@@ -128,6 +144,7 @@ class LineupSettings {
       'libraryTabsEnabled',
     };
     final requiredFields = fields.difference({
+      'overlayTransparency',
       'dvrControlsEnabled',
       'guideShowChannelSources',
       ...retiredFields,
@@ -191,6 +208,13 @@ class LineupSettings {
       12,
     ]);
     return LineupSettings(
+      overlayTransparency: json.containsKey('overlayTransparency')
+          ? enumValue(
+              OverlayTransparency.values,
+              'overlayTransparency',
+              (level) => level.storageKey,
+            )
+          : OverlayTransparency.standard,
       theme: json['theme'] == 'glass'
           ? LineupThemeName.emberSteel
           : enumValue(

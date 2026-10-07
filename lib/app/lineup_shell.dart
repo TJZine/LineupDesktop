@@ -1187,6 +1187,26 @@ class _SettingsViewState extends State<SettingsView> {
                       ),
               ),
               _settingFeedback('preferClearLogos'),
+              _Dropdown<OverlayTransparency>(
+                'Player overlays',
+                'How much of the picture shows through Player controls and panels. More transparent can be harder to read on bright scenes.',
+                value.overlayTransparency,
+                OverlayTransparency.values,
+                (item) => item.label,
+                _pendingSettingKeys.contains('overlayTransparency')
+                    ? null
+                    : (item) => _update(
+                        'overlayTransparency',
+                        (current) =>
+                            current.copyWith(overlayTransparency: item),
+                      ),
+                choiceDescription: (item) => switch (item) {
+                  OverlayTransparency.moreTransparent => 'Lightest',
+                  OverlayTransparency.standard => 'Default',
+                  OverlayTransparency.reduced => 'Most solid, easiest to read',
+                },
+              ),
+              _settingFeedback('overlayTransparency'),
             ],
             SettingsCategory.guide => [
               _Dropdown<int>(

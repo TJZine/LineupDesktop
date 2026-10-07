@@ -17,6 +17,148 @@ import 'package:lineup_desktop/settings/lineup_settings.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  testWidgets('number notices expire and newer input and tunes replace them', (
+    tester,
+  ) async {
+    final lineup = _TestLineup();
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    final player = _Player();
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(coordinator.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(lineup.dispose);
+    coordinator.appendChannelDigit('9');
+    expect(coordinator.channelNumberLabel, '9 · Channel 1');
+    await tester.pump(const Duration(milliseconds: 1999));
+    expect(lineup.currentChannelId, 'channel-0');
+    await tester.pump(const Duration(milliseconds: 1));
+    await tester.pump();
+    expect(lineup.currentChannelId, 'channel-b');
+    coordinator.appendChannelDigit('7');
+    await tester.pump(const Duration(seconds: 2));
+    expect(coordinator.notice, 'Not in this lineup');
+    expect(coordinator.error, isNull);
+    expect(coordinator.status.state, PlayerState.playing);
+    await tester.pump(const Duration(milliseconds: 2999));
+    expect(coordinator.notice, isNotNull);
+    await tester.pump(const Duration(milliseconds: 1));
+    expect(coordinator.notice, isNull);
+    coordinator.appendChannelDigit('7');
+    await coordinator.commitChannelNumber();
+    await tester.pump(const Duration(seconds: 1));
+    coordinator.appendChannelDigit('9');
+    expect(coordinator.notice, isNull);
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pump();
+    expect(lineup.currentChannelId, 'channel-b');
+    expect(coordinator.notice, isNull);
+    coordinator.appendChannelDigit('9');
+    await coordinator.tune('channel-0');
+    await tester.pump(const Duration(seconds: 3));
+    expect(lineup.currentChannelId, 'channel-0');
+    expect(coordinator.channelNumber, isEmpty);
+    coordinator.appendChannelDigit('9');
+    coordinator.closeOverlay();
+    await tester.pump(const Duration(seconds: 3));
+    expect(lineup.currentChannelId, 'channel-0');
+    coordinator.closeOverlay();
+  });
+
+  testWidgets(
+    'busy labels wait two seconds and reject obsolete native and scope state',
+    (tester) async {
+      final lineup = _TestLineup();
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => _schedule(channel),
+      );
+      final player = _EventPlayer();
+      final coordinator = PlayerCoordinator(
+        player: player,
+        lineup: lineup,
+        guide: guide,
+      );
+      addTearDown(coordinator.dispose);
+      addTearDown(player.close);
+      addTearDown(guide.dispose);
+      addTearDown(lineup.dispose);
+      await coordinator.tune('channel-b');
+      final generation = player.loadGenerations.last;
+      player.emitStatus(PlayerState.loading, generation: generation);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 1999));
+      expect(coordinator.busyLabel, isNull);
+      await tester.pump(const Duration(milliseconds: 1));
+      expect(coordinator.busyLabel, 'Starting playback…');
+      player.emitStatus(PlayerState.ready, generation: generation);
+      await tester.pump();
+      expect(coordinator.busyLabel, isNull);
+      player.emitStatus(PlayerState.buffering, generation: generation);
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      player.emitStatus(PlayerState.playing, generation: generation);
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 2));
+      expect(coordinator.busyLabel, isNull);
+      player.emitStatus(PlayerState.buffering, generation: generation);
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 2));
+      expect(coordinator.busyLabel, 'Buffering…');
+      lineup.changeContentScope();
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 3));
+      expect(coordinator.busyLabel, isNull);
+      player.emitStatus(PlayerState.buffering, generation: generation);
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 3));
+      expect(coordinator.busyLabel, isNull);
+      player.emitStatus(PlayerState.loading);
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      var lateNotifications = 0;
+      coordinator.addListener(() => lateNotifications++);
+      coordinator.dispose();
+      await tester.pump(const Duration(seconds: 3));
+      expect(lateNotifications, 0);
+    },
+  );
+
+  testWidgets(
+    'control notices expire after six seconds without a blocking error',
+    (tester) async {
+      final lineup = _TestLineup();
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => _schedule(channel),
+      );
+      final coordinator = PlayerCoordinator(
+        player: _FailingControlPlayer(),
+        lineup: lineup,
+        guide: guide,
+      );
+      addTearDown(coordinator.dispose);
+      addTearDown(guide.dispose);
+      addTearDown(lineup.dispose);
+      await coordinator.pause();
+      await tester.pump(const Duration(milliseconds: 5999));
+      expect(coordinator.notice, isNotNull);
+      expect(coordinator.error, isNull);
+      await tester.pump(const Duration(milliseconds: 1));
+      expect(coordinator.notice, isNull);
+      await coordinator.pause();
+      lineup.changeContentScope();
+      await tester.pump(const Duration(seconds: 6));
+      expect(coordinator.notice, isNull);
+    },
+  );
+
   for (final failure in ['timeout', 'command_error']) {
     test(
       'native $failure retains cleanup through failed stop and logout',
@@ -717,45 +859,43 @@ void main() {
     });
   });
 
-  test(
-    'native control failures publish one safe recoverable surface',
-    () async {
-      final lineup = _TestLineup()..diagnostics.enabled = true;
-      final guide = GuideController(
-        lineup: lineup,
-        loadSchedule: (channel) async => _schedule(channel),
-      );
-      final player = _FailingControlPlayer();
-      final coordinator = PlayerCoordinator(
-        player: player,
-        lineup: lineup,
-        guide: guide,
-      );
-      addTearDown(lineup.dispose);
-      addTearDown(guide.dispose);
-      addTearDown(coordinator.dispose);
+  test('native control failures publish safe nonblocking notices', () async {
+    final lineup = _TestLineup()..diagnostics.enabled = true;
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    final player = _FailingControlPlayer();
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
 
-      await coordinator.play();
-      await coordinator.pause();
-      await coordinator.seekTo(const Duration(seconds: 12));
-      await coordinator.selectTrack(PlayerTrackType.audio, 2);
-      await coordinator.toggleFullscreen();
+    await coordinator.play();
+    await coordinator.pause();
+    await coordinator.seekTo(const Duration(seconds: 12));
+    await coordinator.selectTrack(PlayerTrackType.audio, 2);
+    await coordinator.toggleFullscreen();
 
-      expect(
-        coordinator.error,
-        'Playback controls are temporarily unavailable. Try again.',
-      );
-      expect(coordinator.overlay, PlayerOverlay.error);
-      expect(coordinator.canRetry, isFalse);
-      expect(lineup.diagnostics.entries.map((entry) => entry.context), [
-        {'operation': 'play', 'code': 'command_queue_full'},
-        {'operation': 'pause', 'code': 'command_queue_full'},
-        {'operation': 'seek', 'code': 'command_queue_full'},
-        {'operation': 'audio_track', 'code': 'command_queue_full'},
-        {'operation': 'fullscreen', 'code': 'command_queue_full'},
-      ]);
-    },
-  );
+    expect(
+      coordinator.notice,
+      'Playback controls are temporarily unavailable. Try again.',
+    );
+    expect(coordinator.error, isNull);
+    expect(coordinator.overlay, isNot(PlayerOverlay.error));
+    expect(coordinator.canRetry, isFalse);
+    expect(lineup.diagnostics.entries.map((entry) => entry.context), [
+      {'operation': 'play', 'code': 'command_queue_full'},
+      {'operation': 'pause', 'code': 'command_queue_full'},
+      {'operation': 'seek', 'code': 'command_queue_full'},
+      {'operation': 'audio_track', 'code': 'command_queue_full'},
+      {'operation': 'fullscreen', 'code': 'command_queue_full'},
+    ]);
+  });
 
   test('stale control failure cannot replace a scope reset', () async {
     final lineup = _TestLineup()..diagnostics.enabled = true;
@@ -918,9 +1058,10 @@ void main() {
     await tester.pump();
 
     expect(coordinator.sleepDuration, isNull);
-    expect(coordinator.overlay, PlayerOverlay.error);
+    expect(coordinator.overlay, isNot(PlayerOverlay.error));
+    expect(coordinator.error, isNull);
     expect(
-      coordinator.error,
+      coordinator.notice,
       'Playback could not be stopped when the sleep timer expired.',
     );
     expect(
@@ -933,6 +1074,8 @@ void main() {
       '${lineup.diagnostics.entries.single.context}',
       isNot(contains('opaque-secret-sentinel')),
     );
+    await tester.pump(const Duration(seconds: 6));
+    expect(coordinator.notice, isNull);
   });
 
   test('an expired deadline stops before a resume command can play', () async {

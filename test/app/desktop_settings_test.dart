@@ -20,6 +20,64 @@ const _longServerName =
     'A deliberately long Plex Media Server name for the desktop settings acceptance fixture';
 
 void main() {
+  testWidgets(
+    'Player overlays uses descriptive choices and optimistic persistence',
+    (tester) async {
+      final store = _DelayedSettingsStore();
+      final controller = FixtureController(store: store);
+      addTearDown(controller.dispose);
+      await _showSettings(tester, controller);
+      final field = find.byType(DropdownButton<OverlayTransparency>);
+      await tester.ensureVisible(field);
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<DropdownButton<OverlayTransparency>>(field).value,
+        OverlayTransparency.standard,
+      );
+      expect(
+        find.text(
+          'How much of the picture shows through Player controls and panels. More transparent can be harder to read on bright scenes.',
+        ),
+        findsOneWidget,
+      );
+      await tester.tap(field);
+      await tester.pumpAndSettle();
+      expect(find.text('Most solid, easiest to read'), findsOneWidget);
+      await tester.tap(find.text('Reduce transparency').last);
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<DropdownButton<OverlayTransparency>>(field).value,
+        OverlayTransparency.reduced,
+      );
+      expect(
+        controller.settings.overlayTransparency,
+        OverlayTransparency.standard,
+      );
+      expect(find.text('Most solid, easiest to read'), findsNothing);
+      store.pending.completeError(StateError('synthetic save failure'));
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<DropdownButton<OverlayTransparency>>(field).value,
+        OverlayTransparency.standard,
+      );
+      store.pending = Completer<void>();
+      await tester.tap(field);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('More transparent').last);
+      await tester.pump();
+      store.pending.complete();
+      await tester.pumpAndSettle();
+      expect(
+        controller.settings.overlayTransparency,
+        OverlayTransparency.moreTransparent,
+      );
+      expect(
+        store.state.settings.overlayTransparency,
+        OverlayTransparency.moreTransparent,
+      );
+    },
+  );
+
   testWidgets('Guide source switch uses optimistic save and failure rollback', (
     tester,
   ) async {

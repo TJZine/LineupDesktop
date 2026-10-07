@@ -35,6 +35,240 @@ final _extremeWideArtwork = base64Decode(
 );
 
 void main() {
+  testWidgets(
+    'stopped slate stays opaque at every level with working Browse and Close',
+    (tester) async {
+      final fixture = _Fixture(PlayerState.stopped);
+      var closed = false;
+      for (final level in OverlayTransparency.values) {
+        fixture.lineup.settings = fixture.lineup.settings.copyWith(
+          overlayTransparency: level,
+        );
+        fixture.lineup.notifyListeners();
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: LineupTheme.forName(LineupThemeName.slatePine),
+            builder: LineupCanvas.builder,
+            home: PlayerView(
+              controller: fixture.player,
+              openGuide: () => closed = true,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('Playback stopped'), findsOneWidget);
+        expect(find.text('Retry'), findsNothing);
+        expect(find.byType(NativeVideoSurface), findsNothing);
+        final roles = LineupTheme.of(
+          tester.element(find.text('Playback stopped')),
+        );
+        expect(
+          find.byWidgetPredicate(
+            (w) =>
+                w is ColoredBox &&
+                w.color == roles.deepBackground &&
+                w.color.a == 1,
+          ),
+          findsWidgets,
+        );
+      }
+      await tester.tap(find.text('Browse channels'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('mini-guide-shelf')), findsOneWidget);
+      fixture.player.closeOverlay();
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Close'));
+      await tester.pumpAndSettle();
+      expect(closed, isTrue);
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    },
+  );
+
+  testWidgets(
+    'overlay settings update the mounted Player with each theme tint',
+    (tester) async {
+      final fixture = _Fixture(PlayerState.playing);
+      await tester.binding.setSurfaceSize(const Size(1920, 1080));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      fixture.player.showOsd();
+      for (final theme in LineupThemeName.values) {
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: LineupTheme.forName(theme),
+            builder: LineupCanvas.builder,
+            home: PlayerView(controller: fixture.player, openGuide: () {}),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final surface = find.byKey(const Key('player-osd-surface'));
+        final roles = LineupTheme.of(tester.element(surface));
+        final before = _drawnRect(
+          tester,
+          find.byKey(const Key('player-osd-title')),
+        );
+        for (final level in OverlayTransparency.values) {
+          fixture.lineup.settings = fixture.lineup.settings.copyWith(
+            overlayTransparency: level,
+          );
+          fixture.lineup.notifyListeners();
+          await tester.pumpAndSettle();
+          final decoration =
+              tester.widget<Container>(surface).decoration! as BoxDecoration;
+          final color = level == OverlayTransparency.moreTransparent
+              ? (decoration.gradient! as LinearGradient).colors.last
+              : decoration.color!;
+          expect(
+            color.withValues(alpha: 1),
+            roles.overlaySurface.withValues(alpha: 1),
+          );
+          expect(
+            color.a,
+            closeTo(switch (level) {
+              OverlayTransparency.moreTransparent => .45,
+              OverlayTransparency.standard => .78,
+              OverlayTransparency.reduced => .94,
+            }, .001),
+          );
+          expect(
+            _drawnRect(tester, find.byKey(const Key('player-osd-title'))),
+            before,
+          );
+        }
+      }
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    },
+  );
+
+  testWidgets('sleep popover is above its real button and remains clickable', (
+    tester,
+  ) async {
+    final fixture = _Fixture(PlayerState.playing);
+    await tester.binding.setSurfaceSize(const Size(1280, 720));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    fixture.player.showOsd();
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: LineupTheme.forName(LineupThemeName.emberSteel),
+        builder: LineupCanvas.builder,
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('player-osd-sleep')));
+    await tester.pumpAndSettle();
+    final popup = _drawnRect(
+      tester,
+      find.byKey(const Key('sleep-timer-picker')),
+    );
+    final button = _drawnRect(
+      tester,
+      find.byKey(const Key('player-osd-sleep')),
+    );
+    expect(popup.bottom, lessThan(button.top));
+    expect(popup.right, closeTo(button.right, .1));
+    expect(popup.left, greaterThanOrEqualTo(0));
+    expect(popup.top, greaterThanOrEqualTo(0));
+    await tester.tap(find.text('30 minutes'));
+    await tester.pumpAndSettle();
+    expect(find.text('Sleep · 30m'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  });
+
+  testWidgets(
+    'keyboard track traversal reveals each focused row below its header',
+    (tester) async {
+      final fixture = _Fixture(
+        PlayerState.playing,
+        tracks: [
+          for (var index = 0; index < 30; index++)
+            PlayerTrack(
+              id: index + 1,
+              type: PlayerTrackType.audio,
+              selected: index == 0,
+              title: 'Audio choice ${index + 1}',
+            ),
+        ],
+      );
+      await tester.binding.setSurfaceSize(const Size(800, 600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      fixture.player.showOsd();
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: LineupTheme.forName(LineupThemeName.emberSteel),
+          builder: LineupCanvas.builder,
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('player-osd-audio')));
+      await tester.pumpAndSettle();
+      final selected = find.byKey(const Key('playback-track-audio-1'));
+      final selectedSurface = find.ancestor(
+        of: selected,
+        matching: find.byType(LineupRowSurface),
+      );
+      final ring =
+          tester
+                  .widget<Container>(
+                    find
+                        .descendant(
+                          of: selectedSurface,
+                          matching: find.byWidgetPredicate(
+                            (w) =>
+                                w is Container &&
+                                w.foregroundDecoration != null,
+                          ),
+                        )
+                        .first,
+                  )
+                  .foregroundDecoration!
+              as BoxDecoration;
+      expect((ring.border! as Border).top.color.a, 0);
+      for (var index = 2; index <= 12; index++) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+        await tester.pumpAndSettle();
+        final row = find.byKey(Key('playback-track-audio-$index'));
+        expect(Focus.of(tester.element(row)).hasFocus, isTrue);
+        final rowSurface = find.ancestor(
+          of: row,
+          matching: find.byType(LineupRowSurface),
+        );
+        final keyboardRing =
+            tester
+                    .widget<Container>(
+                      find
+                          .descendant(
+                            of: rowSurface,
+                            matching: find.byWidgetPredicate(
+                              (w) =>
+                                  w is Container &&
+                                  w.foregroundDecoration != null,
+                            ),
+                          )
+                          .first,
+                    )
+                    .foregroundDecoration!
+                as BoxDecoration;
+        final roles = LineupTheme.of(tester.element(row));
+        final keyboardBorder = keyboardRing.border! as Border;
+        expect(keyboardBorder.top.color, roles.focusBorder);
+        expect(keyboardBorder.top.width, roles.focusBorderWidth);
+        final rect = _drawnRect(tester, row);
+        final list = _drawnRect(
+          tester,
+          find.byKey(const Key('playback-options-list')),
+        );
+        expect(rect.top, greaterThanOrEqualTo(list.top));
+        expect(rect.bottom, lessThanOrEqualTo(list.bottom));
+      }
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    },
+  );
+
   testWidgets('unsupported macOS backend keeps the Flutter player accessible', (
     tester,
   ) async {
@@ -276,10 +510,12 @@ void main() {
       await tester.sendKeyEvent(key);
       await tester.pump();
       expect(
-        fixture.player.error,
+        fixture.player.notice,
         'Playback controls are temporarily unavailable. Try again.',
       );
-      expect(fixture.player.overlay, PlayerOverlay.error);
+      expect(fixture.player.error, isNull);
+      expect(fixture.player.overlay, isNot(PlayerOverlay.error));
+      expect(find.byType(NativeVideoSurface), findsOneWidget);
       expect(tester.takeException(), isNull);
       fixture.player.closeOverlay();
     }
@@ -3139,49 +3375,49 @@ void main() {
         viewport: Size(800, 600),
         dpr: 1.0,
         width: 320.0,
-        fade: 80.0,
+        fade: 44.0,
         scale: 1.0,
       ),
       (
         viewport: Size(1280, 720),
         dpr: 1.0,
         width: 480.0,
-        fade: 80.0,
+        fade: 44.0,
         scale: 1.0,
       ),
       (
         viewport: Size(1920, 1080),
         dpr: 1.25,
         width: 600.0,
-        fade: 100.0,
+        fade: 55.0,
         scale: 1.0,
       ),
       (
         viewport: Size(1360, 840),
         dpr: 1.0,
         width: 480.0,
-        fade: 80.0,
+        fade: 44.0,
         scale: 1.0,
       ),
       (
         viewport: Size(1600, 900),
         dpr: 1.0,
         width: 500.0,
-        fade: 250 / 3,
+        fade: 55 * 5 / 6,
         scale: 1.0,
       ),
       (
         viewport: Size(2560, 1440),
         dpr: 1.5,
         width: 800.0,
-        fade: 400 / 3,
+        fade: 55 * 4 / 3,
         scale: 4 / 3,
       ),
       (
         viewport: Size(3840, 2160),
         dpr: 2.0,
         width: 1200.0,
-        fade: 200.0,
+        fade: 110.0,
         scale: 2.0,
       ),
     ]) {
@@ -3233,9 +3469,10 @@ void main() {
                   .decoration!
               as BoxDecoration;
       final gradient = decoration.gradient! as LinearGradient;
-      expect(gradient.stops, const [0, 0.10, 0.22, 1]);
+      expect(gradient.stops![1], closeTo(layout.fade / fade.width, .001));
+      expect(gradient.stops![2], gradient.stops![1]);
       expect(gradient.colors.first.a, 0);
-      expect(gradient.colors.last.a, closeTo(0.82, 0.01));
+      expect(gradient.colors.last.a, closeTo(0.78, 0.01));
       expect(find.text('Audio'), findsOneWidget);
       expect(find.text('Close'), findsOneWidget);
       expect(find.text('PLAYBACK OPTIONS'), findsNothing);

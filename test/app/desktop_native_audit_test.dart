@@ -63,7 +63,9 @@ void main() {
       await tester.tap(
         route == 'Settings'
             ? find.byKey(const Key('settings-app-menu'))
-            : find.byTooltip('Open Lineup menu'),
+            : find.byTooltip(
+                route == 'Player' ? 'Lineup menu' : 'Open Lineup menu',
+              ),
       );
       await tester.pumpAndSettle();
       final action = find.byKey(const Key('app-menu-now-playing'));

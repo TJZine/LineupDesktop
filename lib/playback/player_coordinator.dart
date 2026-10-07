@@ -43,6 +43,7 @@ class PlayerCoordinator extends ChangeNotifier {
     _subscription = player.events.listen(_event);
     lineup.addListener(_lineupChanged);
     guide.addListener(_guideChanged);
+    notifyListeners();
   }
 
   final NativePlayer player;
@@ -60,6 +61,12 @@ class PlayerCoordinator extends ChangeNotifier {
   Timer? _sleepTimer;
   Timer? _numberTimer;
   Timer? _cursorTimer;
+  Timer? _noticeTimer;
+  Timer? _busyTimer;
+  String? _notice;
+  String? _busyLabel;
+  (int, bool, PlayerState)? _busyIdentity;
+
   Timer? _trackConfirmationTimer;
   int _overlayEpoch = 0;
   int _overlayPresentationGeneration = 0;
@@ -155,6 +162,15 @@ class PlayerCoordinator extends ChangeNotifier {
     );
   }
 
+  String? get notice => _notice;
+  String? get busyLabel => _busyLabel;
+  String get channelNumberLabel {
+    final channel = _channelByNumber[int.tryParse(_channelNumber)];
+    return channel == null
+        ? _channelNumber
+        : '$_channelNumber · ${channel.name}';
+  }
+
   String? get error => _error;
   bool get fullscreen => _fullscreen;
   bool get cursorVisible => _cursorVisible;
@@ -197,6 +213,60 @@ class PlayerCoordinator extends ChangeNotifier {
   GuideProgram? get nextProgram {
     final id = lineup.currentChannelId;
     return id == null ? null : guide.nextProgram(id);
+  }
+
+  void _showNotice(
+    String message, {
+    Duration duration = const Duration(seconds: 6),
+  }) {
+    _noticeTimer?.cancel();
+    _notice = message;
+    _noticeTimer = Timer(duration, () {
+      if (_disposed) return;
+      _notice = null;
+      notifyListeners();
+    });
+    notifyListeners();
+  }
+
+  void _clearTransientStatus() {
+    _numberTimer?.cancel();
+    _numberTimer = null;
+    _channelNumber = '';
+    _noticeTimer?.cancel();
+    _notice = null;
+    _busyTimer?.cancel();
+    _busyLabel = null;
+    _busyIdentity = null;
+  }
+
+  // All status publication passes here, including native events and tune/scope
+  // changes. Restart the delay only when the actual busy operation changes.
+  @override
+  void notifyListeners() {
+    if (_disposed) return;
+    final busy =
+        !_scopeCleanupPending &&
+        _error == null &&
+        (_tuning ||
+            _status.state == PlayerState.loading ||
+            _status.state == PlayerState.buffering);
+    final identity = busy ? (_tuneGeneration, _tuning, _status.state) : null;
+    if (_busyIdentity != identity) {
+      _busyTimer?.cancel();
+      _busyLabel = null;
+      _busyIdentity = identity;
+      if (identity != null) {
+        _busyTimer = Timer(const Duration(seconds: 2), () {
+          if (_disposed || _busyIdentity != identity) return;
+          _busyLabel = !_tuning && _status.state == PlayerState.buffering
+              ? 'Buffering…'
+              : 'Starting playback…';
+          notifyListeners();
+        });
+      }
+    }
+    super.notifyListeners();
   }
 
   void _event(PlayerEvent event) {
@@ -379,6 +449,7 @@ class PlayerCoordinator extends ChangeNotifier {
     if (deadline != null && !DateTime.now().isBefore(deadline)) {
       return _expireSleepTimer(_sleepEpoch).then((_) => false);
     }
+    _clearTransientStatus();
     final generation = ++_tuneGeneration;
     ++_controlGeneration;
     _invalidateAuthorizationRecovery();
@@ -401,6 +472,7 @@ class PlayerCoordinator extends ChangeNotifier {
     if (_initialMediaRequested) return;
     _initialMediaRequested = true;
     if (await _expireSleepIfNeeded()) return;
+    _clearTransientStatus();
     final generation = ++_tuneGeneration;
     ++_controlGeneration;
     try {
@@ -1096,9 +1168,7 @@ class PlayerCoordinator extends ChangeNotifier {
 
   void _publishControlFailure(String operation, Object error) {
     _recordPlaybackFailure(error, operation: operation);
-    _error = 'Playback controls are temporarily unavailable. Try again.';
-    _canRetry = _retryChannelId != null;
-    _setOverlay(PlayerOverlay.error, timed: false);
+    _showNotice('Playback controls are temporarily unavailable. Try again.');
   }
 
   void showOsd() => _setOverlay(PlayerOverlay.osd);
@@ -1179,6 +1249,11 @@ class PlayerCoordinator extends ChangeNotifier {
   }
 
   void closeOverlay() {
+    if (_overlay == PlayerOverlay.channelNumber) {
+      _numberTimer?.cancel();
+      _numberTimer = null;
+      _channelNumber = '';
+    }
     if (_overlay == PlayerOverlay.audioTracks ||
         _overlay == PlayerOverlay.subtitleTracks ||
         _overlay == PlayerOverlay.sleepTimer) {
@@ -1214,6 +1289,8 @@ class PlayerCoordinator extends ChangeNotifier {
     if (!RegExp(r'^\d$').hasMatch(digit)) return;
     _channelNumber = '$_channelNumber$digit';
     if (_channelNumber.length > 4) _channelNumber = digit;
+    _noticeTimer?.cancel();
+    _notice = null;
     _numberTimer?.cancel();
     _setOverlay(PlayerOverlay.channelNumber, timed: false);
     _numberTimer = Timer(const Duration(seconds: 2), commitChannelNumber);
@@ -1225,8 +1302,8 @@ class PlayerCoordinator extends ChangeNotifier {
     _channelNumber = '';
     final channel = _channelByNumber[number];
     if (channel == null) {
-      _error = 'Channel ${number ?? ''} is not in this lineup.';
-      _setOverlay(PlayerOverlay.error, timed: false);
+      closeOverlay();
+      _showNotice('Not in this lineup', duration: const Duration(seconds: 3));
       return;
     }
     await tune(channel.id);
@@ -1275,8 +1352,9 @@ class PlayerCoordinator extends ChangeNotifier {
         return;
       }
       _recordPlaybackFailure(error);
-      _error = 'Playback could not be stopped when the sleep timer expired.';
-      _setOverlay(PlayerOverlay.error, timed: false);
+      _showNotice(
+        'Playback could not be stopped when the sleep timer expired.',
+      );
       return;
     }
     if (_disposed ||
@@ -1495,11 +1573,9 @@ class PlayerCoordinator extends ChangeNotifier {
   }
 
   void _resetScopeState() {
+    _clearTransientStatus();
     _cancelOverlayTimer();
     _clearSleepTimer();
-    _numberTimer?.cancel();
-    _numberTimer = null;
-    _channelNumber = '';
     _cursorTimer?.cancel();
     _cursorTimer = null;
     _cursorVisible = true;
@@ -1598,6 +1674,7 @@ class PlayerCoordinator extends ChangeNotifier {
 
   @override
   void dispose() {
+    _clearTransientStatus();
     if (_disposed) return;
     final fullscreenReset = _queueFullscreenReset();
     _disposed = true;
@@ -1611,7 +1688,6 @@ class PlayerCoordinator extends ChangeNotifier {
     _subscription?.cancel();
     _cancelOverlayTimer();
     _sleepTimer?.cancel();
-    _numberTimer?.cancel();
     _cursorTimer?.cancel();
     _clearTrackSelection();
     _activePlayback = null;

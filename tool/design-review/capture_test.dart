@@ -22,6 +22,7 @@ import 'package:lineup_desktop/diagnostics/diagnostics.dart';
 import 'package:lineup_desktop/guide/guide_view.dart';
 import 'package:lineup_desktop/playback/native_player.dart';
 import 'package:lineup_desktop/playback/player_view.dart';
+import 'package:lineup_desktop/playback/player_coordinator.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 
@@ -376,7 +377,7 @@ final Map<String, Scene> _scenes = {
     await _open(tester, 'Player');
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await _settle(tester);
-    await shot('paused');
+    await _playerMaterialShots(tester, shot, f, 'paused');
   },
   'player-now-playing': (tester, shot) async {
     final f =
@@ -397,7 +398,7 @@ final Map<String, Scene> _scenes = {
     await _precacheNowPlaying(tester);
     await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
     await _settle(tester);
-    await shot('shelf');
+    await _playerMaterialShots(tester, shot, f, 'shelf');
     // The first image read lets pending artwork decode finish. Lay out that
     // artwork before revealing cast so its new height cannot hide the target.
     await _settle(tester);
@@ -419,7 +420,7 @@ final Map<String, Scene> _scenes = {
       drawnRect(castName).bottom,
       lessThanOrEqualTo(drawnRect(details).bottom + .5),
     );
-    await shot('cast-visible');
+    await _playerMaterialShots(tester, shot, f, 'cast-visible');
   },
   'player-tracks': (tester, shot) async {
     final f = _readyFixture(
@@ -474,12 +475,15 @@ final Map<String, Scene> _scenes = {
     await _open(tester, 'Player');
     await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
     await _settle(tester);
-    await shot('audio');
+    await _playerMaterialShots(tester, shot, f, 'audio');
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await _settle(tester);
     await tester.sendKeyEvent(LogicalKeyboardKey.keyC);
     await _settle(tester);
-    await shot('subtitles');
+    await _playerMaterialShots(tester, shot, f, 'subtitles');
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await _settle(tester);
+    await shot('subtitles-keyboard-focus');
   },
   'player-sleep': (tester, shot) async {
     final f = _readyFixture(
@@ -495,7 +499,14 @@ final Map<String, Scene> _scenes = {
         .controller
         .showSleepTimer();
     await _settle(tester);
-    await shot('timer');
+    await _playerMaterialShots(tester, shot, f, 'timer');
+    final coordinator = tester
+        .widget<PlayerView>(find.byType(PlayerView))
+        .controller;
+    coordinator.setSleepTimer(const Duration(minutes: 42));
+    coordinator.showSleepTimer();
+    await _settle(tester);
+    await _playerMaterialShots(tester, shot, f, 'timer-active');
   },
   'player-states': (tester, shot) async {
     final f = _readyFixture(
@@ -506,15 +517,59 @@ final Map<String, Scene> _scenes = {
     )..controller.settings = const LineupSettings(reduceMotion: true);
     await _pump(tester, f.build());
     await _open(tester, 'Player');
-    await shot('buffering');
-    f.player.emit(
+    await _playerMaterialShots(tester, shot, f, 'buffering');
+    await tester.pumpWidget(const SizedBox.shrink());
+    final failed = _readyFixture(
+      playerState: const PlayerStatus(
+        state: PlayerState.paused,
+        message: 'Paused',
+      ),
+    )..controller.settings = const LineupSettings(reduceMotion: true);
+    await _pump(tester, failed.build());
+    await _open(tester, 'Player');
+    failed.player.emit(
       const PlayerStatus(
         state: PlayerState.error,
-        message: 'Playback failed: the server closed the connection.',
+        message: 'Synthetic native failure',
       ),
     );
     await _settle(tester);
-    await shot('error');
+    expect(find.text('Playback stopped'), findsOneWidget);
+    await _playerMaterialShots(tester, shot, failed, 'error');
+    await tester.pumpWidget(const SizedBox.shrink());
+    final loading = _readyFixture(
+      playerState: const PlayerStatus(
+        state: PlayerState.loading,
+        message: 'Loading',
+      ),
+    )..controller.settings = const LineupSettings(reduceMotion: true);
+    loading.player.emit(
+      const PlayerStatus(state: PlayerState.loading, message: 'Loading'),
+      position: Duration.zero,
+    );
+    await _pump(tester, loading.build());
+    await _open(tester, 'Player');
+    await _playerMaterialShots(tester, shot, loading, 'starting');
+    await tester.pump(const Duration(seconds: 2));
+    await shot('starting-delayed');
+    await tester.pumpWidget(const SizedBox.shrink());
+    final unavailable = _readyFixture(
+      playerState: const PlayerStatus(
+        state: PlayerState.paused,
+        message: 'Paused',
+      ),
+    )..controller.settings = const LineupSettings(reduceMotion: true);
+    await _pump(tester, unavailable.build());
+    await _open(tester, 'Player');
+    unavailable.player.emit(
+      const PlayerStatus(
+        state: PlayerState.unsupported,
+        message: 'Playback is unavailable on this development platform.',
+      ),
+    );
+    await _settle(tester);
+    expect(find.text('Playback unavailable'), findsOneWidget);
+    await _playerMaterialShots(tester, shot, unavailable, 'unavailable');
   },
   'mini-guide': (tester, shot) async {
     final f = _readyFixture(
@@ -527,7 +582,60 @@ final Map<String, Scene> _scenes = {
     await _open(tester, 'Player');
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
     await _settle(tester);
-    await shot('shelf');
+    await _playerMaterialShots(tester, shot, f, 'shelf');
+  },
+
+  'player-notices': (tester, shot) async {
+    final f = _readyFixture(
+      capturePlayer: _FailingCapturePlayer(),
+      playerState: const PlayerStatus(
+        state: PlayerState.playing,
+        message: 'Playing',
+      ),
+    )..controller.settings = const LineupSettings(reduceMotion: true);
+    await _pump(tester, f.build());
+    await _open(tester, 'Player');
+    final coordinator = tester
+        .widget<PlayerView>(find.byType(PlayerView))
+        .controller;
+    for (final digit in f.controller.channels.first.number.toString().split(
+      '',
+    )) {
+      coordinator.appendChannelDigit(digit);
+    }
+    await tester.pump();
+    await shot('typed-target');
+    coordinator.closeOverlay();
+    for (var i = 0; i < 4; i++) {
+      coordinator.appendChannelDigit('9');
+    }
+    await coordinator.commitChannelNumber();
+    await _settle(tester);
+    expect(coordinator.error, isNull);
+    await _playerMaterialShots(
+      tester,
+      shot,
+      f,
+      'unknown-number',
+      beforeEach: () async {
+        for (var i = 0; i < 4; i++) {
+          coordinator.appendChannelDigit('9');
+        }
+        await coordinator.commitChannelNumber();
+        expect(coordinator.notice, 'Not in this lineup');
+      },
+    );
+    await tester.pump(const Duration(seconds: 3));
+    expect(coordinator.notice, isNull);
+    coordinator.showOsd();
+    await tester.pump();
+    await shot('notice-expired');
+    coordinator.showOsd();
+    await coordinator.pause();
+    await _settle(tester);
+    expect(coordinator.error, isNull);
+    expect(coordinator.status.state, PlayerState.playing);
+    await _playerMaterialShots(tester, shot, f, 'control-unavailable');
   },
 
   // ── Channels + Studio ──
@@ -598,6 +706,15 @@ final Map<String, Scene> _scenes = {
     ]) {
       await _tap(tester, find.text(category).first);
       await shot(category.toLowerCase());
+      if (category == 'Appearance') {
+        await _tap(
+          tester,
+          find.byKey(const ValueKey('settings-field-Player overlays')),
+        );
+        await shot('player-overlays-menu');
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        await _settle(tester);
+      }
       if (category == 'Guide') {
         await _tap(
           tester,
@@ -857,6 +974,58 @@ List<Map<String, Object?>> _spanProbes(
   return runs;
 }
 
+Future<void> _playerMaterialShots(
+  WidgetTester tester,
+  Shot shot,
+  UiFixture fixture,
+  String state, {
+  Future<void> Function()? beforeEach,
+}) async {
+  final coordinator = tester
+      .widget<PlayerView>(find.byType(PlayerView))
+      .controller;
+  final originalOverlay = coordinator.overlay;
+  await beforeEach?.call();
+  await shot(state);
+  final original = fixture.controller.settings;
+  for (final level in [
+    OverlayTransparency.moreTransparent,
+    OverlayTransparency.reduced,
+  ]) {
+    fixture.controller.settings = original.copyWith(overlayTransparency: level);
+    fixture.controller.notifyListeners();
+    if (originalOverlay == PlayerOverlay.osd) coordinator.showOsd();
+    await beforeEach?.call();
+    await _settle(tester);
+    await shot('$state-${level.storageKey}');
+  }
+  fixture.controller.settings = original;
+  fixture.controller.notifyListeners();
+  await tester.pump();
+}
+
+// A preloaded synthetic status has no Dart load generation. Once load() is
+// requested, preserve the real generation so currentness guards still apply.
+class _CapturePlayer extends FixturePlayer {
+  @override
+  Stream<PlayerEvent> get events => super.events.map(
+    (event) => PlayerEvent(
+      status: event.status,
+      position: event.position,
+      duration: event.duration,
+      telemetry: event.telemetry,
+      tracks: event.tracks,
+      generation: event.generation == 0 ? null : event.generation,
+    ),
+  );
+}
+
+class _FailingCapturePlayer extends _CapturePlayer {
+  @override
+  Future<void> pause() async =>
+      throw const PlayerUnavailable('Synthetic control failure');
+}
+
 Future<void> _pump(WidgetTester tester, Widget child) async {
   await tester.pumpWidget(RepaintBoundary(key: _key, child: child));
   await _settle(tester);
@@ -1033,8 +1202,9 @@ UiFixture _readyFixture({
   PlayerStatus? playerState,
   List<PlayerTrack>? tracks,
   bool useWordmarkArtwork = false,
+  FixturePlayer? capturePlayer,
 }) {
-  final player = FixturePlayer();
+  final player = capturePlayer ?? _CapturePlayer();
   if (playerState != null) {
     player.emit(
       playerState,

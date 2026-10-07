@@ -41,6 +41,67 @@ void main() {
         ..['settings'] = {
           ...old['settings'] as Map,
           'guideShowChannelSources': false,
+          'overlayTransparency': 'standard',
+        };
+      expect(loaded.state.toJson(), expected);
+      await store.save(loaded.state);
+      expect(jsonDecode(await file.readAsString()), expected);
+      final reloaded = await FileAppStore(directory).load();
+      expect(reloaded.recoveredCorruptState, isFalse);
+      expect(reloaded.state.toJson(), expected);
+      expect(
+        await directory
+            .list()
+            .where((file) => file.path.contains('.corrupt-'))
+            .isEmpty,
+        isTrue,
+      );
+      expect(
+        await File('${file.path}.pre-desktop-ui').readAsString(),
+        original,
+      );
+    },
+  );
+
+  test(
+    'pre-overlay-setting file loads saves and reloads without quarantine',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'lineup-guide-sources',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      final file = File('${directory.path}/state.json');
+      final old = _canonicalJson();
+      // Literal settings from the pre-change schema, independent of new serialization.
+      old['settings'] = {
+        'theme': 'slate-pine',
+        'guideHours': 3,
+        'guideShowChannelSources': true,
+        'guideInfoBackgroundMode': 'bleed',
+        'preferClearLogos': false,
+        'dvrControlsEnabled': true,
+        'nowWatchingBanner': false,
+        'osdAutoHideSeconds': 8,
+        'audioSetupComplete': true,
+        'reduceMotion': true,
+        'largeFocusIndicators': true,
+        'profilePickerOnStartup': true,
+        'diagnosticsEnabled': true,
+      };
+      final original = _encodedState(old);
+      await file.writeAsString(original);
+      final store = FileAppStore(directory);
+      final loaded = await store.load();
+      expect(loaded.recoveredCorruptState, isFalse);
+      expect(loaded.state.settings.guideShowChannelSources, isTrue);
+      expect(
+        loaded.state.settings.overlayTransparency,
+        OverlayTransparency.standard,
+      );
+      final expected = Map<String, Object?>.from(old)
+        ..['settings'] = {
+          ...old['settings'] as Map,
+          'overlayTransparency': 'standard',
         };
       expect(loaded.state.toJson(), expected);
       await store.save(loaded.state);
