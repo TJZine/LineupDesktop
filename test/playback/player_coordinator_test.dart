@@ -130,6 +130,128 @@ void main() {
     },
   );
 
+  for (final state in [PlayerState.loading, PlayerState.buffering]) {
+    for (final delay in [
+      const Duration(seconds: 1),
+      const Duration(seconds: 3),
+    ]) {
+      testWidgets(
+        '${state.name} stop publishes completion after ${delay.inSeconds}s',
+        (tester) async {
+          final lineup = _TestLineup();
+          final guide = GuideController(
+            lineup: lineup,
+            loadSchedule: (channel) async => _schedule(channel),
+          );
+          final player = _BlockingStopEventPlayer();
+          final coordinator = PlayerCoordinator(
+            player: player,
+            lineup: lineup,
+            guide: guide,
+            overlayTimeout: const Duration(minutes: 1),
+          );
+          addTearDown(coordinator.dispose);
+          addTearDown(player.close);
+          addTearDown(guide.dispose);
+          addTearDown(lineup.dispose);
+          await coordinator.tune('channel-b');
+          player.emitStatus(state, generation: player.loadGenerations.last);
+          await tester.pump();
+
+          final stop = coordinator.stop();
+          await tester.pump();
+          expect(player.stopStarted.isCompleted, isTrue);
+          await tester.pump(delay);
+          expect(coordinator.status.state, state);
+          expect(
+            coordinator.busyLabel,
+            delay.inSeconds < 2
+                ? isNull
+                : state == PlayerState.buffering
+                ? 'Buffering…'
+                : 'Starting playback…',
+          );
+          final publications = <(PlayerState, String?)>[];
+          coordinator.addListener(
+            () => publications.add((
+              coordinator.status.state,
+              coordinator.busyLabel,
+            )),
+          );
+          player.releaseStop.complete();
+          await tester.pump();
+          await stop;
+          expect(coordinator.status.state, PlayerState.stopped);
+          expect(coordinator.busyLabel, isNull);
+          expect(publications, [(PlayerState.stopped, null)]);
+          await tester.pump(const Duration(seconds: 3));
+          expect(coordinator.busyLabel, isNull);
+          expect(publications, [(PlayerState.stopped, null)]);
+          coordinator.dispose();
+        },
+      );
+    }
+  }
+
+  for (final supersededBy in ['disposal', 'tune']) {
+    testWidgets('pending stop rejects final publication after $supersededBy', (
+      tester,
+    ) async {
+      final lineup = _TestLineup();
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => _schedule(channel),
+      );
+      final player = _BlockingStopEventPlayer();
+      final coordinator = PlayerCoordinator(
+        player: player,
+        lineup: lineup,
+        guide: guide,
+        overlayTimeout: const Duration(minutes: 1),
+      );
+      addTearDown(coordinator.dispose);
+      addTearDown(player.close);
+      addTearDown(guide.dispose);
+      addTearDown(lineup.dispose);
+      await coordinator.tune('channel-b');
+      await guide.ensureCurrentProgram('channel-0');
+      player.emitStatus(
+        PlayerState.loading,
+        generation: player.loadGenerations.last,
+      );
+      await tester.pump();
+      final stop = coordinator.stop();
+      await tester.pump();
+      expect(player.stopStarted.isCompleted, isTrue);
+      await tester.pump(const Duration(seconds: 3));
+      expect(coordinator.busyLabel, 'Starting playback…');
+      final publications = <PlayerState>[];
+      coordinator.addListener(() => publications.add(coordinator.status.state));
+      Future<bool>? replacement;
+      if (supersededBy == 'disposal') {
+        coordinator.dispose();
+      } else {
+        replacement = coordinator.tune('channel-0');
+      }
+      publications.clear();
+      player.releaseStop.complete();
+      await tester.pump();
+      await stop;
+      if (replacement != null) {
+        expect(await replacement, isTrue);
+        expect(lineup.currentChannelId, 'channel-0');
+        expect(coordinator.status.state, PlayerState.playing);
+        expect(publications, isNot(contains(PlayerState.stopped)));
+      } else {
+        expect(publications, isEmpty);
+      }
+      expect(coordinator.busyLabel, isNull);
+      await tester.pump(const Duration(seconds: 3));
+      expect(coordinator.busyLabel, isNull);
+      coordinator.dispose();
+    });
+  }
+
   testWidgets(
     'control notices expire after six seconds without a blocking error',
     (tester) async {
@@ -4411,6 +4533,24 @@ class _BlockingFullscreenPlayer extends _Player {
 class _BlockingStopPlayer extends _Player {
   final stopStarted = Completer<void>();
   final releaseStop = Completer<void>();
+
+  @override
+  Future<void> stop() async {
+    await super.stop();
+    if (!stopStarted.isCompleted) stopStarted.complete();
+    await releaseStop.future;
+  }
+}
+
+class _BlockingStopEventPlayer extends _EventPlayer {
+  final stopStarted = Completer<void>();
+  final releaseStop = Completer<void>();
+
+  @override
+  Future<void> load(Uri media, {String? plexToken, int? generation}) async {
+    await super.load(media, plexToken: plexToken, generation: generation);
+    emitStatus(PlayerState.playing, generation: generation);
+  }
 
   @override
   Future<void> stop() async {

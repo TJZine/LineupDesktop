@@ -942,7 +942,7 @@ class PlayerCoordinator extends ChangeNotifier {
 
   Future<void> stop() async {
     _clearSleepTimer();
-    ++_tuneGeneration;
+    final generation = ++_tuneGeneration;
     ++_controlGeneration;
     _tuning = false;
     _canRetry = false;
@@ -951,10 +951,12 @@ class PlayerCoordinator extends ChangeNotifier {
     if (!_disposed) notifyListeners();
     final operation = _tuneOperations.then((_) async {
       await nativeStop;
+      if (_disposed || generation != _tuneGeneration) return;
       _status = const PlayerStatus(
         state: PlayerState.stopped,
         message: 'Stopped',
       );
+      notifyListeners();
     });
     _tuneOperations = operation.catchError((_) {});
     await operation;
