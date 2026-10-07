@@ -141,7 +141,7 @@ void main() {
       (layout: '5.1(side)', count: 6, fact: '5.1 surround'),
       (layout: 'unknown', count: 6, fact: '6 channels'),
       (layout: '7.1', count: 6, fact: '6 channels'),
-      (layout: null, count: 1, fact: '1 channels'),
+      (layout: null, count: 1, fact: '1 channel'),
       (layout: null, count: 0, fact: null),
       (layout: null, count: -1, fact: null),
       (layout: 'unknown', count: null, fact: null),
@@ -156,6 +156,13 @@ void main() {
           display.secondaryFacts,
           testCase.fact == null ? isEmpty : [testCase.fact],
         );
+        if (testCase.count == 1) {
+          expect(display.tooltipText, 'Audio track: Audio track 1; 1 channel');
+          expect(
+            display.semanticsText,
+            'Select Audio track: Audio track 1; 1 channel.',
+          );
+        }
       });
     }
 

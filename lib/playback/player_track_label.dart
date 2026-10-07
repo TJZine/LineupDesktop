@@ -261,7 +261,8 @@ String? _channels(int? count, String? layout) {
     case '5.1(side)':
       return '5.1 surround';
   }
-  return count != null && count > 0 ? '$count channels' : null;
+  if (count == null || count <= 0) return null;
+  return count == 1 ? '1 channel' : '$count channels';
 }
 
 String? _codec(String? value) {
