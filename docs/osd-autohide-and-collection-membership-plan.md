@@ -1,16 +1,19 @@
 # Player Timing and Channel Creation Fix Plan
 
-**Status:** Approved for implementation on October 7, 2026.
+**Status:** Approved on October 7, 2026; all six units implemented locally.
+Independent final review is complete with one accepted builder correction.
+Final portable checks pass. Windows and live Plex acceptance remain outstanding.
 
-- **Source:** `codex/desktop-ui-second-pass` @ `97cf093a`. This plan file is
-  uncommitted until the orchestrator commits it.
+- **Source:** `codex/desktop-ui-second-pass`, approved base `97cf093a`.
+  The plan and handoff were committed together as `2e402473` before dispatch.
 - **How the plan was built:**
   1. A controller investigation.
   2. An independent plan review.
   3. Two investigations of adjacent areas: Player timing, and the
      channel-creation pipeline.
-- **Evidence:** all of it comes from reading the source. No test, Plex request,
-  or Windows run was executed for this plan.
+- **Planning evidence:** source inspection only; no tests, Plex requests, or
+  Windows runs were executed during planning. Implementation now has portable
+  test and Flutter-render evidence, with no Windows or live Plex verification.
 - **Product decisions:** the user made these on October 7, 2026. They are
   listed in [Decisions](#user-decisions-october-7-2026) and are binding.
 
@@ -630,6 +633,26 @@ sizes. A golden update is not approval.
 - **Multi-part duration capture at end of file.** Get a Windows event trace
   first.
 
+## Independent implementation review
+
+The read-only review of `97cf093a` through `95056800` found one P2 issue:
+when all channel numbers were occupied and a generated original was absent,
+its surviving Alt or variant could miss an Update and be reported unmatched.
+The accepted correction retains the proposal for extra expansion even when
+the original cannot be allocated. A focused regression verifies the surviving
+Alt's identity, updated settings, unmatched result, and exclusion counts.
+The correction is committed as `c732f79f`. No other material findings were
+established.
+
+Integrated checks passed after Wave 1 (1,122 tests), after Wave 2 (1,142 tests),
+and after review remediation (1,143 tests at `c732f79f`). Each run used full
+repository formatting verification, `flutter analyze`, and
+`TZ=America/New_York flutter test`. B3's approved layout changes were rendered
+in matched 1920×1080 and 960×720 states; no goldens were updated. Its regression
+confirms that selecting Remove changes 7 final / 0 Removed to 6 final /
+1 Removed and updates the table row from Unchanged to Removed. This review,
+rendering, and the portable checks do not replace the acceptance below.
+
 ## Acceptance outside this checkout (user)
 
 Use redacted counts and timings only. Record no collection names, server
@@ -649,8 +672,11 @@ addresses, or tokens.
      upstream's show-based counts.
    - Tune a TV collection channel and a smart collection channel.
    - Relaunch after a Kometa run; saved channels still resolve.
-   - Record how much longer the scan of the largest library takes, against
-     the budget the B1 implementer documents.
+   - Measure launch and setup separately for the largest library: added
+     median must be at most `max(20 s, 50% of the item-only median)`, with
+     no single paired run above twice that allowance. Follow the paired
+     measurement protocol above and report any exceedance before changing
+     the launch policy.
 4. **Live probes** (they settle the open hypotheses):
    - Compare tag array lengths in `/all?type=1` against `/library/metadata/{id}`
      for 20 movies.
