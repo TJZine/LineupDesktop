@@ -8,6 +8,55 @@ import 'package:lineup_desktop/settings/lineup_settings.dart';
 
 void main() {
   test(
+    'pre-change Glass state loads and saves as Ember without quarantine',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'lineup-retired-theme',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      final stateFile = File('${directory.path}/state.json');
+      final oldState = _canonicalJson();
+      oldState['settings'] = {
+        ...const LineupSettings(
+          guideHours: 3,
+          reduceMotion: true,
+          dvrControlsEnabled: true,
+        ).toJson(),
+        'theme': 'glass',
+      };
+      final original = _encodedState(oldState);
+      await stateFile.writeAsString(original);
+      final store = FileAppStore(directory);
+      final loaded = await store.load();
+      expect(loaded.recoveredCorruptState, isFalse);
+      expect(loaded.state.settings.theme, LineupThemeName.emberSteel);
+      expect(loaded.state.settings.guideHours, 3);
+      expect(loaded.state.settings.reduceMotion, isTrue);
+      expect(loaded.state.settings.dvrControlsEnabled, isTrue);
+      expect(loaded.state.profileId, 'profile');
+      await store.save(loaded.state);
+      final written = jsonDecode(await stateFile.readAsString()) as Map;
+      expect((written['settings'] as Map)['theme'], 'ember-steel');
+      expect((written['settings'] as Map)['guideHours'], 3);
+      expect(
+        (await FileAppStore(directory).load()).state.toJson(),
+        loaded.state.toJson(),
+      );
+      expect(
+        await directory
+            .list()
+            .where((file) => file.path.contains('.corrupt-'))
+            .isEmpty,
+        isTrue,
+      );
+      expect(
+        await File('${stateFile.path}.pre-desktop-ui').readAsString(),
+        original,
+      );
+    },
+  );
+
+  test(
     'first overwrite preserves exact bytes across queued saves and restart',
     () async {
       final directory = await Directory.systemTemp.createTemp(

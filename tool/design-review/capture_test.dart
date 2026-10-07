@@ -304,6 +304,28 @@ final Map<String, Scene> _scenes = {
     await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
     await _settle(tester);
     await shot('shelf');
+    // The first image read lets pending artwork decode finish. Lay out that
+    // artwork before revealing cast so its new height cannot hide the target.
+    await _settle(tester);
+    await tester.ensureVisible(
+      find.byKey(const Key('player-now-playing-cast-name-4')),
+    );
+    await _settle(tester);
+    final castName = tester.renderObject<RenderBox>(
+      find.byKey(const Key('player-now-playing-cast-name-4')),
+    );
+    final details = tester.renderObject<RenderBox>(
+      find.byKey(const Key('player-now-playing-details')),
+    );
+    Rect drawnRect(RenderBox box) => MatrixUtils.transformRect(
+      box.getTransformTo(null),
+      Offset.zero & box.size,
+    );
+    expect(
+      drawnRect(castName).bottom,
+      lessThanOrEqualTo(drawnRect(details).bottom + .5),
+    );
+    await shot('cast-visible');
   },
   'player-tracks': (tester, shot) async {
     final f = _readyFixture(
@@ -440,13 +462,7 @@ final Map<String, Scene> _scenes = {
     await shot('browse');
     await _tap(tester, find.text('Library').first);
     await shot('library-programming');
-    await _tap(
-      tester,
-      find.descendant(
-        of: find.byKey(const Key('studio-filter-genre')),
-        matching: find.byType(OutlinedButton),
-      ),
-    );
+    await _tap(tester, find.byKey(const Key('studio-filter-genre')));
     await shot('filter-picker');
   },
 

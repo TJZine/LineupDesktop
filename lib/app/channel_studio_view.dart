@@ -465,15 +465,8 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
       MediaQuery.sizeOf(context).width,
     );
     final baseFontSize = compact ? 14.0 : 18.0;
-    final inputDecorationTheme = theme.inputDecorationTheme;
     return Theme(
       data: theme.copyWith(
-        inputDecorationTheme: inputDecorationTheme.copyWith(
-          floatingLabelStyle: TextStyle(
-            fontSize: _studioSize(24, 18),
-            color: LineupTheme.of(context).secondaryText,
-          ),
-        ),
         textTheme: theme.textTheme.copyWith(
           bodyMedium: theme.textTheme.bodyMedium?.copyWith(
             fontSize: baseFontSize,
@@ -672,8 +665,9 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
         ? 'Saved'
         : 'Draft';
     final mode = _modeLabel(_effectiveMode);
-    final titleStyle = Theme.of(context).textTheme.headlineMedium
-        ?.copyWith(fontSize: (compact ? 24 : 36), fontWeight: FontWeight.w600);
+    final titleStyle = LineupTypography.pageTitle.copyWith(
+      color: roles.primaryText,
+    );
     final statusStyle = _studioBodyStyle(
       color: _conflict || _baseDeleted
           ? Theme.of(context).colorScheme.error
@@ -693,7 +687,6 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
         focusNode: _backFocus,
         autofocus: true,
         onPressed: _busy ? null : () => unawaited(_leave()),
-        style: _studioTextButtonStyle(),
         icon: const Icon(Icons.arrow_back),
         label: const Text('Back to Channels'),
       ),
@@ -789,25 +782,18 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
       : wide);
 
   TextStyle _studioBodyStyle({Color? color, FontWeight? fontWeight}) =>
-      Theme.of(context).textTheme.bodyMedium?.copyWith(
-        fontSize: _studioSize(18, 14),
-        color: color,
-        fontWeight: fontWeight,
-      ) ??
-      TextStyle(
-        fontSize: _studioSize(18, 14),
-        color: color,
-        fontWeight: fontWeight,
-      );
+      Theme.of(context).textTheme.bodyMedium
+          ?.copyWith(fontSize: 18, color: color, fontWeight: fontWeight) ??
+      TextStyle(fontSize: 18, color: color, fontWeight: fontWeight);
 
   TextStyle _studioSupportStyle({Color? color, FontWeight? fontWeight}) =>
       Theme.of(context).textTheme.bodyMedium?.copyWith(
-        fontSize: _studioSize(16, 14),
+        fontSize: 18,
         color: color ?? LineupTheme.of(context).secondaryText,
         fontWeight: fontWeight,
       ) ??
       TextStyle(
-        fontSize: _studioSize(16, 14),
+        fontSize: 18,
         color: color ?? LineupTheme.of(context).secondaryText,
         fontWeight: fontWeight,
       );
@@ -818,60 +804,6 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
         fontWeight: FontWeight.w600,
       ) ??
       TextStyle(fontSize: _studioSize(24, 20), fontWeight: FontWeight.w600);
-
-  TextStyle _studioControlStyle() =>
-      Theme.of(context).textTheme.labelLarge
-          ?.copyWith(fontSize: _studioSize(18, 14)) ??
-      TextStyle(fontSize: _studioSize(18, 14));
-
-  ButtonStyle _studioTextButtonStyle() => TextButton.styleFrom(
-    minimumSize: Size(0, 48),
-    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-    textStyle: _studioControlStyle(),
-  );
-
-  ButtonStyle _studioOutlinedButtonStyle() => OutlinedButton.styleFrom(
-    minimumSize: Size(0, 48),
-    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-    textStyle: _studioControlStyle(),
-  );
-
-  ButtonStyle _studioFilledButtonStyle() => FilledButton.styleFrom(
-    minimumSize: Size(0, 48),
-    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-    textStyle: _studioControlStyle(),
-  );
-
-  ButtonStyle _studioSourceStyle() {
-    final roles = LineupTheme.of(context);
-    final controlStyle = _studioControlStyle();
-    return ButtonStyle(
-      padding: WidgetStatePropertyAll(
-        const EdgeInsets.symmetric(horizontal: 16),
-      ),
-      textStyle: WidgetStatePropertyAll(controlStyle),
-      foregroundColor: WidgetStateProperty.resolveWith(
-        (states) => states.contains(WidgetState.disabled)
-            ? roles.mutedText
-            : states.contains(WidgetState.selected)
-            ? roles.primaryText
-            : roles.secondaryText,
-      ),
-      backgroundColor: WidgetStateProperty.resolveWith(
-        (states) => states.contains(WidgetState.selected)
-            ? roles.selectedSurface
-            : Colors.transparent,
-      ),
-      side: WidgetStateProperty.resolveWith(
-        (states) => states.contains(WidgetState.focused)
-            ? BorderSide(
-                color: roles.focusBorder,
-                width: roles.focusBorderWidth,
-              )
-            : BorderSide.none,
-      ),
-    );
-  }
 
   Widget _studioSwitchTile({
     Key? key,
@@ -939,7 +871,6 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
             order: const NumericFocusOrder(4),
             child: OutlinedButton(
               onPressed: _busy ? null : _duplicate,
-              style: _studioOutlinedButtonStyle(),
               child: const Text('Duplicate as custom'),
             ),
           ),
@@ -950,14 +881,12 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                 ? FilledButton.icon(
                     key: const Key('studio-tune'),
                     onPressed: _busy ? null : _tune,
-                    style: _studioFilledButtonStyle(),
                     icon: const Icon(Icons.play_arrow),
                     label: const Text('Tune in'),
                   )
                 : OutlinedButton.icon(
                     key: const Key('studio-tune'),
                     onPressed: canSave ? _confirmSaveAndTune : null,
-                    style: _studioOutlinedButtonStyle(),
                     icon: const Icon(Icons.play_arrow),
                     label: const Text('Tune in'),
                   ),
@@ -968,7 +897,6 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
             child: FilledButton(
               focusNode: _saveFocus,
               onPressed: canSave ? _save : null,
-              style: _studioFilledButtonStyle(),
               child: Text(
                 _saving
                     ? 'Saving…'
@@ -988,17 +916,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     final roles = LineupTheme.of(context);
     final error = Theme.of(context).colorScheme.error;
     final current = _currentBase;
-    final recoverySide = WidgetStateProperty.resolveWith(
-      (states) => BorderSide(
-        color: states.contains(WidgetState.focused)
-            ? roles.focusBorder
-            : roles.defaultBorder,
-        width: states.contains(WidgetState.focused)
-            ? roles.focusBorderWidth
-            : 1,
-      ),
-    );
-    final recoveryButtonStyle = ButtonStyle(side: recoverySide);
+
     return Semantics(
       liveRegion: true,
       container: true,
@@ -1030,7 +948,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                             ? 'This channel was deleted'
                             : 'Another edit was saved first',
                         style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.w800),
+                            ?.copyWith(fontWeight: FontWeight.w600),
                       ),
                       SizedBox(height: 4),
                       Text(
@@ -1062,25 +980,21 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                 if (_baseDeleted) ...[
                   OutlinedButton(
                     focusNode: _saveFocus,
-                    style: recoveryButtonStyle,
                     onPressed: _saving ? null : _prepareSaveAsNew,
                     child: const Text('Save as new custom channel'),
                   ),
                   OutlinedButton(
-                    style: recoveryButtonStyle,
                     onPressed: _saving ? null : _reload,
                     child: const Text('Return to Channels'),
                   ),
                 ] else ...[
                   OutlinedButton(
                     focusNode: _recoveryFocus,
-                    style: recoveryButtonStyle,
                     onPressed: _saving ? null : _confirmUseSaved,
                     child: const Text('Use saved version…'),
                   ),
                   OutlinedButton(
                     focusNode: _saveFocus,
-                    style: recoveryButtonStyle,
                     onPressed: _saving ? null : _confirmReapply,
                     child: const Text('Replace saved version with my draft…'),
                   ),
@@ -1104,7 +1018,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
             style: TextStyle(
               color: LineupTheme.of(context).mutedText,
               fontSize: 11,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w600,
               letterSpacing: 0.7,
             ),
           ),
@@ -1112,7 +1026,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
         Expanded(
           child: Text(
             value,
-            style: const TextStyle(fontWeight: FontWeight.w700),
+            style: const TextStyle(fontWeight: FontWeight.w600),
           ),
         ),
       ],
@@ -1154,37 +1068,39 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
               SizedBox(height: 8),
             ],
             LayoutBuilder(
-              builder: (context, constraints) => SegmentedButton<_SourceChoice>(
-                key: const Key('studio-source-choices'),
-                direction:
-                    MediaQuery.textScalerOf(context).scale(14) > 21 ||
-                        constraints.maxWidth < 480
-                    ? Axis.vertical
-                    : Axis.horizontal,
-                multiSelectionEnabled: false,
-                emptySelectionAllowed: _source is MixedSource,
-                segments: const [
-                  ButtonSegment(
-                    value: _SourceChoice.library,
-                    label: Text('Library'),
+              builder: (context, constraints) =>
+                  LineupSegmentedControl<_SourceChoice>(
+                    key: const Key('studio-source-choices'),
+                    expanded: true,
+                    direction:
+                        MediaQuery.textScalerOf(context).scale(14) > 21 ||
+                            constraints.maxWidth < 480
+                        ? Axis.vertical
+                        : Axis.horizontal,
+                    multiSelectionEnabled: false,
+                    emptySelectionAllowed: _source is MixedSource,
+                    segments: const [
+                      ButtonSegment(
+                        value: _SourceChoice.library,
+                        label: Text('Library'),
+                      ),
+                      ButtonSegment(
+                        value: _SourceChoice.playlist,
+                        label: Text('Plex playlist'),
+                      ),
+                      ButtonSegment(
+                        value: _SourceChoice.handPicked,
+                        label: Text('Hand-picked'),
+                      ),
+                    ],
+                    selected: {?_sourceChoice},
+                    showSelectedIcon: false,
+                    onSelectionChanged: _saving
+                        ? null
+                        : (value) => _changed(
+                            () => _sourceChoice = value.singleOrNull,
+                          ),
                   ),
-                  ButtonSegment(
-                    value: _SourceChoice.playlist,
-                    label: Text('Plex playlist'),
-                  ),
-                  ButtonSegment(
-                    value: _SourceChoice.handPicked,
-                    label: Text('Hand-picked'),
-                  ),
-                ],
-                selected: {?_sourceChoice},
-                showSelectedIcon: false,
-                style: _studioSourceStyle(),
-                onSelectionChanged: _saving
-                    ? null
-                    : (value) =>
-                          _changed(() => _sourceChoice = value.singleOrNull),
-              ),
             ),
             SizedBox(height: 8),
             switch (_sourceChoice) {
@@ -1220,20 +1136,27 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
           Text(
             'Playlist $_playlistId is unavailable — retained until replaced.',
           ),
-        DropdownButtonFormField<String>(
-          key: const Key('studio-playlist'),
-          isExpanded: true,
-          iconSize: 24,
-          itemHeight: null,
-          initialValue: selected ? _playlistId : null,
-          decoration: const InputDecoration(labelText: 'Video playlist'),
-          items: [
-            for (final playlist in available)
-              DropdownMenuItem(value: playlist.id, child: Text(playlist.title)),
-          ],
-          onChanged: _saving
-              ? null
-              : (value) => _changed(() => _playlistId = value),
+        LineupField(
+          label: 'Video playlist',
+          child: lineupDropdownField<String>(
+            context: context,
+            key: const Key('studio-playlist'),
+            isExpanded: true,
+            iconSize: 24,
+            itemHeight: null,
+            initialValue: selected ? _playlistId : null,
+            decoration: const InputDecoration(),
+            items: [
+              for (final playlist in available)
+                DropdownMenuItem(
+                  value: playlist.id,
+                  child: Text(playlist.title),
+                ),
+            ],
+            onChanged: _saving
+                ? null
+                : (value) => _changed(() => _playlistId = value),
+          ),
         ),
         if (otherUses.isNotEmpty) ...[
           SizedBox(height: 8),
@@ -1422,41 +1345,12 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
               ? 'Any collection'
               : 'Any'
         : '${selectedLabels.take(3).join(', ')}${selected.length > 3 ? ' · +${selected.length - 3} more' : ''}${unavailable > 0 ? ' · $unavailable unavailable' : ''}';
-    final roles = LineupTheme.of(context);
-    return ListenableBuilder(
+    return LineupFieldButton(
       key: Key('studio-filter-$key'),
-      listenable: focus,
-      builder: (context, _) => OutlinedButton(
-        focusNode: focus,
-        onPressed: _saving
-            ? null
-            : () => _openFilterPicker(key, values, labels),
-        style: OutlinedButton.styleFrom(
-          minimumSize: Size.zero,
-          padding: EdgeInsets.zero,
-          alignment: Alignment.centerLeft,
-          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          foregroundColor: roles.primaryText,
-          textStyle: _studioBodyStyle(),
-          side: BorderSide.none,
-        ),
-        child: InputDecorator(
-          isEmpty: false,
-          isFocused: focus.hasFocus,
-          decoration: InputDecoration(
-            labelText: _facetLabel(key),
-            floatingLabelBehavior: FloatingLabelBehavior.always,
-            enabled: !_saving,
-            contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-          ),
-          child: Row(
-            children: [
-              Expanded(child: Text(summary, softWrap: true)),
-              Icon(Icons.expand_more, color: roles.secondaryText, size: null),
-            ],
-          ),
-        ),
-      ),
+      label: _facetLabel(key),
+      value: summary,
+      focusNode: focus,
+      onPressed: _saving ? null : () => _openFilterPicker(key, values, labels),
     );
   }
 
@@ -1549,10 +1443,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                 controller: _filterPickerSearch,
                 autofocus: true,
                 style: _studioBodyStyle(),
-                decoration: const InputDecoration(
-                  labelText: 'Search values',
-                  floatingLabelBehavior: FloatingLabelBehavior.always,
-                ),
+                decoration: const InputDecoration(hintText: 'Search values'),
                 onChanged: (_) => setState(() {}),
               ),
               Wrap(
@@ -1565,14 +1456,12 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                       () =>
                           _showPendingFilterValues = !_showPendingFilterValues,
                     ),
-                    style: _studioTextButtonStyle(),
                     child: Text('${_pendingFilterValues.length} selected'),
                   ),
                   TextButton(
                     onPressed: _pendingFilterValues.isEmpty
                         ? null
                         : () => setState(_pendingFilterValues.clear),
-                    style: _studioTextButtonStyle(),
                     child: const Text('Clear selection'),
                   ),
                   if (unavailable.isNotEmpty)
@@ -1580,7 +1469,6 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                       onPressed: () => setState(
                         () => _pendingFilterValues.removeAll(unavailable),
                       ),
-                      style: _studioTextButtonStyle(),
                       child: Text('Remove ${unavailable.length} unavailable'),
                     ),
                   Text(
@@ -1608,7 +1496,6 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                 children: [
                   TextButton(
                     onPressed: () => _closeFilterPicker(key),
-                    style: _studioTextButtonStyle(),
                     child: const Text('Cancel'),
                   ),
                   FilledButton(
@@ -1625,7 +1512,6 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                       });
                       _restoreFilterFocus(key);
                     },
-                    style: _studioFilledButtonStyle(),
                     child: const Text('Done'),
                   ),
                 ],
@@ -1691,311 +1577,286 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     ];
     final countLabel =
         '${visible.length} matching, ${_manualEntries.length} selected';
-    final roles = LineupTheme.of(context);
-    Widget stageTab({
-      required Key key,
-      required bool selected,
-      required String label,
-      required VoidCallback? onPressed,
-    }) => Semantics(
-      selected: selected,
-      button: true,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          border: Border(
-            bottom: BorderSide(
-              color: selected ? roles.progressFill : Colors.transparent,
-              width: 2,
-            ),
-          ),
-        ),
-        child: TextButton(
-          key: key,
-          onPressed: onPressed,
-          style: _studioTextButtonStyle().copyWith(
-            foregroundColor: WidgetStateProperty.resolveWith(
-              (states) => states.contains(WidgetState.disabled)
-                  ? roles.mutedText
-                  : selected
-                  ? roles.primaryText
-                  : roles.secondaryText,
-            ),
-          ),
-          child: Text(label),
-        ),
-      ),
-    );
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _inventoryStatus(hasInventory: inventory.isNotEmpty),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            stageTab(
-              key: const Key('studio-manual-browse-stage'),
-              selected: !_manualRundown,
-              label: 'Browse library · ${visible.length}',
-              onPressed: _saving
-                  ? null
-                  : () => setState(() => _manualRundown = false),
-            ),
-            stageTab(
-              key: const Key('studio-manual-rundown-stage'),
-              selected: _manualRundown,
-              label: 'Channel programs · ${_manualEntries.length}',
-              onPressed: _saving
-                  ? null
-                  : () => setState(() => _manualRundown = true),
-            ),
-          ],
-        ),
-        SizedBox(height: 6),
-        Text(countLabel, style: _studioSupportStyle()),
-        if (_settledCountLabel.isNotEmpty)
-          Semantics(
-            liveRegion: true,
-            label: _settledCountLabel,
-            child: const SizedBox.shrink(),
-          ),
-        SizedBox(height: 12),
-        if (!_manualRundown) ...[
-          TextField(
-            key: const Key('studio-search'),
-            controller: _search,
-            focusNode: _searchFocus,
-            enabled: !_saving,
-            decoration: const InputDecoration(
-              labelText: 'Search title or show title',
-              floatingLabelBehavior: FloatingLabelBehavior.always,
-            ),
-            onChanged: (_) => _browseChanged(),
-          ),
-          SizedBox(height: 12),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final columns = constraints.maxWidth >= 960
-                  ? 4
-                  : constraints.maxWidth >= 700
-                  ? 3
-                  : constraints.maxWidth >= 480
-                  ? 2
-                  : 1;
-              final double gap = 12;
-              final width =
-                  (constraints.maxWidth - gap * (columns - 1)) / columns;
-              return Wrap(
-                spacing: gap,
-                runSpacing: 16,
-                children: [
-                  SizedBox(
-                    width: width,
-                    child: _libraryDropdown(
-                      key: const Key('studio-manual-library'),
-                      value: _manualLibraryId,
-                      allowAll: true,
-                      onChanged: (value) =>
-                          _browseChanged(() => _manualLibraryId = value),
-                    ),
-                  ),
-                  SizedBox(
-                    width: width,
-                    child: DropdownButtonFormField<String>(
-                      key: const Key('studio-media-type'),
-                      isExpanded: true,
-                      iconSize: 24,
-                      itemHeight: null,
-                      initialValue: _manualMediaType ?? '',
-                      style: _studioBodyStyle(),
-                      decoration: const InputDecoration(
-                        labelText: 'Media type',
-                        hintText: 'All types',
-                        floatingLabelBehavior: FloatingLabelBehavior.always,
-                      ),
-                      items: [
-                        const DropdownMenuItem(
-                          value: '',
-                          child: Text('All types'),
-                        ),
-                        for (final type
-                            in inventory.map((item) => item.type).toSet())
-                          DropdownMenuItem(value: type, child: Text(type)),
-                      ],
-                      onChanged: _saving
-                          ? null
-                          : (value) => _browseChanged(
-                              () => _manualMediaType = value?.isEmpty == true
-                                  ? null
-                                  : value,
-                            ),
-                    ),
-                  ),
-                  for (final key in _facetKeys)
-                    SizedBox(
-                      width: width,
-                      child: _facetDropdown(
-                        key: key,
-                        values: facets.values[key] ?? const [],
-                        labels: facets.labels[key] ?? const {},
-                        selected: _manualFilters[key],
-                        onChanged: (value) => _browseChanged(() {
-                          if (value == null) {
-                            _manualFilters.remove(key);
-                          } else {
-                            _manualFilters[key] = value;
-                          }
-                        }),
-                      ),
-                    ),
-                ],
-              );
-            },
-          ),
-          SizedBox(height: 12),
+    return LineupCompactControls(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _inventoryStatus(hasInventory: inventory.isNotEmpty),
           Wrap(
             spacing: 8,
             runSpacing: 8,
-            children: _browseSelecting
-                ? [
-                    Text(
-                      '${_browseSelection.length} selected${_browseSelection.where((id) => !visible.any((item) => item.id == id)).isEmpty ? '' : ' · selections outside this view'}${unavailableSelections == 0 ? '' : ' · $unavailableSelections unavailable; retained off air if added'}',
-                    ),
-                    TextButton(
-                      onPressed: _browseSelection.isEmpty
-                          ? null
-                          : () => _setShowBrowseSelected(true),
-                      child: const Text('Show selected'),
-                    ),
-                    if (_showBrowseSelected)
-                      TextButton(
-                        onPressed: () => _setShowBrowseSelected(false),
-                        child: const Text('Back to results'),
+            children: [
+              LineupTab(
+                key: const Key('studio-manual-browse-stage'),
+                selected: !_manualRundown,
+                label: 'Browse library',
+                count: visible.length,
+                onPressed: _saving
+                    ? null
+                    : () => setState(() => _manualRundown = false),
+              ),
+              LineupTab(
+                key: const Key('studio-manual-rundown-stage'),
+                selected: _manualRundown,
+                label: 'Channel programs',
+                count: _manualEntries.length,
+                onPressed: _saving
+                    ? null
+                    : () => setState(() => _manualRundown = true),
+              ),
+            ],
+          ),
+          SizedBox(height: 6),
+          Text(countLabel, style: _studioSupportStyle()),
+          if (_settledCountLabel.isNotEmpty)
+            Semantics(
+              liveRegion: true,
+              label: _settledCountLabel,
+              child: const SizedBox.shrink(),
+            ),
+          SizedBox(height: 12),
+          if (!_manualRundown) ...[
+            TextField(
+              key: const Key('studio-search'),
+              controller: _search,
+              focusNode: _searchFocus,
+              enabled: !_saving,
+              decoration: const InputDecoration(
+                hintText: 'Search title or show title',
+              ),
+              onChanged: (_) => _browseChanged(),
+            ),
+            SizedBox(height: 12),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final columns = constraints.maxWidth >= 960
+                    ? 4
+                    : constraints.maxWidth >= 700
+                    ? 3
+                    : constraints.maxWidth >= 480
+                    ? 2
+                    : 1;
+                final double gap = 12;
+                final width =
+                    (constraints.maxWidth - gap * (columns - 1)) / columns;
+                return Wrap(
+                  spacing: gap,
+                  runSpacing: 16,
+                  children: [
+                    SizedBox(
+                      width: width,
+                      child: _libraryDropdown(
+                        key: const Key('studio-manual-library'),
+                        value: _manualLibraryId,
+                        allowAll: true,
+                        onChanged: (value) =>
+                            _browseChanged(() => _manualLibraryId = value),
                       ),
-                    TextButton(
-                      onPressed: () => setState(() {
-                        _browseSelecting = false;
-                        _browseSelection.clear();
-                        _browseSelectionItems.clear();
-                        _showBrowseSelected = false;
-                      }),
-                      child: const Text('Cancel'),
                     ),
-                    FilledButton(
-                      onPressed: _browseSelection.isEmpty
-                          ? null
-                          : _addBrowseSelected,
-                      child: Text('Add selected (${_browseSelection.length})'),
+                    SizedBox(
+                      width: width,
+                      child: LineupField(
+                        label: 'Media type',
+                        child: lineupDropdownField<String>(
+                          context: context,
+                          key: const Key('studio-media-type'),
+                          isExpanded: true,
+                          iconSize: 24,
+                          itemHeight: null,
+                          initialValue: _manualMediaType ?? '',
+                          style: _studioBodyStyle(),
+                          decoration: const InputDecoration(
+                            hintText: 'All types',
+                          ),
+                          items: [
+                            const DropdownMenuItem(
+                              value: '',
+                              child: Text('All types'),
+                            ),
+                            for (final type
+                                in inventory.map((item) => item.type).toSet())
+                              DropdownMenuItem(value: type, child: Text(type)),
+                          ],
+                          onChanged: _saving
+                              ? null
+                              : (value) => _browseChanged(
+                                  () => _manualMediaType =
+                                      value?.isEmpty == true ? null : value,
+                                ),
+                        ),
+                      ),
                     ),
-                  ]
-                : [
-                    OutlinedButton(
-                      onPressed: () => setState(() => _browseSelecting = true),
-                      child: const Text('Select'),
-                    ),
-                    if (_lastAddedEntries.isNotEmpty)
-                      TextButton(
-                        onPressed: _undoLastAddition,
-                        child: const Text('Undo last addition'),
+                    for (final key in _facetKeys)
+                      SizedBox(
+                        width: width,
+                        child: _facetDropdown(
+                          key: key,
+                          values: facets.values[key] ?? const [],
+                          labels: facets.labels[key] ?? const {},
+                          selected: _manualFilters[key],
+                          onChanged: (value) => _browseChanged(() {
+                            if (value == null) {
+                              _manualFilters.remove(key);
+                            } else {
+                              _manualFilters[key] = value;
+                            }
+                          }),
+                        ),
                       ),
                   ],
-          ),
-          SizedBox(
-            height: _studioSize(300, 300),
-            child: ListView.builder(
-              key: const Key('studio-results'),
-              controller: _browseScroll,
-              itemCount: shown.length,
-              itemBuilder: (context, index) {
-                final item = shown[index];
-                final available = _playableInventory.byId.containsKey(item.id);
-
-                final browseCheckbox = Checkbox(
-                  value: _browseSelection.contains(item.id),
-                  onChanged: selectedIds.contains(item.id)
-                      ? null
-                      : (_) => _toggleBrowseSelection(item),
                 );
-                return ListTile(
-                  key: Key('studio-result-${item.id}'),
-                  minTileHeight: null,
-                  title: Text(item.title),
-                  subtitle: item.grandparentTitle != null || !available
-                      ? Text(
-                          [
-                            ?item.grandparentTitle,
-                            if (!available)
-                              'Unavailable — retained off air if added',
-                          ].join(' · '),
-                        )
-                      : null,
-                  leading: _browseSelecting ? browseCheckbox : null,
-                  trailing: _browseSelecting
-                      ? null
-                      : TextButton(
-                          onPressed: _saving || selectedIds.contains(item.id)
-                              ? null
-                              : () => _addManualItem(item),
-                          child: Text(
-                            selectedIds.contains(item.id) ? 'Added' : 'Add',
-                          ),
+              },
+            ),
+            SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: _browseSelecting
+                  ? [
+                      Text(
+                        '${_browseSelection.length} selected${_browseSelection.where((id) => !visible.any((item) => item.id == id)).isEmpty ? '' : ' · selections outside this view'}${unavailableSelections == 0 ? '' : ' · $unavailableSelections unavailable; retained off air if added'}',
+                      ),
+                      TextButton(
+                        onPressed: _browseSelection.isEmpty
+                            ? null
+                            : () => _setShowBrowseSelected(true),
+                        child: const Text('Show selected'),
+                      ),
+                      if (_showBrowseSelected)
+                        TextButton(
+                          onPressed: () => _setShowBrowseSelected(false),
+                          child: const Text('Back to results'),
                         ),
-                  onTap: selectedIds.contains(item.id)
-                      ? null
-                      : _browseSelecting
-                      ? () => _toggleBrowseSelection(item)
-                      : () => _addManualItem(item),
-                );
-              },
+                      TextButton(
+                        onPressed: () => setState(() {
+                          _browseSelecting = false;
+                          _browseSelection.clear();
+                          _browseSelectionItems.clear();
+                          _showBrowseSelected = false;
+                        }),
+                        child: const Text('Cancel'),
+                      ),
+                      FilledButton(
+                        onPressed: _browseSelection.isEmpty
+                            ? null
+                            : _addBrowseSelected,
+                        child: Text(
+                          'Add selected (${_browseSelection.length})',
+                        ),
+                      ),
+                    ]
+                  : [
+                      OutlinedButton(
+                        onPressed: () =>
+                            setState(() => _browseSelecting = true),
+                        child: const Text('Select'),
+                      ),
+                      if (_lastAddedEntries.isNotEmpty)
+                        TextButton(
+                          onPressed: _undoLastAddition,
+                          child: const Text('Undo last addition'),
+                        ),
+                    ],
             ),
-          ),
-        ] else ...[
-          TextField(
-            key: const Key('studio-rundown-search'),
-            controller: _rundownSearch,
-            decoration: InputDecoration(
-              labelText: 'Find a channel program',
-              suffixIcon: rundownQuery.isEmpty
-                  ? null
-                  : IconButton(
-                      tooltip: 'Clear channel program search',
-                      onPressed: () => setState(_rundownSearch.clear),
-                      icon: Icon(Icons.clear, size: 24),
-                    ),
+            SizedBox(
+              height: _studioSize(300, 300),
+              child: ListView.builder(
+                key: const Key('studio-results'),
+                controller: _browseScroll,
+                itemCount: shown.length,
+                itemBuilder: (context, index) {
+                  final item = shown[index];
+                  final available = _playableInventory.byId.containsKey(
+                    item.id,
+                  );
+
+                  final browseCheckbox = Checkbox(
+                    value: _browseSelection.contains(item.id),
+                    onChanged: selectedIds.contains(item.id)
+                        ? null
+                        : (_) => _toggleBrowseSelection(item),
+                  );
+                  return ListTile(
+                    key: Key('studio-result-${item.id}'),
+                    minTileHeight: null,
+                    title: Text(item.title),
+                    subtitle: item.grandparentTitle != null || !available
+                        ? Text(
+                            [
+                              ?item.grandparentTitle,
+                              if (!available)
+                                'Unavailable — retained off air if added',
+                            ].join(' · '),
+                          )
+                        : null,
+                    leading: _browseSelecting ? browseCheckbox : null,
+                    trailing: _browseSelecting
+                        ? null
+                        : TextButton(
+                            onPressed: _saving || selectedIds.contains(item.id)
+                                ? null
+                                : () => _addManualItem(item),
+                            child: Text(
+                              selectedIds.contains(item.id) ? 'Added' : 'Add',
+                            ),
+                          ),
+                    onTap: selectedIds.contains(item.id)
+                        ? null
+                        : _browseSelecting
+                        ? () => _toggleBrowseSelection(item)
+                        : () => _addManualItem(item),
+                  );
+                },
+              ),
             ),
-            onChanged: (_) => setState(() {}),
-          ),
-          SizedBox(height: 8),
-          Text(
-            _manualEntries.isEmpty
-                ? 'No programs selected. Return to Browse library to add programming.'
-                : '${rundownEntries.length} of ${_manualEntries.length} shown · Alt+Up/Down reorders · Delete removes${rundownQuery.isEmpty ? '' : ' · Clear search to drag reorder'}',
-          ),
-          SizedBox(height: 8),
-          SizedBox(
-            height: rundownEntries.isEmpty ? 0 : 420,
-            child: ReorderableListView.builder(
-              key: const Key('studio-rundown'),
-              scrollController: _rundownScroll,
-              buildDefaultDragHandles: false,
-              itemCount: rundownEntries.length,
-              onReorderItem: _saving || rundownQuery.isNotEmpty
-                  ? (_, _) {}
-                  : (from, to) => _reorderManual(from, to),
-              itemBuilder: (context, visibleIndex) {
-                final item = rundownEntries[visibleIndex];
-                return _rundownRow(
-                  item.entry,
-                  item.index,
-                  !inventoryById.containsKey(item.entry.id),
-                  inventoryById,
-                  dragIndex: rundownQuery.isEmpty ? visibleIndex : null,
-                );
-              },
+          ] else ...[
+            TextField(
+              key: const Key('studio-rundown-search'),
+              controller: _rundownSearch,
+              decoration: InputDecoration(
+                hintText: 'Search channel programs',
+                suffixIcon: rundownQuery.isEmpty
+                    ? null
+                    : IconButton(
+                        tooltip: 'Clear channel program search',
+                        onPressed: () => setState(_rundownSearch.clear),
+                        icon: Icon(Icons.clear, size: 24),
+                      ),
+              ),
+              onChanged: (_) => setState(() {}),
             ),
-          ),
+            SizedBox(height: 8),
+            Text(
+              _manualEntries.isEmpty
+                  ? 'No programs selected. Return to Browse library to add programming.'
+                  : '${rundownEntries.length} of ${_manualEntries.length} shown · Alt+Up/Down reorders · Delete removes${rundownQuery.isEmpty ? '' : ' · Clear search to drag reorder'}',
+            ),
+            SizedBox(height: 8),
+            SizedBox(
+              height: rundownEntries.isEmpty ? 0 : 420,
+              child: ReorderableListView.builder(
+                key: const Key('studio-rundown'),
+                scrollController: _rundownScroll,
+                buildDefaultDragHandles: false,
+                itemCount: rundownEntries.length,
+                onReorderItem: _saving || rundownQuery.isNotEmpty
+                    ? (_, _) {}
+                    : (from, to) => _reorderManual(from, to),
+                itemBuilder: (context, visibleIndex) {
+                  final item = rundownEntries[visibleIndex];
+                  return _rundownRow(
+                    item.entry,
+                    item.index,
+                    !inventoryById.containsKey(item.entry.id),
+                    inventoryById,
+                    dragIndex: rundownQuery.isEmpty ? visibleIndex : null,
+                  );
+                },
+              ),
+            ),
+          ],
         ],
-      ],
+      ),
     );
   }
 
@@ -2098,7 +1959,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                   : 'Library loading failed. The last usable programming and this draft were preserved.',
             ),
           ),
-          TextButton(
+          LineupInlineLink(
             onPressed: _saving ? null : _openGenerateLineup,
             child: const Text('Retry in Generate lineup'),
           ),
@@ -2112,7 +1973,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
           const Text(
             'No usable programming is loaded. A new channel needs a selected Plex movie/show library or video playlist.',
           ),
-          TextButton(
+          LineupInlineLink(
             onPressed: _saving ? null : _openGenerateLineup,
             child: const Text('Open Generate lineup'),
           ),
@@ -2133,26 +1994,30 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     bool allowAll = false,
   }) {
     final selected = _selectedLibraries.any((library) => library.id == value);
-    return DropdownButtonFormField<String>(
-      key: key,
-      isExpanded: true,
-      iconSize: 24,
-      itemHeight: null,
-      initialValue: selected
-          ? value
-          : allowAll
-          ? ''
-          : null,
-      decoration: const InputDecoration(labelText: 'Library'),
-      items: [
-        if (allowAll)
-          const DropdownMenuItem(value: '', child: Text('All libraries')),
-        for (final library in _selectedLibraries)
-          DropdownMenuItem(value: library.id, child: Text(library.title)),
-      ],
-      onChanged: _saving
-          ? null
-          : (value) => onChanged(value?.isEmpty == true ? null : value),
+    return LineupField(
+      label: 'Library',
+      child: lineupDropdownField<String>(
+        context: context,
+        key: key,
+        isExpanded: true,
+        iconSize: 24,
+        itemHeight: null,
+        initialValue: selected
+            ? value
+            : allowAll
+            ? ''
+            : null,
+        decoration: const InputDecoration(),
+        items: [
+          if (allowAll)
+            const DropdownMenuItem(value: '', child: Text('All libraries')),
+          for (final library in _selectedLibraries)
+            DropdownMenuItem(value: library.id, child: Text(library.title)),
+        ],
+        onChanged: _saving
+            ? null
+            : (value) => onChanged(value?.isEmpty == true ? null : value),
+      ),
     );
   }
 
@@ -2166,26 +2031,33 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     final fieldValue = selected ?? '';
     return SizedBox(
       key: Key('studio-facet-$key'),
-      child: DropdownButtonFormField<String>(
-        key: ValueKey(fieldValue),
-        isExpanded: true,
-        iconSize: 24,
-        itemHeight: null,
-        initialValue: fieldValue,
-        decoration: InputDecoration(labelText: _facetLabel(key)),
-        items: [
-          const DropdownMenuItem(value: '', child: Text('Any')),
-          if (selected != null && !values.contains(selected))
-            DropdownMenuItem(
-              value: selected,
-              child: Text('$selected (unavailable — retained)'),
-            ),
-          for (final value in values)
-            DropdownMenuItem(value: value, child: Text(labels[value] ?? value)),
-        ],
-        onChanged: _saving
-            ? null
-            : (value) => onChanged(value?.isEmpty == true ? null : value),
+      child: LineupField(
+        label: _facetLabel(key),
+        child: lineupDropdownField<String>(
+          context: context,
+          key: ValueKey(fieldValue),
+          isExpanded: true,
+          iconSize: 24,
+          itemHeight: null,
+          initialValue: fieldValue,
+          decoration: InputDecoration(),
+          items: [
+            const DropdownMenuItem(value: '', child: Text('Any')),
+            if (selected != null && !values.contains(selected))
+              DropdownMenuItem(
+                value: selected,
+                child: Text('$selected (unavailable — retained)'),
+              ),
+            for (final value in values)
+              DropdownMenuItem(
+                value: value,
+                child: Text(labels[value] ?? value),
+              ),
+          ],
+          onChanged: _saving
+              ? null
+              : (value) => onChanged(value?.isEmpty == true ? null : value),
+        ),
       ),
     );
   }
@@ -2371,19 +2243,19 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                 child: Icon(Icons.drag_handle, size: 24),
               ),
             ),
-          IconButton(
+          lineupArrowButton(
             tooltip: 'Move $positionedTitle earlier in $_draftChannelLabel',
             onPressed: _saving || index == 0
                 ? null
                 : () => _moveManual(entry, -1),
-            icon: const Icon(Icons.arrow_upward),
+            icon: Icons.arrow_upward,
           ),
-          IconButton(
+          lineupArrowButton(
             tooltip: 'Move $positionedTitle later in $_draftChannelLabel',
             onPressed: _saving || index == _manualEntries.length - 1
                 ? null
                 : () => _moveManual(entry, 1),
-            icon: const Icon(Icons.arrow_downward),
+            icon: Icons.arrow_downward,
           ),
           IconButton(
             tooltip: 'Move $positionedTitle before or after another program',
@@ -2417,13 +2289,25 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
             return Container(
               decoration: BoxDecoration(
                 color: focus.hasFocus ? roles.selectedSurface : null,
+                border: Border(
+                  left: BorderSide(
+                    color: focus.hasFocus
+                        ? roles.progressFill
+                        : Colors.transparent,
+                    width: 3,
+                  ),
+                ),
+                borderRadius: BorderRadius.zero,
+              ),
+              foregroundDecoration: BoxDecoration(
                 border: Border.all(
-                  color: focus.hasFocus
+                  color: LineupFocusScope.visible(context, focus.hasFocus)
                       ? roles.focusBorder
                       : Colors.transparent,
-                  width: focus.hasFocus ? roles.focusBorderWidth : 1,
+                  width: LineupFocusScope.visible(context, focus.hasFocus)
+                      ? roles.focusBorderWidth
+                      : 1,
                 ),
-                borderRadius: BorderRadius.circular(roles.panelRadius),
               ),
               child: child,
             );
@@ -2574,40 +2458,39 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
               final identity = Row(
                 children: [
                   Expanded(
-                    child: TextFormField(
-                      key: const Key('studio-name'),
-                      controller: _name,
-                      focusNode: _nameFocus,
-                      enabled: !_saving,
-                      style: _studioBodyStyle(),
-                      decoration: const InputDecoration(
-                        labelText: 'Channel name',
-                        hintText: 'Required',
-                        floatingLabelBehavior: FloatingLabelBehavior.always,
+                    child: LineupField(
+                      label: 'Channel name',
+                      child: TextFormField(
+                        key: const Key('studio-name'),
+                        controller: _name,
+                        focusNode: _nameFocus,
+                        enabled: !_saving,
+                        style: _studioBodyStyle(),
+                        decoration: const InputDecoration(hintText: 'Required'),
+                        onChanged: (_) => _changed(),
+                        validator: (value) =>
+                            value == null || value.trim().isEmpty
+                            ? 'Enter a channel name.'
+                            : null,
                       ),
-                      onChanged: (_) => _changed(),
-                      validator: (value) =>
-                          value == null || value.trim().isEmpty
-                          ? 'Enter a channel name.'
-                          : null,
                     ),
                   ),
                   SizedBox(width: 12),
                   SizedBox(
                     width: numberWidth,
-                    child: TextFormField(
-                      key: const Key('studio-number'),
-                      controller: _number,
-                      focusNode: _numberFocus,
-                      enabled: !_saving,
-                      keyboardType: TextInputType.number,
-                      style: _studioBodyStyle(),
-                      decoration: const InputDecoration(
-                        labelText: 'Number',
-                        floatingLabelBehavior: FloatingLabelBehavior.always,
+                    child: LineupField(
+                      label: 'Number',
+                      child: TextFormField(
+                        key: const Key('studio-number'),
+                        controller: _number,
+                        focusNode: _numberFocus,
+                        enabled: !_saving,
+                        keyboardType: TextInputType.number,
+                        style: _studioBodyStyle(),
+                        decoration: const InputDecoration(),
+                        onChanged: (_) => _changed(),
+                        validator: _validateNumber,
                       ),
-                      onChanged: (_) => _changed(),
-                      validator: _validateNumber,
                     ),
                   ),
                 ],
@@ -2647,7 +2530,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
           if (_conflictingChannel != null)
             Align(
               alignment: Alignment.centerLeft,
-              child: TextButton(
+              child: LineupInlineLink(
                 onPressed: _saving || _lowestFreeNumber() == null
                     ? null
                     : _useNextAvailable,
@@ -2703,66 +2586,68 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
         children: [
           SizedBox(
             width: inline ? constraints.maxWidth - 474 : constraints.maxWidth,
-            child: DropdownButtonFormField<PlaybackMode>(
-              key: const Key('studio-playback-order'),
-              initialValue: _playbackMode,
-              isExpanded: true,
-              iconSize: 24,
-              itemHeight: null,
-              decoration: const InputDecoration(
-                labelText: 'Playback order',
-                floatingLabelBehavior: FloatingLabelBehavior.always,
+            child: LineupField(
+              label: 'Playback order',
+              child: lineupDropdownField<PlaybackMode>(
+                context: context,
+                key: const Key('studio-playback-order'),
+                initialValue: _playbackMode,
+                isExpanded: true,
+                iconSize: 24,
+                itemHeight: null,
+                decoration: const InputDecoration(),
+                items: [
+                  const DropdownMenuItem(
+                    value: PlaybackMode.shuffle,
+                    child: Text('Shuffle'),
+                  ),
+                  const DropdownMenuItem(
+                    value: PlaybackMode.sequential,
+                    child: Text('In order'),
+                  ),
+                  DropdownMenuItem(
+                    value: PlaybackMode.block,
+                    enabled:
+                        !confirmedMovieOnly ||
+                        _playbackMode == PlaybackMode.block,
+                    child: const Text('Mini-marathons'),
+                  ),
+                ],
+                onChanged: _busy
+                    ? null
+                    : (value) {
+                        if (value == null) return;
+                        _changed(() {
+                          _playbackMode = value;
+                          _blockSize ??= 3;
+                        });
+                      },
               ),
-              items: [
-                const DropdownMenuItem(
-                  value: PlaybackMode.shuffle,
-                  child: Text('Shuffle'),
-                ),
-                const DropdownMenuItem(
-                  value: PlaybackMode.sequential,
-                  child: Text('In order'),
-                ),
-                DropdownMenuItem(
-                  value: PlaybackMode.block,
-                  enabled:
-                      !confirmedMovieOnly ||
-                      _playbackMode == PlaybackMode.block,
-                  child: const Text('Mini-marathons'),
-                ),
-              ],
-              onChanged: _busy
-                  ? null
-                  : (value) {
-                      if (value == null) return;
-                      _changed(() {
-                        _playbackMode = value;
-                        _blockSize ??= 3;
-                      });
-                    },
             ),
           ),
           if (block) ...[
             SizedBox(
               width: inline ? 220 : constraints.maxWidth,
-              child: DropdownButtonFormField<int>(
-                key: const Key('studio-block-size'),
-                isExpanded: true,
-                iconSize: 24,
-                itemHeight: null,
-                initialValue: (_blockSize ?? 3) >= 2 && (_blockSize ?? 3) <= 5
-                    ? _blockSize ?? 3
-                    : null,
-                decoration: const InputDecoration(
-                  labelText: 'Episodes per block',
-                  floatingLabelBehavior: FloatingLabelBehavior.always,
+              child: LineupField(
+                label: 'Episodes per block',
+                child: lineupDropdownField<int>(
+                  context: context,
+                  key: const Key('studio-block-size'),
+                  isExpanded: true,
+                  iconSize: 24,
+                  itemHeight: null,
+                  initialValue: (_blockSize ?? 3) >= 2 && (_blockSize ?? 3) <= 5
+                      ? _blockSize ?? 3
+                      : null,
+                  decoration: const InputDecoration(),
+                  items: [
+                    for (var size = 2; size <= 5; size++)
+                      DropdownMenuItem(value: size, child: Text('$size')),
+                  ],
+                  onChanged: _saving
+                      ? null
+                      : (value) => _changed(() => _blockSize = value),
                 ),
-                items: [
-                  for (var size = 2; size <= 5; size++)
-                    DropdownMenuItem(value: size, child: Text('$size')),
-                ],
-                onChanged: _saving
-                    ? null
-                    : (value) => _changed(() => _blockSize = value),
               ),
             ),
             SizedBox(
@@ -3544,8 +3429,7 @@ class _MoveProgramDialogState extends State<_MoveProgramDialog> {
     }
     final size = MediaQuery.sizeOf(context);
     final viewInsets = MediaQuery.viewInsetsOf(context);
-    final theme = Theme.of(context);
-    final inputDecorationTheme = theme.inputDecorationTheme;
+
     final dialog = AlertDialog(
       title: Text('Move ${widget.titleFor(widget.moving)}'),
       content: SizedBox(
@@ -3557,10 +3441,7 @@ class _MoveProgramDialogState extends State<_MoveProgramDialog> {
               key: const Key('move-program-search'),
               controller: _search,
               autofocus: true,
-              decoration: InputDecoration(
-                labelText: 'Find program',
-                contentPadding: inputDecorationTheme.contentPadding,
-              ),
+              decoration: InputDecoration(hintText: 'Search programs'),
               onChanged: (_) => setState(() {}),
             ),
             SizedBox(height: 8),
@@ -3581,7 +3462,7 @@ class _MoveProgramDialogState extends State<_MoveProgramDialog> {
                 ),
               ),
             ),
-            SegmentedButton<bool>(
+            LineupSegmentedControl<bool>(
               segments: const [
                 ButtonSegment(value: false, label: Text('Before')),
                 ButtonSegment(value: true, label: Text('After')),

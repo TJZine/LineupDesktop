@@ -1381,6 +1381,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           builder: LineupCanvas.builder,
+          theme: LineupTheme.forName(LineupThemeName.emberSteel),
           home: GuideView(
             controller: guide,
             onClose: () {},
@@ -1393,6 +1394,7 @@ void main() {
       Finder marker() => find.byKey(const Key('guide-now-line'));
       Finder focusedCell() => find.byKey(ValueKey(guide.focusedProgram!.id));
 
+      expect(tester.takeException(), isNull);
       expect(marker(), findsOneWidget);
       expect(find.byKey(const Key('guide-midnight-date')), findsOneWidget);
       expect(
@@ -1437,6 +1439,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           builder: LineupCanvas.builder,
+          theme: LineupTheme.forName(LineupThemeName.emberSteel),
           home: GuideView(
             controller: guide,
             onClose: () {},

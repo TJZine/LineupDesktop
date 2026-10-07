@@ -17,6 +17,7 @@ const _guideTimelineGutter = 1.0;
 class GuideLayoutPolicy {
   const GuideLayoutPolicy._({
     required this.compact,
+    required this.timeHeaderHeight,
     required this.padding,
     required this.channelRailWidth,
     required this.showcaseHeight,
@@ -31,6 +32,7 @@ class GuideLayoutPolicy {
     Size size, {
     required bool hasPicture,
     double textScale = 1,
+    double? timeHeaderHeight,
   }) {
     final width = size.width.isFinite ? size.width.clamp(0, 10000) : 0.0;
     final height = size.height.isFinite ? size.height.clamp(0, 10000) : 0.0;
@@ -42,7 +44,7 @@ class GuideLayoutPolicy {
         toolbarHeight(size, textScale: textScale) +
         10 +
         controlsHeight(size, textScale: textScale) +
-        38 * textScale;
+        (timeHeaderHeight ?? 38 * textScale);
     final minimumRowHeight = 58 * textScale;
     // Extra height belongs to the information area; the five reference rows
     // retain their geometry. Below the root floor, reserve navigable rows first.
@@ -71,6 +73,7 @@ class GuideLayoutPolicy {
         : pictureHeight * 16 / 9;
     return GuideLayoutPolicy._(
       compact: compact,
+      timeHeaderHeight: timeHeaderHeight ?? 38 * textScale,
       padding: padding,
       channelRailWidth:
           (width >= 1800
@@ -122,6 +125,7 @@ class GuideLayoutPolicy {
   }
 
   final bool compact;
+  final double timeHeaderHeight;
   final double padding;
   final double channelRailWidth;
   final double showcaseHeight;
@@ -488,6 +492,7 @@ class _GuideViewState extends State<GuideView>
                       _TimeHeader(
                         controller: widget.controller,
                         railWidth: policy.channelRailWidth,
+                        height: policy.timeHeaderHeight,
                       ),
                       Expanded(
                         child: channels.isEmpty
@@ -547,6 +552,10 @@ class _GuideViewState extends State<GuideView>
               outer.biggest,
               hasPicture: widget.pictureInPicture != null,
               textScale: MediaQuery.textScalerOf(context).scale(1),
+              timeHeaderHeight: _TimeHeader.requiredHeight(
+                context,
+                widget.controller,
+              ),
             );
             final schedule = _schedule(policy, channels);
             final theme = Theme.of(context);
@@ -712,12 +721,7 @@ class _Toolbar extends StatelessWidget {
       fontSize: 18.0,
       color: roles.secondaryText,
     );
-    final menuButtonStyle = enlargedControls
-        ? TextButton.styleFrom(
-            minimumSize: Size(48, 48),
-            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          )
-        : null;
+
     return Container(
       height: GuideLayoutPolicy.toolbarHeight(size, textScale: textScale),
       decoration: BoxDecoration(
@@ -733,7 +737,6 @@ class _Toolbar extends StatelessWidget {
                   key: const Key('guide-app-menu'),
                   focusNode: menuFocus,
                   onPressed: () => onOpenMenu!(invokerContext, menuFocus),
-                  style: menuButtonStyle,
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -827,39 +830,44 @@ class _GuideControls extends StatelessWidget {
       width: railWidth,
       height: controlHeight,
       child: DropdownButtonHideUnderline(
-        child: DropdownButton<String?>(
-          key: const Key('guide-library-picker'),
-          style: controlStyle,
-          isExpanded: true,
-          isDense: enlargedControls,
-          padding: EdgeInsets.symmetric(horizontal: 10),
-          iconSize: 24,
-          itemHeight: enlargedControls ? null : controlHeight,
-          value: selectedLibrary,
-          hint: Text(selectedLibrary == null ? 'All libraries' : 'Libraries'),
-          selectedItemBuilder: (context) => [
-            const Align(
-              alignment: Alignment.centerLeft,
-              child: Text('All libraries'),
-            ),
-            for (final _ in libraryIds)
+        child: LineupDropdownBox(
+          compact: true,
+          enabled: true,
+          child: DropdownButton<String?>(
+            key: const Key('guide-library-picker'),
+            style: controlStyle,
+            isExpanded: true,
+            isDense: enlargedControls,
+            padding: EdgeInsets.symmetric(horizontal: 10),
+            iconSize: 24,
+            itemHeight: enlargedControls ? null : controlHeight,
+            value: selectedLibrary,
+            hint: Text(selectedLibrary == null ? 'All libraries' : 'Libraries'),
+            selectedItemBuilder: (context) => [
               const Align(
                 alignment: Alignment.centerLeft,
-                child: Text('Libraries'),
+                child: Text('All libraries'),
               ),
-          ],
-          items: [
-            DropdownMenuItem(
-              value: null,
-              child: menuItemContent(const Text('All libraries')),
-            ),
-            for (final id in libraryIds)
+              for (final _ in libraryIds)
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('Libraries'),
+                ),
+            ],
+            items: lineupMenuItems([
               DropdownMenuItem(
-                value: id,
-                child: menuItemContent(Text(_libraryName(controller, id))),
+                value: null,
+                child: menuItemContent(const Text('All libraries')),
               ),
-          ],
-          onChanged: controller.setLibraryFilter,
+              for (final id in libraryIds)
+                DropdownMenuItem(
+                  value: id,
+                  child: menuItemContent(Text(_libraryName(controller, id))),
+                ),
+            ], selectedLibrary),
+            onChanged: controller.setLibraryFilter,
+            dropdownColor: LineupTheme.of(context).elevatedSurface,
+          ),
         ),
       ),
     );
@@ -898,8 +906,7 @@ class _GuideControls extends StatelessWidget {
             controller: searchController,
             focusNode: searchFocus,
             decoration: InputDecoration(
-              isDense: true,
-              hintText: 'Channel name or number',
+              hintText: 'Search channels',
               suffixIcon: value.text.isEmpty
                   ? null
                   : IconButton(
@@ -907,22 +914,6 @@ class _GuideControls extends StatelessWidget {
                       onPressed: searchController.clear,
                       icon: Icon(Icons.close, size: 17),
                     ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(6),
-                borderSide: BorderSide(color: roles.subtleBorder),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(6),
-                borderSide: BorderSide(color: roles.subtleBorder),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(6),
-                borderSide: BorderSide(color: roles.focusBorder, width: 2),
-              ),
-              contentPadding: EdgeInsets.symmetric(
-                horizontal: 14,
-                vertical: 12,
-              ),
             ),
           ),
         ),
@@ -940,18 +931,7 @@ class _GuideControls extends StatelessWidget {
           iconSize: 24,
           icon: const Icon(Icons.chevron_left),
         ),
-        TextButton(
-          onPressed: controller.playToNow,
-          style: TextButton.styleFrom(
-            textStyle: controlStyle,
-            foregroundColor: roles.secondaryText,
-            minimumSize: enlargedControls ? Size(0, 48) : null,
-            padding: enlargedControls
-                ? EdgeInsets.symmetric(horizontal: 12, vertical: 8)
-                : null,
-          ),
-          child: const Text('Now'),
-        ),
+        TextButton(onPressed: controller.playToNow, child: const Text('Now')),
         IconButton(
           key: const Key('guide-later'),
           tooltip: 'Later by 30 minutes',
@@ -961,34 +941,46 @@ class _GuideControls extends StatelessWidget {
         ),
         SizedBox(width: 8),
         DropdownButtonHideUnderline(
-          child: DropdownButton<int>(
-            key: const Key('guide-hours'),
-            style: controlStyle,
-            isDense: enlargedControls,
-            iconSize: 24,
-            itemHeight: enlargedControls ? null : controlHeight,
-            padding: null,
-            value:
+          child: LineupDropdownBox(
+            compact: true,
+            enabled: true,
+            child: DropdownButton<int>(
+              key: const Key('guide-hours'),
+              style: controlStyle,
+              isDense: enlargedControls,
+              iconSize: 24,
+              itemHeight: enlargedControls ? null : controlHeight,
+              padding: null,
+              value:
+                  LineupSettings.guideHoursOptions.contains(
+                    controller.guideHours,
+                  )
+                  ? controller.guideHours
+                  : null,
+              hint: const Text('Hours'),
+              selectedItemBuilder: enlargedControls
+                  ? (context) => [
+                      for (final hours in LineupSettings.guideHoursOptions)
+                        Text('$hours hours'),
+                    ]
+                  : null,
+              items: lineupMenuItems(
+                [
+                  for (final hours in LineupSettings.guideHoursOptions)
+                    DropdownMenuItem(
+                      value: hours,
+                      child: menuItemContent(Text('$hours hours')),
+                    ),
+                ],
                 LineupSettings.guideHoursOptions.contains(controller.guideHours)
-                ? controller.guideHours
-                : null,
-            hint: const Text('Hours'),
-            selectedItemBuilder: enlargedControls
-                ? (context) => [
-                    for (final hours in LineupSettings.guideHoursOptions)
-                      Text('$hours hours'),
-                  ]
-                : null,
-            items: [
-              for (final hours in LineupSettings.guideHoursOptions)
-                DropdownMenuItem(
-                  value: hours,
-                  child: menuItemContent(Text('$hours hours')),
-                ),
-            ],
-            onChanged: (hours) {
-              if (hours != null) unawaited(controller.setGuideHours(hours));
-            },
+                    ? controller.guideHours
+                    : null,
+              ),
+              onChanged: (hours) {
+                if (hours != null) unawaited(controller.setGuideHours(hours));
+              },
+              dropdownColor: LineupTheme.of(context).elevatedSurface,
+            ),
           ),
         ),
       ],
@@ -1156,7 +1148,36 @@ class _CornerMaskPainter extends CustomPainter {
 }
 
 class _TimeHeader extends StatelessWidget {
-  const _TimeHeader({required this.controller, required this.railWidth});
+  const _TimeHeader({
+    required this.controller,
+    required this.railWidth,
+    required this.height,
+  });
+  final double height;
+
+  static double requiredHeight(
+    BuildContext context,
+    GuideController controller,
+  ) {
+    final scaler = MediaQuery.textScalerOf(context);
+    final minimum = 38 * scaler.scale(1);
+    final hasMidnight = List.generate(
+      controller.guideHours * 2,
+      (index) =>
+          controller.windowStart.add(Duration(minutes: 30 * index)).toLocal(),
+    ).any((tick) => tick.hour == 0 && tick.minute == 0);
+    if (!hasMidnight) return minimum;
+    final theme = Theme.of(context);
+    final timeStyle = theme.textTheme.bodyMedium!;
+    final dateStyle = timeStyle.merge(theme.textTheme.labelSmall);
+    final direction = Directionality.of(context);
+    return math.max(
+      minimum,
+      _textHeight(timeStyle, scaler, direction) +
+          _textHeight(dateStyle, scaler, direction),
+    );
+  }
+
   final GuideController controller;
   final double railWidth;
 
@@ -1164,7 +1185,7 @@ class _TimeHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final slots = controller.guideHours * 2;
     final textScale = MediaQuery.textScalerOf(context).scale(1);
-    final headerHeight = 38 * textScale;
+    final headerHeight = height;
     if (slots <= 0) return SizedBox(height: headerHeight);
     return SizedBox(
       height: headerHeight,
@@ -1305,10 +1326,12 @@ class _GuideRow extends StatelessWidget {
     final tunedChannel = watchingChannelId == channel.id;
     final largeFocusIndicators =
         controller.lineup.settings.largeFocusIndicators;
-    final focusFill = Color.alphaBlend(
-      roles.focusBorder.withValues(alpha: 0.24),
-      roles.primarySurface,
-    );
+    final focusFill = roles.focusedText == roles.onFocus
+        ? roles.focusedSurface
+        : Color.alphaBlend(
+            roles.focusBorder.withValues(alpha: 0.24),
+            roles.primarySurface,
+          );
     final data = controller.row(channel.id);
     void focusCurrentProgram() {
       final current = controller.currentProgram(channel.id);
@@ -1359,7 +1382,9 @@ class _GuideRow extends StatelessWidget {
                       child: Text(
                         '${channel.number}',
                         style: TextStyle(
-                          color: roles.secondaryText,
+                          color: focusChannelRail
+                              ? roles.focusedText
+                              : roles.secondaryText,
                           fontSize: (showProvenance ? 28 : 22),
                           fontWeight: FontWeight.w500,
                           fontFeatures: const [ui.FontFeature.tabularFigures()],
@@ -1371,7 +1396,10 @@ class _GuideRow extends StatelessWidget {
                         builder: (context, constraints) {
                           final nameStyle = DefaultTextStyle.of(context).style
                               .copyWith(
-                                fontSize: (showProvenance ? 20 : 16),
+                                fontSize: 18,
+                                color: focusChannelRail
+                                    ? roles.focusedText
+                                    : roles.primaryText,
                                 fontWeight: FontWeight.w500,
                               );
                           final painter = TextPainter(
@@ -1504,13 +1532,6 @@ class _Programs extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final textScale = MediaQuery.textScalerOf(context).scale(1);
-    final retryStyle = textScale > 1
-        ? TextButton.styleFrom(
-            minimumSize: Size(0, 48),
-            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          )
-        : null;
     if (data.state == GuideLoadState.loading ||
         data.state == GuideLoadState.retrying) {
       return _ScheduleStatus(
@@ -1530,9 +1551,8 @@ class _Programs extends StatelessWidget {
           children: [
             const Text('Schedule unavailable'),
             SizedBox(width: 8),
-            TextButton(
+            LineupInlineLink(
               onPressed: () => controller.retry(channel.id),
-              style: retryStyle,
               child: const Text('Retry'),
             ),
           ],
@@ -1764,10 +1784,12 @@ class _ProgramCellState extends State<_ProgramCell> {
   @override
   Widget build(BuildContext context) {
     final roles = LineupTheme.of(context);
-    final focusFill = Color.alphaBlend(
-      roles.focusBorder.withValues(alpha: 0.24),
-      roles.primarySurface,
-    );
+    final focusFill = roles.focusedText == roles.onFocus
+        ? roles.focusedSurface
+        : Color.alphaBlend(
+            roles.focusBorder.withValues(alpha: 0.24),
+            roles.primarySurface,
+          );
     final fill = widget.focused
         ? focusFill
         : _hovered || widget.selected
@@ -1889,22 +1911,22 @@ class _ProgramCellContent extends StatelessWidget {
         final scaler = MediaQuery.textScalerOf(context);
         final direction = Directionality.of(context);
         final roles = LineupTheme.of(context);
-        final titleStyle = Theme.of(context).textTheme.bodyMedium?.copyWith(
-          fontSize: 22.0,
+        final titleStyle = LineupTypography.guideTitle.copyWith(
           color: focused
               ? roles.focusedText
               : past
               ? roles.mutedText
               : null,
-          fontWeight: focused ? FontWeight.w600 : FontWeight.w500,
         );
         final secondaryStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
+          height: 1.1,
           fontSize: 18.0,
-          color: focused ? roles.secondaryText : roles.mutedText,
+          color: focused ? roles.focusedText : roles.mutedText,
         );
         final tagStyle = Theme.of(context).textTheme.labelSmall?.copyWith(
+          height: 1.1,
           fontSize: 14.0,
-          color: focused ? roles.secondaryText : null,
+          color: focused ? roles.focusedText : null,
           fontWeight: FontWeight.w500,
           letterSpacing: 0.2,
         );
@@ -2256,7 +2278,7 @@ class _GuideDetailsPlaceholder extends StatelessWidget {
             '${inspected.number} • ${inspected.name}',
             style: Theme.of(context).textTheme.labelLarge?.copyWith(
               color: LineupTheme.of(context).progressFill,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w600,
             ),
           ),
           SizedBox(height: 8),
@@ -2312,10 +2334,7 @@ class _ProgramDetails extends StatelessWidget {
       color: roles.mutedText,
       fontWeight: FontWeight.w500,
     );
-    final leadStyle = TextStyle(
-      fontSize: 38.0,
-      height: 1.15,
-      fontWeight: FontWeight.w500,
+    final leadStyle = LineupTypography.programTitle.copyWith(
       color: roles.primaryText,
     );
     final secondaryStyle = TextStyle(
@@ -2324,9 +2343,9 @@ class _ProgramDetails extends StatelessWidget {
       color: roles.secondaryText,
     );
     final metadataStyle = TextStyle(
-      fontSize: 16.0,
+      fontSize: 18.0,
       height: 1.2,
-      color: roles.mutedText,
+      color: roles.secondaryText,
       fontFeatures: const [ui.FontFeature.tabularFigures()],
     );
     final bodyStyle = TextStyle(

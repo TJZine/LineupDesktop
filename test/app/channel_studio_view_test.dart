@@ -873,8 +873,14 @@ void main() {
       final useSaved = tester.widget<OutlinedButton>(useSavedButton);
       expect(FocusManager.instance.primaryFocus, same(useSaved.focusNode));
       expect(tester.getTopLeft(useSavedButton).dy, greaterThanOrEqualTo(0));
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pump();
       final roles = LineupTheme.of(tester.element(useSavedButton));
-      final focusedSide = useSaved.style!.side!.resolve({WidgetState.focused})!;
+      final focusedSide = Theme.of(tester.element(useSavedButton))
+          .outlinedButtonTheme
+          .style!
+          .side!
+          .resolve({WidgetState.focused})!;
       expect(focusedSide.color, roles.focusBorder);
       expect(focusedSide.width, roles.focusBorderWidth);
 
@@ -4267,7 +4273,7 @@ void main() {
     await tester.tap(
       find.descendant(
         of: find.byKey(const Key('studio-filter-genre')),
-        matching: find.byType(OutlinedButton),
+        matching: find.byType(InkWell),
       ),
     );
     await tester.pumpAndSettle();
@@ -4295,7 +4301,7 @@ void main() {
     await tester.tap(
       find.descendant(
         of: find.byKey(const Key('studio-filter-genre')),
-        matching: find.byType(OutlinedButton),
+        matching: find.byType(InkWell),
       ),
     );
     await tester.pumpAndSettle();

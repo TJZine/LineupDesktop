@@ -336,7 +336,7 @@ class _LineupShellState extends State<LineupShell> {
                 onPressed: () => Navigator.pop(context, false),
                 child: const Text('Cancel'),
               ),
-              FilledButton(
+              LineupDestructiveButton(
                 onPressed: () => Navigator.pop(context, true),
                 child: const Text('Sign out'),
               ),
@@ -379,8 +379,10 @@ class _LineupShellState extends State<LineupShell> {
     final titleStyle = textTheme.titleLarge?.copyWith(
       fontSize: (textTheme.titleLarge?.fontSize ?? 22),
     );
-    final labelStyle = textTheme.labelLarge?.copyWith(fontSize: 16);
-    final detailStyle = textTheme.bodySmall?.copyWith(fontSize: 14);
+    final labelStyle = textTheme.labelLarge?.copyWith(fontSize: 18);
+    final detailStyle = textTheme.bodyMedium?.copyWith(
+      color: roles.secondaryText,
+    );
     final profileName = widget.controller.profile?.name;
     final accountName = widget.controller.account?.name ?? 'Plex account';
     final serverName = widget.controller.server?.name ?? 'No server selected';
@@ -411,6 +413,7 @@ class _LineupShellState extends State<LineupShell> {
               policy: WidgetOrderTraversalPolicy(),
               child: Card(
                 key: const Key('immersive-app-menu'),
+                color: roles.elevatedSurface,
                 margin: EdgeInsets.zero,
                 child: SingleChildScrollView(
                   padding: EdgeInsets.all(12),
@@ -459,13 +462,6 @@ class _LineupShellState extends State<LineupShell> {
                           message: 'Program information (I)',
                           child: TextButton(
                             key: const Key('app-menu-now-playing'),
-                            style: TextButton.styleFrom(
-                              alignment: Alignment.centerLeft,
-                              minimumSize: Size(0, 48),
-                              padding: EdgeInsets.all(12),
-                              foregroundColor: roles.secondaryText,
-                              textStyle: labelStyle,
-                            ),
                             onPressed: () => unawaited(_openNowPlaying()),
                             child: const Text('Now Playing'),
                           ),
@@ -489,17 +485,6 @@ class _LineupShellState extends State<LineupShell> {
                             _settingsCategory == SettingsCategory.account,
                         button: true,
                         child: TextButton(
-                          style: TextButton.styleFrom(
-                            alignment: Alignment.centerLeft,
-                            padding: EdgeInsets.all(12),
-                            foregroundColor:
-                                _selectedIndex == 2 &&
-                                    _settingsCategory ==
-                                        SettingsCategory.account
-                                ? roles.primaryText
-                                : roles.secondaryText,
-                            textStyle: labelStyle,
-                          ),
                           onPressed: () => unawaited(_openAccount()),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -558,20 +543,9 @@ class _LineupShellState extends State<LineupShell> {
       enabled: enabled,
       label: semanticLabel,
       onTap: enabled ? () => unawaited(_select(index)) : null,
-      child: TextButton(
+      child: LineupNavigationRow(
+        selected: selected,
         autofocus: autofocus,
-        style: TextButton.styleFrom(
-          alignment: Alignment.centerLeft,
-          minimumSize: Size(0, 48),
-          padding: EdgeInsets.all(12),
-          foregroundColor: selected
-              ? LineupTheme.of(context).primaryText
-              : LineupTheme.of(context).secondaryText,
-          backgroundColor: selected
-              ? LineupTheme.of(context).selectedSurface
-              : null,
-          textStyle: labelStyle,
-        ),
         onPressed: enabled ? () => unawaited(_select(index)) : null,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -882,7 +856,7 @@ class _SettingsViewState extends State<SettingsView> {
       largeFocusIndicators: _displaySettings.largeFocusIndicators,
     );
     final roles = settingsTheme.extension<LineupThemeRoles>()!;
-    return Theme(
+    return LineupFocusTheme(
       data: settingsTheme,
       child: Material(
         type: MaterialType.transparency,
@@ -953,28 +927,20 @@ class _SettingsViewState extends State<SettingsView> {
       spacing: 12,
       overflowSpacing: 8,
       children: [
-        Row(
-          mainAxisSize: MainAxisSize.min,
+        Wrap(
+          spacing: 12,
+          runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             TextButton.icon(
               onPressed: widget.onBack,
               icon: Icon(Icons.arrow_back, size: 18),
               label: const Text('Back'),
-              style: TextButton.styleFrom(
-                foregroundColor: LineupTheme.of(context).secondaryText,
-                minimumSize: Size(0, 48),
-                padding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-                textStyle: Theme.of(context).textTheme.labelLarge
-                    ?.copyWith(fontSize: 18),
-              ),
             ),
-            SizedBox(width: 12),
             Text(
               'Settings',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+              style: LineupTypography.pageTitle.copyWith(
                 color: LineupTheme.of(context).primaryText,
-                fontSize: 26,
-                fontWeight: FontWeight.w500,
               ),
             ),
           ],
@@ -986,20 +952,16 @@ class _SettingsViewState extends State<SettingsView> {
               focusNode: widget.menuFocusNode,
               onPressed: () =>
                   widget.onOpenMenu!(buttonContext, widget.menuFocusNode!),
-              style: TextButton.styleFrom(
-                foregroundColor: LineupTheme.of(context).primaryText,
-                minimumSize: Size(0, 48),
-                padding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-                textStyle: Theme.of(context).textTheme.labelLarge?.copyWith(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w500,
-                  letterSpacing: 1.5,
-                ),
-              ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text('LINEUP'),
+                  const Text(
+                    'LINEUP',
+                    style: TextStyle(
+                      fontFamily: 'Arial',
+                      fontWeight: FontWeight.w400,
+                    ),
+                  ),
                   SizedBox(width: 12),
                   Icon(Icons.menu, size: 18),
                 ],
@@ -1054,56 +1016,24 @@ class _SettingsViewState extends State<SettingsView> {
   );
 
   Widget _categorySelector(BuildContext context, bool compact) {
-    final roles = LineupTheme.of(context);
     final controls = [
       for (final category in SettingsCategory.values)
         Padding(
           padding: EdgeInsets.only(right: 10, bottom: 10),
-          child: Semantics(
+          child: LineupNavigationRow(
             selected: category == _category,
-            button: true,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: category == _category
-                    ? roles.selectedSurface
-                    : Colors.transparent,
-                border: Border(
-                  left: BorderSide(
-                    width: 2,
-                    color: category == _category
-                        ? roles.progressFill
-                        : Colors.transparent,
-                  ),
-                ),
-              ),
-              child: TextButton(
-                focusNode: category == _category ? widget.focusNode : null,
-                autofocus: category == _category && !_categoryFocusPlaced,
-                style: TextButton.styleFrom(
-                  alignment: Alignment.centerLeft,
-                  foregroundColor: category == _category
-                      ? roles.primaryText
-                      : roles.secondaryText,
-                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 18),
-                  minimumSize: Size(0, 0),
-                  textStyle: Theme.of(context).textTheme.labelLarge
-                      ?.copyWith(fontSize: 18),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(5),
-                  ),
-                ),
-                onPressed: () {
-                  setState(() => _localCategory = category);
-                  widget.onCategoryChanged?.call(category);
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (mounted && category == _category) {
-                      widget.focusNode?.requestFocus();
-                    }
-                  });
-                },
-                child: Text(_categoryLabel(category)),
-              ),
-            ),
+            focusNode: category == _category ? widget.focusNode : null,
+            autofocus: category == _category && !_categoryFocusPlaced,
+            onPressed: () {
+              setState(() => _localCategory = category);
+              widget.onCategoryChanged?.call(category);
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted && category == _category) {
+                  widget.focusNode?.requestFocus();
+                }
+              });
+            },
+            child: Text(_categoryLabel(category)),
           ),
         ),
     ];
@@ -1117,7 +1047,6 @@ class _SettingsViewState extends State<SettingsView> {
 
   Widget _categoryDetail(BuildContext context) {
     final value = _displaySettings;
-    final roles = LineupTheme.of(context);
 
     return ListView(
       children: [
@@ -1285,12 +1214,6 @@ class _SettingsViewState extends State<SettingsView> {
                   onPressed: widget.controller.profiles.isEmpty
                       ? null
                       : widget.controller.showProfiles,
-                  style: OutlinedButton.styleFrom(
-                    minimumSize: Size(0, 48),
-                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                    textStyle: Theme.of(context).textTheme.labelLarge
-                        ?.copyWith(fontSize: 16),
-                  ),
                   child: const Text('Switch profile'),
                 ),
                 first: true,
@@ -1322,12 +1245,6 @@ class _SettingsViewState extends State<SettingsView> {
                 ),
                 control: OutlinedButton(
                   onPressed: widget.controller.showServers,
-                  style: OutlinedButton.styleFrom(
-                    minimumSize: Size(0, 48),
-                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                    textStyle: Theme.of(context).textTheme.labelLarge
-                        ?.copyWith(fontSize: 16),
-                  ),
                   child: const Text('Switch server'),
                 ),
               ),
@@ -1339,30 +1256,6 @@ class _SettingsViewState extends State<SettingsView> {
                   onPressed: widget.onSignOut == null
                       ? null
                       : () => unawaited(widget.onSignOut!()),
-                  style: ButtonStyle(
-                    foregroundColor: WidgetStateProperty.resolveWith(
-                      (states) => states.contains(WidgetState.disabled)
-                          ? roles.mutedText
-                          : roles.secondaryText,
-                    ),
-                    side: WidgetStateProperty.resolveWith(
-                      (states) => states.contains(WidgetState.focused)
-                          ? null
-                          : BorderSide(
-                              color: states.contains(WidgetState.disabled)
-                                  ? roles.subtleBorder.withValues(alpha: 0.6)
-                                  : roles.subtleBorder,
-                            ),
-                    ),
-                    minimumSize: WidgetStatePropertyAll(Size(0, 48)),
-                    padding: WidgetStatePropertyAll(
-                      EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                    ),
-                    textStyle: WidgetStatePropertyAll(
-                      Theme.of(context).textTheme.labelLarge
-                          ?.copyWith(fontSize: 16),
-                    ),
-                  ),
                   child: const Text('Sign out of Plex'),
                 ),
               ),
@@ -1390,12 +1283,6 @@ class _SettingsViewState extends State<SettingsView> {
                 ),
                 control: OutlinedButton(
                   onPressed: widget.onOpenDiagnostics,
-                  style: OutlinedButton.styleFrom(
-                    minimumSize: Size(0, 48),
-                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                    textStyle: Theme.of(context).textTheme.labelLarge
-                        ?.copyWith(fontSize: 16),
-                  ),
                   child: const Text('Open Diagnostics'),
                 ),
               ),
@@ -1513,9 +1400,9 @@ class _SettingsSection extends StatelessWidget {
             title,
             style: theme.textTheme.headlineMedium?.copyWith(
               color: roles.primaryText,
-              fontSize: 32,
-              fontWeight: FontWeight.w500,
-              height: 1.2,
+              fontSize: 44,
+              fontWeight: FontWeight.w600,
+              height: 1.08,
             ),
           ),
         ),
@@ -1524,7 +1411,7 @@ class _SettingsSection extends StatelessWidget {
           description,
           style: theme.textTheme.bodyLarge?.copyWith(
             color: roles.secondaryText,
-            fontSize: 16,
+            fontSize: 18,
             height: 1.5,
           ),
         ),
@@ -1562,7 +1449,7 @@ class _SettingsRow extends StatelessWidget {
           DefaultTextStyle.merge(
             style: theme.textTheme.titleMedium?.copyWith(
               color: roles.primaryText,
-              fontSize: 20,
+              fontSize: 18,
               fontWeight: FontWeight.w500,
               height: 1.2,
             ),
@@ -1572,7 +1459,7 @@ class _SettingsRow extends StatelessWidget {
           DefaultTextStyle.merge(
             style: theme.textTheme.bodyLarge?.copyWith(
               color: roles.secondaryText,
-              fontSize: 16,
+              fontSize: 18,
               height: 1.5,
             ),
             child: helper,
@@ -1685,20 +1572,15 @@ class _Dropdown<T> extends StatelessWidget {
         helper: Text(description),
         control: SizedBox(
           width: 248 * controlScale,
-          child: DropdownButtonFormField<T>(
-            key: ValueKey(value),
+          child: lineupDropdownField<T>(
+            context: context,
+            key: ValueKey('settings-field-$label'),
             initialValue: value,
             isExpanded: true,
             itemHeight: 48 * controlScale,
             icon: Icon(Icons.arrow_drop_down, size: 20 * controlScale),
-            style: theme.textTheme.bodyLarge?.copyWith(fontSize: 16),
-            decoration: InputDecoration(
-              border: const OutlineInputBorder(),
-              contentPadding: EdgeInsets.symmetric(
-                horizontal: 14 * controlScale,
-                vertical: 11 * controlScale,
-              ),
-            ),
+            style: theme.textTheme.bodyLarge?.copyWith(fontSize: 18),
+            decoration: InputDecoration(),
             items: [
               for (final item in values)
                 DropdownMenuItem(value: item, child: Text(display(item))),

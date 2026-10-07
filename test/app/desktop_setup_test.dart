@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:ui' show CheckedState;
 
+import 'package:lineup_desktop/ui/app_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -798,6 +799,8 @@ void main() {
     );
     await tester.pump();
     expect(find.text('No matching channels'), findsOneWidget);
+    await tester.ensureVisible(find.text('Clear search'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Clear search'));
     await tester.pump();
     expect(find.text('No matching channels'), findsNothing);
@@ -877,9 +880,13 @@ Future<void> _openPlaybackControls(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
-Finder _setupField<T>(String label) => find.byWidgetPredicate(
-  (widget) =>
-      widget is DropdownButtonFormField && widget.decoration.labelText == label,
+Finder _setupField<T>(String label) => find.descendant(
+  of: find.byWidgetPredicate(
+    (widget) => widget is LineupField && widget.label == label,
+  ),
+  matching: find.byWidgetPredicate(
+    (widget) => widget is DropdownButtonFormField<T>,
+  ),
 );
 
 class _SetupController extends FixtureController {

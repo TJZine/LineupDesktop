@@ -27,3 +27,10 @@ flutter:
   assets:
     - assets/branding/lineup-logo-mark.png
     - assets/branding/lineup-wordmark.png
+  fonts:
+    - family: Instrument Sans
+      fonts:
+        - asset: assets/fonts/instrumentsans/InstrumentSans[wdth,wght].ttf
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/inter/Inter[opsz,wght].ttf

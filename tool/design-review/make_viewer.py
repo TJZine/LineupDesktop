@@ -15,7 +15,7 @@ families = [
     ('Player', ['player-osd', 'player-now-playing', 'mini-guide', 'player-tracks', 'player-sleep', 'player-states']),
     ('Channels & Studio', ['channels', 'studio']),
     ('Settings', ['settings', 'settings-over-playback']),
-    ('Themes', ['theme-ember-steel', 'theme-slate-pine', 'theme-swiss', 'theme-directv', 'theme-glass']),
+    ('Themes', ['theme-ember-steel', 'theme-slate-pine', 'theme-swiss', 'theme-directv']),
     ('Diagnostics', ['diagnostics']),
 ]
 available = {c: {p.stem for p in (captures / c).glob('*.png')}

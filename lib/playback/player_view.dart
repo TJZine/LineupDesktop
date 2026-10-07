@@ -555,7 +555,7 @@ class _SurfaceError extends StatelessWidget {
                       style: bodyStyle,
                     ),
                     if (controller.canRetry)
-                      TextButton(
+                      LineupInlineLink(
                         onPressed: controller.retry,
                         child: const Text('Retry'),
                       ),
@@ -613,7 +613,7 @@ class _Osd extends StatelessWidget {
     // lane; keep the compact 800x600 regime stacked so every action remains
     // reachable without crowding the identity block.
     final horizontal = size.width >= 1200 && size.height >= 640;
-    final largeDesktop = size.width >= 1920 && size.height >= 900;
+
     final transportActions = <Widget>[
       IconButton(
         tooltip: 'Previous channel',
@@ -793,8 +793,8 @@ class _Osd extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: roles.primaryText.withValues(alpha: 0.88),
-              fontSize: (largeDesktop ? 16 : 14),
+              color: roles.secondaryText,
+              fontSize: 18,
               fontWeight: FontWeight.w400,
             ),
           ),
@@ -809,21 +809,23 @@ class _Osd extends StatelessWidget {
             Duration(milliseconds: duration),
           );
     final osdSecondaryStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
-      color: roles.primaryText.withValues(alpha: 0.88),
-      fontSize: horizontal ? (largeDesktop ? 16 : 14) : null,
+      color: roles.secondaryText,
+      fontSize: 18,
       fontWeight: FontWeight.w400,
     );
     final progress = Row(
       key: const Key('player-osd-progress-block'),
       children: [
-        Text(
-          [
-            '${_duration(displayedPosition)} / ${_duration(controller.duration)}',
-            ?remaining,
-          ].join(' • '),
-          key: const Key('player-osd-timing'),
-          style: osdSecondaryStyle?.copyWith(
-            fontFeatures: const [FontFeature.tabularFigures()],
+        Flexible(
+          child: Text(
+            [
+              '${_duration(displayedPosition)} / ${_duration(controller.duration)}',
+              ?remaining,
+            ].join(' • '),
+            key: const Key('player-osd-timing'),
+            style: osdSecondaryStyle?.copyWith(
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
           ),
         ),
         if (next != null) ...[
@@ -1027,9 +1029,6 @@ class _OsdTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.sizeOf(context);
-    final largeDesktop = size.width >= 1920 && size.height >= 900;
-    final horizontal = size.width >= 1200 && size.height >= 640;
     return Semantics(
       container: true,
       label: title,
@@ -1039,14 +1038,8 @@ class _OsdTitle extends StatelessWidget {
         key: const Key('player-osd-title'),
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
-        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+        style: LineupTypography.osdTitle.copyWith(
           color: LineupTheme.of(context).primaryText,
-          fontSize: largeDesktop
-              ? 28
-              : horizontal
-              ? 24
-              : null,
-          fontWeight: FontWeight.w600,
         ),
       ),
     );
@@ -1089,7 +1082,7 @@ class _ChannelBug extends StatelessWidget {
               fontSize: osdPresentation
                   ? (size.width >= 1920 && size.height >= 900 ? 16 : 14)
                   : inheritedLabelSize,
-              fontWeight: osdPresentation ? FontWeight.w500 : FontWeight.w800,
+              fontWeight: osdPresentation ? FontWeight.w500 : FontWeight.w600,
             ),
           ),
         ),
@@ -1509,10 +1502,8 @@ TextStyle? _nowPlayingSecondaryStyle(
   BuildContext context, {
   required bool dense,
 }) {
-  return Theme.of(context).textTheme.bodyMedium?.copyWith(
-    color: LineupTheme.of(context).primaryText.withValues(alpha: 0.88),
-    fontSize: (dense ? 14 : 16),
-  );
+  return Theme.of(context).textTheme.bodyMedium
+      ?.copyWith(color: LineupTheme.of(context).secondaryText, fontSize: 18);
 }
 
 class _NowPlayingIdentity extends StatefulWidget {
@@ -1647,13 +1638,11 @@ TextStyle? _nowPlayingSeriesStyle(
 }) => _nowPlayingSecondaryStyle(
   context,
   dense: dense,
-)?.copyWith(fontSize: (dense ? 16 : 20), fontWeight: FontWeight.w500);
+)?.copyWith(fontSize: 18, fontWeight: FontWeight.w500);
 
 TextStyle _nowPlayingTitleStyle(BuildContext context, {required bool dense}) =>
-    (Theme.of(context).textTheme.bodyLarge ?? const TextStyle()).copyWith(
+    LineupTypography.programTitle.copyWith(
       color: LineupTheme.of(context).primaryText,
-      fontSize: (dense ? 24 : 28),
-      fontWeight: FontWeight.w600,
     );
 
 /*
@@ -1868,7 +1857,7 @@ class _NowPlayingCastColumn extends StatelessWidget {
     final nameStyle = _nowPlayingSecondaryStyle(
       context,
       dense: dense,
-    )?.copyWith(fontSize: (dense ? 12 : 14), height: 1.3);
+    )?.copyWith(fontSize: 18, height: 1.3);
     var displayName = member.name;
     final words = member.name.trim().split(RegExp(r'\s+'));
     if (words.length > 2) {
@@ -1917,20 +1906,24 @@ class _NowPlayingCastColumn extends StatelessWidget {
         SizedBox(height: 6),
         SizedBox(
           width: width,
-          height:
-              MediaQuery.textScalerOf(context).scale((dense ? 12 : 14)) *
-              1.3 *
-              2,
-          child: Tooltip(
-            message: member.name,
-            excludeFromSemantics: true,
-            child: Text(
-              displayName,
-              key: ValueKey('player-now-playing-cast-name-$index'),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              style: nameStyle,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              minHeight:
+                  MediaQuery.textScalerOf(context).scale(nameStyle!.fontSize!) *
+                  nameStyle.height! *
+                  2,
+            ),
+            child: Tooltip(
+              message: member.name,
+              excludeFromSemantics: true,
+              child: Text(
+                displayName,
+                key: ValueKey('player-now-playing-cast-name-$index'),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: nameStyle,
+              ),
             ),
           ),
         ),
@@ -1973,7 +1966,7 @@ class _NowPlayingCastMore extends StatelessWidget {
                 style: Theme.of(context).textTheme.labelLarge?.copyWith(
                   color: roles.primaryText,
                   fontSize: labelSize,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ),
@@ -2107,7 +2100,7 @@ class _MiniGuide extends StatelessWidget {
                                     _time(context, controller.guide.now),
                                     style: TextStyle(
                                       color: roles.secondaryText,
-                                      fontSize: (large ? 18 : 14),
+                                      fontSize: 18,
                                       fontWeight: FontWeight.w400,
                                     ),
                                   ),
@@ -2117,20 +2110,6 @@ class _MiniGuide extends StatelessWidget {
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   TextButton(
-                                    style: TextButton.styleFrom(
-                                      foregroundColor: roles.secondaryText,
-                                      minimumSize: Size(0, 44),
-                                      padding: EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                      ),
-                                      textStyle: Theme.of(context)
-                                          .textTheme
-                                          .labelLarge
-                                          ?.copyWith(
-                                            fontSize: (large ? 18 : 14),
-                                            fontWeight: FontWeight.w400,
-                                          ),
-                                    ),
                                     onPressed: () {
                                       controller.showFullGuide();
                                       openGuide();
@@ -2150,20 +2129,6 @@ class _MiniGuide extends StatelessWidget {
                                     ),
                                   ),
                                   TextButton(
-                                    style: TextButton.styleFrom(
-                                      foregroundColor: roles.secondaryText,
-                                      minimumSize: Size(0, 44),
-                                      padding: EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                      ),
-                                      textStyle: Theme.of(context)
-                                          .textTheme
-                                          .labelLarge
-                                          ?.copyWith(
-                                            fontSize: (large ? 18 : 14),
-                                            fontWeight: FontWeight.w400,
-                                          ),
-                                    ),
                                     onPressed: controller.closeOverlay,
                                     child: Row(
                                       mainAxisSize: MainAxisSize.min,
@@ -2196,7 +2161,7 @@ class _MiniGuide extends StatelessWidget {
                                       'Channel',
                                       style: TextStyle(
                                         color: roles.secondaryText,
-                                        fontSize: (large ? 16 : 12),
+                                        fontSize: 18,
                                         fontWeight: FontWeight.w500,
                                       ),
                                     ),
@@ -2208,7 +2173,7 @@ class _MiniGuide extends StatelessWidget {
                                       'On now',
                                       style: TextStyle(
                                         color: roles.secondaryText,
-                                        fontSize: (large ? 16 : 12),
+                                        fontSize: 18,
                                         fontWeight: FontWeight.w500,
                                       ),
                                     ),
@@ -2220,7 +2185,7 @@ class _MiniGuide extends StatelessWidget {
                                       'Up next',
                                       style: TextStyle(
                                         color: roles.secondaryText,
-                                        fontSize: (large ? 16 : 12),
+                                        fontSize: 18,
                                         fontWeight: FontWeight.w500,
                                       ),
                                     ),
@@ -2251,7 +2216,7 @@ class _MiniGuide extends StatelessWidget {
                                 'Up / Down · Browse · Enter Tune · Esc Close',
                                 style: TextStyle(
                                   color: roles.secondaryText,
-                                  fontSize: (large ? 16 : 12),
+                                  fontSize: 18,
                                 ),
                               ),
                               Row(
@@ -2324,7 +2289,7 @@ class _MiniGuideRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final roles = LineupTheme.of(context);
     final focused = channel.id == controller.miniGuideChannelId;
-    final foreground = focused ? roles.focusedText : roles.primaryText;
+    final foreground = roles.primaryText;
     final tuned =
         channel.id == controller.lineup.currentChannelId &&
         !controller.tuning &&
@@ -2350,11 +2315,11 @@ class _MiniGuideRow extends StatelessWidget {
               spanMilliseconds;
     final titleStyle = Theme.of(context).textTheme.bodyMedium?.copyWith(
       color: foreground,
-      fontSize: (large ? 20 : 14),
+      fontSize: 18,
       fontWeight: FontWeight.w500,
     );
     final metadataStyle = Theme.of(context).textTheme.bodySmall
-        ?.copyWith(color: roles.secondaryText, fontSize: (large ? 16 : 12));
+        ?.copyWith(color: roles.secondaryText, fontSize: 18);
     final nextTitleStyle = titleStyle?.copyWith(
       color: roles.secondaryText,
       fontWeight: FontWeight.w400,
@@ -2388,9 +2353,13 @@ class _MiniGuideRow extends StatelessWidget {
                 ),
               ),
               SizedBox(width: 4),
-              Text(
-                'Watching',
-                style: metadataStyle?.copyWith(fontSize: (large ? 14 : 12)),
+              Flexible(
+                child: Text(
+                  'Watching',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: metadataStyle,
+                ),
               ),
             ],
           ),
@@ -2469,82 +2438,78 @@ class _MiniGuideRow extends StatelessWidget {
       selected: focused,
       label:
           'Channel ${channel.number}, ${channel.name}. Now $currentText.${next == null ? '' : ' Next ${next.scheduled.item.title}.'}${tuned ? ' Now watching.' : ''}',
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: focused
-              ? roles.progressFill.withValues(alpha: 0.16)
-              : Colors.transparent,
-          border: Border(
-            left: BorderSide(
-              color: focused ? roles.focusBorder : Colors.transparent,
-              width: roles.focusBorderWidth,
-            ),
-            bottom: BorderSide(
-              color: isLast
-                  ? Colors.transparent
-                  : roles.primaryText.withValues(alpha: 0.10),
-              width: 1.0,
+      child: LineupRowSurface(
+        selected: focused,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(
+                color: isLast
+                    ? Colors.transparent
+                    : roles.primaryText.withValues(alpha: 0.10),
+                width: 1.0,
+              ),
             ),
           ),
-        ),
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: () => controller.focusMiniGuideChannel(channel.id),
-            onDoubleTap: unsupported || unavailable
-                ? null
-                : () {
-                    controller.focusMiniGuideChannel(channel.id);
-                    unawaited(controller.tuneMiniGuideSelection());
-                  },
-            child: rowHeight == null
-                ? Padding(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: rowInset,
-                      vertical: 7,
-                    ),
-                    child: Row(
-                      children: [
-                        number,
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              channelIdentity,
-                              currentCell,
-                              ?nextTitle,
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  )
-                : SizedBox(
-                    height: rowHeight,
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(horizontal: rowInset),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () => controller.focusMiniGuideChannel(channel.id),
+              onDoubleTap: unsupported || unavailable
+                  ? null
+                  : () {
+                      controller.focusMiniGuideChannel(channel.id);
+                      unawaited(controller.tuneMiniGuideSelection());
+                    },
+              child: rowHeight == null
+                  ? Padding(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: rowInset,
+                        vertical: 7,
+                      ),
                       child: Row(
                         children: [
-                          SizedBox(
-                            width: channelColumnWidth,
-                            child: Row(
+                          number,
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                number,
-                                Expanded(child: channelIdentity),
+                                channelIdentity,
+                                currentCell,
+                                ?nextTitle,
                               ],
                             ),
                           ),
-                          SizedBox(width: columnGap),
-                          Expanded(flex: 115, child: currentCell),
-                          SizedBox(width: columnGap),
-                          Expanded(
-                            flex: 100,
-                            child: nextTitle ?? const SizedBox.shrink(),
-                          ),
                         ],
                       ),
+                    )
+                  : SizedBox(
+                      height: rowHeight,
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(horizontal: rowInset),
+                        child: Row(
+                          children: [
+                            SizedBox(
+                              width: channelColumnWidth,
+                              child: Row(
+                                children: [
+                                  number,
+                                  Expanded(child: channelIdentity),
+                                ],
+                              ),
+                            ),
+                            SizedBox(width: columnGap),
+                            Expanded(flex: 115, child: currentCell),
+                            SizedBox(width: columnGap),
+                            Expanded(
+                              flex: 100,
+                              child: nextTitle ?? const SizedBox.shrink(),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
-                  ),
+            ),
           ),
         ),
       ),
@@ -2671,37 +2636,36 @@ class _SleepTimerPicker extends StatelessWidget {
                           ),
                         SizedBox(height: 18),
                         for (final choice in choices)
-                          ListTile(
-                            key: Key(
-                              'sleep-timer-${choice.$2?.inMinutes ?? 'off'}',
-                            ),
-                            dense: true,
-                            minTileHeight: 60,
+                          LineupRowSurface(
                             selected: choice.$2 == selected,
-                            selectedTileColor: roles.progressFill.withValues(
-                              alpha: 0.10,
-                            ),
-                            focusColor: roles.focusedSurface,
-                            contentPadding: EdgeInsets.symmetric(
-                              horizontal: 18,
-                            ),
-                            autofocus: choice.$2 == selected,
-                            title: Text(
-                              choice.$1,
-                              style: theme.textTheme.bodyLarge?.copyWith(
-                                color: roles.primaryText,
-                                fontSize: 13,
+                            child: ListTile(
+                              key: Key(
+                                'sleep-timer-${choice.$2?.inMinutes ?? 'off'}',
                               ),
+                              dense: true,
+                              minTileHeight: 60,
+                              selected: choice.$2 == selected,
+                              contentPadding: EdgeInsets.symmetric(
+                                horizontal: 18,
+                              ),
+                              autofocus: choice.$2 == selected,
+                              title: Text(
+                                choice.$1,
+                                style: theme.textTheme.bodyLarge?.copyWith(
+                                  color: roles.primaryText,
+                                  fontSize: 18,
+                                ),
+                              ),
+                              trailing: choice.$2 == selected
+                                  ? Icon(
+                                      Icons.check,
+                                      color: roles.progressFill,
+                                      size: 24,
+                                      semanticLabel: 'Selected preset',
+                                    )
+                                  : null,
+                              onTap: () => _choose(choice.$2),
                             ),
-                            trailing: choice.$2 == selected
-                                ? Icon(
-                                    Icons.check,
-                                    color: roles.progressFill,
-                                    size: 24,
-                                    semanticLabel: 'Selected preset',
-                                  )
-                                : null,
-                            onTap: () => _choose(choice.$2),
                           ),
                       ],
                     ),
@@ -2820,12 +2784,6 @@ class _TracksState extends State<_Tracks> {
                                   tracks.isEmpty &&
                                   widget.type != PlayerTrackType.subtitle,
                               onPressed: widget.controller.closeOverlay,
-                              style: TextButton.styleFrom(
-                                textStyle: textTheme.labelLarge,
-                                foregroundColor: supportingText,
-                                padding: null,
-                                minimumSize: null,
-                              ),
                               child: const Text('Close'),
                             ),
                           ],
@@ -2959,87 +2917,82 @@ class _TracksState extends State<_Tracks> {
                                                   selected: selected,
                                                   onTap: selectTrack,
                                                   excludeSemantics: true,
-                                                  child: ListTile(
-                                                    key: Key(
-                                                      off
-                                                          ? 'playback-track-off'
-                                                          : 'playback-track-${widget.type.name}-${track!.id}',
-                                                    ),
-                                                    autofocus: selected,
+                                                  child: LineupRowSurface(
                                                     selected: selected,
-                                                    selectedTileColor: roles
-                                                        .progressFill
-                                                        .withValues(
-                                                          alpha: 0.10,
-                                                        ),
-                                                    focusColor:
-                                                        roles.focusedSurface,
-                                                    minTileHeight: null,
-                                                    contentPadding:
-                                                        EdgeInsets.symmetric(
-                                                          horizontal: 12,
-                                                          vertical: 8,
-                                                        ),
-                                                    title: Tooltip(
-                                                      message: tooltip,
-                                                      excludeFromSemantics:
-                                                          true,
-                                                      child: Text(
-                                                        title,
-                                                        maxLines: 3,
-                                                        overflow: TextOverflow
-                                                            .ellipsis,
-                                                        softWrap: true,
-                                                        style: textTheme
-                                                            .bodyLarge
-                                                            ?.copyWith(
-                                                              color: roles
-                                                                  .primaryText,
-                                                              fontWeight:
-                                                                  FontWeight
-                                                                      .w500,
-                                                            ),
+                                                    child: ListTile(
+                                                      key: Key(
+                                                        off
+                                                            ? 'playback-track-off'
+                                                            : 'playback-track-${widget.type.name}-${track!.id}',
                                                       ),
-                                                    ),
-                                                    subtitle: metadata.isEmpty
-                                                        ? null
-                                                        : Text(
-                                                            metadataText,
-                                                            maxLines: 3,
-                                                            overflow:
-                                                                TextOverflow
-                                                                    .ellipsis,
-                                                            softWrap: true,
-                                                            style: textTheme
-                                                                .bodyMedium
-                                                                ?.copyWith(
-                                                                  color:
-                                                                      supportingText,
-                                                                ),
+                                                      autofocus: selected,
+                                                      selected: selected,
+                                                      minTileHeight: null,
+                                                      contentPadding:
+                                                          EdgeInsets.symmetric(
+                                                            horizontal: 12,
+                                                            vertical: 8,
                                                           ),
-                                                    trailing: SizedBox(
-                                                      width: 30,
-                                                      child: Center(
-                                                        child: pending
-                                                            ? SizedBox.square(
-                                                                dimension: 18,
-                                                                child:
-                                                                    CircularProgressIndicator(
-                                                                      strokeWidth:
-                                                                          2,
-                                                                    ),
-                                                              )
-                                                            : selected
-                                                            ? Icon(
-                                                                Icons.check,
+                                                      title: Tooltip(
+                                                        message: tooltip,
+                                                        excludeFromSemantics:
+                                                            true,
+                                                        child: Text(
+                                                          title,
+                                                          maxLines: 3,
+                                                          overflow: TextOverflow
+                                                              .ellipsis,
+                                                          softWrap: true,
+                                                          style: textTheme
+                                                              .bodyLarge
+                                                              ?.copyWith(
                                                                 color: roles
-                                                                    .progressFill,
-                                                                size: 24,
-                                                              )
-                                                            : const SizedBox.shrink(),
+                                                                    .primaryText,
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .w500,
+                                                              ),
+                                                        ),
                                                       ),
+                                                      subtitle: metadata.isEmpty
+                                                          ? null
+                                                          : Text(
+                                                              metadataText,
+                                                              maxLines: 3,
+                                                              overflow:
+                                                                  TextOverflow
+                                                                      .ellipsis,
+                                                              softWrap: true,
+                                                              style: textTheme
+                                                                  .bodyMedium
+                                                                  ?.copyWith(
+                                                                    color:
+                                                                        supportingText,
+                                                                  ),
+                                                            ),
+                                                      trailing: SizedBox(
+                                                        width: 30,
+                                                        child: Center(
+                                                          child: pending
+                                                              ? SizedBox.square(
+                                                                  dimension: 18,
+                                                                  child: CircularProgressIndicator(
+                                                                    strokeWidth:
+                                                                        2,
+                                                                  ),
+                                                                )
+                                                              : selected
+                                                              ? Icon(
+                                                                  Icons.check,
+                                                                  color: roles
+                                                                      .progressFill,
+                                                                  size: 24,
+                                                                )
+                                                              : const SizedBox.shrink(),
+                                                        ),
+                                                      ),
+                                                      onTap: selectTrack,
                                                     ),
-                                                    onTap: selectTrack,
                                                   ),
                                                 ),
                                               );
@@ -3284,9 +3237,6 @@ Widget _osdAction(
   required bool compact,
   FocusNode? focusNode,
 }) {
-  final roles = LineupTheme.of(context);
-  final size = MediaQuery.sizeOf(context);
-  final largeDesktop = size.width >= 1920 && size.height >= 900;
   return ConstrainedBox(
     constraints: BoxConstraints(maxWidth: (compact ? 132 : 180)),
     child: Tooltip(
@@ -3302,28 +3252,16 @@ Widget _osdAction(
           key: key,
           focusNode: focusNode,
           onPressed: onPressed,
-          style: TextButton.styleFrom(
-            foregroundColor: roles.primaryText,
-            padding: EdgeInsets.symmetric(horizontal: (compact ? 5 : 8)),
-            minimumSize: Size(0, 40),
-            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            visualDensity: VisualDensity.compact,
-          ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: (compact ? 17 : 18)),
+              Icon(icon, size: 20),
               SizedBox(width: 8),
               Flexible(
                 child: Text(
                   label,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                    color: roles.primaryText,
-                    fontSize: (largeDesktop ? 16 : 14),
-                    fontWeight: FontWeight.w500,
-                  ),
                 ),
               ),
             ],

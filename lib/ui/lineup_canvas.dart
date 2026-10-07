@@ -2,6 +2,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import 'lineup_focus.dart';
+
 /// The single design-canvas owner, above the Navigator and all its overlays.
 /// Layout and MediaQuery use canvas pixels; painting and input use window pixels.
 class LineupCanvas extends StatelessWidget {
@@ -47,7 +49,7 @@ class LineupCanvas extends StatelessWidget {
                   systemGestureInsets: media.systemGestureInsets / scale,
                   disableAnimations: media.disableAnimations || reduceMotion,
                 ),
-                child: child,
+                child: LineupFocusScope(child: child),
               ),
             ),
           ),

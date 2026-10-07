@@ -1828,7 +1828,23 @@ void main() {
     expect(selected.selected, isTrue);
     expect(focused.shape, isNull);
     expect(selected.shape, isNull);
-    expect(focused.focusColor, isNot(selected.selectedTileColor));
+    final focusSurface = tester.widget<Container>(
+      find
+          .ancestor(
+            of: find.byKey(const Key('playback-track-audio-1')),
+            matching: find.byWidgetPredicate(
+              (widget) =>
+                  widget is Container && widget.foregroundDecoration != null,
+            ),
+          )
+          .first,
+    );
+    final focusBorder =
+        (focusSurface.foregroundDecoration! as BoxDecoration).border! as Border;
+    expect(
+      focusBorder.top.color,
+      LineupTheme.of(tester.element(find.text('Stereo'))).focusBorder,
+    );
     expect(
       find.descendant(
         of: find.byKey(const Key('playback-track-audio-2')),
@@ -3411,7 +3427,7 @@ void main() {
     fixture.dispose();
   });
 
-  testWidgets('focused Mini Guide uses the theme focused foreground', (
+  testWidgets('Mini Guide selection keeps its primary foreground', (
     tester,
   ) async {
     final fixture = _Fixture(PlayerState.playing);
@@ -3440,7 +3456,7 @@ void main() {
           )
           .style
           ?.color,
-      LineupTheme.of(tester.element(find.text('Channel').first)).focusedText,
+      LineupTheme.of(tester.element(find.text('Channel').first)).primaryText,
     );
     expect(find.bySemanticsLabel(RegExp(r'^Now watching$')), findsNothing);
 
@@ -3501,7 +3517,7 @@ void main() {
     final title = tester.widget<Text>(
       find.byKey(const Key('player-now-playing-title')),
     );
-    expect(title.style?.fontSize, 28);
+    expect(title.style?.fontSize, 54);
     expect(title.style?.fontWeight, FontWeight.w600);
     expect(
       find.text('A synthetic synopsis for deterministic tests.'),
@@ -4143,6 +4159,7 @@ void main() {
         await tester.pumpWidget(
           MaterialApp(
             builder: LineupCanvas.builder,
+            theme: LineupTheme.forName(LineupThemeName.emberSteel),
             home: PlayerView(controller: fixture.player, openGuide: () {}),
           ),
         );
@@ -4196,13 +4213,30 @@ void main() {
           final title = tester.widget<Text>(
             find.byKey(const Key('player-now-playing-title')).last,
           );
-          expect(title.style?.fontSize, 28);
+          expect(title.style?.fontSize, 54);
           expect(title.style?.fontWeight, FontWeight.w600);
         }
         expect(
           find.byKey(const Key('player-now-playing-cast')),
           variant.castPresent ? findsOneWidget : findsNothing,
         );
+        if (variant.castPresent) {
+          final name = find.byKey(const Key('player-now-playing-cast-name-0'));
+          final text = tester.widget<Text>(name);
+          final context = tester.element(name);
+          final measure = TextPainter(
+            text: TextSpan(text: text.data, style: text.style),
+            textDirection: Directionality.of(context),
+            textScaler: MediaQuery.textScalerOf(context),
+            maxLines: 2,
+          )..layout(maxWidth: tester.getSize(name).width);
+          expect(
+            tester.getSize(name).height,
+            greaterThanOrEqualTo(measure.height),
+            reason: 'Cast name must fit at $viewport',
+          );
+          measure.dispose();
+        }
         expect(tester.takeException(), isNull, reason: '$viewport');
       }
 

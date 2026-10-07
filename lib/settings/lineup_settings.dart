@@ -3,9 +3,8 @@ enum GuideInfoBackgroundMode { bleed, themeDefault, artwork }
 enum LineupThemeName {
   emberSteel('ember-steel', 'Ember & Steel'),
   slatePine('slate-pine', 'Slate & Pine'),
-  swiss('swiss', 'Swiss Minimal'),
-  directv('directv', 'DirecTV Classic'),
-  glass('glass', 'Glassmorphism');
+  swiss('swiss', 'Mint Noir'),
+  directv('directv', 'Satellite Blue');
 
   const LineupThemeName(this.storageKey, this.label);
 
@@ -184,11 +183,13 @@ class LineupSettings {
       12,
     ]);
     return LineupSettings(
-      theme: enumValue(
-        LineupThemeName.values,
-        'theme',
-        (theme) => theme.storageKey,
-      ),
+      theme: json['theme'] == 'glass'
+          ? LineupThemeName.emberSteel
+          : enumValue(
+              LineupThemeName.values,
+              'theme',
+              (theme) => theme.storageKey,
+            ),
       guideHours: persistedGuideHours > 4 ? 4 : persistedGuideHours,
       guideInfoBackgroundMode: enumValue(
         GuideInfoBackgroundMode.values,

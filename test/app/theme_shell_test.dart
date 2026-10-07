@@ -1,8 +1,11 @@
 import 'dart:async';
+import 'dart:ui' show PointerDeviceKind;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
+
+import 'package:lineup_desktop/ui/lineup_controls.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/playback/native_player.dart';
@@ -66,6 +69,95 @@ void main() {
       ).colorScheme.primary,
       slatePine.colorScheme.primary,
     );
+  });
+
+  testWidgets('Settings preview retains pointer and keyboard focus modality', (
+    tester,
+  ) async {
+    final controller = _DelayedSettingsController()..stage = SetupStage.ready;
+    await tester.pumpWidget(UiFixture(controller: controller).build());
+    await tester.pumpAndSettle();
+    await openDestination(tester, 'Settings');
+    final menu = find.byKey(const Key('settings-app-menu'));
+    final menuNode = tester.widget<TextButton>(menu).focusNode!;
+    menuNode.requestFocus();
+    await tester.pump();
+    BorderSide buttonSide() =>
+        Theme.of(tester.element(menu)).textButtonTheme.style!.side!
+            .resolve({WidgetState.focused})!;
+    expect(buttonSide(), BorderSide.none);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump();
+    expect(buttonSide().width, 3);
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: const Offset(700, 500));
+    await mouse.moveTo(const Offset(710, 500));
+    await tester.pump();
+    expect(buttonSide(), BorderSide.none);
+    expect(menuNode.hasFocus, isTrue);
+    final selectedBefore = tester
+        .widget<LineupNavigationRow>(
+          find.ancestor(
+            of: find.text('Appearance'),
+            matching: find.byType(LineupNavigationRow),
+          ),
+        )
+        .selected;
+    expect(selectedBefore, isTrue);
+
+    final dropdown = find.byType(DropdownButton<LineupThemeName>);
+    await tester.tap(dropdown);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(LineupThemeName.slatePine.label).last);
+    await tester.pump();
+    final focused = FocusManager.instance.primaryFocus;
+    final field = find
+        .descendant(of: dropdown, matching: find.byType(InputDecorator))
+        .first;
+    BorderSide fieldSide() =>
+        (Theme.of(tester.element(field)).inputDecorationTheme.focusedBorder!
+                as OutlineInputBorder)
+            .borderSide;
+    expect(controller.settings.theme, LineupThemeName.emberSteel);
+    expect(
+      Theme.of(tester.element(field)).colorScheme.primary,
+      LineupTheme.forName(LineupThemeName.slatePine).colorScheme.primary,
+    );
+    expect(fieldSide().width, 1);
+    expect(tester.widget<InputDecorator>(field).isFocused, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump();
+    expect(fieldSide().width, 3);
+    expect(
+      fieldSide().color,
+      LineupTheme.of(tester.element(field)).focusBorder,
+    );
+    expect(FocusManager.instance.primaryFocus, same(focused));
+    await mouse.moveTo(const Offset(720, 500));
+    await tester.pump();
+    expect(fieldSide().width, 1);
+    expect(FocusManager.instance.primaryFocus, same(focused));
+    expect(
+      tester
+          .widget<LineupNavigationRow>(
+            find.ancestor(
+              of: find.text('Appearance'),
+              matching: find.byType(LineupNavigationRow),
+            ),
+          )
+          .selected,
+      isTrue,
+    );
+    controller.fail();
+    await tester.pumpAndSettle();
+    expect(
+      Theme.of(tester.element(field)).colorScheme.primary,
+      LineupTheme.forName(LineupThemeName.emberSteel).colorScheme.primary,
+    );
+    expect(fieldSide().width, 1);
+    expect(FocusManager.instance.primaryFocus, same(focused));
+    await mouse.removePointer();
+    await tester.pumpWidget(const SizedBox.shrink());
   });
 
   testWidgets('theme dropdown exposes selection and keyboard traversal', (

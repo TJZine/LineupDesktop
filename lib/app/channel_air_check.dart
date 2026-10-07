@@ -7,6 +7,7 @@ import '../channels/channel.dart';
 import '../channels/scheduler.dart';
 import '../guide/guide_controller.dart';
 import '../ui/app_theme.dart';
+import '../ui/app_ui.dart';
 import 'lineup_controller.dart';
 
 const channelAirCheckDebounce = Duration(milliseconds: 80);
@@ -431,11 +432,10 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
                     if (_futureHours < 24)
                       Align(
                         alignment: Alignment.centerLeft,
-                        child: TextButton(
+                        child: LineupInlineLink(
                           onPressed: _stale
                               ? null
                               : () => _extendPreview(preview),
-
                           child: const Text('Show next 6 hours'),
                         ),
                       ),
@@ -528,7 +528,7 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
                 'Schedule preview',
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
                   fontSize: (widget.compact ? 16 : 24),
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ),
@@ -615,29 +615,9 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
             label:
                 'Channel ${preview.channel.number} ${preview.channel.name}, ${program.scheduled.item.title}, ${_time(context, program.scheduled.start)} to ${_time(context, program.scheduled.end)}, ${current ? 'current' : 'upcoming'}',
             onTap: activate,
-            child: OutlinedButton(
+            child: LineupNavigationRow(
+              selected: selected,
               key: ValueKey('air-check-program-${program.id}'),
-              style: ButtonStyle(
-                alignment: Alignment.centerLeft,
-                padding: const WidgetStatePropertyAll(EdgeInsets.zero),
-                foregroundColor: WidgetStatePropertyAll(roles.primaryText),
-                textStyle: WidgetStatePropertyAll(_airCheckButtonTextStyle()),
-                backgroundColor: WidgetStatePropertyAll(
-                  selected ? roles.selectedSurface : Colors.transparent,
-                ),
-                side: WidgetStateProperty.resolveWith(
-                  (states) => BorderSide(
-                    color: states.contains(WidgetState.focused)
-                        ? roles.focusBorder
-                        : Colors.transparent,
-                    width: states.contains(WidgetState.focused)
-                        ? (roles.focusBorderWidth > 3
-                              ? roles.focusBorderWidth
-                              : 2)
-                        : 1,
-                  ),
-                ),
-              ),
               onPressed: activate,
               child: Padding(
                 padding: EdgeInsets.symmetric(
@@ -658,7 +638,7 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
                               ? roles.liveAccent
                               : roles.secondaryText,
                           fontWeight: current
-                              ? FontWeight.w700
+                              ? FontWeight.w600
                               : FontWeight.w400,
                         ),
                       ),
@@ -747,7 +727,7 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
           showTitle?.isNotEmpty == true ? showTitle! : item.title,
           style: Theme.of(context).textTheme.titleMedium?.copyWith(
             fontSize: (widget.compact ? 16 : 28),
-            fontWeight: FontWeight.w700,
+            fontWeight: FontWeight.w600,
           ),
         ),
         if (episode.isNotEmpty) Text(episode),
@@ -759,7 +739,7 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
         if (summary?.isNotEmpty == true) ...[
           SizedBox(height: 4),
           Text(summary!, maxLines: _synopsisExpanded ? null : 3),
-          TextButton(
+          LineupInlineLink(
             onPressed: () =>
                 setState(() => _synopsisExpanded = !_synopsisExpanded),
 
@@ -769,13 +749,12 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
         if (current != null && current.id != selected.id)
           Align(
             alignment: Alignment.centerLeft,
-            child: TextButton(
+            child: LineupInlineLink(
               onPressed: () => setState(() {
                 _selectedId = current.id;
                 _selectionFollowsNow = true;
                 _synopsisExpanded = false;
               }),
-
               child: const Text('Back to now'),
             ),
           ),
@@ -834,7 +813,7 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
     liveRegion: true,
     child: LayoutBuilder(
       builder: (context, constraints) {
-        final action = TextButton(onPressed: retry, child: Text(label));
+        final action = LineupInlineLink(onPressed: retry, child: Text(label));
         if (constraints.maxWidth / MediaQuery.textScalerOf(context).scale(1) <
             480) {
           return Column(

@@ -4,6 +4,7 @@ import 'dart:ui' show SemanticsAction;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/ui/lineup_canvas.dart';
+import 'package:lineup_desktop/ui/app_theme.dart';
 import 'package:lineup_desktop/app/channel_air_check.dart';
 import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/channels/scheduler.dart';
@@ -331,6 +332,14 @@ void main() {
       await tester.pumpAndSettle();
       await tester.ensureVisible(find.text('Show next 6 hours'));
       await tester.pump();
+      final extension = find.widgetWithText(TextButton, 'Show next 6 hours');
+      final link = tester.widget<TextButton>(extension);
+      final roles = LineupTheme.of(tester.element(extension));
+      expect(link.style!.foregroundColor!.resolve({}), roles.progressFill);
+      expect(
+        link.style!.foregroundColor!.resolve({WidgetState.hovered}),
+        roles.progressFill,
+      );
       await tester.tap(find.text('Show next 6 hours'));
       await tester.pump();
       final futureRow = find.byKey(ValueKey('air-check-program-${future.id}'));
@@ -495,10 +504,10 @@ void main() {
       ),
       findsOneWidget,
     );
-    final secondProgram = find.byType(OutlinedButton).at(1);
-    await tester.tap(
-      find.byKey(tester.widget<OutlinedButton>(secondProgram).key!),
+    final secondProgram = tester.getSemantics(
+      find.bySemanticsLabel(RegExp(r'Channel 4 .*B.*upcoming')),
     );
+    secondProgram.owner!.performAction(secondProgram.id, SemanticsAction.tap);
     await tester.pump();
     expect(
       find.descendant(

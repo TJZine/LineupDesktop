@@ -6,6 +6,10 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 
 import 'app_theme.dart';
+import 'lineup_focus.dart';
+
+export 'lineup_controls.dart';
+export 'lineup_focus.dart';
 
 typedef LineupMenuCallback = void Function(
   BuildContext invokerContext,
@@ -260,8 +264,12 @@ class _LineupSelectionCardState extends State<LineupSelectionCard> {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(focusRadius),
             border: Border.all(
-              color: _focused ? roles.focusBorder : Colors.transparent,
-              width: _focused ? roles.focusBorderWidth : 1,
+              color: LineupFocusScope.visible(context, _focused)
+                  ? roles.focusBorder
+                  : Colors.transparent,
+              width: LineupFocusScope.visible(context, _focused)
+                  ? roles.focusBorderWidth
+                  : 1,
             ),
           ),
           child: Card(
@@ -272,7 +280,7 @@ class _LineupSelectionCardState extends State<LineupSelectionCard> {
                 color: widget.selected
                     ? roles.progressFill
                     : roles.subtleBorder,
-                width: widget.selected ? 2 : 1,
+                width: 1,
               ),
             ),
             child: InkWell(
@@ -307,9 +315,10 @@ Future<bool> confirmDestructiveAction(
             child: const Text('Cancel'),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.error,
-              foregroundColor: Theme.of(context).colorScheme.onError,
+            style: LineupTheme.buttonStyle(
+              LineupTheme.of(context),
+              LineupButtonTier.destructive,
+              focusVisible: LineupFocusScope.visible(context),
             ),
             onPressed: () => Navigator.pop(context, true),
             child: Text(confirmLabel),

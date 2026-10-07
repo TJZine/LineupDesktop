@@ -60,13 +60,6 @@ class _GuidePlaybackPlaceholderState extends State<GuidePlaybackPlaceholder>
   Widget build(BuildContext context) {
     final roles = LineupTheme.of(context);
 
-    final textScale = MediaQuery.textScalerOf(context).scale(1);
-    final retryStyle = textScale > 1
-        ? TextButton.styleFrom(
-            minimumSize: Size(0, 48),
-            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          )
-        : null;
     return ColoredBox(
       color: roles.deepBackground,
       child: Stack(
@@ -113,7 +106,6 @@ class _GuidePlaybackPlaceholderState extends State<GuidePlaybackPlaceholder>
                   if (widget.onRetry != null) ...[
                     SizedBox(height: 8),
                     TextButton(
-                      style: retryStyle,
                       onPressed: widget.onRetry,
                       child: const Text('Retry'),
                     ),

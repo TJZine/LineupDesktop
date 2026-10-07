@@ -327,11 +327,8 @@ class _SetupState extends State<UpstreamChannelSetupView> {
                   header: true,
                   child: Text(
                     titleText,
-                    style: TextStyle(
+                    style: LineupTypography.pageTitle.copyWith(
                       color: roles.primaryText,
-                      fontSize: 38,
-                      fontWeight: FontWeight.w600,
-                      height: 1.2,
                     ),
                   ),
                 ),
@@ -463,7 +460,6 @@ class _SetupState extends State<UpstreamChannelSetupView> {
         if (canRetry && canContinue)
           OutlinedButton(
             key: const ValueKey('retry-failed-libraries'),
-            style: OutlinedButton.styleFrom(textStyle: actionStyle),
             onPressed: controller.busy
                 ? null
                 : () => _scan(retryFailedOnly: true),
@@ -478,7 +474,6 @@ class _SetupState extends State<UpstreamChannelSetupView> {
           : canContinue
           ? FilledButton(
               key: const ValueKey('continue-ready-libraries'),
-              style: FilledButton.styleFrom(textStyle: actionStyle),
               onPressed: controller.busy ? null : () => _commitLibraries(ready),
               child: Text(
                 'Continue with ${ready.length} ${ready.length == 1 ? 'library' : 'libraries'}',
@@ -487,7 +482,6 @@ class _SetupState extends State<UpstreamChannelSetupView> {
           : canRetry
           ? FilledButton(
               key: const ValueKey('retry-failed-libraries'),
-              style: FilledButton.styleFrom(textStyle: actionStyle),
               onPressed: _selectedLibraries.isEmpty || controller.busy
                   ? null
                   : () => _scan(retryFailedOnly: true),
@@ -495,7 +489,6 @@ class _SetupState extends State<UpstreamChannelSetupView> {
             )
           : FilledButton(
               key: const ValueKey('scan-selected-libraries'),
-              style: FilledButton.styleFrom(textStyle: actionStyle),
               onPressed: _selectedLibraries.isEmpty || controller.busy
                   ? null
                   : _scan,
@@ -876,22 +869,13 @@ class _SetupState extends State<UpstreamChannelSetupView> {
     final allocation = _allocate(widget.controller.channels);
 
     final roles = LineupTheme.of(context);
-    final double actionHeight = 56;
-    final actionPadding = EdgeInsets.symmetric(horizontal: 16, vertical: 12);
-    final actionTextStyle = Theme.of(context).textTheme.labelLarge!
-        .copyWith(fontSize: 18, height: 1.4, fontWeight: FontWeight.normal);
+
     return _Stage(
       footerGap: 0,
       footer: _Footer(
         configuration: true,
         leading: [
           TextButton(
-            style: TextButton.styleFrom(
-              foregroundColor: roles.secondaryText,
-              minimumSize: Size(0, actionHeight),
-              padding: actionPadding,
-              textStyle: actionTextStyle,
-            ),
             onPressed: () => setState(() => _step = 1),
             child: const Text('Back to libraries'),
           ),
@@ -899,11 +883,6 @@ class _SetupState extends State<UpstreamChannelSetupView> {
         summary: _configurationSummary(allocation),
         trailing: FilledButton(
           key: const ValueKey('review-channels'),
-          style: FilledButton.styleFrom(
-            minimumSize: Size(0, actionHeight),
-            padding: actionPadding,
-            textStyle: actionTextStyle.copyWith(fontWeight: FontWeight.w600),
-          ),
           onPressed: allocation.channels.isEmpty ? null : _prepareReview,
           child: const Text('Review channels'),
         ),
@@ -914,31 +893,14 @@ class _SetupState extends State<UpstreamChannelSetupView> {
           final compact =
               constraints.maxWidth < 1100 ||
               MediaQuery.textScalerOf(context).scale(1) >= 1.6;
-          final double navigationHeight = 56;
-          final navigationPadding = EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 12,
-          );
+
           final navigation = [
             for (var index = 0; index < labels.length; index++)
               Semantics(
                 selected: _configurationSection == index,
-                child: TextButton(
+                child: LineupNavigationRow(
+                  selected: _configurationSection == index,
                   key: ValueKey('configure-section-$index'),
-                  style: TextButton.styleFrom(
-                    alignment: Alignment.centerLeft,
-                    foregroundColor: roles.primaryText,
-                    backgroundColor: _configurationSection == index
-                        ? roles.selectedSurface
-                        : Colors.transparent,
-                    minimumSize: Size(0, navigationHeight),
-                    padding: navigationPadding,
-                    textStyle: Theme.of(context).textTheme.labelLarge!.copyWith(
-                      fontSize: 18,
-                      fontWeight: FontWeight.normal,
-                      height: 1.4,
-                    ),
-                  ),
                   onPressed: () =>
                       setState(() => _configurationSection = index),
                   child: Text(labels[index]),
@@ -1387,14 +1349,11 @@ class _SetupState extends State<UpstreamChannelSetupView> {
           );
           final dropdown = SizedBox(
             width: metrics.width,
-            height: metrics.closedHeight,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: roles.primarySurface,
-                border: Border.all(color: roles.defaultBorder),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: DropdownButtonHideUnderline(
+            height: math.max(44, metrics.closedHeight),
+            child: DropdownButtonHideUnderline(
+              child: LineupDropdownBox(
+                compact: true,
+                enabled: enabled,
                 child: DropdownButton<bool>(
                   key: ValueKey('source-grouping-${strategy.name}'),
                   isExpanded: true,
@@ -1404,13 +1363,13 @@ class _SetupState extends State<UpstreamChannelSetupView> {
                   itemHeight: metrics.itemHeight,
                   value: _grouped.contains(strategy),
                   style: groupingStyle,
-                  items: [
+                  items: lineupMenuItems([
                     const DropdownMenuItem(
                       value: false,
                       child: Text('Separate by library'),
                     ),
                     DropdownMenuItem(value: true, child: Text(groupingLabel)),
-                  ],
+                  ], _grouped.contains(strategy)),
                   onChanged: enabled
                       ? (value) => setState(() {
                           if (value == true) {
@@ -1420,6 +1379,14 @@ class _SetupState extends State<UpstreamChannelSetupView> {
                           }
                         })
                       : null,
+                  dropdownColor: LineupTheme.of(context).elevatedSurface,
+                  selectedItemBuilder: (_) => ([
+                    const DropdownMenuItem(
+                      value: false,
+                      child: Text('Separate by library'),
+                    ),
+                    DropdownMenuItem(value: true, child: Text(groupingLabel)),
+                  ]).map<Widget>((item) => item.child).toList(),
                 ),
               ),
             ),
@@ -1562,58 +1529,62 @@ class _SetupState extends State<UpstreamChannelSetupView> {
             children: [
               SizedBox(
                 width: variantMetrics.width,
-                child: DropdownButtonFormField<PlaybackMode?>(
-                  isExpanded: true,
-                  iconSize: 24,
-                  itemHeight: variantMetrics.itemHeight,
-                  initialValue: _variantMode,
-                  decoration: const InputDecoration(
-                    labelText: 'Different playback mode',
+                child: LineupField(
+                  label: 'Different playback mode',
+                  child: lineupDropdownField<PlaybackMode?>(
+                    context: context,
+                    isExpanded: true,
+                    iconSize: 24,
+                    itemHeight: variantMetrics.itemHeight,
+                    initialValue: _variantMode,
+                    decoration: const InputDecoration(),
+                    items: const [
+                      DropdownMenuItem(value: null, child: Text('None')),
+                      DropdownMenuItem(
+                        value: PlaybackMode.shuffle,
+                        child: Text('Shuffle'),
+                      ),
+                      DropdownMenuItem(
+                        value: PlaybackMode.sequential,
+                        child: Text('In order'),
+                      ),
+                      DropdownMenuItem(
+                        value: PlaybackMode.block,
+                        child: Text('Mini-marathons'),
+                      ),
+                    ],
+                    onChanged: (value) => setState(() {
+                      _variantMode = value;
+                      _clearDuplicateVariant();
+                      _clearIncludeSpecialsIfUnused();
+                    }),
                   ),
-                  items: const [
-                    DropdownMenuItem(value: null, child: Text('None')),
-                    DropdownMenuItem(
-                      value: PlaybackMode.shuffle,
-                      child: Text('Shuffle'),
-                    ),
-                    DropdownMenuItem(
-                      value: PlaybackMode.sequential,
-                      child: Text('In order'),
-                    ),
-                    DropdownMenuItem(
-                      value: PlaybackMode.block,
-                      child: Text('Mini-marathons'),
-                    ),
-                  ],
-                  onChanged: (value) => setState(() {
-                    _variantMode = value;
-                    _clearDuplicateVariant();
-                    _clearIncludeSpecialsIfUnused();
-                  }),
                 ),
               ),
               if (_variantMode == PlaybackMode.block)
                 SizedBox(width: 210, child: _blockField(main: false)),
               SizedBox(
                 width: alternateMetrics.width,
-                child: DropdownButtonFormField<int>(
-                  initialValue: _alternateCopies,
-                  decoration: const InputDecoration(
-                    labelText: 'Alternate schedules',
+                child: LineupField(
+                  label: 'Alternate schedules',
+                  child: lineupDropdownField<int>(
+                    context: context,
+                    initialValue: _alternateCopies,
+                    decoration: const InputDecoration(),
+                    iconSize: 24,
+                    itemHeight: alternateMetrics.itemHeight,
+                    items: const [0, 1, 2, 3]
+                        .map(
+                          (value) => DropdownMenuItem(
+                            value: value,
+                            child: Text('$value'),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: _playback == PlaybackMode.sequential
+                        ? null
+                        : (value) => setState(() => _alternateCopies = value!),
                   ),
-                  iconSize: 24,
-                  itemHeight: alternateMetrics.itemHeight,
-                  items: const [0, 1, 2, 3]
-                      .map(
-                        (value) => DropdownMenuItem(
-                          value: value,
-                          child: Text('$value'),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: _playback == PlaybackMode.sequential
-                      ? null
-                      : (value) => setState(() => _alternateCopies = value!),
                 ),
               ),
             ],
@@ -1657,7 +1628,10 @@ class _SetupState extends State<UpstreamChannelSetupView> {
             builder: (context, state) {
               final roles = LineupTheme.of(context);
               final selected = state.states.contains(WidgetState.selected);
-              final focused = state.states.contains(WidgetState.focused);
+              final focused = LineupFocusScope.visible(
+                context,
+                state.states.contains(WidgetState.focused),
+              );
               final hovered = state.states.contains(WidgetState.hovered);
               final radius = BorderRadius.circular(roles.panelRadius);
               final surface = selected
@@ -1862,24 +1836,28 @@ class _SetupState extends State<UpstreamChannelSetupView> {
       labels: ['2', '3', '4', '5'],
       style: Theme.of(context).textTheme.titleMedium!,
     );
-    return DropdownButtonFormField<int>(
-      initialValue: main ? _blockSize : _variantBlockSize,
-      iconSize: 24,
-      itemHeight: metrics.itemHeight,
-      decoration: InputDecoration(
-        labelText: main ? 'Episodes per block' : 'Extra block size',
+    return LineupField(
+      label: main ? 'Episodes per block' : 'Extra block size',
+      child: lineupDropdownField<int>(
+        context: context,
+        initialValue: main ? _blockSize : _variantBlockSize,
+        iconSize: 24,
+        itemHeight: metrics.itemHeight,
+        decoration: InputDecoration(),
+        items: const [2, 3, 4, 5]
+            .map(
+              (value) => DropdownMenuItem(value: value, child: Text('$value')),
+            )
+            .toList(),
+        onChanged: (value) => setState(() {
+          if (main) {
+            _blockSize = value!;
+          } else {
+            _variantBlockSize = value!;
+          }
+          _clearDuplicateVariant();
+        }),
       ),
-      items: const [2, 3, 4, 5]
-          .map((value) => DropdownMenuItem(value: value, child: Text('$value')))
-          .toList(),
-      onChanged: (value) => setState(() {
-        if (main) {
-          _blockSize = value!;
-        } else {
-          _variantBlockSize = value!;
-        }
-        _clearDuplicateVariant();
-      }),
     );
   }
 
@@ -1983,14 +1961,11 @@ class _SetupState extends State<UpstreamChannelSetupView> {
                 container: true,
                 child: SizedBox(
                   width: dropdownWidth,
-                  height: metrics.closedHeight,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: roles.primarySurface,
-                      border: Border.all(color: roles.defaultBorder),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: DropdownButtonHideUnderline(
+                  height: math.max(56, metrics.closedHeight),
+                  child: DropdownButtonHideUnderline(
+                    child: LineupDropdownBox(
+                      compact: false,
+                      enabled: true,
                       child: DropdownButton<int>(
                         key: key,
                         isExpanded: true,
@@ -2000,16 +1975,24 @@ class _SetupState extends State<UpstreamChannelSetupView> {
                         itemHeight: metrics.itemHeight,
                         value: value,
                         style: dropdownStyle,
-                        items: [
+                        items: lineupMenuItems([
                           for (final choice in choices)
                             DropdownMenuItem(
                               value: choice,
                               child: Text('$choice'),
                             ),
-                        ],
+                        ], value),
                         onChanged: (next) {
                           if (next != null) onChanged(next);
                         },
+                        dropdownColor: LineupTheme.of(context).elevatedSurface,
+                        selectedItemBuilder: (_) => ([
+                          for (final choice in choices)
+                            DropdownMenuItem(
+                              value: choice,
+                              child: Text('$choice'),
+                            ),
+                        ]).map<Widget>((item) => item.child).toList(),
                       ),
                     ),
                   ),
@@ -2133,8 +2116,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
       height: 1.4,
     );
     final double rowHeight = 60;
-    final double buttonSize = 44;
-    final double buttonIconSize = 24;
+
     final double rowGap = 16;
 
     Widget rowFor(int index, BuilderStrategy strategy) {
@@ -2161,7 +2143,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
             child: DecoratedBox(
               key: ValueKey('source-order-${strategy.name}'),
               decoration: BoxDecoration(
-                color: hovered || focused
+                color: hovered || LineupFocusScope.visible(context, focused)
                     ? roles.primarySurface
                     : Colors.transparent,
                 border: Border(bottom: BorderSide(color: roles.subtleBorder)),
@@ -2192,33 +2174,21 @@ class _SetupState extends State<UpstreamChannelSetupView> {
                     Wrap(
                       spacing: 4,
                       children: [
-                        IconButton(
+                        lineupArrowButton(
                           focusNode: _orderFocus[strategy]!.earlier,
-                          constraints: BoxConstraints.tightFor(
-                            width: buttonSize,
-                            height: buttonSize,
-                          ),
-                          padding: EdgeInsets.zero,
-                          iconSize: buttonIconSize,
                           tooltip: 'Move earlier',
                           onPressed: index == 0
                               ? null
                               : () => _moveSource(index, -1),
-                          icon: const Icon(Icons.arrow_upward),
+                          icon: Icons.arrow_upward,
                         ),
-                        IconButton(
+                        lineupArrowButton(
                           focusNode: _orderFocus[strategy]!.later,
-                          constraints: BoxConstraints.tightFor(
-                            width: buttonSize,
-                            height: buttonSize,
-                          ),
-                          padding: EdgeInsets.zero,
-                          iconSize: buttonIconSize,
                           tooltip: 'Move later',
                           onPressed: index == _sourceOrder.length - 1
                               ? null
                               : () => _moveSource(index, 1),
-                          icon: const Icon(Icons.arrow_downward),
+                          icon: Icons.arrow_downward,
                         ),
                       ],
                     ),
@@ -2292,26 +2262,13 @@ class _SetupState extends State<UpstreamChannelSetupView> {
     final noChanges =
         counts.added == 0 && counts.updated == 0 && counts.removed == 0;
     final roles = LineupTheme.of(context);
-    final actionSize = Size(148, 54);
-    final actionPadding = EdgeInsets.symmetric(horizontal: 24, vertical: 16);
-    final actionTextStyle = Theme.of(context).textTheme.labelLarge!
-        .copyWith(fontSize: 18);
-    final actionStyle = FilledButton.styleFrom(
-      minimumSize: actionSize,
-      padding: actionPadding,
-      textStyle: actionTextStyle.copyWith(fontWeight: FontWeight.w600),
-    );
+
     return _Stage(
       footer: _Footer(
         configuration: true,
         leading: [
           TextButton(
             key: const ValueKey('back-to-configure'),
-            style: TextButton.styleFrom(
-              minimumSize: actionSize,
-              padding: actionPadding,
-              textStyle: actionTextStyle,
-            ),
             onPressed: () => setState(() => _step = 2),
             child: const Text('Back to configure'),
           ),
@@ -2319,12 +2276,10 @@ class _SetupState extends State<UpstreamChannelSetupView> {
         summary: _firstSetup ? const SizedBox.shrink() : _methodDecision(),
         trailing: noChanges
             ? FilledButton(
-                style: actionStyle,
                 onPressed: _viewLineup,
                 child: const Text('View lineup'),
               )
             : FilledButton(
-                style: actionStyle,
                 key: const ValueKey('apply-reviewed-lineup'),
                 onPressed:
                     _notice == 'Updating review…' ||
@@ -2407,39 +2362,43 @@ class _SetupState extends State<UpstreamChannelSetupView> {
     );
     final dropdown = SizedBox(
       width: methodMetrics.width,
-      child: DropdownButtonFormField<ChannelBuildMode>(
-        key: const ValueKey('review-build-method'),
-        initialValue: _mode,
-        isExpanded: true,
-        iconSize: 24,
-        itemHeight: methodMetrics.itemHeight,
-        style: methodStyle,
-        decoration: const InputDecoration(labelText: 'Build method'),
-        items: const [
-          DropdownMenuItem(
-            value: ChannelBuildMode.merge,
-            child: Text('Update and add'),
-          ),
-          DropdownMenuItem(
-            value: ChannelBuildMode.replace,
-            child: Text('Replace generated channels'),
-          ),
-          DropdownMenuItem(
-            value: ChannelBuildMode.append,
-            child: Text('Add as new channels'),
-          ),
-        ],
-        onChanged: (mode) {
-          setState(() {
-            _mode = mode!;
-            _removalConfirmed = false;
-            _notice = 'Updating review…';
-            _plan = _allocateReview(_reviewBase);
-          });
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) setState(() => _notice = null);
-          });
-        },
+      child: LineupField(
+        label: 'Build method',
+        child: lineupDropdownField<ChannelBuildMode>(
+          context: context,
+          key: const ValueKey('review-build-method'),
+          initialValue: _mode,
+          isExpanded: true,
+          iconSize: 24,
+          itemHeight: methodMetrics.itemHeight,
+          style: methodStyle,
+          decoration: const InputDecoration(),
+          items: const [
+            DropdownMenuItem(
+              value: ChannelBuildMode.merge,
+              child: Text('Update and add'),
+            ),
+            DropdownMenuItem(
+              value: ChannelBuildMode.replace,
+              child: Text('Replace generated channels'),
+            ),
+            DropdownMenuItem(
+              value: ChannelBuildMode.append,
+              child: Text('Add as new channels'),
+            ),
+          ],
+          onChanged: (mode) {
+            setState(() {
+              _mode = mode!;
+              _removalConfirmed = false;
+              _notice = 'Updating review…';
+              _plan = _allocateReview(_reviewBase);
+            });
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) setState(() => _notice = null);
+            });
+          },
+        ),
       ),
     );
     final explanation = Text(
@@ -2682,24 +2641,10 @@ class _SetupState extends State<UpstreamChannelSetupView> {
             _ReviewFilter.removed => Theme.of(context).colorScheme.error,
             _ReviewFilter.all => roles.mutedText,
           };
-    final textStyle = Theme.of(context).textTheme.bodyMedium!
-        .copyWith(color: roles.primaryText, fontSize: 18, height: 1.4);
+
     return Semantics(
       selected: selected,
       child: TextButton(
-        style: TextButton.styleFrom(
-          foregroundColor: roles.primaryText,
-          backgroundColor: selected
-              ? roles.selectedSurface
-              : Colors.transparent,
-          side: selected
-              ? BorderSide(color: roles.defaultBorder)
-              : BorderSide.none,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-          minimumSize: Size(0, 44),
-          padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          textStyle: textStyle,
-        ),
         onPressed: () => setState(() => _filter = filter),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -2729,68 +2674,58 @@ class _SetupState extends State<UpstreamChannelSetupView> {
           (_filter == _ReviewFilter.all || entry.kind.name == _filter.name);
     }).toList();
     final filtered = _filter != _ReviewFilter.all;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Expanded(
-              child: TextField(
-                key: const ValueKey('channel-setup-review-search'),
-                controller: _search,
-                style: searchStyle,
-                decoration: InputDecoration(
-                  hintText: 'Search channels by name or number',
-                  hintStyle: searchStyle,
-                  contentPadding: EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 16,
+    return LineupCompactControls(
+      child: CustomScrollView(
+        key: const ValueKey('channel-setup-review-roster'),
+        slivers: [
+          SliverList.list(
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Expanded(
+                    child: TextField(
+                      key: const ValueKey('channel-setup-review-search'),
+                      controller: _search,
+                      style: searchStyle,
+                      decoration: InputDecoration(
+                        hintText: 'Search channels by name or number',
+                        hintStyle: searchStyle,
+                      ),
+                      onChanged: (_) => setState(() {}),
+                    ),
                   ),
-                  prefixIconConstraints: BoxConstraints(
-                    minWidth: 48,
-                    minHeight: 48,
-                  ),
-                  prefixIcon: Icon(Icons.search, size: 24),
-                ),
-                onChanged: (_) => setState(() {}),
+                  if (!_firstSetup) ...[
+                    SizedBox(width: 12),
+                    TextButton(
+                      key: const ValueKey('review-show-all'),
+                      onPressed: () =>
+                          setState(() => _filter = _ReviewFilter.all),
+                      child: const Text('Show all'),
+                    ),
+                  ],
+                ],
               ),
-            ),
-            if (!_firstSetup) ...[
-              SizedBox(width: 12),
-              TextButton(
-                key: const ValueKey('review-show-all'),
-                style: TextButton.styleFrom(
-                  foregroundColor: roles.secondaryText,
-                  textStyle: searchStyle,
-                  minimumSize: Size(0, 48),
-                  padding: EdgeInsets.symmetric(horizontal: 12),
-                ),
-                onPressed: () => setState(() => _filter = _ReviewFilter.all),
-                child: const Text('Show all'),
+              SizedBox(height: 8),
+              Text(
+                filtered
+                    ? '${_capitalized(_filter.name)} · ${entries.length} matching ${entries.length == 1 ? 'channel' : 'channels'}'
+                    : '${entries.length} of ${all.length} review entries',
+                style: textStyle,
               ),
+              SizedBox(height: 12),
+              _rosterHeader(),
             ],
-          ],
-        ),
-        SizedBox(height: 8),
-        Text(
-          filtered
-              ? '${_capitalized(_filter.name)} · ${entries.length} matching ${entries.length == 1 ? 'channel' : 'channels'}'
-              : '${entries.length} of ${all.length} review entries',
-          style: textStyle,
-        ),
-        SizedBox(height: 12),
-        _rosterHeader(),
-        Expanded(
-          child: entries.isEmpty
-              ? _emptyRoster(query, filtered)
-              : ListView.builder(
-                  key: const ValueKey('channel-setup-review-roster'),
-                  itemCount: entries.length,
-                  itemBuilder: (_, index) => _reviewRow(entries[index]),
-                ),
-        ),
-      ],
+          ),
+          if (entries.isEmpty)
+            SliverToBoxAdapter(child: _emptyRoster(query, filtered))
+          else
+            SliverList.builder(
+              itemCount: entries.length,
+              itemBuilder: (_, index) => _reviewRow(entries[index]),
+            ),
+        ],
+      ),
     );
   }
 
@@ -2837,7 +2772,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
               ? 'No matching channels'
               : 'No channels in this filter',
         ),
-        TextButton(
+        LineupInlineLink(
           onPressed: () => setState(() {
             if (query.isNotEmpty) _search.clear();
             if (filtered) _filter = _ReviewFilter.all;
@@ -2971,12 +2906,8 @@ class _SetupState extends State<UpstreamChannelSetupView> {
     final total = widget.controller.channels.length;
     final roles = LineupTheme.of(context);
     final textTheme = Theme.of(context).textTheme;
-    final headingStyle = textTheme.headlineMedium!.copyWith(
+    final headingStyle = LineupTypography.pageTitle.copyWith(
       color: roles.primaryText,
-      fontSize: 48,
-      fontWeight: FontWeight.w600,
-      height: 1.18,
-      letterSpacing: -1.2,
     );
     final infoStyle = textTheme.bodyMedium!.copyWith(
       color: roles.secondaryText,
@@ -2988,11 +2919,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
       fontSize: 18,
       height: 1.4,
     );
-    final actionStyle = textTheme.labelLarge!.copyWith(
-      fontSize: 18,
-      height: 1.4,
-      fontWeight: FontWeight.w600,
-    );
+
     final failure = _phase == _BuildPhase.failed;
     final applying = _phase == _BuildPhase.applying;
     final changeSummary = _changeSummary(counts);
@@ -3058,7 +2985,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
         ),
       ),
     );
-    final double actionHeight = 56;
+
     final actions = ConstrainedBox(
       constraints: BoxConstraints(minHeight: 120),
       child: applying
@@ -3071,10 +2998,6 @@ class _SetupState extends State<UpstreamChannelSetupView> {
                   constraints: BoxConstraints(minWidth: 190),
                   child: FilledButton(
                     focusNode: _resultFocus,
-                    style: FilledButton.styleFrom(
-                      minimumSize: Size(0, actionHeight),
-                      textStyle: actionStyle,
-                    ),
                     onPressed: failure
                         ? () => setState(() => _phase = _BuildPhase.review)
                         : _viewLineup,
@@ -3084,11 +3007,6 @@ class _SetupState extends State<UpstreamChannelSetupView> {
                 if (!failure) ...[
                   SizedBox(height: 12),
                   TextButton(
-                    style: TextButton.styleFrom(
-                      foregroundColor: roles.secondaryText,
-                      minimumSize: Size(0, 48),
-                      textStyle: actionStyle,
-                    ),
                     onPressed: _addCustom,
                     child: const Text('Add a custom channel'),
                   ),

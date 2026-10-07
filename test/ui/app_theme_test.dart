@@ -8,9 +8,8 @@ void main() {
     expect(LineupThemeName.values.map((theme) => theme.label), [
       'Ember & Steel',
       'Slate & Pine',
-      'Swiss Minimal',
-      'DirecTV Classic',
-      'Glassmorphism',
+      'Mint Noir',
+      'Satellite Blue',
     ]);
   });
 
@@ -100,7 +99,7 @@ void main() {
 
       expect(selected.fontFamily, theme.textTheme.labelMedium!.fontFamily);
       expect(selected.color, theme.extension<LineupThemeRoles>()!.progressFill);
-      expect(selected.fontWeight, FontWeight.w700);
+      expect(selected.fontWeight, FontWeight.w600);
     }
   });
 

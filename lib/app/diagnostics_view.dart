@@ -209,18 +209,11 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
             onPressed: widget.onBack,
             icon: Icon(Icons.arrow_back, size: 18),
             label: const Text('Back'),
-            style: TextButton.styleFrom(
-              foregroundColor: roles.secondaryText,
-              minimumSize: Size(0, 48),
-              padding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-              textStyle: Theme.of(context).textTheme.labelLarge
-                  ?.copyWith(fontSize: 18),
-            ),
           ),
           SizedBox(width: 12),
           Text(
             'Support',
-            style: TextStyle(color: roles.secondaryText, fontSize: 16),
+            style: TextStyle(color: roles.secondaryText, fontSize: 18),
           ),
           const Spacer(),
           if (widget.onOpenMenu != null && widget.menuFocusNode != null)
@@ -230,20 +223,16 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
                 focusNode: widget.menuFocusNode,
                 onPressed: () =>
                     widget.onOpenMenu!(buttonContext, widget.menuFocusNode!),
-                style: TextButton.styleFrom(
-                  foregroundColor: roles.primaryText,
-                  minimumSize: Size(0, 48),
-                  padding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-                  textStyle: Theme.of(context).textTheme.labelLarge?.copyWith(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w500,
-                    letterSpacing: 1.5,
-                  ),
-                ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Text('LINEUP'),
+                    const Text(
+                      'LINEUP',
+                      style: TextStyle(
+                        fontFamily: 'Arial',
+                        fontWeight: FontWeight.w400,
+                      ),
+                    ),
                     SizedBox(width: 12),
                     Icon(Icons.menu, size: 18),
                   ],
@@ -263,11 +252,7 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
         FilledButton(
           focusNode: widget.focusNode,
           onPressed: _copying ? null : _copy,
-          style: FilledButton.styleFrom(
-            minimumSize: Size(148, 54),
-            padding: EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-          ),
-          child: Text('Copy redacted report', style: TextStyle(fontSize: 16)),
+          child: Text('Copy redacted report', style: TextStyle(fontSize: 18)),
         ),
         ConstrainedBox(
           constraints: BoxConstraints(
@@ -294,18 +279,12 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
       children: [
         Text(
           'Diagnostics',
-          style: TextStyle(
-            color: roles.primaryText,
-            fontSize: 32,
-            fontWeight: FontWeight.w500,
-            height: 1.2,
-            letterSpacing: -0.6,
-          ),
+          style: LineupTypography.pageTitle.copyWith(color: roles.primaryText),
         ),
         SizedBox(height: 5),
         Text(
           'Playback information and recent support events.',
-          style: TextStyle(color: roles.secondaryText, fontSize: 16),
+          style: TextStyle(color: roles.secondaryText, fontSize: 18),
         ),
       ],
     );
@@ -402,7 +381,7 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
                 'Technical details',
                 style: TextStyle(
                   color: roles.primaryText,
-                  fontSize: 16,
+                  fontSize: 18,
                   fontWeight: FontWeight.w500,
                 ),
               ),
@@ -501,7 +480,7 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
                   ),
                 ],
               ),
-              style: TextStyle(fontSize: 16),
+              style: TextStyle(fontSize: 18),
             ),
             SizedBox(height: 16),
             Text(
@@ -530,7 +509,7 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
           title,
           style: TextStyle(
             color: roles.primaryText,
-            fontSize: 16,
+            fontSize: 18,
             fontWeight: FontWeight.w500,
           ),
         ),
@@ -571,7 +550,7 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
         ),
       ),
       SizedBox(height: 4),
-      Text(value, style: TextStyle(fontSize: 16)),
+      Text(value, style: TextStyle(fontSize: 18)),
     ],
   );
 
@@ -596,12 +575,7 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
         ),
       ],
     );
-    final buttonStyle = TextButton.styleFrom(
-      foregroundColor: roles.secondaryText,
-      minimumSize: Size(0, 48),
-      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-      textStyle: Theme.of(context).textTheme.labelLarge?.copyWith(fontSize: 16),
-    );
+
     final actions = Wrap(
       spacing: 16,
       runSpacing: 8,
@@ -613,7 +587,6 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
         ),
         TextButton(
           onPressed: widget.onRecordingSettings,
-          style: buttonStyle,
           child: const Text('Recording settings'),
         ),
         SizedBox(
@@ -627,7 +600,6 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
               onPressed: () => setState(
                 () => _visibleEvents = currentEvents.reversed.toList(),
               ),
-              style: buttonStyle,
               child: Text('$unseen new ${unseen == 1 ? 'event' : 'events'}'),
             ),
           ),
@@ -668,7 +640,7 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
         Text(
           message,
           textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 16),
+          style: TextStyle(fontSize: 18),
         ),
       ],
     ),
@@ -718,7 +690,7 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
               );
               final message = Text(
                 event.message,
-                style: TextStyle(fontSize: 16),
+                style: TextStyle(fontSize: 18),
               );
               if (constraints.maxWidth < 520 * eventScale) {
                 return Column(
@@ -769,7 +741,7 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
             16,
           ),
           child: event.context.isEmpty
-              ? Text('No additional details', style: TextStyle(fontSize: 16))
+              ? Text('No additional details', style: TextStyle(fontSize: 18))
               : Wrap(
                   spacing: 24,
                   runSpacing: 8,
@@ -782,7 +754,7 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
                               text: '${_eventFactLabel(fact.key)}: ',
                               style: TextStyle(
                                 color: LineupTheme.of(context).secondaryText,
-                                fontSize: 16,
+                                fontSize: 18,
                               ),
                             ),
                             TextSpan(
@@ -793,12 +765,12 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
                                   : '${fact.value}',
                               style: TextStyle(
                                 color: LineupTheme.of(context).primaryText,
-                                fontSize: 16,
+                                fontSize: 18,
                               ),
                             ),
                           ],
                         ),
-                        style: TextStyle(fontSize: 16),
+                        style: TextStyle(fontSize: 18),
                       ),
                   ],
                 ),
@@ -836,7 +808,7 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
           title,
           style: TextStyle(
             color: LineupTheme.of(context).secondaryText,
-            fontSize: 16,
+            fontSize: 18,
           ),
         ),
         SizedBox(height: 8),

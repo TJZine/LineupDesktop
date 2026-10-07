@@ -266,51 +266,20 @@ class ChannelsViewState extends State<ChannelsView> {
     }
     _pruneHealth(liveIds);
     _scheduleFocusPrune(liveIds);
-    final headingStyle = Theme.of(context).textTheme.headlineMedium?.copyWith(
-      fontSize: _directorySize(36, 28),
-      fontWeight: FontWeight.w600,
+    final headingStyle = LineupTypography.pageTitle.copyWith(
+      color: LineupTheme.of(context).primaryText,
     );
-    final countStyle = Theme.of(context).textTheme.headlineMedium?.copyWith(
+    final countStyle = LineupTypography.body.copyWith(
       fontSize: _directorySize(28, 24),
-      fontWeight: FontWeight.w400,
       color: LineupTheme.of(context).secondaryText,
     );
     final bodyStyle = Theme.of(context).textTheme.bodyMedium
-        ?.copyWith(fontSize: _directorySize(18, 14));
-    final labelStyle = Theme.of(context).textTheme.labelLarge
-        ?.copyWith(fontSize: _directorySize(18, 14));
+        ?.copyWith(fontSize: 18);
+
     final menuContextStyle = Theme.of(context).textTheme.bodyMedium?.copyWith(
       fontSize: (Theme.of(context).textTheme.bodyMedium?.fontSize ?? 14),
     );
-    final menuButtonStyle = TextButton.styleFrom(
-      minimumSize: Size(64, 40),
-      padding: EdgeInsetsDirectional.fromSTEB(12, 8, 16, 8),
-      iconSize: 18,
-    );
-    final baseFilledTextStyle = Theme.of(context)
-        .filledButtonTheme
-        .style
-        ?.textStyle
-        ?.resolve(const {});
-    final baseOutlinedTextStyle = Theme.of(context)
-        .outlinedButtonTheme
-        .style
-        ?.textStyle
-        ?.resolve(const {});
-    final filledFontSize = baseFilledTextStyle?.fontSize ?? 17;
-    final outlinedFontSize = baseOutlinedTextStyle?.fontSize ?? 17;
-    final emptyFilledButtonStyle = FilledButton.styleFrom(
-      minimumSize: Size(148, 54),
-      padding: EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-      iconSize: 18,
-      textStyle: baseFilledTextStyle?.copyWith(fontSize: filledFontSize),
-    );
-    final emptyOutlinedButtonStyle = OutlinedButton.styleFrom(
-      minimumSize: Size(148, 54),
-      padding: EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-      iconSize: 18,
-      textStyle: baseOutlinedTextStyle?.copyWith(fontSize: outlinedFontSize),
-    );
+
     return LineupPage(
       title: 'Channels',
       titleWidget: Row(
@@ -323,9 +292,14 @@ class ChannelsViewState extends State<ChannelsView> {
                 focusNode: widget.menuFocusNode,
                 onPressed: () =>
                     widget.onOpenMenu(buttonContext, widget.menuFocusNode),
-                style: menuButtonStyle,
                 icon: const Icon(Icons.menu),
-                label: const Text('LINEUP'),
+                label: const Text(
+                  'LINEUP',
+                  style: TextStyle(
+                    fontFamily: 'Arial',
+                    fontWeight: FontWeight.w400,
+                  ),
+                ),
               ),
             ),
           ),
@@ -346,9 +320,8 @@ class ChannelsViewState extends State<ChannelsView> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.baseline,
-                        textBaseline: TextBaseline.alphabetic,
+                      Wrap(
+                        crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
                           Text(
                             _mode == _DirectoryMode.reorder
@@ -386,26 +359,10 @@ class ChannelsViewState extends State<ChannelsView> {
                             onPressed: _saving
                                 ? null
                                 : widget.controller.enterChannelSetup,
-                            style: OutlinedButton.styleFrom(
-                              minimumSize: Size(0, 48),
-                              padding: EdgeInsets.symmetric(
-                                horizontal: 24,
-                                vertical: 16,
-                              ),
-                              textStyle: labelStyle,
-                            ),
                             child: const Text('Generate lineup'),
                           ),
                           FilledButton(
                             onPressed: _saving ? null : openNew,
-                            style: FilledButton.styleFrom(
-                              minimumSize: Size(0, 48),
-                              padding: EdgeInsets.symmetric(
-                                horizontal: 24,
-                                vertical: 16,
-                              ),
-                              textStyle: labelStyle,
-                            ),
                             child: const Text('Add a custom channel'),
                           ),
                         ],
@@ -424,7 +381,7 @@ class ChannelsViewState extends State<ChannelsView> {
             SizedBox(height: 20),
             DefaultTextStyle.merge(
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                fontSize: _directorySize(18, 14),
+                fontSize: 18,
                 color: LineupTheme.of(context).secondaryText,
               ),
               child: _mode == _DirectoryMode.reorder
@@ -468,13 +425,11 @@ class ChannelsViewState extends State<ChannelsView> {
                           onPressed: _saving
                               ? null
                               : widget.controller.enterChannelSetup,
-                          style: emptyFilledButtonStyle,
                           icon: const Icon(Icons.auto_awesome_outlined),
                           label: const Text('Generate lineup'),
                         ),
                         OutlinedButton.icon(
                           onPressed: _saving ? null : openNew,
-                          style: emptyOutlinedButtonStyle,
                           icon: const Icon(Icons.add),
                           label: const Text('Create a custom channel'),
                         ),
@@ -511,7 +466,7 @@ class ChannelsViewState extends State<ChannelsView> {
                           .textTheme
                           .bodyMedium
                           ?.copyWith(
-                            fontSize: _directorySize(18, 14),
+                            fontSize: 18,
                             color: LineupTheme.of(context).secondaryText,
                           );
                       final ownership = channel.builderKey == null
@@ -522,102 +477,109 @@ class ChannelsViewState extends State<ChannelsView> {
                         () => FocusNode(debugLabel: 'Open ${channel.name}'),
                       );
                       rowFocus.debugLabel = 'Open ${channel.name}';
-                      return Material(
-                        key: ValueKey('channel-row-${channel.id}'),
-                        color: _selectedIds.contains(channel.id)
-                            ? Theme.of(context).colorScheme.primary
-                                  .withValues(alpha: 0.08)
-                            : Colors.transparent,
-                        child: Tooltip(
-                          message: _mode == _DirectoryMode.selection
-                              ? '${_selectedIds.contains(channel.id) ? 'Deselect' : 'Select'} ${channel.name}'
-                              : 'Open ${channel.name}',
-                          child: InkWell(
-                            focusNode: rowFocus,
-                            onTap: _saving
-                                ? null
-                                : _mode == _DirectoryMode.selection
-                                ? () => _toggleSelected(channel.id)
-                                : () => _open(channel),
-                            child: _directoryColumns(
-                              leading: _mode == _DirectoryMode.selection
-                                  ? Checkbox(
-                                      semanticLabel: 'Select ${channel.name}',
-                                      value: _selectedIds.contains(channel.id),
-                                      onChanged: _saving
-                                          ? null
-                                          : (_) => _toggleSelected(channel.id),
-                                    )
-                                  : null,
-                              number: Text(
-                                '${channel.number}',
-                                style: rowSupportStyle,
-                              ),
-                              name: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(channel.name, style: rowNameStyle),
-                                  if (_health[channel.id]?.issue == true)
-                                    Text(
-                                      'Schedule issue — open this channel to recover',
-                                      style: rowSupportStyle?.copyWith(
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .error,
-                                      ),
-                                    ),
-                                ],
-                              ),
-                              source: Text(
-                                channelSourceLabel(
-                                  channel.source,
-                                  widget.controller,
-                                ),
-                                style: rowSupportStyle,
-                              ),
-                              playback: Text(
-                                channelRhythmLabel(
-                                  channel.playbackMode,
-                                  channel.blockSize,
-                                ),
-                                style: rowSupportStyle,
-                              ),
-                              type: Text(ownership, style: rowSupportStyle),
-                              action: _mode == _DirectoryMode.selection
-                                  ? const SizedBox.shrink()
-                                  : PopupMenuButton<_RowAction>(
-                                      enabled: !_saving,
-                                      tooltip: 'Actions for ${channel.name}',
-                                      padding: EdgeInsets.all(8),
-                                      iconSize: 24,
-                                      menuPadding: null,
-                                      onSelected: (action) => switch (action) {
-                                        _RowAction.duplicate => _openDuplicate(
-                                          channel,
+                      return LineupRowSurface(
+                        selected: _selectedIds.contains(channel.id),
+                        child: Material(
+                          key: ValueKey('channel-row-${channel.id}'),
+                          color: Colors.transparent,
+                          child: Tooltip(
+                            message: _mode == _DirectoryMode.selection
+                                ? '${_selectedIds.contains(channel.id) ? 'Deselect' : 'Select'} ${channel.name}'
+                                : 'Open ${channel.name}',
+                            child: InkWell(
+                              focusNode: rowFocus,
+                              onTap: _saving
+                                  ? null
+                                  : _mode == _DirectoryMode.selection
+                                  ? () => _toggleSelected(channel.id)
+                                  : () => _open(channel),
+                              child: _directoryColumns(
+                                leading: _mode == _DirectoryMode.selection
+                                    ? Checkbox(
+                                        semanticLabel: 'Select ${channel.name}',
+                                        value: _selectedIds.contains(
+                                          channel.id,
                                         ),
-                                        _RowAction.delete => _delete(channel),
-                                      },
-                                      itemBuilder: (_) => [
-                                        if (channel.builderKey != null)
+                                        onChanged: _saving
+                                            ? null
+                                            : (_) =>
+                                                  _toggleSelected(channel.id),
+                                      )
+                                    : null,
+                                number: Text(
+                                  '${channel.number}',
+                                  style: rowSupportStyle,
+                                ),
+                                name: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(channel.name, style: rowNameStyle),
+                                    if (_health[channel.id]?.issue == true)
+                                      Text(
+                                        'Schedule issue — open this channel to recover',
+                                        style: rowSupportStyle?.copyWith(
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .error,
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                                source: Text(
+                                  channelSourceLabel(
+                                    channel.source,
+                                    widget.controller,
+                                  ),
+                                  style: rowSupportStyle,
+                                ),
+                                playback: Text(
+                                  channelRhythmLabel(
+                                    channel.playbackMode,
+                                    channel.blockSize,
+                                  ),
+                                  style: rowSupportStyle,
+                                ),
+                                type: Text(ownership, style: rowSupportStyle),
+                                action: _mode == _DirectoryMode.selection
+                                    ? const SizedBox.shrink()
+                                    : PopupMenuButton<_RowAction>(
+                                        enabled: !_saving,
+                                        tooltip: 'Actions for ${channel.name}',
+                                        padding: EdgeInsets.all(8),
+                                        iconSize: 24,
+                                        menuPadding: null,
+                                        onSelected: (action) =>
+                                            switch (action) {
+                                              _RowAction.duplicate =>
+                                                _openDuplicate(channel),
+                                              _RowAction.delete => _delete(
+                                                channel,
+                                              ),
+                                            },
+                                        itemBuilder: (_) => [
+                                          if (channel.builderKey != null)
+                                            PopupMenuItem(
+                                              value: _RowAction.duplicate,
+                                              height: 48,
+                                              padding: EdgeInsets.symmetric(
+                                                horizontal: 12,
+                                              ),
+                                              child: Text(
+                                                'Duplicate as custom',
+                                              ),
+                                            ),
                                           PopupMenuItem(
-                                            value: _RowAction.duplicate,
+                                            value: _RowAction.delete,
                                             height: 48,
                                             padding: EdgeInsets.symmetric(
                                               horizontal: 12,
                                             ),
-                                            child: Text('Duplicate as custom'),
+                                            child: Text('Delete'),
                                           ),
-                                        PopupMenuItem(
-                                          value: _RowAction.delete,
-                                          height: 48,
-                                          padding: EdgeInsets.symmetric(
-                                            horizontal: 12,
-                                          ),
-                                          child: Text('Delete'),
-                                        ),
-                                      ],
-                                    ),
+                                        ],
+                                      ),
+                              ),
                             ),
                           ),
                         ),
@@ -715,7 +677,7 @@ class ChannelsViewState extends State<ChannelsView> {
               SizedBox(width: 16),
               Expanded(flex: 2, child: playback),
               SizedBox(width: 16),
-              SizedBox(width: 144, child: action),
+              SizedBox(width: 144, child: LineupCompactControls(child: action)),
             ],
           ),
         ),
@@ -729,62 +691,8 @@ class ChannelsViewState extends State<ChannelsView> {
       : expanded;
 
   TextStyle _channelBodyStyle(BuildContext context) {
-    return Theme.of(context).textTheme.bodyMedium
-            ?.copyWith(fontSize: _directorySize(18, 14)) ??
-        TextStyle(fontSize: _directorySize(18, 14));
-  }
-
-  TextStyle _channelControlStyle(BuildContext context) {
-    return Theme.of(context).textTheme.labelLarge
-            ?.copyWith(fontSize: _directorySize(18, 14)) ??
-        TextStyle(fontSize: _directorySize(18, 14));
-  }
-
-  ButtonStyle _channelQuietButtonStyle(BuildContext context) {
-    return TextButton.styleFrom(
-      minimumSize: Size(0, 48),
-      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      visualDensity: VisualDensity.standard,
-      foregroundColor: LineupTheme.of(context).secondaryText,
-      textStyle: _channelControlStyle(context),
-    );
-  }
-
-  ButtonStyle _channelFilterStyle(BuildContext context) {
-    final roles = LineupTheme.of(context);
-    return ButtonStyle(
-      padding: LineupLayout.isCompactWidth(MediaQuery.sizeOf(context).width)
-          ? null
-          : WidgetStatePropertyAll(
-              EdgeInsets.symmetric(horizontal: 16, vertical: 11),
-            ),
-      visualDensity: VisualDensity.standard,
-      tapTargetSize:
-          LineupLayout.isCompactWidth(MediaQuery.sizeOf(context).width)
-          ? null
-          : MaterialTapTargetSize.shrinkWrap,
-      textStyle: WidgetStatePropertyAll(_channelControlStyle(context)),
-      foregroundColor: WidgetStateProperty.resolveWith(
-        (states) => states.contains(WidgetState.disabled)
-            ? roles.mutedText
-            : states.contains(WidgetState.selected)
-            ? roles.primaryText
-            : roles.secondaryText,
-      ),
-      backgroundColor: WidgetStateProperty.resolveWith(
-        (states) => states.contains(WidgetState.selected)
-            ? roles.selectedSurface
-            : Colors.transparent,
-      ),
-      side: WidgetStateProperty.resolveWith(
-        (states) => states.contains(WidgetState.focused)
-            ? BorderSide(
-                color: roles.focusBorder,
-                width: roles.focusBorderWidth,
-              )
-            : BorderSide.none,
-      ),
-    );
+    return Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 18) ??
+        TextStyle(fontSize: 18);
   }
 
   Widget _directoryToolbar() {
@@ -795,7 +703,7 @@ class ChannelsViewState extends State<ChannelsView> {
             ? 0
             : 48,
       ),
-      child: SegmentedButton<_DirectoryFilter>(
+      child: LineupSegmentedControl<_DirectoryFilter>(
         segments: const [
           ButtonSegment(value: _DirectoryFilter.all, label: Text('All')),
           ButtonSegment(value: _DirectoryFilter.custom, label: Text('Custom')),
@@ -806,7 +714,6 @@ class ChannelsViewState extends State<ChannelsView> {
         ],
         selected: {_filter},
         showSelectedIcon: false,
-        style: _channelFilterStyle(context),
         onSelectionChanged: _saving
             ? null
             : (value) => setState(() {
@@ -816,19 +723,17 @@ class ChannelsViewState extends State<ChannelsView> {
       ),
     );
     final actions = [
-      TextButton(
+      OutlinedButton(
         onPressed: _saving
             ? null
             : () => setState(() {
                 _mode = _DirectoryMode.selection;
                 _selectedIds.clear();
               }),
-        style: _channelQuietButtonStyle(context),
         child: const Text('Select'),
       ),
-      TextButton(
+      OutlinedButton(
         onPressed: _saving ? null : _beginReorder,
-        style: _channelQuietButtonStyle(context),
         child: const Text('Reorder channels'),
       ),
     ];
@@ -840,12 +745,7 @@ class ChannelsViewState extends State<ChannelsView> {
           controller: _search,
           focusNode: _searchFocus,
           style: _channelBodyStyle(context),
-          decoration: InputDecoration(
-            hintText: 'Search by name or number',
-            isDense: true,
-            contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 11),
-            constraints: BoxConstraints(minHeight: 48),
-          ),
+          decoration: InputDecoration(hintText: 'Search by name or number'),
           onChanged: (_) => setState(() {}),
         );
         final wide = constraints.maxWidth >= 1200 && textScale < 1.4;
@@ -856,7 +756,10 @@ class ChannelsViewState extends State<ChannelsView> {
               SizedBox(width: 8),
               filters,
               SizedBox(width: 8),
-              if (_mode == _DirectoryMode.normal) ...actions,
+              if (_mode == _DirectoryMode.normal) ...[
+                const SizedBox(height: 28, child: VerticalDivider(width: 16)),
+                ...actions,
+              ],
             ],
           );
         }
@@ -874,7 +777,10 @@ class ChannelsViewState extends State<ChannelsView> {
           children: [
             SizedBox(width: searchWidth, child: search),
             filters,
-            if (_mode == _DirectoryMode.normal) ...actions,
+            if (_mode == _DirectoryMode.normal) ...[
+              const SizedBox(height: 28, child: VerticalDivider(width: 16)),
+              ...actions,
+            ],
           ],
         );
       },
@@ -887,148 +793,124 @@ class ChannelsViewState extends State<ChannelsView> {
         _reorderBase.map((channel) => channel.id),
         _reorderIds,
       );
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Align(
-            alignment: Alignment.centerRight,
-            child: Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                TextButton(
-                  onPressed: _saving ? null : _cancelReorder,
-                  style: _channelQuietButtonStyle(context).copyWith(
-                    padding: WidgetStatePropertyAll(
-                      EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                    ),
-                  ),
-                  child: const Text('Cancel'),
-                ),
-                FilledButton(
-                  onPressed: changed && !_saving ? _saveOrder : null,
-                  style: FilledButton.styleFrom(
-                    minimumSize: Size(0, 48),
-                    padding: EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                    textStyle: _channelControlStyle(context),
-                  ),
-                  child: Text(_saving ? 'Saving…' : 'Save order'),
-                ),
-              ],
-            ),
-          ),
-        ],
-      );
-    }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        if (_showSelected)
-          Text('Selected channels', style: _channelBodyStyle(context))
-        else
-          _directoryToolbar(),
-        if (_mode == _DirectoryMode.selection) ...[
-          SizedBox(height: 8),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final leading = Wrap(
+      return LineupCompactControls(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Align(
+              alignment: Alignment.centerRight,
+              child: Wrap(
                 spacing: 8,
                 runSpacing: 8,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   TextButton(
-                    onPressed: _saving || _selectedIds.isEmpty
-                        ? null
-                        : () => setState(() => _showSelected = true),
-                    style: _channelQuietButtonStyle(context),
-                    child: Text(
-                      _showSelected
-                          ? '${_selectedIds.length} selected'
-                          : _selectionSummary(matching),
-                    ),
-                  ),
-                  if (_showSelected)
-                    TextButton(
-                      onPressed: _saving
-                          ? null
-                          : () => setState(() => _showSelected = false),
-                      style: _channelQuietButtonStyle(context),
-                      child: const Text('Back to results'),
-                    ),
-                  if (!_showSelected)
-                    TextButton(
-                      onPressed: _saving || matching.isEmpty
-                          ? null
-                          : () => setState(
-                              () => _selectedIds.addAll(
-                                matching.map((channel) => channel.id),
-                              ),
-                            ),
-                      style: _channelQuietButtonStyle(context),
-                      child: const Text('Select all matching'),
-                    ),
-                  TextButton(
-                    onPressed: _saving || _selectedIds.isEmpty
-                        ? null
-                        : () => setState(_selectedIds.clear),
-                    style: _channelQuietButtonStyle(context),
-                    child: const Text('Clear selection'),
-                  ),
-                ],
-              );
-              final trailing = Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  TextButton(
-                    onPressed: _saving ? null : _cancelSelection,
-                    style: _channelQuietButtonStyle(context).copyWith(
-                      padding: WidgetStatePropertyAll(
-                        EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                      ),
-                    ),
+                    onPressed: _saving ? null : _cancelReorder,
                     child: const Text('Cancel'),
                   ),
-                  OutlinedButton(
-                    onPressed: _selectedIds.isEmpty || _saving
-                        ? null
-                        : _deleteSelected,
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Theme.of(context).colorScheme.error,
-                      minimumSize: Size(0, 48),
-                      padding: EdgeInsets.symmetric(
-                        horizontal: 24,
-                        vertical: 16,
-                      ),
-                      textStyle: _channelControlStyle(context),
-                    ),
-                    child: Text(_saving ? 'Deleting…' : 'Delete selected'),
+                  FilledButton(
+                    onPressed: changed && !_saving ? _saveOrder : null,
+                    child: Text(_saving ? 'Saving…' : 'Save order'),
                   ),
                 ],
-              );
-              if (constraints.maxWidth < 760) {
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    return LineupCompactControls(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (_showSelected)
+            Text('Selected channels', style: _channelBodyStyle(context))
+          else
+            _directoryToolbar(),
+          if (_mode == _DirectoryMode.selection) ...[
+            SizedBox(height: 8),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final leading = Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    leading,
-                    SizedBox(height: 8),
-                    Align(alignment: Alignment.centerRight, child: trailing),
+                    TextButton(
+                      onPressed: _saving || _selectedIds.isEmpty
+                          ? null
+                          : () => setState(() => _showSelected = true),
+                      child: Text(
+                        _showSelected
+                            ? '${_selectedIds.length} selected'
+                            : _selectionSummary(matching),
+                      ),
+                    ),
+                    if (_showSelected)
+                      TextButton(
+                        onPressed: _saving
+                            ? null
+                            : () => setState(() => _showSelected = false),
+                        child: const Text('Back to results'),
+                      ),
+                    if (!_showSelected)
+                      TextButton(
+                        onPressed: _saving || matching.isEmpty
+                            ? null
+                            : () => setState(
+                                () => _selectedIds.addAll(
+                                  matching.map((channel) => channel.id),
+                                ),
+                              ),
+                        child: const Text('Select all matching'),
+                      ),
+                    TextButton(
+                      onPressed: _saving || _selectedIds.isEmpty
+                          ? null
+                          : () => setState(_selectedIds.clear),
+                      child: const Text('Clear selection'),
+                    ),
                   ],
                 );
-              }
-              return Row(
-                children: [
-                  Expanded(child: leading),
-                  SizedBox(width: 12),
-                  trailing,
-                ],
-              );
-            },
-          ),
+                final trailing = Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    TextButton(
+                      onPressed: _saving ? null : _cancelSelection,
+                      child: const Text('Cancel'),
+                    ),
+                    OutlinedButton(
+                      onPressed: _selectedIds.isEmpty || _saving
+                          ? null
+                          : _deleteSelected,
+                      child: Text(_saving ? 'Deleting…' : 'Delete selected'),
+                    ),
+                  ],
+                );
+                if (constraints.maxWidth < 760) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      leading,
+                      SizedBox(height: 8),
+                      Align(alignment: Alignment.centerRight, child: trailing),
+                    ],
+                  );
+                }
+                return Row(
+                  children: [
+                    Expanded(child: leading),
+                    SizedBox(width: 12),
+                    trailing,
+                  ],
+                );
+              },
+            ),
+          ],
         ],
-      ],
+      ),
     );
   }
 
@@ -1137,31 +1019,25 @@ class ChannelsViewState extends State<ChannelsView> {
         );
         final rowSupportStyle = Theme.of(context).textTheme.bodyMedium
             ?.copyWith(
-              fontSize: _directorySize(18, 14),
+              fontSize: 18,
               color: LineupTheme.of(context).secondaryText,
             );
         final moves = Wrap(
           alignment: WrapAlignment.end,
           children: [
-            IconButton(
-              constraints: BoxConstraints(minWidth: 40, minHeight: 40),
-              padding: EdgeInsets.all(8),
-              iconSize: 24,
+            lineupArrowButton(
               tooltip: 'Move ${channel.name} up',
               onPressed: _saving || index == 0
                   ? null
                   : () => _moveReorder(index, index - 1),
-              icon: const Icon(Icons.arrow_upward),
+              icon: Icons.arrow_upward,
             ),
-            IconButton(
-              constraints: BoxConstraints(minWidth: 40, minHeight: 40),
-              padding: EdgeInsets.all(8),
-              iconSize: 24,
+            lineupArrowButton(
               tooltip: 'Move ${channel.name} down',
               onPressed: _saving || index == _reorderIds.length - 1
                   ? null
                   : () => _moveReorder(index, index + 1),
-              icon: const Icon(Icons.arrow_downward),
+              icon: Icons.arrow_downward,
             ),
             IconButton(
               constraints: BoxConstraints(minWidth: 40, minHeight: 40),
@@ -1491,22 +1367,13 @@ class _MoveChannelDialogState extends State<_MoveChannelDialog> {
         .toList(growable: false);
     final size = MediaQuery.sizeOf(context);
     final viewInsets = MediaQuery.viewInsetsOf(context);
-    final theme = Theme.of(context);
-    final dialogTextTheme = theme.textTheme;
+
     final contentWidth = (size.width - 128).clamp(0.0, 520).toDouble();
     final contentHeight = (size.height - viewInsets.vertical - 200)
         .clamp(0.0, 440)
         .toDouble();
-    final actionStyle = TextButton.styleFrom(
-      minimumSize: Size(64, 40),
-      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      textStyle: dialogTextTheme.labelLarge,
-    );
-    final searchDecoration = InputDecoration(
-      labelText: 'Search channels',
-      prefixIcon: Icon(Icons.search, size: 24),
-      prefixIconConstraints: null,
-    );
+
+    final searchDecoration = InputDecoration(hintText: 'Search channels');
     final dialog = AlertDialog(
       insetPadding: EdgeInsets.symmetric(horizontal: 40, vertical: 24),
       titlePadding: EdgeInsets.only(left: 24, top: 24, right: 24),
@@ -1546,7 +1413,6 @@ class _MoveChannelDialogState extends State<_MoveChannelDialog> {
                             id: channel.id,
                             after: false,
                           )),
-                          style: actionStyle,
                           child: const Text('Before'),
                         ),
                         TextButton(
@@ -1554,7 +1420,6 @@ class _MoveChannelDialogState extends State<_MoveChannelDialog> {
                             id: channel.id,
                             after: true,
                           )),
-                          style: actionStyle,
                           child: const Text('After'),
                         ),
                       ],
@@ -1569,7 +1434,6 @@ class _MoveChannelDialogState extends State<_MoveChannelDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          style: actionStyle,
           child: const Text('Cancel'),
         ),
       ],
@@ -1625,10 +1489,7 @@ class _ChannelDeletionDialogState extends State<_ChannelDeletionDialog> {
       fontSize: (compact ? 14 : 18),
       color: roles.secondaryText,
     );
-    final actionStyle = theme.textTheme.labelLarge?.copyWith(
-      fontSize: (compact ? 14 : 18),
-    );
-    final actionPadding = EdgeInsets.symmetric(horizontal: 16, vertical: 16);
+
     final availableWidth = (size.width - (48)).clamp(0.0, 680).toDouble();
     final availableHeight = (size.height - viewInsets.vertical - (48))
         .clamp(0.0, 720)
@@ -1725,23 +1586,10 @@ class _ChannelDeletionDialogState extends State<_ChannelDeletionDialog> {
                   TextButton(
                     autofocus: true,
                     onPressed: () => Navigator.pop(context, false),
-                    style: TextButton.styleFrom(
-                      foregroundColor: roles.secondaryText,
-                      minimumSize: Size(0, 48),
-                      padding: actionPadding,
-                      textStyle: actionStyle,
-                    ),
                     child: const Text('Cancel'),
                   ),
-                  FilledButton(
+                  LineupDestructiveButton(
                     onPressed: () => Navigator.pop(context, true),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: theme.colorScheme.error,
-                      foregroundColor: theme.colorScheme.onError,
-                      minimumSize: Size(0, 48),
-                      padding: actionPadding,
-                      textStyle: actionStyle,
-                    ),
                     child: Text(widget.confirmLabel),
                   ),
                 ],
