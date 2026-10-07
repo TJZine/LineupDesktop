@@ -24,6 +24,8 @@ class ChannelStateConflictException extends FormatException {
 
 typedef _LibraryScanResult = ({
   Set<String> failedPlaylistIds,
+  Map<String, Set<String>> failedCollectionTitles,
+  Set<String> unavailableCollectionLibraryIds,
   List<PlexMediaItem> media,
   List<PlexPlaylist> playlists,
   LibraryScanStatus status,
@@ -164,6 +166,13 @@ class LineupController extends ChangeNotifier {
   int? _playbackRefreshScope;
   Completer<void>? _scanCancelled;
   final Map<String, List<PlexMediaItem>> _scanResults = {};
+  final Map<String, Set<String>> _failedCollectionTitles = {};
+  final Set<String> _unavailableCollectionLibraryIds = {};
+
+  Map<String, Set<String>> get failedCollectionTitles =>
+      Map.unmodifiable(_failedCollectionTitles);
+  Set<String> get unavailableCollectionLibraryIds =>
+      Set.unmodifiable(_unavailableCollectionLibraryIds);
   Set<String> _scanIds = const {};
   ({String? profileId, String serverId})? _scanScope;
   _LibraryScanResult? _pendingScan;
@@ -697,6 +706,7 @@ class LineupController extends ChangeNotifier {
           if (operation != _epoch) return;
           libraryScanStatus = loaded.status;
           _requireAvailablePlaylists(loaded.failedPlaylistIds);
+          _requireAvailableCollections(loaded);
           availableMedia = loaded.media;
           availablePlaylists = loaded.playlists;
           await _migrateLegacySchedules(operation);
@@ -786,6 +796,7 @@ class LineupController extends ChangeNotifier {
           return;
         }
         _requireAvailablePlaylists(pending.failedPlaylistIds);
+        _requireAvailableCollections(pending, libraryIds: ids);
         final media = List<PlexMediaItem>.unmodifiable([
           for (final library in libraries)
             if (ids.contains(library.id))
@@ -852,15 +863,26 @@ class LineupController extends ChangeNotifier {
         (retryFailedOnly || retryLibraryIds != null) &&
         _scanScope == scope &&
         setEquals(_scanIds, ids);
-    if (!retain) _scanResults.clear();
+    if (!retain) {
+      _scanResults.clear();
+      _failedCollectionTitles.clear();
+      _unavailableCollectionLibraryIds.clear();
+    }
+    // Explicit row retries take precedence over a cached item result: optional
+    // collection enrichment can fail while that result remains ready.
+    bool retainLibrary(String id) =>
+        retain &&
+        (retryLibraryIds != null
+            ? !retryLibraryIds.contains(id)
+            : _scanResults.containsKey(id));
+    for (final id in ids) {
+      if (!retainLibrary(id)) _scanResults.remove(id);
+    }
     _scanIds = Set.unmodifiable(ids);
     _scanScope = scope;
     _libraryScanFacts = Map.unmodifiable({
       for (final id in ids)
-        id:
-            retain &&
-                (_scanResults.containsKey(id) ||
-                    (retryLibraryIds != null && !retryLibraryIds.contains(id)))
+        id: retainLibrary(id)
             ? _libraryScanFacts[id]!
             : const LibraryScanFact(status: LibraryScanStatus.idle),
     });
@@ -882,10 +904,7 @@ class LineupController extends ChangeNotifier {
           final index = nextLibrary++;
           if (index >= selected.length) return;
           final library = selected[index];
-          if (retain &&
-              (_scanResults.containsKey(library.id) ||
-                  (retryLibraryIds != null &&
-                      !retryLibraryIds.contains(library.id)))) {
+          if (retainLibrary(library.id)) {
             continue;
           }
           _setLibraryScanFact(
@@ -894,10 +913,10 @@ class LineupController extends ChangeNotifier {
           );
           notifyListeners();
           try {
-            final items = await _withPmsAuthorization(
+            final scanned = await _withPmsAuthorization(
               operation,
               selectedServer.id,
-              (token, refreshedConnection) => plex.libraryItems(
+              (token, refreshedConnection) => plex.scanLibrary(
                 (refreshedConnection ?? connection!).uri,
                 token,
                 library.id,
@@ -932,6 +951,14 @@ class LineupController extends ChangeNotifier {
               ),
             );
             if (!_isCurrent(operation)) return;
+            final items = scanned.items;
+            _failedCollectionTitles[library.id] =
+                scanned.collections.failedTitles;
+            if (scanned.collections.unavailable) {
+              _unavailableCollectionLibraryIds.add(library.id);
+            } else {
+              _unavailableCollectionLibraryIds.remove(library.id);
+            }
             results[index] = items;
             _scanResults[library.id] = List.unmodifiable(items);
             final current = _libraryScanFacts[library.id]!;
@@ -980,6 +1007,8 @@ class LineupController extends ChangeNotifier {
       }
       if (!_isCurrent(operation)) {
         return (
+          failedCollectionTitles: const <String, Set<String>>{},
+          unavailableCollectionLibraryIds: const <String>{},
           failedPlaylistIds: const <String>{},
           media: const <PlexMediaItem>[],
           playlists: const <PlexPlaylist>[],
@@ -1021,6 +1050,8 @@ class LineupController extends ChangeNotifier {
       }
       if (!_isCurrent(operation)) {
         return (
+          failedCollectionTitles: const <String, Set<String>>{},
+          unavailableCollectionLibraryIds: const <String>{},
           failedPlaylistIds: const <String>{},
           media: const <PlexMediaItem>[],
           playlists: const <PlexPlaylist>[],
@@ -1032,6 +1063,25 @@ class LineupController extends ChangeNotifier {
           'count': catalog.failedIds.length,
         });
       }
+      final failedTitleCount = ids.fold<int>(
+        0,
+        (count, id) => count + (_failedCollectionTitles[id]?.length ?? 0),
+      );
+      final unavailableCount = _unavailableCollectionLibraryIds
+          .intersection(ids)
+          .length;
+      if (failedTitleCount > 0) {
+        diagnostics.add(
+          'plex-library',
+          'Some collections could not be loaded',
+          {'count': failedTitleCount},
+        );
+      }
+      if (unavailableCount > 0) {
+        diagnostics.add('plex-library', 'Collection discovery unavailable', {
+          'count': unavailableCount,
+        });
+      }
       final playable = items.where((item) => item.isPlayable).toList();
       final status = libraryScanRetryIds.isNotEmpty
           ? LibraryScanStatus.transientFailure
@@ -1041,6 +1091,14 @@ class LineupController extends ChangeNotifier {
           ? LibraryScanStatus.unsupported
           : LibraryScanStatus.complete;
       return (
+        failedCollectionTitles: Map<String, Set<String>>.unmodifiable({
+          for (final id in ids)
+            if (_failedCollectionTitles[id]?.isNotEmpty ?? false)
+              id: _failedCollectionTitles[id]!,
+        }),
+        unavailableCollectionLibraryIds: Set<String>.unmodifiable(
+          _unavailableCollectionLibraryIds.intersection(ids),
+        ),
         failedPlaylistIds: Set<String>.unmodifiable(catalog.failedIds),
         media: List<PlexMediaItem>.unmodifiable(playable),
         playlists: List<PlexPlaylist>.unmodifiable(catalog.playlists),
@@ -1078,6 +1136,44 @@ class LineupController extends ChangeNotifier {
     });
     _updateLibraryScanAggregates();
     notifyListeners();
+  }
+
+  void _requireAvailableCollections(
+    _LibraryScanResult scan, {
+    Set<String>? libraryIds,
+  }) {
+    Iterable<LibrarySource> librarySources(ContentSource source) sync* {
+      if (source is LibrarySource) {
+        yield source;
+      } else if (source is MixedSource) {
+        for (final nested in source.sources) {
+          yield* librarySources(nested);
+        }
+      }
+    }
+
+    for (final source in channels.expand(
+      (channel) => librarySources(channel.source),
+    )) {
+      if (libraryIds != null && !libraryIds.contains(source.libraryId)) {
+        continue;
+      }
+      final titles = source.filters[LibraryFilter.collection];
+      if (titles == null || titles.isEmpty) continue;
+      if (scan.unavailableCollectionLibraryIds.contains(source.libraryId) ||
+          titles.any(
+            (title) =>
+                scan.failedCollectionTitles[source.libraryId]?.contains(
+                  title,
+                ) ??
+                false,
+          )) {
+        throw const PlexException(
+          'collection-unavailable',
+          'A collection used by this lineup could not be loaded. Retry setup.',
+        );
+      }
+    }
   }
 
   void _requireAvailablePlaylists(Set<String> failedIds) {
@@ -2021,6 +2117,8 @@ class LineupController extends ChangeNotifier {
   void _resetLibraryScan() {
     _lastScanFailure = null;
     _scanResults.clear();
+    _failedCollectionTitles.clear();
+    _unavailableCollectionLibraryIds.clear();
     _scanIds = const {};
     _scanScope = null;
     _pendingScan = null;

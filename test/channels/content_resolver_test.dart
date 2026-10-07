@@ -4,6 +4,58 @@ import 'package:lineup_desktop/channels/content_resolver.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
 
 void main() {
+  test(
+    'persisted collection filters resolve annotated TV and smart inventory',
+    () {
+      final inventory = [
+        PlexMediaItem(
+          id: 'episode',
+          title: 'Episode',
+          type: 'episode',
+          duration: const Duration(minutes: 20),
+          libraryId: 'tv',
+          parts: [PlexMediaPart(path: '/parts/episode')],
+          collections: const ['TV Collection'],
+        ),
+        PlexMediaItem(
+          id: 'smart-movie',
+          title: 'Movie',
+          type: 'movie',
+          duration: const Duration(minutes: 90),
+          libraryId: 'movies',
+          parts: [PlexMediaPart(path: '/parts/movie')],
+          collections: const ['Smart Collection'],
+        ),
+        PlexMediaItem(
+          id: 'other-library',
+          title: 'Other',
+          type: 'episode',
+          duration: const Duration(minutes: 20),
+          libraryId: 'other',
+          parts: [PlexMediaPart(path: '/parts/other')],
+          collections: const ['TV Collection'],
+        ),
+      ];
+      for (final scenario in [
+        ('tv', 'show', 'TV Collection', 'episode'),
+        ('movies', 'movie', 'Smart Collection', 'smart-movie'),
+      ]) {
+        final source = ContentSource.fromJson({
+          'type': 'library',
+          'libraryId': scenario.$1,
+          'libraryType': scenario.$2,
+          'includeWatched': true,
+          'filters': {
+            'collection': [scenario.$3],
+          },
+        });
+        expect(resolveContent(source, inventory).map((item) => item.id), [
+          scenario.$4,
+        ]);
+      }
+    },
+  );
+
   test('decades use one canonical four-digit representation', () {
     expect(channelDecadeForYear(1981), '1980s');
     expect(channelDecadeForYear(1000), '1000s');

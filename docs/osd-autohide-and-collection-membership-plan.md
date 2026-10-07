@@ -476,6 +476,37 @@ Add the following methods.
   membership now comes from Plex, so a same-title recreation resolves after
   the next scan. Live-session refresh is still deferred.
 
+#### B1 implemented bounds and live measurement proposal
+
+Collection children use four sliding workers per library and a shared cap of
+eight active collection streams per `PlexClient`, across up to four simultaneous
+library scans. Pages request 100 records and each metadata stream stops at 1,000
+pages. A library is limited to 100,000 collection listing records and 100,000
+aggregate member entries, counting repeated membership across collections and
+404 recovery fetches. Oversized child pages are accepted only when they complete
+the reported total. A scale failure marks membership unavailable and publishes
+no partial index. These bounds have synthetic test coverage.
+
+**Proposed budget, awaiting user agreement; no live measurement performed:**
+median added scan time must be at most `max(60 seconds, item-only median)`, with
+no paired run adding more than twice that allowance. The absolute allowance
+avoids misleading ratios for fast item scans; the relative allowance scales with
+large libraries. The tail check exposes slow smart collections. This is an
+acceptance proposal, not a runtime timeout or permission to omit membership.
+
+Use the same host, Plex profile/server, route, library selection, and unchanged
+contents. Time the existing public `libraryItems` and `scanLibrary` methods with
+a monotonic clock in a local debug harness; include collection and TV show-genre
+work. Discard a warm-up pair, then run five sequential pairs, alternating order,
+without overlapping scans. Count only fully successful scans with the same item
+set. Record each item-only and enriched duration and their difference, the
+item-only median, added-time median and maximum, candidate/runtime identity,
+route class, library type, and redacted item/show/collection/membership/page counts.
+Keep credentials in secure local state and log no URLs, titles, or identifiers.
+Repeat with the normal selected-library set to expose shared-cap contention and
+report it separately. A failed budget requires bottleneck investigation before
+performance acceptance; it changes neither membership completeness nor scope.
+
 ### B2: Builder rules (`channel_builder.dart`)
 
 1. **TV Recently Added plays shuffled instead of newest-first.**

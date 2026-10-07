@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/testing.dart';
 import 'package:lineup_desktop/app/lineup_app.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
+import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/persistence/app_store.dart';
 import 'package:lineup_desktop/playback/native_player.dart';
 import 'package:lineup_desktop/plex/plex_client.dart';
@@ -40,7 +41,7 @@ class FixtureController extends LineupController {
       super(
         store: store,
         credentials: _MemoryCredentials(),
-        plex: PlexClient(
+        plex: _FixturePlex(
           clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
           httpClient: MockClient(
             (_) async => throw StateError('unexpected HTTP'),
@@ -60,6 +61,21 @@ class FixtureController extends LineupController {
   @override
   Future<void> initialize() =>
       restoreOnInitialize ? super.initialize() : Future.value();
+}
+
+class _FixturePlex extends PlexClient {
+  _FixturePlex({required super.clientIdentifier, required super.httpClient});
+
+  @override
+  Future<PlexLibraryScan> scanLibrary(
+    Uri server,
+    String token,
+    String libraryId,
+    PlexLibraryType libraryType, {
+    required bool Function() isCurrent,
+    required void Function(PlexLibraryPageProgress progress) onProgress,
+    Future<void>? cancelled,
+  }) async => const PlexLibraryScan(items: []);
 }
 
 Future<void> openDestination(WidgetTester tester, String destination) async {

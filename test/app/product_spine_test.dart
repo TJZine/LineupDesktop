@@ -360,6 +360,27 @@ class _ProductPlex extends PlexClient {
   }
 
   @override
+  Future<PlexLibraryScan> scanLibrary(
+    Uri server,
+    String token,
+    String libraryId,
+    PlexLibraryType libraryType, {
+    required bool Function() isCurrent,
+    required void Function(PlexLibraryPageProgress progress) onProgress,
+    Future<void>? cancelled,
+  }) async => PlexLibraryScan(
+    items: await libraryItems(
+      server,
+      token,
+      libraryId,
+      libraryType,
+      isCurrent: isCurrent,
+      onProgress: onProgress,
+      cancelled: cancelled,
+    ),
+  );
+
+  @override
   Future<List<PlexMediaItem>> libraryItems(
     Uri server,
     String token,

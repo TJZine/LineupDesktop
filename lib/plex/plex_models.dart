@@ -137,6 +137,30 @@ class PlexPlaylistCatalog {
   final Set<String> failedIds;
 }
 
+/// Authoritative collection membership for one library. Failed titles have no
+/// published members, even when another collection has the same title.
+class PlexCollectionMembership {
+  const PlexCollectionMembership({
+    this.titlesByMember = const {},
+    this.failedTitles = const {},
+    this.unavailable = false,
+  });
+
+  final Map<String, Set<String>> titlesByMember;
+  final Set<String> failedTitles;
+  final bool unavailable;
+}
+
+class PlexLibraryScan {
+  const PlexLibraryScan({
+    required this.items,
+    this.collections = const PlexCollectionMembership(),
+  });
+
+  final List<PlexMediaItem> items;
+  final PlexCollectionMembership collections;
+}
+
 typedef PlexLibraryPageProgress = ({
   int completedPages,
   int completedItems,
@@ -168,6 +192,7 @@ class PlexMediaItem {
     this.libraryId,
     this.parentTitle,
     this.grandparentTitle,
+    this.parentRatingKey,
     this.grandparentRatingKey,
     this.thumbPath,
     this.grandparentThumbPath,
@@ -202,6 +227,7 @@ class PlexMediaItem {
   final String? libraryId;
   final String? parentTitle;
   final String? grandparentTitle;
+  final String? parentRatingKey;
   final String? grandparentRatingKey;
   final String? thumbPath;
   final String? grandparentThumbPath;

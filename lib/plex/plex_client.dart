@@ -45,6 +45,12 @@ class PlexClient {
   final http.Client _http;
   final Duration requestTimeout;
 
+  // Match the item pager's 1000 × 100 bound. Both collection records and
+  // member occurrences (including duplicates across collections) are bounded.
+  static const maximumLibraryCollections = 100000;
+  static const maximumLibraryCollectionMembers = 100000;
+  final _collectionRequests = _CollectionRequestPool(8);
+
   Map<String, String> _headers([String? token]) => {
     'Accept': 'application/json',
     'X-Plex-Client-Identifier': clientIdentifier,
@@ -493,6 +499,371 @@ class PlexClient {
       'library-scale-exceeded',
       'This library is too large to scan safely.',
     );
+  }
+
+  /// Scans playable inventory, then replaces tag-era collection metadata with
+  /// Plex's authoritative membership. Progress remains the item pager's facts.
+  Future<PlexLibraryScan> scanLibrary(
+    Uri server,
+    String token,
+    String libraryId,
+    PlexLibraryType libraryType, {
+    required bool Function() isCurrent,
+    required void Function(PlexLibraryPageProgress progress) onProgress,
+    Future<void>? cancelled,
+  }) async {
+    final items = await libraryItems(
+      server,
+      token,
+      libraryId,
+      libraryType,
+      isCurrent: isCurrent,
+      onProgress: onProgress,
+      cancelled: cancelled,
+    );
+    final collections = await libraryCollectionMembership(
+      server,
+      token,
+      libraryId,
+      isCurrent: isCurrent,
+      cancelled: cancelled,
+    );
+    final showGenres = libraryType == PlexLibraryType.show
+        ? await libraryShowGenres(
+            server,
+            token,
+            libraryId,
+            isCurrent: isCurrent,
+            cancelled: cancelled,
+          )
+        : const <String, List<String>>{};
+    if (!isCurrent()) throw _scanCancelledException;
+    return PlexLibraryScan(
+      items: List.unmodifiable([
+        for (final item in items)
+          _annotateLibraryItem(item, collections.titlesByMember, showGenres),
+      ]),
+      collections: collections,
+    );
+  }
+
+  Future<Map<String, List<String>>> libraryShowGenres(
+    Uri server,
+    String token,
+    String libraryId, {
+    required bool Function() isCurrent,
+    Future<void>? cancelled,
+  }) async {
+    final rows = await _libraryMetadata(
+      server
+          .resolve('/library/sections/$libraryId/all')
+          .replace(queryParameters: {'type': '2'}),
+      token,
+      checkCurrent: () {
+        if (!isCurrent()) throw _scanCancelledException;
+      },
+      cancelled: cancelled,
+      parseRow: (raw) => _record(raw, 'show'),
+    );
+    return Map.unmodifiable({
+      for (final raw in rows)
+        _id(_record(raw, 'show')['ratingKey'], 'show id'):
+            List<String>.unmodifiable(_tagNames(_record(raw, 'show')['Genre'])),
+    });
+  }
+
+  Future<PlexCollectionMembership> libraryCollectionMembership(
+    Uri server,
+    String token,
+    String libraryId, {
+    required bool Function() isCurrent,
+    Future<void>? cancelled,
+  }) async {
+    final abort = Completer<void>();
+    var callerCancelled = false;
+    var finished = false;
+    if (cancelled != null) {
+      unawaited(
+        cancelled.then((_) {
+          if (finished) return;
+          callerCancelled = true;
+          if (!abort.isCompleted) abort.complete();
+        }),
+      );
+    }
+    void checkCurrent() {
+      if (!isCurrent() || callerCancelled || abort.isCompleted) {
+        if (!abort.isCompleted) abort.complete();
+        throw _scanCancelledException;
+      }
+    }
+
+    void stop() {
+      if (!abort.isCompleted) abort.complete();
+    }
+
+    Future<List<({String key, String title})>> list() async {
+      final raws = await _libraryMetadata(
+        server
+            .resolve('/library/sections/$libraryId/all')
+            .replace(queryParameters: {'type': '18'}),
+        token,
+        checkCurrent: checkCurrent,
+        cancelled: abort.future,
+        maximumEntries: maximumLibraryCollections,
+        parseRow: (raw) => _record(raw, 'collection'),
+      );
+      final result = <({String key, String title})>[];
+      for (final raw in raws) {
+        final row = _record(raw, 'collection');
+        final key = _id(row['ratingKey'], 'collection id');
+        final title = _optionalText(row['title']);
+        if (title == null) {
+          throw const PlexException(
+            'parse-error',
+            'Collection title was invalid.',
+          );
+        }
+        if (_optionalInteger(row['childCount']) != 0) {
+          result.add((key: key, title: title));
+        }
+      }
+      return result;
+    }
+
+    const fatalCodes = {
+      'auth-invalid',
+      'auth-required',
+      'access-denied',
+      'cancelled',
+    };
+    try {
+      checkCurrent();
+      final List<({String key, String title})> records;
+      try {
+        records = await list();
+      } on PlexException catch (error) {
+        if (fatalCodes.contains(error.code)) rethrow;
+        return const PlexCollectionMembership(unavailable: true);
+      } catch (_) {
+        checkCurrent();
+        return const PlexCollectionMembership(unavailable: true);
+      }
+      Future<List<({String key, String title})>>? relisted;
+      final members = <String, Set<String>>{};
+      final failed = <String>{};
+      PlexException? fatal;
+      StackTrace? fatalStack;
+      var scaleExceeded = false;
+      var consumed = 0;
+      var next = 0;
+      Future<List<String>> children(String key) async {
+        await _collectionRequests.acquire(checkCurrent, abort.future);
+        try {
+          return await _libraryMetadata(
+            server.resolve(
+              '/library/collections/${Uri.encodeComponent(key)}/children',
+            ),
+            token,
+            checkCurrent: checkCurrent,
+            cancelled: abort.future,
+            allowOversizedComplete: true,
+            parseRow: (raw) => _id(
+              _record(raw, 'collection member')['ratingKey'],
+              'collection member id',
+            ),
+            onPage: (count) {
+              consumed += count;
+              if (consumed > maximumLibraryCollectionMembers) {
+                throw _libraryScaleException;
+              }
+            },
+          );
+        } finally {
+          _collectionRequests.release();
+        }
+      }
+
+      Future<void> worker() async {
+        while (!abort.isCompleted) {
+          checkCurrent();
+          final index = next++;
+          if (index >= records.length) return;
+          final record = records[index];
+          try {
+            List<String> memberIds;
+            try {
+              memberIds = await children(record.key);
+            } on PlexException catch (error) {
+              if (error.code != 'resource-not-found') rethrow;
+              final fresh = await (relisted ??= list());
+              final matches = fresh
+                  .where((r) => r.title == record.title)
+                  .toList();
+              if (matches.isEmpty) continue;
+              final replacements = matches
+                  .where((r) => r.key != record.key)
+                  .toList();
+              if (replacements.isEmpty) rethrow;
+              memberIds = [];
+              for (final replacement in replacements) {
+                memberIds.addAll(await children(replacement.key));
+              }
+            }
+            checkCurrent();
+            for (final id in memberIds) {
+              (members[id] ??= {}).add(record.title);
+            }
+          } on PlexException catch (error, stack) {
+            if (fatalCodes.contains(error.code)) {
+              // Sibling cancellation caused by our abort must not replace the
+              // authorization or scale failure that caused it.
+              if (!abort.isCompleted || callerCancelled || !isCurrent()) {
+                fatal ??= error;
+                fatalStack ??= stack;
+              }
+              stop();
+              return;
+            }
+            if (error.code == 'library-scale-exceeded') {
+              scaleExceeded = true;
+              stop();
+              return;
+            }
+            failed.add(record.title);
+          } catch (_) {
+            checkCurrent();
+            failed.add(record.title);
+          }
+        }
+      }
+
+      await Future.wait(
+        List.generate(records.length.clamp(0, 4), (_) => worker()),
+      );
+      if (fatal != null) Error.throwWithStackTrace(fatal!, fatalStack!);
+      if (scaleExceeded) {
+        return const PlexCollectionMembership(unavailable: true);
+      }
+      checkCurrent();
+      return PlexCollectionMembership(
+        titlesByMember: Map.unmodifiable({
+          for (final entry in members.entries)
+            if (entry.value.any((title) => !failed.contains(title)))
+              entry.key: Set<String>.unmodifiable(
+                entry.value.difference(failed),
+              ),
+        }),
+        failedTitles: Set.unmodifiable(failed),
+      );
+    } finally {
+      finished = true;
+      stop();
+    }
+  }
+
+  /// Strict library paging for the collection and show metadata streams.
+  /// Children may exceed the requested size only when that page ends at total.
+  Future<List<T>> _libraryMetadata<T>(
+    Uri base,
+    String token, {
+    required void Function() checkCurrent,
+    required T Function(Object? row) parseRow,
+    Future<void>? cancelled,
+    bool allowOversizedComplete = false,
+    int maximumEntries = 100000,
+    void Function(int count)? onPage,
+  }) async {
+    var wasCancelled = false;
+    var finished = false;
+    if (cancelled != null) {
+      unawaited(
+        cancelled.then((_) {
+          if (!finished) wasCancelled = true;
+        }),
+      );
+    }
+    void check() {
+      checkCurrent();
+      if (wasCancelled) throw _scanCancelledException;
+    }
+
+    try {
+      final rows = <T>[];
+      final seen = <String>{};
+      int? total;
+      for (var page = 0; page < 1000; page++) {
+        check();
+        final start = rows.length;
+        final json = await _serverJson(
+          base.replace(
+            queryParameters: {
+              ...base.queryParameters,
+              'X-Plex-Container-Start': '$start',
+              'X-Plex-Container-Size': '100',
+            },
+          ),
+          token,
+          cancelled: cancelled,
+        );
+        check();
+        final rawContainer = json['MediaContainer'];
+        if (rawContainer is! Map) throw _libraryPageException;
+        final pageTotal = _libraryPageCount(rawContainer['totalSize']);
+        final size = _libraryPageCount(rawContainer['size']);
+        final offset = _libraryPageCount(rawContainer['offset']);
+        if (offset != null && offset != start) throw _libraryPageException;
+        if (pageTotal != null) {
+          if (total != null && total != pageTotal) {
+            throw _libraryPageException;
+          }
+          total = pageTotal;
+          if (total > maximumEntries) throw _libraryScaleException;
+        }
+        final rawRows = rawContainer['Metadata'];
+        final List<Object?> metadata;
+        if (rawRows is List) {
+          metadata = rawRows;
+        } else if (rawRows == null && size == 0) {
+          metadata = const [];
+        } else {
+          throw _libraryPageException;
+        }
+        if (size != null && size != metadata.length) {
+          throw _libraryPageException;
+        }
+        final end = start + metadata.length;
+        if (metadata.length > 100 &&
+            !(allowOversizedComplete && total == end)) {
+          throw _libraryPageException;
+        }
+        if (total != null &&
+            (end > total || (metadata.isEmpty && start < total))) {
+          throw _libraryPageException;
+        }
+        if (end > maximumEntries) throw _libraryScaleException;
+        for (final raw in metadata) {
+          final id = _id(
+            _record(raw, 'library metadata')['ratingKey'],
+            'metadata id',
+          );
+          if (!seen.add(id)) {
+            throw const PlexException(
+              'library-page-not-progressing',
+              'Plex returned a library page without progress.',
+            );
+          }
+        }
+        onPage?.call(metadata.length);
+        rows.addAll(metadata.map(parseRow));
+        if (total == rows.length || (total == null && metadata.isEmpty)) {
+          return rows;
+        }
+      }
+      throw _libraryScaleException;
+    } finally {
+      finished = true;
+    }
   }
 
   Future<PlexPlaylistCatalog> playlists(
@@ -1055,6 +1426,106 @@ class PlexClient {
   void close() => _http.close();
 }
 
+const _scanCancelledException = PlexException(
+  'cancelled',
+  'Library scan cancelled.',
+);
+const _libraryPageException = PlexException(
+  'library-page-invalid',
+  'Plex returned an invalid library page.',
+);
+const _libraryScaleException = PlexException(
+  'library-scale-exceeded',
+  'This library is too large to scan safely.',
+);
+
+/// Shared by concurrent library attempts on this client, with cancellable
+/// waiters. The attempt owns a permit until all pages for that collection end.
+class _CollectionRequestPool {
+  _CollectionRequestPool(this.limit);
+  final int limit;
+  int _active = 0;
+  final Set<Completer<void>> _waiters = {};
+
+  Future<void> acquire(
+    void Function() checkCurrent,
+    Future<void> cancelled,
+  ) async {
+    while (true) {
+      checkCurrent();
+      if (_active < limit) {
+        _active++;
+        return;
+      }
+      final waiter = Completer<void>();
+      _waiters.add(waiter);
+      try {
+        await Future.any([waiter.future, cancelled]);
+      } finally {
+        _waiters.remove(waiter);
+      }
+    }
+  }
+
+  void release() {
+    _active--;
+    for (final waiter in _waiters.toList()) {
+      if (!waiter.isCompleted) waiter.complete();
+    }
+  }
+}
+
+PlexMediaItem _annotateLibraryItem(
+  PlexMediaItem item,
+  Map<String, Set<String>> titlesByMember,
+  Map<String, List<String>> showGenres,
+) {
+  final collections = <String>{
+    ...?titlesByMember[item.id],
+    ...?titlesByMember[item.parentRatingKey],
+    ...?titlesByMember[item.grandparentRatingKey],
+  };
+  final genres = <String>{
+    ...item.genres,
+    if (item.type == 'episode') ...?showGenres[item.grandparentRatingKey],
+  };
+  return PlexMediaItem(
+    id: item.id,
+    title: item.title,
+    type: item.type,
+    duration: item.duration,
+    libraryId: item.libraryId,
+    parentTitle: item.parentTitle,
+    grandparentTitle: item.grandparentTitle,
+    parentRatingKey: item.parentRatingKey,
+    grandparentRatingKey: item.grandparentRatingKey,
+    thumbPath: item.thumbPath,
+    grandparentThumbPath: item.grandparentThumbPath,
+    artPath: item.artPath,
+    clearLogoPath: item.clearLogoPath,
+    parts: item.parts,
+    container: item.container,
+    videoCodec: item.videoCodec,
+    audioCodec: item.audioCodec,
+    dynamicRange: item.dynamicRange,
+    directors: item.directors,
+    actors: item.actors,
+    cast: item.cast,
+    studio: item.studio,
+    year: item.year,
+    summary: item.summary,
+    contentRating: item.contentRating,
+    seasonNumber: item.seasonNumber,
+    episodeNumber: item.episodeNumber,
+    videoResolution: item.videoResolution,
+    audioChannels: item.audioChannels,
+    addedAt: item.addedAt,
+    viewed: item.viewed,
+    collections: List.unmodifiable(collections),
+    genres: List.unmodifiable(genres),
+  );
+}
+
 Uri _directPlayUri(Uri server, String partPath) {
   final uri = server.resolve(partPath);
   if (_isSameServerUri(server, uri)) return uri;
@@ -1110,6 +1581,7 @@ PlexMediaItem parseMediaItem(Object? raw, {String? libraryId}) {
     libraryId: libraryId,
     parentTitle: _optionalText(json['parentTitle']),
     grandparentTitle: _optionalText(json['grandparentTitle']),
+    parentRatingKey: _optionalId(json['parentRatingKey']),
     grandparentRatingKey: _optionalId(json['grandparentRatingKey']),
     thumbPath: canonicalPlexArtworkPathText(_optionalText(json['thumb'])),
     grandparentThumbPath: canonicalPlexArtworkPathText(

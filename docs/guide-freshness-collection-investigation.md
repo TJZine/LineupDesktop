@@ -65,14 +65,29 @@ cause remain unproven until the Desktop path is observed.
 
 ## Current Desktop facts (inspect again before changing code)
 
+### October 7, 2026 collection inventory implementation
+
+Collection inventory now comes from Plex's collection listing and children
+endpoints, including smart collections and show/season members inherited by
+episodes. Scanned library items replace their Collection tags with this
+authoritative membership. Saved `LibrarySource` collection filters still identify
+titles within their library; no collection `ratingKey` is persisted and no
+migration is required. A collection deleted and recreated under the same title
+resolves after the next complete scan. A children 404 triggers one bounded re-list
+during that scan; confirmed deletion, per-title failure, and unavailable membership
+remain distinct. Synthetic transport and controller tests cover same-title
+recreation and saved schedule/content continuity. Live-session refresh,
+source-order drift, real membership-change policy, and live Plex acceptance remain
+deferred.
+
 These observations are from the current source, not an assertion that they are
 sufficient or correct under the above scenarios.
 
 - Collection-generated channels are currently persisted as a `LibrarySource`
   with the collection's **name** in `filters['collection']`; Desktop does not
   currently persist an upstream-style collection key for this source. The
-  resolver matches that name against the `collections` tags carried by every
-  scanned media item. See [channel sources](../lib/channels/channel.dart) and
+  resolver matches that name against the authoritative `collections` membership
+  annotated onto scanned library items. See [channel sources](../lib/channels/channel.dart) and
   [content resolution](../lib/channels/content_resolver.dart).
 - At selected-server restoration, the controller reloads selected libraries
   before declaring the app ready when persisted channels exist. It then builds
@@ -87,7 +102,7 @@ sufficient or correct under the above scenarios.
 - The current collection filter is exact name matching. A recreated collection
   with the same name may therefore continue to work after a complete fresh
   inventory scan, unlike upstream's key-based failure. Conversely, a rename,
-  incomplete/stale tag inventory, different case, duplicate names, or a scan
+  incomplete inventory, different case, duplicate names, or a scan
   failure could behave differently. Do not assume either automatic recovery or
   a 404 failure without a Desktop reproduction.
 - Desktop's public model documents bounded startup/channel-setup scanning and

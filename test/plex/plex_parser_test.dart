@@ -46,18 +46,21 @@ void main() {
     );
   });
 
-  test('parses collection metadata for builder sources', () {
-    final item = parseMediaItem({
-      'ratingKey': '1',
-      'title': 'Movie',
-      'type': 'movie',
-      'duration': 1000,
-      'Collection': [
-        {'tag': 'Friday Night'},
-      ],
-    });
-    expect(item.collections, ['Friday Night']);
-  });
+  test(
+    'parses collection tags for playlist metadata (library scans replace them)',
+    () {
+      final item = parseMediaItem({
+        'ratingKey': '1',
+        'title': 'Movie',
+        'type': 'movie',
+        'duration': 1000,
+        'Collection': [
+          {'tag': 'Friday Night'},
+        ],
+      });
+      expect(item.collections, ['Friday Night']);
+    },
+  );
 
   test('parses media, part, and Dolby Vision facts', () {
     final item = parseMediaItem({
