@@ -89,12 +89,13 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.pump();
     expect(buttonSide().width, 3);
+    final keyboardFocus = FocusManager.instance.primaryFocus;
     final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
     await mouse.addPointer(location: const Offset(700, 500));
     await mouse.moveTo(const Offset(710, 500));
     await tester.pump();
     expect(buttonSide(), BorderSide.none);
-    expect(menuNode.hasFocus, isTrue);
+    expect(FocusManager.instance.primaryFocus, same(keyboardFocus));
     final selectedBefore = tester
         .widget<LineupNavigationRow>(
           find.ancestor(
@@ -106,11 +107,12 @@ void main() {
     expect(selectedBefore, isTrue);
 
     final dropdown = find.byType(DropdownButton<LineupThemeName>);
+    await tester.ensureVisible(dropdown);
+    await tester.pumpAndSettle();
     await tester.tap(dropdown);
     await tester.pumpAndSettle();
     await tester.tap(find.text(LineupThemeName.slatePine.label).last);
     await tester.pump();
-    final focused = FocusManager.instance.primaryFocus;
     final field = find
         .descendant(of: dropdown, matching: find.byType(InputDecorator))
         .first;
@@ -132,7 +134,7 @@ void main() {
       fieldSide().color,
       LineupTheme.of(tester.element(field)).focusBorder,
     );
-    expect(FocusManager.instance.primaryFocus, same(focused));
+    final focused = FocusManager.instance.primaryFocus;
     await mouse.moveTo(const Offset(720, 500));
     await tester.pump();
     expect(fieldSide().width, 1);

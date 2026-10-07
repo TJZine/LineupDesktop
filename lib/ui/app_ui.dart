@@ -26,6 +26,120 @@ abstract final class LineupLayout {
       EdgeInsets.all((isCompactWidth(size.width) ? 20.0 : 32.0));
 }
 
+/// Shared shell geometry is expressed in canvas pixels; LineupCanvas scales it.
+class LineupTopBar extends StatelessWidget {
+  const LineupTopBar({
+    this.onOpenMenu,
+    this.menuFocusNode,
+    this.menuKey,
+    this.trailing,
+    this.inset = 48,
+    this.divider = true,
+    super.key,
+  });
+
+  final LineupMenuCallback? onOpenMenu;
+  final FocusNode? menuFocusNode;
+  final Key? menuKey;
+  final Widget? trailing;
+  final double inset;
+  final bool divider;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final roles = LineupTheme.of(context);
+      final menu = onOpenMenu != null && menuFocusNode != null;
+      final condensed = constraints.maxWidth < 900;
+      final lockup = Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Image.asset(
+            'assets/branding/lineup-logo-mark.png',
+            width: 30,
+            height: 30,
+            excludeFromSemantics: true,
+          ),
+          if (!condensed) ...[
+            const SizedBox(width: 14),
+            Text(
+              'LINEUP',
+              style: TextStyle(
+                fontFamily: 'Arial',
+                fontSize: 22,
+                fontWeight: FontWeight.w400,
+                letterSpacing: 3,
+                color: roles.primaryText,
+              ),
+            ),
+          ],
+          if (menu) ...[
+            const SizedBox(width: 14),
+            Icon(Icons.menu, size: 22, color: roles.primaryText),
+          ],
+        ],
+      );
+      return Container(
+        key: const ValueKey('lineup-top-bar'),
+        height: 80,
+        padding: EdgeInsets.symmetric(horizontal: inset),
+        decoration: BoxDecoration(
+          border: divider
+              ? Border(bottom: BorderSide(color: roles.subtleBorder))
+              : null,
+        ),
+        child: Row(
+          children: [
+            if (menu)
+              Builder(
+                builder: (invokerContext) => Tooltip(
+                  message: 'Open Lineup menu',
+                  child: TextButton(
+                    key: menuKey,
+                    focusNode: menuFocusNode,
+                    onPressed: () =>
+                        onOpenMenu!(invokerContext, menuFocusNode!),
+                    style: TextButton.styleFrom(padding: EdgeInsets.zero),
+                    child: lockup,
+                  ),
+                ),
+              )
+            else
+              Semantics(label: 'Lineup', child: lockup),
+            const SizedBox(width: 20),
+            Expanded(child: trailing ?? const SizedBox.shrink()),
+          ],
+        ),
+      );
+    },
+  );
+}
+
+/// The cap applies to content, with the bar retaining the full window width.
+class LineupContentWidth extends StatelessWidget {
+  const LineupContentWidth({
+    required this.child,
+    this.maxWidth = 1824,
+    this.vertical = 0,
+    super.key,
+  });
+  final Widget child;
+  final double maxWidth;
+  final double vertical;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: EdgeInsets.symmetric(horizontal: 48, vertical: vertical),
+    child: Align(
+      alignment: Alignment.topCenter,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: maxWidth),
+        child: SizedBox(width: double.infinity, child: child),
+      ),
+    ),
+  );
+}
+
 class LineupNotice extends StatelessWidget {
   const LineupNotice({required this.message, super.key});
 
@@ -65,6 +179,8 @@ class LineupPage extends StatelessWidget {
     this.actions,
     this.titleWidget,
     this.traversalPolicy,
+    this.topBar,
+    this.showTitle = true,
     super.key,
   });
 
@@ -73,6 +189,8 @@ class LineupPage extends StatelessWidget {
   final Widget? actions;
   final Widget? titleWidget;
   final FocusTraversalPolicy? traversalPolicy;
+  final Widget? topBar;
+  final bool showTitle;
 
   @override
   Widget build(BuildContext context) => FocusTraversalGroup(
@@ -81,49 +199,56 @@ class LineupPage extends StatelessWidget {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final compact = LineupLayout.isCompactWidth(constraints.maxWidth);
-          final size = Size(constraints.maxWidth, constraints.maxHeight);
+
           return DefaultTextStyle(
             style: Theme.of(context).textTheme.bodyMedium!,
-            child: Padding(
-              padding: LineupLayout.pageInsets(size),
-              child: Column(
-                key: const ValueKey('lineup-page-content'),
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (compact)
-                    Column(
+            child: Column(
+              children: [
+                ?topBar,
+                Expanded(
+                  child: LineupContentWidth(
+                    vertical: 24,
+                    child: Column(
+                      key: const ValueKey('lineup-page-content'),
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        if (titleWidget != null && actions != null) ...[
-                          Align(
-                            alignment: Alignment.centerLeft,
-                            child: actions,
+                        if (showTitle && compact)
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              if (titleWidget != null && actions != null) ...[
+                                Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: actions,
+                                ),
+                                const SizedBox(height: 16),
+                                titleWidget!,
+                              ] else ...[
+                                titleWidget ?? _PageTitle(title),
+                                if (actions != null) ...[
+                                  const SizedBox(height: 16),
+                                  Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: actions,
+                                  ),
+                                ],
+                              ],
+                            ],
+                          )
+                        else if (showTitle)
+                          Row(
+                            children: [
+                              Expanded(child: titleWidget ?? _PageTitle(title)),
+                              ?actions,
+                            ],
                           ),
-                          const SizedBox(height: 16),
-                          titleWidget!,
-                        ] else ...[
-                          titleWidget ?? _PageTitle(title),
-                          if (actions != null) ...[
-                            const SizedBox(height: 16),
-                            Align(
-                              alignment: Alignment.centerLeft,
-                              child: actions,
-                            ),
-                          ],
-                        ],
-                      ],
-                    )
-                  else
-                    Row(
-                      children: [
-                        Expanded(child: titleWidget ?? _PageTitle(title)),
-                        ?actions,
+                        if (showTitle) SizedBox(height: 24),
+                        Expanded(child: child),
                       ],
                     ),
-                  SizedBox(height: 24),
-                  Expanded(child: child),
-                ],
-              ),
+                  ),
+                ),
+              ],
             ),
           );
         },

@@ -68,6 +68,10 @@ void main() {
       await tester.pumpAndSettle();
       final action = find.byKey(const Key('app-menu-now-playing'));
       expect(action, findsOneWidget);
+      expect(
+        find.descendant(of: action, matching: find.text(_program.title)),
+        findsOneWidget,
+      );
       await tester.tap(action);
       await tester.pumpAndSettle();
 

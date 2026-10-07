@@ -134,12 +134,16 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _diagnosticsHeader(context),
+              LineupTopBar(
+                menuKey: const Key('diagnostics-app-menu'),
+                menuFocusNode: widget.menuFocusNode,
+                onOpenMenu: widget.onOpenMenu,
+              ),
               Expanded(
                 child: Material(
                   color: Colors.transparent,
-                  child: Padding(
-                    padding: EdgeInsets.fromLTRB(48, 32, 48, 0),
+                  child: LineupContentWidth(
+                    vertical: 24,
                     child: ListView(
                       controller: _scroll,
                       children: [
@@ -195,55 +199,6 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
     );
   }
 
-  Widget _diagnosticsHeader(BuildContext context) {
-    final roles = LineupTheme.of(context);
-    return Container(
-      height: 96,
-      margin: EdgeInsets.symmetric(horizontal: 48),
-      decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: roles.subtleBorder)),
-      ),
-      child: Row(
-        children: [
-          TextButton.icon(
-            onPressed: widget.onBack,
-            icon: Icon(Icons.arrow_back, size: 18),
-            label: const Text('Back'),
-          ),
-          SizedBox(width: 12),
-          Text(
-            'Support',
-            style: TextStyle(color: roles.secondaryText, fontSize: 18),
-          ),
-          const Spacer(),
-          if (widget.onOpenMenu != null && widget.menuFocusNode != null)
-            Builder(
-              builder: (buttonContext) => TextButton(
-                key: const Key('diagnostics-app-menu'),
-                focusNode: widget.menuFocusNode,
-                onPressed: () =>
-                    widget.onOpenMenu!(buttonContext, widget.menuFocusNode!),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Text(
-                      'LINEUP',
-                      style: TextStyle(
-                        fontFamily: 'Arial',
-                        fontWeight: FontWeight.w400,
-                      ),
-                    ),
-                    SizedBox(width: 12),
-                    Icon(Icons.menu, size: 18),
-                  ],
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
   Widget _diagnosticsIntro(BuildContext context) {
     final roles = LineupTheme.of(context);
     final copyAction = Column(
@@ -277,6 +232,11 @@ class _DiagnosticsViewState extends State<DiagnosticsView> {
     final heading = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (widget.onBack != null)
+          LineupInlineLink(
+            onPressed: widget.onBack,
+            child: const Text('‹ Settings · Support'),
+          ),
         Text(
           'Diagnostics',
           style: LineupTypography.pageTitle.copyWith(color: roles.primaryText),

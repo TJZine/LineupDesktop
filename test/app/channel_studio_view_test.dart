@@ -95,7 +95,7 @@ void main() {
     expect(find.text('Schedule preview'), findsOneWidget);
     expect(find.text('New channel'), findsWidgets);
     expect(find.text('1'), findsWidgets);
-    await tester.tap(find.text('Back to Channels'));
+    await tester.tap(find.text('‹ Channels'));
     await tester.pumpAndSettle();
 
     await tester.tap(find.byTooltip('Open Custom four'));
@@ -103,7 +103,7 @@ void main() {
     expect(find.text('Edit custom channel'), findsOneWidget);
     expect(find.text('Schedule preview'), findsOneWidget);
     expect(find.byType(Dialog), findsNothing);
-    await tester.tap(find.text('Back to Channels'));
+    await tester.tap(find.text('‹ Channels'));
     await tester.pumpAndSettle();
     expect(FocusManager.instance.primaryFocus?.debugLabel, 'Open Custom four');
 
@@ -169,7 +169,7 @@ void main() {
     await tester.pump();
     await tester.tap(find.text('Save changes'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Back to Channels'));
+    await tester.tap(find.text('‹ Channels'));
     await tester.pumpAndSettle();
 
     final open = find.byTooltip('Open Renamed');
@@ -481,9 +481,7 @@ void main() {
     );
     expect(
       tester
-          .widget<TextButton>(
-            find.widgetWithText(TextButton, 'Back to Channels'),
-          )
+          .widget<TextButton>(find.widgetWithText(TextButton, '‹ Channels'))
           .onPressed,
       isNull,
     );
@@ -687,9 +685,7 @@ void main() {
     expect(calls, 1);
     expect(
       tester
-          .widget<TextButton>(
-            find.widgetWithText(TextButton, 'Back to Channels'),
-          )
+          .widget<TextButton>(find.widgetWithText(TextButton, '‹ Channels'))
           .onPressed,
       isNull,
     );
@@ -803,7 +799,7 @@ void main() {
     expect(savedProgram.start, expected.start);
     expect(savedProgram.end, expected.end);
 
-    await tester.tap(find.text('Back to Channels'));
+    await tester.tap(find.text('‹ Channels'));
     await tester.pumpAndSettle();
     await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
     await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
@@ -4036,10 +4032,7 @@ void main() {
     await _settleAirCheck(tester);
     expect(tester.takeException(), isNull);
     expect(find.byKey(const Key('channel-air-check')), findsOneWidget);
-    for (final finder in [
-      find.text('Back to Channels'),
-      find.text('Save channel'),
-    ]) {
+    for (final finder in [find.text('‹ Channels'), find.text('Save channel')]) {
       _expectFitsHorizontally(tester, finder, const Size(800, 600));
     }
     for (final finder in [
@@ -4101,7 +4094,12 @@ void main() {
       );
       await _settleAirCheck(tester);
 
-      expect(find.byType(Image), findsOneWidget);
+      expect(
+        find.byWidgetPredicate(
+          (widget) => widget is Image && widget.image is MemoryImage,
+        ),
+        findsOneWidget,
+      );
       expect(find.textContaining('6 future hours requested'), findsOneWidget);
       await tester.ensureVisible(find.text('Show next 6 hours'));
       await tester.tap(find.text('Show next 6 hours'));

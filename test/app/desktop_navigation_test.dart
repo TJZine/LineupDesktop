@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/playback/native_player.dart';
+import 'package:lineup_desktop/ui/app_ui.dart';
+import 'package:lineup_desktop/plex/plex_models.dart';
 
 import '../support/ui_fixture.dart';
 
@@ -115,14 +117,9 @@ void main() {
       await tester.pumpAndSettle();
 
       final tops = [
-        for (final label in [
-          'Guide',
-          'Player',
-          'Channels',
-          'Settings',
-          'Account',
-        ])
+        for (final label in ['Guide', 'Player', 'Channels', 'Settings'])
           tester.getTopLeft(find.text(label).last).dy,
+        tester.getTopLeft(find.byKey(const Key('app-menu-account'))).dy,
       ];
       expect(tops, orderedEquals([...tops]..sort()));
 
@@ -158,6 +155,183 @@ void main() {
     expect(find.text('Player controls auto-hide'), findsOneWidget);
   });
 
+  for (final (index, name) in [(0, 'Guide'), (1, 'Channels'), (4, 'Player')]) {
+    testWidgets('Settings keeps $name origin through Diagnostics and menu', (
+      tester,
+    ) async {
+      final fixture = UiFixture(
+        player: FixturePlayer()
+          ..emit(
+            const PlayerStatus(state: PlayerState.ready, message: 'Ready'),
+          ),
+      )..controller.stage = SetupStage.ready;
+      await tester.pumpWidget(fixture.build());
+      await tester.pumpAndSettle();
+      if (index != 0) await _routeShortcut(tester, index);
+      await _routeShortcut(tester, 2);
+      expect(find.text('‹ Back to $name'), findsOneWidget);
+      await tester.tap(find.widgetWithText(TextButton, 'Support'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Open Diagnostics'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Open Diagnostics'));
+      await tester.pumpAndSettle();
+      expect(find.text('‹ Settings · Support'), findsOneWidget);
+      // A menu selection has the same origin contract as the inline link.
+      await openDestination(tester, 'Settings');
+      expect(find.text('‹ Back to $name'), findsOneWidget);
+      await tester.ensureVisible(find.text('Open Diagnostics'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Open Diagnostics'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('‹ Settings · Support'));
+      await tester.pumpAndSettle();
+      expect(find.text('‹ Back to $name'), findsOneWidget);
+      await tester.tap(find.text('‹ Back to $name'));
+      await tester.pumpAndSettle();
+      expect(find.text('‹ Settings · Support'), findsNothing);
+      expect(FocusManager.instance.primaryFocus?.debugLabel, name);
+    });
+  }
+
+  testWidgets(
+    'Channels menu and shortcut leave Studio through the dirty guard',
+    (tester) async {
+      final fixture = UiFixture()..controller.stage = SetupStage.ready;
+      await tester.pumpWidget(fixture.build());
+      await tester.pumpAndSettle();
+      await openDestination(tester, 'Channels');
+      await tester.tap(find.text('Create a custom channel'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const Key('studio-name')),
+        'Draft name',
+      );
+      await openDestination(tester, 'Channels');
+      expect(find.text('Discard changes?'), findsOneWidget);
+      await tester.tap(find.text('Keep editing'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('studio-name')), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('immersive-app-menu')), findsNothing);
+      await _routeShortcut(tester, 1);
+      expect(find.text('Discard changes?'), findsOneWidget);
+      await tester.tap(find.text('Discard changes'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('studio-name')), findsNothing);
+      expect(find.text('Create a custom channel'), findsOneWidget);
+    },
+  );
+
+  testWidgets('Diagnostics shortcut Back returns through Support to Channels', (
+    tester,
+  ) async {
+    final fixture = UiFixture()..controller.stage = SetupStage.ready;
+    await tester.pumpWidget(fixture.build());
+    await tester.pumpAndSettle();
+    await _routeShortcut(tester, 1);
+    await _routeShortcut(tester, 3);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(find.text('‹ Back to Channels'), findsOneWidget);
+    expect(find.text('Open Diagnostics'), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('channels-app-menu')), findsOneWidget);
+  });
+
+  testWidgets('condensed bar keeps an accessible menu and first-run lockup', (
+    tester,
+  ) async {
+    tester.view
+      ..devicePixelRatio = 1
+      ..physicalSize = const Size(640, 480);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    final fixture = UiFixture()..controller.stage = SetupStage.ready;
+    await tester.pumpWidget(fixture.build());
+    await tester.pumpAndSettle();
+    expect(find.text('LINEUP'), findsNothing);
+    expect(find.byIcon(Icons.menu), findsOneWidget);
+    await tester.tap(find.byKey(const Key('guide-app-menu')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('immersive-app-menu')), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+    final onboarding = UiFixture()..controller.stage = SetupStage.servers;
+    await tester.pumpWidget(onboarding.build());
+    await tester.pumpAndSettle();
+    expect(find.byType(LineupTopBar), findsOneWidget);
+    expect(find.byIcon(Icons.menu), findsNothing);
+    expect(find.byTooltip('Open Lineup menu'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('wide workspace caps content while its bar keeps the corner', (
+    tester,
+  ) async {
+    tester.view
+      ..devicePixelRatio = 1
+      ..physicalSize = const Size(3440, 1440);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    final fixture = UiFixture()..controller.stage = SetupStage.ready;
+    await tester.pumpWidget(fixture.build());
+    await tester.pumpAndSettle();
+    await openDestination(tester, 'Channels');
+    final content = tester.getRect(
+      find.byKey(const ValueKey('lineup-page-content')),
+    );
+    expect(content.width, closeTo(1824 * 4 / 3, .001));
+    // getSize reports canvas units; getRect/positions include root scaling.
+    final bar = tester.getSize(find.byKey(const ValueKey('lineup-top-bar')));
+    expect(bar.height, 80);
+    expect(bar.width, closeTo(2580, .001));
+    expect(
+      tester.getTopLeft(find.byKey(const Key('channels-app-menu'))).dx,
+      48 * 4 / 3,
+    );
+    expect(content.center.dx, closeTo(1720, .001));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'Account menu wraps names and uses measured status without a heading',
+    (tester) async {
+      final fixture = UiFixture()..controller.stage = SetupStage.ready;
+      fixture.controller
+        ..profile = const PlexHomeUser(
+          id: 'guest',
+          name: 'A long synthetic profile name',
+          protected: false,
+        )
+        ..server = const PlexServer(
+          id: 'server',
+          name: 'A long synthetic server name',
+          connections: [],
+        )
+        ..connection = PlexConnection(
+          uri: Uri.parse('https://synthetic.invalid'),
+          local: true,
+          relay: false,
+          latency: const Duration(milliseconds: 126),
+        );
+      await tester.pumpWidget(fixture.build());
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('guide-app-menu')));
+      await tester.pumpAndSettle();
+      expect(find.text('Lineup'), findsNothing);
+      expect(find.text('Account'), findsNothing);
+      expect(find.byTooltip('Close Lineup menu'), findsNothing);
+      expect(find.byType(LineupProfileAvatar), findsOneWidget);
+      expect(find.text('Direct local · 126 ms'), findsOneWidget);
+      expect(find.text('A long synthetic profile name'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('app-menu-account')));
+      await tester.pumpAndSettle();
+      expect(find.text('Plex Home profile'), findsOneWidget);
+    },
+  );
+
   testWidgets('Account sign out confirms first and reports owner failure', (
     tester,
   ) async {
@@ -167,7 +341,7 @@ void main() {
 
     await tester.tap(find.byKey(const Key('guide-app-menu')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Account').last);
+    await tester.tap(find.byKey(const Key('app-menu-account')));
     await tester.pumpAndSettle();
     await tester.drag(find.byType(ListView).last, const Offset(0, -180));
     await tester.pumpAndSettle();
@@ -254,4 +428,18 @@ class _LogoutController extends FixtureController {
     error = 'Credential cleanup failed.';
     return false;
   }
+}
+
+Future<void> _routeShortcut(WidgetTester tester, int index) async {
+  const keys = [
+    LogicalKeyboardKey.digit1,
+    LogicalKeyboardKey.digit2,
+    LogicalKeyboardKey.digit3,
+    LogicalKeyboardKey.digit4,
+    LogicalKeyboardKey.digit5,
+  ];
+  await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+  await tester.sendKeyEvent(keys[index]);
+  await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+  await tester.pumpAndSettle();
 }

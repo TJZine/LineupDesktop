@@ -128,23 +128,37 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
                 ),
               ),
         child: SafeArea(
-          child: Center(
-            child: SingleChildScrollView(
-              padding: EdgeInsets.all(32),
-              child: ConstrainedBox(
-                key: const ValueKey('onboarding-content'),
-                constraints: const BoxConstraints(maxWidth: double.infinity),
-                child: FocusTraversalGroup(
-                  policy: ReadingOrderTraversalPolicy(),
-                  child: AnimatedSwitcher(
-                    duration: widget.controller.settings.reduceMotion
-                        ? Duration.zero
-                        : const Duration(milliseconds: 180),
-                    child: _screen(key: ValueKey(widget.controller.stage)),
+          child: Column(
+            children: [
+              if (refinedStage) const LineupTopBar(),
+              Expanded(
+                child: Center(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 48,
+                      vertical: 24,
+                    ),
+                    child: ConstrainedBox(
+                      key: const ValueKey('onboarding-content'),
+                      constraints: BoxConstraints(
+                        maxWidth: refinedStage ? 1040 : double.infinity,
+                      ),
+                      child: FocusTraversalGroup(
+                        policy: ReadingOrderTraversalPolicy(),
+                        child: AnimatedSwitcher(
+                          duration: widget.controller.settings.reduceMotion
+                              ? Duration.zero
+                              : const Duration(milliseconds: 180),
+                          child: _screen(
+                            key: ValueKey(widget.controller.stage),
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               ),
-            ),
+            ],
           ),
         ),
       ),
@@ -161,9 +175,9 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
       SetupStage.channelSetup || SetupStage.ready => const SizedBox.shrink(),
     };
     final compactWidth = switch (controller.stage) {
-      SetupStage.linking => 736.0,
-      SetupStage.profiles => 1080.0,
-      SetupStage.servers => 880.0,
+      SetupStage.linking => 1040.0,
+      SetupStage.profiles => 1040.0,
+      SetupStage.servers => 1040.0,
       _ => null,
     };
     if (compactWidth != null) {
@@ -371,7 +385,7 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
     final hasQr = usable || expired;
     return Center(
       child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: 736),
+        constraints: BoxConstraints(maxWidth: 1040),
         child: SizedBox(
           width: double.infinity,
           child: Column(
@@ -380,7 +394,7 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
             children: [
               Center(
                 child: ConstrainedBox(
-                  constraints: BoxConstraints(maxWidth: 736),
+                  constraints: BoxConstraints(maxWidth: 1040),
                   child: LayoutBuilder(
                     builder: (context, bodyConstraints) {
                       final qrSize = (narrow ? 172.0 : 200.0);
@@ -614,7 +628,7 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
     title: 'Choose a server',
     subtitle: 'Select the Plex server you want to watch from.',
     centered: false,
-    maxWidth: 880,
+    maxWidth: 1040,
     titleFontSize: 36,
     subtitleFontSize: 18,
     titleWeight: FontWeight.w600,
@@ -755,7 +769,6 @@ class _OnboardingCompactPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final roles = LineupTheme.of(context);
     const bodyFontSize = 18.0;
     final content = ConstrainedBox(
       constraints: BoxConstraints(maxWidth: maxWidth),
@@ -764,28 +777,6 @@ class _OnboardingCompactPanel extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Image.asset(
-                  'assets/branding/lineup-logo-mark.png',
-                  height: 24,
-                  width: 24,
-                ),
-                SizedBox(width: 8),
-                Text(
-                  'LINEUP',
-                  style: TextStyle(
-                    color: roles.progressFill,
-                    fontFamily: 'Arial',
-                    fontSize: 18,
-                    letterSpacing: 1.5,
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(height: 20),
             if (busy) ...[
               LinearProgressIndicator(semanticsLabel: 'Working'),
               SizedBox(height: 16),

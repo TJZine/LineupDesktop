@@ -10,6 +10,7 @@ import 'package:lineup_desktop/app/onboarding_view.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 import 'package:lineup_desktop/ui/app_theme.dart';
+import 'package:lineup_desktop/ui/app_ui.dart';
 
 import '../support/ui_fixture.dart';
 
@@ -67,6 +68,46 @@ void main() {
       }
     },
   );
+
+  testWidgets('first-run focused tasks use a centred 1040 canvas column', (
+    tester,
+  ) async {
+    tester.view
+      ..devicePixelRatio = 1
+      ..physicalSize = const Size(3440, 1440);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    for (final stage in [
+      SetupStage.linking,
+      SetupStage.profiles,
+      SetupStage.servers,
+      SetupStage.welcome,
+    ]) {
+      final controller = FixtureController()..stage = stage;
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: LineupCanvas.builder,
+          home: UpstreamOnboardingView(
+            controller: controller,
+            onLogout: () async {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      if (stage == SetupStage.welcome) {
+        expect(find.byType(LineupTopBar), findsNothing);
+      } else {
+        final column = find.byKey(const ValueKey('onboarding-content'));
+        expect(tester.getSize(column).width, 1040);
+        expect(tester.getRect(column).center.dx, closeTo(1720, .001));
+        expect(find.byType(LineupTopBar), findsOneWidget);
+        expect(find.byTooltip('Open Lineup menu'), findsNothing);
+      }
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      controller.dispose();
+    }
+  });
 
   Future<void> show(
     WidgetTester tester,

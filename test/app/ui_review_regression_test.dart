@@ -543,7 +543,7 @@ void main() {
         find.descendant(of: sourceChoices, matching: find.text('Hand-picked')),
         findsOneWidget,
       );
-      await tester.tap(find.text('Back to Channels'));
+      await tester.tap(find.text('‹ Channels'));
       await tester.pumpAndSettle();
     }
   });
@@ -576,7 +576,7 @@ void main() {
 
     await _openChannelEditor(tester, controller, original);
     await tester.enterText(find.byType(TextFormField).first, 'Cancelled');
-    await tester.tap(find.text('Back to Channels'));
+    await tester.tap(find.text('‹ Channels'));
     await tester.pumpAndSettle();
     expect(controller.channels.single.toJson(), original.toJson());
 

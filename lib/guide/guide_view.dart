@@ -40,7 +40,7 @@ class GuideLayoutPolicy {
     final padding = horizontalPadding(size);
     const minimumRows = 5;
     final chromeHeight =
-        padding * 2 +
+        padding +
         toolbarHeight(size, textScale: textScale) +
         10 +
         controlsHeight(size, textScale: textScale) +
@@ -91,11 +91,7 @@ class GuideLayoutPolicy {
     );
   }
 
-  static double toolbarHeight(Size size, {double textScale = 1}) {
-    final wordmarkSize = 30.0;
-    final enlargedContent = wordmarkSize * textScale * 1.2 + 16;
-    return math.max(56, enlargedContent);
-  }
+  static double toolbarHeight(Size size, {double textScale = 1}) => 80;
 
   static double horizontalPadding(Size size) => 20;
 
@@ -628,10 +624,7 @@ class _ClassicGuideSurface extends StatelessWidget {
           color: color,
           child: Column(
             children: [
-              Padding(
-                padding: EdgeInsets.fromLTRB(padding, padding, padding, 0),
-                child: toolbar,
-              ),
+              Padding(padding: EdgeInsets.zero, child: toolbar),
               const SizedBox(width: double.infinity, height: 2),
             ],
           ),
@@ -709,53 +702,18 @@ class _Toolbar extends StatelessWidget {
     final showPlaying =
         tunedChannel != null && controller.lineup.settings.nowWatchingBanner;
     final showDate = size.width >= 1100;
-    final wordmarkStyle = TextStyle(
-      fontFamily: 'Arial',
-      fontSize: 30.0,
-      fontWeight: FontWeight.w400,
-      letterSpacing: 3,
-      color: roles.primaryText,
-    );
-    final sectionStyle = TextStyle(fontSize: 20.0, color: roles.primaryText);
     final supportingStyle = TextStyle(
       fontSize: 18.0,
       color: roles.secondaryText,
     );
 
-    return Container(
-      height: GuideLayoutPolicy.toolbarHeight(size, textScale: textScale),
-      decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: roles.subtleBorder)),
-      ),
-      child: Row(
+    return LineupTopBar(
+      inset: 20,
+      menuKey: const Key('guide-app-menu'),
+      menuFocusNode: menuFocus,
+      onOpenMenu: onOpenMenu,
+      trailing: Row(
         children: [
-          if (onOpenMenu != null)
-            Builder(
-              builder: (invokerContext) => Tooltip(
-                message: 'Open Lineup menu',
-                child: TextButton(
-                  key: const Key('guide-app-menu'),
-                  focusNode: menuFocus,
-                  onPressed: () => onOpenMenu!(invokerContext, menuFocus),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text('LINEUP', style: wordmarkStyle),
-                      SizedBox(width: 4),
-                      Icon(
-                        Icons.expand_more,
-                        size: 22.0,
-                        color: roles.secondaryText,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            )
-          else
-            Text('LINEUP', style: wordmarkStyle),
-          SizedBox(width: 20.0),
-          Text('Guide', style: sectionStyle),
           if (showPlaying) ...[
             SizedBox(width: 20.0),
             Expanded(

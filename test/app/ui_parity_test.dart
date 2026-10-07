@@ -56,15 +56,11 @@ void main() {
         const Key('immersive-app-menu'),
       );
     }
-    for (final label in [
-      'Guide',
-      'Player',
-      'Channels',
-      'Settings',
-      'Account',
-    ]) {
+    for (final label in ['Guide', 'Player', 'Channels', 'Settings']) {
       expect(find.text(label), findsWidgets);
     }
+    expect(find.byKey(const Key('app-menu-account')), findsOneWidget);
+    expect(find.bySemanticsLabel(RegExp(r'^Account')), findsOneWidget);
     await tester.tap(find.text('Channels').last);
     await tester.pumpAndSettle();
 

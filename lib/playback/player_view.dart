@@ -125,6 +125,20 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
     }
+    // Shell route shortcuts must reach the shared navigation/leave guard.
+    if (HardwareKeyboard.instance.isControlPressed &&
+        const [
+          LogicalKeyboardKey.digit1,
+          LogicalKeyboardKey.digit2,
+          LogicalKeyboardKey.digit3,
+          LogicalKeyboardKey.digit4,
+          LogicalKeyboardKey.digit5,
+          LogicalKeyboardKey.keyG,
+          LogicalKeyboardKey.keyP,
+          LogicalKeyboardKey.comma,
+        ].contains(event.logicalKey)) {
+      return KeyEventResult.ignored;
+    }
     final key = event.logicalKey;
     final initialPress = event is KeyDownEvent;
     final controller = widget.controller;

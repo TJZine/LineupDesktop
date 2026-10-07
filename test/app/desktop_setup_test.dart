@@ -52,6 +52,36 @@ void main() {
     },
   );
 
+  testWidgets('setup bar and actions remain reachable with enlarged text', (
+    tester,
+  ) async {
+    tester.platformDispatcher.textScaleFactorTestValue = 1.5;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final controller = _SetupController();
+    addTearDown(controller.dispose);
+    await _pump(tester, controller);
+    expect(find.byType(LineupTopBar), findsOneWidget);
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('scan-selected-libraries')),
+    );
+    await tester.tap(find.byKey(const ValueKey('scan-selected-libraries')));
+    await tester.pumpAndSettle();
+    expect(find.text('Shape your lineup'), findsOneWidget);
+    await tester.ensureVisible(find.byKey(const ValueKey('review-channels')));
+    await tester.tap(find.byKey(const ValueKey('review-channels')));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('apply-reviewed-lineup')),
+    );
+    expect(
+      find.byKey(const ValueKey('apply-reviewed-lineup')).hitTestable(),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'library selection is tri-state and mixed scans continue ready rows',
     (tester) async {
@@ -772,6 +802,10 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('apply-reviewed-lineup')));
     await tester.pumpAndSettle();
     expect(find.text('We couldn’t update your lineup'), findsOneWidget);
+    expect(
+      tester.widget<LineupTopBar>(find.byType(LineupTopBar)).divider,
+      isTrue,
+    );
     expect(find.text('Your existing lineup hasn’t changed.'), findsOneWidget);
     expect(find.text('Your setup choices are still here.'), findsOneWidget);
     expect(find.text('The lineup could not be saved.'), findsOneWidget);
@@ -828,6 +862,13 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Your lineup is ready'), findsOneWidget);
+      expect(
+        tester.widget<LineupTopBar>(find.byType(LineupTopBar)).divider,
+        isFalse,
+      );
+      for (final label in ['✓ Libraries', '✓ Configure', '✓ Review']) {
+        expect(find.text(label), findsOneWidget);
+      }
       expect(find.textContaining('in your lineup'), findsOneWidget);
       await tester.tap(find.text('Add a custom channel'));
       await tester.tap(find.text('View lineup'));

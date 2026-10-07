@@ -123,7 +123,8 @@ class _LineupShellState extends State<LineupShell> {
       if (_appMenuOpen) _closeAppMenu();
       return;
     }
-    if (index == _selectedIndex) {
+    if (index == _selectedIndex &&
+        !(index == 1 && (_channelsKey.currentState?.studioOpen ?? false))) {
       if (_appMenuOpen) _closeAppMenu();
       return;
     }
@@ -136,10 +137,18 @@ class _LineupShellState extends State<LineupShell> {
       }
       if (!mounted) return;
       if (widget.controller.stage == SetupStage.ready) {
-        if (index == 2 && _selectedIndex != 2) {
+        if (index == 2 && _selectedIndex != 2 && _selectedIndex != 3) {
           _settingsReturnIndex = _selectedIndex;
-        } else if (index != 2 && _selectedIndex == 2) {
+        } else if (index != 2 && index != 3) {
           _settingsReturnIndex = null;
+        }
+        // Direct Diagnostics entry still has a real Settings origin.
+        if (index == 3 && _settingsReturnIndex == null) {
+          _settingsReturnIndex = _selectedIndex == 4
+              ? 4
+              : _selectedIndex == 1
+              ? 1
+              : 0;
         }
       }
       if (index == 0) {
@@ -270,6 +279,15 @@ class _LineupShellState extends State<LineupShell> {
       return KeyEventResult.ignored;
     }
     final keyboard = HardwareKeyboard.instance;
+    if (_selectedIndex == 3 &&
+        !_appMenuOpen &&
+        (event.logicalKey == LogicalKeyboardKey.escape ||
+            event.logicalKey == LogicalKeyboardKey.backspace ||
+            event.logicalKey == LogicalKeyboardKey.goBack)) {
+      _settingsCategory = SettingsCategory.support;
+      unawaited(_select(2));
+      return KeyEventResult.handled;
+    }
     if (_selectedIndex == 2 &&
         _settingsReturnIndex != null &&
         !_appMenuOpen &&
@@ -376,14 +394,11 @@ class _LineupShellState extends State<LineupShell> {
     if (anchor == null) return const SizedBox.shrink();
     final roles = LineupTheme.of(context);
     final textTheme = Theme.of(context).textTheme;
-    final titleStyle = textTheme.titleLarge?.copyWith(
-      fontSize: (textTheme.titleLarge?.fontSize ?? 22),
-    );
-    final labelStyle = textTheme.labelLarge?.copyWith(fontSize: 18);
     final detailStyle = textTheme.bodyMedium?.copyWith(
       color: roles.secondaryText,
     );
-    final profileName = widget.controller.profile?.name;
+    final profile = widget.controller.profile;
+    final profileName = profile?.name;
     final accountName = widget.controller.account?.name ?? 'Plex account';
     final serverName = widget.controller.server?.name ?? 'No server selected';
     return Stack(
@@ -415,36 +430,19 @@ class _LineupShellState extends State<LineupShell> {
                 key: const Key('immersive-app-menu'),
                 color: roles.elevatedSurface,
                 margin: EdgeInsets.zero,
+                shape: const RoundedRectangleBorder(
+                  borderRadius: BorderRadius.all(Radius.circular(8)),
+                ),
                 child: SingleChildScrollView(
                   padding: EdgeInsets.all(12),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Padding(
-                        padding: EdgeInsets.fromLTRB(12, 4, 4, 8),
-                        child: Row(
-                          children: [
-                            Expanded(child: Text('Lineup', style: titleStyle)),
-                            IconButton(
-                              constraints: BoxConstraints(
-                                minWidth: 48,
-                                minHeight: 48,
-                              ),
-                              padding: EdgeInsets.all(8),
-                              iconSize: 24,
-                              tooltip: 'Close Lineup menu',
-                              onPressed: _closeAppMenu,
-                              icon: const Icon(Icons.close),
-                            ),
-                          ],
-                        ),
-                      ),
                       _menuDestination(
                         index: 0,
                         label: 'Guide',
                         autofocus: true,
-                        labelStyle: labelStyle,
                         detailStyle: detailStyle,
                       ),
                       _menuDestination(
@@ -454,58 +452,68 @@ class _LineupShellState extends State<LineupShell> {
                         helper: hasPlaybackSurface
                             ? null
                             : 'Choose a channel in Guide',
-                        labelStyle: labelStyle,
                         detailStyle: detailStyle,
                       ),
                       if (_canShowNowPlaying)
-                        Tooltip(
-                          message: 'Program information (I)',
-                          child: TextButton(
-                            key: const Key('app-menu-now-playing'),
-                            onPressed: () => unawaited(_openNowPlaying()),
-                            child: const Text('Now Playing'),
+                        LineupNavigationRow(
+                          key: const Key('app-menu-now-playing'),
+                          selected: false,
+                          onPressed: () => unawaited(_openNowPlaying()),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('Now Playing'),
+                              Text(
+                                _player.currentProgram!.scheduled.item.title,
+                                style: detailStyle,
+                              ),
+                            ],
                           ),
                         ),
                       _menuDestination(
                         index: 1,
                         label: 'Channels',
-                        labelStyle: labelStyle,
                         detailStyle: detailStyle,
                       ),
                       _menuDestination(
                         index: 2,
                         label: 'Settings',
-                        labelStyle: labelStyle,
                         detailStyle: detailStyle,
                       ),
                       Divider(height: 24, thickness: 1.0),
                       Semantics(
-                        selected:
-                            _selectedIndex == 2 &&
-                            _settingsCategory == SettingsCategory.account,
-                        button: true,
-                        child: TextButton(
+                        label: 'Account',
+                        child: LineupNavigationRow(
+                          key: const Key('app-menu-account'),
+                          selected:
+                              _selectedIndex == 2 &&
+                              _settingsCategory == SettingsCategory.account,
                           onPressed: () => unawaited(_openAccount()),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                          child: Row(
                             children: [
-                              const Text('Account'),
-                              SizedBox(height: 4),
-                              Text(
-                                profileName == null
-                                    ? accountName
-                                    : '$profileName · $accountName',
-                                softWrap: true,
-                                style: detailStyle,
+                              LineupProfileAvatar(
+                                name: profileName ?? accountName,
+                                identity: profile?.id ?? 'account',
+                                size: 40,
+                                photo: profile?.thumb?.isAbsolute == true
+                                    ? NetworkImage(profile!.thumb.toString())
+                                    : null,
                               ),
-                              SizedBox(height: 3),
-                              Text(
-                                serverName,
-                                softWrap: true,
-                                style: detailStyle?.copyWith(
-                                  color: roles.secondaryText,
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(profileName ?? accountName),
+                                    Text(serverName, style: detailStyle),
+                                    LineupConnectionStatus(
+                                      connection: widget.controller.connection,
+                                    ),
+                                  ],
                                 ),
                               ),
+                              const SizedBox(width: 8),
+                              const Icon(Icons.chevron_right, size: 22),
                             ],
                           ),
                         ),
@@ -527,7 +535,6 @@ class _LineupShellState extends State<LineupShell> {
     bool enabled = true,
     bool autofocus = false,
     String? helper,
-    required TextStyle? labelStyle,
     required TextStyle? detailStyle,
   }) {
     final selected = _selectedIndex == index;
@@ -616,6 +623,12 @@ class _LineupShellState extends State<LineupShell> {
       focusNode: _settingsFocus,
       menuFocusNode: _settingsMenuFocus,
       onOpenMenu: _openAppMenu,
+      backLabel:
+          '‹ Back to ${switch (_settingsReturnIndex) {
+            4 => "Player",
+            1 => "Channels",
+            _ => "Guide",
+          }}',
       onBack: _settingsReturnIndex == null
           ? null
           : () {
@@ -653,7 +666,10 @@ class _LineupShellState extends State<LineupShell> {
         focusNode: _diagnosticsFocus,
         menuFocusNode: _diagnosticsMenuFocus,
         onOpenMenu: _openAppMenu,
-        onBack: () => unawaited(_select(2)),
+        onBack: () {
+          _settingsCategory = SettingsCategory.support;
+          unawaited(_select(2));
+        },
       ),
       playerView,
     ];
@@ -775,6 +791,7 @@ class SettingsView extends StatefulWidget {
     this.menuFocusNode,
     this.onOpenMenu,
     this.onBack,
+    this.backLabel = '‹ Back to Guide',
     super.key,
   });
   final LineupController controller;
@@ -786,6 +803,7 @@ class SettingsView extends StatefulWidget {
   final FocusNode? menuFocusNode;
   final LineupMenuCallback? onOpenMenu;
   final VoidCallback? onBack;
+  final String backLabel;
 
   @override
   State<SettingsView> createState() => _SettingsViewState();
@@ -876,30 +894,48 @@ class _SettingsViewState extends State<SettingsView> {
                     builder: (context) => Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        _settingsHeader(context),
+                        LineupTopBar(
+                          menuKey: const Key('settings-app-menu'),
+                          onOpenMenu: widget.onOpenMenu,
+                          menuFocusNode: widget.menuFocusNode,
+                        ),
                         Expanded(
-                          child: compact
-                              ? Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.stretch,
-                                  children: [
-                                    _categoryRail(context, true),
-                                    Expanded(child: _detailPane(context, true)),
-                                  ],
-                                )
-                              : Padding(
-                                  padding: EdgeInsets.fromLTRB(48, 32, 48, 0),
-                                  child: Row(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.stretch,
-                                    children: [
-                                      _categoryRail(context, false),
-                                      Expanded(
-                                        child: _detailPane(context, false),
-                                      ),
-                                    ],
-                                  ),
+                          child: LineupContentWidth(
+                            vertical: 24,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                _settingsHeader(context),
+                                const SizedBox(height: 24),
+                                Expanded(
+                                  child: compact
+                                      ? Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.stretch,
+                                          children: [
+                                            _categoryRail(context, true),
+                                            Expanded(
+                                              child: _detailPane(context, true),
+                                            ),
+                                          ],
+                                        )
+                                      : Row(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.stretch,
+                                          children: [
+                                            _categoryRail(context, false),
+                                            Expanded(
+                                              child: _detailPane(
+                                                context,
+                                                false,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
                                 ),
+                              ],
+                            ),
+                          ),
                         ),
                       ],
                     ),
@@ -913,63 +949,21 @@ class _SettingsViewState extends State<SettingsView> {
     );
   }
 
-  Widget _settingsHeader(BuildContext context) => Container(
-    alignment: Alignment.center,
-    constraints: BoxConstraints(minHeight: 96),
-    margin: EdgeInsets.symmetric(horizontal: 48),
-    decoration: BoxDecoration(
-      border: Border(
-        bottom: BorderSide(color: LineupTheme.of(context).subtleBorder),
-      ),
-    ),
-    child: OverflowBar(
-      alignment: MainAxisAlignment.spaceBetween,
-      spacing: 12,
-      overflowSpacing: 8,
-      children: [
-        Wrap(
-          spacing: 12,
-          runSpacing: 8,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            TextButton.icon(
-              onPressed: widget.onBack,
-              icon: Icon(Icons.arrow_back, size: 18),
-              label: const Text('Back'),
-            ),
-            Text(
-              'Settings',
-              style: LineupTypography.pageTitle.copyWith(
-                color: LineupTheme.of(context).primaryText,
-              ),
-            ),
-          ],
+  Widget _settingsHeader(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      if (widget.onBack != null)
+        LineupInlineLink(
+          onPressed: widget.onBack,
+          child: Text(widget.backLabel),
         ),
-        if (widget.onOpenMenu != null && widget.menuFocusNode != null)
-          Builder(
-            builder: (buttonContext) => TextButton(
-              key: const Key('settings-app-menu'),
-              focusNode: widget.menuFocusNode,
-              onPressed: () =>
-                  widget.onOpenMenu!(buttonContext, widget.menuFocusNode!),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text(
-                    'LINEUP',
-                    style: TextStyle(
-                      fontFamily: 'Arial',
-                      fontWeight: FontWeight.w400,
-                    ),
-                  ),
-                  SizedBox(width: 12),
-                  Icon(Icons.menu, size: 18),
-                ],
-              ),
-            ),
-          ),
-      ],
-    ),
+      Text(
+        'Settings',
+        style: LineupTypography.pageTitle.copyWith(
+          color: LineupTheme.of(context).primaryText,
+        ),
+      ),
+    ],
   );
 
   Widget _categoryRail(BuildContext context, bool compact) {

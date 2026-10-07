@@ -251,8 +251,8 @@ void main() {
           expect(FocusManager.instance.primaryFocus?.debugLabel, 'Open Second');
           await tester.sendKeyEvent(LogicalKeyboardKey.enter);
           await tester.pumpAndSettle();
-          expect(find.text('Back to Channels'), findsOneWidget);
-          await tester.tap(find.text('Back to Channels'));
+          expect(find.text('‹ Channels'), findsOneWidget);
+          await tester.tap(find.text('‹ Channels'));
           await tester.pumpAndSettle();
         } else {
           expect(find.text('Generate lineup'), findsOneWidget);

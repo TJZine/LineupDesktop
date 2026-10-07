@@ -81,6 +81,8 @@ class ChannelStudioView extends StatefulWidget {
     required this.controller,
     required this.mode,
     required this.onBack,
+    this.onOpenMenu,
+    this.menuFocusNode,
     required this.onSaved,
     required this.onTune,
     required this.onDuplicate,
@@ -92,6 +94,8 @@ class ChannelStudioView extends StatefulWidget {
   });
 
   final LineupController controller;
+  final LineupMenuCallback? onOpenMenu;
+  final FocusNode? menuFocusNode;
   final ChannelStudioMode mode;
   final Channel? channel;
   final Future<void> Function(String? focusChannelId) onBack;
@@ -483,6 +487,11 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
         type: MaterialType.transparency,
         child: LineupPage(
           traversalPolicy: OrderedTraversalPolicy(),
+          topBar: LineupTopBar(
+            menuKey: const Key('studio-app-menu'),
+            onOpenMenu: widget.onOpenMenu,
+            menuFocusNode: widget.menuFocusNode,
+          ),
           title: _name.text.trim().isEmpty ? 'New channel' : _name.text.trim(),
           titleWidget: Builder(
             builder: (_) => _studioTitle(
@@ -673,22 +682,13 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
           ? Theme.of(context).colorScheme.error
           : roles.secondaryText,
     );
-    final wordmarkStyle = TextStyle(
-      color: roles.primaryText,
-      fontFamily: 'Arial',
-      fontSize: (compact ? 14 : 18),
-      fontWeight: FontWeight.w400,
-      letterSpacing: 1.5,
-    );
-    final contextStyle = _studioSupportStyle(fontWeight: FontWeight.w600);
     final back = FocusTraversalOrder(
       order: const NumericFocusOrder(0),
-      child: TextButton.icon(
+      child: LineupInlineLink(
         focusNode: _backFocus,
         autofocus: true,
         onPressed: _busy ? null : () => unawaited(_leave()),
-        icon: const Icon(Icons.arrow_back),
-        label: const Text('Back to Channels'),
+        child: const Text('‹ Channels'),
       ),
     );
     final actions = Align(
@@ -747,30 +747,8 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Wrap(
-          alignment: WrapAlignment.spaceBetween,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          spacing: 24,
-          runSpacing: 8,
-          children: [
-            back,
-            Wrap(
-              crossAxisAlignment: WrapCrossAlignment.center,
-              spacing: 16,
-              children: [
-                Text('LINEUP', style: wordmarkStyle),
-                Text(
-                  '/',
-                  style: _studioBodyStyle(color: roles.secondaryText)
-                      .copyWith(fontSize: (compact ? 14 : 18)),
-                ),
-                Text('CHANNEL STUDIO', style: contextStyle),
-              ],
-            ),
-          ],
-        ),
-        Divider(height: 1, color: roles.subtleBorder),
-        SizedBox(height: 20),
+        Align(alignment: Alignment.centerLeft, child: back),
+        SizedBox(height: 8),
         titleAndActions,
       ],
     );

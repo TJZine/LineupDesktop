@@ -101,7 +101,7 @@ void main() {
       hasPicture: true,
       textScale: 2,
     );
-    expect(comfortable.rowHeight, closeTo(111.2, 0.1));
+    expect(comfortable.rowHeight, closeTo(110.4, 0.1));
     expect(enlarged.rowHeight, greaterThanOrEqualTo(116));
     expect(comfortable.minimumRows, 5);
     expect(enlarged.minimumRows, 5);

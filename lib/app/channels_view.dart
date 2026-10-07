@@ -72,6 +72,8 @@ class ChannelsViewState extends State<ChannelsView> {
   GlobalKey<ChannelStudioViewState> _studioKey =
       GlobalKey<ChannelStudioViewState>();
 
+  bool get studioOpen => _studioOpen;
+
   bool get _studioOpen => _studioMode != null;
   ChannelStudioViewState? get _studio => _studioKey.currentState;
 
@@ -219,6 +221,8 @@ class ChannelsViewState extends State<ChannelsView> {
           mode: mode,
           channel: _studioChannel,
           onBack: closeStudio,
+          onOpenMenu: widget.onOpenMenu,
+          menuFocusNode: widget.menuFocusNode,
           onSaved: (id) => _returnFocusId = id,
           onDuplicate: _openDuplicate,
           onOpenChannel: (channel) async {
@@ -276,42 +280,16 @@ class ChannelsViewState extends State<ChannelsView> {
     final bodyStyle = Theme.of(context).textTheme.bodyMedium
         ?.copyWith(fontSize: 18);
 
-    final menuContextStyle = Theme.of(context).textTheme.bodyMedium?.copyWith(
-      fontSize: (Theme.of(context).textTheme.bodyMedium?.fontSize ?? 14),
-    );
-
     return LineupPage(
       title: 'Channels',
-      titleWidget: Row(
-        children: [
-          Builder(
-            builder: (buttonContext) => Tooltip(
-              message: 'Open Lineup menu',
-              child: TextButton.icon(
-                key: const Key('channels-app-menu'),
-                focusNode: widget.menuFocusNode,
-                onPressed: () =>
-                    widget.onOpenMenu(buttonContext, widget.menuFocusNode),
-                icon: const Icon(Icons.menu),
-                label: const Text(
-                  'LINEUP',
-                  style: TextStyle(
-                    fontFamily: 'Arial',
-                    fontWeight: FontWeight.w400,
-                  ),
-                ),
-              ),
-            ),
-          ),
-          SizedBox(width: 16),
-          SizedBox(height: 24, child: const VerticalDivider(width: 1)),
-          SizedBox(width: 16),
-          Text('Channels', style: menuContextStyle),
-        ],
+      showTitle: false,
+      topBar: LineupTopBar(
+        menuKey: const Key('channels-app-menu'),
+        menuFocusNode: widget.menuFocusNode,
+        onOpenMenu: widget.onOpenMenu,
       ),
       child: Column(
         children: [
-          const Divider(height: 1),
           Padding(
             padding: EdgeInsets.symmetric(vertical: _directorySize(24, 16)),
             child: Row(
