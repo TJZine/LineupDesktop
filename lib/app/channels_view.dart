@@ -628,17 +628,17 @@ class ChannelsViewState extends State<ChannelsView> {
     final textScaler = MediaQuery.textScalerOf(context);
     final textScale = textScaler.scale(1);
     final numberWidth = 76 * textScale;
-    final moveToText = TextPainter(
+    final moveToTextWidth = TextPainter.computeWidth(
       text: TextSpan(
         text: 'Move to…',
         style: LineupTypography.button.copyWith(fontSize: 16),
       ),
       textDirection: Directionality.of(context),
       textScaler: textScaler,
-    )..layout();
+    );
     // Keep two 44px arrows and the compact label on one line while allowing
     // the active font and accessibility text scale to determine its width.
-    final actionWidth = (88 + moveToText.width + 40 + 16)
+    final actionWidth = (88 + moveToTextWidth + 40 + 16)
         .clamp(216, 336)
         .toDouble();
     return DecoratedBox(
