@@ -3,10 +3,11 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui' show Tristate;
+import 'dart:ui' as ui;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/semantics.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/ui/lineup_canvas.dart';
@@ -23,6 +24,8 @@ import 'package:lineup_desktop/plex/plex_client.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
 import 'package:lineup_desktop/ui/app_theme.dart';
 import 'package:lineup_desktop/ui/app_ui.dart';
+
+import '../support/golden_test_support.dart';
 
 final _fixtureArtwork = base64Decode(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
@@ -113,23 +116,43 @@ void main() {
           );
           fixture.lineup.notifyListeners();
           await tester.pumpAndSettle();
-          final decoration =
-              tester.widget<Container>(surface).decoration! as BoxDecoration;
-          final color = level == OverlayTransparency.moreTransparent
-              ? (decoration.gradient! as LinearGradient).colors.last
-              : decoration.color!;
-          expect(
-            color.withValues(alpha: 1),
-            roles.overlaySurface.withValues(alpha: 1),
+          final painter = tester
+              .widget<CustomPaint>(
+                find
+                    .ancestor(of: surface, matching: find.byType(CustomPaint))
+                    .first,
+              )
+              .painter!;
+          final recorder = ui.PictureRecorder();
+          final canvas = Canvas(recorder)..translate(0, 55);
+          painter.paint(canvas, const Size(8, 256));
+          final picture = recorder.endRecording();
+          final image = await tester.runAsync(() => picture.toImage(8, 311));
+          final pixels = await tester.runAsync(
+            () => image!.toByteData(format: ui.ImageByteFormat.rawStraightRgba),
           );
+          final offset = (310 * 8 + 4) * 4;
+          final tint = roles.overlaySurface;
+          expect(pixels!.getUint8(offset), closeTo(tint.r * 255, 2));
+          expect(pixels.getUint8(offset + 1), closeTo(tint.g * 255, 2));
+          expect(pixels.getUint8(offset + 2), closeTo(tint.b * 255, 2));
           expect(
-            color.a,
+            pixels.getUint8(offset + 3) / 255,
             closeTo(switch (level) {
               OverlayTransparency.moreTransparent => .45,
               OverlayTransparency.standard => .78,
               OverlayTransparency.reduced => .94,
-            }, .001),
+            }, .006),
           );
+          if (level != OverlayTransparency.moreTransparent) {
+            // A single shader joins the feather to flat material without
+            // an uncovered pixel or two separately anti-aliased edges.
+            final above = pixels.getUint8((54 * 8 + 4) * 4 + 3);
+            final below = pixels.getUint8((55 * 8 + 4) * 4 + 3);
+            expect(above, closeTo(below, 3));
+          }
+          image!.dispose();
+          picture.dispose();
           expect(
             _drawnRect(tester, find.byKey(const Key('player-osd-title'))),
             before,
@@ -140,6 +163,312 @@ void main() {
       fixture.dispose();
     },
   );
+
+  testWidgets(
+    'expanded proposal displays approved title artwork within its cap',
+    (tester) async {
+      final bytes = await tester.runAsync(
+        () =>
+            File('test/support/now_playing/signal-after-midnight-title.png')
+                .readAsBytes(),
+      );
+      final inkFraction = await tester.runAsync(() async {
+        final codec = await ui.instantiateImageCodec(bytes!);
+        final image = (await codec.getNextFrame()).image;
+        final pixels = await image.toByteData(
+          format: ui.ImageByteFormat.rawRgba,
+        );
+        var top = image.height, bottom = -1;
+        for (var y = 0; y < image.height; y++) {
+          for (var x = 0; x < image.width; x++) {
+            if (pixels!.getUint8((y * image.width + x) * 4 + 3) >= 32) {
+              top = math.min(top, y);
+              bottom = math.max(bottom, y);
+            }
+          }
+        }
+        final fraction = (bottom - top + 1) / image.height;
+        image.dispose();
+        codec.dispose();
+        return fraction;
+      });
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      for (final size in [const Size(1280, 720), const Size(1920, 1080)]) {
+        for (final textScale in [1.0, 1.5]) {
+          await tester.binding.setSurfaceSize(size);
+          final fixture = _Fixture(
+            PlayerState.playing,
+            richProgram: true,
+            artworkBytes: bytes,
+          );
+          await fixture.guide.ensureCurrentProgram('channel');
+          fixture.player.showNowPlaying();
+          await tester.pumpWidget(
+            MaterialApp(
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(context)
+                    .copyWith(textScaler: TextScaler.linear(textScale)),
+                child: LineupCanvas(child: child!),
+              ),
+              home: PlayerView(controller: fixture.player, openGuide: () {}),
+            ),
+          );
+          await tester.pumpAndSettle();
+          await _settleNowPlayingArtwork(tester);
+          final logo = find.byKey(const Key('player-now-playing-logo'));
+          expect(logo, findsOneWidget, reason: '$size text$textScale');
+          final image = tester.widget<Image>(logo);
+          expect(image.image, MemoryImage(bytes!));
+          final visibleLogo = find
+              .ancestor(of: logo, matching: find.byType(ClearLogoImage))
+              .first;
+          final drawn = _drawnSize(tester, visibleLogo);
+          expect(
+            drawn.height,
+            lessThanOrEqualTo(56 * LineupCanvas.scaleFor(size) + .01),
+          );
+          expect(
+            drawn.height,
+            greaterThanOrEqualTo(48 * LineupCanvas.scaleFor(size)),
+          );
+          expect(drawn.width, greaterThan(0));
+          final paintedInkHeight =
+              _drawnSize(tester, logo).height * inkFraction!;
+          final canvasScale = LineupCanvas.scaleFor(size);
+          expect(
+            paintedInkHeight,
+            inInclusiveRange(48 * canvasScale, 56 * canvasScale),
+          );
+
+          expect(
+            find.byKey(const Key('player-now-playing-series')),
+            findsNothing,
+          );
+          expect(tester.takeException(), isNull);
+          await tester.pumpWidget(const SizedBox.shrink());
+          fixture.dispose();
+        }
+      }
+    },
+  );
+
+  testWidgets('expanded proposal keeps metadata, cast and controls reachable', (
+    tester,
+  ) async {
+    await tester.runAsync(loadPinnedTestFonts);
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    for (final size in [const Size(1280, 720), const Size(1920, 1080)]) {
+      for (final textScale in [1.0, 1.5]) {
+        await tester.binding.setSurfaceSize(size);
+        final fixture = _Fixture(
+          PlayerState.playing,
+          richItemOverride: _fixtureItem(
+            0,
+            rich: true,
+            duration: const Duration(hours: 1),
+            cast: _fixtureCast,
+          ),
+          shortPrograms: true,
+          dvrControlsEnabled: textScale > 1,
+          guideClock: () => DateTime(2026, 1, 15, 12),
+          tracks: const [
+            PlayerTrack(
+              id: 1,
+              type: PlayerTrackType.audio,
+              language: 'eng',
+              selected: true,
+            ),
+            PlayerTrack(
+              id: 2,
+              type: PlayerTrackType.subtitle,
+              language: 'eng',
+              selected: true,
+            ),
+          ],
+        );
+        await fixture.guide.ensureCurrentProgram('channel');
+        fixture.player.showNowPlaying();
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: LineupTheme.forName(LineupThemeName.emberSteel),
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context)
+                  .copyWith(textScaler: TextScaler.linear(textScale)),
+              child: LineupCanvas(child: child!),
+            ),
+            home: PlayerView(
+              controller: fixture.player,
+              openGuide: () {},
+              openMenu: (_, _) {},
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await _settleNowPlayingArtwork(tester);
+        expect(
+          find.text('S2 E6 · 60 min · 2026 · Drama · Adventure'),
+          findsOneWidget,
+        );
+        expect(find.textContaining('Season 2'), findsNothing);
+        final logo = find.byKey(const Key('player-now-playing-logo'));
+        final canvasScale = LineupCanvas.scaleFor(size);
+        expect(
+          _drawnSize(
+            tester,
+            find
+                .ancestor(of: logo, matching: find.byType(ClearLogoImage))
+                .first,
+          ).height,
+          lessThanOrEqualTo(56 * canvasScale + .01),
+        );
+        final summaryFinder = find.byKey(
+          const Key('player-now-playing-summary'),
+        );
+        final summary = tester.widget<Text>(summaryFinder);
+        expect(summary.maxLines, 3);
+        expect(summary.overflow, TextOverflow.ellipsis);
+        expect(
+          _drawnSize(tester, summaryFinder).width,
+          lessThanOrEqualTo(900 * canvasScale + .01),
+        );
+        final castFinder = find.byKey(const Key('player-now-playing-cast'));
+        final castLeft = _drawnRect(tester, castFinder).left;
+        final roleStyle = tester
+            .widget<Text>(
+              find.byKey(const ValueKey('player-now-playing-cast-role-0')),
+            )
+            .style!;
+        final roles = LineupTheme.of(tester.element(castFinder));
+        expect(roleStyle.color, roles.secondaryText);
+        for (var i = 0; i < 4; i++) {
+          final nameFinder = find.byKey(
+            ValueKey('player-now-playing-cast-name-$i'),
+          );
+          final roleFinder = find.byKey(
+            ValueKey('player-now-playing-cast-role-$i'),
+          );
+          final name = tester.widget<Text>(nameFinder);
+          expect(name.style!.color, roles.primaryText);
+          expect(name.maxLines, 2);
+          final nameRect = _drawnRect(tester, nameFinder);
+          final roleRect = _drawnRect(tester, roleFinder);
+          expect(roleRect.left, closeTo(nameRect.left, .01));
+          expect(roleRect.top - nameRect.bottom, closeTo(3 * canvasScale, .01));
+          if (i == 0) expect(nameRect.left, closeTo(castLeft, .01));
+          final roleParagraph = tester.renderObject<RenderParagraph>(
+            roleFinder,
+          );
+          expect(roleParagraph.didExceedMaxLines, isFalse);
+        }
+        expect(
+          find.byKey(const ValueKey('player-now-playing-cast-name-4')),
+          findsNothing,
+        );
+        for (final key in [
+          'player-osd-subtitles',
+          'player-osd-audio',
+          'player-osd-sleep',
+        ]) {
+          final labelFinder = find.descendant(
+            of: find.byKey(Key(key)),
+            matching: find.byType(Text),
+          );
+          final text = tester.widget<Text>(labelFinder);
+          expect(text.overflow, isNot(TextOverflow.ellipsis));
+          expect(
+            tester.renderObject<RenderParagraph>(labelFinder).didExceedMaxLines,
+            isFalse,
+          );
+        }
+        final standardActions = [
+          find.byKey(const Key('player-osd-subtitles')),
+          find.byKey(const Key('player-osd-audio')),
+          find.byKey(const Key('player-osd-sleep')),
+          find.byKey(const Key('player-app-menu')),
+          find.byTooltip('Full screen'),
+        ].map((finder) => _drawnRect(tester, finder)).toList();
+        final availableWidth =
+            size.width -
+            2 *
+                (size.width / LineupCanvas.scaleFor(size) * .05).clamp(
+                  24.0,
+                  96.0,
+                ) *
+                LineupCanvas.scaleFor(size);
+        final naturalStandardWidth = standardActions.fold<double>(
+          16 * LineupCanvas.scaleFor(size),
+          (sum, rect) => sum + rect.width,
+        );
+        if (naturalStandardWidth <= availableWidth) {
+          for (final rect in standardActions.skip(1)) {
+            expect(
+              rect.center.dy,
+              closeTo(standardActions.first.center.dy, .01),
+              reason: 'All five actions fit at $size text$textScale',
+            );
+          }
+        }
+        final actions = _drawnRect(
+          tester,
+          find.byKey(const Key('player-osd-action-groups')),
+        );
+        final close = _drawnRect(
+          tester,
+          find.byKey(const Key('player-now-playing-collapse')),
+        );
+        expect(close.right, closeTo(actions.right, .01));
+        final closeGlyph = find.descendant(
+          of: find.byKey(const Key('player-now-playing-collapse')),
+          matching: find.byIcon(Icons.close),
+        );
+        final fullscreenGlyph = find.byIcon(Icons.fullscreen);
+        expect(
+          await _paintedIconRight(tester, closeGlyph),
+          closeTo(await _paintedIconRight(tester, fullscreenGlyph), .5),
+        );
+
+        final next = _drawnRect(
+          tester,
+          find.byKey(const Key('player-osd-next')),
+        );
+        expect(next.right, closeTo(actions.right, .01));
+        expect(next.top, greaterThanOrEqualTo(actions.bottom));
+        expect(tester.takeException(), isNull, reason: '$size text$textScale');
+        fixture.player.showOsd();
+        await tester.pumpAndSettle();
+        for (final key in [
+          'player-osd-subtitles',
+          'player-osd-audio',
+          'player-osd-sleep',
+        ]) {
+          final labelFinder = find.descendant(
+            of: find.byKey(Key(key)),
+            matching: find.byType(Text),
+          );
+          expect(
+            tester.renderObject<RenderParagraph>(labelFinder).didExceedMaxLines,
+            isFalse,
+          );
+        }
+        final collapsedActions = _drawnRect(
+          tester,
+          find.byKey(const Key('player-osd-action-groups')),
+        );
+        final collapsedNext = _drawnRect(
+          tester,
+          find.byKey(const Key('player-osd-next')),
+        );
+        expect(collapsedNext.right, closeTo(collapsedActions.right, .01));
+        expect(
+          collapsedNext.top,
+          greaterThanOrEqualTo(collapsedActions.bottom),
+        );
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+        fixture.dispose();
+      }
+    }
+  });
 
   testWidgets('sleep popover is above its real button and remains clickable', (
     tester,
@@ -752,7 +1081,7 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
     expect(fixture.player.overlay, PlayerOverlay.nowPlaying);
     await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
-    expect(fixture.player.overlay, PlayerOverlay.none);
+    expect(fixture.player.overlay, PlayerOverlay.osd);
     await tester.sendKeyEvent(LogicalKeyboardKey.numpadEnter);
     expect(fixture.player.overlay, PlayerOverlay.osd);
 
@@ -1270,7 +1599,7 @@ void main() {
     final nowPlayingSemantics = tester.widget<Semantics>(
       find
           .ancestor(
-            of: find.byKey(const Key('player-now-playing-shelf')),
+            of: find.byKey(const Key('player-now-playing-details')),
             matching: find.byType(Semantics),
           )
           .first,
@@ -2664,8 +2993,12 @@ void main() {
     final osdLabel = find.text('Audio • English — $longTitle');
     expect(osdLabel, findsOneWidget);
     final osdText = tester.widget<Text>(osdLabel);
-    expect(osdText.maxLines, 1);
-    expect(osdText.overflow, TextOverflow.ellipsis);
+    expect(osdText.maxLines, isNull);
+    expect(osdText.overflow, isNot(TextOverflow.ellipsis));
+    expect(
+      tester.renderObject<RenderParagraph>(osdLabel).didExceedMaxLines,
+      isFalse,
+    );
 
     await tester.binding.setSurfaceSize(const Size(3840, 2160));
     await tester.pumpWidget(
@@ -3722,24 +4055,15 @@ void main() {
     await _settleNowPlayingArtwork(tester);
 
     expect(find.byKey(const Key('player-now-playing-surface')), findsOneWidget);
-    expect(
-      find.byKey(const Key('player-now-playing-channel-bug')),
-      findsOneWidget,
-    );
+    expect(find.byKey(const Key('player-osd-channel-bug')), findsOneWidget);
     expect(find.byKey(const Key('player-now-playing-channel')), findsNothing);
     expect(
-      _drawnSize(
-        tester,
-        find.byKey(const Key('player-now-playing-shelf')),
-      ).width,
-      1180 * .8,
+      _drawnSize(tester, find.byKey(const Key('player-osd-surface'))).width,
+      1280,
     );
     expect(
-      _drawnSize(
-        tester,
-        find.byKey(const Key('player-now-playing-shelf')),
-      ).height,
-      lessThanOrEqualTo(380.01),
+      _drawnSize(tester, find.byKey(const Key('player-osd-surface'))).height,
+      lessThan(720),
     );
     expect(
       MediaQuery.sizeOf(
@@ -3750,7 +4074,10 @@ void main() {
     expect(fixture.lineup.artworkRequests, hasLength(2));
     expect(find.byKey(const Key('player-now-playing-logo')), findsOneWidget);
     expect(find.byType(Image), findsNWidgets(2));
-    expect(find.text('S2 · E6 · 60 min'), findsOneWidget);
+    expect(
+      find.text('S2 E6 · 60 min · 2026 · Drama · Adventure'),
+      findsOneWidget,
+    );
     final title = tester.widget<Text>(
       find.byKey(const Key('player-now-playing-title')),
     );
@@ -3761,22 +4088,29 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('TV-14'), findsOneWidget);
-    expect(
-      find.byKey(const Key('player-now-playing-channel-bug')),
-      findsOneWidget,
-    );
+    expect(find.byKey(const Key('player-osd-channel-bug')), findsOneWidget);
     expect(find.bySemanticsLabel('Channel 7, Channel'), findsOneWidget);
     expect(find.bySemanticsLabel('7 • Channel'), findsNothing);
-    expect(find.text('Source • H264'), findsOneWidget);
+    expect(find.text('H264'), findsOneWidget);
+    expect(
+      find.byKey(const Key('player-now-playing-runtime-facts')),
+      findsNothing,
+    );
     expect(
       find.bySemanticsLabel(RegExp(r'^Now playing\..*Program')),
       findsOneWidget,
     );
-    expect(
-      find.bySemanticsLabel(RegExp(r'10:00 / 1:00:00 playback')),
-      findsOneWidget,
-    );
+    expect(find.bySemanticsLabel('Playback progress'), findsOneWidget);
 
+    final progressSemantics = tester.widget<Semantics>(
+      find.descendant(
+        of: find.byKey(const Key('player-osd-progress-line')),
+        matching: find.byWidgetPredicate(
+          (w) => w is Semantics && w.properties.label == 'Playback progress',
+        ),
+      ),
+    );
+    expect(progressSemantics.properties.value, '10:00 of 1:00:00');
     fixture.player.showOsd();
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 1));
@@ -3791,7 +4125,7 @@ void main() {
     'Now Playing renders bounded cast portraits, fallbacks, names, and semantics',
     (tester) async {
       final cast = [
-        ..._fixtureCast.take(4),
+        ..._fixtureCast.take(3),
         ChannelCastMember(name: 'Alexander Maximilian Montgomery'),
         ..._fixtureCast.skip(5),
       ];
@@ -3822,14 +4156,17 @@ void main() {
         findsOneWidget,
       );
       expect(
-        find.byKey(const Key('player-now-playing-cast-fallback-4')),
+        find.byKey(const Key('player-now-playing-cast-fallback-3')),
         findsOneWidget,
       );
       expect(
         find.byKey(const Key('player-now-playing-cast-more')),
-        findsOneWidget,
+        findsNothing,
       );
-      expect(find.text('+2'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('player-now-playing-cast-name-4')),
+        findsNothing,
+      );
       for (final member in cast.take(4)) {
         expect(find.text(member.name), findsOneWidget);
       }
@@ -3837,13 +4174,16 @@ void main() {
         find.byKey(const Key('player-now-playing-cast-names')),
         findsNothing,
       );
-      expect(find.text('Alexander M. Montgomery'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('player-now-playing-cast-name-3')),
+        findsOneWidget,
+      );
       expect(find.byTooltip('Alexander Maximilian Montgomery'), findsOneWidget);
       expect(
         find.bySemanticsLabel(RegExp('Cast:.*Alexander Maximilian Montgomery')),
         findsOneWidget,
       );
-      expect(fixture.lineup.artworkRequests, hasLength(6));
+      expect(fixture.lineup.artworkRequests, hasLength(5));
       expect(
         find.bySemanticsLabel(
           RegExp(
@@ -3929,6 +4269,7 @@ void main() {
         richProgram: true,
         shortPrograms: true,
         nativeDuration: Duration.zero,
+        dvrControlsEnabled: true,
         guideClock: () => now,
       );
       await tester.pumpWidget(
@@ -3941,16 +4282,23 @@ void main() {
       fixture.player.showNowPlaying();
       await tester.pumpAndSettle();
 
-      expect(find.text('30:00 / 1:00:00'), findsOneWidget);
+      expect(find.text('30:00 / 1:00:00 • 30m left'), findsOneWidget);
       expect(
         tester
             .widget<LinearProgressIndicator>(
-              find.byKey(const Key('player-now-playing-progress')),
+              find.descendant(
+                of: find.byKey(const Key('player-osd-progress-line')),
+                matching: find.byType(LinearProgressIndicator),
+              ),
             )
             .value,
         0.5,
       );
 
+      // Schedule fallback describes progress; it does not establish an
+      // observed native seek duration or enable a native seek command.
+      expect(tester.widget<Slider>(find.byType(Slider)).onChanged, isNull);
+      expect(fixture.native.transportCommands, 0);
       await tester.pumpWidget(const SizedBox.shrink());
       fixture.dispose();
     },
@@ -4061,7 +4409,7 @@ void main() {
     fixture.player.closeOverlay();
     await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('player-now-playing-shelf')));
+    await tester.tap(find.byKey(const Key('player-now-playing-details')));
     expect(fixture.player.overlay, PlayerOverlay.nowPlaying);
     await tester.tapAt(const Offset(799, 5));
     expect(fixture.player.overlay, PlayerOverlay.osd);
@@ -4160,7 +4508,14 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('player-now-playing-cast')), findsOneWidget);
-    expect(find.text('+1'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('player-now-playing-cast-name-3')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('player-now-playing-cast-name-4')),
+      findsNothing,
+    );
     expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(const SizedBox.shrink());
@@ -4378,20 +4733,6 @@ void main() {
       ].indexed) {
         final scale = LineupCanvas.scaleFor(viewport);
         final canvas = viewport / scale;
-        final compact = canvas.width < 900 || canvas.height < 650;
-        final height = compact
-            ? (canvas.height * (variant.castPresent ? .63 : .56)).clamp(
-                300.0,
-                380.0,
-              )
-            : (canvas.height * (variant.castPresent ? .54 : .5)).clamp(
-                variant.castPresent ? 432.0 : 380.0,
-                variant.castPresent ? 580.0 : 560.0,
-              );
-        final maxShelf = Size(
-          math.min(canvas.width * .95, 1180) * scale,
-          height * scale,
-        );
         tester.view.physicalSize = viewport;
         await tester.pumpWidget(
           MaterialApp(
@@ -4417,23 +4758,29 @@ void main() {
 
         final shelfSize = _drawnSize(
           tester,
-          find.byKey(const Key('player-now-playing-shelf')),
+          find.byKey(const Key('player-osd-surface')),
         );
         final posterSize = _drawnSize(
           tester,
           find.byKey(const Key('player-now-playing-poster')),
         );
-        expect(shelfSize.width, closeTo(maxShelf.width, 0.01));
-        expect(shelfSize.height, lessThanOrEqualTo(maxShelf.height + 0.01));
-        expect(shelfSize.height, greaterThanOrEqualTo(190 * scale * 3 / 2));
+        expect(shelfSize.width, closeTo(viewport.width, .01));
+        expect(shelfSize.height, lessThan(viewport.height));
         expect(
           posterSize.width,
-          closeTo(
-            (maxShelf.height * 2 / 3).clamp(190 * scale, 374 * scale),
-            0.01,
-          ),
+          closeTo((canvas.height < 900 ? 160 : 240) * scale, .01),
         );
-        expect(posterSize.height, closeTo(shelfSize.height, scale + 0.01));
+        expect(
+          posterSize.height,
+          lessThanOrEqualTo(posterSize.width * 1.5 + .01),
+        );
+        expect(
+          _drawnRect(
+            tester,
+            find.byKey(const Key('player-osd-surface')),
+          ).bottom,
+          closeTo(viewport.height, .01),
+        );
         expect(
           _drawnRect(
             tester,
@@ -4489,18 +4836,12 @@ void main() {
       await tester.pumpAndSettle();
       await _settleNowPlayingArtwork(tester);
       expect(
-        _drawnSize(
-          tester,
-          find.byKey(const Key('player-now-playing-shelf')),
-        ).width,
-        variant.dpr2MaxShelf.width,
+        _drawnSize(tester, find.byKey(const Key('player-osd-surface'))).width,
+        1920,
       );
       expect(
-        _drawnSize(
-          tester,
-          find.byKey(const Key('player-now-playing-shelf')),
-        ).height,
-        lessThanOrEqualTo(variant.dpr2MaxShelf.height + 0.01),
+        _drawnSize(tester, find.byKey(const Key('player-osd-surface'))).height,
+        lessThan(1080),
       );
       expect(
         find.byKey(const Key('player-now-playing-cast')),
@@ -4594,7 +4935,7 @@ void main() {
           testCase.logo ? findsOneWidget : findsNothing,
         );
         expect(
-          find.byKey(const Key('player-now-playing-progress')),
+          find.byKey(const Key('player-osd-progress-line')),
           findsOneWidget,
         );
         expect(
@@ -4655,57 +4996,109 @@ void main() {
     },
   );
 
-  testWidgets('Now Playing enters from the left and exits in 200ms', (
-    tester,
-  ) async {
-    final fixture = _Fixture(PlayerState.playing, richProgram: true);
-    await tester.pumpWidget(
-      MaterialApp(
-        builder: LineupCanvas.builder,
-        home: PlayerView(controller: fixture.player, openGuide: () {}),
-      ),
-    );
-
-    fixture.player.showNowPlaying();
-    await tester.pump();
-    var switcher = tester.widget<AnimatedSwitcher>(
-      find.byType(AnimatedSwitcher),
-    );
-    expect(switcher.duration, const Duration(milliseconds: 200));
-    expect(switcher.reverseDuration, const Duration(milliseconds: 200));
-    await tester.pump(const Duration(milliseconds: 100));
-    var slidePositions = tester
-        .widgetList<SlideTransition>(
-          find.ancestor(
-            of: find.byKey(const Key('player-now-playing-surface')),
-            matching: find.byType(SlideTransition),
+  testWidgets(
+    'retained OSD action focus suspends hide across expansion and collapse',
+    (tester) async {
+      final fixture = _Fixture(
+        PlayerState.playing,
+        richProgram: true,
+        overlayTimeout: const Duration(seconds: 1),
+      );
+      FocusManager.instance.highlightStrategy =
+          FocusHighlightStrategy.alwaysTraditional;
+      addTearDown(
+        () => FocusManager.instance.highlightStrategy =
+            FocusHighlightStrategy.automatic,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: LineupCanvas.builder,
+          home: PlayerView(
+            controller: fixture.player,
+            openGuide: () {},
+            openMenu: (_, _) {},
           ),
-        )
-        .map((slide) => slide.position.value);
-    expect(slidePositions.any((position) => position.dx < 0), isTrue);
-    expect(slidePositions.every((position) => position.dy == 0), isTrue);
+        ),
+      );
+      await tester.pump();
+      fixture.player.showOsd();
+      await tester.pumpAndSettle();
+      final menu = tester.widget<IconButton>(
+        find.byKey(const Key('player-app-menu')),
+      );
+      menu.focusNode!.requestFocus();
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
+      await tester.pumpAndSettle();
+      expect(menu.focusNode!.hasFocus, isTrue);
+      expect(fixture.player.overlay, PlayerOverlay.nowPlaying);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
+      await tester.pumpAndSettle();
+      expect(menu.focusNode!.hasFocus, isTrue);
+      await tester.pump(const Duration(seconds: 2));
+      expect(fixture.player.overlay, PlayerOverlay.osd);
+      menu.focusNode!.unfocus();
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 2));
+      expect(fixture.player.overlay, PlayerOverlay.none);
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    },
+  );
 
-    await tester.pumpAndSettle();
-    fixture.player.closeOverlay();
-    await tester.pump();
-    switcher = tester.widget<AnimatedSwitcher>(find.byType(AnimatedSwitcher));
-    expect(switcher.duration, const Duration(milliseconds: 200));
-    await tester.pump(const Duration(milliseconds: 100));
-    slidePositions = tester
-        .widgetList<SlideTransition>(
-          find.ancestor(
-            of: find.byKey(const Key('player-now-playing-surface')),
-            matching: find.byType(SlideTransition),
-          ),
-        )
-        .map((slide) => slide.position.value);
-    expect(slidePositions.any((position) => position.dx < 0), isTrue);
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('player-now-playing-surface')), findsNothing);
-
-    await tester.pumpWidget(const SizedBox.shrink());
-    fixture.dispose();
-  });
+  testWidgets(
+    'Now Playing expands the same bottom panel and collapses in 200ms',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1920, 1080));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final fixture = _Fixture(PlayerState.playing, richProgram: true);
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: LineupCanvas.builder,
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      );
+      await tester.pump();
+      fixture.player.showOsd();
+      await tester.pumpAndSettle();
+      final collapsed = _drawnRect(
+        tester,
+        find.byKey(const Key('player-osd-surface')),
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pump();
+      expect(fixture.player.overlay, PlayerOverlay.nowPlaying);
+      expect(find.byKey(const Key('player-osd-surface')), findsOneWidget);
+      expect(find.byKey(const Key('player-osd-progress-line')), findsOneWidget);
+      await tester.pumpAndSettle();
+      final expanded = _drawnRect(
+        tester,
+        find.byKey(const Key('player-osd-surface')),
+      );
+      expect(expanded.top, lessThan(collapsed.top));
+      expect(expanded.bottom, collapsed.bottom);
+      expect(expanded.left, collapsed.left);
+      expect(
+        tester.widget<AnimatedSize>(find.byType(AnimatedSize)).duration,
+        const Duration(milliseconds: 200),
+      );
+      await tester.tap(find.byKey(const Key('player-now-playing-collapse')));
+      await tester.pumpAndSettle();
+      expect(fixture.player.overlay, PlayerOverlay.osd);
+      expect(
+        _drawnRect(tester, find.byKey(const Key('player-osd-surface'))),
+        collapsed,
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
+      await tester.pumpAndSettle();
+      expect(fixture.player.overlay, PlayerOverlay.nowPlaying);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(fixture.player.overlay, PlayerOverlay.osd);
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    },
+  );
 }
 
 class _Fixture {
@@ -4988,6 +5381,43 @@ Future<void> _settleNowPlayingArtwork(WidgetTester tester) async {
     );
     await tester.pump();
   }
+}
+
+Future<double> _paintedIconRight(WidgetTester tester, Finder icon) async {
+  final text = find.descendant(of: icon, matching: find.byType(RichText));
+  final paragraph = tester.renderObject<RenderParagraph>(text);
+  final painter = TextPainter(
+    text: paragraph.text,
+    textDirection: paragraph.textDirection,
+    textScaler: paragraph.textScaler,
+  )..layout(maxWidth: paragraph.size.width);
+  final recorder = ui.PictureRecorder();
+  painter.paint(Canvas(recorder), Offset.zero);
+  final picture = recorder.endRecording();
+  final image = await tester.runAsync(
+    () => picture.toImage(
+      paragraph.size.width.ceil(),
+      paragraph.size.height.ceil(),
+    ),
+  );
+  final pixels = await tester.runAsync(
+    () => image!.toByteData(format: ui.ImageByteFormat.rawRgba),
+  );
+  var right = -1;
+  for (var y = 0; y < image!.height; y++) {
+    for (var x = 0; x < image.width; x++) {
+      if (pixels!.getUint8((y * image.width + x) * 4 + 3) >= 32) {
+        right = math.max(right, x);
+      }
+    }
+  }
+  expect(right, greaterThanOrEqualTo(0));
+  final drawn = _drawnRect(tester, text);
+  final scale = drawn.width / paragraph.size.width;
+  image.dispose();
+  picture.dispose();
+  painter.dispose();
+  return drawn.left + (right + 1) * scale;
 }
 
 String _statusLabelForTest(PlayerState state) => switch (state) {

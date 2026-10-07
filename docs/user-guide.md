@@ -212,36 +212,32 @@ cancel the timer.
 
 Unavailable tracks or unsupported native actions remain disabled rather than
 showing controls that cannot work. The Guide retains the catalog media facts it
-displays, including resolution, dynamic range, and audio facts. Rich Now
-Playing retains detailed source/runtime resolution, video codec, HDR, and
-hardware-decoder facts when available rather than repeating those facts in the
-default OSD.
+displays, including resolution, dynamic range, and audio facts. Expanded Now
+Playing includes rating, resolution, HDR, video codec, audio codec, and channel
+count in its format chips. Decoded dimensions and hardware-decoder facts appear
+in Diagnostics.
 
 Track panels show the selection confirmed by native playback. A requested
 change remains marked pending until that confirmation arrives; a failed change
 keeps the prior confirmed selection and shows an inline error.
 
-Press `I` for persistent rich Now Playing details without leaving playback.
-The details surface keeps the shared top-right channel bug, then uses the
-current scheduled program for title/episode identity, synopsis, year and
-genres, concise rating/resolution/dynamic-range/audio badges, poster, and
-official title artwork. When **Prefer official title artwork** is enabled, an
-available Plex
-clear logo leads the identity and text remains the fallback when the logo is
-missing, disabled, fails, or would render too small to read. Its playback line
-is shown only for facts that are available: source/runtime details are separate,
-and actual native playback
-position/duration are preferred, with schedule timing used when native duration
-is unavailable. When Plex supplies cast facts, actor portraits appear between
-the synopsis and progress, with names and roles available to accessibility.
-Missing or failed headshots use a neutral person silhouette, never fabricated
-initials, and no cast space is reserved when cast facts are absent. Up Next and
-secondary actions remain owned by the OSD. Pointer movement leaves this reading
-surface open. Press `I` or Back
-to close it; `Down`, `Enter`, click/tap, or a successful enabled transport
-action replaces it with the OSD, while a failed action retains the safe error
-surface. `A` or `C` opens the requested track list directly when that track type
-is available.
+Press `I` or `Down` to expand the bottom OSD into persistent Now Playing
+details without leaving playback. The expanded panel shares the OSD actions,
+Up Next, timing and full-width progress lane. It shows the current scheduled
+program's title, one line of episode/runtime/year/genre facts, format chips,
+poster, official title artwork, and a synopsis clamped to three lines.
+When **Prefer official title artwork** is enabled, an available Plex clear logo
+leads the identity; text is the fallback when the logo is missing, disabled,
+fails, or would render too small to read. Actual native playback duration is
+preferred, with schedule timing used when native duration is unavailable.
+
+When Plex supplies cast facts, up to four actor portraits appear in one row,
+with names and roles beneath them. Full cast facts remain available to
+accessibility. Missing or failed headshots use a neutral person silhouette,
+never fabricated initials, and no cast space is reserved when cast facts are
+absent. Pointer movement leaves the expanded reading surface open. Press `I`,
+`Enter`, `Esc`, or Back, or choose **Close**, to collapse it to the OSD. `A` or
+`C` opens the requested track list directly when that track type is available.
 
 The mini Guide displays a bounded group of nearby channels without leaving
 playback. Selecting a row replaces the current tune through the same Player
@@ -289,7 +285,7 @@ report to Flutter.
 | Guide | Close Guide to Player when playback exists; otherwise open the Lineup menu | `Esc`, `Backspace`, Back, `G`, or `F2` |
 | Player | Open full Guide | `G` or `F2` |
 | Player | Show mini Guide | `Up` |
-| Player | Show OSD / rich Now Playing | `Down` or `Enter` shows OSD; `I` toggles rich Now Playing details |
+| Player | Show OSD / expand Now Playing | `Enter` shows OSD; `I` or `Down` expands Now Playing; `I` or `Enter` collapses it |
 | Player | Seek backward/forward | `Left` or `J` = 10 seconds back; `Right` or `L` = 30 seconds forward (DVR playback controls on) |
 | Player | Play or pause | `Space`, `K`, or Media Play/Pause (DVR playback controls on) |
 | Player | Previous/next channel | `Page Up` / `Page Down` |
@@ -297,7 +293,7 @@ report to Flutter.
 | Player | Audio / subtitle tracks | `A` / `C` |
 | Player | Sleep timer | `S` |
 | Player | Toggle fullscreen | `F` or `F11` |
-| Player | Close the active overlay; otherwise return to Guide | `Esc`, `Backspace`, or Back |
+| Player | Collapse Now Playing to OSD; close other overlays; otherwise return to Guide | `Esc`, `Backspace`, or Back |
 | Mini Guide | Browse nearby channels | `Up` / `Down` |
 | Mini Guide | Move seven channels | `Page Up` / `Page Down` |
 | Mini Guide | Tune focused channel | `Enter`, `Space`, or Select |

@@ -37,6 +37,7 @@ class PlayerView extends StatefulWidget {
 
 class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
   late PlayerOverlay _renderedOverlay;
+  late int _bottomPanelGeneration;
   var _overlayTransitionDuration = const Duration(milliseconds: 350);
   final _menuFocus = FocusNode(debugLabel: 'Player Lineup menu');
   final _sleepFocus = FocusNode(debugLabel: 'Player sleep timer');
@@ -47,6 +48,7 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     _renderedOverlay = widget.controller.overlay;
+    _bottomPanelGeneration = widget.controller.overlayPresentationGeneration;
     WidgetsBinding.instance.addObserver(this);
     widget.controller.addListener(_changed);
     _syncSleepCountdownTimer();
@@ -75,7 +77,20 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
     if (!mounted) return;
     _syncSleepCountdownTimer();
     final nextOverlay = widget.controller.overlay;
+    final bottomPanelChanged =
+        _renderedOverlay != nextOverlay &&
+        (_renderedOverlay == PlayerOverlay.osd ||
+            _renderedOverlay == PlayerOverlay.nowPlaying) &&
+        (nextOverlay == PlayerOverlay.osd ||
+            nextOverlay == PlayerOverlay.nowPlaying);
     setState(() {
+      if (!bottomPanelChanged &&
+          _renderedOverlay != nextOverlay &&
+          (nextOverlay == PlayerOverlay.osd ||
+              nextOverlay == PlayerOverlay.nowPlaying)) {
+        _bottomPanelGeneration =
+            widget.controller.overlayPresentationGeneration;
+      }
       final transitioningNowPlaying =
           _renderedOverlay == PlayerOverlay.nowPlaying ||
           nextOverlay == PlayerOverlay.nowPlaying;
@@ -98,13 +113,30 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
       );
       _renderedOverlay = nextOverlay;
     });
+    if (bottomPanelChanged) {
+      final generation = widget.controller.overlayPresentationGeneration;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted &&
+            FocusManager.instance.primaryFocus?.context
+                    ?.findAncestorWidgetOfExactType<_Osd>()
+                    ?.controller ==
+                widget.controller &&
+            FocusManager.instance.highlightMode ==
+                FocusHighlightMode.traditional) {
+          // The shared panel retains focus across expansion, while the
+          // coordinator retires each presentation's auto-hide suspension.
+          widget.controller.overlayFocusChanged(nextOverlay, generation, true);
+        }
+      });
+    }
   }
 
   void _syncSleepCountdownTimer() {
     final showCountdown =
         _appActive &&
         (widget.controller.overlay == PlayerOverlay.sleepTimer ||
-            widget.controller.overlay == PlayerOverlay.osd) &&
+            widget.controller.overlay == PlayerOverlay.osd ||
+            widget.controller.overlay == PlayerOverlay.nowPlaying) &&
         widget.controller.sleepDeadline != null;
     if (!showCountdown) {
       _sleepCountdownTimer?.cancel();
@@ -115,7 +147,8 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
       if (!mounted) return;
       if (!_appActive ||
           (widget.controller.overlay != PlayerOverlay.sleepTimer &&
-              widget.controller.overlay != PlayerOverlay.osd) ||
+              widget.controller.overlay != PlayerOverlay.osd &&
+              widget.controller.overlay != PlayerOverlay.nowPlaying) ||
           widget.controller.sleepDeadline == null) {
         _syncSleepCountdownTimer();
         return;
@@ -153,7 +186,9 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
         widget.openGuide();
       } else {
         final restoreSleep = controller.overlay == PlayerOverlay.sleepTimer;
-        controller.closeOverlay();
+        controller.overlay == PlayerOverlay.nowPlaying
+            ? controller.showOsd()
+            : controller.closeOverlay();
         if (restoreSleep) _restoreSleepFocus();
       }
       return KeyEventResult.handled;
@@ -296,12 +331,13 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
         controller.overlay == PlayerOverlay.none) {
       controller.showMiniGuide();
     } else if (key == LogicalKeyboardKey.arrowDown &&
-        (controller.overlay == PlayerOverlay.none || showingNowPlaying)) {
-      controller.showOsd();
-    } else if (initialPress && key == LogicalKeyboardKey.keyI) {
-      showingNowPlaying
-          ? controller.closeOverlay()
+        (controller.overlay == PlayerOverlay.none ||
+            controller.overlay == PlayerOverlay.osd)) {
+      controller.currentProgram == null
+          ? controller.showOsd()
           : controller.showNowPlaying();
+    } else if (initialPress && key == LogicalKeyboardKey.keyI) {
+      showingNowPlaying ? controller.showOsd() : controller.showNowPlaying();
     } else if (initialPress &&
         (key == LogicalKeyboardKey.keyF || key == LogicalKeyboardKey.f11)) {
       unawaited(controller.toggleFullscreen());
@@ -345,7 +381,12 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
     final sleepAnchor = LayerLink();
     final overlay = controller.overlay;
     final presentationGeneration = controller.overlayPresentationGeneration;
-    final presentationKey = ValueKey((overlay, presentationGeneration));
+    final bottomPanel =
+        overlay == PlayerOverlay.osd || overlay == PlayerOverlay.nowPlaying;
+    final presentationKey = ValueKey((
+      bottomPanel ? PlayerOverlay.osd : overlay,
+      bottomPanel ? _bottomPanelGeneration : presentationGeneration,
+    ));
     final transitionDuration =
         (MediaQuery.disableAnimationsOf(context) ||
             overlay == PlayerOverlay.sleepTimer)
@@ -415,15 +456,6 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
                     );
                     final childOverlay =
                         (child.key as ValueKey<(PlayerOverlay, int)>).value.$1;
-                    if (childOverlay == PlayerOverlay.nowPlaying) {
-                      return SlideTransition(
-                        position: Tween(
-                          begin: const Offset(-1, 0),
-                          end: Offset.zero,
-                        ).animate(fade),
-                        child: transitioned,
-                      );
-                    }
                     if (childOverlay == PlayerOverlay.audioTracks ||
                         childOverlay == PlayerOverlay.subtitleTracks) {
                       return SlideTransition(
@@ -470,15 +502,13 @@ class _PlayerViewState extends State<PlayerView> with WidgetsBindingObserver {
                         }
                       },
                       child: switch (overlay) {
-                        PlayerOverlay.osd => _Osd(
+                        PlayerOverlay.osd || PlayerOverlay.nowPlaying => _Osd(
+                          detailsExpanded: overlay == PlayerOverlay.nowPlaying,
                           controller: controller,
                           openMenu: widget.openMenu,
                           menuFocus: _menuFocus,
                           sleepFocus: _sleepFocus,
                           sleepAnchor: LayerLink(),
-                        ),
-                        PlayerOverlay.nowPlaying => _NowPlaying(
-                          controller: controller,
                         ),
                         PlayerOverlay.miniGuide => _MiniGuide(
                           controller: controller,
@@ -636,6 +666,24 @@ class _SurfaceError extends StatelessWidget {
   }
 }
 
+// Keep the material bottom-anchored while its content grows upward. Bypass
+// animation entirely for Reduce Motion, including asynchronous artwork sizes.
+class _BottomPanelExpansion extends StatelessWidget {
+  const _BottomPanelExpansion({required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => MediaQuery.disableAnimationsOf(context)
+      ? child
+      : AnimatedSize(
+          duration: const Duration(milliseconds: 200),
+          alignment: Alignment.bottomCenter,
+          curve: Curves.easeOut,
+          clipBehavior: Clip.none,
+          child: child,
+        );
+}
+
 class _Osd extends StatelessWidget {
   const _Osd({
     required this.controller,
@@ -643,7 +691,9 @@ class _Osd extends StatelessWidget {
     required this.sleepFocus,
     required this.sleepAnchor,
     this.openMenu,
+    this.detailsExpanded = false,
   });
+  final bool detailsExpanded;
   final PlayerCoordinator controller;
   final LineupMenuCallback? openMenu;
   final FocusNode menuFocus;
@@ -658,8 +708,19 @@ class _Osd extends StatelessWidget {
     final channel = controller.currentChannel;
     final program = controller.currentProgram;
     final next = controller.nextProgram;
-    final duration = controller.duration.inMilliseconds;
-    final rawPosition = controller.position.inMilliseconds;
+    final scheduleTiming =
+        detailsExpanded &&
+        controller.duration <= Duration.zero &&
+        program != null;
+    final timingDuration = scheduleTiming
+        ? program.scheduled.end.difference(program.scheduled.start)
+        : controller.duration;
+    final duration = timingDuration.inMilliseconds;
+    final rawPosition = scheduleTiming
+        ? controller.guide.now
+              .difference(program.scheduled.start)
+              .inMilliseconds
+        : controller.position.inMilliseconds;
     final position = duration > 0
         ? rawPosition.clamp(0, duration)
         : rawPosition < 0
@@ -763,7 +824,6 @@ class _Osd extends StatelessWidget {
         onPressed: subtitlesAvailable
             ? () => controller.showTracks(PlayerTrackType.subtitle)
             : null,
-        compact: !expanded,
       ),
       _osdAction(
         context,
@@ -775,7 +835,6 @@ class _Osd extends StatelessWidget {
         onPressed: audioAvailable
             ? () => controller.showTracks(PlayerTrackType.audio)
             : null,
-        compact: !expanded,
       ),
       CompositedTransformTarget(
         link: sleepAnchor,
@@ -787,7 +846,6 @@ class _Osd extends StatelessWidget {
           icon: Icons.bedtime_outlined,
           focusNode: sleepFocus,
           onPressed: controller.showSleepTimer,
-          compact: !expanded,
         ),
       ),
     ];
@@ -889,10 +947,10 @@ class _Osd extends StatelessWidget {
     final progress = Row(
       key: const Key('player-osd-progress-block'),
       children: [
-        Flexible(
+        Expanded(
           child: Text(
             [
-              '${_duration(displayedPosition)} / ${_duration(controller.duration)}',
+              '${_duration(displayedPosition)} / ${_duration(timingDuration)}',
               ?remaining,
             ].join(' • '),
             key: const Key('player-osd-timing'),
@@ -922,36 +980,74 @@ class _Osd extends StatelessWidget {
     );
     Widget actionGroup(List<Widget> children) =>
         Row(mainAxisSize: MainAxisSize.min, children: children);
-    final wrapActions = MediaQuery.textScalerOf(context).scale(1) > 1;
-    final optionGroup = wrapActions
-        ? Wrap(spacing: 8, runSpacing: 6, children: optionActions)
-        : actionGroup(optionActions);
-    final groupedActions = wrapActions
-        ? Wrap(
+    final availableWidth = size.width - horizontalInset * 2;
+    final labelStyle = actionStyle.textStyle?.resolve({});
+    final minimumSize =
+        actionStyle.minimumSize?.resolve({}) ?? const Size(44, 44);
+    final padding = (actionStyle.padding?.resolve({}) ?? EdgeInsets.zero)
+        .resolve(Directionality.of(context));
+    final tapTarget =
+        actionStyle.tapTargetSize ?? Theme.of(context).materialTapTargetSize;
+    final minimumWidth = math.max(
+      minimumSize.width,
+      tapTarget == MaterialTapTargetSize.padded ? kMinInteractiveDimension : 0,
+    );
+    final iconActionWidth = math
+        .max(minimumWidth, 20 + padding.horizontal)
+        .ceilToDouble();
+    final standardWidth =
+        [subtitlesLabel, audioLabel, sleepLabel].fold<double>(
+          0,
+          (sum, label) =>
+              sum +
+              math
+                  .max(
+                    minimumWidth,
+                    _textWidth(context, label, labelStyle) +
+                        20 +
+                        8 +
+                        padding.horizontal,
+                  )
+                  .ceilToDouble(),
+        ) +
+        windowActions.length * iconActionWidth +
+        16;
+    final controlsWidth = standardWidth + (dvrControlsEnabled ? 168 : 0);
+    final wrapActions = controlsWidth > availableWidth * .65;
+    final groupedActions = SizedBox(
+      width: math.min(controlsWidth, availableWidth),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final width = math.min(controlsWidth, constraints.maxWidth);
+          return SizedBox(
             key: const Key('player-osd-action-groups'),
-            alignment: WrapAlignment.end,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 16,
-            runSpacing: 6,
-            children: [
-              if (dvrControlsEnabled) actionGroup(transportActions),
-              optionGroup,
-              actionGroup(windowActions),
-            ],
-          )
-        : Row(
-            key: const Key('player-osd-action-groups'),
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (dvrControlsEnabled) ...[
-                actionGroup(transportActions),
-                SizedBox(width: 16),
+            width: width,
+            child: Wrap(
+              alignment: WrapAlignment.end,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 16,
+              runSpacing: 6,
+              children: [
+                if (dvrControlsEnabled) actionGroup(transportActions),
+                SizedBox(
+                  width: math.min(standardWidth, width),
+                  child: Wrap(
+                    key: const Key('player-osd-standard-actions'),
+                    alignment: WrapAlignment.end,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      ...optionActions,
+                      const SizedBox(width: 16),
+                      ...windowActions,
+                    ],
+                  ),
+                ),
               ],
-              optionGroup,
-              SizedBox(width: 16),
-              actionGroup(windowActions),
-            ],
+            ),
           );
+        },
+      ),
+    );
     final progressLine = Positioned(
       key: const Key('player-osd-progress-line'),
       left: 0,
@@ -962,7 +1058,7 @@ class _Osd extends StatelessWidget {
         child: Semantics(
           label: 'Playback progress',
           value:
-              '${_duration(displayedPosition)} of ${_duration(controller.duration)}',
+              '${_duration(displayedPosition)} of ${_duration(timingDuration)}',
           child: Stack(
             fit: StackFit.expand,
             children: [
@@ -989,7 +1085,8 @@ class _Osd extends StatelessWidget {
                   child: Slider(
                     value: sliderPosition,
                     max: sliderMax,
-                    onChanged: duration <= 0 || unsupported
+                    onChanged:
+                        controller.duration <= Duration.zero || unsupported
                         ? null
                         : (value) => controller.seekTo(
                             Duration(milliseconds: value.round()),
@@ -1008,85 +1105,115 @@ class _Osd extends StatelessWidget {
           alignment: Alignment.bottomCenter,
           child: SafeArea(
             top: false,
-            child: CustomPaint(
-              painter: _OverlayFeather(
-                color: _overlayColor(context, controller, more: 0),
-              ),
-              child: Container(
-                key: const Key('player-osd-surface'),
-                width: double.infinity,
-                padding: EdgeInsets.fromLTRB(
-                  horizontalInset,
-                  horizontal
-                      ? (size.height >= 900 ? 44 : 20)
-                      : (size.height >= 720 ? 56 : 40),
-                  horizontalInset,
-                  12 + (dvrControlsEnabled ? 40 : 0),
-                ),
-                decoration: BoxDecoration(
-                  color:
+            child: _BottomPanelExpansion(
+              child: CustomPaint(
+                painter: _OsdPanelMaterial(
+                  color: _overlayColor(context, controller, more: .62),
+                  collapsedFade:
+                      !detailsExpanded &&
                       controller.lineup.settings.overlayTransparency ==
-                          OverlayTransparency.moreTransparent
-                      ? null
-                      : _overlayColor(context, controller),
-                  gradient:
-                      controller.lineup.settings.overlayTransparency ==
-                          OverlayTransparency.moreTransparent
-                      ? LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [
-                            Colors.transparent,
-                            _overlayColor(context, controller, more: .08),
-                            _overlayColor(context, controller, more: .30),
-                            _overlayColor(context, controller, more: .45),
-                          ],
-                          stops: const [0, .2, .6, 1],
-                        )
-                      : null,
+                          OverlayTransparency.moreTransparent,
                 ),
-                child: Semantics(
-                  container: true,
-                  label: 'Playback controls',
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      if (horizontal)
-                        Row(
-                          key: const Key('player-osd-horizontal-layout'),
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Expanded(child: identity),
-                            SizedBox(width: 24),
-                            if (wrapActions)
-                              Flexible(
-                                child: Align(
-                                  alignment: Alignment.bottomRight,
-                                  child: groupedActions,
+                child: Container(
+                  key: const Key('player-osd-surface'),
+                  width: double.infinity,
+                  padding: EdgeInsets.fromLTRB(
+                    horizontalInset,
+                    detailsExpanded
+                        ? 20
+                        : horizontal
+                        ? (size.height >= 900 ? 44 : 20)
+                        : (size.height >= 720 ? 56 : 40),
+                    horizontalInset,
+                    12 + (dvrControlsEnabled ? 40 : 0),
+                  ),
+                  child: Semantics(
+                    container: true,
+                    label: 'Playback controls',
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (detailsExpanded) ...[
+                          _NowPlaying(
+                            controller: controller,
+                            maxHeight: math.max(
+                              80,
+                              size.height -
+                                  (wrapActions ? 280 : 190) -
+                                  (dvrControlsEnabled ? 40 : 0),
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                          if (horizontal && !wrapActions)
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    controller.status.state ==
+                                            PlayerState.playing
+                                        ? 'Playing'
+                                        : _statusLabel(
+                                                controller.status.state,
+                                              ) ??
+                                              'Ready',
+                                    style: osdSecondaryStyle,
+                                  ),
                                 ),
-                              )
-                            else
+                                const SizedBox(width: 24),
+                                groupedActions,
+                              ],
+                            )
+                          else ...[
+                            Text(
+                              controller.status.state == PlayerState.playing
+                                  ? 'Playing'
+                                  : _statusLabel(controller.status.state) ??
+                                        'Ready',
+                              style: osdSecondaryStyle,
+                            ),
+                            const SizedBox(height: 6),
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: groupedActions,
+                            ),
+                          ],
+                        ] else if (horizontal && !wrapActions)
+                          Row(
+                            key: const Key('player-osd-horizontal-layout'),
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Expanded(child: identity),
+                              SizedBox(width: 24),
                               groupedActions,
-                          ],
-                        )
-                      else ...[
-                        identity,
-                        SizedBox(height: 6),
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: wrapActions
-                              ? groupedActions
-                              : Row(
-                                  key: const Key('player-osd-stacked-controls'),
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [groupedActions],
-                                ),
-                        ),
+                            ],
+                          )
+                        else ...[
+                          KeyedSubtree(
+                            key: horizontal
+                                ? const Key('player-osd-horizontal-layout')
+                                : null,
+                            child: identity,
+                          ),
+                          SizedBox(height: 6),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: wrapActions
+                                ? groupedActions
+                                : Row(
+                                    key: const Key(
+                                      'player-osd-stacked-controls',
+                                    ),
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [groupedActions],
+                                  ),
+                          ),
+                        ],
+                        SizedBox(height: 10),
+                        progress,
                       ],
-                      SizedBox(height: 10),
-                      progress,
-                    ],
+                    ),
                   ),
                 ),
               ),
@@ -1185,99 +1312,49 @@ class _ChannelBug extends StatelessWidget {
 }
 
 class _NowPlaying extends StatelessWidget {
-  const _NowPlaying({required this.controller});
+  const _NowPlaying({required this.controller, required this.maxHeight});
 
   final PlayerCoordinator controller;
+  final double maxHeight;
 
   @override
   Widget build(BuildContext context) {
     final program = controller.currentProgram;
     if (program == null) return const SizedBox.shrink();
     final item = program.scheduled.item;
-    final channel = controller.currentChannel;
-    final telemetry = controller.telemetry;
     final roles = LineupTheme.of(context);
     final size = MediaQuery.sizeOf(context);
-    final compact =
-        LineupLayout.isCompactWidth(size.width) || size.height < 650;
-    final shelfWidth = (size.width * 0.95).clamp(0, 1180).toDouble();
-    final shelfHeight = compact
-        ? (size.height * (item.cast.isEmpty ? 0.56 : 0.63))
-              .clamp(300, 380)
-              .toDouble()
-        : (size.height * (item.cast.isEmpty ? 0.50 : 0.54))
-              .clamp(
-                (item.cast.isEmpty ? 380 : 432),
-                (item.cast.isEmpty ? 560 : 580),
-              )
-              .toDouble();
-    final denseShelf = compact || shelfHeight < 440;
-    final showPoster = size.width >= 700 && size.height >= 500;
-    final preferLogo = controller.lineup.settings.preferClearLogos;
+    final dense = size.height < 900;
+    final generation = controller.lineup.contentGeneration;
+    final artworkIdentity = (program.id, generation);
     final posterPath = _artworkPath(item, GuideArtworkKind.poster);
     final logoPath = _artworkPath(item, GuideArtworkKind.clearLogo);
-    final generation = controller.lineup.contentGeneration;
-    final elapsed = controller.guide.now.difference(program.scheduled.start);
-    final span = program.scheduled.end.difference(program.scheduled.start);
-    final nativeDuration = controller.duration;
-    final nativeTimingAvailable = nativeDuration > Duration.zero;
-    final timingDuration = nativeTimingAvailable ? nativeDuration : span;
-    final rawTimingPosition = nativeTimingAvailable
-        ? controller.position
-        : elapsed;
-    final timingPosition = timingDuration <= Duration.zero
-        ? Duration.zero
-        : Duration(
-            milliseconds: rawTimingPosition.inMilliseconds
-                .clamp(0, timingDuration.inMilliseconds)
-                .toInt(),
-          );
-    final progress = timingDuration.inMilliseconds <= 0
-        ? 0.0
-        : timingPosition.inMilliseconds / timingDuration.inMilliseconds;
+    final duration = controller.duration > Duration.zero
+        ? controller.duration
+        : program.scheduled.end.difference(program.scheduled.start);
     final episode = _episodeLabel(item);
-    final episodeFacts = [
+    final numberedEpisode = [
       if (item.seasonNumber != null) 'S${item.seasonNumber}',
       if (item.episodeNumber != null) 'E${item.episodeNumber}',
-      if (timingDuration > Duration.zero) '${timingDuration.inMinutes} min',
+    ].join(' ');
+    final editorial = [
+      if (numberedEpisode.isNotEmpty) numberedEpisode,
+      if (duration > Duration.zero) '${duration.inMinutes} min',
+      if (item.year != null) '${item.year}',
+      ...item.genres.where((genre) => genre.trim().isNotEmpty).take(3),
     ].join(' · ');
-    final dynamicRange = _dynamicRangeLabel(item.dynamicRange, telemetry.isHdr);
+    final reportedCodec = controller.telemetry.videoCodec?.trim();
+    final videoCodec = reportedCodec?.isNotEmpty == true
+        ? reportedCodec
+        : item.videoCodec?.trim();
     final badges = <String>[
       ?item.contentRating,
       if (item.resolution case final resolution?) resolution.toUpperCase(),
-      ?dynamicRange,
-      if (item.audioCodec case final audioCodec?) audioCodec.toUpperCase(),
+      ?_dynamicRangeLabel(item.dynamicRange, controller.telemetry.isHdr),
+      if (videoCodec != null && videoCodec.isNotEmpty) videoCodec.toUpperCase(),
+      if (item.audioCodec case final codec?) codec.toUpperCase(),
       if (item.audioChannels case final channels?) _audioChannels(channels),
     ];
-    final editorial = [
-      if (item.year != null) '${item.year}',
-      ...item.genres.where((genre) => genre.trim().isNotEmpty).take(3),
-    ].join(' • ');
-    final itemResolution = item.resolution?.toLowerCase();
-    final dimensions = telemetry.width != null && telemetry.height != null
-        ? '${telemetry.width}×${telemetry.height}'
-        : null;
-    final dimensionsMatchCatalog =
-        dimensions != null &&
-        ((itemResolution == '1080p' && telemetry.height == 1080) ||
-            (itemResolution == '720p' && telemetry.height == 720) ||
-            (itemResolution == '4k' &&
-                telemetry.height != null &&
-                telemetry.height! >= 2000));
-    final runtimeFacts = <String>[
-      if (dimensions != null && !dimensionsMatchCatalog) dimensions,
-      if (telemetry.videoCodec case final videoCodec?) videoCodec.toUpperCase(),
-      ?telemetry.hardwareDecoder,
-    ];
-    final playbackFacts = runtimeFacts.isEmpty
-        ? switch (item.videoCodec) {
-            final codec? when codec.trim().isNotEmpty =>
-              'Source • ${codec.toUpperCase()}',
-            _ => null,
-          }
-        : ['Playback', ...runtimeFacts].join(' • ');
-    final playbackTime =
-        '${_duration(timingPosition)} / ${_duration(timingDuration)}';
     final castFacts = item.cast
         .map(
           (member) => member.role == null
@@ -1290,324 +1367,175 @@ class _NowPlaying extends StatelessWidget {
       ?item.showTitle,
       item.title,
       ?episode,
-      if (timingDuration > Duration.zero)
-        '${_humanDuration(timingDuration)} runtime',
       if (editorial.isNotEmpty) editorial,
       ...badges,
-      ?playbackFacts,
-      '$playbackTime playback',
       ?item.summary,
       if (castFacts.isNotEmpty) 'Cast: $castFacts',
     ].join('. ');
-    final artworkIdentity = (program.id, generation);
+    final posterWidth = dense ? 160.0 : 240.0;
 
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        Align(
-          key: const Key('player-now-playing-surface'),
-          alignment: Alignment.bottomLeft,
-          child: SafeArea(
-            top: false,
-            right: false,
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () {},
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () {},
+      child: ConstrainedBox(
+        key: const Key('player-now-playing-surface'),
+        constraints: BoxConstraints(maxHeight: maxHeight),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Now playing',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                ),
+                TextButton(
+                  key: const Key('player-now-playing-collapse'),
+                  style: _playerActionStyle(context).copyWith(
+                    padding: const WidgetStatePropertyAll(
+                      // Center the 20px glyph like the fullscreen action's
+                      // 48px target, while keeping the label-to-icon gap tight.
+                      EdgeInsets.only(left: 10, right: 14),
+                    ),
+                  ),
+                  onPressed: controller.showOsd,
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text('Close'),
+                      SizedBox(width: 6),
+                      ExcludeSemantics(child: Icon(Icons.close, size: 20)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Flexible(
+              fit: FlexFit.loose,
               child: Semantics(
                 container: true,
                 label: semanticFacts,
                 explicitChildNodes: true,
-                child: Container(
-                  key: const Key('player-now-playing-shelf'),
-                  width: shelfWidth,
-                  clipBehavior: Clip.antiAlias,
-                  decoration: BoxDecoration(
-                    border: Border(
-                      top: BorderSide(color: roles.subtleBorder, width: 1.0),
-                      right: BorderSide(color: roles.subtleBorder, width: 1.0),
-                    ),
-                    borderRadius: BorderRadius.only(
-                      topRight: Radius.circular(16),
-                    ),
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        _overlayColor(context, controller, more: .62),
-                        _overlayColor(context, controller, more: .62),
-                      ],
-                    ),
-                  ),
-                  child: _NowPlayingShelfLayout(
-                    maxHeight: shelfHeight,
-                    poster: showPoster
-                        ? Stack(
-                            key: const Key('player-now-playing-poster'),
-                            fit: StackFit.expand,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (size.width >= 700 && size.height >= 500) ...[
+                      SizedBox(
+                        key: const Key('player-now-playing-poster'),
+                        width: posterWidth,
+                        height: math.min(posterWidth * 1.5, maxHeight - 64),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: posterPath == null
+                              ? _ArtworkFallback(roles: roles)
+                              : _PlayerArtwork(
+                                  key: ValueKey((
+                                    artworkIdentity,
+                                    GuideArtworkKind.poster,
+                                    posterPath,
+                                  )),
+                                  future: controller.guide.artworkFor(program),
+                                  fit: BoxFit.cover,
+                                  fallback: _ArtworkFallback(roles: roles),
+                                ),
+                        ),
+                      ),
+                      SizedBox(width: dense ? 24 : 32),
+                    ],
+                    Expanded(
+                      child: ExcludeSemantics(
+                        child: SingleChildScrollView(
+                          key: const Key('player-now-playing-details'),
+                          primary: false,
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              posterPath == null
-                                  ? _ArtworkFallback(roles: roles)
-                                  : _PlayerArtwork(
-                                      key: ValueKey((
-                                        artworkIdentity,
-                                        GuideArtworkKind.poster,
-                                        posterPath,
-                                      )),
-                                      future: controller.guide.artworkFor(
-                                        program,
-                                      ),
-                                      fit: BoxFit.cover,
-                                      fallback: _ArtworkFallback(roles: roles),
-                                    ),
-                              Align(
-                                alignment: Alignment.centerRight,
-                                child: SizedBox(
-                                  width: (compact ? 48 : 64),
-                                  child: DecoratedBox(
-                                    decoration: BoxDecoration(
-                                      gradient: LinearGradient(
-                                        colors: [
-                                          Colors.transparent,
-                                          roles.overlaySurface.withValues(
-                                            alpha: _overlayOpacity(
-                                              controller,
-                                              more: .62,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
+                              if (controller.lineup.settings.preferClearLogos &&
+                                  logoPath != null)
+                                _NowPlayingIdentity(
+                                  key: ValueKey((
+                                    artworkIdentity,
+                                    GuideArtworkKind.clearLogo,
+                                    logoPath,
+                                  )),
+                                  controller: controller,
+                                  program: program,
+                                  compact: dense,
+                                )
+                              else
+                                _NowPlayingTitle(item: item, compact: dense),
+                              if (editorial.isNotEmpty) ...[
+                                const SizedBox(height: 8),
+                                Text(
+                                  editorial,
+                                  key: const Key(
+                                    'player-now-playing-editorial',
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: _nowPlayingSecondaryStyle(
+                                    context,
+                                    dense: dense,
                                   ),
                                 ),
-                              ),
-                            ],
-                          )
-                        : null,
-                    content: Padding(
-                      padding: EdgeInsets.fromLTRB(
-                        (denseShelf ? 18 : 28),
-                        (denseShelf ? 16 : 24),
-                        (denseShelf ? 18 : 28),
-                        (denseShelf ? 14 : 20),
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  'Now playing',
-                                  style: Theme.of(context).textTheme.titleLarge,
-                                ),
-                              ),
-                              TextButton(
-                                onPressed: controller.closeOverlay,
-                                child: const _OverlayCloseLabel(),
-                              ),
-                            ],
-                          ),
-                          Flexible(
-                            fit: FlexFit.loose,
-                            child: ExcludeSemantics(
-                              child: SingleChildScrollView(
-                                key: const Key('player-now-playing-details'),
-                                primary: false,
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  crossAxisAlignment: CrossAxisAlignment.start,
+                              ],
+                              if (badges.isNotEmpty) ...[
+                                const SizedBox(height: 12),
+                                Wrap(
+                                  key: const Key('player-now-playing-badges'),
+                                  spacing: 8,
+                                  runSpacing: 8,
                                   children: [
-                                    if (preferLogo && logoPath != null)
-                                      _NowPlayingIdentity(
-                                        key: ValueKey((
-                                          artworkIdentity,
-                                          GuideArtworkKind.clearLogo,
-                                          logoPath,
-                                          preferLogo,
-                                        )),
-                                        controller: controller,
-                                        program: program,
-                                        compact: denseShelf,
-                                        hasCast: item.cast.isNotEmpty,
-                                      )
-                                    else
-                                      _NowPlayingTitle(
-                                        item: item,
-                                        compact: denseShelf,
-                                      ),
-                                    if (episodeFacts.isNotEmpty) ...[
-                                      SizedBox(height: (denseShelf ? 8 : 10)),
-                                      Text(
-                                        episodeFacts,
-                                        key: const Key(
-                                          'player-now-playing-episode',
-                                        ),
-                                        style: _nowPlayingSecondaryStyle(
-                                          context,
-                                          dense: denseShelf,
-                                        ),
-                                      ),
-                                    ],
-                                    if (editorial.isNotEmpty) ...[
-                                      SizedBox(height: (denseShelf ? 8 : 10)),
-                                      Text(
-                                        editorial,
-                                        key: const Key(
-                                          'player-now-playing-editorial',
-                                        ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: _nowPlayingSecondaryStyle(
-                                          context,
-                                          dense: denseShelf,
-                                        ),
-                                      ),
-                                    ],
-                                    if (!compact && badges.isNotEmpty) ...[
-                                      SizedBox(height: 14),
-                                      Wrap(
-                                        key: const Key(
-                                          'player-now-playing-badges',
-                                        ),
-                                        spacing: 8,
-                                        runSpacing: 8,
-                                        children: [
-                                          for (final badge in badges)
-                                            _NowPlayingBadge(label: badge),
-                                        ],
-                                      ),
-                                    ],
-                                    if (!compact && playbackFacts != null) ...[
-                                      SizedBox(height: (denseShelf ? 8 : 10)),
-                                      Text(
-                                        playbackFacts,
-                                        key: const Key(
-                                          'player-now-playing-runtime-facts',
-                                        ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: _nowPlayingSecondaryStyle(
-                                          context,
-                                          dense: denseShelf,
-                                        ),
-                                      ),
-                                    ],
-                                    if (item.summary case final summary?) ...[
-                                      SizedBox(height: (denseShelf ? 10 : 14)),
-                                      Text(
-                                        summary,
-                                        key: const Key(
-                                          'player-now-playing-summary',
-                                        ),
-                                        maxLines: item.cast.isEmpty
-                                            ? (denseShelf ? 3 : 4)
-                                            : (denseShelf ? 2 : 3),
-                                        overflow: TextOverflow.ellipsis,
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .bodyLarge
-                                            ?.copyWith(
-                                              color: roles.primaryText,
-                                              fontSize:
-                                                  (Theme.of(context)
-                                                      .textTheme
-                                                      .bodyLarge
-                                                      ?.fontSize ??
-                                                  16),
-                                              height: 1.45,
-                                            ),
-                                      ),
-                                    ],
-                                    if (item.cast.isNotEmpty) ...[
-                                      SizedBox(height: (denseShelf ? 10 : 14)),
-                                      _NowPlayingCast(
-                                        controller: controller,
-                                        cast: item.cast,
-                                        compact: compact,
-                                        dense: denseShelf,
-                                      ),
-                                    ],
+                                    for (final badge in badges)
+                                      _NowPlayingBadge(label: badge),
                                   ],
                                 ),
-                              ),
-                            ),
+                              ],
+                              if (item.summary case final summary?) ...[
+                                const SizedBox(height: 12),
+                                ConstrainedBox(
+                                  constraints: const BoxConstraints(
+                                    maxWidth: 900,
+                                  ),
+                                  child: Text(
+                                    summary,
+                                    maxLines: 3,
+                                    overflow: TextOverflow.ellipsis,
+                                    key: const Key(
+                                      'player-now-playing-summary',
+                                    ),
+                                    style: Theme.of(context).textTheme.bodyLarge
+                                        ?.copyWith(
+                                          color: roles.primaryText,
+                                          height: 1.45,
+                                        ),
+                                  ),
+                                ),
+                              ],
+                              if (item.cast.isNotEmpty) ...[
+                                const SizedBox(height: 14),
+                                _NowPlayingCast(
+                                  controller: controller,
+                                  cast: item.cast,
+                                  dense: dense,
+                                ),
+                              ],
+                            ],
                           ),
-                          SizedBox(height: 16),
-                          LinearProgressIndicator(
-                            key: const Key('player-now-playing-progress'),
-                            value: progress,
-                            minHeight: 5,
-                            color: roles.progressFill,
-                            backgroundColor: roles.progressTrack,
-                          ),
-                          SizedBox(height: 8),
-                          Text(
-                            playbackTime,
-                            key: const Key('player-now-playing-time'),
-                            style: _nowPlayingSecondaryStyle(
-                              context,
-                              dense: denseShelf,
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
                     ),
-                  ),
+                  ],
                 ),
               ),
             ),
-          ),
+          ],
         ),
-        if (channel != null &&
-            controller.notice == null &&
-            controller.busyLabel == null)
-          Positioned(
-            top: 24,
-            right: (size.width * 0.05).clamp(24.0, 96.0).toDouble(),
-            child: _ChannelBug(
-              key: const Key('player-now-playing-channel-bug'),
-              channel: channel,
-              controller: controller,
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-class _NowPlayingShelfLayout extends StatelessWidget {
-  const _NowPlayingShelfLayout({
-    required this.maxHeight,
-    required this.content,
-    this.poster,
-  });
-  final double maxHeight;
-  final Widget content;
-  final Widget? poster;
-
-  @override
-  Widget build(BuildContext context) {
-    final posterWidth = poster == null
-        ? 0.0
-        : (maxHeight * 2 / 3).clamp(190, 374).toDouble();
-    return ConstrainedBox(
-      constraints: BoxConstraints(maxHeight: maxHeight - 1.0),
-      child: Stack(
-        children: [
-          Padding(
-            padding: EdgeInsets.only(left: posterWidth),
-            child: content,
-          ),
-          if (poster != null)
-            Positioned(
-              left: 0,
-              top: 0,
-              bottom: 0,
-              width: posterWidth,
-              child: poster!,
-            ),
-        ],
       ),
     );
   }
@@ -1626,14 +1554,12 @@ class _NowPlayingIdentity extends StatefulWidget {
     required this.controller,
     required this.program,
     required this.compact,
-    required this.hasCast,
     super.key,
   });
 
   final PlayerCoordinator controller;
   final GuideProgram program;
   final bool compact;
-  final bool hasCast;
 
   @override
   State<_NowPlayingIdentity> createState() => _NowPlayingIdentityState();
@@ -1652,12 +1578,11 @@ class _NowPlayingIdentityState extends State<_NowPlayingIdentity> {
       final bytes = snapshot.data;
       final item = widget.program.scheduled.item;
       final showTitle = item.showTitle?.trim();
-      final logoMaxHeight = widget.hasCast && widget.compact
-          ? 58.0
-          : widget.compact
-          ? 84.0
-          : 132.0;
-      final logoMaxWidth = (widget.compact ? 360.0 : 600.0);
+      const logoMaxHeight = 72.0;
+      // Keep the artwork slot proportional to its compact height, so the
+      // shared relative-size guard evaluates this title-art layout rather
+      // than the retired tall shelf's much wider reservation.
+      const logoMaxWidth = logoMaxHeight * 6;
       return LayoutBuilder(
         builder: (context, available) {
           final logoFallback = OverflowBox(
@@ -1692,6 +1617,7 @@ class _NowPlayingIdentityState extends State<_NowPlayingIdentity> {
                   child: ClearLogoImage(
                     bytes,
                     imageKey: const Key('player-now-playing-logo'),
+                    maximumVisibleHeight: 56,
                     excludeFromSemantics: true,
                     maximumSize: Size(logoMaxWidth, logoMaxHeight),
                     minimumVisibleSize: Size(96, (widget.compact ? 20 : 28)),
@@ -1858,91 +1784,99 @@ class _NowPlayingBadge extends StatelessWidget {
   }
 }
 
+double _textWidth(BuildContext context, String text, TextStyle? style) {
+  final painter = TextPainter(
+    text: TextSpan(text: text, style: style),
+    textDirection: Directionality.of(context),
+    textScaler: MediaQuery.textScalerOf(context),
+    locale: Localizations.maybeLocaleOf(context),
+    maxLines: 1,
+  )..layout();
+  final width = painter.width;
+  painter.dispose();
+  return width;
+}
+
 class _NowPlayingCast extends StatelessWidget {
   const _NowPlayingCast({
     required this.controller,
     required this.cast,
-    required this.compact,
     required this.dense,
   });
 
   final PlayerCoordinator controller;
   final List<ChannelCastMember> cast;
-  final bool compact;
   final bool dense;
 
   @override
   Widget build(BuildContext context) {
     final roles = LineupTheme.of(context);
-    final limit = compact ? 4 : 5;
+    const limit = 4;
     final visible = cast.take(limit).toList(growable: false);
-    final hidden = cast.length - visible.length;
     final diameter = (dense ? 40.0 : 46.0);
-    final columnLimit = (dense ? 72.0 : 104.0);
-    final columnCount = visible.length + (hidden > 0 ? 1 : 0);
-    final spacing = math.max(0, columnCount - 1) * 8.0;
-    return Column(
-      key: const Key('player-now-playing-cast'),
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        LayoutBuilder(
-          builder: (context, constraints) {
-            final width = constraints.maxWidth.isFinite
-                ? constraints.maxWidth
-                : columnCount * columnLimit + spacing;
-            final columnWidth = math.min(
-              columnLimit,
-              math.max(0.0, (width - spacing) / columnCount),
-            );
-            final constrained = width < columnCount * columnLimit + spacing;
-            final children = <Widget>[
-              for (final (index, member) in visible.indexed)
-                _NowPlayingCastColumn(
-                  key: ValueKey('player-now-playing-cast-column-$index'),
-                  width: columnWidth,
-                  diameter: diameter,
-                  index: index,
-                  member: member,
-                  controller: controller,
-                  roles: roles,
-                  dense: dense,
-                ),
-              if (hidden > 0)
-                _NowPlayingCastMore(
-                  width: columnWidth,
-                  diameter: diameter,
-                  hidden: hidden,
-                  roles: roles,
-                ),
-            ];
-            return constrained
-                ? Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      for (final child in children)
-                        Expanded(
-                          child: Padding(
-                            padding: EdgeInsets.only(
-                              right: child == children.last ? 0 : 8,
-                            ),
-                            child: child,
-                          ),
-                        ),
-                    ],
-                  )
-                : Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      for (final (index, child) in children.indexed) ...[
-                        if (index > 0) SizedBox(width: 8),
-                        child,
-                      ],
-                    ],
-                  );
-          },
+    const gap = 24.0;
+    final nameStyle = _nowPlayingSecondaryStyle(
+      context,
+      dense: dense,
+    )?.copyWith(fontSize: 16, height: 1.3, color: roles.primaryText);
+    final roleStyle = Theme.of(context).textTheme.bodySmall
+        ?.copyWith(color: roles.secondaryText, fontSize: 14);
+    final naturalWidths = [
+      for (final member in visible)
+        math.max(
+          diameter,
+          math.max(
+            _textWidth(context, member.name, nameStyle),
+            _textWidth(context, member.role ?? '', roleStyle),
+          ),
         ),
-      ],
+    ];
+    return LayoutBuilder(
+      key: const Key('player-now-playing-cast'),
+      builder: (context, constraints) {
+        final widths = List<double>.of(naturalWidths);
+        final available = math.max(
+          0.0,
+          constraints.maxWidth - gap * math.max(0, visible.length - 1),
+        );
+        // Preserve natural content widths when they fit. When constrained,
+        // share the remaining space without reserving wide blank columns.
+        var remaining = available;
+        final pending = <int>{for (var i = 0; i < widths.length; i++) i};
+        while (pending.isNotEmpty) {
+          final share = remaining / pending.length;
+          final fitting = pending.where((i) => widths[i] <= share).toList();
+          if (fitting.isEmpty) {
+            for (final i in pending) {
+              widths[i] = share;
+            }
+            break;
+          }
+          for (final i in fitting) {
+            remaining -= widths[i];
+            pending.remove(i);
+          }
+        }
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final (index, member) in visible.indexed) ...[
+              if (index > 0) const SizedBox(width: gap),
+              _NowPlayingCastColumn(
+                key: ValueKey('player-now-playing-cast-column-$index'),
+                width: widths[index],
+                diameter: diameter,
+                index: index,
+                member: member,
+                controller: controller,
+                roles: roles,
+                dense: dense,
+              ),
+            ],
+          ],
+        );
+      },
     );
   }
 }
@@ -1973,7 +1907,7 @@ class _NowPlayingCastColumn extends StatelessWidget {
     final nameStyle = _nowPlayingSecondaryStyle(
       context,
       dense: dense,
-    )?.copyWith(fontSize: 18, height: 1.3);
+    )?.copyWith(fontSize: 16, height: 1.3, color: roles.primaryText);
     var displayName = member.name;
     final words = member.name.trim().split(RegExp(r'\s+'));
     if (words.length > 2) {
@@ -1998,6 +1932,7 @@ class _NowPlayingCastColumn extends StatelessWidget {
     }
     return Column(
       mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SizedBox.square(
           key: ValueKey('player-now-playing-cast-portrait-$index'),
@@ -2022,74 +1957,37 @@ class _NowPlayingCastColumn extends StatelessWidget {
         SizedBox(height: 6),
         SizedBox(
           width: width,
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              minHeight:
-                  MediaQuery.textScalerOf(context).scale(nameStyle!.fontSize!) *
-                  nameStyle.height! *
-                  2,
+          child: Tooltip(
+            message: member.name,
+            excludeFromSemantics: true,
+            child: Text(
+              displayName,
+              key: ValueKey('player-now-playing-cast-name-$index'),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.start,
+              style: nameStyle,
             ),
+          ),
+        ),
+        if (member.role case final role? when role.trim().isNotEmpty) ...[
+          const SizedBox(height: 3),
+          SizedBox(
+            width: width,
             child: Tooltip(
-              message: member.name,
-              excludeFromSemantics: true,
+              message: role,
               child: Text(
-                displayName,
-                key: ValueKey('player-now-playing-cast-name-$index'),
-                maxLines: 2,
+                role,
+                key: ValueKey('player-now-playing-cast-role-$index'),
+                maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-                style: nameStyle,
+                textAlign: TextAlign.start,
+                style: Theme.of(context).textTheme.bodySmall
+                    ?.copyWith(color: roles.secondaryText, fontSize: 14),
               ),
             ),
           ),
-        ),
-      ],
-    );
-  }
-}
-
-class _NowPlayingCastMore extends StatelessWidget {
-  const _NowPlayingCastMore({
-    required this.width,
-    required this.diameter,
-    required this.hidden,
-    required this.roles,
-  });
-
-  final double width;
-  final double diameter;
-  final int hidden;
-  final LineupThemeRoles roles;
-
-  @override
-  Widget build(BuildContext context) {
-    final labelSize = Theme.of(context).textTheme.labelLarge?.fontSize ?? 14;
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        SizedBox.square(
-          dimension: diameter,
-          child: DecoratedBox(
-            key: const Key('player-now-playing-cast-more'),
-            decoration: BoxDecoration(
-              color: roles.elevatedSurface,
-              border: Border.all(color: roles.subtleBorder),
-              shape: BoxShape.circle,
-            ),
-            child: Center(
-              child: Text(
-                '+$hidden',
-                style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                  color: roles.primaryText,
-                  fontSize: labelSize,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ),
-        ),
-        SizedBox(height: 6),
-        SizedBox(width: width, child: const SizedBox.shrink()),
+        ],
       ],
     );
   }
@@ -3438,11 +3336,10 @@ Widget _osdAction(
   String? semanticLabel,
   required IconData icon,
   required VoidCallback? onPressed,
-  required bool compact,
   FocusNode? focusNode,
 }) {
   return ConstrainedBox(
-    constraints: BoxConstraints(maxWidth: (compact ? 132 : 180)),
+    constraints: const BoxConstraints(minWidth: 44),
     child: Tooltip(
       message: tooltip,
       excludeFromSemantics: semanticLabel != null,
@@ -3462,13 +3359,7 @@ Widget _osdAction(
             children: [
               Icon(icon, size: 20),
               SizedBox(width: 8),
-              Flexible(
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
+              Flexible(child: Text(label, softWrap: true)),
             ],
           ),
         ),
@@ -3540,15 +3431,6 @@ String _audioChannels(int channels) => switch (channels) {
   _ => '${channels}ch',
 };
 
-String _humanDuration(Duration value) {
-  final minutes = value.inMinutes;
-  final hours = minutes ~/ 60;
-  final remainder = minutes.remainder(60);
-  if (hours == 0) return '${remainder}m';
-  if (remainder == 0) return '${hours}h';
-  return '${hours}h ${remainder}m';
-}
-
 String _time(BuildContext context, DateTime value) =>
     MaterialLocalizations.of(context).formatTimeOfDay(
       TimeOfDay.fromDateTime(value.toLocal()),
@@ -3611,25 +3493,48 @@ ButtonStyle _playerActionStyle(BuildContext context) {
   );
 }
 
-class _OverlayFeather extends CustomPainter {
-  const _OverlayFeather({required this.color});
+class _OsdPanelMaterial extends CustomPainter {
+  const _OsdPanelMaterial({required this.color, required this.collapsedFade});
   final Color color;
+  final bool collapsedFade;
+
   @override
   void paint(Canvas canvas, Size size) {
-    final bounds = Rect.fromLTWH(0, -55, size.width, 55);
+    const feather = 55.0;
+    final bounds = Rect.fromLTWH(
+      0,
+      -feather,
+      size.width,
+      size.height + feather,
+    );
+    final join = feather / bounds.height;
+    final colors = collapsedFade
+        ? [
+            color.withValues(alpha: 0),
+            color.withValues(alpha: 0),
+            color.withValues(alpha: .08),
+            color.withValues(alpha: .30),
+            color.withValues(alpha: .45),
+          ]
+        : [color.withValues(alpha: 0), color, color];
+    final stops = collapsedFade
+        ? [0.0, join, join + (1 - join) * .2, join + (1 - join) * .6, 1.0]
+        : [0.0, join, 1.0];
     canvas.drawRect(
       bounds,
       Paint()
         ..shader = LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [color.withValues(alpha: 0), color],
+          colors: colors,
+          stops: stops,
         ).createShader(bounds),
     );
   }
 
   @override
-  bool shouldRepaint(_OverlayFeather oldDelegate) => color != oldDelegate.color;
+  bool shouldRepaint(_OsdPanelMaterial oldDelegate) =>
+      color != oldDelegate.color || collapsedFade != oldDelegate.collapsedFade;
 }
 
 class _TrackListFade extends StatelessWidget {

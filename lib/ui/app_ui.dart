@@ -480,6 +480,7 @@ class ClearLogoImage extends StatefulWidget {
     this.excludeFromSemantics = false,
     this.maximumSize,
     this.minimumVisibleSize,
+    this.maximumVisibleHeight,
     super.key,
   });
 
@@ -490,6 +491,10 @@ class ClearLogoImage extends StatefulWidget {
   final bool excludeFromSemantics;
   final Size? maximumSize;
   final Size? minimumVisibleSize;
+
+  /// Optional cap on the actual alpha-bearing artwork after padding is cropped.
+  /// Existing consumers retain their original contain scale when omitted.
+  final double? maximumVisibleHeight;
 
   @override
   State<ClearLogoImage> createState() => _ClearLogoImageState();
@@ -546,7 +551,9 @@ class _ClearLogoImageState extends State<ClearLogoImage> {
             ),
           );
           final minimum = widget.minimumVisibleSize;
-          if (minimum == null) return image();
+          if (minimum == null && widget.maximumVisibleHeight == null) {
+            return image();
+          }
           return FutureBuilder<Rect?>(
             future: _visibleFraction ??= _decodeVisibleFraction(widget.bytes),
             builder: (context, visible) {
@@ -555,17 +562,23 @@ class _ClearLogoImageState extends State<ClearLogoImage> {
                   fraction == null) {
                 return widget.fallback;
               }
-              final fitted = applyBoxFit(
+              var fitted = applyBoxFit(
                 BoxFit.contain,
                 size,
                 constraints.biggest,
               ).destination;
-              if (fitted.width * fraction.width < minimum.width ||
-                  fitted.height * fraction.height < minimum.height) {
+              final visibleCap = widget.maximumVisibleHeight;
+              if (visibleCap != null &&
+                  fitted.height * fraction.height > visibleCap) {
+                fitted *= visibleCap / (fitted.height * fraction.height);
+              }
+              if (minimum != null &&
+                  (fitted.width * fraction.width < minimum.width ||
+                      fitted.height * fraction.height < minimum.height)) {
                 return widget.fallback;
               }
-              // Keep the original fit scale; remove padding without enlarging
-              // the artwork or moving the independent text fallback.
+              // Preserve the contain scale unless the caller caps visible ink;
+              // crop padding without enlarging the artwork or moving fallback.
               return SizedBox(
                 width: fitted.width * fraction.width,
                 height: fitted.height * fraction.height,

@@ -86,7 +86,7 @@ void main() {
 
       await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await tester.pumpAndSettle();
-      expect(view.controller.overlay, PlayerOverlay.none);
+      expect(view.controller.overlay, PlayerOverlay.osd);
       expect(find.byType(PlayerView), findsOneWidget);
       expect(player.commands, before);
       await tester.pumpWidget(const SizedBox.shrink());

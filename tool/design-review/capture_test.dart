@@ -375,53 +375,14 @@ final Map<String, Scene> _scenes = {
     );
     await _pump(tester, f.build());
     await _open(tester, 'Player');
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    tester.widget<PlayerView>(find.byType(PlayerView)).controller.showOsd();
     await _settle(tester);
     await _playerMaterialShots(tester, shot, f, 'paused');
   },
-  'player-now-playing': (tester, shot) async {
-    final f =
-        _readyFixture(
-            useWordmarkArtwork: true,
-            playerState: const PlayerStatus(
-              state: PlayerState.playing,
-              message: 'Playing',
-            ),
-          )
-          ..controller.channels = _richPlayerChannels
-          ..controller.settings = const LineupSettings(
-            guideHours: 4,
-            reduceMotion: true,
-          );
-    await _pump(tester, f.build());
-    await _open(tester, 'Player');
-    await _precacheNowPlaying(tester);
-    await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
-    await _settle(tester);
-    await _playerMaterialShots(tester, shot, f, 'shelf');
-    // The first image read lets pending artwork decode finish. Lay out that
-    // artwork before revealing cast so its new height cannot hide the target.
-    await _settle(tester);
-    await tester.ensureVisible(
-      find.byKey(const Key('player-now-playing-cast-name-4')),
-    );
-    await _settle(tester);
-    final castName = tester.renderObject<RenderBox>(
-      find.byKey(const Key('player-now-playing-cast-name-4')),
-    );
-    final details = tester.renderObject<RenderBox>(
-      find.byKey(const Key('player-now-playing-details')),
-    );
-    Rect drawnRect(RenderBox box) => MatrixUtils.transformRect(
-      box.getTransformTo(null),
-      Offset.zero & box.size,
-    );
-    expect(
-      drawnRect(castName).bottom,
-      lessThanOrEqualTo(drawnRect(details).bottom + .5),
-    );
-    await _playerMaterialShots(tester, shot, f, 'cast-visible');
-  },
+  'player-now-playing': (tester, shot) =>
+      _nowPlayingScene(tester, shot, clearLogo: true),
+  'player-now-playing-fallback': (tester, shot) =>
+      _nowPlayingScene(tester, shot, clearLogo: false),
   'player-tracks': (tester, shot) async {
     final f = _readyFixture(
       playerState: const PlayerStatus(
@@ -788,7 +749,7 @@ final Map<String, Scene> _scenes = {
       await tester.pumpWidget(const SizedBox.shrink());
       await _pump(tester, fixture().build());
       await _open(tester, 'Player');
-      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      tester.widget<PlayerView>(find.byType(PlayerView)).controller.showOsd();
       await _settle(tester);
       await shot('player-osd');
       await tester.sendKeyEvent(LogicalKeyboardKey.escape);
@@ -972,6 +933,94 @@ List<Map<String, Object?>> _spanProbes(
 
   visit(render.text, rootStyle, '0');
   return runs;
+}
+
+// Deliberately distinguish usable title artwork from a missing-artwork fallback.
+// Both states must finish decoding before the first material-level capture.
+Future<void> _nowPlayingScene(
+  WidgetTester tester,
+  Shot shot, {
+  required bool clearLogo,
+}) async {
+  final f =
+      _readyFixture(
+          useWordmarkArtwork: true,
+          omitClearLogoArtwork: !clearLogo,
+          playerState: const PlayerStatus(
+            state: PlayerState.playing,
+            message: 'Playing',
+          ),
+        )
+        ..controller.channels = _richPlayerChannels
+        ..controller.settings = const LineupSettings(
+          guideHours: 4,
+          reduceMotion: true,
+        );
+  await _pump(tester, f.build());
+  await _open(tester, 'Player');
+  await _precacheNowPlaying(tester);
+  await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
+  await _settle(tester);
+  Future<void> ready() => _settlePlayerArtwork(tester, clearLogo: clearLogo);
+  await _playerMaterialShots(tester, shot, f, 'shelf', beforeEach: ready);
+  expect(find.byKey(const Key('player-now-playing-cast-name-4')), findsNothing);
+  final lastCast = find.byKey(const Key('player-now-playing-cast-name-3'));
+  await tester.ensureVisible(lastCast);
+  await _settle(tester);
+  final castName = tester.renderObject<RenderBox>(lastCast);
+  final details = tester.renderObject<RenderBox>(
+    find.byKey(const Key('player-now-playing-details')),
+  );
+  Rect drawnRect(RenderBox box) => MatrixUtils.transformRect(
+    box.getTransformTo(null),
+    Offset.zero & box.size,
+  );
+  expect(
+    drawnRect(castName).bottom,
+    lessThanOrEqualTo(drawnRect(details).bottom + .5),
+  );
+  await _playerMaterialShots(
+    tester,
+    shot,
+    f,
+    'cast-visible',
+    beforeEach: ready,
+  );
+}
+
+Future<void> _settlePlayerArtwork(
+  WidgetTester tester, {
+  required bool clearLogo,
+}) async {
+  final logo = find.byKey(const Key('player-now-playing-logo'));
+  // ClearLogoImage's visible-ink scan uses an asynchronous codec in addition
+  // to ImageCache. Pump real async work, then paint, until both are resolved.
+  for (var attempt = 0; attempt < 60; attempt++) {
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 5)),
+    );
+    await tester.pump();
+    final images = find.byType(RawImage).evaluate();
+    final imagesReady = images.every(
+      (element) => (element.renderObject as RenderImage).image != null,
+    );
+    if (imagesReady &&
+        (clearLogo ? logo.evaluate().isNotEmpty : logo.evaluate().isEmpty)) {
+      await tester.pump();
+      expect(logo, clearLogo ? findsOneWidget : findsNothing);
+      if (!clearLogo) {
+        expect(
+          find.byKey(const Key('player-now-playing-series')),
+          findsOneWidget,
+        );
+      }
+      return;
+    }
+  }
+  throw StateError(
+    'Player artwork did not reach the deliberate '
+    '${clearLogo ? 'clear-logo' : 'text-fallback'} state before capture',
+  );
 }
 
 Future<void> _playerMaterialShots(
@@ -1202,6 +1251,7 @@ UiFixture _readyFixture({
   PlayerStatus? playerState,
   List<PlayerTrack>? tracks,
   bool useWordmarkArtwork = false,
+  bool omitClearLogoArtwork = false,
   FixturePlayer? capturePlayer,
 }) {
   final player = capturePlayer ?? _CapturePlayer();
@@ -1242,6 +1292,7 @@ UiFixture _readyFixture({
   }
   final controller = _VisualController()
     ..useWordmarkArtwork = useWordmarkArtwork
+    ..omitClearLogoArtwork = omitClearLogoArtwork
     ..stage = SetupStage.ready
     ..channels = _channels
     ..currentChannelId = _channels[1].id;
@@ -1377,6 +1428,7 @@ class _VisualController extends FixtureController {
   Diagnostics get diagnostics => _captureDiagnostics;
   Map<String, LibraryScanFact> scanFacts = const {};
   bool useWordmarkArtwork = false;
+  bool omitClearLogoArtwork = false;
   Set<String> _scannedLibraryIds = const {};
   List<PlexMediaItem>? _scannedMedia;
 
@@ -1405,7 +1457,11 @@ class _VisualController extends FixtureController {
 
   @override
   Future<Uint8List?> artworkForPath(Uri path) async =>
-      useWordmarkArtwork ? _nowPlayingArtwork[path] : _syntheticArtwork;
+      omitClearLogoArtwork && path == Uri.parse('test://now-playing/title')
+      ? null
+      : useWordmarkArtwork
+      ? _nowPlayingArtwork[path]
+      : _syntheticArtwork;
 
   @override
   Future<ScheduleIndex> loadScheduleFor(Channel channel) async =>
