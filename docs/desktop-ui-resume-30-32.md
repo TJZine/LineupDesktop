@@ -1,5 +1,15 @@
 # Resume collaborative desktop UI review — surfaces 30–32
 
+> **Current workflow authority:** This document retains its product decisions,
+> approvals, scope constraints, and dated evidence. Historical execution policy
+> below does not activate Ponytail, select models, require sequential work,
+> prescribe worker leases or review batches, or prohibit independent review.
+> New or resumed work follows [AGENTS.md](../AGENTS.md),
+> [the project profile](../.agents/project.md), and the shared skills. Parallel
+> work is allowed when contracts, ownership, and runtime resources permit it.
+> This transition does not approve new product work or UI changes, remove an
+> acceptance gate, or turn a recorded observation into fresh verification.
+
 > Completed September12: surfaces30/31/32 are locked at1080p after the
 > user-authorized final fade adjustment, implementation `baec2d04`.
 > See the current approval ledger and
@@ -172,7 +182,7 @@ comparing. Differing movie/episode fixtures previously confused review: explicit
 match content when comparing artwork enabled/disabled or backgrounds.
 
 Pinned tools:
-`/Users/tristan/.cache/lineup-flutter/3.47.2/flutter/bin/flutter`
+`<pinned Flutter SDK>/bin/flutter` (Flutter 3.47.2 at the time; see `docs/DEVELOPMENT.md`)
 (and sibling dart). Run TZ=America/New_York, --no-pub.
 Use existing meaningful behavior tests, focused analysis/format/diff checks.
 NO new UI layout tests/goldens. Do not run broad suites repeatedly for tiny changes.

@@ -2734,6 +2734,54 @@ void main() {
     expect(player.stops, 1);
   });
 
+  test(
+    'authorization during initial seek settles the replacement tune',
+    () async {
+      final lineup = _TestLineup(
+        recoverAuthorization: true,
+        playbackParts: _parts(first: const Duration(minutes: 30)),
+      );
+      final guide = GuideController(
+        lineup: lineup,
+        loadSchedule: (channel) async => _schedule(channel),
+      );
+      final player = _BlockingControlPlayer();
+      final coordinator = PlayerCoordinator(
+        player: player,
+        lineup: lineup,
+        guide: guide,
+      );
+      addTearDown(player.close);
+      addTearDown(lineup.dispose);
+      addTearDown(guide.dispose);
+      addTearDown(coordinator.dispose);
+
+      final tune = coordinator.tune('channel-b');
+      await player.seekStarted.future;
+      final target = player.seeks.single;
+      player.emitError(
+        recoverable: true,
+        generation: player.loadGenerations.single,
+        failureCode: 'http_error',
+        httpStatus: 401,
+      );
+      await pumpEventQueue(times: 5);
+      expect(player.loads.map((uri) => uri.path), [
+        '/part-2.mkv',
+        '/part-2.mkv',
+      ]);
+      expect(player.loadPlexTokens, ['test-token-1', 'test-token-2']);
+      expect(coordinator.tuning, isTrue);
+      player.releaseSeek.complete();
+
+      expect(await tune, isTrue);
+      expect(player.seeks, [target, target]);
+      expect(lineup.currentChannelId, 'channel-b');
+      expect(coordinator.error, isNull);
+      expect(lineup.recoveryCalls, 1);
+    },
+  );
+
   test('known cross-part seek loads a fresh native generation', () async {
     final lineup = _TestLineup(
       playbackParts: _parts(
@@ -3238,6 +3286,43 @@ void main() {
       },
     );
   }
+
+  test('latest target can return to zero during a pending part seek', () async {
+    final lineup = _TestLineup(
+      playbackParts: _parts(
+        first: const Duration(hours: 2),
+        second: const Duration(hours: 1),
+      ),
+    );
+    final guide = GuideController(
+      lineup: lineup,
+      loadSchedule: (channel) async => _schedule(channel),
+    );
+    final player = _BlockingSecondSeekPlayer();
+    final coordinator = PlayerCoordinator(
+      player: player,
+      lineup: lineup,
+      guide: guide,
+    );
+    addTearDown(player.close);
+    addTearDown(lineup.dispose);
+    addTearDown(guide.dispose);
+    addTearDown(coordinator.dispose);
+    await coordinator.tune('channel-b');
+
+    final first = coordinator.seekTo(const Duration(hours: 2, minutes: 5));
+    await player.secondSeekStarted.future;
+    final latest = coordinator.seekTo(const Duration(hours: 2));
+    player.releaseSecondSeek.complete();
+    await Future.wait([first, latest]);
+
+    expect(player.loads.map((uri) => uri.path), ['/part-1.mkv', '/part-2.mkv']);
+    expect(player.seeks.sublist(1), [
+      const Duration(minutes: 5),
+      Duration.zero,
+    ]);
+    expect(coordinator.error, isNull);
+  });
 
   test('same-part seek preserves its pending cross-part failure', () async {
     final lineup = _TestLineup(

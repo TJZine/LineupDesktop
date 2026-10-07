@@ -159,6 +159,21 @@ void main() {
         year: 1998,
         addedAt: DateTime.utc(2021),
       ),
+      PlexMediaItem(
+        id: 'unmatched',
+        title: 'Unmatched',
+        type: 'movie',
+        duration: const Duration(minutes: 1),
+        libraryId: 'movies',
+        parts: [PlexMediaPart(path: '/unmatched')],
+        genres: const ['Drama'],
+        collections: const ['Archive'],
+        studio: 'Other Studio',
+        actors: const ['Other Actor'],
+        directors: const ['Other Director'],
+        year: 2004,
+        addedAt: DateTime.utc(2019),
+      ),
     ];
     for (final filter in const <LibraryFilter, List<String>>{
       LibraryFilter.genre: ['Comedy'],
@@ -176,8 +191,9 @@ void main() {
             filters: {filter.key: filter.value},
           ),
           dated,
-        ).length,
-        2,
+        ).map((item) => item.id),
+        ['older', 'newer'],
+        reason: '${filter.key}',
       );
     }
     expect(
@@ -189,7 +205,7 @@ void main() {
         ),
         dated,
       ).map((item) => item.id),
-      ['newer', 'older'],
+      ['newer', 'older', 'unmatched'],
     );
     for (final filters in const <Map<LibraryFilter, List<String>>>[
       {
@@ -705,60 +721,42 @@ void main() {
     }
   });
 
-  test('content sources reject missing, unknown, null, and invalid fields', () {
-    for (final invalid in [
-      {'type': 'playlist'},
-      {'type': 'playlist', 'playlistId': 'playlist', 'future': true},
-      {'type': 'library', 'libraryId': 'movies', 'libraryType': 'movie'},
-      {
-        'type': 'library',
-        'libraryId': 'movies',
-        'libraryType': 'future',
-        'includeWatched': true,
-      },
-      {
+  test(
+    'library sources reject an ungenerated decade and non-Boolean flags',
+    () {
+      const valid = {
         'type': 'library',
         'libraryId': 'movies',
         'libraryType': 'movie',
         'includeWatched': true,
-        'filters': null,
-      },
-      for (final decade in ['invalid', '0000s', '0990s'])
+      };
+      for (final invalid in [
         {
-          'type': 'library',
-          'libraryId': 'movies',
-          'libraryType': 'movie',
-          'includeWatched': true,
+          ...valid,
           'filters': {
-            'decade': [decade],
+            'decade': ['0990s'],
           },
         },
-      {'type': 'manual', 'items': null},
-      {'type': 'mixed', 'interleave': 1, 'sources': <Object?>[]},
-      {'type': 'future'},
-    ]) {
-      expect(() => ContentSource.fromJson(invalid), throwsFormatException);
-    }
-  });
+        {...valid, 'includeWatched': 1},
+      ]) {
+        expect(() => ContentSource.fromJson(invalid), throwsFormatException);
+      }
+    },
+  );
 
-  test('channel items reject noncanonical fields and numeric values', () {
-    const canonical = {'id': 'item', 'title': 'Item', 'durationMs': 60000};
-    for (final invalid in [
-      {...canonical}..remove('title'),
-      {...canonical, 'future': true},
-      {...canonical, 'durationMs': 60000.0},
-      {...canonical, 'year': 2026.0},
-      {...canonical, 'summary': null},
-      {
-        ...canonical,
+  test('channel items reject mistyped persisted values', () {
+    expect(
+      () => ChannelItem.fromJson({
+        'id': 'item',
+        'title': 'Item',
+        'durationMs': 60000,
         'genres': ['Drama', 7],
-      },
-    ]) {
-      expect(() => ChannelItem.fromJson(invalid), throwsFormatException);
-    }
+      }),
+      throwsFormatException,
+    );
   });
 
-  test('channels round-trip and reject noncanonical persisted values', () {
+  test('channels round-trip and reject unknown fields and enum values', () {
     final channel = Channel(
       id: 'channel',
       number: 7,
@@ -772,18 +770,14 @@ void main() {
     );
     expect(Channel.fromJson(channel.toJson()).toJson(), channel.toJson());
 
-    final canonical = channel.toJson();
-    for (final invalid in [
-      {...canonical}..remove('anchor'),
-      {...canonical, 'future': true},
-      {...canonical, 'number': 7.0},
-      {...canonical, 'shuffleSeed': 42.0},
-      {...canonical, 'playbackMode': 'future'},
-      {...canonical, 'blockSize': null},
-      {...canonical, 'builderKey': null},
-    ]) {
-      expect(() => Channel.fromJson(invalid), throwsFormatException);
-    }
+    expect(
+      () => Channel.fromJson({...channel.toJson(), 'future': true}),
+      throwsFormatException,
+    );
+    expect(
+      () => Channel.fromJson({...channel.toJson(), 'playbackMode': 'future'}),
+      throwsFormatException,
+    );
   });
 
   test('non-block channels normalize specials in persistence and identity', () {

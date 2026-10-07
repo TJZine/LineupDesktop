@@ -4,8 +4,10 @@ Lineup Desktop is a pre-release Flutter-native desktop application with a narrow
 Windows C++/libmpv boundary. Contributions should improve the current
 architecture rather than preserve the historical Electron implementation.
 
-Target `flutter-mvp` unless an issue or maintainer explicitly names another
-base branch.
+Resolve the target and base from the current task, issue, or pull request
+metadata. Do not infer the active development target from an old branch name.
+If those sources leave a consequential base choice unresolved, clarify it
+before creating or retargeting a branch or pull request.
 
 ## Before contributing
 
@@ -23,20 +25,13 @@ being investigated.
 
 ## Architecture constraints
 
-- Flutter/Dart owns application state, product policy, Plex workflows, channels,
-  schedules, settings, persistence, diagnostics, UI, Guide, navigation, input,
-  focus, overlays, and accessibility.
-- C++ owns only behavior that materially requires native media or platform
-  ownership: libmpv lifetime and commands, decoded-frame presentation, Windows
-  handles, DirectComposition, fullscreen placement, and bounded native facts.
-- Keep one authoritative owner per responsibility.
-- Reject stale asynchronous work explicitly and bound queues, caches, and
-  user-controlled workloads.
-- Do not add Electron/WebView compatibility, helper processes, duplicate
-  coordinators, event buses, service locators, speculative plugin systems, or
-  dependency layers without a demonstrated owner and consumer.
-- Prefer deletion or direct replacement over compatibility shims in this
-  pre-release codebase.
+[Architecture](docs/architecture.md#accepted-ownership) owns the current
+responsibility boundaries; the [project profile](.agents/project.md) maps
+source entry points and task-specific contracts. Flutter/Dart owns application
+and interaction policy. Native code owns libmpv and Windows platform mechanisms.
+Preserve the relevant behavior, security, lifetime, and data obligations when
+replacing an implementation. Historical structure is not a reason to retain
+duplicate policy or a displaced compatibility path.
 
 ## Development setup
 
@@ -47,33 +42,34 @@ engine, patch, or media runtime when validating repository behavior.
 Commands and evidence boundaries live in
 [Development's verification map](docs/DEVELOPMENT.md#verification-by-task).
 
-## Change design
+## Change design and review
 
-Before editing:
+Use the current [agent entry](AGENTS.md) and shared skills for agent-assisted
+work. Investigate the actual owner and affected contracts before changing a
+design. The project profile identifies relevant product/UI approvals and
+native obligations; those are distinct from historical agent dispatch rules.
 
-- trace the current owner, callers, tests, persistence, and failure behavior;
-- identify the smallest cohesive change;
-- state what evidence can prove it;
-- consider security, accessibility, cancellation/currentness, and rollback; and
-- avoid unrelated cleanup.
-
-Add dependencies only when the concrete reliability or ownership benefit
-outweighs activity, license, desktop support, transitive cost, and debugging
-cost.
+Independent tasks may run concurrently with explicit write ownership and stable
+verification inputs. Keep one Git/integration owner. Review depth follows the
+changed risk, not a required number of agents or repeated passes. The shared
+`review-code` process adjudicates findings, including bot findings, against
+the actual source and evidence.
 
 ## Tests and validation
 
-Use [Development](docs/DEVELOPMENT.md#verification-by-task) to select focused
-tests and the relevant full checks. Reuse inspected results while their tested
-code, inputs, dependencies, and relevant environment remain unchanged; rerun
-checks invalidated by edits or integration. Documentation-only changes need
-structural and claim checks, not product test reruns.
+Use [the project verification profile](.agents/project.md#verification-selection)
+and [Development's command map](docs/DEVELOPMENT.md#verification-by-task).
+The shared `verify-code` skill owns general evidence selection. Preserve each
+relevant obligation without requiring duplicate tests or automatic new tests
+for every changed file. Documentation-only changes need structural and claim
+checks, not product test reruns.
 
-Classify missing physical Windows evidence as unverified or blocked for the
-specific native/support claim, and state the exact scenario still required.
-It does not block unrelated portable work. Compilation alone never establishes
-native presentation, HDR, hardware decode, physical input, or package runtime
-behavior.
+Record what was actually checked, the source/build identity, and material
+limits. Missing physical Windows evidence limits the particular native or
+support claim; it does not block unrelated portable work. Compilation alone
+does not establish native presentation, HDR, hardware decode, physical input,
+or package runtime behavior. Evidence reuse follows the project profile;
+an old observation is never relabeled as a newly executed candidate run.
 
 ## Security and private data
 
@@ -129,9 +125,10 @@ A pull request should explain:
 - rollback or recovery considerations for consequential changes.
 
 Keep the diff focused. Do not merge a native-media change solely because CI
-compiled it. Independent review is appropriate for credential/data-loss risk,
-complex concurrency, native ABI or lifetime work, DirectComposition, HDR, and
-release packaging, but it remains an explicit maintainer decision.
+compiled it. Apply the shared review policy and the project's native/security
+risks. Read-only review may run within the authorized workflow; merge,
+publication, and other consequential external actions retain their actual
+authorization requirements.
 
 ## Reporting issues
 

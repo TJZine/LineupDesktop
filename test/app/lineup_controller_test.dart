@@ -77,7 +77,7 @@ void main() {
       await controller.initialize();
       controller.diagnostics.enabled = true;
       store.blockNext(fail: true);
-      final pending = controller.updateSettings(controller.settings);
+      final pending = controller.updateSettings((current) => current);
       final failure = expectLater(pending, throwsStateError);
       await store.blockedSaveStarted.future;
       controller.dispose();
@@ -428,7 +428,8 @@ void main() {
     await controller.initialize();
     await controller.selectProfile(child);
     controller.diagnostics.enabled = true;
-    await controller.setLibraries({'movies'});
+    expect(await controller.scanLibraries({'movies'}), isTrue);
+    expect(await controller.commitLibraryScan({'movies'}), isTrue);
     await controller.artworkForPath(Uri.parse('/art'));
     plex.playbackDescriptorResult = [
       (
@@ -1089,9 +1090,10 @@ void main() {
         _generatedChannel('planned', 1),
       ]);
 
-      await controller.applyChannelPlan(
+      await controller.applyReviewedChannelPlan(
         planned,
         mode: ChannelBuildMode.replace,
+        expectedBase: controller.channels,
       );
 
       expect(controller.channels.single.id, 'planned');
@@ -1121,9 +1123,11 @@ void main() {
         ..channels = [custom, _generatedChannel('old', 2)]
         ..currentChannelId = custom.id;
 
-      await controller.applyChannelPlan([
-        _generatedChannel('planned', 3),
-      ], mode: mode);
+      await controller.applyReviewedChannelPlan(
+        [_generatedChannel('planned', 3)],
+        mode: mode,
+        expectedBase: controller.channels,
+      );
 
       expect(
         jsonEncode(
@@ -1140,27 +1144,53 @@ void main() {
 
   test('replace falls back near a removed generated current channel', () async {
     final custom = _channel('custom');
-    final removed = _generatedChannel('removed', 2);
-    final replacement = _generatedChannel('replacement', 3);
-    final controller = LineupController(
-      store: _MemoryStore(),
-      credentials: _MemoryCredentials(),
-      plex: _FakePlex(),
-    );
-    addTearDown(controller.dispose);
-    await controller.initialize();
-    controller
-      ..connection = _server('server').connections.single
-      ..availableMedia = [_playableMovie]
-      ..channels = [custom, removed]
-      ..currentChannelId = removed.id;
+    final cases = [
+      (
+        name: 'old index beyond the shorter lineup selects the last channel',
+        old: [
+          _generatedChannel('old-generated', 2),
+          _generatedChannel('removed', 3),
+        ],
+        planned: [_generatedChannel('replacement', 4)],
+        expected: 'replacement',
+      ),
+      (
+        name: 'old index inside the new lineup keeps its position',
+        old: [
+          _generatedChannel('removed', 2),
+          _generatedChannel('old-generated', 3),
+        ],
+        planned: [
+          for (var number = 4; number <= 6; number++)
+            _generatedChannel('replacement-$number', number),
+        ],
+        expected: 'replacement-4',
+      ),
+    ];
 
-    await controller.applyChannelPlan([
-      replacement,
-    ], mode: ChannelBuildMode.replace);
+    for (final row in cases) {
+      final controller = LineupController(
+        store: _MemoryStore(),
+        credentials: _MemoryCredentials(),
+        plex: _FakePlex(),
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+      controller
+        ..connection = _server('server').connections.single
+        ..availableMedia = [_playableMovie]
+        ..channels = [custom, ...row.old]
+        ..currentChannelId = 'removed';
 
-    expect(controller.channels, [custom, replacement]);
-    expect(controller.currentChannelId, replacement.id);
+      await controller.applyReviewedChannelPlan(
+        row.planned,
+        mode: ChannelBuildMode.replace,
+        expectedBase: controller.channels,
+      );
+
+      expect(controller.channels, [custom, ...row.planned], reason: row.name);
+      expect(controller.currentChannelId, row.expected, reason: row.name);
+    }
   });
 
   test(
@@ -1194,9 +1224,11 @@ void main() {
         ..availableMedia = [_playableMovie]
         ..channels = [custom, matched, unmatched];
 
-      await controller.applyChannelPlan([
-        replacement,
-      ], mode: ChannelBuildMode.merge);
+      await controller.applyReviewedChannelPlan(
+        [replacement],
+        mode: ChannelBuildMode.merge,
+        expectedBase: controller.channels,
+      );
 
       expect(
         controller.channels,
@@ -1224,9 +1256,11 @@ void main() {
       ..currentChannelId = generated.id;
 
     await expectLater(
-      controller.applyChannelPlan([
-        _channel('unowned'),
-      ], mode: ChannelBuildMode.replace),
+      controller.applyReviewedChannelPlan(
+        [_channel('unowned')],
+        mode: ChannelBuildMode.replace,
+        expectedBase: controller.channels,
+      ),
       throwsFormatException,
     );
     expect(controller.channels, [custom, generated]);
@@ -1234,9 +1268,11 @@ void main() {
     expect(store.saveCalls, 0);
 
     await expectLater(
-      controller.applyChannelPlan([
-        _generatedChannel('conflict', custom.number),
-      ], mode: ChannelBuildMode.append),
+      controller.applyReviewedChannelPlan(
+        [_generatedChannel('conflict', custom.number)],
+        mode: ChannelBuildMode.append,
+        expectedBase: controller.channels,
+      ),
       throwsFormatException,
     );
     expect(controller.channels, [custom, generated]);
@@ -1289,7 +1325,11 @@ void main() {
         );
 
         await expectLater(
-          controller.applyChannelPlan([planned], mode: mode),
+          controller.applyReviewedChannelPlan(
+            [planned],
+            mode: mode,
+            expectedBase: original,
+          ),
           throwsA(
             isA<FormatException>().having(
               (error) => error.message,
@@ -1359,7 +1399,11 @@ void main() {
           );
 
           await expectLater(
-            controller.applyChannelPlan([planned], mode: mode),
+            controller.applyReviewedChannelPlan(
+              [planned],
+              mode: mode,
+              expectedBase: original,
+            ),
             throwsA(
               isA<FormatException>().having(
                 (error) => error.message,
@@ -1401,9 +1445,11 @@ void main() {
         ..currentChannelId = generated.id;
 
       await expectLater(
-        controller.applyChannelPlan([
-          _generatedChannel('replacement', 2),
-        ], mode: ChannelBuildMode.replace),
+        controller.applyReviewedChannelPlan(
+          [_generatedChannel('replacement', 2)],
+          mode: ChannelBuildMode.replace,
+          expectedBase: controller.channels,
+        ),
         throwsStateError,
       );
 
@@ -1467,9 +1513,10 @@ void main() {
       ..stage = SetupStage.channelSetup
       ..diagnostics.enabled = true;
 
-    final loaded = await controller.setLibraries({'movies'});
+    final loaded = await controller.scanLibraries({'movies'});
 
-    expect(loaded, isFalse);
+    expect(loaded, isTrue);
+    expect(controller.libraryScanRetryIds, {'movies'});
     expect(controller.stage, SetupStage.channelSetup);
     expect(controller.error, 'opaque-secret-sentinel');
     expect(controller.diagnostics.entries.single.message, 'Operation failed');
@@ -1542,7 +1589,7 @@ void main() {
       }
     });
 
-    final loaded = await controller.setLibraries({
+    final scanned = await controller.scanLibraries({
       'library-5',
       'library-4',
       'library-3',
@@ -1551,7 +1598,18 @@ void main() {
       'library-0',
     });
 
-    expect(loaded, isTrue);
+    expect(scanned, isTrue);
+    expect(
+      await controller.commitLibraryScan({
+        'library-5',
+        'library-4',
+        'library-3',
+        'library-2',
+        'library-1',
+        'library-0',
+      }),
+      isTrue,
+    );
     expect(peak, 4);
     expect(perLibrary.values, everyElement(1));
     expect(requests, 6);
@@ -1640,7 +1698,8 @@ void main() {
         }
       });
 
-      expect(await controller.setLibraries({'movies'}), isTrue);
+      expect(await controller.scanLibraries({'movies'}), isTrue);
+      expect(await controller.commitLibraryScan({'movies'}), isTrue);
 
       expect(calls, 2);
       expect(observed, orderedEquals(observed.toList()..sort()));
@@ -1737,14 +1796,18 @@ void main() {
     await controller.initialize();
 
     expect(
-      await controller.setLibraries({'mixed', 'empty', 'unsupported', 'shows'}),
+      await controller.scanLibraries({
+        'mixed',
+        'empty',
+        'unsupported',
+        'shows',
+      }),
       isTrue,
     );
 
-    expect(controller.availableMedia.map((item) => item.id), [
-      'playable',
-      'episode',
-    ]);
+    expect(controller.availableMedia, isEmpty);
+    expect(controller.selectedLibraryIds, isEmpty);
+    expect(controller.libraryScanReadyIds, {'mixed', 'shows'});
     expect(
       controller.libraryScanFacts['mixed']!.status,
       LibraryScanStatus.complete,
@@ -1847,7 +1910,7 @@ void main() {
         ),
       ];
 
-    final scan = controller.setLibraries({
+    final scan = controller.scanLibraries({
       for (var index = 0; index < 7; index++) 'library-$index',
     });
     await fourStarted.future;
@@ -1856,7 +1919,7 @@ void main() {
     final itemsAtFailure = controller.libraryScanCompletedItems;
     releasePeers.complete();
 
-    expect(await scan, isFalse);
+    expect(await scan, isTrue);
     expect(controller.error, 'First failure');
     expect(started, [for (var index = 0; index < 7; index++) 'library-$index']);
     expect(controller.libraryScanCompletedItems, greaterThan(itemsAtFailure));
@@ -1949,17 +2012,18 @@ void main() {
         ),
       ];
 
-    final first = controller.setLibraries({'first'});
+    final first = controller.scanLibraries({'first'});
     await firstStarted.future;
     controller.cancelLibraryScan();
     expect(controller.libraryScanStatus, LibraryScanStatus.cancelled);
     expect(controller.selectedLibraryIds, {'committed'});
     expect(controller.availableMedia.single.id, 'committed');
 
-    final second = controller.setLibraries({'second'});
+    final second = controller.scanLibraries({'second'});
     releaseFirst.complete();
     expect(await first, isFalse);
     expect(await second, isTrue);
+    expect(await controller.commitLibraryScan({'second'}), isTrue);
     expect(controller.selectedLibraryIds, {'second'});
     expect(controller.availableMedia.single.id, 'second');
     expect(controller.libraryScanStatus, LibraryScanStatus.complete);
@@ -2054,14 +2118,15 @@ void main() {
           ]
           ..diagnostics.enabled = true;
         final savedBefore = store.saveCalls;
-        final abandoned = controller.setLibraries({'movies'});
+        final abandoned = controller.scanLibraries({'movies'});
         await firstBatchStarted.future;
         if (action == 'cancel and retry') {
           controller.cancelLibraryScan();
           expect(controller.availableMedia.single.id, 'committed');
           expect(controller.selectedLibraryIds, {'committed'});
           expect(store.saveCalls, savedBefore);
-          expect(await controller.setLibraries({'movies'}), isTrue);
+          expect(await controller.scanLibraries({'movies'}), isTrue);
+          expect(await controller.commitLibraryScan({'movies'}), isTrue);
           expect(controller.availableMedia.single.id, _playableMovie.id);
           expect(controller.libraryScanStatus, LibraryScanStatus.complete);
           expect(itemRequests.where((scan) => scan == 2), hasLength(8));
@@ -2139,7 +2204,7 @@ void main() {
         ];
       final savesBeforeScan = store.saveCalls;
 
-      final scan = controller.setLibraries({'movies'});
+      final scan = controller.scanLibraries({'movies'});
       await started.future;
       controller.cancelChannelSetup();
       release.complete();
@@ -2187,7 +2252,7 @@ void main() {
     addTearDown(controller.dispose);
     await controller.initialize();
 
-    final scan = controller.setLibraries({
+    final scan = controller.scanLibraries({
       for (var index = 0; index < 5; index++) 'library-$index',
     });
     await fourStarted.future;
@@ -2258,21 +2323,21 @@ void main() {
       addTearDown(controller.dispose);
       await controller.initialize();
 
-      expect(await controller.setLibraries({'movies'}), isTrue);
+      expect(await controller.scanLibraries({'movies'}), isTrue);
       expect(controller.libraryScanStatus, LibraryScanStatus.empty);
       result = 1;
-      expect(await controller.setLibraries({'movies'}), isTrue);
+      expect(await controller.scanLibraries({'movies'}), isTrue);
       expect(controller.libraryScanStatus, LibraryScanStatus.unsupported);
       result = 2;
-      expect(await controller.setLibraries({'movies'}), isFalse);
+      expect(await controller.scanLibraries({'movies'}), isTrue);
       expect(controller.libraryScanStatus, LibraryScanStatus.transientFailure);
       expect(controller.error, contains('did not respond'));
       result = 3;
-      expect(await controller.setLibraries({'movies'}), isFalse);
+      expect(await controller.scanLibraries({'movies'}), isTrue);
       expect(controller.libraryScanStatus, LibraryScanStatus.transientFailure);
       expect(controller.error, contains('503'));
       result = 4;
-      expect(await controller.setLibraries({'movies'}), isFalse);
+      expect(await controller.scanLibraries({'movies'}), isTrue);
       expect(controller.libraryScanStatus, LibraryScanStatus.transientFailure);
       expect(controller.error, contains('too large'));
     },
@@ -2459,7 +2524,7 @@ void main() {
         ]
         ..diagnostics.enabled = true;
 
-      expect(await controller.setLibraries({'movies'}), isFalse);
+      expect(await controller.scanLibraries({'movies'}), isFalse);
 
       expect(controller.availableMedia, same(previousMedia));
       expect(controller.availablePlaylists, same(previousPlaylists));
@@ -2588,7 +2653,8 @@ void main() {
       ..diagnostics.enabled = true;
     final savedBefore = store.saveCalls;
 
-    expect(await controller.setLibraries({'movies'}), isFalse);
+    expect(await controller.scanLibraries({'movies'}), isTrue);
+    expect(await controller.commitLibraryScan({'movies'}), isFalse);
 
     expect(controller.availableMedia, same(previousMedia));
     expect(controller.availablePlaylists, same(previousPlaylists));
@@ -2603,7 +2669,8 @@ void main() {
     expect(store.saveCalls, savedBefore);
 
     catalogMode = 'valid';
-    expect(await controller.setLibraries({'movies'}), isTrue);
+    expect(await controller.scanLibraries({'movies'}), isTrue);
+    expect(await controller.commitLibraryScan({'movies'}), isTrue);
     expect(controller.availablePlaylists.map((playlist) => playlist.id), [
       'p1',
     ]);
@@ -2687,7 +2754,7 @@ void main() {
         ..diagnostics.enabled = true;
       final savedBefore = store.saveCalls;
 
-      expect(await controller.setLibraries({'movies'}), isFalse);
+      expect(await controller.scanLibraries({'movies'}), isFalse);
 
       expect(controller.availableMedia, same(previousMedia));
       expect(controller.availablePlaylists, same(previousPlaylists));
@@ -2826,10 +2893,11 @@ void main() {
       await controller.initialize();
       final savedBefore = store.saveCalls;
 
-      final scan = controller.setLibraries({'movies'});
+      final scan = controller.scanLibraries({'movies'});
       await allStarted.future;
       releaseFatal.complete();
       expect(await scan, isTrue);
+      expect(await controller.commitLibraryScan({'movies'}), isTrue);
 
       expect(aborts, 3);
       expect(discoveries, 2);
@@ -2892,7 +2960,7 @@ void main() {
         ..stage = SetupStage.channelSetup
         ..diagnostics.enabled = true;
 
-      expect(await controller.setLibraries({'movies'}), isTrue);
+      expect(await controller.scanLibraries({'movies'}), isTrue);
       var entry = controller.diagnostics.entries.single;
       expect(entry.message, 'Playlist discovery unavailable');
       expect(entry.context, {'code': 'playlist-failed'});
@@ -2903,7 +2971,7 @@ void main() {
 
       controller.diagnostics.enabled = false;
       controller.diagnostics.enabled = true;
-      expect(await controller.setLibraries({'movies'}), isTrue);
+      expect(await controller.scanLibraries({'movies'}), isTrue);
       entry = controller.diagnostics.entries.single;
       expect(entry.message, 'Some playlists could not be loaded');
       expect(entry.context, {'count': 2});
@@ -3229,7 +3297,7 @@ void main() {
 
       await expectLater(
         controller.updateSettings(
-          const LineupSettings(diagnosticsEnabled: true),
+          (_) => const LineupSettings(diagnosticsEnabled: true),
         ),
         throwsStateError,
       );
@@ -3385,7 +3453,10 @@ void main() {
         shuffleSeed: 1,
       );
 
-      expect(controller.scheduleFor(channel).items.single.id, 'shared');
+      expect(
+        (await controller.loadScheduleFor(channel)).items.single.id,
+        'shared',
+      );
       await controller.saveChannel(channel, expectedBase: null);
       controller.playbackFor('shared');
       expect(plex.playbackItems.last.title, 'Playlist item');
@@ -3502,10 +3573,6 @@ void main() {
 
       expect(controller.playableInventory.playlists.single.items, isEmpty);
 
-      expect(
-        () => controller.scheduleFor(channel),
-        _throwsScheduleFailure(ScheduleFailureReason.noContent),
-      );
       await expectLater(
         controller.loadScheduleFor(channel),
         _throwsScheduleFailure(ScheduleFailureReason.noContent),
@@ -3523,7 +3590,7 @@ void main() {
 
   test(
     'missing endpoints are empty and unexpected descriptor errors surface',
-    () {
+    () async {
       final plex = _FakePlex();
       final missingEndpoint = LineupController(
         store: _MemoryStore(),
@@ -3532,8 +3599,8 @@ void main() {
       )..availableMedia = [_playableMovie];
       addTearDown(missingEndpoint.dispose);
 
-      expect(
-        () => missingEndpoint.scheduleFor(_channel('missing')),
+      await expectLater(
+        missingEndpoint.loadScheduleFor(_channel('missing')),
         _throwsScheduleFailure(ScheduleFailureReason.noContent),
       );
       expect(missingEndpoint.playableInventory.media, isEmpty);
@@ -3549,7 +3616,10 @@ void main() {
             ..connection = _server('server').connections.single
             ..availableMedia = [_playableMovie];
       addTearDown(broken.dispose);
-      expect(() => broken.scheduleFor(_channel('broken')), throwsStateError);
+      expect(
+        () => broken.loadScheduleFor(_channel('broken')),
+        throwsStateError,
+      );
     },
   );
 
@@ -3596,7 +3666,10 @@ void main() {
         isNull,
       );
 
-      expect(controller.scheduleFor(channel).items.single.id, 'multipart');
+      expect(
+        (await controller.loadScheduleFor(channel)).items.single.id,
+        'multipart',
+      );
       await controller.saveChannel(channel, expectedBase: null);
       expect(
         (await controller.loadScheduleFor(channel)).items.single.id,
@@ -3825,52 +3898,67 @@ void main() {
       expect(manual.items.map((item) => item.id), ['missing', 'movie']);
       expect(manual.items.first.title, 'Retained missing');
       expect(manual.items.last.title, 'Fresh movie');
-      expect(controller.scheduleFor(reloaded[3]).items.map((item) => item.id), [
-        'movie',
-      ]);
+      expect(
+        (await controller.loadScheduleFor(reloaded[3])).items
+            .map((item) => item.id),
+        ['movie'],
+      );
       for (var size = 2; size <= 5; size++) {
         final channel = reloaded[size + 2];
         expect(channel.playbackMode, PlaybackMode.block);
         expect(channel.blockSize, size);
         expect(
-          controller.scheduleFor(channel).items.map((item) => item.id),
+          (await controller.loadScheduleFor(channel)).items
+              .map((item) => item.id),
           expectedBlockOrders[size],
         );
       }
     },
   );
 
-  test('failed projection rebuild retries the same inventory identity', () {
-    final plex = _ThrowOncePlaybackPlex('replacement');
-    final controller =
-        LineupController(
-            store: _MemoryStore(),
-            credentials: _MemoryCredentials(),
-            plex: plex,
-          )
-          ..connection = _server('server').connections.single
-          ..availableMedia = [_playableMovie];
-    addTearDown(controller.dispose);
-    final channel = _channel('retry');
-    expect(controller.scheduleFor(channel).items.single.id, 'movie');
-    final replacement = PlexMediaItem(
-      id: 'replacement',
-      title: 'Replacement',
-      type: 'movie',
-      duration: const Duration(minutes: 1),
-      libraryId: 'movies',
-      parts: [PlexMediaPart(path: '/replacement')],
-    );
-    final replacementInventory = <PlexMediaItem>[replacement];
-    controller.availableMedia = replacementInventory;
+  test(
+    'failed projection rebuild retries the same inventory identity',
+    () async {
+      final plex = _ThrowOncePlaybackPlex('replacement');
+      final controller =
+          LineupController(
+              store: _MemoryStore(),
+              credentials: _MemoryCredentials(),
+              plex: plex,
+            )
+            ..connection = _server('server').connections.single
+            ..availableMedia = [_playableMovie];
+      addTearDown(controller.dispose);
+      final channel = _channel('retry');
+      expect(
+        (await controller.loadScheduleFor(channel)).items.single.id,
+        'movie',
+      );
+      final replacement = PlexMediaItem(
+        id: 'replacement',
+        title: 'Replacement',
+        type: 'movie',
+        duration: const Duration(minutes: 1),
+        libraryId: 'movies',
+        parts: [PlexMediaPart(path: '/replacement')],
+      );
+      final replacementInventory = <PlexMediaItem>[replacement];
+      controller.availableMedia = replacementInventory;
 
-    expect(() => controller.scheduleFor(channel), throwsStateError);
-    expect(plex.attempts, 1);
-    expect(identical(controller.availableMedia, replacementInventory), isTrue);
+      expect(() => controller.loadScheduleFor(channel), throwsStateError);
+      expect(plex.attempts, 1);
+      expect(
+        identical(controller.availableMedia, replacementInventory),
+        isTrue,
+      );
 
-    expect(controller.scheduleFor(channel).items.single.id, 'replacement');
-    expect(plex.attempts, 2);
-  });
+      expect(
+        (await controller.loadScheduleFor(channel)).items.single.id,
+        'replacement',
+      );
+      expect(plex.attempts, 2);
+    },
+  );
 
   test(
     'failed settings settles before a queued channel transaction derives',
@@ -3892,7 +3980,7 @@ void main() {
       store.blockNext(fail: true);
 
       final settings = controller.updateSettings(
-        const LineupSettings(diagnosticsEnabled: true),
+        (_) => const LineupSettings(diagnosticsEnabled: true),
       );
       await store.blockedSaveStarted.future;
       final channel = controller.saveChannel(
@@ -3935,10 +4023,10 @@ void main() {
       ..currentChannelId = existing.id;
     store.blockNext(fail: true);
 
-    final channel = controller.deleteChannel(existing.id);
+    final channel = controller.deleteChannels(expectedChannels: [existing]);
     await store.blockedSaveStarted.future;
     final settings = controller.updateSettings(
-      const LineupSettings(nowWatchingBanner: false),
+      (_) => const LineupSettings(nowWatchingBanner: false),
     );
     store.releaseBlockedSave();
 
@@ -3981,7 +4069,7 @@ void main() {
       store.blockNext(fail: true);
 
       final settings = controller.updateSettings(
-        const LineupSettings(diagnosticsEnabled: true),
+        (_) => const LineupSettings(diagnosticsEnabled: true),
       );
       await store.blockedSaveStarted.future;
       final current = controller.setCurrentChannel(second.id);
@@ -4019,7 +4107,8 @@ void main() {
             title: 'Movies',
             type: PlexLibraryType.movie,
           ),
-        ];
+        ]
+        ..libraryItemsHandler = (_, _, _, _) async => [_playableMovie];
       final controller = LineupController(
         store: store,
         credentials: _MemoryCredentials(accountToken: 'account-token'),
@@ -4030,10 +4119,14 @@ void main() {
       store.blockNext(fail: true);
 
       final settings = controller.updateSettings(
-        const LineupSettings(diagnosticsEnabled: true),
+        (_) => const LineupSettings(diagnosticsEnabled: true),
       );
       await store.blockedSaveStarted.future;
-      final libraries = controller.setLibraries({'movies'});
+      final libraries = () async {
+        final scanned = await controller.scanLibraries({'movies'});
+        if (!scanned) return false;
+        return controller.commitLibraryScan({'movies'});
+      }();
       await Future<void>.delayed(Duration.zero);
       store.releaseBlockedSave();
 
@@ -4093,7 +4186,7 @@ void main() {
     store.blockNext();
 
     final settings = controller.updateSettings(
-      const LineupSettings(nowWatchingBanner: false),
+      (_) => const LineupSettings(nowWatchingBanner: false),
     );
     await store.blockedSaveStarted.future;
     final selection = controller.selectProfile(child);
@@ -4132,7 +4225,7 @@ void main() {
     store.blockNext();
 
     final settings = controller.updateSettings(
-      const LineupSettings(nowWatchingBanner: false),
+      (_) => const LineupSettings(nowWatchingBanner: false),
     );
     await store.blockedSaveStarted.future;
     final selection = controller.selectServer(nextServer);
@@ -4212,7 +4305,7 @@ void main() {
       store.blockNext();
 
       final settings = controller.updateSettings(
-        const LineupSettings(nowWatchingBanner: false),
+        (_) => const LineupSettings(nowWatchingBanner: false),
       );
       await store.blockedSaveStarted.future;
       final selection = controller.selectServer(nextServer);
@@ -4259,7 +4352,7 @@ void main() {
       store.blockNext(fail: true);
 
       final settings = controller.updateSettings(
-        const LineupSettings(diagnosticsEnabled: true),
+        (_) => const LineupSettings(diagnosticsEnabled: true),
       );
       await store.blockedSaveStarted.future;
       final selection = controller.selectProfile(child);
@@ -4290,7 +4383,7 @@ void main() {
       store.blockNext();
 
       final settings = controller.updateSettings(
-        const LineupSettings(nowWatchingBanner: false),
+        (_) => const LineupSettings(nowWatchingBanner: false),
       );
       await store.blockedSaveStarted.future;
       final logout = controller.logout();
@@ -4330,7 +4423,7 @@ void main() {
     store.blockNext();
 
     final settings = controller.updateSettings(
-      const LineupSettings(nowWatchingBanner: false),
+      (_) => const LineupSettings(nowWatchingBanner: false),
     );
     await store.blockedSaveStarted.future;
     final stale = controller.saveChannel(_channel('stale'), expectedBase: null);
@@ -4500,7 +4593,7 @@ void main() {
     addTearDown(controller.dispose);
 
     final settings = controller.updateSettings(
-      const LineupSettings(diagnosticsEnabled: true),
+      (_) => const LineupSettings(diagnosticsEnabled: true),
     );
     await store.saveStarted.future;
     final logout = controller.logout();
@@ -4786,7 +4879,7 @@ void main() {
     expect(plex.artworkServer, selected.connections.single.uri);
   });
 
-  test('a failed settings transaction settles before the next value', () async {
+  test('cross-caller settings failure never becomes committed', () async {
     final store = _ConcurrentStore();
     final controller = LineupController(
       store: store,
@@ -4795,21 +4888,357 @@ void main() {
     );
     addTearDown(controller.dispose);
     await controller.initialize();
-
+    final observed = <LineupSettings>[];
+    controller.addListener(() => observed.add(controller.settings));
     final stale = controller.updateSettings(
-      const LineupSettings(diagnosticsEnabled: true),
+      (current) => current.copyWith(diagnosticsEnabled: true),
     );
+    final failure = expectLater(stale, throwsStateError);
     await store.firstSaveStarted.future;
+    expect(controller.settings.diagnosticsEnabled, isFalse);
     final newer = controller.updateSettings(
-      const LineupSettings(nowWatchingBanner: false),
+      (current) => current.copyWith(nowWatchingBanner: false),
     );
     store.failFirstSave.complete();
-    await expectLater(stale, throwsStateError);
+    await failure;
     await newer;
-
     expect(controller.settings.nowWatchingBanner, isFalse);
     expect(controller.settings.diagnosticsEnabled, isFalse);
+    expect(store.state.settings.nowWatchingBanner, isFalse);
+    expect(store.state.settings.diagnosticsEnabled, isFalse);
+    expect(observed.every((value) => !value.diagnosticsEnabled), isTrue);
   });
+
+  test('queued settings transformations retain both successful fields through refresh', () async {
+    final store = _ControlledSaveStore();
+    final selected = _server('server');
+    final controller = LineupController(
+      store: store,
+      credentials: _MemoryCredentials(accountToken: 'account-token'),
+      plex: _FakePlex()..serversResult = [selected],
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+    store.blockNext();
+    final first = controller.updateSettings(
+      (current) => current.copyWith(diagnosticsEnabled: true),
+    );
+    await store.blockedSaveStarted.future;
+    final second = controller.updateSettings(
+      (current) => current.copyWith(nowWatchingBanner: false),
+    );
+    expect(controller.settings.diagnosticsEnabled, isFalse);
+    await controller.refreshServers();
+    store.releaseBlockedSave();
+    await first;
+    await second;
+    expect(controller.settings.diagnosticsEnabled, isTrue);
+    expect(controller.settings.nowWatchingBanner, isFalse);
+    expect(store.state.settings.diagnosticsEnabled, isTrue);
+    expect(store.state.settings.nowWatchingBanner, isFalse);
+  });
+
+  test('captured playback recovery survives discovery but rejects leave and return', () async {
+    final selected = _server('server');
+    final other = _server('other');
+    final plex = _FakePlex()..serversResult = [selected, other];
+    final controller = LineupController(
+      store: _MemoryStore(
+        const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+      ),
+      credentials: _MemoryCredentials(accountToken: 'account-token'),
+      plex: plex,
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+    controller.availableMedia = [_playableMovie];
+    final playback = controller.playbackFor('movie');
+    await controller.refreshServers();
+    plex.resourceToken = 'refreshed-pms-token';
+    final refreshed = await playback.authorizationRecovery!();
+    expect(refreshed.plexToken, plex.resourceToken);
+    await controller.selectServer(other);
+    await controller.selectServer(selected);
+    final requests = plex.discoveredTokens.length;
+    await expectLater(
+      playback.authorizationRecovery!(),
+      throwsA(isA<PlexException>()),
+    );
+    expect(plex.discoveredTokens.length, requests);
+  });
+
+  for (final cleanupFails in [false, true]) {
+    test(
+      'in-flight channel commit stays coherent when logout cleanup ${cleanupFails ? 'fails' : 'succeeds'}',
+      () async {
+        final selected = _server('server');
+        final store = _ControlledSaveStore(
+          const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+        );
+        final credentials = cleanupFails
+            ? _FailingClearCredentials(accountToken: 'account-token')
+            : _MemoryCredentials(accountToken: 'account-token');
+        final controller = LineupController(
+          store: store,
+          credentials: credentials,
+          plex: _FakePlex()..serversResult = [selected],
+        );
+        addTearDown(controller.dispose);
+        await controller.initialize();
+        final existing = _channel('existing');
+        controller
+          ..channels = [existing]
+          ..currentChannelId = existing.id
+          ..availableMedia = [_playableMovie];
+        final playback = controller.playbackFor('movie');
+        store.blockNext();
+        final deleting = controller.deleteChannels(
+          expectedChannels: [existing],
+        );
+        await store.blockedSaveStarted.future;
+        final queued = controller.reorderChannels(
+          expectedLineup: [existing],
+          orderedChannelIds: [existing.id],
+        );
+        final denied = expectLater(queued, throwsStateError);
+        final logout = controller.logout();
+        await Future<void>.delayed(Duration.zero);
+        await expectLater(
+          playback.authorizationRecovery!(),
+          throwsA(isA<PlexException>()),
+        );
+        store.releaseBlockedSave();
+        await deleting;
+        await denied;
+        expect(await logout, !cleanupFails);
+        expect(
+          store.state.channelsByProfileServer['owner']!['server'],
+          isEmpty,
+        );
+        expect(controller.channels, isEmpty);
+        expect(
+          store.saveCalls,
+          2,
+        ); // Initial server restore and the started deletion.
+        if (cleanupFails) {
+          expect(controller.server, selected);
+          expect(controller.error, contains('securely sign out'));
+          // Fresh work is eligible; the denied reorder cannot revive after failure.
+          await controller.saveChannel(_channel('fresh'), expectedBase: null);
+          expect(controller.channels.single.id, 'fresh');
+        } else {
+          expect(controller.server, isNull);
+          expect(controller.stage, SetupStage.welcome);
+        }
+      },
+    );
+  }
+
+  for (final cleanupFails in [false, true]) {
+    test(
+      'late playback refresh cannot probe after logout cleanup ${cleanupFails ? 'fails' : 'succeeds'}',
+      () async {
+        final selected = _server('server');
+        final plex = _FakePlex()..serversResult = [selected];
+        final controller = LineupController(
+          store: _MemoryStore(
+            const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+          ),
+          credentials: cleanupFails
+              ? _FailingClearCredentials(accountToken: 'account-token')
+              : _MemoryCredentials(accountToken: 'account-token'),
+          plex: plex,
+        );
+        addTearDown(controller.dispose);
+        await controller.initialize();
+        controller.availableMedia = [_playableMovie];
+        final playback = controller.playbackFor('movie');
+        final discovery = Completer<List<PlexServerAccess>>();
+        final started = Completer<void>();
+        plex.discoverServersHandler = (_) {
+          started.complete();
+          return discovery.future;
+        };
+        final recovery = playback.authorizationRecovery!();
+        final denied = expectLater(recovery, throwsA(isA<PlexException>()));
+        await started.future;
+        final probes = plex.selectedTokens.length;
+        expect(await controller.logout(), !cleanupFails);
+        discovery.complete([
+          PlexServerAccess(server: selected, token: 'old-pms-token'),
+        ]);
+        await denied;
+        expect(plex.selectedTokens.length, probes);
+        if (cleanupFails) {
+          plex.discoverServersHandler = null;
+          await expectLater(
+            playback.authorizationRecovery!(),
+            throwsA(isA<PlexException>()),
+          );
+          final fresh = await controller
+              .playbackFor('movie')
+              .authorizationRecovery!();
+          expect(fresh.plexToken, plex.resourceToken);
+        }
+      },
+    );
+  }
+
+  for (final retirement in ['logout', 'profile', 'dispose']) {
+    test('captured playback cannot recover after $retirement', () async {
+      final selected = _server('server');
+      final plex = _FakePlex()..serversResult = [selected];
+      final controller = LineupController(
+        store: _MemoryStore(
+          const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+        ),
+        credentials: _MemoryCredentials(accountToken: 'account-token'),
+        plex: plex,
+      );
+      if (retirement != 'dispose') addTearDown(controller.dispose);
+      await controller.initialize();
+      controller.availableMedia = [_playableMovie];
+      final playback = controller.playbackFor('movie');
+      if (retirement == 'logout') {
+        expect(await controller.logout(), isTrue);
+      } else if (retirement == 'profile') {
+        expect(
+          await controller.selectProfile(
+            const PlexHomeUser(id: 'child', name: 'Child', protected: false),
+          ),
+          isTrue,
+        );
+      } else {
+        controller.dispose();
+      }
+      final requests = plex.discoveredTokens.length;
+      await expectLater(
+        playback.authorizationRecovery!(),
+        throwsA(isA<PlexException>()),
+      );
+      expect(plex.discoveredTokens.length, requests);
+    });
+  }
+
+  test(
+    'pending target selection does not replace active playback authorization',
+    () async {
+      final selected = _server('server');
+      final target = _server('target');
+      final plex = _FakePlex()..serversResult = [selected, target];
+      final controller = LineupController(
+        store: _MemoryStore(
+          const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+        ),
+        credentials: _MemoryCredentials(accountToken: 'account-token'),
+        plex: plex,
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+      controller.availableMedia = [_playableMovie];
+      controller.stage = SetupStage.ready;
+      controller.showServers();
+      final playback = controller.playbackFor('movie');
+      final started = Completer<void>();
+      final targetConnection = Completer<PlexConnection>();
+      plex.selectConnectionHandler = (server, _) {
+        if (server.id == target.id) {
+          started.complete();
+          return targetConnection.future;
+        }
+        return Future.value(selected.connections.single);
+      };
+      final selecting = controller.selectServer(target);
+      await started.future;
+      plex.resourceToken = 'refreshed-pms-token';
+      final refreshed = await playback.authorizationRecovery!();
+      expect(refreshed.plexToken, plex.resourceToken);
+      expect(controller.server, selected);
+      controller.cancelServerSelection();
+      targetConnection.complete(target.connections.single);
+      await selecting;
+      expect(controller.server, selected);
+    },
+  );
+
+  for (final mutation in ['delete', 'reorder', 'save']) {
+    test(
+      'same-scope refresh preserves blocked $mutation commit and later saves',
+      () async {
+        final selected = _server('server');
+        final store = _ControlledSaveStore(
+          const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+        );
+        final controller = LineupController(
+          store: store,
+          credentials: _MemoryCredentials(accountToken: 'account-token'),
+          plex: _FakePlex()..serversResult = [selected],
+        );
+        addTearDown(controller.dispose);
+        await controller.initialize();
+        final first = _channel('first');
+        final second = Channel.fromJson({
+          ..._channel('second').toJson(),
+          'number': 2,
+        });
+        controller
+          ..channels = [first, second]
+          ..currentChannelId = first.id
+          ..availableMedia = [_playableMovie];
+        store.blockNext();
+        final Future<void> pending;
+        if (mutation == 'delete') {
+          pending = controller.deleteChannels(expectedChannels: [first]);
+        } else if (mutation == 'reorder') {
+          pending = controller.reorderChannels(
+            expectedLineup: [first, second],
+            orderedChannelIds: [second.id, first.id],
+          );
+        } else {
+          pending = controller
+              .saveChannel(
+                Channel.fromJson({...first.toJson(), 'name': 'Edited'}),
+                expectedBase: first,
+              )
+              .then((saved) => expect(saved.name, 'Edited'));
+        }
+        await store.blockedSaveStarted.future;
+        await controller.refreshServers();
+        store.releaseBlockedSave();
+        await pending;
+        final committed = controller.channels
+            .map((channel) => channel.toJson())
+            .toList();
+        expect(
+          store.state.channelsByProfileServer['owner']!['server']!
+              .map((channel) => channel.toJson())
+              .toList(),
+          committed,
+        );
+        if (mutation == 'delete') {
+          expect(controller.channels.map((channel) => channel.id), [second.id]);
+        }
+        if (mutation == 'reorder') {
+          expect(controller.channels.map((channel) => channel.id), [
+            second.id,
+            first.id,
+          ]);
+        }
+        if (mutation == 'save') {
+          expect(controller.channels.first.name, 'Edited');
+        }
+        await controller.updateSettings(
+          (current) => current.copyWith(guideHours: 4),
+        );
+        expect(
+          store.state.channelsByProfileServer['owner']!['server']!
+              .map((channel) => channel.toJson())
+              .toList(),
+          committed,
+        );
+      },
+    );
+  }
 }
 
 PlexServer _server(String id) => PlexServer(

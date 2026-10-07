@@ -146,10 +146,8 @@ void main() {
       await player.retry();
 
       await controller.updateSettings(
-        controller.settings.copyWith(
-          nowWatchingBanner: false,
-          osdAutoHideSeconds: 8,
-        ),
+        (current) =>
+            current.copyWith(nowWatchingBanner: false, osdAutoHideSeconds: 8),
       );
       expect(controller.settings.nowWatchingBanner, isFalse);
 
@@ -168,9 +166,10 @@ void main() {
         (index) => _channel(index + 1, anchor: _ProductPlex.now),
         growable: false,
       );
-      await controller.applyChannelPlan(
+      await controller.applyReviewedChannelPlan(
         largeLineup,
         mode: ChannelBuildMode.replace,
+        expectedBase: controller.channels,
       );
       expect(controller.channels, hasLength(1000));
       expect(

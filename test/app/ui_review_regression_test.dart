@@ -982,7 +982,8 @@ class _SettingsFixtureController extends FixtureController {
   final _update = Completer<void>();
 
   @override
-  Future<void> updateSettings(LineupSettings value) => _update.future;
+  Future<void> updateSettings(LineupSettings Function(LineupSettings) change) =>
+      _update.future;
 
   void failUpdate() =>
       _update.completeError(StateError('synthetic save failure'));

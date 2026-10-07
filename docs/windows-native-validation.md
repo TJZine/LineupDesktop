@@ -10,8 +10,10 @@ package identity, media set, and transition results were not captured. The
 deeper campaign below remains the support/release record, not an urgent
 precondition for continuing product-completeness work.
 
-**Target:** The exact commit requested for acceptance. `flutter-mvp` is the
-default development branch, not a substitute for a requested feature commit.
+**Target:** Resolve the current task or PR's requested candidate to an exact
+commit. A historical development branch is not a substitute for that candidate.
+Record the actual tested identity and use the project profile when deciding
+whether earlier evidence remains relevant to a later candidate.
 
 This is the authoritative physical-Windows campaign for native presentation,
 libmpv playback, focus/input integration, and portable packaging. It is a
@@ -86,9 +88,10 @@ Safety rules:
 Use the full Windows prerequisites and pinned environment from
 [Development](DEVELOPMENT.md#patched-engine-provisioning). Before the campaign,
 select a clean checkout at the requested commit and put its full SHA below.
-If the request explicitly targets the latest `flutter-mvp`, fetch and
-fast-forward that branch during setup, then record the resolved SHA. Do not
-switch branches or update the checkout during acceptance.
+If the request targets a branch, resolve its intended current remote revision
+and prepare that exact candidate during setup, preserving unrelated local work.
+Record the resolved SHA. Do not switch branches or update the checkout during
+acceptance.
 
 ```powershell
 $Repo = 'C:\src\LineupDesktop'
@@ -257,6 +260,8 @@ Classify every row as **Pass**, **Fail — blocker**, **Fail — non-blocking**,
 | Plex auth | PIN/QR success, expiration replacement, cancellation, protected-profile rejection/retry | |
 | Server/state | Direct/relay description is truthful; retry/switch/clear works; relaunch is profile-scoped; logout stops playback and clears scope | |
 | Authenticated redirects | Using a dedicated test credential and controlled endpoints, an authenticated HTTPS response redirects first to a different HTTPS origin and then, in a separate run, to HTTP; neither redirect target receives a request or token, and no credential appears in output | |
+| Nested-reference containment | With controlled authenticated HTTPS fixtures, test HLS absolute references to another hostname and to the same hostname on another port, plus DASH references; record B's request count and confirm B receives no token. The gated CTest supplies deterministic evidence only; repeat through the app at the exact acceptance commit | |
+| Reference-bearing media is rejected | Reference-dependent HLS/DASH, MOV references, EDL/CUE/playlists and external-segment ordered-chapter items are unsupported, including same-server references. Confirm tested reference-dependent loads fail without credential leakage or late output, and channel recovery works. Ordered chapters may fall back to the main file with references ignored; do not claim every container containing a reference must fail | |
 | Channels | Initial Builder review/apply is atomic; custom create/edit/delete validates and confirms destructive action; representative large lineup remains responsive | |
 | Classic Guide | Focused/selected/tuned/airing identities remain distinct; time/paging/filter/now behavior works; real video occupies only the PiP aperture | |
 | Alternate Overlay Guide (only older targets retaining it) | Real video remains beneath legible, interactive Flutter artwork, text, focus, and schedule; PiP-only target: N/A, retired | |

@@ -1,5 +1,14 @@
 # Lineup UX and Functionality Audit
 
+> **Current workflow authority:** Dated task prompts, branch targets, model
+> assignments, and host sequencing below describe their original work. New or
+> resumed work resolves the current target and follows [AGENTS.md](../AGENTS.md),
+> [the project profile](../.agents/project.md), and the shared skills. Parallel
+> work remains eligible with independent ownership and compatible resources.
+> Preserve the technical findings, product/UI approvals, and exact evidence
+> limits; this notice does not authorize new product work or waive physical
+> Windows acceptance.
+
 Living report for issues found during hands-on Windows testing. Add new items
 below without rewriting the original observations. Status values are: reported,
 investigating, ready to implement, verified, or deferred.

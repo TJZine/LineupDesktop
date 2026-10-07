@@ -555,14 +555,54 @@ class WindowsNativePlayer implements NativePlayer {
       'sub' => PlayerTrackType.subtitle,
       _ => null,
     };
-    if (id is! int || type == null) return null;
+    final selected = item['selected'];
+    if (id is! int || id <= 0 || type == null || selected is! bool) {
+      return null;
+    }
+    final channelCount = item['demux-channel-count'];
     return PlayerTrack(
       id: id,
       type: type,
-      selected: item['selected'] == true,
-      title: item['title'] as String?,
-      language: item['lang'] as String?,
-      codec: item['codec'] as String?,
+      selected: selected,
+      title: switch (item['title']) {
+        String value => value,
+        _ => null,
+      },
+      language: switch (item['lang']) {
+        String value => value,
+        _ => null,
+      },
+      codec: switch (item['codec']) {
+        String value => value,
+        _ => null,
+      },
+      channelCount: channelCount is int && channelCount > 0
+          ? channelCount
+          : null,
+      channelLayout: switch (item['demux-channels']) {
+        String value => value,
+        _ => null,
+      },
+      forced: switch (item['forced']) {
+        bool value => value,
+        _ => null,
+      },
+      external: switch (item['external']) {
+        bool value => value,
+        _ => null,
+      },
+      hearingImpaired: switch (item['hearing-impaired']) {
+        bool value => value,
+        _ => null,
+      },
+      visualImpaired: switch (item['visual-impaired']) {
+        bool value => value,
+        _ => null,
+      },
+      commentary: switch (item['commentary']) {
+        bool value => value,
+        _ => null,
+      },
     );
   }
 

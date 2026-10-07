@@ -507,7 +507,9 @@ class GuideController extends ChangeNotifier {
       return;
     }
     try {
-      await lineup.updateSettings(lineup.settings.copyWith(guideHours: hours));
+      await lineup.updateSettings(
+        (current) => current.copyWith(guideHours: hours),
+      );
     } catch (_) {
       // LineupController owns rollback and persistence diagnostics.
     }

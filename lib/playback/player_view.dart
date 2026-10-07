@@ -14,6 +14,7 @@ import '../ui/app_ui.dart';
 import 'native_player.dart';
 import 'native_video_surface.dart';
 import 'player_coordinator.dart';
+import 'player_track_label.dart';
 
 class PlayerView extends StatefulWidget {
   const PlayerView({
@@ -681,10 +682,28 @@ class _Osd extends StatelessWidget {
           (track) => track.type == PlayerTrackType.subtitle && track.selected,
         )
         .firstOrNull;
-    final audioLabel = _osdTrackLabel('Audio', selectedAudio);
-    final subtitlesLabel = selectedSubtitles == null
+    final audioDisplay = selectedAudio == null
+        ? null
+        : formatPlayerTrackDisplay(selectedAudio, peers: controller.tracks);
+    final audioLabel = audioDisplay == null || audioDisplay.compactText == null
+        ? 'Audio'
+        : 'Audio • ${audioDisplay.compactText}';
+    final audioDescription =
+        audioDisplay?.tooltipText ??
+        (audioAvailable ? 'Audio tracks' : 'Audio tracks unavailable');
+    final subtitlesDisplay = selectedSubtitles == null
+        ? null
+        : formatPlayerTrackDisplay(selectedSubtitles, peers: controller.tracks);
+    final subtitlesLabel = subtitlesDisplay == null
         ? '${expanded ? 'Subtitles' : 'Subs'} • Off'
-        : _osdTrackLabel(expanded ? 'Subtitles' : 'Subs', selectedSubtitles);
+        : subtitlesDisplay.compactText == null
+        ? (expanded ? 'Subtitles' : 'Subs')
+        : '${expanded ? 'Subtitles' : 'Subs'} • ${subtitlesDisplay.compactText}';
+    final subtitlesDescription = subtitlesDisplay == null
+        ? (subtitlesAvailable
+              ? 'Subtitle tracks: Off'
+              : 'Subtitles unavailable')
+        : subtitlesDisplay.tooltipText;
     final sleepRemaining = controller.sleepRemaining;
     final remainingMinutes = sleepRemaining == null
         ? null
@@ -697,7 +716,8 @@ class _Osd extends StatelessWidget {
         context,
         key: const Key('player-osd-subtitles'),
         label: subtitlesLabel,
-        tooltip: subtitlesAvailable ? 'Subtitles' : 'Subtitles unavailable',
+        tooltip: subtitlesDescription,
+        semanticLabel: subtitlesDescription,
         icon: Icons.subtitles_outlined,
         onPressed: subtitlesAvailable
             ? () => controller.showTracks(PlayerTrackType.subtitle)
@@ -708,7 +728,8 @@ class _Osd extends StatelessWidget {
         context,
         key: const Key('player-osd-audio'),
         label: audioLabel,
-        tooltip: audioAvailable ? 'Audio tracks' : 'Audio tracks unavailable',
+        tooltip: audioDescription,
+        semanticLabel: audioDescription,
         icon: Icons.audiotrack,
         onPressed: audioAvailable
             ? () => controller.showTracks(PlayerTrackType.audio)
@@ -3047,24 +3068,25 @@ class _TracksState extends State<_Tracks> {
                                               final selected = off
                                                   ? selectedTrack == null
                                                   : track!.selected;
+                                              final display = track == null
+                                                  ? null
+                                                  : formatPlayerTrackDisplay(
+                                                      track,
+                                                      peers: tracks,
+                                                    );
                                               final title = off
                                                   ? 'Off'
-                                                  : _railTrackTitle(track!);
-                                              final metadata = track == null
-                                                  ? const <String>[]
-                                                  : _railTrackDetail(
-                                                      track,
-                                                      title,
-                                                    );
+                                                  : display!.primaryText;
+                                              final metadata =
+                                                  display?.secondaryFacts ??
+                                                  const <String>[];
                                               final metadataText = metadata
                                                   .join(' • ');
                                               final minTileHeight =
                                                   (metadata.isEmpty ? 56 : 72) *
                                                   scale;
                                               final tooltip =
-                                                  metadataText.isEmpty
-                                                  ? title
-                                                  : '$title\n$metadataText';
+                                                  display?.tooltipText ?? title;
                                               final pending =
                                                   widget
                                                           .controller
@@ -3074,6 +3096,19 @@ class _TracksState extends State<_Tracks> {
                                                           .controller
                                                           .pendingTrackId ==
                                                       track?.id;
+                                              final semanticLabel =
+                                                  track == null
+                                                  ? 'Select subtitle track: Off.'
+                                                  : display!.semanticsText;
+                                              void selectTrack() {
+                                                unawaited(
+                                                  widget.controller.selectTrack(
+                                                    widget.type,
+                                                    track?.id,
+                                                  ),
+                                                );
+                                              }
+
                                               return Material(
                                                 key:
                                                     (off
@@ -3084,103 +3119,114 @@ class _TracksState extends State<_Tracks> {
                                                     ? _selectedRowKey
                                                     : null,
                                                 color: Colors.transparent,
-                                                child: ListTile(
-                                                  key: Key(
-                                                    off
-                                                        ? 'playback-track-off'
-                                                        : 'playback-track-${widget.type.name}-${track!.id}',
-                                                  ),
-                                                  autofocus: selected,
+                                                child: Semantics(
+                                                  label: pending
+                                                      ? '$semanticLabel Pending.'
+                                                      : semanticLabel,
+                                                  button: true,
                                                   selected: selected,
-                                                  selectedTileColor: roles
-                                                      .progressFill
-                                                      .withValues(alpha: 0.10),
-                                                  focusColor:
-                                                      roles.focusedSurface,
-                                                  minTileHeight: scale > 1
-                                                      ? minTileHeight
-                                                      : null,
-                                                  horizontalTitleGap: scale > 1
-                                                      ? 16 * scale
-                                                      : null,
-                                                  minVerticalPadding: scale > 1
-                                                      ? 8 * scale
-                                                      : null,
-                                                  contentPadding:
-                                                      EdgeInsets.symmetric(
-                                                        horizontal: 12 * scale,
-                                                        vertical: 8 * scale,
-                                                      ),
-                                                  title: Tooltip(
-                                                    message: tooltip,
-                                                    excludeFromSemantics: true,
-                                                    child: Text(
-                                                      title,
-                                                      semanticsLabel: title,
-                                                      maxLines: 3,
-                                                      overflow:
-                                                          TextOverflow.ellipsis,
-                                                      softWrap: true,
-                                                      style:
-                                                          scaled(
-                                                            textTheme.bodyLarge,
-                                                          )?.copyWith(
-                                                            color: roles
-                                                                .primaryText,
-                                                            fontWeight:
-                                                                FontWeight.w500,
-                                                          ),
+                                                  onTap: selectTrack,
+                                                  excludeSemantics: true,
+                                                  child: ListTile(
+                                                    key: Key(
+                                                      off
+                                                          ? 'playback-track-off'
+                                                          : 'playback-track-${widget.type.name}-${track!.id}',
                                                     ),
-                                                  ),
-                                                  subtitle: metadata.isEmpty
-                                                      ? null
-                                                      : Text(
-                                                          metadataText,
-                                                          semanticsLabel:
-                                                              metadataText,
-                                                          maxLines: 3,
-                                                          overflow: TextOverflow
-                                                              .ellipsis,
-                                                          softWrap: true,
-                                                          style:
-                                                              scaled(
-                                                                textTheme
-                                                                    .bodyMedium,
-                                                              )?.copyWith(
-                                                                color:
-                                                                    supportingText,
-                                                              ),
+                                                    autofocus: selected,
+                                                    selected: selected,
+                                                    selectedTileColor: roles
+                                                        .progressFill
+                                                        .withValues(
+                                                          alpha: 0.10,
                                                         ),
-                                                  trailing: SizedBox(
-                                                    width: 30 * scale,
-                                                    child: Center(
-                                                      child: pending
-                                                          ? SizedBox.square(
-                                                              dimension:
-                                                                  18 * scale,
-                                                              child: CircularProgressIndicator(
-                                                                strokeWidth:
-                                                                    2 * scale,
-                                                                semanticsLabel: 'Changing track',
-                                                              ),
-                                                            )
-                                                          : selected
-                                                          ? Icon(
-                                                              Icons.check,
+                                                    focusColor:
+                                                        roles.focusedSurface,
+                                                    minTileHeight: scale > 1
+                                                        ? minTileHeight
+                                                        : null,
+                                                    horizontalTitleGap:
+                                                        scale > 1
+                                                        ? 16 * scale
+                                                        : null,
+                                                    minVerticalPadding:
+                                                        scale > 1
+                                                        ? 8 * scale
+                                                        : null,
+                                                    contentPadding:
+                                                        EdgeInsets.symmetric(
+                                                          horizontal:
+                                                              12 * scale,
+                                                          vertical: 8 * scale,
+                                                        ),
+                                                    title: Tooltip(
+                                                      message: tooltip,
+                                                      excludeFromSemantics:
+                                                          true,
+                                                      child: Text(
+                                                        title,
+                                                        maxLines: 3,
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
+                                                        softWrap: true,
+                                                        style:
+                                                            scaled(
+                                                              textTheme
+                                                                  .bodyLarge,
+                                                            )?.copyWith(
                                                               color: roles
-                                                                  .progressFill,
-                                                              size: 24 * scale,
-                                                              semanticLabel:
-                                                                  'Selected',
-                                                            )
-                                                          : const SizedBox.shrink(),
-                                                    ),
-                                                  ),
-                                                  onTap: () => widget.controller
-                                                      .selectTrack(
-                                                        widget.type,
-                                                        track?.id,
+                                                                  .primaryText,
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .w500,
+                                                            ),
                                                       ),
+                                                    ),
+                                                    subtitle: metadata.isEmpty
+                                                        ? null
+                                                        : Text(
+                                                            metadataText,
+                                                            maxLines: 3,
+                                                            overflow:
+                                                                TextOverflow
+                                                                    .ellipsis,
+                                                            softWrap: true,
+                                                            style:
+                                                                scaled(
+                                                                  textTheme
+                                                                      .bodyMedium,
+                                                                )?.copyWith(
+                                                                  color:
+                                                                      supportingText,
+                                                                ),
+                                                          ),
+                                                    trailing: SizedBox(
+                                                      width: 30 * scale,
+                                                      child: Center(
+                                                        child: pending
+                                                            ? SizedBox.square(
+                                                                dimension:
+                                                                    18 * scale,
+                                                                child:
+                                                                    CircularProgressIndicator(
+                                                                      strokeWidth:
+                                                                          2 *
+                                                                          scale,
+                                                                    ),
+                                                              )
+                                                            : selected
+                                                            ? Icon(
+                                                                Icons.check,
+                                                                color: roles
+                                                                    .progressFill,
+                                                                size:
+                                                                    24 * scale,
+                                                              )
+                                                            : const SizedBox.shrink(),
+                                                      ),
+                                                    ),
+                                                    onTap: selectTrack,
+                                                  ),
                                                 ),
                                               );
                                             },
@@ -3191,6 +3237,7 @@ class _TracksState extends State<_Tracks> {
                                   ),
                           ),
                         ),
+                        SizedBox(height: 24 * geometryScale),
                         if (widget.controller.trackSelectionError
                             case final error?)
                           Padding(
@@ -3206,6 +3253,7 @@ class _TracksState extends State<_Tracks> {
                             ),
                           ),
                         Padding(
+                          key: const Key('playback-options-footer'),
                           padding: EdgeInsets.only(top: 20 * geometryScale),
                           child: Text(
                             'Up/Down Browse · Enter Select · Esc Close',
@@ -3486,54 +3534,12 @@ String? _wholeMinutesLeft(Duration position, Duration duration) {
   return '${minutes}m left';
 }
 
-String _osdTrackLabel(String category, PlayerTrack? track) {
-  final detail = track == null ? null : _compactTrackLabel(track);
-  return detail == null ? category : '$category • $detail';
-}
-
-/// Trims an optional native track field; whitespace-only counts as absent.
-String? _meaningfulTrackText(String? value) {
-  final trimmed = value?.trim();
-  if (trimmed == null || trimmed.isEmpty) return null;
-  return trimmed;
-}
-
-/// Compact fallback shared by the options rail and the OSD: a meaningful
-/// title, otherwise a meaningful language. The rail adds a type/ID label when
-/// this is absent; the OSD keeps its bare category instead.
-String? _compactTrackLabel(PlayerTrack track) =>
-    _meaningfulTrackText(track.title) ?? _meaningfulTrackText(track.language);
-
-/// Rail primary label: the shared compact fallback, otherwise a readable
-/// type/ID label such as `Audio track 3` or `Subtitle track 2`.
-String _railTrackTitle(PlayerTrack track) =>
-    _compactTrackLabel(track) ?? _fallbackTrackLabel(track.type, track.id);
-
-String _fallbackTrackLabel(PlayerTrackType type, int id) {
-  final kind = switch (type) {
-    PlayerTrackType.audio => 'Audio',
-    PlayerTrackType.subtitle => 'Subtitle',
-    PlayerTrackType.video => 'Video',
-  };
-  return '$kind track $id';
-}
-
-/// Rail detail components: normalized language/codec with blanks omitted and
-/// exact duplicates of the shown title (or each other) removed.
-List<String> _railTrackDetail(PlayerTrack track, String title) {
-  final language = _meaningfulTrackText(track.language);
-  final codec = _meaningfulTrackText(track.codec);
-  return [
-    if (language != null && language != title) language,
-    if (codec != null && codec != title && codec != language) codec,
-  ];
-}
-
 Widget _osdAction(
   BuildContext context, {
   required Key key,
   required String label,
   required String tooltip,
+  String? semanticLabel,
   required IconData icon,
   required VoidCallback? onPressed,
   required bool compact,
@@ -3547,35 +3553,45 @@ Widget _osdAction(
     constraints: BoxConstraints(maxWidth: (compact ? 132 : 180) * scale),
     child: Tooltip(
       message: tooltip,
-      child: TextButton(
-        key: key,
-        focusNode: focusNode,
-        onPressed: onPressed,
-        style: TextButton.styleFrom(
-          foregroundColor: roles.primaryText,
-          padding: EdgeInsets.symmetric(horizontal: (compact ? 5 : 8) * scale),
-          minimumSize: Size(0, 40 * scale),
-          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          visualDensity: VisualDensity.compact,
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: (compact ? 17 : 18) * scale),
-            SizedBox(width: 8 * scale),
-            Flexible(
-              child: Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                  color: roles.primaryText,
-                  fontSize: (largeDesktop ? 16 : 14) * scale,
-                  fontWeight: FontWeight.w500,
+      excludeFromSemantics: semanticLabel != null,
+      child: Semantics(
+        label: semanticLabel,
+        button: semanticLabel == null ? null : true,
+        enabled: semanticLabel == null ? null : onPressed != null,
+        onTap: semanticLabel == null ? null : onPressed,
+        excludeSemantics: semanticLabel != null,
+        child: TextButton(
+          key: key,
+          focusNode: focusNode,
+          onPressed: onPressed,
+          style: TextButton.styleFrom(
+            foregroundColor: roles.primaryText,
+            padding: EdgeInsets.symmetric(
+              horizontal: (compact ? 5 : 8) * scale,
+            ),
+            minimumSize: Size(0, 40 * scale),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            visualDensity: VisualDensity.compact,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: (compact ? 17 : 18) * scale),
+              SizedBox(width: 8 * scale),
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                    color: roles.primaryText,
+                    fontSize: (largeDesktop ? 16 : 14) * scale,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     ),

@@ -1,106 +1,59 @@
 # Development
 
-Lineup Desktop work normally moves through five activities in one session:
+This document owns Lineup's toolchain, commands, build prerequisites, and
+evidence boundaries. Start at [AGENTS.md](../AGENTS.md) for agent workflow and
+the [project profile](../.agents/project.md) for task-specific routing. The
+shared skills own general implementation, design, review, and verification
+procedures; they do not require separate agents or sessions for each activity.
 
-1. **Inspect** the current flow, its owners, tests, and platform constraints.
-   Use `git show bfaee636748f2a0d442f3690b7ba5262d32ff17c:<path>` when the
-   preserved Electron implementation is provenance evidence. The mutable
-   `origin/electron-ui` branch is suitable only for non-evidentiary exploration.
-   Use `git show origin/initial-build:<path>` for the later historical Flutter
-   milestone only when that evidence is relevant.
-2. **Decide** the responsibility owner, dependency direction, failure behavior,
-   and proportionate proof before editing.
-3. **Implement** the smallest cohesive change that meets current requirements.
-   Delete displaced alternatives and keep commits coherent.
-4. **Verify** with fresh, observed evidence matched to the risk.
-5. **Self-review and close out** the complete diff, remaining platform limits,
-   and whether independent review is specifically worthwhile.
+Read the affected owner and relevant document sections; expand when a material
+question remains. Independent investigation, checks, and implementation may
+run in parallel when their contracts, ownership, worktrees or shared-tree
+write scopes, and runtime resources permit it. The controller owns Git
+integration and ensures checks observe a stable source state. Historical UI
+campaign handoffs do not prescribe model choices or review batches for new work.
 
-These are not mandatory separate agents, sessions, tracked plans, Tiers, or
-handoff formats. Independent review is optional and never launched
-automatically. Recommend it for novel security boundaries, credential or data
-loss risks, complex concurrency, native ABI/lifetime work, or Windows media and
-presentation changes whose proof deserves a second specialist.
-
-Read the relevant sections and affected owners first; broaden to callers, adjacent
-contracts, or complete documents when invariants or behavior remain unclear.
-Continue authorized implementation and repair failures caused by the change without
-requesting approval at each step. Ask when investigation leaves a consequential
-product, design, security, data-loss, or scope decision unresolved. Preserve existing
-UI design approvals in `.interface-design/system.md`.
-
-Reuse inspected verification results when the tested code, inputs, dependencies,
-and relevant environment are unchanged. Rerun affected checks when edits or
-integration invalidate them, and add proof for uncovered interactions. Nonbehavioral
-edits need only the relevant structural or formatting check. Physical Windows
-evidence requirements for native behavior and support claims remain unchanged.
+Use the task or PR's resolved target and base. For Electron provenance only,
+use `git show bfaee636748f2a0d442f3690b7ba5262d32ff17c:<path>`; the historical
+`initial-build` milestone is relevant only to an explicitly identified older
+observation. Neither historical branch is a compatibility target.
 
 ## Architecture practice
 
-Use a feature-oriented modular monolith. A feature owns its models, policies,
-state, and UI where that improves cohesion. The application bootstrap is the
-single composition root; dependencies point from that root into features and
-are passed explicitly through constructors. Avoid repeated
-`data/domain/presentation` ceremonies and generic `core` or `utils` dumping
-grounds. Local widget state stays local. Adopt one state-management package only
-when a concrete cross-feature asynchronous state graph shows a material
-debugging, testing, or correctness advantage over Flutter/Dart built-ins.
+[Architecture](architecture.md#accepted-ownership) owns the current
+Flutter/Dart and native responsibilities. Use the shared `design-code` skill
+when an unresolved domain or architecture decision warrants it. The project
+profile maps the affected owners and obligations; a coherent redesign may
+replace current private structure while preserving or explicitly migrating
+those obligations. Existing files, queues, and abstractions are not permanent
+design constraints merely because they already exist.
 
-Current requirements outrank hypothetical compatibility. Keep one owner per
-responsibility and make cancellation/currentness explicit for asynchronous
-work. Bound queues and caches whose inputs can grow.
-
-Apply SOLID, DRY, KISS, and YAGNI as design judgment:
-
-- Group behavior by shared invariants and reason to change. Split an independent
-  policy or resource lifetime when that improves ownership; file length alone
-  does not justify either splitting or accumulating responsibilities.
-- Keep one authoritative implementation of each business rule, such as schedule
-  resolution. Extract shared knowledge, not merely similar syntax whose callers
-  may evolve independently.
-- Keep interfaces small at real boundaries. Substitutes must preserve errors,
-  ordering, and cleanup as well as successful results. Prefer composition and
-  explicit collaborators; SOLID does not require an interface per class,
-  inheritance, or speculative extension points.
-- Prefer established repository and platform conventions. Judge simplicity by
-  readability and total maintenance cost, not the fewest lines or files.
-- Make scoped refactors and regression protection part of completing the change.
-  YAGNI rules out speculative capability, not work that keeps current code safe
-  to change. Remove obsolete paths replaced by the change; report concrete
-  remaining debt with its consequence rather than adding vague future-proofing.
-
-These interpretations use the maintainer's
-[SOLID/DRY/KISS reference](https://scalastic.io/en/solid-dry-kiss/),
-[Fowler's YAGNI clarification](https://martinfowler.com/bliki/Yagni.html), and
-[Google's design/complexity review guidance](https://google.github.io/eng-practices/review/reviewer/looking-for.html).
-They do not add a mandatory review pass or a new workflow.
+Preserve still-approved [UI decisions](../.interface-design/system.md) unless
+the current task authorizes changing them. Workflow maintenance alone does not
+approve a new visual direction or a platform migration.
 
 ## Quality and safety
 
-- Test pure policies and public seams. Add widget/integration/manual proof when
-  behavior depends on focus, accessibility, rendering, lifecycle, or native
-  platform integration. Do not use brittle tests merely to increase coverage.
-- Evaluate each dependency for current need, activity, license, desktop support,
-  transitive cost, debuggability, and standard-library alternatives. Record
-  material license obligations before shipping bundled native libraries.
-- Never commit Plex credentials, authorization headers, tokenized media URLs,
-  private media metadata, or unredacted diagnostics. Diagnostic producers use
-  fixed messages and normalized structured facts; never log raw exceptions,
-  native messages, headers, or playback descriptors. Redaction is defense in
-  depth. Preserve the credential and diagnostic contracts in
-  [Architecture](architecture.md#implemented-now).
-- Keep scheduling deterministic and pure. Cancel or reject stale network and
-  playback results. Avoid blocking the UI isolate; measure before optimizing,
-  then isolate CPU-heavy work and bound large guide/channel workloads.
-- Use coherent conventional commits. Keep generated platform scaffolding with
-  the feature that requires it, and do not mix unrelated cleanup.
+Use the shared `verify-code` procedure and
+[project-specific verification selection](../.agents/project.md#verification-selection)
+to choose evidence. Coverage remains a local diagnostic, not a percentage gate.
+Existing risk-matched checks are reused until changed code, fixtures,
+dependencies, build settings, or relevant environment invalidate them.
+
+Preserve the credential, diagnostic, cancellation, and persistence contracts in
+[Architecture](architecture.md). Producers emit fixed safe messages and
+normalized facts; do not put tokens, tokenized URLs, raw exceptions, native
+messages, headers, or private media data in shared evidence. Redaction remains
+defense in depth. Native dependency changes retain their provenance, license,
+and redistribution obligations.
 
 ## Verification by task
 
-Choose the affected checks below; reuse still-current results under the rule
-above. Native behavior and support claims retain their exact-commit physical
-Windows requirements. Missing Windows evidence does not block unrelated
-portable work; report the specific unverified behavior and required scenario.
+Choose the affected checks below using the
+[evidence identity and reuse rules](../.agents/project.md#native-evidence-and-reuse).
+Native behavior and support claims require the relevant physical Windows
+evidence with its actual tested identity. Missing Windows evidence does not
+block unrelated portable work; report the specific unverified scenario.
 
 | Task or evidence | Prerequisites and checks | What the result establishes |
 | --- | --- | --- |
@@ -113,17 +66,76 @@ portable work; report the specific unverified behavior and required scenario.
 | Native player contract / C++ integration | Dart adapter/coordinator tests, lifetime/currentness inspection, Windows C++ toolchain and prepared libmpv; `flutter build windows` | Contract and stock-engine compile/link proof; not a runnable or packageable Lineup player |
 | Patched engine / portable package | Full Windows provisioning below; release wrapper and [package acceptance](windows-native-validation.md#8-portable-package-acceptance) | Artifact-bound build/package checks; launch, media, HDR, layering, fullscreen, input, and support claims require [physical Windows acceptance](windows-native-validation.md) |
 
+### Current test tiers and gaps
+
+`test/` contains Dart policy, boundary, widget, and public-seam integration
+tests using `flutter_test`. The product-spine test uses fake Plex/native
+boundaries; `test_driver/ui_harness.dart` is a synthetic development composition
+root. Neither is an automated real-app E2E harness with checked artifacts;
+that harness is currently absent, and CI does not launch the app. Select
+additional evidence by the changed obligation and credible failure, using the
+shared verification procedure and existing owners in the project profile.
+Building a new harness requires an actual task need; these synthetic checks
+do not establish physical media, platform input, or package behavior.
+
+`flutter analyze` includes `test/`, `tool/visual/`, and `test_driver/` under the
+same analyzer configuration as `lib/`. There is no coverage-percentage floor;
+`TZ=America/New_York flutter test --coverage` is available for local diagnosis.
+Optional visual suites run explicitly as described below. Native runtime and
+hardware proof follows [physical Windows acceptance](windows-native-validation.md).
+
+The assertion-based `track_list_encoder_test` CTest target exercises the real
+encoder, not the app. It is excluded from the default build and is not run in
+CI. After configuring the Windows build with the prerequisites below, run:
+
+```powershell
+cmake --build .\build\windows\x64 --config Release --target track_list_encoder_test
+ctest --test-dir .\build\windows\x64 -C Release -R '^track_list_encoder$' --output-on-failure --timeout 30
+```
+
+The gated `authenticated_reference_test` target compiles the production native
+player and drives its existing method channel against the exact prepared DLL.
+It is `EXCLUDE_FROM_ALL`, with no CI gate change. Python 3, an FFmpeg executable
+with the `libx264` encoder and DASH muxer, and OpenSSL are required. Put them on
+PATH before configuring/running CTest; the runner also recognizes Git for
+Windows' bundled OpenSSL. `LINEUP_MPV_ROOT` must be the prepared pinned runtime.
+No Python packages or system trust-store changes are needed.
+
+```powershell
+cmake --build .\build\windows\x64 --config Release --target authenticated_reference_test
+ctest --test-dir .\build\windows\x64 -C Release -R '^authenticated_reference$' --repeat until-fail:3 --verbose --timeout 180
+```
+
+The test verifies both prepared and copied DLL hashes, creates authenticated
+loopback HTTPS fixtures and a temporary CA, and leaves TLS verification enabled.
+Test-local forwarding around libmpv creation/initialization supplies only the CA
+and null audio/video outputs; the production option list and authenticated
+`loadfile` command are reused directly. The hidden window and supplied engine
+marker allow the channel boundary to run without a live Flutter engine. This
+does not validate presentation, hardware, real Plex playback, or packaging.
+Option-rejection injection exercises fail-closed initialization, and an
+untrusted-CA control verifies TLS refusal. All subprocesses, native observation
+waits, socket operations and server joins are bounded; an overall 150-second
+runner deadline leaves cleanup time before CTest's 180-second timeout.
+Only normalized request counts, token-presence booleans and playback outcomes
+are emitted. Servers, media, keys and certificates are removed after each run.
+The [dated reference mitigation record](libmpv-authenticated-reference-investigation.md#2026-10-03-mitigation-disable-reference-following)
+records the before/after evidence and source-audit limits. To reproduce the
+negative comparison locally, remove only the two reference-hardening options,
+rebuild the same test target, observe containment failure, then restore them and
+rebuild. Do not distribute or commit that unhardened configuration.
+
 ## Portable commands
 
-Flutter SDK `3.47.4` (revision
-`9584c6713b324636289d067944a46fd6b49df14b`, Dart `3.13.3`) is the reproducible
+Flutter SDK `3.47.6` (revision
+`5fc346839b5d0eef006ed8404392afb4dfae428d`, Dart `3.13.5`) is the reproducible
 toolchain for macOS, Windows, and CI.
 
 Select the exact Flutter checkout rather than a different SDK already on PATH:
 
 ```sh
 git clone https://github.com/flutter/flutter.git /path/to/flutter
-git -C /path/to/flutter checkout 9584c6713b324636289d067944a46fd6b49df14b
+git -C /path/to/flutter checkout 5fc346839b5d0eef006ed8404392afb4dfae428d
 export PATH=/path/to/flutter/bin:$PATH
 flutter doctor -v
 ```
@@ -218,7 +230,7 @@ x86-64 LGPL libmpv directory before configuring the application:
 
 ```powershell
 Set-Location C:\path\to\LineupDesktop
-$mpvRoot = 'C:\local\lineup-mpv-20260912-14f2d48cbc' # New or empty directory.
+$mpvRoot = 'C:\local\lineup-mpv-20261002-3186d369f9' # New or empty directory.
 & .\tool\windows\prepare-mpv.ps1 -Destination $mpvRoot
 $env:LINEUP_MPV_ROOT = $mpvRoot
 flutter build windows
@@ -239,7 +251,7 @@ package machines also need a GPU driver or Vulkan Runtime providing
 When the pinned runtime changes, provision it into a fresh unique destination;
 do not reuse or overwrite an older prepared directory. Rebuild the Lineup
 application against the new runtime. This refresh also upgrades Flutter to
-3.47.4, so reprovision its patched `host_debug` and `host_release` outputs
+3.47.6, so reprovision its patched `host_debug` and `host_release` outputs
 before launching or packaging; the older SDK outputs cannot be reused.
 
 ### Patched engine provisioning
@@ -297,7 +309,7 @@ in the current session as well:
 
 ```powershell
 $engineSource = 'C:\path\to\flutter\engine\src'
-$mpvRoot = 'C:\local\lineup-mpv-20260912-14f2d48cbc'
+$mpvRoot = 'C:\local\lineup-mpv-20261002-3186d369f9'
 [Environment]::SetEnvironmentVariable('LINEUP_ENGINE_SOURCE', $engineSource, 'User')
 [Environment]::SetEnvironmentVariable('LINEUP_MPV_ROOT', $mpvRoot, 'User')
 $env:LINEUP_ENGINE_SOURCE = $engineSource
@@ -347,7 +359,7 @@ package the portable application:
 
 ```powershell
 Set-Location C:\path\to\LineupDesktop
-$env:LINEUP_MPV_ROOT = 'C:\local\lineup-mpv-20260912-14f2d48cbc'
+$env:LINEUP_MPV_ROOT = 'C:\local\lineup-mpv-20261002-3186d369f9'
 .\tool\windows\build-release.ps1 -EngineSource 'C:\path\to\flutter\engine\src'
 .\tool\windows\package.ps1
 ```

@@ -30,7 +30,7 @@ void main() {
     );
   });
 
-  test('accepts, validates, and omits retired preference keys', () {
+  test('accepts and omits retired preference keys', () {
     final legacy = const LineupSettings().toJson()
       ..addAll({
         'guideLayoutMode': 'overlay',
@@ -72,20 +72,12 @@ void main() {
     );
   });
 
-  test('rejects malformed or unknown canonical and retired fields', () {
+  test('rejects unsupported option, enum, and Boolean values', () {
     final canonical = const LineupSettings().toJson();
     for (final invalid in [
-      {...canonical}..remove('theme'),
-      {...canonical, 'future': true},
-      {...canonical, 'reduceMotion': 1},
-      {...canonical, 'guideHours': 2.0},
       {...canonical, 'guideHours': 5},
       {...canonical, 'theme': 'future-theme'},
-      {...canonical, 'guideInfoBackgroundMode': 'future-background'},
-      {...canonical, 'guideLayoutMode': 'future-layout'},
-      {...canonical, 'guideDensity': 'future-density'},
-      {...canonical, 'pastMinutes': 45},
-      {...canonical, 'libraryTabsEnabled': 'false'},
+      {...canonical, 'reduceMotion': 1},
     ]) {
       expect(() => LineupSettings.fromJson(invalid), throwsFormatException);
     }

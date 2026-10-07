@@ -10,6 +10,7 @@ add_executable(${BINARY_NAME} WIN32
   "flutter_window.cpp"
   "main.cpp"
   "native_player.cpp"
+  "track_list_encoder.cpp"
   "utils.cpp"
   "win32_window.cpp"
   "${FLUTTER_MANAGED_DIR}/generated_plugin_registrant.cc"
@@ -69,7 +70,7 @@ if(NOT LINEUP_MPV_DISTRIBUTION STREQUAL "production" OR
   message(FATAL_ERROR "LINEUP_MPV_ROOT is not the selected production runtime.")
 endif()
 if(NOT LINEUP_MPV_ASSET_SHA256 STREQUAL
-    "455965297BA3F5906A63CD2B219442685BE45528A1FE806E4B228147881E41CB")
+    "322CB0040B97B15F97069F631F665FD63DA331CED92705F757DA13B99380DA5F")
   message(FATAL_ERROR "LINEUP_MPV_ROOT is not the pinned mpv production asset.")
 endif()
 function(verify_lineup_mpv_file PATH EXPECTED_HASH)
@@ -86,12 +87,48 @@ endfunction()
 verify_lineup_mpv_file("${LINEUP_MPV_INCLUDE_DIR}/mpv/client.h"
   "1ACF99EE77C8C2A6F1D1993BD81BBC8A91D27FB5924E80171670E6139A4BD353")
 verify_lineup_mpv_file("${LINEUP_MPV_DLL}"
-  "B507529D99A4DFFDEAEC85ECEFF7661A7E3C6CA4EFD09C2014E11A1441B83EAA")
+  "4BA364226FD2EA5DD2C6F2333F0118462DA549FEED92360FB766A3924E313A51")
 verify_lineup_mpv_file("${LINEUP_MPV_LIBRARY}"
   "${LINEUP_MPV_IMPORT_LIBRARY_SHA256}")
 target_include_directories(${BINARY_NAME} PRIVATE "${LINEUP_MPV_INCLUDE_DIR}")
 target_link_libraries(${BINARY_NAME} PRIVATE "${LINEUP_MPV_LIBRARY}")
 set(LINEUP_MPV_RUNTIME_LIBRARY "${LINEUP_MPV_DLL}" PARENT_SCOPE)
+
+# Exercise the production projection directly, without a live mpv instance.
+add_executable(track_list_encoder_test EXCLUDE_FROM_ALL
+  "track_list_encoder.cpp"
+  "track_list_encoder_test.cpp"
+)
+apply_standard_settings(track_list_encoder_test)
+target_include_directories(track_list_encoder_test PRIVATE "${LINEUP_MPV_INCLUDE_DIR}")
+target_link_libraries(track_list_encoder_test PRIVATE flutter_wrapper_app)
+add_test(NAME track_list_encoder COMMAND track_list_encoder_test)
+
+# Explicit opt-in only: real pinned DLL, synthetic loopback HTTPS fixtures.
+add_executable(authenticated_reference_test EXCLUDE_FROM_ALL
+  "authenticated_reference_test.cpp"
+  "track_list_encoder.cpp"
+)
+apply_standard_settings(authenticated_reference_test)
+target_compile_definitions(authenticated_reference_test PRIVATE "NOMINMAX")
+target_include_directories(authenticated_reference_test PRIVATE "${LINEUP_MPV_INCLUDE_DIR}")
+target_link_libraries(authenticated_reference_test PRIVATE
+  flutter_wrapper_app "${LINEUP_MPV_LIBRARY}" "dwmapi.lib")
+add_custom_command(TARGET authenticated_reference_test POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    "${LINEUP_MPV_DLL}" "$<TARGET_FILE_DIR:authenticated_reference_test>")
+find_program(LINEUP_REFERENCE_PYTHON NAMES python python3)
+if(NOT LINEUP_REFERENCE_PYTHON)
+  # Keep production builds independent of test tools, but never silently omit
+  # the requested test when its Python prerequisite is missing.
+  set(LINEUP_REFERENCE_PYTHON "python")
+endif()
+add_test(NAME authenticated_reference
+  COMMAND "${LINEUP_REFERENCE_PYTHON}"
+    "${CMAKE_SOURCE_DIR}/../tool/windows/authenticated-reference-test.py"
+    --harness "$<TARGET_FILE:authenticated_reference_test>"
+    --dll "${LINEUP_MPV_DLL}")
+set_tests_properties(authenticated_reference PROPERTIES TIMEOUT 180)
 
 # Run the Flutter tool portions of the build. This must not be removed.
 add_dependencies(${BINARY_NAME} flutter_assemble)

@@ -843,7 +843,8 @@ class _SettingsViewState extends State<SettingsView> {
   final Set<String> _pendingSettingKeys = {};
   final Set<String> _showSaving = {};
   final Map<String, String> _errors = {};
-  Future<void> _saveTail = Future.value();
+  final Map<String, LineupSettings Function(LineupSettings)> _pendingChanges =
+      {};
 
   SettingsCategory get _category =>
       widget.onCategoryChanged == null ? _localCategory : widget.category;
@@ -876,7 +877,7 @@ class _SettingsViewState extends State<SettingsView> {
     _lastControllerSettings = settings;
     var refreshed = settings;
     for (final keyName in _pendingSettingKeys) {
-      refreshed = _mergeSetting(keyName, refreshed, _displaySettings);
+      refreshed = _pendingChanges[keyName]!(refreshed);
     }
     if (!mounted) return;
     setState(() => _displaySettings = refreshed);
@@ -1189,7 +1190,10 @@ class _SettingsViewState extends State<SettingsView> {
                 (item) => item.label,
                 _pendingSettingKeys.contains('theme')
                     ? null
-                    : (item) => _update('theme', value.copyWith(theme: item)),
+                    : (item) => _update(
+                        'theme',
+                        (current) => current.copyWith(theme: item),
+                      ),
                 first: true,
               ),
               _settingFeedback('theme'),
@@ -1207,7 +1211,8 @@ class _SettingsViewState extends State<SettingsView> {
                     ? null
                     : (item) => _update(
                         'guideInfoBackgroundMode',
-                        value.copyWith(guideInfoBackgroundMode: item),
+                        (current) =>
+                            current.copyWith(guideInfoBackgroundMode: item),
                       ),
               ),
               _settingFeedback('guideInfoBackgroundMode'),
@@ -1221,7 +1226,7 @@ class _SettingsViewState extends State<SettingsView> {
                     ? null
                     : (item) => _update(
                         'preferClearLogos',
-                        value.copyWith(preferClearLogos: item),
+                        (current) => current.copyWith(preferClearLogos: item),
                       ),
               ),
               _settingFeedback('preferClearLogos'),
@@ -1241,7 +1246,7 @@ class _SettingsViewState extends State<SettingsView> {
                     ? null
                     : (item) => _update(
                         'guideHours',
-                        value.copyWith(guideHours: item),
+                        (current) => current.copyWith(guideHours: item),
                       ),
                 first: true,
               ),
@@ -1256,7 +1261,7 @@ class _SettingsViewState extends State<SettingsView> {
                     ? null
                     : (item) => _update(
                         'nowWatchingBanner',
-                        value.copyWith(nowWatchingBanner: item),
+                        (current) => current.copyWith(nowWatchingBanner: item),
                       ),
               ),
               _settingFeedback('nowWatchingBanner'),
@@ -1272,7 +1277,7 @@ class _SettingsViewState extends State<SettingsView> {
                     ? null
                     : (item) => _update(
                         'osdAutoHideSeconds',
-                        value.copyWith(osdAutoHideSeconds: item),
+                        (current) => current.copyWith(osdAutoHideSeconds: item),
                       ),
                 first: true,
               ),
@@ -1287,7 +1292,7 @@ class _SettingsViewState extends State<SettingsView> {
                     ? null
                     : (item) => _update(
                         'dvrControlsEnabled',
-                        value.copyWith(dvrControlsEnabled: item),
+                        (current) => current.copyWith(dvrControlsEnabled: item),
                       ),
               ),
               _settingFeedback('dvrControlsEnabled'),
@@ -1303,7 +1308,7 @@ class _SettingsViewState extends State<SettingsView> {
                     ? null
                     : (item) => _update(
                         'reduceMotion',
-                        value.copyWith(reduceMotion: item),
+                        (current) => current.copyWith(reduceMotion: item),
                       ),
                 first: true,
               ),
@@ -1318,7 +1323,8 @@ class _SettingsViewState extends State<SettingsView> {
                     ? null
                     : (item) => _update(
                         'largeFocusIndicators',
-                        value.copyWith(largeFocusIndicators: item),
+                        (current) =>
+                            current.copyWith(largeFocusIndicators: item),
                       ),
               ),
               _settingFeedback('largeFocusIndicators'),
@@ -1359,7 +1365,8 @@ class _SettingsViewState extends State<SettingsView> {
                     ? null
                     : (item) => _update(
                         'profilePickerOnStartup',
-                        value.copyWith(profilePickerOnStartup: item),
+                        (current) =>
+                            current.copyWith(profilePickerOnStartup: item),
                       ),
               ),
               _settingFeedback('profilePickerOnStartup'),
@@ -1436,7 +1443,7 @@ class _SettingsViewState extends State<SettingsView> {
                     ? null
                     : (item) => _update(
                         'diagnosticsEnabled',
-                        value.copyWith(diagnosticsEnabled: item),
+                        (current) => current.copyWith(diagnosticsEnabled: item),
                       ),
                 first: true,
               ),
@@ -1492,12 +1499,16 @@ class _SettingsViewState extends State<SettingsView> {
     return const SizedBox.shrink();
   }
 
-  Future<void> _update(String keyName, LineupSettings next) async {
+  Future<void> _update(
+    String keyName,
+    LineupSettings Function(LineupSettings) change,
+  ) async {
     if (_pendingSettingKeys.contains(keyName)) return;
     setState(() {
       _pendingSettingKeys.add(keyName);
       _errors.remove(keyName);
-      _displaySettings = _mergeSetting(keyName, _displaySettings, next);
+      _pendingChanges[keyName] = change;
+      _displaySettings = change(_displaySettings);
     });
     _savingTimers[keyName] = Timer(const Duration(milliseconds: 300), () {
       if (mounted && _pendingSettingKeys.contains(keyName)) {
@@ -1506,13 +1517,7 @@ class _SettingsViewState extends State<SettingsView> {
     });
     String? error;
     try {
-      final operation = _saveTail.then(
-        (_) => widget.controller.updateSettings(
-          _mergeSetting(keyName, widget.controller.settings, next),
-        ),
-      );
-      _saveTail = operation.then<void>((_) {}, onError: (_, _) {});
-      await operation;
+      await widget.controller.updateSettings(change);
     } catch (_) {
       error = 'Could not save. The previous value was restored.';
     } finally {
@@ -1521,53 +1526,17 @@ class _SettingsViewState extends State<SettingsView> {
         setState(() {
           _pendingSettingKeys.remove(keyName);
           _showSaving.remove(keyName);
-          if (error != null) {
-            _displaySettings = _mergeSetting(
-              keyName,
-              _displaySettings,
-              widget.controller.settings,
-            );
-            _errors[keyName] = error;
+          _pendingChanges.remove(keyName);
+          var refreshed = widget.controller.settings;
+          for (final pending in _pendingChanges.values) {
+            refreshed = pending(refreshed);
           }
+          _displaySettings = refreshed;
+          if (error != null) _errors[keyName] = error;
         });
       }
     }
   }
-
-  static LineupSettings _mergeSetting(
-    String keyName,
-    LineupSettings current,
-    LineupSettings requested,
-  ) => switch (keyName) {
-    'theme' => current.copyWith(theme: requested.theme),
-    'guideHours' => current.copyWith(guideHours: requested.guideHours),
-    'guideInfoBackgroundMode' => current.copyWith(
-      guideInfoBackgroundMode: requested.guideInfoBackgroundMode,
-    ),
-    'preferClearLogos' => current.copyWith(
-      preferClearLogos: requested.preferClearLogos,
-    ),
-    'nowWatchingBanner' => current.copyWith(
-      nowWatchingBanner: requested.nowWatchingBanner,
-    ),
-    'osdAutoHideSeconds' => current.copyWith(
-      osdAutoHideSeconds: requested.osdAutoHideSeconds,
-    ),
-    'dvrControlsEnabled' => current.copyWith(
-      dvrControlsEnabled: requested.dvrControlsEnabled,
-    ),
-    'reduceMotion' => current.copyWith(reduceMotion: requested.reduceMotion),
-    'largeFocusIndicators' => current.copyWith(
-      largeFocusIndicators: requested.largeFocusIndicators,
-    ),
-    'profilePickerOnStartup' => current.copyWith(
-      profilePickerOnStartup: requested.profilePickerOnStartup,
-    ),
-    'diagnosticsEnabled' => current.copyWith(
-      diagnosticsEnabled: requested.diagnosticsEnabled,
-    ),
-    _ => throw ArgumentError.value(keyName, 'keyName'),
-  };
 
   static String _categoryLabel(SettingsCategory category) => switch (category) {
     SettingsCategory.appearance => 'Appearance',

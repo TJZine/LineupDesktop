@@ -44,10 +44,10 @@ class ChannelAirCheck extends StatefulWidget {
   final ValueChanged<ChannelAirCheckStatus> onValidityChanged;
 
   @override
-  State<ChannelAirCheck> createState() => ChannelAirCheckState();
+  State<ChannelAirCheck> createState() => _ChannelAirCheckState();
 }
 
-class ChannelAirCheckState extends State<ChannelAirCheck> {
+class _ChannelAirCheckState extends State<ChannelAirCheck> {
   static const _tick = Duration(seconds: 30);
 
   Timer? _debounce;
@@ -97,9 +97,6 @@ class ChannelAirCheckState extends State<ChannelAirCheck> {
           textStyle: Theme.of(context).textTheme.labelLarge,
         )
       : null;
-
-  int get activeRequestCount => _active == null ? 0 : 1;
-  int get pendingRequestCount => _pending == null ? 0 : 1;
 
   @override
   void initState() {

@@ -1,5 +1,15 @@
 # Desktop surface visual approvals
 
+> **Current workflow authority:** This document retains its product decisions,
+> approvals, scope constraints, and dated evidence. Historical execution policy
+> below does not activate Ponytail, select models, require sequential work,
+> prescribe worker leases or review batches, or prohibit independent review.
+> New or resumed work follows [AGENTS.md](../AGENTS.md),
+> [the project profile](../.agents/project.md), and the shared skills. Parallel
+> work is allowed when contracts, ownership, and runtime resources permit it.
+> This transition does not approve new product work or UI changes, remove an
+> acceptance gate, or turn a recorded observation into fresh verification.
+
 Starting comparison: `cbf3dbd5`, September 9, 2026. The user accepted the comparison
 as useful; **no application surface is visually approved by that statement**.
 Follow the [collaborative handoff](desktop-ui-collaborative-handoff.md).

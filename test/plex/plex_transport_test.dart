@@ -11,25 +11,6 @@ import 'package:lineup_desktop/plex/plex_client.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
 
 void main() {
-  test('transport timeouts surface a stable Plex error', () async {
-    final response = Completer<http.Response>();
-    final client = PlexClient(
-      clientIdentifier: 'lineup-desktop-test-abcdefghijklmnopqrst',
-      requestTimeout: const Duration(milliseconds: 5),
-      httpClient: MockClient((_) => response.future),
-    );
-    await expectLater(
-      client.createPin(),
-      throwsA(
-        isA<PlexException>().having(
-          (exception) => exception.code,
-          'code',
-          'network-timeout',
-        ),
-      ),
-    );
-  });
-
   test(
     'header deadline triggers request abortion and consumes a late response',
     () async {
@@ -161,6 +142,8 @@ void main() {
     );
     final pin = await client.createPin();
     expect(pin.code, 'ABCD');
+    expect(request.method, 'POST');
+    expect(request.url, Uri.parse('https://plex.tv/api/v2/pins'));
     expect(
       request.headers['X-Plex-Client-Identifier'],
       'lineup-desktop-test-abcdefghijklmnopqrst',

@@ -194,10 +194,20 @@ class FileAppStore implements AppStore {
   }
 
   Future<void> _quarantineState() async {
-    final quarantine = File(
-      '${_stateFile.path}.corrupt-${_clock().toUtc().millisecondsSinceEpoch}',
+    final quarantine = await directory.createTemp(
+      'state.json.corrupt-${_clock().toUtc().millisecondsSinceEpoch}-',
     );
-    await _stateFile.rename(quarantine.path);
+    try {
+      await _stateFile.rename('${quarantine.path}/state.json');
+    } catch (error, stackTrace) {
+      // The directory is exclusively owned by this operation. A nonrecursive
+      // delete only removes it when the failed move left it empty, so recovery
+      // bytes are never removed while preserving the original failure.
+      try {
+        await quarantine.delete();
+      } catch (_) {}
+      Error.throwWithStackTrace(error, stackTrace);
+    }
   }
 
   @override

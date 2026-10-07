@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:ui' show Tristate;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
@@ -796,11 +798,22 @@ void main() {
           );
         }
       }
+      for (final label in [
+        'Audio tracks unavailable',
+        'Subtitles unavailable',
+      ]) {
+        expect(find.byTooltip(label), findsOneWidget);
+        final semantics = tester
+            .getSemantics(find.bySemanticsLabel(label))
+            .getSemanticsData();
+        expect(semantics.flagsCollection.isEnabled, Tristate.isFalse);
+        expect(semantics.hasAction(SemanticsAction.tap), isFalse);
+      }
 
       await tester.pumpWidget(const SizedBox.shrink());
       fixture.dispose();
     }
-  });
+  }, semanticsEnabled: true);
 
   testWidgets('OSD uses stateful labeled track and sleep actions', (
     tester,
@@ -1759,7 +1772,7 @@ void main() {
       find.descendant(
         of: find.byKey(const Key('playback-track-audio-2')),
         matching: find.byWidgetPredicate(
-          (widget) => widget is Icon && widget.semanticLabel == 'Selected',
+          (widget) => widget is Icon && widget.icon == Icons.check,
         ),
       ),
       findsOneWidget,
@@ -1844,12 +1857,20 @@ void main() {
     // A whitespace-only title falls back to the meaningful language, and the
     // detail drops the duplicated language instead of repeating it.
     expect(find.text('English'), findsOneWidget);
-    expect(find.text('eac3'), findsOneWidget);
+    expect(find.text('Dolby Digital Plus'), findsOneWidget);
     expect(find.text('English • eac3'), findsNothing);
-    // Fully blank metadata falls back to a readable type/ID label with no
-    // secondary row or stray separators.
+    // Fully blank metadata falls back to distinct readable type/ID labels
+    // without inventing a redundant secondary fact.
     expect(find.text('Audio track 2'), findsOneWidget);
     expect(find.text('Audio track 3'), findsOneWidget);
+    expect(
+      find.bySemanticsLabel('Select Audio track: Audio track 2.'),
+      findsOneWidget,
+    );
+    expect(
+      find.bySemanticsLabel('Select Audio track: Audio track 3.'),
+      findsOneWidget,
+    );
     for (final id in [2, 3]) {
       expect(
         tester
@@ -1859,16 +1880,224 @@ void main() {
         reason: 'track $id has no meaningful detail',
       );
     }
-    // A custom title keeps its trimmed text and full language/codec detail.
-    expect(find.text('Director commentary'), findsOneWidget);
-    expect(find.text('en • aac'), findsOneWidget);
+    // A custom title keeps its trimmed text, resolved language, and friendly
+    // codec detail.
+    expect(find.text('English — Director commentary'), findsOneWidget);
+    expect(find.text('AAC'), findsOneWidget);
     expect(find.text('   '), findsNothing);
     // Formatting and metadata display emit no native selection command.
     expect(fixture.native.selectedTracks, isEmpty);
 
     await tester.pumpWidget(const SizedBox.shrink());
     fixture.dispose();
-  });
+  }, semanticsEnabled: true);
+
+  testWidgets('track rows expose one complete actionable semantics identity', (
+    tester,
+  ) async {
+    final fixture = _Fixture(
+      PlayerState.playing,
+      tracks: const [
+        PlayerTrack(
+          id: 1,
+          type: PlayerTrackType.audio,
+          selected: true,
+          title: 'Original theatrical mix',
+          language: 'en',
+          codec: 'aac',
+          channelLayout: 'stereo',
+        ),
+        PlayerTrack(
+          id: 2,
+          type: PlayerTrackType.audio,
+          selected: false,
+          language: 'es-419',
+          codec: 'eac3',
+          channelLayout: '5.1',
+        ),
+      ],
+    );
+    fixture.player.showTracks(PlayerTrackType.audio);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('English — Original theatrical mix'), findsOneWidget);
+    expect(find.text('Stereo • AAC'), findsOneWidget);
+    expect(find.text('español (Latinoamérica)'), findsOneWidget);
+    expect(find.text('5.1 surround • Dolby Digital Plus'), findsOneWidget);
+
+    const selectedLabel =
+        'Select Audio track: English — Original theatrical mix; Stereo; AAC.';
+    const alternateLabel =
+        'Select Audio track: español (Latinoamérica); 5.1 surround; '
+        'Dolby Digital Plus.';
+    final selectedFinder = find.bySemanticsLabel(selectedLabel);
+    final alternateFinder = find.bySemanticsLabel(alternateLabel);
+    expect(selectedFinder, findsOneWidget);
+    expect(alternateFinder, findsOneWidget);
+    final selectedSemantics = tester
+        .getSemantics(selectedFinder)
+        .getSemanticsData();
+    expect(selectedSemantics.flagsCollection.isButton, isTrue);
+    expect(selectedSemantics.flagsCollection.isSelected, Tristate.isTrue);
+    expect(selectedSemantics.hasAction(SemanticsAction.tap), isTrue);
+    final alternateSemantics = tester
+        .getSemantics(alternateFinder)
+        .getSemanticsData();
+    expect(alternateSemantics.flagsCollection.isButton, isTrue);
+    expect(alternateSemantics.flagsCollection.isSelected, Tristate.isFalse);
+    expect(alternateSemantics.hasAction(SemanticsAction.tap), isTrue);
+    expect(
+      find.bySemanticsLabel('English — Original theatrical mix'),
+      findsNothing,
+    );
+    expect(find.bySemanticsLabel('Selected'), findsNothing);
+    expect(find.bySemanticsLabel('Changing track'), findsNothing);
+    expect(
+      find.bySemanticsLabel(
+        'Audio track: English — Original theatrical mix; Stereo; AAC',
+      ),
+      findsNothing,
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  }, semanticsEnabled: true);
+
+  testWidgets(
+    'pending track semantics retain confirmed selection until native update',
+    (tester) async {
+      const confirmed = PlayerTrack(
+        id: 1,
+        type: PlayerTrackType.subtitle,
+        selected: true,
+        title: 'Festival edition',
+        language: 'en',
+        codec: 'subrip',
+        hearingImpaired: true,
+      );
+      const requested = PlayerTrack(
+        id: 2,
+        type: PlayerTrackType.subtitle,
+        selected: false,
+        language: 'en',
+        codec: 'hdmv_pgs_subtitle',
+        forced: true,
+      );
+      final fixture = _Fixture(
+        PlayerState.playing,
+        tracks: const [confirmed, requested],
+      );
+      fixture.player.showTracks(PlayerTrackType.subtitle);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      );
+      await tester.pump();
+
+      const confirmedLabel =
+          'Select Subtitle track: English — Festival edition; subtitles for '
+          'deaf and hard-of-hearing viewers; SRT (text).';
+      const requestedLabel =
+          'Select Subtitle track: English — marked as forced; PGS (image).';
+      final requestedNode = tester.getSemantics(
+        find.bySemanticsLabel(requestedLabel),
+      );
+      requestedNode.owner!.performAction(requestedNode.id, SemanticsAction.tap);
+      await tester.pump();
+
+      expect(fixture.native.selectedTracks, [(PlayerTrackType.subtitle, 2)]);
+      final pendingFinder = find.bySemanticsLabel('$requestedLabel Pending.');
+      expect(pendingFinder, findsOneWidget);
+      final pendingSemantics = tester
+          .getSemantics(pendingFinder)
+          .getSemanticsData();
+      expect(pendingSemantics.flagsCollection.isSelected, Tristate.isFalse);
+      expect(pendingSemantics.flagsCollection.isLiveRegion, isFalse);
+      expect(
+        tester
+            .getSemantics(find.bySemanticsLabel(confirmedLabel))
+            .getSemanticsData()
+            .flagsCollection
+            .isSelected,
+        Tristate.isTrue,
+      );
+
+      final pendingNodeId = tester.getSemantics(pendingFinder).id;
+      fixture.lineup.notifyListeners();
+      await tester.pump();
+      expect(tester.getSemantics(pendingFinder).id, pendingNodeId);
+      expect(fixture.native.selectedTracks, [(PlayerTrackType.subtitle, 2)]);
+
+      fixture.native.emitTracks(const [
+        PlayerTrack(
+          id: 1,
+          type: PlayerTrackType.subtitle,
+          selected: false,
+          title: 'Festival edition',
+          language: 'en',
+          codec: 'subrip',
+          hearingImpaired: true,
+        ),
+        PlayerTrack(
+          id: 2,
+          type: PlayerTrackType.subtitle,
+          selected: true,
+          language: 'en',
+          codec: 'hdmv_pgs_subtitle',
+          forced: true,
+        ),
+      ]);
+      await tester.pump();
+      expect(
+        tester
+            .getSemantics(find.bySemanticsLabel(requestedLabel))
+            .getSemanticsData()
+            .flagsCollection
+            .isSelected,
+        Tristate.isTrue,
+      );
+      expect(find.bySemanticsLabel('$requestedLabel Pending.'), findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    },
+    semanticsEnabled: true,
+  );
+
+  testWidgets('subtitle Off is one actionable confirmed choice', (
+    tester,
+  ) async {
+    final fixture = _Fixture(
+      PlayerState.playing,
+      tracks: const [
+        PlayerTrack(id: 3, type: PlayerTrackType.subtitle, selected: false),
+      ],
+    );
+    fixture.player.showTracks(PlayerTrackType.subtitle);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
+      ),
+    );
+    await tester.pump();
+
+    final offFinder = find.bySemanticsLabel('Select subtitle track: Off.');
+    expect(offFinder, findsOneWidget);
+    final off = tester.getSemantics(offFinder);
+    final data = off.getSemanticsData();
+    expect(data.flagsCollection.isButton, isTrue);
+    expect(data.flagsCollection.isSelected, Tristate.isTrue);
+    expect(data.hasAction(SemanticsAction.tap), isTrue);
+    off.owner!.performAction(off.id, SemanticsAction.tap);
+    await tester.pump();
+    expect(fixture.native.selectedTracks, [(PlayerTrackType.subtitle, null)]);
+    await tester.pumpWidget(const SizedBox.shrink());
+    fixture.dispose();
+  }, semanticsEnabled: true);
 
   testWidgets(
     'subtitle rail preserves Unicode titles, unknown codes, and Off',
@@ -1902,10 +2131,10 @@ void main() {
       );
       await tester.pump();
 
-      expect(find.text('監督コメンタリー 🎬'), findsOneWidget);
-      expect(find.text('ja • ass'), findsOneWidget);
-      // An unknown language code is used as-is once the blank title is absent.
-      expect(find.text('tlh'), findsOneWidget);
+      expect(find.text('日本語 — 監督コメンタリー 🎬'), findsOneWidget);
+      expect(find.text('ASS (styled text)'), findsOneWidget);
+      // language_code resolves the Klingon code to its self-name.
+      expect(find.text('Klingon'), findsOneWidget);
       expect(
         tester
             .widget<ListTile>(
@@ -1918,7 +2147,7 @@ void main() {
       expect(find.text('Off'), findsOneWidget);
       expect(
         tester.getTopLeft(find.text('Off')).dy,
-        lessThan(tester.getTopLeft(find.text('監督コメンタリー 🎬')).dy),
+        lessThan(tester.getTopLeft(find.text('日本語 — 監督コメンタリー 🎬')).dy),
       );
       expect(fixture.native.selectedTracks, isEmpty);
 
@@ -2023,7 +2252,66 @@ void main() {
     fixture.dispose();
   });
 
-  testWidgets('long track labels stay bounded at compact and enlarged text', (
+  testWidgets(
+    'OSD keeps compact text and exposes the complete track identity',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1280, 720));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final fixture = _Fixture(
+        PlayerState.playing,
+        tracks: const [
+          PlayerTrack(
+            id: 4,
+            type: PlayerTrackType.audio,
+            selected: true,
+            title: 'Original theatrical mix',
+            language: 'en',
+            codec: 'truehd',
+            channelLayout: '5.1',
+          ),
+          PlayerTrack(id: 8, type: PlayerTrackType.subtitle, selected: false),
+        ],
+      );
+      fixture.player.showOsd();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MediaQuery(
+            data: const MediaQueryData(size: Size(1280, 720)),
+            child: PlayerView(controller: fixture.player, openGuide: () {}),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.text('Audio • English'), findsOneWidget);
+      expect(find.textContaining('Dolby TrueHD'), findsNothing);
+      const audioDescription =
+          'Audio track: English — Original theatrical mix; 5.1 surround; '
+          'Dolby TrueHD';
+      expect(find.byTooltip(audioDescription), findsOneWidget);
+      final audioFinder = find.bySemanticsLabel(audioDescription);
+      expect(audioFinder, findsOneWidget);
+      final audioSemantics = tester
+          .getSemantics(audioFinder)
+          .getSemanticsData();
+      expect(audioSemantics.flagsCollection.isButton, isTrue);
+      expect(audioSemantics.flagsCollection.isEnabled, Tristate.isTrue);
+      expect(audioSemantics.hasAction(SemanticsAction.tap), isTrue);
+
+      expect(find.text('Subtitles • Off'), findsOneWidget);
+      expect(find.byTooltip('Subtitle tracks: Off'), findsOneWidget);
+      final subtitlesSemantics = tester
+          .getSemantics(find.bySemanticsLabel('Subtitle tracks: Off'))
+          .getSemanticsData();
+      expect(subtitlesSemantics.flagsCollection.isEnabled, Tristate.isTrue);
+      expect(subtitlesSemantics.hasAction(SemanticsAction.tap), isTrue);
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    },
+    semanticsEnabled: true,
+  );
+
+  testWidgets('long track labels stay bounded with untruncated semantics', (
     tester,
   ) async {
     const longTitle =
@@ -2040,6 +2328,14 @@ void main() {
           language: 'English',
           codec: 'truehd',
         ),
+        PlayerTrack(
+          id: 12,
+          type: PlayerTrackType.audio,
+          selected: false,
+          title: 'Alternate mix',
+          language: 'English',
+          codec: 'aac',
+        ),
       ],
     );
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -2054,7 +2350,7 @@ void main() {
       ),
     );
     await tester.pump();
-    final osdLabel = find.text('Audio • $longTitle');
+    final osdLabel = find.text('Audio • English — $longTitle');
     expect(osdLabel, findsOneWidget);
     final osdText = tester.widget<Text>(osdLabel);
     expect(osdText.maxLines, 1);
@@ -2074,14 +2370,20 @@ void main() {
     );
     await tester.pump();
     fixture.player.showTracks(PlayerTrackType.audio);
-    await tester.pump();
-    expect(find.text(longTitle), findsOneWidget);
-    expect(find.text('English • truehd'), findsOneWidget);
+    await tester.pumpAndSettle();
+    expect(find.text('English — $longTitle'), findsOneWidget);
+    expect(find.text('Dolby TrueHD'), findsOneWidget);
+    expect(
+      find.bySemanticsLabel(
+        'Select Audio track: English — $longTitle; Dolby TrueHD.',
+      ),
+      findsOneWidget,
+    );
     expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(const SizedBox.shrink());
     fixture.dispose();
-  });
+  }, semanticsEnabled: true);
 
   testWidgets('displaying track metadata emits no native selection command', (
     tester,
@@ -2123,6 +2425,86 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     fixture.dispose();
   });
+
+  testWidgets(
+    'display-only track updates preserve keyed focus and selection identity',
+    (tester) async {
+      final fixture = _Fixture(
+        PlayerState.playing,
+        tracks: const [
+          PlayerTrack(
+            id: 1,
+            type: PlayerTrackType.audio,
+            selected: true,
+            title: 'Original mix',
+            language: 'en',
+          ),
+          PlayerTrack(
+            id: 2,
+            type: PlayerTrackType.audio,
+            selected: false,
+            title: 'Alternate mix',
+            language: 'en',
+          ),
+        ],
+      );
+      fixture.player.showTracks(PlayerTrackType.audio);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
+        ),
+      );
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pump();
+      expect(
+        Focus.of(tester.element(find.text('English — Alternate mix'))).hasFocus,
+        isTrue,
+      );
+
+      fixture.native.emitTracks(const [
+        PlayerTrack(
+          id: 1,
+          type: PlayerTrackType.audio,
+          selected: true,
+          title: 'Original mix remastered',
+          language: 'en',
+          codec: 'flac',
+        ),
+        PlayerTrack(
+          id: 2,
+          type: PlayerTrackType.audio,
+          selected: false,
+          title: 'Alternate mix restored',
+          language: 'en',
+          codec: 'aac',
+        ),
+        PlayerTrack(
+          id: 3,
+          type: PlayerTrackType.audio,
+          selected: false,
+          title: 'New peer',
+          language: 'fr',
+        ),
+      ]);
+      await tester.pump();
+
+      expect(
+        Focus.of(tester.element(find.text('English — Alternate mix restored')))
+            .hasFocus,
+        isTrue,
+      );
+      expect(
+        tester
+            .widget<ListTile>(find.byKey(const Key('playback-track-audio-1')))
+            .selected,
+        isTrue,
+      );
+      expect(fixture.native.selectedTracks, isEmpty);
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    },
+  );
 
   testWidgets('failed track switch keeps the rail and reports recovery', (
     tester,
@@ -2170,11 +2552,18 @@ void main() {
           .selected,
       isTrue,
     );
+    final error = find.text('Could not change this track. Try again.');
+    final errorNode = tester.getSemantics(error);
+    expect(errorNode.getSemanticsData().flagsCollection.isLiveRegion, isTrue);
+    final errorNodeId = errorNode.id;
+    fixture.lineup.notifyListeners();
+    await tester.pump();
+    expect(tester.getSemantics(error).id, errorNodeId);
     expect(fixture.native.selectedTracks, [(PlayerTrackType.audio, 2)]);
 
     await tester.pumpWidget(const SizedBox.shrink());
     fixture.dispose();
-  });
+  }, semanticsEnabled: true);
 
   testWidgets('mini Guide scrolls in short windows', (tester) async {
     final fixture = _Fixture(PlayerState.playing, channelCount: 5);
@@ -2358,16 +2747,16 @@ void main() {
     },
   );
 
-  testWidgets('playback options scroll through long native track lists', (
+  testWidgets('playback options keep all 256 native track rows reachable', (
     tester,
   ) async {
     final tracks = List.generate(
-      30,
+      256,
       (index) => PlayerTrack(
-        id: index,
+        id: index + 1,
         type: PlayerTrackType.audio,
         selected: index == 0,
-        title: 'Audio track $index',
+        title: 'Audio choice ${index + 1}',
       ),
     );
     final fixture = _Fixture(PlayerState.playing, tracks: tracks);
@@ -2399,7 +2788,7 @@ void main() {
       expect(rail.width, size.width == 800 ? 320 : 400);
       position.jumpTo(position.maxScrollExtent);
       await tester.pumpAndSettle();
-      expect(find.text('Audio track 29'), findsOneWidget);
+      expect(find.text('Audio choice 256'), findsOneWidget);
       expect(find.text('Close'), findsOneWidget);
       expect(tester.takeException(), isNull, reason: '$size');
     }
@@ -2407,6 +2796,186 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     fixture.dispose();
   });
+
+  testWidgets(
+    '1280 track drawers keep wrapped rows clear of the fixed footer',
+    (tester) async {
+      const audioTracks = [
+        PlayerTrack(
+          id: 1,
+          type: PlayerTrackType.audio,
+          selected: true,
+          title: 'Original theatrical mix',
+          language: 'en',
+          codec: 'truehd',
+          channelLayout: '5.1',
+        ),
+        PlayerTrack(
+          id: 2,
+          type: PlayerTrackType.audio,
+          selected: false,
+          title: 'Director commentary',
+          language: 'en',
+          codec: 'aac',
+          channelLayout: 'stereo',
+          commentary: true,
+        ),
+        PlayerTrack(
+          id: 3,
+          type: PlayerTrackType.audio,
+          selected: false,
+          language: 'es-419',
+          codec: 'eac3',
+          channelLayout: '5.1(side)',
+        ),
+        PlayerTrack(
+          id: 4,
+          type: PlayerTrackType.audio,
+          selected: false,
+          title: 'Descriptive restoration',
+          language: 'fr',
+          codec: 'ac3',
+          channelCount: 6,
+          channelLayout: 'unknown-layout',
+          visualImpaired: true,
+        ),
+        PlayerTrack(
+          id: 5,
+          type: PlayerTrackType.audio,
+          selected: false,
+          title: 'Long shared archival presentation title ending in theatrical',
+          language: 'en',
+          codec: 'flac',
+          channelLayout: 'stereo',
+        ),
+        PlayerTrack(
+          id: 6,
+          type: PlayerTrackType.audio,
+          selected: false,
+          title: 'Long shared archival presentation title ending in commentary',
+          language: 'en',
+          codec: 'flac',
+          channelLayout: 'stereo',
+        ),
+      ];
+      const subtitleTracks = [
+        PlayerTrack(
+          id: 11,
+          type: PlayerTrackType.subtitle,
+          selected: true,
+          language: 'en',
+          codec: 'subrip',
+          hearingImpaired: true,
+        ),
+        PlayerTrack(
+          id: 12,
+          type: PlayerTrackType.subtitle,
+          selected: false,
+          language: 'en',
+          codec: 'hdmv_pgs_subtitle',
+          forced: true,
+        ),
+        PlayerTrack(
+          id: 13,
+          type: PlayerTrackType.subtitle,
+          selected: false,
+          title: 'Festival edition',
+          language: 'fr',
+          codec: 'ass',
+        ),
+        PlayerTrack(
+          id: 14,
+          type: PlayerTrackType.subtitle,
+          selected: false,
+          language: 'es-419',
+          codec: 'subrip',
+          external: true,
+        ),
+        PlayerTrack(
+          id: 15,
+          type: PlayerTrackType.subtitle,
+          selected: false,
+          title:
+              'Long shared restored subtitle presentation ending in theatrical',
+          language: 'en',
+          codec: 'subrip',
+        ),
+        PlayerTrack(
+          id: 16,
+          type: PlayerTrackType.subtitle,
+          selected: false,
+          title:
+              'Long shared restored subtitle presentation ending in commentary',
+          language: 'en',
+          codec: 'subrip',
+        ),
+      ];
+      await tester.binding.setSurfaceSize(const Size(1280, 720));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      for (final scenario in [
+        (type: PlayerTrackType.audio, tracks: audioTracks),
+        (type: PlayerTrackType.subtitle, tracks: subtitleTracks),
+      ]) {
+        final fixture = _Fixture(PlayerState.playing, tracks: scenario.tracks);
+        fixture.player.showTracks(scenario.type);
+        await tester.pumpWidget(
+          MaterialApp(
+            home: MediaQuery(
+              data: const MediaQueryData(size: Size(1280, 720)),
+              child: PlayerView(controller: fixture.player, openGuide: () {}),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final rail = tester.getRect(
+          find.byKey(const Key('playback-options-rail')),
+        );
+        final list = tester.getRect(
+          find.byKey(const Key('playback-options-list')),
+        );
+        final footer = tester.getRect(
+          find.byKey(const Key('playback-options-footer')),
+        );
+        expect(rail.contains(footer.topLeft), isTrue);
+        expect(
+          rail.contains(footer.bottomRight - const Offset(0.1, 0.1)),
+          isTrue,
+        );
+        expect(list.bottom, lessThan(footer.top));
+
+        for (final track in scenario.tracks) {
+          final row = tester.getRect(
+            find.byKey(Key('playback-track-${scenario.type.name}-${track.id}')),
+          );
+          final visible = row.intersect(list);
+          if (!visible.isEmpty) {
+            expect(visible.overlaps(footer), isFalse);
+          }
+        }
+
+        for (var index = 0; index < 5; index++) {
+          await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+          await tester.pump();
+        }
+        final prefix = scenario.type == PlayerTrackType.audio
+            ? 'English — Long shared archival presentation title ending in '
+            : 'English — Long shared restored subtitle presentation ending in ';
+        final theatrical = find.text('${prefix}theatrical');
+        final commentary = find.text('${prefix}commentary');
+        expect(theatrical, findsOneWidget);
+        expect(commentary, findsOneWidget);
+        expect(list.contains(tester.getRect(theatrical).center), isTrue);
+        expect(list.contains(tester.getRect(commentary).center), isTrue);
+        expect(Focus.of(tester.element(commentary)).hasFocus, isTrue);
+        expect(tester.takeException(), isNull, reason: '${scenario.type}');
+
+        await tester.pumpWidget(const SizedBox.shrink());
+        fixture.dispose();
+      }
+    },
+  );
 
   testWidgets('selected subtitle in a long list is focused and visible', (
     tester,
@@ -2439,7 +3008,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final selected = find.text('Subtitle track 24');
+    final selected = find.text('English — Subtitle track 24');
     final list = find.byKey(const Key('playback-options-list'));
     expect(Focus.of(tester.element(selected)).hasFocus, isTrue);
     expect(tester.getRect(list).contains(tester.getCenter(selected)), isTrue);
@@ -2472,6 +3041,13 @@ void main() {
     });
     for (final layout in const [
       (
+        viewport: Size(800, 600),
+        dpr: 1.0,
+        width: 320.0,
+        fade: 200 / 3,
+        scale: 1.0,
+      ),
+      (
         viewport: Size(1280, 720),
         dpr: 1.0,
         width: 400.0,
@@ -2483,6 +3059,20 @@ void main() {
         dpr: 1.25,
         width: 600.0,
         fade: 100.0,
+        scale: 1.0,
+      ),
+      (
+        viewport: Size(1360, 840),
+        dpr: 1.0,
+        width: 425.0,
+        fade: 850 / 12,
+        scale: 1.0,
+      ),
+      (
+        viewport: Size(1600, 900),
+        dpr: 1.0,
+        width: 500.0,
+        fade: 250 / 3,
         scale: 1.0,
       ),
       (
@@ -2551,8 +3141,9 @@ void main() {
       expect(find.text('PLAYBACK OPTIONS'), findsNothing);
       expect(
         find.byTooltip(
-          'A long descriptive English surround audio track label\n'
-          'English • eac3',
+          'Audio track: English — '
+          'A long descriptive English surround audio track label; '
+          'Dolby Digital Plus',
         ),
         findsOneWidget,
       );
@@ -2560,7 +3151,7 @@ void main() {
         tester
             .getSemantics(
               find.text(
-                'A long descriptive English surround audio track label',
+                'English — A long descriptive English surround audio track label',
               ),
             )
             .label,
@@ -2570,7 +3161,7 @@ void main() {
         tester
             .widget<Text>(
               find.text(
-                'A long descriptive English surround audio track label',
+                'English — A long descriptive English surround audio track label',
               ),
             )
             .style
@@ -2578,9 +3169,27 @@ void main() {
         closeTo(16 * layout.scale, 0.01),
       );
       final label = tester.getRect(
-        find.text('A long descriptive English surround audio track label'),
+        find.text(
+          'English — A long descriptive English surround audio track label',
+        ),
       );
       expect(rail.overlaps(label), isTrue);
+      expect(
+        tester
+            .getRect(find.byKey(const Key('playback-options-list')))
+            .contains(label.center),
+        isTrue,
+      );
+      expect(
+        Focus.of(
+          tester.element(
+            find.text(
+              'English — A long descriptive English surround audio track label',
+            ),
+          ),
+        ).hasFocus,
+        isTrue,
+      );
       expect(tester.takeException(), isNull, reason: '${layout.viewport}');
     }
 
@@ -3986,7 +4595,7 @@ class _Native implements NativePlayer {
     this.failControls = false,
     this.failTrackSelect = false,
     this.blockLoad = false,
-    this.tracks = const [],
+    List<PlayerTrack> tracks = const [],
     this.positionValue = const Duration(minutes: 10),
     this.durationValue = const Duration(hours: 1),
     this.telemetryValue = const PlayerTelemetry(),
@@ -3995,7 +4604,9 @@ class _Native implements NativePlayer {
          message: state == PlayerState.unsupported
              ? 'Playback is unavailable on macOS.'
              : 'Playing',
-       );
+       ) {
+    _tracks = tracks;
+  }
 
   final bool failLoad;
   final bool failStop;
@@ -4007,6 +4618,7 @@ class _Native implements NativePlayer {
   final PlayerTelemetry telemetryValue;
   final loadStarted = Completer<void>();
   final _loadCompletion = Completer<void>();
+  final _events = StreamController<PlayerEvent>.broadcast();
   int transportCommands = 0;
   int loadCalls = 0;
   final fullscreenValues = <bool>[];
@@ -4021,9 +4633,10 @@ class _Native implements NativePlayer {
   @override
   PlayerTelemetry get telemetry => telemetryValue;
   @override
-  final List<PlayerTrack> tracks;
+  List<PlayerTrack> get tracks => _tracks;
+  late List<PlayerTrack> _tracks;
   @override
-  Stream<PlayerEvent> get events => const Stream.empty();
+  Stream<PlayerEvent> get events => _events.stream;
   @override
   Future<void> initialize() async {}
   @override
@@ -4080,6 +4693,19 @@ class _Native implements NativePlayer {
     if (failTrackSelect) throw StateError('synthetic track failure');
   }
 
+  void emitTracks(List<PlayerTrack> tracks) {
+    _tracks = List.unmodifiable(tracks);
+    _events.add(
+      PlayerEvent(
+        status: status,
+        position: position,
+        duration: duration,
+        telemetry: telemetry,
+        tracks: _tracks,
+      ),
+    );
+  }
+
   @override
   Future<void> setVolume(double volume) async {}
   @override
@@ -4088,7 +4714,7 @@ class _Native implements NativePlayer {
   }
 
   @override
-  Future<void> dispose() async {}
+  Future<void> dispose() => _events.close();
 }
 
 class _Store implements AppStore {

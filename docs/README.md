@@ -10,11 +10,13 @@ audience and purpose.
 | --- | --- | --- |
 | Private tester or future end user | [User Guide](user-guide.md) | [Windows Native Acceptance](windows-native-validation.md) when participating in hardware testing |
 | New contributor | [Contributing](../CONTRIBUTING.md) | [Development](DEVELOPMENT.md) and [Architecture](architecture.md) |
+| Agent-assisted work | [Agent entry](../AGENTS.md) | [Project profile](../.agents/project.md), then only the affected technical authorities |
 | Product, parity, or release planning | [Product Parity](product-parity.md) | [Architecture](architecture.md) and [Portable UI Parity](ui-parity.md) |
 | Application or UI work | [Architecture](architecture.md) | [Approved interface system](../.interface-design/system.md), [Product Parity](product-parity.md), and the affected source/tests; historical parity records only when relevant |
 | Async, persistence, or credential work | [Architecture](architecture.md#changing-asynchronous-and-persisted-state) | Credential/diagnostic contracts in [Implemented now](architecture.md#implemented-now) and the linked owner tests |
 | Channel Studio implementation or investigation | [Desktop UI target specification](desktop-ui-design-spec.md) | [Architecture](architecture.md), current source/tests and the design-only [delivery plan](desktop-ui-implementation-plan.md); historical Studio documents are absent from this checkout |
 | Windows media, runner, or packaging work | [Development verification map](DEVELOPMENT.md#verification-by-task) | [Architecture](architecture.md#windows-presentation-and-ownership), [Windows Runtime Provenance](windows-runtime.md), and relevant [physical acceptance](windows-native-validation.md) scenarios |
+| Authenticated libmpv reference investigation | [Windows reference investigation](libmpv-authenticated-reference-investigation.md) | [Windows Runtime Provenance](windows-runtime.md) and [Windows Native Acceptance](windows-native-validation.md); investigation evidence is not release acceptance |
 | Planned audio passthrough work | [Architecture](architecture.md) and current source | [Windows Native Acceptance](windows-native-validation.md); the previously indexed passthrough specification is absent, so do not infer an approved plan from this index |
 | Planned automatic fullscreen HDR work | [Fullscreen HDR Presentation Specification](fullscreen-hdr-spec.md) | [Windows Native Acceptance](windows-native-validation.md), [Architecture](architecture.md), and the current source |
 | Deferred Guide freshness / collection investigation | [Guide Freshness and Collection Revalidation Investigation](guide-freshness-collection-investigation.md) | [Architecture](architecture.md), the current source, and its cited upstream evidence |
@@ -34,6 +36,9 @@ audience and purpose.
 
 ### Contributor documentation
 
+- [Agent entry](../AGENTS.md) selects the shared workflow responsibilities;
+  [the project profile](../.agents/project.md) owns Lineup-specific routing and
+  evidence limits. Root `CLAUDE.md` imports the same entry.
 - [Contributing](../CONTRIBUTING.md) covers branch targeting, architecture
   constraints, security expectations, validation, commits, pull requests, and
   documentation standards.
@@ -46,19 +51,31 @@ audience and purpose.
 
 ### Evidence and design records
 
+- [Workflow refresh report for GPT Pro](reviews/workflow-refresh-2026-10-03/REPORT.md)
+  reconciles the shared-skill migration with restored optional Codex presets,
+  the user's reviewer-model adjustment and separate-chat delegation preferences.
+  It includes dated personal orchestration source snapshots for connector review;
+  these are evidence, not additional workflow entry points or runtime acceptance.
+
 - [Collaborative desktop visual correction handoff](desktop-ui-collaborative-handoff.md)
-  defines the active user-led surface review, bounded Luna dispatch and explicit
-  approval workflow. Its [approval ledger](desktop-ui-surface-approvals.md) and
-  [portable 1080p packet](design/desktop-ui/review-packets/README.md) support
-  cross-machine manual review.
+  preserves the earlier user-led campaign and its provenance. Its dispatch,
+  model, and sequential-work rules are historical execution policy. Still-
+  approved design decisions remain in the [interface system](../.interface-design/system.md),
+  [target specification](desktop-ui-design-spec.md), and
+  [approval ledger](desktop-ui-surface-approvals.md). The
+  [portable 1080p packet](design/desktop-ui/review-packets/README.md) remains
+  evidence for its recorded state, not a newly verified baseline.
 
 - [Desktop UI Design Specification](desktop-ui-design-spec.md) contains the
   consolidated approved target. It does not authorize implementation or claim
   that the design has been implemented.
-- [Desktop UI Implementation Plan](desktop-ui-implementation-plan.md) maps the
-  delivery packages, owners, migration safeguards and worker/reviewer verification.
-- [Desktop UI orchestration handoff](desktop-ui-orchestration-handoff.md) supplies
-  worker/Luna assignment rules, grouped reviews and the new-session start prompt.
+- [Desktop UI Implementation Plan](desktop-ui-implementation-plan.md) records
+  campaign delivery packages, owners and migration safeguards. Check its scope
+  and status against current source before resuming unfinished product work;
+  its worker/reviewer procedure does not override the current shared workflow.
+- [Desktop UI orchestration handoff](desktop-ui-orchestration-handoff.md)
+  preserves historical assignment rules and grouped reviews. Do not use its
+  model roster or new-session prompt as the entry point for a new task.
 - [Desktop UI readiness review](desktop-ui-readiness-review.md) records the
   independent reviewer findings, corrections and P0-ready/P1-gated verdict.
 - [Desktop UI visual evidence](design/desktop-ui/README.md) identifies approved
@@ -95,8 +112,10 @@ audience and purpose.
 
 Current source and freshly observed evidence outrank old prompts, screenshots,
 commit descriptions, and historical audit sections.
-Completed plans and issue-specific implementation restrictions do not prescribe
-execution for a new task. Preserve still-approved product/design contracts,
+Completed plans, old model rosters, and issue-specific implementation
+restrictions do not prescribe execution for a new task. Agent workflow is
+defined by [AGENTS.md](../AGENTS.md), the [project profile](../.agents/project.md),
+and the shared skills. Preserve still-approved product/design contracts,
 including the [protected Player layouts](../.interface-design/system.md#player-protected-baseline).
 
 Use these terms precisely:
@@ -111,8 +130,9 @@ Use these terms precisely:
 
 An implemented or compiling path is not automatically platform validated or
 supported. Native video, HDR, hardware decode, DirectComposition, packaging,
-focus, and input claims require physical Windows evidence at the exact commit
-being evaluated.
+focus, and input claims require physical Windows evidence with its actual
+tested identity. Follow the [profile's evidence reuse rules](../.agents/project.md#native-evidence-and-reuse)
+when assessing a later candidate; never relabel an earlier run as a new run.
 
 ## Documentation standards
 

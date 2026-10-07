@@ -1227,7 +1227,7 @@ void main() {
     expect(controller.settings.theme, theme);
   });
 
-  testWidgets('quarantine collision makes startup fail visibly', (
+  testWidgets('pre-existing quarantine directory survives startup recovery', (
     tester,
   ) async {
     final directory = Directory.systemTemp.createTempSync(
@@ -1241,6 +1241,8 @@ void main() {
       '${stateFile.path}.corrupt-${instant.millisecondsSinceEpoch}',
     );
     quarantine.createSync();
+    final marker = File('${quarantine.path}/marker');
+    marker.writeAsStringSync('existing recovery artifact');
     final store = _PreparedFileAppStore(directory, clock: () => instant);
     await tester.runAsync(store.prepare);
     final controller = LineupController(
@@ -1255,10 +1257,32 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Lineup Desktop could not start'), findsOneWidget);
-    expect(find.textContaining(directory.path), findsNothing);
-    expect(stateFile.readAsStringSync(), '{broken');
+    expect(find.byType(MaterialBanner), findsOneWidget);
+    expect(controller.startupRecoveryNotice, isNotNull);
+    expect(stateFile.existsSync(), isFalse);
     expect(quarantine.existsSync(), isTrue);
+    expect(marker.readAsStringSync(), 'existing recovery artifact');
+    final prefix =
+        '${directory.path}${Platform.pathSeparator}state.json.corrupt-';
+    final recoveredContainers = directory
+        .listSync()
+        .whereType<Directory>()
+        .where(
+          (entry) =>
+              entry.path.startsWith(prefix) && entry.path != quarantine.path,
+        )
+        .toList();
+    expect(recoveredContainers, hasLength(1));
+    expect(
+      File('${recoveredContainers.single.path}/state.json').readAsStringSync(),
+      '{broken',
+    );
+
+    await tester.tap(find.widgetWithText(TextButton, 'Dismiss'));
+    await tester.pump();
+
+    expect(find.byType(MaterialBanner), findsNothing);
+    expect(controller.startupRecoveryNotice, isNull);
   });
 
   testWidgets('state directory read failure makes startup fail visibly', (

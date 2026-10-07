@@ -56,7 +56,7 @@ regions reveal it. Frames do not cross the Dart boundary and are not copied
 through a Flutter texture. The native baseline explicitly requests
 `vo=gpu-next`, the D3D11 GPU API/context, and `hwdec=auto`.
 
-Stock Flutter 3.47.4 does not request ANGLE's DirectComposition EGL window
+Stock Flutter 3.47.6 does not request ANGLE's DirectComposition EGL window
 surface mode, so it cannot provide the required transparent composition
 reliably. Lineup therefore owns the single-file patch in
 `tool/flutter_engine`, targeting the exact framework and engine identities in
@@ -130,7 +130,9 @@ is emergency cleanup, not the normal path. See
   current content generation so replaced content cannot retain stale imagery.
   Ordered Plex parts remain one Flutter-owned playback lifetime: the
   coordinator gives every native load its own generation, advances natural
-  completion once, and maps only known part boundaries. Native events remain
+  completion once, and maps only known part boundaries. One part-load operation
+  owns readiness, the latest pending position, and authorization replacement
+  across tune, multipart advance, and part-changing seek. Native events remain
   the track-state authority. Seeks into a loading part share its readiness and
   apply the latest requested position after it loads, including authorization
   recovery. Playback errors retain a native cleanup obligation even after UI
@@ -172,6 +174,22 @@ is emergency cleanup, not the normal path. See
   from the URL and is applied as a per-load header, never as a global mpv
   credential option. Authenticated mpv loads reject redirects because custom
   headers can otherwise follow them; Dart Plex requests also disable redirects.
+  Windows sets `access-references=no` and `autoload-files=no` globally and fails
+  initialization if either is rejected. Nested references, including same-server
+  HLS/DASH, MOV references, and ordered chapters requiring external segments,
+  are unsupported. These options do not implement an origin-scoped transport;
+  see the [bounded reference audit](libmpv-authenticated-reference-investigation.md).
+  **Planned, not implemented:** Plex transcode and Direct Stream HLS/DASH
+  sessions will use a Dart-selected per-load reference policy. Direct Play
+  keeps references off; only Plex transcoder session playlists on the same
+  validated server receive per-file `access-references=yes`, restored by mpv
+  on unload. `autoload-files=no` remains global. Extend the gated
+  `authenticated_reference` test with authenticated session playback and
+  restoration after completion, stop and replacement when this is built,
+  retaining containment for Direct Play originals. The
+  [per-load feasibility check](libmpv-authenticated-reference-investigation.md#2026-10-03-per-load-reference-policy-feasibility)
+  establishes headless HLS feasibility, not implemented transcoding or
+  physical Windows acceptance.
   Preserve native header-buffer clearing after command execution and queue
   cleanup. See [Dart load validation](../lib/playback/windows_native_player.dart),
   [native load options](../windows/runner/native_player.cpp), and the
@@ -206,8 +224,10 @@ is emergency cleanup, not the normal path. See
   expose their source read-only during editing; metadata-only saves preserve
   source and generated identity.
 - State loading treats invalid UTF-8, malformed JSON, or schema-invalid JSON as
-  corruption, moves the original bytes aside, and starts empty with a
-  dismissible recovery banner. Missing state
+  corruption, moves the original bytes into a uniquely reserved quarantine
+  directory beside `state.json`, and starts empty with a dismissible recovery
+  banner. Existing recovery artifacts remain untouched; the original byte file
+  is retained as `state.json` inside its operation-owned directory. Missing state
   starts empty; transient read or quarantine failures stop startup instead of
   silently replacing data.
 - Diagnostic producers supply fixed area/message text and normalized structured
@@ -240,9 +260,14 @@ is emergency cleanup, not the normal path. See
 
 ## Changing asynchronous and persisted state
 
-Use [LineupController](../lib/app/lineup_controller.dart)'s existing operation
-epoch for superseded requests and content generation for committed content
-changes. Check currentness before publishing success or failure. Scan
+In [LineupController](../lib/app/lineup_controller.dart), request currentness
+retires obsolete discovery and scan work; it does not by itself retire active
+playback authorization or an application mutation. Captured authorization belongs
+to the active profile/server lifetime, while channel mutations belong to the
+committed content scope. A same-scope server-list refresh preserves both. Leaving
+and re-entering a scope does not revive its old work. Content generation still
+invalidates Guide and Player consumers after committed content changes. Check
+the identity relevant to an operation before publishing success or failure. Scan
 cancellation also aborts active HTTP requests through
 [PlexClient](../lib/plex/plex_client.dart); rejecting a stale result alone does
 not release its connection. Controller race tests and the
@@ -255,6 +280,17 @@ does not protect controller snapshots. Credential writes and logout cleanup
 have their own ordered queue. Preserve these responsibilities when adding a
 mutation; see the delayed/failing state and credential tests in
 [lineup_controller_test.dart](../test/app/lineup_controller_test.dart).
+
+Settings transformations derive from committed settings inside the controller's
+queue. The controller persists the proposal before publishing it; a view may
+display a pending choice but does not own save ordering or settings merge policy.
+A failed change cannot reappear inside a later caller's captured snapshot.
+
+Logout initiation retires captured authorization and pre-logout queued mutation
+eligibility. An already-started successful write may publish to the still-active
+content scope before logout's state barrier clears runtime. If credential cleanup
+fails, the retained session keeps that committed effect; old authorization and
+queued work remain retired. Successful logout clears runtime after the barrier.
 
 Library scans stage per-library results outside the committed inventory. Retrying
 the same profile/server/selection reuses completed libraries; an explicit ready
