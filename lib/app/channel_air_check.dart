@@ -29,6 +29,7 @@ class ChannelAirCheck extends StatefulWidget {
     required this.onValidityChanged,
     this.originalChannel,
     this.sourceIssue,
+    this.sourceIssueExplained = false,
     this.playableById,
     super.key,
   });
@@ -40,6 +41,7 @@ class ChannelAirCheck extends StatefulWidget {
   final bool compact;
   final String inclusionReason;
   final String? sourceIssue;
+  final bool sourceIssueExplained;
   final Map<String, Object?>? playableById;
   final ValueChanged<ChannelAirCheckStatus> onValidityChanged;
 
@@ -106,8 +108,9 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
       _reportValidity(ChannelAirCheckValidity.unknown);
       _scheduleLoad();
     } else if (_preview case final preview?
-        when preview.channel.name != widget.channel.name ||
-            preview.channel.number != widget.channel.number) {
+        when preview.key == nextKey &&
+            (preview.channel.name != widget.channel.name ||
+                preview.channel.number != widget.channel.number)) {
       _preview = preview.withChannel(widget.channel);
     }
   }
@@ -151,6 +154,7 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
     final target = _AirCheckRequest(
       key: _targetKey,
       channel: widget.channel,
+      sourceLabel: widget.inclusionReason,
       baseline: false,
       publishes: true,
       version: version,
@@ -164,6 +168,7 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
         _AirCheckRequest(
           key: originalKey,
           channel: original,
+          sourceLabel: widget.inclusionReason,
           baseline: true,
           publishes: originalKey == _targetKey,
           version: version,
@@ -215,7 +220,12 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
             if (request.publishes &&
                 request.key == _targetKey &&
                 request.version == _requestVersion) {
-              final preview = _project(schedule, request.key, request.channel);
+              final preview = _project(
+                schedule,
+                request.key,
+                request.channel,
+                sourceLabel: request.sourceLabel,
+              );
               _preview = preview;
               _error = null;
               _preserveSelection(preview, widget.clock());
@@ -272,6 +282,7 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
     String key,
     Channel channel, {
     int? futureHours,
+    required String sourceLabel,
   }) {
     final now = widget.clock().toUtc();
     final current = programAt(now, channel.anchor, schedule);
@@ -297,6 +308,7 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
     );
     return _AirCheckPreview(
       schedule: schedule,
+      sourceLabel: sourceLabel,
       channel: channel,
       window: result,
       key: key,
@@ -320,7 +332,12 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
         now.isBefore(previous.ribbonStart) ||
         !now.isBefore(previous.ribbonEnd);
     final next = needsRollover
-        ? _project(previous.schedule, previous.key, previous.channel)
+        ? _project(
+            previous.schedule,
+            previous.key,
+            previous.channel,
+            sourceLabel: previous.sourceLabel,
+          )
         : previous;
     setState(() {
       _preview = next;
@@ -421,53 +438,71 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
                         ),
                       ),
                     )
-                  else if (preview == null)
+                  else if (preview == null &&
+                      (!widget.sourceIssueExplained || _retryableError))
                     _emptyRibbon(_errorView(error!))
+                  else if (preview == null)
+                    const SizedBox.shrink()
                   else ...[
-                    _facts(preview),
-                    SizedBox(height: 8),
-                    _selection(preview, now),
-                    SizedBox(height: 8),
-                    _verticalSchedule(preview, now),
-                    if (_futureHours < 24)
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: LineupInlineLink(
-                          onPressed: _stale
-                              ? null
-                              : () => _extendPreview(preview),
-                          child: const Text('Show next 6 hours'),
-                        ),
+                    if (_stale)
+                      Text(
+                        'Previous schedule · ${preview.sourceLabel}',
+                        key: const Key('air-check-retained-source'),
                       ),
-                    Text(
-                      'Coverage through ${_time(context, preview.window.lastProjectedEnd ?? preview.windowEnd)} · $_futureHours future hours requested',
+                    Opacity(
+                      key: const Key('air-check-schedule-content'),
+                      opacity: _stale ? .5 : 1,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _facts(preview),
+                          SizedBox(height: 8),
+                          _selection(preview, now),
+                          SizedBox(height: 8),
+                          _verticalSchedule(preview, now),
+                          Wrap(
+                            spacing: 12,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              Text(
+                                'Schedule through ${_time(context, preview.window.lastProjectedEnd ?? preview.windowEnd)}',
+                              ),
+                              if (_futureHours < 24)
+                                LineupInlineLink(
+                                  onPressed: _stale
+                                      ? null
+                                      : () => _extendPreview(preview),
+                                  child: const Text('Show next 6 hours'),
+                                ),
+                            ],
+                          ),
+                          if (preview.window.truncated)
+                            Text(
+                              'Preview truncated at ${_time(context, preview.window.lastProjectedEnd!)}; this is the last projected program end.',
+                            ),
+                          if (_unavailableCount(
+                                preview.channel.source,
+                                widget.playableById ??
+                                    widget.controller.playableInventory.byId,
+                              )
+                              case final count when count > 0)
+                            Text(
+                              '$count unavailable hand-picked ${count == 1 ? 'item is' : 'items are'} retained but off air until available or removed.',
+                            ),
+                          if (_changesOnNow(preview, now))
+                            const Text(
+                              'Saving these programming changes may change what is on now',
+                              key: Key('air-check-on-now-warning'),
+                            ),
+                        ],
+                      ),
                     ),
-                    if (preview.window.truncated)
-                      Text(
-                        'Preview truncated at ${_time(context, preview.window.lastProjectedEnd!)}; this is the last projected program end.',
-                      ),
-                    if (_unavailableCount(
-                          widget.channel.source,
-                          widget.playableById ??
-                              widget.controller.playableInventory.byId,
-                        )
-                        case final count when count > 0)
-                      Text(
-                        '$count unavailable hand-picked ${count == 1 ? 'item is' : 'items are'} retained but off air until available or removed.',
-                      ),
-                    if (_changesOnNow(preview, now))
-                      const Text(
-                        'Saving these programming changes may change what is on now',
-                        key: Key('air-check-on-now-warning'),
-                      ),
                     if (_comparisonFailed) ...[
                       SizedBox(height: 8),
                       _comparisonErrorView(),
                     ],
                     if (error != null) ...[
                       SizedBox(height: 8),
-                      if (preview.key != _targetKey)
-                        const Text('Previous preview'),
                       _errorView(error),
                     ],
                   ],
@@ -488,6 +523,7 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
         preview.key,
         preview.channel,
         futureHours: nextHours,
+        sourceLabel: preview.sourceLabel,
       );
       setState(() {
         _futureHours = nextHours;
@@ -505,8 +541,8 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
     final draft =
         widget.originalChannel == null ||
         _recipeKey(widget.originalChannel!) != _recipeKey(widget.channel);
-    final status = _stale
-        ? 'Updating — preview is stale'
+    final status = _stale || _error != null
+        ? 'Out of date'
         : draft
         ? 'Draft schedule'
         : 'Saved channel';
@@ -540,6 +576,13 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
                 fontWeight: FontWeight.w400,
               ),
             ),
+            if (_retryableError || _comparisonFailed)
+              LineupInlineLink(
+                onPressed: retry,
+                child: Text(
+                  _retryableError ? 'Retry Air Check' : 'Retry comparison',
+                ),
+              ),
           ],
         ),
         Text(
@@ -566,23 +609,9 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
     child: child,
   );
 
-  Widget _facts(_AirCheckPreview preview) => Wrap(
-    spacing: 10,
-    runSpacing: 4,
-    crossAxisAlignment: WrapCrossAlignment.center,
-    children: [
-      Text(
-        'CH ${preview.channel.number} · ${preview.channel.name.toUpperCase()}',
-        style: TextStyle(
-          color: LineupTheme.of(context).secondaryText,
-          fontSize: (widget.compact ? 12 : 16),
-          fontWeight: FontWeight.w500,
-        ),
-      ),
-      Text('${preview.schedule.items.length} playable'),
-      Text('Cycle ${_duration(preview.schedule.loopDuration)}'),
-      Text(_rhythm(preview.channel.playbackMode, preview.channel.blockSize)),
-    ],
+  Widget _facts(_AirCheckPreview preview) => Text(
+    'Ch ${preview.channel.number} · ${preview.schedule.items.length} playable · ${_duration(preview.schedule.loopDuration)} cycle · ${_rhythm(preview.channel.playbackMode, preview.channel.blockSize)}',
+    style: TextStyle(color: LineupTheme.of(context).secondaryText),
   );
 
   Widget _verticalSchedule(_AirCheckPreview preview, DateTime now) {
@@ -733,7 +762,7 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
         if (episode.isNotEmpty) Text(episode),
         SizedBox(height: 6),
         Text(
-          '${_duration(selected.scheduled.end.difference(selected.scheduled.start))} · ${widget.inclusionReason}',
+          '${_duration(selected.scheduled.end.difference(selected.scheduled.start))} · ${preview.sourceLabel}',
           style: TextStyle(color: LineupTheme.of(context).secondaryText),
         ),
         if (summary?.isNotEmpty == true) ...[
@@ -801,33 +830,25 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
         'This source has no playable programs. Choose available programming.',
       _ => 'Air Check could not verify this schedule. Retry before saving.',
     };
-    return _retryMessage(message, 'Retry Air Check');
+    if (widget.sourceIssueExplained && !_retryableError) {
+      return const SizedBox.shrink();
+    }
+    return Semantics(liveRegion: true, child: Text(message));
   }
 
-  Widget _comparisonErrorView() => _retryMessage(
-    'Air Check could not compare this draft with the saved schedule. Retry before saving.',
-    'Retry comparison',
-  );
+  bool get _retryableError =>
+      _error != null &&
+      _error is! _AirCheckSourceIssue &&
+      !(_error is ScheduleBuildException &&
+          ((_error as ScheduleBuildException).reason ==
+                  ScheduleFailureReason.noContent ||
+              (_error as ScheduleBuildException).reason ==
+                  ScheduleFailureReason.unsupportedSource));
 
-  Widget _retryMessage(String message, String label) => Semantics(
+  Widget _comparisonErrorView() => Semantics(
     liveRegion: true,
-    child: LayoutBuilder(
-      builder: (context, constraints) {
-        final action = LineupInlineLink(onPressed: retry, child: Text(label));
-        if (constraints.maxWidth / MediaQuery.textScalerOf(context).scale(1) <
-            480) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [Text(message), const SizedBox(height: 8), action],
-          );
-        }
-        return Row(
-          children: [
-            Expanded(child: Text(message)),
-            action,
-          ],
-        );
-      },
+    child: Text(
+      'Air Check could not compare this draft with the saved schedule. Retry before saving.',
     ),
   );
 
@@ -868,6 +889,7 @@ class _AirCheckRequest {
     required this.baseline,
     required this.publishes,
     required this.version,
+    required this.sourceLabel,
     this.followUp,
   });
 
@@ -876,6 +898,7 @@ class _AirCheckRequest {
   final bool baseline;
   final bool publishes;
   final int version;
+  final String sourceLabel;
   final _AirCheckRequest? followUp;
 }
 
@@ -924,6 +947,7 @@ class _AirCheckArtworkState extends State<_AirCheckArtwork> {
 class _AirCheckPreview {
   const _AirCheckPreview({
     required this.schedule,
+    required this.sourceLabel,
     required this.channel,
     required this.window,
     required this.key,
@@ -934,6 +958,7 @@ class _AirCheckPreview {
   });
 
   final ScheduleIndex schedule;
+  final String sourceLabel;
   final Channel channel;
   final ScheduleWindowResult window;
   final String key;
@@ -944,6 +969,7 @@ class _AirCheckPreview {
 
   _AirCheckPreview withChannel(Channel value) => _AirCheckPreview(
     schedule: schedule,
+    sourceLabel: sourceLabel,
     channel: value,
     window: window,
     key: key,

@@ -111,7 +111,7 @@ void main() {
 
     await tester.tap(find.byTooltip('Actions for Newsroom'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Delete'));
+    await tester.tap(find.text('Delete…'));
     await tester.pumpAndSettle();
     expect(find.text('Delete 1 channel?'), findsOneWidget);
     await tester.tap(find.text('Cancel'));
@@ -122,7 +122,7 @@ void main() {
 
     await tester.tap(find.byTooltip('Actions for Newsroom'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Delete'));
+    await tester.tap(find.text('Delete…'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Delete channel'));
     await tester.pumpAndSettle();
@@ -144,7 +144,7 @@ void main() {
 
     await tester.tap(find.byTooltip('Actions for Newsroom'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Delete'));
+    await tester.tap(find.text('Delete…'));
     await tester.pumpAndSettle();
     fixture.controller
       ..channels = const []

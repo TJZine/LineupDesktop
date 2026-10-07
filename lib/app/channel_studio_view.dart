@@ -120,6 +120,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
   final _saveFocus = FocusNode(debugLabel: 'Save channel');
   final _searchFocus = FocusNode(debugLabel: 'Search programming');
   final _filterPickerSearch = TextEditingController();
+  final _filterPickerFocus = FocusNode(debugLabel: 'Search filter values');
   final _filterControlFocus = <String, FocusNode>{};
   late final TextEditingController _name;
   late final TextEditingController _number;
@@ -145,6 +146,8 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
   String? _filterLibraryId;
   final _filters = <LibraryFilter, List<String>>{};
   String? _activeFilterKey;
+  BuildContext? _programmingContext;
+  double _pickerMinimumHeight = 0;
   List<String> _activeFilterValues = const [];
   Map<String, String> _activeFilterLabels = const {};
   Set<String> _activeAvailableFilterValues = const {};
@@ -152,7 +155,10 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
   bool _showPendingFilterValues = false;
   String? _manualLibraryId;
   String? _manualMediaType;
-  final _manualFilters = <String, String>{};
+  final _manualFilters = <LibraryFilter, List<String>>{};
+  final _librarySearch = TextEditingController();
+  bool _pickerForBrowse = false;
+  final _expandedFilterSummaries = <String>{};
   final LinkedHashSet<String> _browseSelection = LinkedHashSet();
   final Map<String, PlexMediaItem> _browseSelectionItems = {};
   bool _browseSelecting = false;
@@ -326,10 +332,12 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     _name.dispose();
     _number.dispose();
     _search.dispose();
+    _librarySearch.dispose();
     _rundownSearch.dispose();
     _browseScroll.dispose();
     _rundownScroll.dispose();
     _filterPickerSearch.dispose();
+    _filterPickerFocus.dispose();
     _nameFocus.dispose();
     _numberFocus.dispose();
     _saveFocus.dispose();
@@ -543,20 +551,21 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                           _conflict ||
                           _baseDeleted)
                         SizedBox(height: 12),
-                      if (_hasPendingProgrammingChoice) ...[
-                        Semantics(
-                          liveRegion: true,
-                          child: Text(
-                            _activeFilterKey != null
-                                ? 'Finish this filter with Done, or cancel it, before saving or tuning.'
-                                : 'Add the selected programs, or cancel selection, before saving or tuning.',
-                          ),
-                        ),
-                        SizedBox(height: 12),
-                      ],
                       LayoutBuilder(
                         builder: (context, constraints) {
-                          final programming = _programmingCard();
+                          final programming = Builder(
+                            builder: (context) {
+                              _programmingContext = context;
+                              return ConstrainedBox(
+                                constraints: BoxConstraints(
+                                  minHeight: _activeFilterKey == null
+                                      ? 0
+                                      : _pickerMinimumHeight,
+                                ),
+                                child: _programmingCard(),
+                              );
+                            },
+                          );
                           final station = _stationCard(
                             hasShowGrouping: hasShowGrouping,
                             confirmedMovieOnly: confirmedMovieOnly,
@@ -575,6 +584,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                               widget.controller,
                             ),
                             sourceIssue: programmingError,
+                            sourceIssueExplained: true,
                             playableById: _playableInventory.byId,
                             onValidityChanged: (status) {
                               if (!mounted || _airCheckStatus == status) return;
@@ -821,6 +831,37 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     }
   }
 
+  String get _pendingProgrammingHint => _activeFilterKey != null
+      ? 'Finish this filter with Done, or cancel it, before saving or tuning.'
+      : 'Add the selected programs, or cancel selection, before saving or tuning.';
+
+  Widget _pendingActionTooltip(Widget child) => _hasPendingProgrammingChoice
+      ? Tooltip(message: _pendingProgrammingHint, child: child)
+      : child;
+
+  Widget _pendingHint() => Semantics(
+    liveRegion: true,
+    child: Text(_pendingProgrammingHint, style: _studioSupportStyle()),
+  );
+
+  Widget _sourceExplanation() {
+    final resolution = _resolveDraftContent();
+    final error = _programmingError(resolution);
+    final message =
+        error ??
+        (resolution.content?.isEmpty == true &&
+                resolution.source != null &&
+                hasNonemptyRetainedManualContent(resolution.source!)
+            ? 'No retained hand-picked programs are currently available. They remain saved and explicitly off air.'
+            : null);
+    return message == null
+        ? const SizedBox.shrink()
+        : Semantics(
+            liveRegion: true,
+            child: Text(message, style: _studioSupportStyle()),
+          );
+  }
+
   Widget _studioActions({
     required bool persisted,
     required bool saved,
@@ -855,34 +896,40 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
         if (persisted && !recovering)
           FocusTraversalOrder(
             order: const NumericFocusOrder(4),
-            child: saved
-                ? FilledButton.icon(
-                    key: const Key('studio-tune'),
-                    onPressed: _busy ? null : _tune,
-                    icon: const Icon(Icons.play_arrow),
-                    label: const Text('Tune in'),
-                  )
-                : OutlinedButton.icon(
-                    key: const Key('studio-tune'),
-                    onPressed: canSave ? _confirmSaveAndTune : null,
-                    icon: const Icon(Icons.play_arrow),
-                    label: const Text('Tune in'),
-                  ),
+            child: _pendingActionTooltip(
+              saved
+                  ? FilledButton.icon(
+                      key: const Key('studio-tune'),
+                      onPressed: _busy || _hasPendingProgrammingChoice
+                          ? null
+                          : _tune,
+                      icon: const Icon(Icons.play_arrow),
+                      label: const Text('Tune in'),
+                    )
+                  : OutlinedButton.icon(
+                      key: const Key('studio-tune'),
+                      onPressed: canSave ? _confirmSaveAndTune : null,
+                      icon: const Icon(Icons.play_arrow),
+                      label: const Text('Tune in'),
+                    ),
+            ),
           ),
         if (showSave)
           FocusTraversalOrder(
             order: const NumericFocusOrder(4),
-            child: FilledButton(
-              focusNode: _saveFocus,
-              onPressed: canSave ? _save : null,
-              child: Text(
-                _saving
-                    ? 'Saving…'
-                    : switch (_effectiveMode) {
-                        ChannelStudioMode.editCustom => 'Save changes',
-                        ChannelStudioMode.inspectGenerated => 'Save identity',
-                        _ => 'Save channel',
-                      },
+            child: _pendingActionTooltip(
+              FilledButton(
+                focusNode: _saveFocus,
+                onPressed: canSave ? _save : null,
+                child: Text(
+                  _saving
+                      ? 'Saving…'
+                      : switch (_effectiveMode) {
+                          ChannelStudioMode.editCustom => 'Save changes',
+                          ChannelStudioMode.inspectGenerated => 'Save identity',
+                          _ => 'Save channel',
+                        },
+                ),
               ),
             ),
           ),
@@ -1033,11 +1080,12 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
             ],
           ),
           SizedBox(height: 16),
-          if (_sourceReadOnly)
+          if (_sourceReadOnly) ...[
             const Text(
               'Programming is read-only and will be preserved exactly.',
-            )
-          else ...[
+            ),
+            _sourceExplanation(),
+          ] else ...[
             if (_source is MixedSource && _sourceChoice == null) ...[
               _inventoryStatus(),
               const Text(
@@ -1086,7 +1134,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
               _SourceChoice.playlist => _playlistEditor(),
               _SourceChoice.filter => _filterEditor(),
               _SourceChoice.handPicked => _manualEditor(),
-              null => const SizedBox.shrink(),
+              null => _sourceExplanation(),
             },
           ],
         ],
@@ -1110,10 +1158,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
         const Text(
           'Uses an existing Plex playlist. Manage its contents in Plex.',
         ),
-        if (_playlistId != null && !selected)
-          Text(
-            'Playlist $_playlistId is unavailable — retained until replaced.',
-          ),
+
         LineupField(
           label: 'Video playlist',
           child: lineupDropdownField<String>(
@@ -1136,6 +1181,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                 : (value) => _changed(() => _playlistId = value),
           ),
         ),
+        _sourceExplanation(),
         if (otherUses.isNotEmpty) ...[
           SizedBox(height: 8),
           const Text('Also used by'),
@@ -1163,6 +1209,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
       libraryId: _filterLibraryId,
       filters: _filters,
       includeWatched: _filterIncludeWatched,
+      search: _librarySearch.text,
     );
     if (_activeFilterKey case final key?) {
       return _filterPickerPanel(key);
@@ -1171,6 +1218,18 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _inventoryStatus(),
+        LineupField(
+          label: 'Search',
+          child: TextField(
+            key: const Key('studio-library-search'),
+            controller: _librarySearch,
+            decoration: const InputDecoration(
+              hintText: 'Search title or show title',
+            ),
+            onChanged: (_) => setState(() {}),
+          ),
+        ),
+        SizedBox(height: 12),
         LayoutBuilder(
           builder: (context, constraints) {
             final double gap = 16;
@@ -1192,56 +1251,62 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                 ),
                 SizedBox(
                   width: width,
-                  child: _filterControl(
-                    'collection',
-                    facets.values['collection'] ?? const [],
-                    facets.labels['collection'] ?? const {},
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _filterControl(
+                        'collection',
+                        facets.values['collection'] ?? const [],
+                        facets.labels['collection'] ?? const {},
+                      ),
+                      if ((_filters[LibraryFilter.collection]?.length ?? 0) > 3)
+                        TextButton(
+                          onPressed: () => setState(() {
+                            if (!_expandedFilterSummaries.remove(
+                              'collection',
+                            )) {
+                              _expandedFilterSummaries.add('collection');
+                            }
+                          }),
+                          child: Text(
+                            _expandedFilterSummaries.contains('collection')
+                                ? 'Show fewer collections'
+                                : 'Show all selected collections',
+                          ),
+                        ),
+                      if (_expandedFilterSummaries.contains('collection'))
+                        Text(
+                          (_filters[LibraryFilter.collection] ?? const [])
+                              .map(
+                                (value) =>
+                                    facets.labels['collection']?[value] ??
+                                    value,
+                              )
+                              .join(', '),
+                          style: _studioSupportStyle(),
+                        ),
+                    ],
                   ),
                 ),
               ],
             );
           },
         ),
-        if ((facets.values['collection'] ?? const []).isEmpty)
-          Text(
-            'This library has no collections. Other filters remain available.',
-            style: _studioSupportStyle(),
-          ),
-        SizedBox(height: 16),
-        Text('Filters', style: _studioBodyStyle(fontWeight: FontWeight.w600)),
-        SizedBox(height: 16),
-        LayoutBuilder(
-          builder: (context, constraints) {
-            final textScale = MediaQuery.textScalerOf(context).scale(1);
-            final columns = textScale > 1.4
-                ? 1
-                : constraints.maxWidth >= 960
-                ? 3
-                : constraints.maxWidth >= 640
-                ? 2
-                : 1;
-            final double gap = 16;
-            final width =
-                (constraints.maxWidth - gap * (columns - 1)) / columns;
-            return Wrap(
-              spacing: gap,
-              runSpacing: 12,
-              children: [
-                for (final key in _facetKeys.where(
-                  (key) => key != 'collection',
-                ))
-                  SizedBox(
-                    width: width,
-                    child: _filterControl(
-                      key,
-                      facets.values[key] ?? const [],
-                      facets.labels[key] ?? const {},
-                    ),
-                  ),
-              ],
-            );
-          },
+        SizedBox(height: 12),
+        LineupFieldButton(
+          label: 'Media type',
+          value:
+              _selectedLibraries
+                      .where((library) => library.id == _filterLibraryId)
+                      .firstOrNull
+                      ?.type ==
+                  PlexLibraryType.show
+              ? 'TV episodes'
+              : 'Movies',
+          onPressed: null,
         ),
+        SizedBox(height: 12),
+        _filterChips(facets, browse: false),
         SizedBox(height: 12),
         Text(
           'Any selected value within each filter; all filters together.',
@@ -1282,6 +1347,13 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
             ),
           ],
         ),
+        _sourceExplanation(),
+        if (matches.isEmpty &&
+            _programmingError(_resolveDraftContent()) == null)
+          Text(
+            'No programs match. Remove a filter or include watched items.',
+            style: _studioSupportStyle(),
+          ),
         for (final item in matches.take(5))
           DecoratedBox(
             decoration: BoxDecoration(
@@ -1326,33 +1398,193 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     return LineupFieldButton(
       key: Key('studio-filter-$key'),
       label: _facetLabel(key),
-      value: summary,
+      value: key == 'collection' && values.isEmpty && selected.isEmpty
+          ? 'None in this library'
+          : summary,
       focusNode: focus,
-      onPressed: _saving ? null : () => _openFilterPicker(key, values, labels),
+      onPressed:
+          _saving || (key == 'collection' && values.isEmpty && selected.isEmpty)
+          ? null
+          : () => _openFilterPicker(key, values, labels),
     );
+  }
+
+  Widget _filterChips(_FacetOptions facets, {required bool browse}) {
+    final filters = browse ? _manualFilters : _filters;
+    return LayoutBuilder(
+      builder: (context, constraints) => Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          for (final entry in filters.entries.where(
+            (entry) => browse || entry.key != LibraryFilter.collection,
+          )) ...[
+            InputChip(
+              key: Key(
+                'studio-${browse ? 'browse' : 'applied'}-${entry.key.name}',
+              ),
+              focusNode: _filterControlFocus.putIfAbsent(
+                entry.key.name,
+                () => FocusNode(
+                  debugLabel: 'Edit ${_facetLabel(entry.key.name)} filter',
+                ),
+              ),
+              label: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: (constraints.maxWidth - 96).clamp(
+                    0,
+                    double.infinity,
+                  ),
+                ),
+                child: Text(
+                  '${_facetLabel(entry.key.name)}: ${entry.value.take(3).map((value) => facets.labels[entry.key.name]?[value] ?? value).join(', ')}${entry.value.length > 3 ? ' · +${entry.value.length - 3} more' : ''}',
+                  style: _studioSupportStyle(),
+                ),
+              ),
+              onPressed: _saving
+                  ? null
+                  : () => _openFilterPicker(
+                      entry.key.name,
+                      facets.values[entry.key.name] ?? const [],
+                      facets.labels[entry.key.name] ?? const {},
+                      browse: browse,
+                    ),
+              onDeleted: _saving
+                  ? null
+                  : () => browse
+                        ? _browseChanged(() => filters.remove(entry.key))
+                        : _filterChanged(() => filters.remove(entry.key)),
+              deleteIcon: const Icon(Icons.close, size: 20),
+            ),
+            if (entry.value.length > 3)
+              TextButton(
+                onPressed: () => setState(() {
+                  final key =
+                      '${browse ? 'browse' : 'library'}-${entry.key.name}';
+                  if (!_expandedFilterSummaries.remove(key)) {
+                    _expandedFilterSummaries.add(key);
+                  }
+                }),
+                child: Text(
+                  _expandedFilterSummaries.contains(
+                        '${browse ? 'browse' : 'library'}-${entry.key.name}',
+                      )
+                      ? 'Show fewer ${_facetLabel(entry.key.name).toLowerCase()} values'
+                      : 'Show all ${entry.value.length} ${_facetLabel(entry.key.name).toLowerCase()} values',
+                ),
+              ),
+            if (_expandedFilterSummaries.contains(
+              '${browse ? 'browse' : 'library'}-${entry.key.name}',
+            ))
+              Text(
+                entry.value
+                    .map(
+                      (value) => facets.labels[entry.key.name]?[value] ?? value,
+                    )
+                    .join(', '),
+                style: _studioSupportStyle(),
+              ),
+          ],
+          TextButton(
+            key: Key('studio-${browse ? 'browse' : 'library'}-add-filter'),
+            focusNode: _filterControlFocus.putIfAbsent(
+              'choose',
+              () => FocusNode(debugLabel: 'Add filter'),
+            ),
+            onPressed: _saving
+                ? null
+                : () {
+                    _retainProgrammingHeight();
+                    setState(() {
+                      _pickerForBrowse = browse;
+                      _activeFilterKey = 'choose';
+                    });
+                  },
+            child: const Text('+ Filter'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _retainProgrammingHeight() {
+    // A shorter picker must not clamp the page's scroll offset and move both
+    // panels. Reserve only the already occupied editor height while it is open.
+    final box = _programmingContext?.findRenderObject();
+    if (box is RenderBox && box.hasSize) _pickerMinimumHeight = box.size.height;
   }
 
   void _openFilterPicker(
     String key,
     List<String> values,
-    Map<String, String> labels,
-  ) {
+    Map<String, String> labels, {
+    bool browse = false,
+  }) {
     final filter = _libraryFilter(key);
+    final filters = browse ? _manualFilters : _filters;
+    if (_activeFilterKey == null) _retainProgrammingHeight();
     setState(() {
+      _pickerForBrowse = browse;
       _activeFilterKey = key;
-      _activeFilterValues = ({...values, ...?_filters[filter]}.toList()
-        ..sort());
+      _activeFilterValues = ({...values, ...?filters[filter]}.toList()..sort());
       _activeAvailableFilterValues = values.toSet();
       _activeFilterLabels = Map.unmodifiable(labels);
       _pendingFilterValues
         ..clear()
-        ..addAll(_filters[filter] ?? const []);
+        ..addAll(filters[filter] ?? const []);
       _showPendingFilterValues = false;
       _filterPickerSearch.clear();
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _activeFilterKey == key) _filterPickerFocus.requestFocus();
     });
   }
 
   Widget _filterPickerPanel(String key) {
+    final filters = _pickerForBrowse ? _manualFilters : _filters;
+    final libraryId = _pickerForBrowse ? _manualLibraryId : _filterLibraryId;
+    if (key == 'choose') {
+      final facets = _facetOptions(libraryId);
+      return CallbackShortcuts(
+        bindings: {
+          const SingleActivator(LogicalKeyboardKey.escape): () =>
+              _closeFilterPicker(key),
+        },
+        child: Focus(
+          autofocus: true,
+          child: Column(
+            key: const Key('studio-filter-criteria'),
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text('Choose a filter', style: _studioSectionHeadingStyle()),
+              for (final criterion in _facetKeys)
+                TextButton(
+                  key: Key('studio-filter-$criterion'),
+                  onPressed: () => _openFilterPicker(
+                    criterion,
+                    facets.values[criterion] ?? const [],
+                    facets.labels[criterion] ?? const {},
+                    browse: _pickerForBrowse,
+                  ),
+                  child: Text(_facetLabel(criterion)),
+                ),
+              Wrap(
+                spacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  _pendingHint(),
+                  TextButton(
+                    onPressed: () => _closeFilterPicker(key),
+                    child: const Text('Cancel'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      );
+    }
     final query = _filterPickerSearch.text.trim().toLowerCase();
     final visible = _activeFilterValues
         .where(
@@ -1362,16 +1594,18 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
               value.toLowerCase().contains(query),
         )
         .toList(growable: false);
-    final pendingFilters = Map<LibraryFilter, List<String>>.from(_filters);
+    final pendingFilters = Map<LibraryFilter, List<String>>.from(filters);
     if (_pendingFilterValues.isEmpty) {
       pendingFilters.remove(_libraryFilter(key));
     } else {
       pendingFilters[_libraryFilter(key)] = _pendingFilterValues.toList();
     }
     final count = _filteredInventory(
-      libraryId: _filterLibraryId,
+      libraryId: libraryId,
+      mediaType: _pickerForBrowse ? _manualMediaType : null,
+      search: _pickerForBrowse ? _search.text : '',
       filters: pendingFilters,
-      includeWatched: _filterIncludeWatched,
+      includeWatched: _pickerForBrowse || _filterIncludeWatched,
     ).length;
     final unavailable = _pendingFilterValues
         .where((value) => !_activeAvailableFilterValues.contains(value))
@@ -1412,13 +1646,11 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                 style: _studioSectionHeadingStyle(),
               ),
               SizedBox(height: 4),
-              Text(
-                _libraryTitle(_filterLibraryId),
-                style: _studioSupportStyle(),
-              ),
+              Text(_libraryTitle(libraryId), style: _studioSupportStyle()),
               SizedBox(height: 8),
               TextField(
                 controller: _filterPickerSearch,
+                focusNode: _filterPickerFocus,
                 autofocus: true,
                 style: _studioBodyStyle(),
                 decoration: const InputDecoration(hintText: 'Search values'),
@@ -1472,6 +1704,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                 runSpacing: 8,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
+                  _pendingHint(),
                   TextButton(
                     onPressed: () => _closeFilterPicker(key),
                     child: const Text('Cancel'),
@@ -1480,14 +1713,18 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                     onPressed: () {
                       final result = _pendingFilterValues.toList();
                       final filter = _libraryFilter(key);
-                      _filterChanged(() {
+                      void apply() {
                         if (result.isEmpty) {
-                          _filters.remove(filter);
+                          filters.remove(filter);
                         } else {
-                          _filters[filter] = List.unmodifiable(result);
+                          filters[filter] = List.unmodifiable(result);
                         }
                         _activeFilterKey = null;
-                      });
+                      }
+
+                      _pickerForBrowse
+                          ? _browseChanged(apply)
+                          : _filterChanged(apply);
                       _restoreFilterFocus(key);
                     },
                     child: const Text('Done'),
@@ -1508,7 +1745,10 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
 
   void _restoreFilterFocus(String key) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _filterControlFocus[key]?.requestFocus();
+      if (mounted) {
+        (_filterControlFocus[key] ?? _filterControlFocus['choose'])
+            ?.requestFocus();
+      }
     });
   }
 
@@ -1554,7 +1794,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
           (entry: _manualEntries[index], index: index),
     ];
     final countLabel =
-        '${visible.length} matching, ${_manualEntries.length} selected';
+        '${visible.length} matching · ${_manualEntries.length} added';
     return LineupCompactControls(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1585,24 +1825,42 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
             ],
           ),
           SizedBox(height: 6),
-          Text(countLabel, style: _studioSupportStyle()),
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            children: [
+              Text(countLabel, style: _studioSupportStyle()),
+              if (!_manualRundown && !_browseSelecting)
+                OutlinedButton(
+                  onPressed: () => setState(() => _browseSelecting = true),
+                  child: const Text('Select'),
+                ),
+            ],
+          ),
           if (_settledCountLabel.isNotEmpty)
             Semantics(
               liveRegion: true,
               label: _settledCountLabel,
               child: const SizedBox.shrink(),
             ),
+          _sourceExplanation(),
           SizedBox(height: 12),
-          if (!_manualRundown) ...[
-            TextField(
-              key: const Key('studio-search'),
-              controller: _search,
-              focusNode: _searchFocus,
-              enabled: !_saving,
-              decoration: const InputDecoration(
-                hintText: 'Search title or show title',
+          if (!_manualRundown && _activeFilterKey != null)
+            _filterPickerPanel(_activeFilterKey!)
+          else if (!_manualRundown) ...[
+            LineupField(
+              label: 'Search',
+              child: TextField(
+                key: const Key('studio-search'),
+                controller: _search,
+                focusNode: _searchFocus,
+                enabled: !_saving,
+                decoration: const InputDecoration(
+                  hintText: 'Search title or show title',
+                ),
+                onChanged: (_) => _browseChanged(),
               ),
-              onChanged: (_) => _browseChanged(),
             ),
             SizedBox(height: 12),
             LayoutBuilder(
@@ -1664,26 +1922,15 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                         ),
                       ),
                     ),
-                    for (final key in _facetKeys)
-                      SizedBox(
-                        width: width,
-                        child: _facetDropdown(
-                          key: key,
-                          values: facets.values[key] ?? const [],
-                          labels: facets.labels[key] ?? const {},
-                          selected: _manualFilters[key],
-                          onChanged: (value) => _browseChanged(() {
-                            if (value == null) {
-                              _manualFilters.remove(key);
-                            } else {
-                              _manualFilters[key] = value;
-                            }
-                          }),
-                        ),
-                      ),
                   ],
                 );
               },
+            ),
+            SizedBox(height: 12),
+            _filterChips(facets, browse: true),
+            Text(
+              'Any selected value within each filter; all filters together.',
+              style: _studioSupportStyle(),
             ),
             SizedBox(height: 12),
             Wrap(
@@ -1694,6 +1941,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                       Text(
                         '${_browseSelection.length} selected${_browseSelection.where((id) => !visible.any((item) => item.id == id)).isEmpty ? '' : ' · selections outside this view'}${unavailableSelections == 0 ? '' : ' · $unavailableSelections unavailable; retained off air if added'}',
                       ),
+                      _pendingHint(),
                       TextButton(
                         onPressed: _browseSelection.isEmpty
                             ? null
@@ -1724,11 +1972,6 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                       ),
                     ]
                   : [
-                      OutlinedButton(
-                        onPressed: () =>
-                            setState(() => _browseSelecting = true),
-                        child: const Text('Select'),
-                      ),
                       if (_lastAddedEntries.isNotEmpty)
                         TextButton(
                           onPressed: _undoLastAddition,
@@ -1736,6 +1979,11 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                         ),
                     ],
             ),
+            if (shown.isEmpty)
+              Text(
+                'No programs match. Remove a filter or include watched items.',
+                style: _studioSupportStyle(),
+              ),
             SizedBox(
               height: _studioSize(300, 300),
               child: ListView.builder(
@@ -1757,26 +2005,44 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
                   return ListTile(
                     key: Key('studio-result-${item.id}'),
                     minTileHeight: null,
-                    title: Text(item.title),
-                    subtitle: item.grandparentTitle != null || !available
-                        ? Text(
-                            [
-                              ?item.grandparentTitle,
-                              if (!available)
-                                'Unavailable — retained off air if added',
-                            ].join(' · '),
-                          )
-                        : null,
+                    title: Text(
+                      item.title,
+                      style: _studioBodyStyle(fontWeight: FontWeight.w500),
+                    ),
+                    subtitleTextStyle: _studioSupportStyle(),
+                    subtitle: Text(
+                      [
+                        if (item.grandparentTitle?.isNotEmpty == true)
+                          item.grandparentTitle!,
+                        if (item.seasonNumber != null ||
+                            item.episodeNumber != null)
+                          'S${item.seasonNumber ?? '—'} E${item.episodeNumber ?? '—'}',
+                        _compactDuration(item.duration),
+                        if (!available)
+                          'Unavailable — retained off air if added',
+                      ].join(' · '),
+                    ),
                     leading: _browseSelecting ? browseCheckbox : null,
-                    trailing: _browseSelecting
+                    trailing: selectedIds.contains(item.id)
+                        ? Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.check,
+                                size: 20,
+                                color: LineupTheme.of(context).progressFill,
+                              ),
+                              const SizedBox(width: 4),
+                              Text('Added', style: _studioSupportStyle()),
+                            ],
+                          )
+                        : _browseSelecting
                         ? null
-                        : TextButton(
-                            onPressed: _saving || selectedIds.contains(item.id)
+                        : OutlinedButton(
+                            onPressed: _saving
                                 ? null
                                 : () => _addManualItem(item),
-                            child: Text(
-                              selectedIds.contains(item.id) ? 'Added' : 'Add',
-                            ),
+                            child: const Text('Add'),
                           ),
                     onTap: selectedIds.contains(item.id)
                         ? null
@@ -1999,47 +2265,6 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
     );
   }
 
-  Widget _facetDropdown({
-    required String key,
-    required List<String> values,
-    required Map<String, String> labels,
-    required String? selected,
-    required ValueChanged<String?> onChanged,
-  }) {
-    final fieldValue = selected ?? '';
-    return SizedBox(
-      key: Key('studio-facet-$key'),
-      child: LineupField(
-        label: _facetLabel(key),
-        child: lineupDropdownField<String>(
-          context: context,
-          key: ValueKey(fieldValue),
-          isExpanded: true,
-          iconSize: 24,
-          itemHeight: null,
-          initialValue: fieldValue,
-          decoration: InputDecoration(),
-          items: [
-            const DropdownMenuItem(value: '', child: Text('Any')),
-            if (selected != null && !values.contains(selected))
-              DropdownMenuItem(
-                value: selected,
-                child: Text('$selected (unavailable — retained)'),
-              ),
-            for (final value in values)
-              DropdownMenuItem(
-                value: value,
-                child: Text(labels[value] ?? value),
-              ),
-          ],
-          onChanged: _saving
-              ? null
-              : (value) => onChanged(value?.isEmpty == true ? null : value),
-        ),
-      ),
-    );
-  }
-
   _FacetOptions _facetOptions(
     String? libraryId, {
     Iterable<PlexMediaItem>? inventory,
@@ -2163,7 +2388,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
   );
 
   String get _countLabel =>
-      '${_manualMatches.length} matching, ${_manualEntries.length} selected';
+      '${_manualMatches.length} matching · ${_manualEntries.length} added';
 
   Widget _rundownRow(
     _ManualEntry entry,
@@ -2199,54 +2424,69 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
       if (season != null || episode != null)
         'S${season ?? '—'} E${episode ?? '—'}',
     ];
-    final tile = ListTile(
-      key: entry.occurrence == 1 ? Key('studio-rundown-${entry.id}') : null,
-      title: Text(title),
-      minTileHeight: null,
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(facts.join(' · ')),
-          if (unavailable) const Text('Unavailable — retained until removed'),
-        ],
-      ),
-      trailing: Wrap(
-        spacing: 4,
-        children: [
-          if (dragIndex case final visibleIndex?)
-            Tooltip(
-              message: 'Drag $positionedTitle to reorder',
-              child: ReorderableDragStartListener(
-                index: visibleIndex,
-                child: Icon(Icons.drag_handle, size: 24),
-              ),
-            ),
-          lineupArrowButton(
-            tooltip: 'Move $positionedTitle earlier in $_draftChannelLabel',
-            onPressed: _saving || index == 0
-                ? null
-                : () => _moveManual(entry, -1),
-            icon: Icons.arrow_upward,
+    final actions = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        lineupArrowButton(
+          tooltip: 'Move $positionedTitle earlier in $_draftChannelLabel',
+          onPressed: _saving || index == 0
+              ? null
+              : () => _moveManual(entry, -1),
+          icon: Icons.arrow_upward,
+        ),
+        lineupArrowButton(
+          tooltip: 'Move $positionedTitle later in $_draftChannelLabel',
+          onPressed: _saving || index == _manualEntries.length - 1
+              ? null
+              : () => _moveManual(entry, 1),
+          icon: Icons.arrow_downward,
+        ),
+        TextButton(
+          onPressed: _saving ? null : () => _moveManualTo(entry),
+          child: const Text('Move to…'),
+        ),
+        IconButton(
+          tooltip: 'Remove from channel',
+          onPressed: _saving ? null : () => _removeManual(entry),
+          icon: const Icon(Icons.close),
+        ),
+      ],
+    );
+    final tile = LayoutBuilder(
+      builder: (context, constraints) {
+        final wrapActions =
+            constraints.maxWidth / MediaQuery.textScalerOf(context).scale(1) <
+            640;
+        return ListTile(
+          key: entry.occurrence == 1 ? Key('studio-rundown-${entry.id}') : null,
+          title: Text(
+            title,
+            style: _studioBodyStyle(fontWeight: FontWeight.w500),
           ),
-          lineupArrowButton(
-            tooltip: 'Move $positionedTitle later in $_draftChannelLabel',
-            onPressed: _saving || index == _manualEntries.length - 1
-                ? null
-                : () => _moveManual(entry, 1),
-            icon: Icons.arrow_downward,
+          subtitleTextStyle: _studioSupportStyle(),
+          minTileHeight: null,
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(facts.join(' · ')),
+              if (unavailable)
+                const Text('Unavailable — retained until removed'),
+              if (wrapActions)
+                Align(alignment: Alignment.centerRight, child: actions),
+            ],
           ),
-          IconButton(
-            tooltip: 'Move $positionedTitle before or after another program',
-            onPressed: _saving ? null : () => _moveManualTo(entry),
-            icon: const Icon(Icons.low_priority),
-          ),
-          IconButton(
-            tooltip: 'Remove $positionedTitle from $_draftChannelLabel',
-            onPressed: _saving ? null : () => _removeManual(entry),
-            icon: const Icon(Icons.delete_outline),
-          ),
-        ],
-      ),
+          trailing: wrapActions ? null : actions,
+          leading: dragIndex == null
+              ? null
+              : Tooltip(
+                  message: 'Drag $positionedTitle to reorder',
+                  child: ReorderableDragStartListener(
+                    index: dragIndex,
+                    child: const Icon(Icons.drag_handle, size: 24),
+                  ),
+                ),
+        );
+      },
     );
     return CallbackShortcuts(
       key: ObjectKey(entry),
@@ -2882,7 +3122,7 @@ class ChannelStudioViewState extends State<ChannelStudioView> {
           return 'This source contains an unsupported filter. Choose a supported replacement.';
         }
         if (resolved.isEmpty) {
-          return 'This library and its filters match no playable programs. Choose a replacement source.';
+          return 'No programs match. Remove a filter or include watched items.';
         }
       case PlaylistSource(:final playlistId):
         if (!_playableInventory.playlists.any(

@@ -37,9 +37,9 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(controller.requests, 1);
-      expect(find.text('2 playable'), findsOneWidget);
-      expect(find.text('Cycle 1h'), findsOneWidget);
-      expect(find.text('In order'), findsOneWidget);
+      expect(find.textContaining('2 playable'), findsOneWidget);
+      expect(find.textContaining('1h cycle'), findsOneWidget);
+      expect(find.textContaining('In order'), findsOneWidget);
       expect(find.text('ON NOW'), findsOneWidget);
       final heading = tester.widget<Semantics>(
         find.byWidgetPredicate(
@@ -621,7 +621,7 @@ void main() {
     await tester.pump(
       channelAirCheckDebounce + const Duration(milliseconds: 1),
     );
-    expect(find.text('Updating — preview is stale'), findsOneWidget);
+    expect(find.text('Out of date'), findsOneWidget);
     expect(find.text('One'), findsWidgets);
     await tester.pumpWidget(_airCheck(controller, latest));
     await tester.pump(
@@ -655,7 +655,7 @@ void main() {
         ),
       );
       await tester.pump();
-      expect(find.text('Updating — preview is stale'), findsOneWidget);
+      expect(find.text('Out of date'), findsOneWidget);
       expect(find.text('One'), findsWidgets);
 
       await tester.pumpWidget(_airCheck(controller, changed));
@@ -665,9 +665,72 @@ void main() {
       controller.failNext(StateError('synthetic worker failure'));
       await tester.pump();
       await tester.pump();
-      expect(find.text('Updating — preview is stale'), findsOneWidget);
+      expect(find.text('Out of date'), findsOneWidget);
       expect(find.text('One'), findsWidgets);
       expect(find.textContaining('could not verify'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'retained schedule keeps its source and dims without offering invalid-source retry',
+    (tester) async {
+      final controller = _AirController(controlled: true);
+      addTearDown(controller.dispose);
+      final first = _channel(items: [_item('one')]);
+      final next = _channel(items: [_item('two')]);
+      await tester.pumpWidget(
+        _airCheck(controller, first, inclusionReason: 'Original source'),
+      );
+      controller.completeNext();
+      await tester.pump();
+      await tester.pumpWidget(
+        _airCheck(
+          controller,
+          next,
+          inclusionReason: 'Replacement source',
+          sourceIssue: 'Choose available programming.',
+        ),
+      );
+      await tester.pump();
+      expect(find.text('Previous schedule · Original source'), findsOneWidget);
+      final selectedFacts = find.descendant(
+        of: find.byKey(const Key('air-check-selection')),
+        matching: find.text('30m · Original source'),
+      );
+      expect(selectedFacts, findsOneWidget);
+      expect(find.textContaining('Replacement source'), findsNothing);
+      expect(
+        tester
+            .widget<Opacity>(
+              find.byKey(const Key('air-check-schedule-content')),
+            )
+            .opacity,
+        .5,
+      );
+      expect(find.text('Retry Air Check'), findsNothing);
+      final renamed = Channel(
+        id: next.id,
+        number: 9,
+        name: 'Renamed draft',
+        source: next.source,
+        playbackMode: next.playbackMode,
+        anchor: next.anchor,
+        shuffleSeed: next.shuffleSeed,
+      );
+      await tester.pumpWidget(
+        _airCheck(
+          controller,
+          renamed,
+          inclusionReason: 'Replacement source',
+          sourceIssue: 'Choose available programming.',
+        ),
+      );
+      await tester.pump();
+      expect(find.textContaining('Ch 4 · 1 playable'), findsOneWidget);
+      expect(find.text('Previous schedule · Original source'), findsOneWidget);
+      expect(selectedFacts, findsOneWidget);
+      expect(find.textContaining('Replacement source'), findsNothing);
+      expect(controller.requests, 1);
     },
   );
 
@@ -848,7 +911,7 @@ void main() {
     );
     await tester.pump();
     expect(find.byKey(const Key('air-check-on-now-warning')), findsNothing);
-    expect(find.textContaining('CH 9 · RENAMED'), findsOneWidget);
+    expect(find.textContaining('Ch 9 ·'), findsOneWidget);
     expect(
       find.bySemanticsLabel(RegExp(r'Channel 9 Renamed, .*current')),
       findsOneWidget,
@@ -954,7 +1017,7 @@ void main() {
         findsOneWidget,
       );
       expect(find.text('Retry comparison'), findsOneWidget);
-      expect(find.text('Updating — preview is stale'), findsNothing);
+      expect(find.text('Out of date'), findsNothing);
       expect(validity, ChannelAirCheckValidity.unknown);
       expect(controller.requests, 2);
 
@@ -1101,6 +1164,7 @@ Widget _airCheck(
   DateTime Function()? clock,
   bool compact = false,
   String? sourceIssue,
+  String inclusionReason = 'Hand-picked programming',
   Channel? originalChannel,
   ValueChanged<ChannelAirCheckValidity>? onValidityChanged,
   bool always24 = false,
@@ -1122,7 +1186,7 @@ Widget _airCheck(
             originalChannel: originalChannel,
             clock: clock ?? () => DateTime.utc(2026, 1, 1, 0, 10),
             compact: compact,
-            inclusionReason: 'Hand-picked programming',
+            inclusionReason: inclusionReason,
             sourceIssue: sourceIssue,
             onValidityChanged: (status) =>
                 onValidityChanged?.call(status.validity),

@@ -16,6 +16,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/channels/channel_builder.dart';
+import 'package:lineup_desktop/channels/content_resolver.dart';
 import 'package:lineup_desktop/channels/scheduler.dart';
 import 'package:lineup_desktop/diagnostics/diagnostics.dart';
 import 'package:lineup_desktop/guide/guide_view.dart';
@@ -535,6 +536,10 @@ final Map<String, Scene> _scenes = {
     await _pump(tester, f.build());
     await _open(tester, 'Channels');
     await shot('directory');
+    await _tap(tester, find.byTooltip('Actions for Saturday Cartoons'));
+    await shot('row-menu');
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await _settle(tester);
     await _tap(tester, find.text('Select'));
     await _tap(tester, find.text('Select all matching'));
     await shot('selection');
@@ -553,10 +558,29 @@ final Map<String, Scene> _scenes = {
     await shot('handpicked-air-check');
     await _tap(tester, find.textContaining('Browse library').first);
     await shot('browse');
+    await _tap(tester, find.text('Select'));
+    await shot('browse-selection');
+    await _tap(tester, find.text('Cancel'));
+    await _tap(tester, find.byKey(const Key('studio-browse-add-filter')));
+    await _tap(tester, find.byKey(const Key('studio-filter-genre')));
+    await shot('browse-filter-picker');
+    await _tap(tester, find.text('Comedy').last);
+    await _tap(tester, find.text('Done'));
+    await shot('browse-applied-filter');
     await _tap(tester, find.text('Library').first);
     await shot('library-programming');
+    await _tap(tester, find.byKey(const Key('studio-library-add-filter')));
     await _tap(tester, find.byKey(const Key('studio-filter-genre')));
     await shot('filter-picker');
+    await _tap(tester, find.text('Comedy').last);
+    await _tap(tester, find.text('Done'));
+    await shot('library-applied-filter');
+    await _tap(tester, find.byKey(const Key('studio-library-add-filter')));
+    await _tap(tester, find.byKey(const Key('studio-filter-decade')));
+    await _tap(tester, find.text('2010s').last);
+    await _tap(tester, find.text('Done'));
+    expect(find.text('Out of date'), findsOneWidget);
+    await shot('retained-empty-schedule');
   },
 
   // ── Settings + Diagnostics ──
@@ -1073,6 +1097,7 @@ UiFixture _channelManagementFixture() {
       PlexLibrary(id: 'movies', title: 'Movies', type: PlexLibraryType.movie),
     ]
     ..selectedLibraryIds = {'movies'}
+    ..libraryScanStatus = LibraryScanStatus.complete
     ..channels = [
       base,
       for (var i = 1; i < 4; i++)
@@ -1098,6 +1123,8 @@ UiFixture _channelManagementFixture() {
           type: 'episode',
           duration: program.duration,
           grandparentTitle: program.showTitle,
+          seasonNumber: 1,
+          episodeNumber: programs.indexOf(program) + 1,
           parts: [PlexMediaPart(path: '/synthetic/${program.id}')],
         ),
       for (final genre in [
@@ -1114,7 +1141,9 @@ UiFixture _channelManagementFixture() {
           type: 'movie',
           duration: const Duration(minutes: 90),
           libraryId: 'movies',
+          year: genre == 'Drama' ? 2010 : 2026,
           genres: [genre],
+          parts: [PlexMediaPart(path: '/synthetic/audit-$genre')],
         ),
     ];
   return UiFixture(controller: controller, guideClock: () => _fixedNow);
@@ -1181,7 +1210,16 @@ class _VisualController extends FixtureController {
 
   @override
   Future<ScheduleIndex> loadScheduleFor(Channel channel) async =>
-      buildChannelSchedule(channel, (channel.source as ManualSource).items);
+      buildChannelSchedule(
+        channel,
+        channel.source is ManualSource
+            ? (channel.source as ManualSource).items
+            : resolveContent(
+                channel.source,
+                playableInventory.media,
+                playableInventory.playlists,
+              ),
+      );
 
   @override
   Future<bool> scanLibraries(

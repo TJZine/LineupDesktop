@@ -1,10 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/channels/channel.dart';
+import 'package:lineup_desktop/ui/lineup_controls.dart';
 
 import '../support/ui_fixture.dart';
 
@@ -128,6 +130,142 @@ void main() {
     expect(controller.orderedIds, ['second', 'first', 'third']);
   });
 
+  testWidgets(
+    'reorder uses the directory number label and compact move action',
+    (tester) async {
+      final controller = _RecordingDirectoryController()
+        ..stage = SetupStage.ready
+        ..channels = [
+          _channel('first', 2, 'First'),
+          _channel('second', 7, 'Second'),
+        ];
+      await tester.pumpWidget(UiFixture(controller: controller).build());
+      await tester.pumpAndSettle();
+      await openDestination(tester, 'Channels');
+
+      await tester.tap(find.text('Reorder channels'));
+      await tester.pump();
+
+      expect(find.text('No.'), findsOneWidget);
+      expect(find.text('Number'), findsNothing);
+      expect(find.text('Move to…'), findsNWidgets(2));
+      final firstUp = find.ancestor(
+        of: find.byTooltip('Move First up'),
+        matching: find.byType(IconButton),
+      );
+      final firstDown = find.ancestor(
+        of: find.byTooltip('Move First down'),
+        matching: find.byType(IconButton),
+      );
+      final secondDown = find.ancestor(
+        of: find.byTooltip('Move Second down'),
+        matching: find.byType(IconButton),
+      );
+      expect(tester.widget<IconButton>(firstUp).onPressed, isNull);
+      expect(tester.widget<IconButton>(firstDown).onPressed, isNotNull);
+      expect(tester.widget<IconButton>(secondDown).onPressed, isNull);
+    },
+  );
+
+  for (final (size, textScale) in [
+    (const Size(1280, 720), 1.0),
+    (const Size(1920, 1080), 1.0),
+    (const Size(1920, 1080), 1.5),
+  ]) {
+    testWidgets(
+      'reorder action row stays single-line at ${size.width}x${size.height} text $textScale',
+      (tester) async {
+        tester.view
+          ..physicalSize = size
+          ..devicePixelRatio = 1;
+        tester.platformDispatcher.textScaleFactorTestValue = textScale;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+        final controller = _RecordingDirectoryController()
+          ..stage = SetupStage.ready
+          ..channels = [
+            _channel('first', 2, 'First', source: const PlaylistSource('P')),
+            _channel('second', 7, 'Second', source: const PlaylistSource('P')),
+          ];
+        await tester.pumpWidget(UiFixture(controller: controller).build());
+        await tester.pumpAndSettle();
+        await openDestination(tester, 'Channels');
+        await tester.tap(find.text('Reorder channels'));
+        await tester.pump();
+
+        final row = find.byKey(const ValueKey('reorder-first'));
+        final move = find
+            .descendant(of: row, matching: find.text('Move to…'))
+            .first;
+        final moveButton = find
+            .ancestor(of: move, matching: find.byType(TextButton))
+            .first;
+        final upButton = find.ancestor(
+          of: find.byTooltip('Move First up'),
+          matching: find.byType(IconButton),
+        );
+        final downButton = find.ancestor(
+          of: find.byTooltip('Move First down'),
+          matching: find.byType(IconButton),
+        );
+        final rowSize = tester.getSize(row);
+        final moveTop = tester.getTopLeft(moveButton).dy;
+        expect(tester.getTopLeft(upButton).dy, closeTo(moveTop, 0.5));
+        expect(tester.getTopLeft(downButton).dy, closeTo(moveTop, 0.5));
+        expect(rowSize.height, lessThanOrEqualTo(80));
+        expect(tester.getSize(moveButton).width, lessThanOrEqualTo(248));
+      },
+    );
+  }
+
+  testWidgets('row actions use themed menu rows and baseline delete rows', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    tester.platformDispatcher.textScaleFactorTestValue = 1.5;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    const longName =
+        'A very long channel name that wraps across multiple lines in the deletion confirmation';
+    final controller = _RecordingDirectoryController()
+      ..stage = SetupStage.ready
+      ..channels = [_channel('long', 42, longName, generated: true)];
+    await tester.pumpWidget(UiFixture(controller: controller).build());
+    await tester.pumpAndSettle();
+    await openDestination(tester, 'Channels');
+
+    final actionButton = find.byWidgetPredicate(
+      (widget) => widget.runtimeType.toString().startsWith('PopupMenuButton'),
+    );
+    await tester.ensureVisible(actionButton);
+    await tester.tap(actionButton);
+    await tester.pumpAndSettle();
+    expect(find.text('Duplicate as custom'), findsOneWidget);
+    expect(find.text('Delete…'), findsOneWidget);
+    expect(find.byType(LineupDropdownMenuRow), findsNWidgets(2));
+    final menu = tester.widget<Widget>(actionButton) as dynamic;
+    expect(menu.menuPadding, EdgeInsets.zero);
+
+    await tester.tap(find.text('Delete…'));
+    await tester.pumpAndSettle();
+    final dialogRow = find.byKey(const ValueKey('delete-dialog-row-long'));
+    final row = tester.renderObject<RenderFlex>(dialogRow);
+    expect(row.crossAxisAlignment, CrossAxisAlignment.baseline);
+    expect(row.textBaseline, TextBaseline.alphabetic);
+    expect(
+      tester
+          .getSize(
+            find.descendant(of: dialogRow, matching: find.text(longName)),
+          )
+          .height,
+      greaterThan(40),
+    );
+    await tester.tap(find.text('Cancel'));
+  });
+
   testWidgets('removed focused row restores focus to a surviving channel', (
     tester,
   ) async {
@@ -179,7 +317,7 @@ void main() {
         } else {
           await tester.tap(find.byTooltip('Actions for First'));
           await tester.pumpAndSettle();
-          await tester.tap(find.text('Delete'));
+          await tester.tap(find.text('Delete…'));
         }
         await tester.pumpAndSettle();
         await tester.tap(
@@ -272,17 +410,20 @@ Channel _channel(
   int number,
   String name, {
   bool generated = false,
+  ContentSource? source,
 }) => Channel(
   id: id,
   number: number,
   name: name,
-  source: ManualSource([
-    ChannelItem(
-      id: '$id-program',
-      title: '$name program',
-      duration: const Duration(minutes: 30),
-    ),
-  ]),
+  source:
+      source ??
+      ManualSource([
+        ChannelItem(
+          id: '$id-program',
+          title: '$name program',
+          duration: const Duration(minutes: 30),
+        ),
+      ]),
   playbackMode: PlaybackMode.sequential,
   anchor: DateTime.utc(2026),
   shuffleSeed: number,

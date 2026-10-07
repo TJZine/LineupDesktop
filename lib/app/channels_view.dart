@@ -365,7 +365,7 @@ class ChannelsViewState extends State<ChannelsView> {
               child: _mode == _DirectoryMode.reorder
                   ? _reorderColumns(
                       drag: const SizedBox.shrink(),
-                      number: const Text('Number'),
+                      number: const Text('No.'),
                       name: const Text('Channel'),
                       source: const Text('Source'),
                       playback: const Text('Playback'),
@@ -526,7 +526,7 @@ class ChannelsViewState extends State<ChannelsView> {
                                         tooltip: 'Actions for ${channel.name}',
                                         padding: EdgeInsets.all(8),
                                         iconSize: 24,
-                                        menuPadding: null,
+                                        menuPadding: EdgeInsets.zero,
                                         onSelected: (action) =>
                                             switch (action) {
                                               _RowAction.duplicate =>
@@ -540,20 +540,22 @@ class ChannelsViewState extends State<ChannelsView> {
                                             PopupMenuItem(
                                               value: _RowAction.duplicate,
                                               height: 48,
-                                              padding: EdgeInsets.symmetric(
-                                                horizontal: 12,
-                                              ),
-                                              child: Text(
-                                                'Duplicate as custom',
+                                              padding: EdgeInsets.zero,
+                                              child: LineupDropdownMenuRow(
+                                                selected: false,
+                                                child: const Text(
+                                                  'Duplicate as custom',
+                                                ),
                                               ),
                                             ),
                                           PopupMenuItem(
                                             value: _RowAction.delete,
                                             height: 48,
-                                            padding: EdgeInsets.symmetric(
-                                              horizontal: 12,
+                                            padding: EdgeInsets.zero,
+                                            child: const LineupDropdownMenuRow(
+                                              selected: false,
+                                              child: Text('Delete…'),
                                             ),
-                                            child: Text('Delete'),
                                           ),
                                         ],
                                       ),
@@ -623,8 +625,22 @@ class ChannelsViewState extends State<ChannelsView> {
     required Widget action,
     bool heading = false,
   }) {
-    final textScale = MediaQuery.textScalerOf(context).scale(1);
+    final textScaler = MediaQuery.textScalerOf(context);
+    final textScale = textScaler.scale(1);
     final numberWidth = 76 * textScale;
+    final moveToText = TextPainter(
+      text: TextSpan(
+        text: 'Move to…',
+        style: LineupTypography.button.copyWith(fontSize: 16),
+      ),
+      textDirection: Directionality.of(context),
+      textScaler: textScaler,
+    )..layout();
+    // Keep two 44px arrows and the compact label on one line while allowing
+    // the active font and accessibility text scale to determine its width.
+    final actionWidth = (88 + moveToText.width + 40 + 16)
+        .clamp(216, 336)
+        .toDouble();
     return DecoratedBox(
       decoration: heading
           ? const BoxDecoration()
@@ -655,7 +671,10 @@ class ChannelsViewState extends State<ChannelsView> {
               SizedBox(width: 16),
               Expanded(flex: 2, child: playback),
               SizedBox(width: 16),
-              SizedBox(width: 144, child: LineupCompactControls(child: action)),
+              SizedBox(
+                width: actionWidth,
+                child: LineupCompactControls(child: action),
+              ),
             ],
           ),
         ),
@@ -1017,13 +1036,9 @@ class ChannelsViewState extends State<ChannelsView> {
                   : () => _moveReorder(index, index + 1),
               icon: Icons.arrow_downward,
             ),
-            IconButton(
-              constraints: BoxConstraints(minWidth: 40, minHeight: 40),
-              padding: EdgeInsets.all(8),
-              iconSize: 24,
-              tooltip: 'Move ${channel.name} before or after another channel',
+            TextButton(
               onPressed: _saving ? null : () => _moveTo(index, byId),
-              icon: const Icon(Icons.low_priority),
+              child: const Text('Move to…'),
             ),
           ],
         );
@@ -1529,7 +1544,9 @@ class _ChannelDeletionDialogState extends State<_ChannelDeletionDialog> {
                         child: Padding(
                           padding: EdgeInsets.symmetric(vertical: 10),
                           child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                            key: ValueKey('delete-dialog-row-${channel.id}'),
+                            crossAxisAlignment: CrossAxisAlignment.baseline,
+                            textBaseline: TextBaseline.alphabetic,
                             children: [
                               SizedBox(
                                 width: 56,

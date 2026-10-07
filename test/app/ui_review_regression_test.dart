@@ -890,7 +890,7 @@ void main() {
 Future<void> _confirmDelete(WidgetTester tester) async {
   await tester.tap(find.byTooltip('Actions for Newsroom'));
   await tester.pumpAndSettle();
-  await tester.tap(find.text('Delete'));
+  await tester.tap(find.text('Delete…'));
   await tester.pumpAndSettle();
   await tester.tap(find.text('Delete channel'));
   await tester.pumpAndSettle();
