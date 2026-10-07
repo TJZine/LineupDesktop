@@ -22,6 +22,31 @@ challenged, not constraints. This log records only decisions the user made.
   captures from synthetic fixtures; regenerate with `capture_test.dart` and
   `make_viewer.py`).
 
+## Supersedes
+
+The user confirmed on October 6 that these decisions replace earlier approvals
+in `.interface-design/system.md` and `docs/desktop-ui-design-spec.md`. Where
+this log is silent, the earlier documents still govern.
+
+- F3 typography replaces "preserve the current production type family, sizes,
+  weights, and hierarchy until typography changes receive separate approval".
+- F8 root scaling and the F2 centred width cap replace "not a
+  physical-resolution switch or whole-page shrink transform" and the rejection
+  of a fixed centred workspace with surrounding margins.
+- Onboarding profile names clamp to two lines with the full name on focus
+  (replaces "full names wrap rather than truncate").
+- Review's build method moves to the top of the summary card (replaces stable
+  bottom placement of the method).
+- Search placeholders start with "Search" (F6 Q1), including the Guide's
+  "Search channels" (replaces "Channel name or number").
+- The current server row gains a primary Continue (replaces "no redundant
+  Connect for the working current server").
+- The Guide no-playback aperture shows dimmed backdrop artwork (replaces the
+  earlier cold-start/no-playback treatment).
+- The sleep status reads "Sleep · 42m" (replaces "Stops in N min").
+- Studio's retained schedule reads "Previous schedule · <source>" (replaces
+  "Previous preview").
+
 ## Foundations
 
 ### F1 · Header system — locked October 5
@@ -79,10 +104,8 @@ Reference mocks: `build/design-review/f2-layout.html`, `f2-step1.html`.
   the menu button aligns with the channel column. Guide is exempt from the
   width cap; a wider window shows more schedule.
 - Centred moments: Welcome and setup complete keep centred compositions.
-- Proposed for the Setup family (not yet locked): one outcome notice instead of
-  four restatements; keep the selection but tag unusable libraries "Won't be
-  used"; a real per-row Retry for a failed scan; align the Select all checkbox
-  and the type labels with the rows.
+- Setup step 1 refinements (outcome notice, "Won't be used" tags, per-row
+  Retry, alignment) are locked in the Channel setup section below.
 
 ### F3 · Typography — locked October 5
 
@@ -117,10 +140,11 @@ Reference mock: `build/design-review/f4-buttons.html`.
   (about 70 today) except genuine layout needs.
 - Primary: filled projector amber, Inter 600 18px, on-accent text. One primary
   per view; it is always the next step.
-- Secondary: quiet outline (strong border) with paper text. Amber is reserved
-  for primary buttons and inline links.
-- Text: no border, secondary text color (paper on hover). For back, cancel and
-  dismiss.
+- Secondary: quiet outline (strong border) with paper text. Among buttons, amber
+  is reserved for the primary tier; inline links and the locked status marks
+  (Current chip, amber dots, added segment, ✓ check) also use it.
+- Text: no border, secondary text color (paper on hover). For cancel and dismiss;
+  F1 back links above titles are inline links.
 - Inline link: amber text inside content only (F1 back links, a row's Retry,
   "Show next 6 hours").
 - Destructive: filled on-air coral, only inside a confirmation dialog.
@@ -414,8 +438,11 @@ Reference mock: `build/design-review/s3-guide.html`.
   to lead the title, so it never sits beside the following program.
 - Metadata in the information area becomes one line (time · duration · year ·
   genres) plus chips (rating, resolution, audio), matching Now Playing.
-- Channel column shows the channel name only; the repeated "Manual lineup"
-  subtitle is removed; "Watching" remains on the tuned channel.
+- Channel column shows the channel name only by default; the second line that
+  names each channel's source ("Manual lineup", "<Library> • Movies",
+  "Playlist", "Mixed sources") is hidden. "Watching" remains on the tuned
+  channel. A Guide setting, "Show channel sources" (off by default), restores
+  the source line (user choice, October 6).
 - Cell times: when the episode title and time both fit, the time follows the
   episode title inline ("The Last Frequency · 10:12–11:00 PM") instead of being
   pushed to the right edge. The existing fit check (title + gap + time must fit
@@ -442,7 +469,10 @@ F7.
   full-width progress lane at the bottom edge.
 - Now Playing (the OSD's expanded state, per F7): HEVC joins the format chips
   (rating · resolution · HDR · video codec · audio codec · channels) and the
-  lone "Playback • HEVC" line is removed. Cast shows the role under each name,
+  lone "Playback • HEVC" line is removed. Its runtime facts (decoded size when
+  it differs from the catalog, hardware decoder) appear only in Diagnostics,
+  which already shows them; the "Source • CODEC" fallback becomes the codec
+  chip. Cast shows the role under each name,
   at most four people in one row so it never wraps.
 - Track drawers: the list scrolls in its own area below the header (never
   beneath the title), with short fades at its top and bottom edges. "Off" is
@@ -535,12 +565,12 @@ F8 already cover the header, buttons, rail, fields and scaling.
 - Overlay transparency (F7) lives in Appearance as the fourth row, "Player
   overlays": helper "How much of the picture shows through Player controls and
   panels. More transparent can be harder to read on bright scenes." Dropdown
-  choices with one-line descriptions: More transparent (lightest; today's look),
+  choices with one-line descriptions: More transparent (lightest),
   Standard (default), Reduce transparency (most solid, easiest to read). Applies
   immediately; no preview renderer.
-- Account server row: server name, then quality dot and the locked connection
-  wording ("Remote · Limited · 340 ms"; "Slow" dropped, "Very slow" and
-  "Limited" carry the amber dot), replacing the raw `plexConnectionDescription`
+- Account server row: server name, then the locked connection wording built from
+  the existing kind labels (for example "Relay · Limited · 340 ms" with the
+  amber dot, or "Direct local · 126 ms" with none; "Slow" dropped), replacing the raw `plexConnectionDescription`
   string.
 - Account profile row shows the profile's photo or warm-initial avatar beside
   the full name (Onboarding lock); the signed-in account row shows the account
@@ -550,6 +580,9 @@ F8 already cover the header, buttons, rail, fields and scaling.
 - Dropdown menus use the themed menu (raised surface, F5 rows, selected bar),
   with one-line choice descriptions where they help (Visible hours, Player
   overlays).
+- Guide category gains "Show channel sources" (toggle, off by default),
+  helper "Show where each channel's programs come from under its name in the
+  Guide."
 - "Large focus indicators" helper: "Use thicker outlines when navigating with a
   keyboard or remote."
 
@@ -580,8 +613,8 @@ each theme keeps its own overlay tint.
 ### Diagnostics — locked October 6
 
 Reference mock: `build/design-review/s8-diagnostics.html`. The September 12
-approval stands; F1 replaces its local 96px header ("‹ Back to Support" above
-the title), and F3/F4/F8 cover type, buttons and scaling.
+approval stands; F1 replaces its local 96px header ("‹ Settings · Support"
+above the title), and F3/F4/F8 cover type, buttons and scaling.
 
 - Technical details share the summary's four-column grid: Application, Video
   output, then Media signal spanning the last two columns with its values in
@@ -618,11 +651,18 @@ phase owns, so no surface is restyled twice. Within a phase, surfaces with
 disjoint files may proceed in parallel under one integration owner.
 
 Evidence for every phase: existing widget/unit tests stay green; the review
-harness (`build/design-review/capture_test.dart`) re-renders the affected
+harness (`tool/design-review/capture_test.dart` after phase 0) re-renders the affected
 scenes across the resolution matrix and is compared against the locked mocks;
 the F8 1080p-vs-2160p geometry check passes for affected states. Harness and
 mock evidence are design evidence, not physical Windows acceptance.
 
+0. **Evidence harness.** Move `capture_test.dart`, `probe_compare.py` and
+   `make_viewer.py` from the ignored `build/design-review/` into a tracked
+   `tool/design-review/` (synthetic fixtures only; outputs stay under the
+   ignored `build/`), keep it compiling under `flutter analyze`, and fix the
+   probe per the phase 1 contract. Children may then work in isolated
+   worktrees; only the controller runs captures, so outputs never collide.
+   Mocks stay local in the main checkout's `build/design-review/`.
 1. **Root scaling (F8).** Introduce the single scale owner in
    `MaterialApp.builder`; retire `LineupLayout.scaleFor`, setup's
    `value(at720, at1080)` interpolation and the Guide compact rule; remove local
@@ -631,22 +671,26 @@ mock evidence are design evidence, not physical Windows acceptance.
    First because every later phase would otherwise write scale-aware code
    twice. Gate: physical Windows acceptance of the native video rectangle,
    artwork decode resolution and IME/caret placement at 4K 100% and 150%.
-2. **Theme primitives (F3, F4, F5, F6, Themes).** Bundle Instrument Sans and
-   set the type roles; move every button tier and state into the theme and
+2. **Theme primitives (F3, F4, F5, F6, Themes).** Bundle Instrument Sans and Inter
+   and set the type roles; move every button tier and state into the theme and
    delete the local overrides; shared side-nav row, segmented control, tabs,
-   themed menu and field components; the app-wide focus-visible mechanism and
+   themed menu and field components; the
+   connection-status primitive (locked wording + quality dot), the profile
+   avatar (photo or warm initials) and the dimmed disabled-arrow style, which
+   phases 3–8 reuse; the app-wide focus-visible mechanism and
    hover fill; theme palette fixes (Satellite Blue and Mint Noir names, solid
    gold focused cell, Slate & Pine focus colour) and the Glassmorphism removal
    with its retired-key load handling.
 3. **Shell and navigation (F1, F2, Lineup menu).** The 80px bar with the M2
    invoker top-left, L2 back links, first-run lockup bar, the <900px condensed
    bar, workspace width cap and focused-task column; the Lineup menu rows,
-   Now Playing row, Account row and header removal; Studio's menu routed through
+   Now Playing row (opening today's Now Playing until 9b replaces it), Account row and header removal; Studio's menu routed through
    the existing unsaved-changes guard.
 4. **Onboarding.** Welcome, linking, profiles, PIN, servers, and the shared
    connection wording change in `plexConnectionDescription`
-   (`lib/plex/plex_models.dart`), which also feeds Settings, the menu and
-   Diagnostics.
+   (`lib/plex/plex_models.dart`); its only other caller is Settings ›
+   Account. The menu Account row and Settings rows reuse the Phase 2
+   connection-status primitive.
 5. **Channel setup.** All locked step refinements, cards, badges, summary and
    apply states.
 6. **Guide.** Information area, empty/failed states, airing dot, metadata line,
@@ -673,3 +717,120 @@ mock evidence are design evidence, not physical Windows acceptance.
    - Gate: physical Windows acceptance of overlay legibility over real bright and
      HDR footage at each transparency level, and of the video rectangle beneath
      the expanded OSD.
+
+### Implementation contracts — review amendments, October 6
+
+An independent pre-implementation review (plan, handoff and source facts)
+added these. They bind the phases above.
+
+Execution
+- Physical Windows gates (phase 1 video/artwork/IME, phase 2 typography,
+  phase 9 legibility and video rectangle) block release, not the next phase;
+  each phase reports them as pending.
+- The Player is protected (`.interface-design/system.md`). Phases 1, 2 and 9a
+  also change it, so each produces matched real-Flutter Player renders at
+  1280×720 and 1920×1080 (identical content, clock, playback state, artwork and
+  focus) as evidence that the result matches the locked decisions. Only 9b
+  needs new approval.
+- Before phase 1, keep the October 5 "today" captures as a fixed baseline
+  (copy, never overwrite) for before/after evidence.
+- The review harness gains scenes for new states it cannot show today: Guide
+  all-failed and no-channels, Player slate and notices, PIN full-screen,
+  Review with removals, the expanded OSD.
+
+Phase 1 (root scaling)
+- The scale owner overrides the reported window size, padding and insets to
+  window ÷ scale (so every remaining `scaleFor` returns 1 and nothing scales
+  twice), keeps the raw device pixel ratio, wraps both `MaterialApp`s (the
+  startup splash/failure app has no builder today), and is a reusable widget
+  that test fixtures wrap.
+- All breakpoints and layout thresholds are canvas pixels. This includes the
+  F1 "<900px" condensed bar, `isCompactWidth`, and the Player's own size rules
+  (`player_view.dart`: ≥1200×640, ≥1920×900, ≥1920×1080), which F8's evidence
+  list missed.
+- `NativeVideoSurface` reports the transformed rectangle (origin and size)
+  with the raw pixel ratio; today it sends a transformed origin with an
+  untransformed size, which would halve the video at 4K. Add a widget test at
+  1080p and 2160p canvases. Applies to Player, Guide PiP and video behind
+  Settings.
+- The Lineup menu anchor is measured in the scaled root's coordinates.
+- Guide height: rewrite `GuideLayoutPolicy`'s height distribution so taller
+  (16:10) windows extend the information area, not the five rows (F8).
+- Check Channel setup and Onboarding for overflow at 1280×720 and 1366×768
+  once `value(at720, at1080)` is retired.
+- F8 text-scaling rules (cells ellipsize, time drops before title, now-line
+  beneath text, toolbars wrap as groups) are part of phase 1 for shared
+  widgets and of each family phase for its own surfaces.
+- The geometry probe measures drawn geometry (size, font size and letter
+  spacing multiplied by the accumulated transform), uses an explicit
+  tolerance of ±0.5px, compares letter spacing, and exits non-zero on failure.
+
+Phase 2 (theme primitives and themes)
+- Glassmorphism removal: settings loading is strict and a failed load
+  quarantines the whole state file, so `fromJson` maps a stored `glass` value
+  to Ember & Steel explicitly (like the retired 6/8/12-hour spans). The next
+  save writes Ember & Steel. Test a pre-change state file containing `glass`.
+- Slate & Pine's lighter sage applies to the focus ring and the Guide's focus
+  blend only; focused text stays light.
+- Satellite Blue's solid gold focus needs a Guide change: the Guide cell and
+  channel focus use their own 24% blend of the focus colour
+  (`guide_view.dart`), not `focusedSurface`.
+
+Phase 3 (shell and navigation)
+- Settings' back link names its origin (Guide, Player or Channels). Settings
+  opened from Diagnostics returns to the surface that opened Settings before
+  Diagnostics, so Diagnostics → Settings → back never loops.
+- Choosing Channels in the menu from Studio returns to the directory through
+  the existing unsaved-changes guard (today it does nothing).
+
+Phase 4 (Onboarding)
+- Profiles, servers and PIN opened from Settings › Account use the in-app bar
+  with "‹ Settings · Account" in place of today's Back; first run keeps the
+  lockup bar.
+- The current server row's Continue keeps that server without reconnecting and
+  returns to where the picker was opened (first run proceeds to setup).
+- Rows other than the current server show a quality dot and wording only when
+  a measured connection exists; otherwise "Not measured yet".
+
+Phase 5 (Channel setup)
+- The build-method segmented control appears on every review of an existing
+  lineup (method choice can cause removals), so it never moves when the method
+  changes.
+
+Phase 6 (Guide)
+- "Show channel sources" persistence: key `guideShowChannelSources` (bool). A
+  missing key reads as false (existing state files keep loading); the key is
+  always written. Test a pre-change state file. The Settings › Guide row ships
+  in this phase.
+- The single schedule Retry retries every failed row, visible or not.
+
+Phase 7 (Studio)
+- The no-shift fix also covers the browse "Add the selected programs…" message;
+  its live screen-reader announcement is kept.
+- Missing from the phase list: the disabled "None in this library" Collection
+  field.
+
+Phase 8 (Diagnostics)
+- The reserved "N new events" slot moves to the left of "● Recording on", so
+  the row still ends on the content edge and new events still never displace
+  the reader.
+- Category labels change display text only; the screen-reader label uses the
+  same sentence-case text.
+
+Phase 9a (Player)
+- Overlay transparency persistence: key `overlayTransparency`, stored values
+  `more-transparent`, `standard`, `reduced`. A missing key reads as Standard
+  (existing state files keep loading); unknown values are rejected; the key is
+  always written. Test a pre-change state file. The Player listens to the
+  setting directly (the app root rebuilds only for theme, focus size and
+  motion).
+- Overlay tint: every Player overlay uses its theme's `overlaySurface` colour
+  at the level's opacity.
+- More transparent for the merged panel: collapsed OSD uses today's fade
+  (about 45%); the expanded state uses about 62% under text.
+- An unknown typed channel number becomes a timed bug notice, which is a
+  coordinator change (today it opens a blocking error with no timeout).
+- Hover and focus treatment covers the DVR transport buttons when they are
+  enabled, not only the five standard actions.
+- Full-screen tooltips read "Full screen" and "Exit full screen".
+
