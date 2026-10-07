@@ -1152,6 +1152,33 @@ class LineupController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Returns to the picker origin without reconnecting the current server.
+  ///
+  /// This intentionally shares the same guards and invalidation path as the
+  /// existing picker cancellation API; it is a named transition for the
+  /// current-server Continue action rather than a second server owner.
+  bool continueCurrentServer() {
+    if (stage != SetupStage.servers || busy || server == null) {
+      return false;
+    }
+
+    if (serverSelectionCanCancel) {
+      cancelServerSelection();
+      return true;
+    }
+
+    // During first-run discovery, an already-selected server can be retained
+    // while the picker is still non-cancellable. Continue must finish that
+    // transition without reconnecting, rediscovering, or persisting anything.
+    serverSelectionCanCancel = false;
+    channelSetupCanCancel = false;
+    _serverTargetId = null;
+    error = null;
+    stage = SetupStage.channelSetup;
+    notifyListeners();
+    return true;
+  }
+
   Future<void> clearSavedServer() async {
     final operation = _invalidateOperation();
     await _run(

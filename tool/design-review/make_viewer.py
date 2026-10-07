@@ -9,7 +9,7 @@ template = Path(__file__).with_name('viewer_template.html')
 configs = ['1280x720', '1366x768', '1536x864@125', '1920x1080', '1920x1200',
            '2560x1440', '3440x1440', '3840x2160', '1920x1080-text150']
 families = [
-    ('Onboarding', ['onboarding', 'linking', 'linking-failure', 'profiles', 'profile-pin', 'servers']),
+    ('Onboarding', ['onboarding', 'linking', 'linking-failure', 'profiles', 'profile-pin', 'servers', 'account-pickers']),
     ('Channel setup', ['setup-libraries', 'setup-configure', 'setup-review', 'setup-review-removals', 'setup-apply']),
     ('Guide', ['guide', 'guide-pip', 'guide-rich', 'guide-loading', 'guide-error', 'guide-empty', 'lineup-menu']),
     ('Player', ['player-osd', 'player-now-playing', 'mini-guide', 'player-tracks', 'player-sleep', 'player-states']),

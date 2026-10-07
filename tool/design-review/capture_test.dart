@@ -100,9 +100,14 @@ final Map<String, Scene> _scenes = {
   'profiles': (tester, shot) async {
     await _pump(tester, _profileSelectionFixture().build());
     await shot('selection');
+    for (var index = 0; index < 3; index++) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    }
+    await _settle(tester);
+    await shot('focused-name');
   },
   'profile-pin': (tester, shot) async {
-    final f = UiFixture()
+    final f = UiFixture(controller: _RejectedPinController())
       ..controller.stage = SetupStage.profiles
       ..controller.profiles = const [
         PlexHomeUser(id: 'protected', name: 'Taylor', protected: true),
@@ -111,10 +116,50 @@ final Map<String, Scene> _scenes = {
     await _pump(tester, f.build());
     await _tap(tester, find.text('Taylor'));
     await shot('pin');
+    for (final key in [
+      LogicalKeyboardKey.digit1,
+      LogicalKeyboardKey.digit2,
+      LogicalKeyboardKey.digit3,
+      LogicalKeyboardKey.digit4,
+    ]) {
+      await tester.sendKeyEvent(key);
+    }
+    await _settle(tester);
+    expect(find.text('Incorrect PIN. Try again.'), findsOneWidget);
+    await shot('pin-error');
   },
   'servers': (tester, shot) async {
     await _pump(tester, _serverFixture().build());
     await shot('selection');
+  },
+  'account-pickers': (tester, shot) async {
+    final f = _serverFixture()
+      ..controller.stage = SetupStage.ready
+      ..controller.profiles = const [
+        PlexHomeUser(id: 'protected', name: 'Taylor', protected: true),
+        PlexHomeUser(id: 'guest', name: 'Guest', protected: false),
+      ];
+    await _pump(tester, f.build());
+    await _tap(tester, find.byTooltip('Open Lineup menu'));
+    await _tap(tester, find.byKey(const Key('app-menu-account')));
+    await _tap(tester, find.text('Switch profile'));
+    await shot('profiles');
+    await _tap(tester, find.text('Taylor'));
+    await shot('pin');
+    await _tap(tester, find.text('‹ Settings · Account'));
+    await _tap(tester, find.text('Switch server'));
+    await shot('servers');
+    await _tap(tester, find.byTooltip('Open Lineup menu'));
+    await shot('menu');
+    await _tap(
+      tester,
+      find.descendant(
+        of: find.byKey(const Key('immersive-app-menu')),
+        matching: find.text('Guide'),
+      ),
+    );
+    expect(f.controller.stage, SetupStage.ready);
+    expect(find.byKey(const Key('immersive-app-menu')), findsNothing);
   },
 
   // ── Channel setup ──
@@ -1025,6 +1070,15 @@ UiFixture _channelManagementFixture() {
         ),
     ];
   return UiFixture(controller: controller, guideClock: () => _fixedNow);
+}
+
+class _RejectedPinController extends FixtureController {
+  @override
+  Future<bool> selectProfile(PlexHomeUser user, {String? pin}) async {
+    error = 'That Plex Home PIN was not accepted.';
+    notifyListeners();
+    return false;
+  }
 }
 
 class _CaptureDiagnostics extends Diagnostics {

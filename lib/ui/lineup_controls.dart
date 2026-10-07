@@ -208,18 +208,9 @@ class LineupConnectionStatus extends StatelessWidget {
   const LineupConnectionStatus({required this.connection, super.key});
   final PlexConnection? connection;
   static bool hasWarning(PlexConnection? connection) =>
-      connection?.latency != null &&
-      (connection!.relay || connection.latency!.inMilliseconds >= 500);
-  static String description(PlexConnection? connection) {
-    if (connection?.latency == null) return 'Not measured yet';
-    final measured = connection!;
-    return [
-      plexConnectionKindLabel(plexConnectionKind(measured)),
-      if (measured.relay) 'Limited',
-      if (measured.latency!.inMilliseconds >= 500) 'Very slow',
-      '${measured.latency!.inMilliseconds} ms',
-    ].join(' · ');
-  }
+      plexConnectionHasWarning(connection);
+  static String description(PlexConnection? connection) =>
+      plexConnectionDescription(connection);
 
   @override
   Widget build(BuildContext context) {
@@ -255,12 +246,14 @@ class LineupProfileAvatar extends StatelessWidget {
     required this.identity,
     this.photo,
     this.size = 64,
+    this.locked = false,
     super.key,
   });
   final String name;
   final String identity;
   final ImageProvider? photo;
   final double size;
+  final bool locked;
   static const _tones = [
     Color(0xFFB98960),
     Color(0xFFC5A275),
@@ -286,14 +279,23 @@ class LineupProfileAvatar extends StatelessWidget {
       0,
       (value, unit) => (value * 31 + unit) & 0x7fffffff,
     );
-    return SizedBox(
-      width: size,
-      height: size,
-      child: ClipOval(
-        child: ColoredBox(
-          color: _tones[hash % _tones.length],
-          child: photo == null
-              ? Center(
+    final avatar = ClipOval(
+      child: ColoredBox(
+        color: _tones[hash % _tones.length],
+        child: photo == null
+            ? Center(
+                child: Text(
+                  initials,
+                  style: LineupTypography.control.copyWith(
+                    fontSize: size * .32,
+                    color: const Color(0xFF20150F),
+                  ),
+                ),
+              )
+            : Image(
+                image: photo!,
+                fit: BoxFit.cover,
+                errorBuilder: (_, error, stack) => Center(
                   child: Text(
                     initials,
                     style: LineupTypography.control.copyWith(
@@ -301,20 +303,42 @@ class LineupProfileAvatar extends StatelessWidget {
                       color: const Color(0xFF20150F),
                     ),
                   ),
-                )
-              : Image(
-                  image: photo!,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, error, stack) => Center(
-                    child: Text(
-                      initials,
-                      style: LineupTypography.control.copyWith(
-                        color: const Color(0xFF20150F),
-                      ),
-                    ),
+                ),
+              ),
+      ),
+    );
+    return SizedBox(
+      width: size,
+      height: size,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned.fill(child: avatar),
+          if (locked)
+            Positioned(
+              right: -2,
+              bottom: -2,
+              child: Container(
+                width: size * .3,
+                height: size * .3,
+                decoration: BoxDecoration(
+                  color: LineupTheme.of(context).elevatedSurface,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: LineupTheme.of(context).defaultBorder,
                   ),
                 ),
-        ),
+                child: Semantics(
+                  label: 'Profile lock',
+                  child: Icon(
+                    Icons.lock,
+                    size: size * .17,
+                    color: LineupTheme.of(context).primaryText,
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

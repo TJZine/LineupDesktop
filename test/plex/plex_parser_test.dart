@@ -20,25 +20,25 @@ void main() {
       plexConnectionDescription(
         connection(local: true, relay: false, latency: 99),
       ),
-      'Direct local • 99 ms measured',
+      'Direct local · 99 ms',
     );
     expect(
       plexConnectionDescription(
         connection(local: false, relay: false, latency: 100),
       ),
-      'Direct remote • 100 ms measured • Slow',
+      'Direct remote · 100 ms',
     );
     expect(
       plexConnectionDescription(
         connection(local: false, relay: false, latency: 499),
       ),
-      'Direct remote • 499 ms measured • Slow',
+      'Direct remote · 499 ms',
     );
     expect(
       plexConnectionDescription(
         connection(local: true, relay: true, latency: 500),
       ),
-      'Relay • Limited • 500 ms measured • Very slow',
+      'Relay · Limited · Very slow · 500 ms',
     );
     expect(
       plexConnectionKind(connection(local: true, relay: true, latency: 1)),

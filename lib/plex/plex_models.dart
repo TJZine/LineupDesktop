@@ -76,23 +76,22 @@ class PlexConnection {
 
 enum PlexConnectionKind { directLocal, directRemote, relay }
 
-String plexConnectionDescription(PlexConnection connection) {
-  final type = plexConnectionKindLabel(plexConnectionKind(connection));
-  final latency = connection.latency;
-  final milliseconds = latency?.inMilliseconds;
-  final warning = milliseconds == null
-      ? null
-      : milliseconds >= 500
-      ? 'Very slow'
-      : milliseconds >= 100
-      ? 'Slow'
-      : null;
+String plexConnectionDescription(PlexConnection? connection) {
+  final latency = connection?.latency;
+  if (connection == null || latency == null) return 'Not measured yet';
+  final milliseconds = latency.inMilliseconds;
   return [
-    type,
+    plexConnectionKindLabel(plexConnectionKind(connection)),
     if (connection.relay) 'Limited',
-    if (milliseconds != null) '$milliseconds ms measured',
-    ?warning,
-  ].join(' • ');
+    if (milliseconds >= 500) 'Very slow',
+    '$milliseconds ms',
+  ].join(' · ');
+}
+
+bool plexConnectionHasWarning(PlexConnection? connection) {
+  final latency = connection?.latency;
+  return latency != null &&
+      (connection!.relay || latency.inMilliseconds >= 500);
 }
 
 PlexConnectionKind plexConnectionKind(PlexConnection connection) =>

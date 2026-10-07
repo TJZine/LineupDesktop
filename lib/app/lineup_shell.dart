@@ -11,7 +11,6 @@ import '../guide/guide_view.dart';
 import '../playback/native_player.dart';
 import '../playback/player_coordinator.dart';
 import '../playback/player_view.dart';
-import '../plex/plex_models.dart';
 import '../settings/lineup_settings.dart';
 import '../ui/app_ui.dart';
 import '../ui/app_theme.dart';
@@ -62,6 +61,7 @@ class _LineupShellState extends State<LineupShell> {
   bool _appMenuOpen = false;
   Rect? _appMenuAnchor;
   FocusNode? _appMenuInvokerFocus;
+  bool _onboardingFromAccount = false;
   SettingsCategory _settingsCategory = SettingsCategory.appearance;
   bool _guideOpenedFromPlayer = false;
   late SetupStage _lastStage = widget.controller.stage;
@@ -93,6 +93,14 @@ class _LineupShellState extends State<LineupShell> {
     final returnedToApp =
         _lastStage != SetupStage.ready && stage == SetupStage.ready;
     _lastStage = stage;
+    if (stage == SetupStage.welcome) _onboardingFromAccount = false;
+    if (_appMenuOpen &&
+        stage != SetupStage.ready &&
+        !_onboardingMenuAvailable) {
+      _appMenuOpen = false;
+      _appMenuAnchor = null;
+      _appMenuInvokerFocus = null;
+    }
     setState(() {});
     if (returnedToApp) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _restoreRouteFocus());
@@ -119,6 +127,10 @@ class _LineupShellState extends State<LineupShell> {
 
   Future<void> _select(int index) async {
     if (_selectionPending) return;
+    if (widget.controller.stage != SetupStage.ready &&
+        !await _leaveOnboardingForRoute()) {
+      return;
+    }
     if (index == 4 && !_hasPlaybackSurface) {
       if (_appMenuOpen) _closeAppMenu();
       return;
@@ -171,6 +183,16 @@ class _LineupShellState extends State<LineupShell> {
 
   bool get _hasPlaybackSurface =>
       _player.hasPlaybackIntent || _player.error != null;
+
+  bool get _onboardingMenuAvailable {
+    final controller = widget.controller;
+    if (!_onboardingFromAccount || controller.busy) return false;
+    return switch (controller.stage) {
+      SetupStage.profiles => controller.profileSelectionCanCancel,
+      SetupStage.servers => controller.serverSelectionCanCancel,
+      _ => false,
+    };
+  }
 
   bool get _canShowNowPlaying =>
       _player.hasPlaybackIntent &&
@@ -270,6 +292,33 @@ class _LineupShellState extends State<LineupShell> {
     await _select(2);
   }
 
+  void _openProfilePickerFromAccount() {
+    if (_selectionPending || widget.controller.busy) return;
+    _onboardingFromAccount = true;
+    widget.controller.showProfiles();
+  }
+
+  void _openServerPickerFromAccount() {
+    if (_selectionPending || widget.controller.busy) return;
+    _onboardingFromAccount = true;
+    widget.controller.showServers();
+  }
+
+  Future<bool> _leaveOnboardingForRoute() async {
+    final controller = widget.controller;
+    if (controller.busy) return false;
+    if (controller.stage == SetupStage.profiles &&
+        controller.profileSelectionCanCancel) {
+      controller.cancelProfileSelection();
+    } else if (controller.stage == SetupStage.servers &&
+        controller.serverSelectionCanCancel) {
+      controller.cancelServerSelection();
+    }
+    if (controller.stage != SetupStage.ready) return false;
+    _onboardingFromAccount = false;
+    return true;
+  }
+
   KeyEventResult _globalKey(FocusNode _, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
     if (event.logicalKey == LogicalKeyboardKey.backspace &&
@@ -328,11 +377,13 @@ class _LineupShellState extends State<LineupShell> {
 
   Future<void> _completeSetup() async {
     widget.controller.completeChannelSetup();
+    _onboardingFromAccount = false;
     await _select(1);
   }
 
   Future<void> _completeSetupAndAdd() async {
     widget.controller.completeChannelSetup();
+    _onboardingFromAccount = false;
     await _select(1);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _channelsKey.currentState?.openNew();
@@ -569,13 +620,41 @@ class _LineupShellState extends State<LineupShell> {
   Widget build(BuildContext context) {
     final controller = widget.controller;
     if (controller.stage != SetupStage.ready) {
-      return controller.stage == SetupStage.channelSetup
+      final onboardingMenuAvailable = _onboardingMenuAvailable;
+      final onboarding = controller.stage == SetupStage.channelSetup
           ? UpstreamChannelSetupView(
               controller: controller,
               onViewLineup: _completeSetup,
               onAddCustomChannel: _completeSetupAndAdd,
             )
-          : UpstreamOnboardingView(controller: controller, onLogout: _logout);
+          : UpstreamOnboardingView(
+              controller: controller,
+              onLogout: _logout,
+              accountOrigin: _onboardingFromAccount,
+              onOpenMenu: onboardingMenuAvailable ? _openAppMenu : null,
+              menuFocusNode: onboardingMenuAvailable
+                  ? _settingsMenuFocus
+                  : null,
+            );
+      if (!_onboardingFromAccount ||
+          controller.stage == SetupStage.channelSetup) {
+        return onboarding;
+      }
+      return _withGlobalKeys(
+        Scaffold(
+          backgroundColor: Colors.transparent,
+          body: Stack(
+            fit: StackFit.expand,
+            children: [
+              ExcludeSemantics(
+                excluding: _appMenuOpen,
+                child: ExcludeFocus(excluding: _appMenuOpen, child: onboarding),
+              ),
+              if (_appMenuOpen) _immersiveAppMenu(_hasPlaybackSurface),
+            ],
+          ),
+        ),
+      );
     }
     final playerView = PlayerView(
       key: _playerKey,
@@ -640,6 +719,8 @@ class _LineupShellState extends State<LineupShell> {
       onCategoryChanged: (category) => setState(() {
         _settingsCategory = category;
       }),
+      onSwitchProfile: _openProfilePickerFromAccount,
+      onSwitchServer: _openServerPickerFromAccount,
       onSignOut: _requestLogout,
       onOpenDiagnostics: () => unawaited(_select(3)),
     );
@@ -785,6 +866,8 @@ class SettingsView extends StatefulWidget {
     required this.controller,
     this.category = SettingsCategory.appearance,
     this.onCategoryChanged,
+    this.onSwitchProfile,
+    this.onSwitchServer,
     this.onSignOut,
     this.onOpenDiagnostics,
     this.focusNode,
@@ -797,6 +880,8 @@ class SettingsView extends StatefulWidget {
   final LineupController controller;
   final SettingsCategory category;
   final ValueChanged<SettingsCategory>? onCategoryChanged;
+  final VoidCallback? onSwitchProfile;
+  final VoidCallback? onSwitchServer;
   final Future<void> Function()? onSignOut;
   final VoidCallback? onOpenDiagnostics;
   final FocusNode? focusNode;
@@ -1207,7 +1292,8 @@ class _SettingsViewState extends State<SettingsView> {
                 control: OutlinedButton(
                   onPressed: widget.controller.profiles.isEmpty
                       ? null
-                      : widget.controller.showProfiles,
+                      : widget.onSwitchProfile ??
+                            widget.controller.showProfiles,
                   child: const Text('Switch profile'),
                 ),
                 first: true,
@@ -1230,15 +1316,20 @@ class _SettingsViewState extends State<SettingsView> {
               _settingFeedback('profilePickerOnStartup'),
               _SettingsRow(
                 label: const Text('Plex Media Server'),
-                helper: Text(
-                  widget.controller.server == null
-                      ? 'No server selected'
-                      : widget.controller.connection == null
-                      ? widget.controller.server!.name
-                      : '${widget.controller.server!.name} • ${plexConnectionDescription(widget.controller.connection!)}',
-                ),
+                helper: widget.controller.server == null
+                    ? const Text('No server selected')
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(widget.controller.server!.name),
+                          LineupConnectionStatus(
+                            connection: widget.controller.connection,
+                          ),
+                        ],
+                      ),
                 control: OutlinedButton(
-                  onPressed: widget.controller.showServers,
+                  onPressed:
+                      widget.onSwitchServer ?? widget.controller.showServers,
                   child: const Text('Switch server'),
                 ),
               ),

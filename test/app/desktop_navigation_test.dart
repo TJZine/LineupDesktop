@@ -9,6 +9,23 @@ import 'package:lineup_desktop/plex/plex_models.dart';
 import '../support/ui_fixture.dart';
 
 void main() {
+  testWidgets('ready-state updates keep the open Lineup menu and focus', (
+    tester,
+  ) async {
+    final fixture = UiFixture()..controller.stage = SetupStage.ready;
+    await tester.pumpWidget(fixture.build());
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Open Lineup menu'));
+    await tester.pumpAndSettle();
+    final menu = find.byKey(const Key('immersive-app-menu'));
+    final menuElement = tester.element(menu);
+    final focus = FocusManager.instance.primaryFocus;
+    fixture.controller.notifyListeners();
+    await tester.pump();
+    expect(tester.element(menu), same(menuElement));
+    expect(FocusManager.instance.primaryFocus, same(focus));
+  });
+
   for (final window in const [Size(1920, 1080), Size(3840, 2160)]) {
     testWidgets('menu anchor follows its canvas invoker at $window', (
       tester,
