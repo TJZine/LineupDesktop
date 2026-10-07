@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:ui' show CheckedState;
 
 import 'package:lineup_desktop/ui/app_ui.dart';
+import 'package:lineup_desktop/ui/app_theme.dart';
+import 'package:lineup_desktop/settings/lineup_settings.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -94,6 +96,10 @@ void main() {
         findsOneWidget,
       );
       expect(find.text('3 of 3 selected'), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.text('Select all')).dx,
+        closeTo(tester.getTopLeft(find.text('Movies').first).dx, .1),
+      );
       await tester.tap(find.text('Shows'));
       await tester.pump();
       expect(find.text('2 of 3 selected'), findsOneWidget);
@@ -109,10 +115,16 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('scan-selected-libraries')));
       await tester.pumpAndSettle();
 
-      expect(find.textContaining('1 library is ready'), findsOneWidget);
+      expect(find.textContaining('1 of 2 libraries is ready'), findsOneWidget);
       expect(find.text('Ready · 6 items checked'), findsOneWidget);
       expect(find.text('Couldn’t scan · Try again.'), findsOneWidget);
       expect(find.text('Retry failed scans'), findsOneWidget);
+      expect(find.text("Won't be used"), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('retry-library-archive')));
+      await tester.pumpAndSettle();
+      expect(controller.rowRetryIds, {'archive'});
+      expect(controller.rowRetryInventory, {'movies', 'archive'});
+      expect(find.text('2 of 3 selected'), findsOneWidget);
       expect(
         find.byKey(const ValueKey('continue-ready-libraries')),
         findsOneWidget,
@@ -222,10 +234,20 @@ void main() {
           isTrue,
         );
       }
+      final selectedPaint = _cardPaint(tester, shuffle);
+      expect((selectedPaint.decoration as BoxDecoration).border!.top.width, 1);
+      expect(selectedPaint.foregroundDecoration, isNull);
       tester.widget<RawRadio<PlaybackMode>>(shuffle).focusNode.requestFocus();
       await tester.pump();
+      expect(_cardPaint(tester, shuffle).foregroundDecoration, isNull);
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
       await tester.pumpAndSettle();
+      final focusedPaint = _cardPaint(tester, inOrder);
+      expect(
+        (focusedPaint.foregroundDecoration as BoxDecoration).border!.top.width,
+        3,
+      );
+      expect((focusedPaint.decoration as BoxDecoration).border!.top.width, 1);
       expect(
         tester
             .getSemantics(inOrder)
@@ -340,6 +362,166 @@ void main() {
   });
 
   testWidgets(
+    'Mini-marathon options share a row without hiding versions at desktop size',
+    (tester) async {
+      final controller = _SetupController();
+      addTearDown(controller.dispose);
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      await _pump(tester, controller);
+      tester.view.physicalSize = const Size(1920, 1080);
+      await tester.pumpAndSettle();
+      await _openPlaybackControls(tester);
+      await tester.tap(find.byKey(const ValueKey('setup-playback-block')));
+      await tester.pumpAndSettle();
+      double? normalSpecialsWidth;
+      for (final textScale in [1.0, 1.5]) {
+        tester.platformDispatcher.textScaleFactorTestValue = textScale;
+        await tester.pumpAndSettle();
+        final field = tester.getRect(_setupField<int>('Episodes per block'));
+        final specials = tester.getRect(
+          find.widgetWithText(CheckboxMenuButton, 'Include specials'),
+        );
+        expect(specials.left, greaterThan(field.right));
+        expect(
+          specials.center.dy,
+          inInclusiveRange(field.top - 28 * textScale, field.bottom),
+        );
+        if (textScale == 1) {
+          normalSpecialsWidth = specials.width;
+        } else {
+          expect(specials.width, greaterThan(normalSpecialsWidth!));
+        }
+        if (textScale == 1) {
+          expect(
+            find.text('Additional channel versions').hitTestable(),
+            findsOneWidget,
+          );
+          expect(
+            tester.getRect(find.text('Additional channel versions')).bottom,
+            lessThan(
+              tester
+                  .getTopLeft(find.byKey(const ValueKey('review-channels')))
+                  .dy,
+            ),
+          );
+        }
+        expect(tester.takeException(), isNull);
+      }
+    },
+  );
+
+  testWidgets(
+    'empty sources stay selectable and disabled sources are not truncation',
+    (tester) async {
+      final controller = _SetupController();
+      addTearDown(controller.dispose);
+      await _pump(tester, controller);
+      await _advanceToConfigure(tester);
+      final playlists = find.ancestor(
+        of: find.text('Playlists'),
+        matching: find.byType(CheckboxListTile),
+      );
+      expect(
+        find.descendant(
+          of: playlists,
+          matching: find.text('None in your libraries'),
+        ),
+        findsOneWidget,
+      );
+      expect(tester.widget<CheckboxListTile>(playlists).onChanged, isNotNull);
+      await tester.tap(playlists);
+      await tester.pumpAndSettle();
+      expect(tester.widget<CheckboxListTile>(playlists).value, isFalse);
+      await tester.tap(playlists);
+      await tester.pumpAndSettle();
+      expect(tester.widget<CheckboxListTile>(playlists).value, isTrue);
+      final recent = find.ancestor(
+        of: find.text(builderStrategyLabels[BuilderStrategy.recentlyAdded]!),
+        matching: find.byType(CheckboxListTile),
+      );
+      await tester.ensureVisible(recent);
+      expect(
+        find.descendant(of: recent, matching: find.text('3 channels')),
+        findsOneWidget,
+      );
+      await tester.tap(recent);
+      await tester.pumpAndSettle();
+      expect(
+        find.descendant(of: recent, matching: find.textContaining('included')),
+        findsNothing,
+      );
+    },
+  );
+
+  testWidgets('stale replacement resets the contained removal confirmation', (
+    tester,
+  ) async {
+    final controller = _SetupController(
+      staleOnce: true,
+      channels: [_generated('retired', 40, builderKey: 'retired')],
+    );
+    addTearDown(controller.dispose);
+    await _pump(tester, controller);
+    await _advanceToReview(tester);
+    await tester.tap(find.text('Replace generated channels').last);
+    await tester.pumpAndSettle();
+    final confirmation = find.byKey(
+      const ValueKey('channel-setup-replace-confirmation'),
+    );
+    await tester.ensureVisible(confirmation);
+    await tester.tap(
+      find.descendant(of: confirmation, matching: find.byType(Checkbox)),
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('apply-reviewed-lineup')));
+    await tester.pumpAndSettle();
+    expect(controller.applyCalls, 1);
+    expect(tester.widget<CheckboxListTile>(confirmation).value, isFalse);
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.byKey(const ValueKey('apply-reviewed-lineup')),
+          )
+          .onPressed,
+      isNull,
+    );
+    expect(
+      find.byType(LineupSegmentedControl<ChannelBuildMode>),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets(
+    'creating shows actual planned count without divider or duplicate apply',
+    (tester) async {
+      final controller = _SetupController()..applyGate = Completer<void>();
+      addTearDown(controller.dispose);
+      await _pump(tester, controller);
+      await _advanceToReview(tester);
+      expect(find.text('+ Added'), findsWidgets);
+      expect(find.text('＋ Added'), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('apply-reviewed-lineup')));
+      await tester.pump();
+      expect(find.text('Creating 6 channels'), findsOneWidget);
+      expect(
+        tester.widget<LineupTopBar>(find.byType(LineupTopBar)).divider,
+        isFalse,
+      );
+      expect(find.byKey(const ValueKey('apply-reviewed-lineup')), findsNothing);
+      expect(controller.applyCalls, 1);
+      controller.applyGate!.complete();
+      await tester.pumpAndSettle();
+      expect(find.text('✓ Review'), findsOneWidget);
+      expect(
+        tester.widget<LineupTopBar>(find.byType(LineupTopBar)).divider,
+        isFalse,
+      );
+    },
+  );
+
+  testWidgets(
     'existing review defaults to update and add and clears confirmation',
     (tester) async {
       final controller = _SetupController(
@@ -350,14 +532,31 @@ void main() {
       await _advanceToReview(tester);
 
       expect(find.text('Update and add'), findsOneWidget);
+      expect(
+        find.byType(LineupSegmentedControl<ChannelBuildMode>),
+        findsOneWidget,
+      );
+      expect(
+        tester.getTopLeft(find.byKey(const ValueKey('review-build-method'))).dy,
+        lessThan(tester.getTopLeft(find.text('Changes in this review')).dy),
+      );
       expect(find.text('Changes in this review'), findsOneWidget);
-      await tester.tap(find.byKey(const ValueKey('review-build-method')));
-      await tester.pumpAndSettle();
       await tester.tap(find.text('Replace generated channels').last);
       await tester.pumpAndSettle();
       expect(
         find.byKey(const ValueKey('channel-setup-replace-confirmation')),
         findsOneWidget,
+      );
+      expect(
+        tester
+            .widget<FilledButton>(
+              find.byKey(const ValueKey('apply-reviewed-lineup')),
+            )
+            .onPressed,
+        isNull,
+      );
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('channel-setup-replace-confirmation')),
       );
       await tester.tap(
         find.descendant(
@@ -374,8 +573,7 @@ void main() {
             .value,
         isTrue,
       );
-      await tester.tap(find.byKey(const ValueKey('review-build-method')));
-      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Add as new channels').last);
       await tester.tap(find.text('Add as new channels').last);
       await tester.pumpAndSettle();
       expect(
@@ -878,6 +1076,17 @@ void main() {
   );
 }
 
+Container _cardPaint(WidgetTester tester, Finder card) =>
+    tester.widget<Container>(
+      find.descendant(
+        of: card,
+        matching: find.byWidgetPredicate(
+          (widget) =>
+              widget is Container && widget.constraints?.minHeight == 152,
+        ),
+      ),
+    );
+
 Future<void> _pump(
   WidgetTester tester,
   _SetupController controller, {
@@ -889,7 +1098,9 @@ Future<void> _pump(
     ..devicePixelRatio = 1;
   await tester.pumpWidget(
     MaterialApp(
-      builder: LineupCanvas.builder,
+      builder: (context, child) =>
+          LineupCanvas.builder(context, LineupFocusScope(child: child!)),
+      theme: LineupTheme.forName(LineupThemeName.emberSteel),
       home: UpstreamChannelSetupView(
         controller: controller,
         onViewLineup: onView,
@@ -954,6 +1165,16 @@ class _SetupController extends FixtureController {
   Set<String> retry = const {};
   Set<String> committedIds = const {};
   int applyCalls = 0;
+  Completer<void>? applyGate;
+  Set<String>? rowRetryIds;
+  Set<String>? rowRetryInventory;
+
+  @override
+  Future<bool> retryLibraryScan(Set<String> ids, Set<String> retryIds) {
+    rowRetryInventory = Set.of(ids);
+    rowRetryIds = Set.of(retryIds);
+    return scanLibraries(ids, retryFailedOnly: true);
+  }
 
   @override
   Map<String, LibraryScanFact> get libraryScanFacts => facts;
@@ -1049,6 +1270,7 @@ class _SetupController extends FixtureController {
     required List<Channel> expectedBase,
   }) async {
     applyCalls++;
+    if (applyGate != null) await applyGate!.future;
     if (failApply) throw StateError('synthetic apply failure');
     if (staleOnce && applyCalls == 1) return ChannelPlanApplyResult.stale;
     channels = composeChannelPlan(

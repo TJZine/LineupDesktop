@@ -736,9 +736,18 @@ class LineupController extends ChangeNotifier {
     if (_serverTargetId == selected.id) _serverTargetId = null;
   }
 
-  Future<bool> scanLibraries(
+  Future<bool> scanLibraries(Set<String> ids, {bool retryFailedOnly = false}) =>
+      _scanLibraries(ids, retryFailedOnly: retryFailedOnly);
+
+  /// Retry failed rows within the complete selected inventory. Completed
+  /// results and unrequested failures remain staged for the same scan scope.
+  Future<bool> retryLibraryScan(Set<String> ids, Set<String> retryIds) =>
+      _scanLibraries(ids, retryLibraryIds: retryIds);
+
+  Future<bool> _scanLibraries(
     Set<String> ids, {
     bool retryFailedOnly = false,
+    Set<String>? retryLibraryIds,
   }) async {
     final operation = _invalidateOperation();
     _pendingScan = null;
@@ -747,7 +756,11 @@ class LineupController extends ChangeNotifier {
     return _run(
       () async {
         final allowed = libraries.map((library) => library.id).toSet();
-        if (ids.isEmpty || !allowed.containsAll(ids)) {
+        if (ids.isEmpty ||
+            !allowed.containsAll(ids) ||
+            (retryLibraryIds != null &&
+                (retryLibraryIds.isEmpty ||
+                    !ids.containsAll(retryLibraryIds)))) {
           throw const PlexException(
             'invalid-library',
             'Select one or more libraries from the current server.',
@@ -757,6 +770,7 @@ class LineupController extends ChangeNotifier {
           operation,
           ids,
           retryFailedOnly: retryFailedOnly,
+          retryLibraryIds: retryLibraryIds,
           settleFailures: true,
         );
         if (!_isCurrent(operation)) return;
@@ -845,6 +859,7 @@ class LineupController extends ChangeNotifier {
     int operation,
     Set<String> ids, {
     bool retryFailedOnly = false,
+    Set<String>? retryLibraryIds,
     bool settleFailures = false,
   }) async {
     final selectedServer = server;
@@ -858,13 +873,18 @@ class LineupController extends ChangeNotifier {
       serverId: selectedServer.id,
     );
     final retain =
-        retryFailedOnly && _scanScope == scope && setEquals(_scanIds, ids);
+        (retryFailedOnly || retryLibraryIds != null) &&
+        _scanScope == scope &&
+        setEquals(_scanIds, ids);
     if (!retain) _scanResults.clear();
     _scanIds = Set.unmodifiable(ids);
     _scanScope = scope;
     _libraryScanFacts = Map.unmodifiable({
       for (final id in ids)
-        id: retain && _scanResults.containsKey(id)
+        id:
+            retain &&
+                (_scanResults.containsKey(id) ||
+                    (retryLibraryIds != null && !retryLibraryIds.contains(id)))
             ? _libraryScanFacts[id]!
             : const LibraryScanFact(status: LibraryScanStatus.idle),
     });
@@ -886,7 +906,12 @@ class LineupController extends ChangeNotifier {
           final index = nextLibrary++;
           if (index >= selected.length) return;
           final library = selected[index];
-          if (retain && _scanResults.containsKey(library.id)) continue;
+          if (retain &&
+              (_scanResults.containsKey(library.id) ||
+                  (retryLibraryIds != null &&
+                      !retryLibraryIds.contains(library.id)))) {
+            continue;
+          }
           _setLibraryScanFact(
             library.id,
             const LibraryScanFact(status: LibraryScanStatus.scanning),
@@ -1032,7 +1057,7 @@ class LineupController extends ChangeNotifier {
         });
       }
       final playable = items.where((item) => item.isPlayable).toList();
-      final status = firstFailure != null
+      final status = libraryScanRetryIds.isNotEmpty
           ? LibraryScanStatus.transientFailure
           : items.isEmpty
           ? LibraryScanStatus.empty

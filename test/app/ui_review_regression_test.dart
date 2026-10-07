@@ -729,7 +729,7 @@ void main() {
     expect(
       find.descendant(
         of: find.widgetWithText(CheckboxListTile, 'Playlists'),
-        matching: find.textContaining('2 qualifying · 2 included'),
+        matching: find.text('2 channels'),
       ),
       findsOneWidget,
     );

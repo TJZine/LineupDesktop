@@ -175,6 +175,14 @@ final Map<String, Scene> _scenes = {
     await shot('playback-order');
     await _tap(tester, find.text('Mini-marathons').first);
     await shot('mini-marathons');
+    await tester.ensureVisible(
+      find.ancestor(
+        of: find.text('Additional channel versions'),
+        matching: find.byType(SwitchListTile),
+      ),
+    );
+    await _settle(tester);
+    await shot('mini-marathons-versions');
     await _tap(tester, find.byKey(const ValueKey('configure-section-2')));
     await shot('lineup-rules');
   },
@@ -213,9 +221,26 @@ final Map<String, Scene> _scenes = {
     );
     await _tap(tester, find.byKey(const ValueKey('scan-selected-libraries')));
     await _tap(tester, find.byKey(const ValueKey('review-channels')));
-    await _tap(tester, find.byKey(const ValueKey('review-build-method')));
-    await _tap(tester, find.text('Replace generated channels').last);
+    await shot('existing-lineup');
+    await _tap(
+      tester,
+      find.descendant(
+        of: find.byKey(const ValueKey('review-build-method')),
+        matching: find.text('Replace generated channels'),
+      ),
+    );
     await shot('replace-confirmation');
+    final rosterScroll = tester.state<ScrollableState>(
+      find
+          .descendant(
+            of: find.byKey(const ValueKey('channel-setup-review-roster')),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    rosterScroll.position.jumpTo(rosterScroll.position.maxScrollExtent);
+    await _settle(tester);
+    await shot('replace-roster');
   },
   'setup-apply': (tester, shot) async {
     final controller = _PendingVisualController()

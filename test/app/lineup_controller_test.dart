@@ -164,6 +164,85 @@ void main() {
   });
 
   test(
+    'row retry retains successful inventory and unrequested failures',
+    () async {
+      final selected = _server('server');
+      final calls = <String, int>{};
+      final failures = {'second', 'third'};
+      final plex = _FakePlex()
+        ..serversResult = [selected]
+        ..connectionResult = selected.connections.single
+        ..librariesResult = const [
+          PlexLibrary(id: 'first', title: 'First', type: PlexLibraryType.movie),
+          PlexLibrary(
+            id: 'second',
+            title: 'Second',
+            type: PlexLibraryType.movie,
+          ),
+          PlexLibrary(id: 'third', title: 'Third', type: PlexLibraryType.movie),
+        ]
+        ..libraryItemsHandler = (_, _, id, _) async {
+          calls.update(id, (value) => value + 1, ifAbsent: () => 1);
+          if (failures.contains(id)) {
+            throw const PlexException('offline', 'Try again');
+          }
+          return [
+            PlexMediaItem(
+              id: id,
+              title: id,
+              type: 'movie',
+              duration: const Duration(minutes: 1),
+              libraryId: id,
+              parts: [PlexMediaPart(path: '/library/parts/$id')],
+            ),
+          ];
+        };
+      final store = _ControlledSaveStore(
+        const PersistedState(selectedServerByProfile: {'owner': 'server'}),
+      );
+      final controller = LineupController(
+        store: store,
+        credentials: _MemoryCredentials(accountToken: 'token'),
+        plex: plex,
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+      const inventory = {'first', 'second', 'third'};
+      expect(await controller.scanLibraries(inventory), isTrue);
+      final readyFact = controller.libraryScanFacts['first'];
+      final untouchedFailure = controller.libraryScanFacts['third'];
+      expect(await controller.commitLibraryScan({'first'}), isTrue);
+      failures.remove('second');
+      expect(await controller.retryLibraryScan(inventory, {'second'}), isTrue);
+      expect(calls, {'first': 1, 'second': 2, 'third': 1});
+      expect(controller.libraryScanFacts['first'], same(readyFact));
+      expect(controller.libraryScanFacts['third'], same(untouchedFailure));
+      expect(controller.libraryScanReadyIds, {'first', 'second'});
+      expect(controller.libraryScanRetryIds, {'third'});
+      expect(controller.libraryScanStatus, LibraryScanStatus.transientFailure);
+      expect(controller.selectedLibraryIds, {'first'});
+      expect(await controller.commitLibraryScan(inventory), isFalse);
+      failures.clear();
+      expect(
+        await controller.scanLibraries(inventory, retryFailedOnly: true),
+        isTrue,
+      );
+      expect(calls, {'first': 1, 'second': 2, 'third': 2});
+      expect(await controller.commitLibraryScan(inventory), isTrue);
+      expect(controller.selectedLibraryIds, inventory);
+      expect(controller.availableMedia.map((item) => item.id), [
+        'first',
+        'second',
+        'third',
+      ]);
+      expect(
+        store.state.selectedLibraryIdsByProfileServer['owner']!['server'],
+        ['first', 'second', 'third'],
+      );
+    },
+  );
+
+  test(
     'reviewed apply checks the full queued base but ignores tuning',
     () async {
       final store = _ControlledSaveStore();

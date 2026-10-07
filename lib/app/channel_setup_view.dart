@@ -170,7 +170,9 @@ class _SetupState extends State<UpstreamChannelSetupView> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             LineupTopBar(
-              divider: _phase != _BuildPhase.complete,
+              divider:
+                  _phase != _BuildPhase.complete &&
+                  _phase != _BuildPhase.applying,
               trailing: Align(
                 alignment: Alignment.centerRight,
                 child: SingleChildScrollView(child: _setupSteps()),
@@ -238,7 +240,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
             : _libraryScanSettled
             ? 'Review your libraries'
             : 'Choose libraries',
-        subtitleText: _librarySummary(),
+        subtitleText: _libraryScanSettled ? '' : _librarySummary(),
       );
     }
     if (_step == 2) return _configurationHeader();
@@ -300,19 +302,21 @@ class _SetupState extends State<UpstreamChannelSetupView> {
           ),
         ),
       ),
-      const SizedBox(height: 10),
-      Text(
-        subtitleText ??
-            switch (_configurationSection) {
-              0 => 'Choose the channels you want from your libraries.',
-              1 => 'Choose how your generated channels will play.',
-              _ => 'Choose the size and balance of your generated lineup.',
-            },
-        style: LineupTypography.body.copyWith(
-          height: 1.4,
-          color: LineupTheme.of(context).secondaryText,
+      if (subtitleText != '') ...[
+        const SizedBox(height: 10),
+        Text(
+          subtitleText ??
+              switch (_configurationSection) {
+                0 => 'Choose the channels you want from your libraries.',
+                1 => 'Choose how your generated channels will play.',
+                _ => 'Choose the size and balance of your generated lineup.',
+              },
+          style: LineupTypography.body.copyWith(
+            height: 1.4,
+            color: LineupTheme.of(context).secondaryText,
+          ),
         ),
-      ),
+      ],
     ],
   );
 
@@ -480,23 +484,19 @@ class _SetupState extends State<UpstreamChannelSetupView> {
               else
                 Flexible(fit: FlexFit.loose, child: list),
             ],
-            if (!scanning && scanError != null)
+            if (!scanning && (_libraryScanSettled || scanError != null))
               Padding(
-                padding: EdgeInsets.only(top: 16),
+                padding: const EdgeInsets.only(top: 16),
                 child: Semantics(
                   liveRegion: true,
                   child: Text(
-                    scanError,
-                    style: bodyStyle.copyWith(color: roles.liveAccent),
+                    scanError != null && (retry.isEmpty || _error != null)
+                        ? scanError
+                        : ready.isEmpty
+                        ? _librarySummary()
+                        : '${ready.length} of ${_selectedLibraries.length} ${_selectedLibraries.length == 1 ? 'library' : 'libraries'} ${ready.length == 1 ? 'is' : 'are'} ready. Continuing builds from ${controller.libraries.where((library) => ready.contains(library.id)).map((library) => library.title).join(', ')}${excluded > 0 ? ' only' : ''}.',
+                    style: bodyStyle,
                   ),
-                ),
-              ),
-            if (canContinue && excluded > 0)
-              Padding(
-                padding: EdgeInsets.only(top: 16),
-                child: Text(
-                  '${ready.length} ${ready.length == 1 ? 'library is' : 'libraries are'} ready. Continuing uses only the ready libraries; the other $excluded selected ${excluded == 1 ? 'library will' : 'libraries will'} be excluded.',
-                  style: bodyStyle,
                 ),
               ),
             SizedBox(height: 24),
@@ -537,7 +537,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
         ? false
         : null;
     return Padding(
-      padding: EdgeInsets.only(bottom: 16),
+      padding: EdgeInsets.fromLTRB(8, 0, 8, 16),
       child: Row(
         children: [
           if (libraries.length > 1) ...[
@@ -548,6 +548,11 @@ class _SetupState extends State<UpstreamChannelSetupView> {
               onChanged: editable ? (_) => _toggleAllLibraries() : null,
             ),
             TextButton(
+              style: const ButtonStyle(
+                padding: WidgetStatePropertyAll(
+                  EdgeInsets.symmetric(horizontal: 8),
+                ),
+              ),
               onPressed: editable ? _toggleAllLibraries : null,
               child: Text(
                 'Select all',
@@ -573,6 +578,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
     required ValueChanged<bool?>? onChanged,
     bool tristate = false,
     double width = 48,
+    String? semanticLabel,
   }) {
     final checkbox = Checkbox(
       key: key,
@@ -580,7 +586,13 @@ class _SetupState extends State<UpstreamChannelSetupView> {
       value: value,
       onChanged: onChanged,
     );
-    return SizedBox(width: width, height: 48, child: checkbox);
+    return SizedBox(
+      width: width,
+      height: 48,
+      child: semanticLabel == null
+          ? checkbox
+          : Semantics(label: semanticLabel, child: checkbox),
+    );
   }
 
   ({double width, double closedHeight, double itemHeight}) _dropdownMetrics({
@@ -689,12 +701,37 @@ class _SetupState extends State<UpstreamChannelSetupView> {
         final details = Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(library.title, style: titleStyle),
+            Wrap(
+              spacing: 12,
+              runSpacing: 4,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Text(library.title, style: titleStyle),
+                if (selected &&
+                    _libraryScanSettled &&
+                    fact?.status != LibraryScanStatus.complete)
+                  Text("Won't be used", style: typeStyle),
+              ],
+            ),
             if (fact != null) ...[
-              SizedBox(height: 8),
-              Text(
-                _scanDetail(fact),
-                style: statusStyle.copyWith(color: _scanColor(fact.status)),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text(
+                    _scanDetail(fact),
+                    style: statusStyle.copyWith(color: _scanColor(fact.status)),
+                  ),
+                  if (fact.status == LibraryScanStatus.transientFailure)
+                    LineupInlineLink(
+                      key: ValueKey('retry-library-${library.id}'),
+                      onPressed: widget.controller.busy
+                          ? null
+                          : () => _scan(retryLibraryIds: {library.id}),
+                      child: const Text('Retry'),
+                    ),
+                ],
               ),
             ],
           ],
@@ -710,6 +747,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
                 children: [
                   _checkbox(
                     value: selected,
+                    semanticLabel: library.title,
                     onChanged: widget.controller.busy ? null : (_) => toggle(),
                   ),
                   SizedBox(width: 8),
@@ -730,6 +768,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
                 children: [
                   _checkbox(
                     value: selected,
+                    semanticLabel: library.title,
                     onChanged: widget.controller.busy ? null : (_) => toggle(),
                   ),
                   SizedBox(width: 8),
@@ -738,31 +777,41 @@ class _SetupState extends State<UpstreamChannelSetupView> {
                   type,
                 ],
               );
-        return MergeSemantics(
-          child: InkWell(
-            canRequestFocus: false,
-            excludeFromSemantics: true,
-            onTap: widget.controller.busy ? null : toggle,
-            child: Padding(
-              padding: EdgeInsets.symmetric(vertical: 18, horizontal: 8),
-              child: content,
-            ),
+        return InkWell(
+          canRequestFocus: false,
+          excludeFromSemantics: true,
+          onTap: widget.controller.busy ? null : toggle,
+          child: Padding(
+            padding: EdgeInsets.symmetric(vertical: 18, horizontal: 8),
+            child: content,
           ),
         );
       },
     );
   }
 
-  Future<void> _scan({bool retryFailedOnly = false}) async {
+  Future<void> _scan({
+    bool retryFailedOnly = false,
+    Set<String>? retryLibraryIds,
+  }) async {
     setState(() {
       _error = null;
       _notice = null;
     });
     try {
-      final settled = await widget.controller.scanLibraries(
-        Set.of(_selectedLibraries),
-        retryFailedOnly: retryFailedOnly,
-      );
+      // A row may have been unchecked since scanning. Retry its staged scan
+      // inventory without changing the person's current selection.
+      final ids = {
+        ..._selectedLibraries,
+        if (retryLibraryIds != null) ...widget.controller.libraryScanFacts.keys,
+        ...?retryLibraryIds,
+      };
+      final settled = retryLibraryIds == null
+          ? await widget.controller.scanLibraries(
+              ids,
+              retryFailedOnly: retryFailedOnly,
+            )
+          : await widget.controller.retryLibraryScan(ids, retryLibraryIds);
       if (!mounted) return;
       if (!settled) {
         setState(() {});
@@ -1202,21 +1251,36 @@ class _SetupState extends State<UpstreamChannelSetupView> {
   ) {
     final roles = LineupTheme.of(context);
     final enabled = _strategies.contains(strategy);
-    final eligible = allocation.eligibleOriginalsByStrategy[strategy] ?? 0;
+    final eligible = enabled
+        ? allocation.eligibleOriginalsByStrategy[strategy] ?? 0
+        : buildChannelProposals(
+            libraries: widget.controller.libraries
+                .where((library) => _selectedLibraries.contains(library.id))
+                .toList(),
+            items: widget.controller.playableInventory.media,
+            playlists: widget.controller.playableInventory.playlists,
+            strategies: {strategy},
+            crossLibraryStrategies: _grouped,
+            minimumItems: _minimum,
+            maximumChannels: null,
+          ).length;
     final included = allocation.allocatedOriginalsByStrategy[strategy] ?? 0;
+    final channels = enabled
+        ? allocation.allocatedChannelsByStrategy[strategy] ?? 0
+        : eligible;
     final nameStyle = TextStyle(
-      color: roles.primaryText,
+      color: eligible == 0 ? roles.mutedText : roles.primaryText,
       fontSize: 22,
       fontWeight: FontWeight.w600,
       height: 1.4,
     );
     final countStyle = TextStyle(
-      color: roles.secondaryText,
+      color: eligible == 0 ? roles.mutedText : roles.secondaryText,
       fontSize: 16,
       height: 1.4,
     );
     final detailStyle = TextStyle(
-      color: roles.secondaryText,
+      color: eligible == 0 ? roles.mutedText : roles.secondaryText,
       fontSize: 18,
       height: 1.4,
     );
@@ -1231,7 +1295,11 @@ class _SetupState extends State<UpstreamChannelSetupView> {
         Flexible(
           fit: FlexFit.tight,
           child: Text(
-            '$eligible qualifying · $included included',
+            eligible == 0
+                ? 'None in your libraries'
+                : enabled && included < eligible
+                ? '$included of $eligible included'
+                : '$channels ${channels == 1 ? 'channel' : 'channels'}',
             textAlign: TextAlign.end,
             style: countStyle,
           ),
@@ -1447,22 +1515,34 @@ class _SetupState extends State<UpstreamChannelSetupView> {
             );
           },
         ),
-        SizedBox(height: sectionGap),
-        _episodeStrip(),
         if (_playback == PlaybackMode.block) ...[
           SizedBox(height: 16),
-          Wrap(
-            spacing: 20,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [SizedBox(width: 220, child: _blockField(main: true))],
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: LineupTheme.of(context).primarySurface,
+              border: Border.all(color: LineupTheme.of(context).subtleBorder),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Wrap(
+              spacing: 20,
+              runSpacing: 12,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                SizedBox(width: 220, child: _blockField(main: true)),
+                _specialsControl(),
+              ],
+            ),
           ),
         ],
+        SizedBox(height: sectionGap),
+        _episodeStrip(),
         SizedBox(height: 28),
         ListTileTheme.merge(
           titleAlignment: ListTileTitleAlignment.top,
           child: SwitchListTile(
             value: _extras,
-            controlAffinity: ListTileControlAffinity.leading,
+            controlAffinity: ListTileControlAffinity.trailing,
             contentPadding: EdgeInsets.zero,
             title: additionalVersionsTitle,
             subtitle: additionalVersionsSubtitle,
@@ -1536,14 +1616,10 @@ class _SetupState extends State<UpstreamChannelSetupView> {
               ),
             ],
           ),
-        if (_playback == PlaybackMode.block ||
-            (_extras && _variantMode == PlaybackMode.block))
-          CheckboxMenuButton(
-            value: _includeSpecials,
-            onChanged: (value) =>
-                setState(() => _includeSpecials = value ?? false),
-            child: const Text('Include specials'),
-          ),
+        if (_playback != PlaybackMode.block &&
+            _extras &&
+            _variantMode == PlaybackMode.block)
+          _specialsControl(),
         if (_notice != null)
           Text(
             _notice!,
@@ -1552,6 +1628,14 @@ class _SetupState extends State<UpstreamChannelSetupView> {
       ],
     );
   }
+
+  Widget _specialsControl() => IntrinsicWidth(
+    child: CheckboxMenuButton(
+      value: _includeSpecials,
+      onChanged: (value) => setState(() => _includeSpecials = value ?? false),
+      child: const Text('Include specials'),
+    ),
+  );
 
   Widget _playbackChoice(
     PlaybackMode mode,
@@ -1582,7 +1666,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
               final hovered = state.states.contains(WidgetState.hovered);
               final radius = BorderRadius.circular(roles.panelRadius);
               final surface = selected
-                  ? roles.selectedSurface
+                  ? roles.elevatedSurface
                   : roles.primarySurface;
               return Container(
                 constraints: BoxConstraints(minHeight: 152),
@@ -1705,7 +1789,15 @@ class _SetupState extends State<UpstreamChannelSetupView> {
                       width: width,
                       child: DecoratedBox(
                         decoration: BoxDecoration(
-                          color: roles.primarySurface,
+                          color: Color.alphaBlend(
+                            (episode.$1 == 'Harbor'
+                                    ? roles.progressFill
+                                    : roles.focusBorder)
+                                .withValues(
+                                  alpha: episode.$1 == 'Harbor' ? .10 : .04,
+                                ),
+                            roles.primarySurface,
+                          ),
                           border: Border(
                             left: BorderSide(
                               color: roles.defaultBorder,
@@ -2208,8 +2300,6 @@ class _SetupState extends State<UpstreamChannelSetupView> {
     );
     final noChanges =
         counts.added == 0 && counts.updated == 0 && counts.removed == 0;
-    final roles = LineupTheme.of(context);
-
     return _Stage(
       footer: _Footer(
         configuration: true,
@@ -2220,7 +2310,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
             child: const Text('Back to configure'),
           ),
         ],
-        summary: _firstSetup ? const SizedBox.shrink() : _methodDecision(),
+        summary: const SizedBox.shrink(),
         trailing: noChanges
             ? FilledButton(
                 onPressed: _viewLineup,
@@ -2243,137 +2333,148 @@ class _SetupState extends State<UpstreamChannelSetupView> {
                 }),
               ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (_notice != null && _notice != 'Updating review…') ...[
-            LineupNotice(message: _notice!),
-            SizedBox(height: 8),
-          ],
-          if (noChanges) ...[
-            Text(
-              'Your lineup is already up to date',
-              style: Theme.of(context).textTheme.headlineSmall,
-            ),
-            const Text('No changes needed.'),
-            SizedBox(height: 8),
-          ],
-          _reviewOverview(entries, finalChannels, counts),
-          SizedBox(height: 24),
-          Expanded(child: _roster(entries)),
-          if (counts.removed > 0)
-            Padding(
-              padding: EdgeInsets.only(top: 16),
-              child: CheckboxListTile(
-                key: const ValueKey('channel-setup-replace-confirmation'),
-                controlAffinity: ListTileControlAffinity.leading,
-                contentPadding: EdgeInsets.zero,
-                value: _removalConfirmed,
-                title: Text(
-                  'I understand that ${counts.removed} existing generated ${counts.removed == 1 ? 'channel' : 'channels'} will be removed.',
-                  style: TextStyle(color: roles.liveAccent),
-                ),
-                onChanged: (value) =>
-                    setState(() => _removalConfirmed = value == true),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final intro = <Widget>[
+            if (_notice != null && _notice != 'Updating review…') ...[
+              LineupNotice(message: _notice!),
+              SizedBox(height: 8),
+            ],
+            if (noChanges) ...[
+              Text(
+                'Your lineup is already up to date',
+                style: Theme.of(context).textTheme.headlineSmall,
               ),
-            ),
-        ],
+              const Text('No changes needed.'),
+              SizedBox(height: 8),
+            ],
+            _reviewOverview(entries, finalChannels, counts),
+            SizedBox(height: 24),
+          ];
+          if (constraints.maxHeight < 650 ||
+              MediaQuery.textScalerOf(context).scale(1) >= 1.5) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(child: _roster(entries, leading: intro)),
+                if (counts.removed > 0) _removalNotice(counts.removed),
+              ],
+            );
+          }
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              ...intro,
+              Expanded(child: _roster(entries)),
+              if (counts.removed > 0) _removalNotice(counts.removed),
+            ],
+          );
+        },
       ),
     );
   }
 
-  Widget _methodDecision() {
-    if (_firstSetup) return const SizedBox.shrink();
+  Widget _removalNotice(int count) {
     final roles = LineupTheme.of(context);
-    final textTheme = Theme.of(context).textTheme;
-    final methodStyle = textTheme.bodyMedium!.copyWith(
-      color: roles.primaryText,
-      fontSize: 18,
-      height: 1.4,
-    );
-    final helpStyle = textTheme.bodyMedium!.copyWith(
-      color: roles.secondaryText,
-      fontSize: 18,
-      height: 1.4,
-    );
-    final methodMetrics = _dropdownMetrics(
-      desiredWidth: 330,
-      baseHeight: 48,
-      maxWidth: double.infinity,
-      labels: [
-        'Update and add',
-        'Replace generated channels',
-        'Add as new channels',
-      ],
-      style: methodStyle,
-    );
-    final dropdown = SizedBox(
-      width: methodMetrics.width,
-      child: LineupField(
-        label: 'Build method',
-        child: lineupDropdownField<ChannelBuildMode>(
-          context: context,
-          key: const ValueKey('review-build-method'),
-          initialValue: _mode,
-          isExpanded: true,
-          iconSize: 24,
-          itemHeight: methodMetrics.itemHeight,
-          style: methodStyle,
-          decoration: const InputDecoration(),
-          items: const [
-            DropdownMenuItem(
-              value: ChannelBuildMode.merge,
-              child: Text('Update and add'),
-            ),
-            DropdownMenuItem(
-              value: ChannelBuildMode.replace,
-              child: Text('Replace generated channels'),
-            ),
-            DropdownMenuItem(
-              value: ChannelBuildMode.append,
-              child: Text('Add as new channels'),
-            ),
-          ],
-          onChanged: (mode) {
-            setState(() {
-              _mode = mode!;
-              _removalConfirmed = false;
-              _notice = 'Updating review…';
-              _plan = _allocateReview(_reviewBase);
-            });
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted) setState(() => _notice = null);
-            });
-          },
+    return Padding(
+      padding: const EdgeInsets.only(top: 16),
+      child: Material(
+        color: roles.primarySurface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+          side: BorderSide(color: roles.subtleBorder),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Wrap(
+            spacing: 16,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.warning_amber_rounded, color: roles.liveAccent),
+                  const SizedBox(width: 12),
+                  Flexible(
+                    child: Text(
+                      '$count existing generated ${count == 1 ? 'channel will' : 'channels will'} be removed.',
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(
+                width: 220,
+                child: CheckboxListTile(
+                  key: const ValueKey('channel-setup-replace-confirmation'),
+                  controlAffinity: ListTileControlAffinity.leading,
+                  contentPadding: EdgeInsets.zero,
+                  value: _removalConfirmed,
+                  title: const Text('I understand'),
+                  onChanged: (value) =>
+                      setState(() => _removalConfirmed = value == true),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
-    final explanation = Text(
-      _notice == 'Updating review…' ? _notice! : _modeDescription(_mode),
-      style: helpStyle,
-    );
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final effectiveWidth =
-            constraints.maxWidth / MediaQuery.textScalerOf(context).scale(1);
-        final inline = effectiveWidth >= 700;
-        if (inline) {
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              dropdown,
-              SizedBox(width: 28),
-              Expanded(child: explanation),
-            ],
-          );
-        }
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [dropdown, SizedBox(height: 8), explanation],
-        );
-      },
-    );
   }
+
+  Widget _methodDecision() => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      LayoutBuilder(
+        builder: (context, constraints) =>
+            LineupSegmentedControl<ChannelBuildMode>(
+              key: const ValueKey('review-build-method'),
+              direction:
+                  constraints.maxWidth /
+                          MediaQuery.textScalerOf(context).scale(1) <
+                      800
+                  ? Axis.vertical
+                  : Axis.horizontal,
+              expanded: true,
+              segments: const [
+                ButtonSegment(
+                  value: ChannelBuildMode.merge,
+                  label: Text('Update and add'),
+                ),
+                ButtonSegment(
+                  value: ChannelBuildMode.replace,
+                  label: Text('Replace generated channels'),
+                ),
+                ButtonSegment(
+                  value: ChannelBuildMode.append,
+                  label: Text('Add as new channels'),
+                ),
+              ],
+              selected: {_mode},
+              onSelectionChanged: (selection) {
+                setState(() {
+                  _mode = selection.single;
+                  _removalConfirmed = false;
+                  _notice = 'Updating review…';
+                  _plan = _allocateReview(_reviewBase);
+                });
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (mounted) setState(() => _notice = null);
+                });
+              },
+            ),
+      ),
+      const SizedBox(height: 8),
+      Text(
+        _notice == 'Updating review…' ? _notice! : _modeDescription(_mode),
+        style: TextStyle(
+          color: LineupTheme.of(context).secondaryText,
+          fontSize: 18,
+          height: 1.4,
+        ),
+      ),
+    ],
+  );
 
   Widget _reviewOverview(
     List<_ReviewEntry> entries,
@@ -2430,45 +2531,15 @@ class _SetupState extends State<UpstreamChannelSetupView> {
         _filterChip(_ReviewFilter.removed, counts.removed),
       ],
     );
-    final sourceBreakdown = Wrap(
-      spacing: 24,
-      runSpacing: 4,
-      children: [
-        Text('Final generated channels', style: supportingStyle),
-        for (final strategy in _sourceOrder)
-          if ((generated.byStrategy[strategy] ?? 0) > 0)
-            Text.rich(
-              TextSpan(
-                text: '${builderStrategyLabels[strategy]} ',
-                style: supportingStyle,
-                children: [
-                  TextSpan(
-                    text: '${generated.byStrategy[strategy]}',
-                    style: supportingStyle.copyWith(
-                      color: roles.primaryText,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-        if (generated.other > 0)
-          Text.rich(
-            TextSpan(
-              text: 'Other generated ',
-              style: supportingStyle,
-              children: [
-                TextSpan(
-                  text: '${generated.other}',
-                  style: supportingStyle.copyWith(
-                    color: roles.primaryText,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-      ],
+    final sourceCounts = [
+      for (final strategy in _sourceOrder)
+        if ((generated.byStrategy[strategy] ?? 0) > 0)
+          '${builderStrategyLabels[strategy]} ${generated.byStrategy[strategy]}',
+      if (generated.other > 0) 'Other generated ${generated.other}',
+    ];
+    final sourceBreakdown = Text(
+      'By source: ${sourceCounts.join(' · ')}',
+      style: supportingStyle,
     );
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -2481,6 +2552,10 @@ class _SetupState extends State<UpstreamChannelSetupView> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            if (!_firstSetup) ...[
+              _methodDecision(),
+              const SizedBox(height: 16),
+            ],
             LayoutBuilder(
               builder: (context, constraints) {
                 final effectiveWidth =
@@ -2520,7 +2595,11 @@ class _SetupState extends State<UpstreamChannelSetupView> {
                     child: Row(
                       children: [
                         _segment(counts.unchanged, roles.mutedText, height: 14),
-                        _segment(counts.updated, roles.focusBorder, height: 14),
+                        _segment(
+                          counts.updated,
+                          roles.secondaryText,
+                          height: 14,
+                        ),
                         _segment(counts.added, roles.progressFill, height: 14),
                         _segment(
                           counts.removed,
@@ -2531,6 +2610,29 @@ class _SetupState extends State<UpstreamChannelSetupView> {
                     ),
                   ),
                 ),
+            ],
+            if (!_firstSetup) ...[
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 20,
+                runSpacing: 4,
+                children: [
+                  for (final item in [
+                    ('Unchanged', roles.mutedText),
+                    ('Updated', roles.secondaryText),
+                    ('Added', roles.progressFill),
+                    ('Removed', roles.liveAccent),
+                  ])
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(width: 10, height: 10, color: item.$2),
+                        const SizedBox(width: 8),
+                        Text(item.$1, style: supportingStyle),
+                      ],
+                    ),
+                ],
+              ),
             ],
             SizedBox(height: 24),
             Divider(height: 1, color: roles.subtleBorder),
@@ -2583,7 +2685,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
         ? roles.subtleBorder
         : switch (filter) {
             _ReviewFilter.unchanged => roles.mutedText,
-            _ReviewFilter.updated => roles.focusBorder,
+            _ReviewFilter.updated => roles.secondaryText,
             _ReviewFilter.added => roles.progressFill,
             _ReviewFilter.removed => Theme.of(context).colorScheme.error,
             _ReviewFilter.all => roles.mutedText,
@@ -2605,7 +2707,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
     );
   }
 
-  Widget _roster(List<_ReviewEntry> all) {
+  Widget _roster(List<_ReviewEntry> all, {List<Widget> leading = const []}) {
     final roles = LineupTheme.of(context);
     final textStyle = Theme.of(context).textTheme.bodyMedium!
         .copyWith(color: roles.secondaryText, fontSize: 18, height: 1.4);
@@ -2625,6 +2727,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
       child: CustomScrollView(
         key: const ValueKey('channel-setup-review-roster'),
         slivers: [
+          if (leading.isNotEmpty) SliverList.list(children: leading),
           SliverList.list(
             children: [
               Row(
@@ -2676,12 +2779,39 @@ class _SetupState extends State<UpstreamChannelSetupView> {
     );
   }
 
+  double _reviewChangeWidth() {
+    final style = Theme.of(context).textTheme.bodyMedium!
+        .copyWith(fontSize: 18, height: 1.4);
+    final scaler = MediaQuery.textScalerOf(context);
+    final direction = Directionality.of(context);
+    var width = 120.0;
+    for (final label in [
+      'Change',
+      'Unchanged',
+      '• Updated',
+      '+ Added',
+      'Removed',
+    ]) {
+      width = math.max(
+        width,
+        TextPainter.computeWidth(
+              text: TextSpan(text: label, style: style),
+              textDirection: direction,
+              textScaler: scaler,
+              maxLines: 1,
+            ) +
+            8,
+      );
+    }
+    return width;
+  }
+
   Widget _rosterHeader() {
     final roles = LineupTheme.of(context);
     final headerStyle = Theme.of(context).textTheme.bodyMedium!
         .copyWith(color: roles.secondaryText, fontSize: 18, height: 1.4);
     final double numberWidth = 80;
-    final double changeWidth = 120;
+    final changeWidth = _reviewChangeWidth();
     return DecoratedBox(
       key: const ValueKey('review-roster-header'),
       decoration: BoxDecoration(color: roles.primarySurface),
@@ -2746,13 +2876,13 @@ class _SetupState extends State<UpstreamChannelSetupView> {
     final changeStyle = metaStyle.copyWith(
       color: switch (entry.kind) {
         _ReviewKind.unchanged => roles.mutedText,
-        _ReviewKind.updated => roles.focusBorder,
-        _ReviewKind.added => roles.progressFill,
+        _ReviewKind.updated => roles.secondaryText,
+        _ReviewKind.added => roles.secondaryText,
         _ReviewKind.removed => Theme.of(context).colorScheme.error,
       },
     );
     final double numberWidth = 80;
-    final double changeWidth = 120;
+    final changeWidth = _reviewChangeWidth();
     final content = Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -2772,7 +2902,11 @@ class _SetupState extends State<UpstreamChannelSetupView> {
         SizedBox(
           width: changeWidth,
           child: Text(
-            _capitalized(entry.kind.name),
+            switch (entry.kind) {
+              _ReviewKind.added => '+ Added',
+              _ReviewKind.updated => '• Updated',
+              _ => _capitalized(entry.kind.name),
+            },
             textAlign: TextAlign.end,
             style: changeStyle,
           ),
@@ -2905,6 +3039,12 @@ class _SetupState extends State<UpstreamChannelSetupView> {
                   style: detailStyle,
                 ),
               ],
+            ] else if (applying) ...[
+              Text(
+                '${_firstSetup ? 'Creating' : 'Updating'} ${_plan!.channels.length} ${_plan!.channels.length == 1 ? 'channel' : 'channels'}',
+                textAlign: TextAlign.center,
+                style: detailStyle,
+              ),
             ] else if (_phase == _BuildPhase.failed) ...[
               Text(
                 _firstSetup
