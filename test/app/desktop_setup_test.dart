@@ -4,6 +4,7 @@ import 'dart:ui' show CheckedState;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lineup_desktop/ui/lineup_canvas.dart';
 import 'package:lineup_desktop/app/channel_setup_view.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/channels/channel.dart';
@@ -13,6 +14,43 @@ import 'package:lineup_desktop/plex/plex_models.dart';
 import '../support/ui_fixture.dart';
 
 void main() {
+  testWidgets(
+    '1366 canvas keeps setup stages reachable after interpolation retirement',
+    (tester) async {
+      tester.view.physicalSize = const Size(1366, 768);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final controller = _SetupController();
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: LineupCanvas.builder,
+          home: UpstreamChannelSetupView(controller: controller),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await _advanceToConfigure(tester);
+      for (final section in [1, 2, 0]) {
+        await tester.tap(find.byKey(ValueKey('configure-section-$section')));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+      }
+      await tester.drag(
+        find.byKey(const ValueKey('channel-configuration')),
+        const Offset(0, -3000),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('review-channels')));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('apply-reviewed-lineup')),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets(
     'library selection is tri-state and mixed scans continue ready rows',
     (tester) async {
@@ -807,6 +845,7 @@ Future<void> _pump(
     ..devicePixelRatio = 1;
   await tester.pumpWidget(
     MaterialApp(
+      builder: LineupCanvas.builder,
       home: UpstreamChannelSetupView(
         controller: controller,
         onViewLineup: onView,

@@ -7,6 +7,51 @@ import 'package:lineup_desktop/playback/native_player.dart';
 import '../support/ui_fixture.dart';
 
 void main() {
+  for (final window in const [Size(1920, 1080), Size(3840, 2160)]) {
+    testWidgets('menu anchor follows its canvas invoker at $window', (
+      tester,
+    ) async {
+      tester.view.devicePixelRatio = 1.5;
+      tester.view.physicalSize = window * 1.5;
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetPhysicalSize);
+      final fixture = UiFixture()..controller.stage = SetupStage.ready;
+      await tester.pumpWidget(fixture.build());
+      await tester.pumpAndSettle();
+      final invoker = find.byKey(const Key('guide-app-menu'));
+      Rect drawn(Finder finder) {
+        final box = tester.renderObject<RenderBox>(finder);
+        return MatrixUtils.transformRect(
+          box.getTransformTo(null),
+          Offset.zero & box.size,
+        );
+      }
+
+      final anchor = drawn(invoker);
+      await tester.tap(invoker);
+      await tester.pumpAndSettle();
+      final menu = drawn(find.byKey(const Key('immersive-app-menu')));
+      final scale = window.height / 1080;
+      expect(menu.top, closeTo(anchor.bottom + 8 * scale, .001));
+      expect(
+        menu.left,
+        closeTo(
+          (anchor.right - menu.width).clamp(
+            16 * scale,
+            window.width - menu.width - 16 * scale,
+          ),
+          .001,
+        ),
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        'Guide Lineup menu',
+      );
+    });
+  }
+
   testWidgets('Lineup menu is bounded, traps focus, and restores its invoker', (
     tester,
   ) async {
@@ -26,11 +71,15 @@ void main() {
     await tester.pumpAndSettle();
 
     final menu = find.byKey(const Key('immersive-app-menu'));
-    final rect = tester.getRect(menu);
-    expect(rect.left, greaterThanOrEqualTo(16));
-    expect(rect.top, greaterThanOrEqualTo(16));
-    expect(rect.right, lessThanOrEqualTo(784));
-    expect(rect.bottom, lessThanOrEqualTo(404));
+    final box = tester.renderObject<RenderBox>(menu);
+    final rect = MatrixUtils.transformRect(
+      box.getTransformTo(null),
+      Offset.zero & box.size,
+    );
+    expect(rect.left, greaterThanOrEqualTo(16 * .8));
+    expect(rect.top, greaterThanOrEqualTo(16 * .8));
+    expect(rect.right, lessThanOrEqualTo(800 - 16 * .8));
+    expect(rect.bottom, lessThanOrEqualTo(420 - 16 * .8 + .001));
     expect(find.text('Choose a channel in Guide'), findsOneWidget);
     expect(
       tester
@@ -122,6 +171,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.drag(find.byType(ListView).last, const Offset(0, -180));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Sign out of Plex'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Sign out of Plex'));
     await tester.pumpAndSettle();
 
@@ -133,6 +184,8 @@ void main() {
     expect(controller.logoutCalls, 0);
 
     await tester.drag(find.byType(ListView).last, const Offset(0, -180));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Sign out of Plex'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Sign out of Plex'));
     await tester.pumpAndSettle();

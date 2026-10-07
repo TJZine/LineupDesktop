@@ -18,12 +18,8 @@ abstract final class LineupLayout {
 
   static bool isCompactWidth(double width) => width < compact;
 
-  static double scaleFor(Size size) =>
-      math.max(1.0, math.min(size.width / 1920, size.height / 1080));
-
-  static EdgeInsets pageInsets(Size size) => EdgeInsets.all(
-    (isCompactWidth(size.width) ? 20.0 : 32.0) * scaleFor(size),
-  );
+  static EdgeInsets pageInsets(Size size) =>
+      EdgeInsets.all((isCompactWidth(size.width) ? 20.0 : 32.0));
 }
 
 class LineupNotice extends StatelessWidget {
@@ -35,13 +31,12 @@ class LineupNotice extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = Theme.of(context).colorScheme.error;
     final radius = LineupTheme.of(context).panelRadius;
-    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
     return Semantics(
       liveRegion: true,
       container: true,
       child: Container(
         width: double.infinity,
-        padding: EdgeInsets.all(14 * scale),
+        padding: EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: color.withValues(alpha: 0.09),
           borderRadius: BorderRadius.circular(radius),
@@ -49,8 +44,8 @@ class LineupNotice extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Icon(Icons.error_outline, color: color, size: 24 * scale),
-            SizedBox(width: 12 * scale),
+            Icon(Icons.error_outline, color: color, size: 24),
+            SizedBox(width: 12),
             Expanded(child: Text(message)),
           ],
         ),
@@ -83,55 +78,47 @@ class LineupPage extends StatelessWidget {
         builder: (context, constraints) {
           final compact = LineupLayout.isCompactWidth(constraints.maxWidth);
           final size = Size(constraints.maxWidth, constraints.maxHeight);
-          final scale = LineupLayout.scaleFor(size);
-          return Theme(
-            data: Theme.of(context).copyWith(
-              textTheme: Theme.of(context).textTheme
-                  .apply(fontSizeFactor: scale),
-            ),
-            child: DefaultTextStyle(
-              style: Theme.of(context).textTheme.bodyMedium!
-                  .apply(fontSizeFactor: scale),
-              child: Padding(
-                padding: LineupLayout.pageInsets(size),
-                child: Column(
-                  key: const ValueKey('lineup-page-content'),
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (compact)
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          if (titleWidget != null && actions != null) ...[
+          return DefaultTextStyle(
+            style: Theme.of(context).textTheme.bodyMedium!,
+            child: Padding(
+              padding: LineupLayout.pageInsets(size),
+              child: Column(
+                key: const ValueKey('lineup-page-content'),
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (compact)
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (titleWidget != null && actions != null) ...[
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: actions,
+                          ),
+                          const SizedBox(height: 16),
+                          titleWidget!,
+                        ] else ...[
+                          titleWidget ?? _PageTitle(title),
+                          if (actions != null) ...[
+                            const SizedBox(height: 16),
                             Align(
                               alignment: Alignment.centerLeft,
                               child: actions,
                             ),
-                            const SizedBox(height: 16),
-                            titleWidget!,
-                          ] else ...[
-                            titleWidget ?? _PageTitle(title),
-                            if (actions != null) ...[
-                              const SizedBox(height: 16),
-                              Align(
-                                alignment: Alignment.centerLeft,
-                                child: actions,
-                              ),
-                            ],
                           ],
                         ],
-                      )
-                    else
-                      Row(
-                        children: [
-                          Expanded(child: titleWidget ?? _PageTitle(title)),
-                          ?actions,
-                        ],
-                      ),
-                    SizedBox(height: 24 * scale),
-                    Expanded(child: child),
-                  ],
-                ),
+                      ],
+                    )
+                  else
+                    Row(
+                      children: [
+                        Expanded(child: titleWidget ?? _PageTitle(title)),
+                        ?actions,
+                      ],
+                    ),
+                  SizedBox(height: 24),
+                  Expanded(child: child),
+                ],
               ),
             ),
           );
@@ -193,7 +180,6 @@ class LineupEmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
-      final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
       return SingleChildScrollView(
         child: ConstrainedBox(
           constraints: BoxConstraints(
@@ -204,16 +190,16 @@ class LineupEmptyState extends StatelessWidget {
           child: Center(
             child: Card(
               child: Padding(
-                padding: EdgeInsets.all(32 * scale),
+                padding: EdgeInsets.all(32),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(
                       icon,
-                      size: 48 * scale,
+                      size: 48,
                       color: Theme.of(context).colorScheme.primary,
                     ),
-                    SizedBox(height: 16 * scale),
+                    SizedBox(height: 16),
                     Semantics(
                       header: true,
                       child: Text(
@@ -222,12 +208,9 @@ class LineupEmptyState extends StatelessWidget {
                         style: Theme.of(context).textTheme.headlineSmall,
                       ),
                     ),
-                    SizedBox(height: 8 * scale),
+                    SizedBox(height: 8),
                     Text(message, textAlign: TextAlign.center),
-                    if (action != null) ...[
-                      SizedBox(height: 24 * scale),
-                      action!,
-                    ],
+                    if (action != null) ...[SizedBox(height: 24), action!],
                   ],
                 ),
               ),

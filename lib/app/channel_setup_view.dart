@@ -20,26 +20,6 @@ enum _ReviewFilter { all, unchanged, updated, added, removed }
 
 typedef _ReviewEntry = ({Channel channel, Channel? before, _ReviewKind kind});
 
-// Interpolate the approved 720p and 1080p configuration dimensions.
-double _configurationExpansion(Size size) =>
-    ((math.min(size.width / 1280, size.height / 720) - 1) * 2)
-        .clamp(0.0, 1.0)
-        .toDouble();
-
-class _ConfigurationDimensions {
-  _ConfigurationDimensions(Size size)
-    : expansion = _configurationExpansion(size),
-      scale = LineupLayout.scaleFor(size);
-
-  final double expansion;
-  final double scale;
-
-  double value(double at720, double at1080) =>
-      (at720 + (at1080 - at720) * expansion) * scale;
-
-  double fixed(double at1080) => at1080 * scale;
-}
-
 class UpstreamChannelSetupView extends StatefulWidget {
   const UpstreamChannelSetupView({
     required this.controller,
@@ -183,117 +163,43 @@ class _SetupState extends State<UpstreamChannelSetupView> {
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.sizeOf(context);
-    final dimensions = _ConfigurationDimensions(size);
     final resultState = _step == 3 && _phase != _BuildPhase.review;
     final refined = _step == 1 || _step == 2 || _step == 3;
-    final scale = refined ? dimensions.value(14, 18) / 14 : dimensions.scale;
-    final theme = Theme.of(context);
-    final filledButtonMinSize = WidgetStatePropertyAll<Size?>(
-      Size(dimensions.fixed(148), dimensions.fixed(54)),
-    );
-    final textButtonMinSize = WidgetStatePropertyAll<Size?>(
-      Size(dimensions.fixed(64), dimensions.fixed(36)),
-    );
-    final filledButtonPadding = WidgetStatePropertyAll<EdgeInsetsGeometry?>(
-      EdgeInsets.symmetric(
-        horizontal: dimensions.fixed(24),
-        vertical: dimensions.fixed(16),
-      ),
-    );
-    final textButtonPadding = WidgetStatePropertyAll<EdgeInsetsGeometry?>(
-      EdgeInsets.symmetric(
-        horizontal: dimensions.fixed(24),
-        vertical: dimensions.fixed(8),
-      ),
-    );
-    final inputDecorationTheme = dimensions.scale > 1
-        ? theme.inputDecorationTheme.copyWith(
-            contentPadding: EdgeInsets.fromLTRB(
-              dimensions.fixed(12),
-              dimensions.fixed(24),
-              dimensions.fixed(12),
-              dimensions.fixed(16),
-            ),
-            prefixIconConstraints: BoxConstraints(
-              minWidth: dimensions.fixed(48),
-              minHeight: dimensions.fixed(48),
-            ),
-            suffixIconConstraints: BoxConstraints(
-              minWidth: dimensions.fixed(48),
-              minHeight: dimensions.fixed(48),
-            ),
-          )
-        : theme.inputDecorationTheme;
     final page = SafeArea(
-      child: Theme(
-        data: theme.copyWith(
-          textTheme: theme.textTheme.apply(fontSizeFactor: scale),
-          inputDecorationTheme: inputDecorationTheme,
-          filledButtonTheme: dimensions.scale > 1
-              ? FilledButtonThemeData(
-                  style: theme.filledButtonTheme.style?.copyWith(
-                    minimumSize: filledButtonMinSize,
-                    padding: filledButtonPadding,
-                  ),
-                )
-              : theme.filledButtonTheme,
-          outlinedButtonTheme: dimensions.scale > 1
-              ? OutlinedButtonThemeData(
-                  style: theme.outlinedButtonTheme.style?.copyWith(
-                    minimumSize: filledButtonMinSize,
-                    padding: filledButtonPadding,
-                  ),
-                )
-              : theme.outlinedButtonTheme,
-          textButtonTheme: dimensions.scale > 1
-              ? TextButtonThemeData(
-                  style: theme.textButtonTheme.style?.copyWith(
-                    minimumSize: textButtonMinSize,
-                    padding: textButtonPadding,
-                  ),
-                )
-              : theme.textButtonTheme,
-        ),
-        child: IconTheme.merge(
-          data: IconThemeData(size: dimensions.fixed(24)),
-          child: Padding(
-            key: const ValueKey('channel-setup-content'),
-            padding: refined
-                ? EdgeInsets.symmetric(
-                    horizontal: dimensions.value(32, 48),
-                    vertical: dimensions.value(24, 36),
-                  )
-                : LineupLayout.pageInsets(size),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (_step != 1) ...[
-                  _header(),
-                  SizedBox(
-                    height: refined ? dimensions.value(20, 32) : 20 * scale,
-                  ),
-                ],
-                if (_error != null &&
-                    _phase != _BuildPhase.failed &&
-                    _step != 1) ...[
-                  LineupNotice(message: _error!),
-                  SizedBox(height: 12 * scale),
-                ],
-                Expanded(
-                  child: KeyedSubtree(
-                    key: const ValueKey('channel-setup-stage'),
-                    child: switch (_step) {
-                      1 => _libraryStep(),
-                      2 => _configureStep(),
-                      _ =>
-                        _phase == _BuildPhase.review
-                            ? _reviewStep()
-                            : _resultStep(),
-                    },
-                  ),
-                ),
+      child: IconTheme.merge(
+        data: IconThemeData(size: 24),
+        child: Padding(
+          key: const ValueKey('channel-setup-content'),
+          padding: refined
+              ? EdgeInsets.symmetric(horizontal: 48, vertical: 36)
+              : LineupLayout.pageInsets(size),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (_step != 1) ...[
+                _header(),
+                SizedBox(height: refined ? 32 : 20),
               ],
-            ),
+              if (_error != null &&
+                  _phase != _BuildPhase.failed &&
+                  _step != 1) ...[
+                LineupNotice(message: _error!),
+                SizedBox(height: 12),
+              ],
+              Expanded(
+                child: KeyedSubtree(
+                  key: const ValueKey('channel-setup-stage'),
+                  child: switch (_step) {
+                    1 => _libraryStep(),
+                    2 => _configureStep(),
+                    _ =>
+                      _phase == _BuildPhase.review
+                          ? _reviewStep()
+                          : _resultStep(),
+                  },
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -348,10 +254,9 @@ class _SetupState extends State<UpstreamChannelSetupView> {
   }) => LayoutBuilder(
     key: const ValueKey('channel-setup-header'),
     builder: (context, constraints) {
-      final dimensions = _ConfigurationDimensions(MediaQuery.sizeOf(context));
       final roles = LineupTheme.of(context);
       final textStyle = TextStyle(
-        fontSize: dimensions.value(14, 18),
+        fontSize: 18,
         height: 1.4,
         color: roles.secondaryText,
       );
@@ -395,18 +300,18 @@ class _SetupState extends State<UpstreamChannelSetupView> {
         children: [
           Image.asset(
             'assets/branding/lineup-logo-mark.png',
-            height: dimensions.value(18, 24),
+            height: 24,
             excludeFromSemantics: true,
           ),
-          SizedBox(width: dimensions.value(10, 12)),
+          SizedBox(width: 12),
           Text(
             'LINEUP',
             style: TextStyle(
               color: roles.progressFill,
               fontFamily: 'Arial',
-              fontSize: dimensions.value(14, 18),
+              fontSize: 18,
               fontWeight: FontWeight.normal,
-              letterSpacing: dimensions.fixed(1.5),
+              letterSpacing: 1.5,
               height: 1.4,
             ),
           ),
@@ -417,20 +322,20 @@ class _SetupState extends State<UpstreamChannelSetupView> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 brand,
-                SizedBox(height: dimensions.value(6, 10)),
+                SizedBox(height: 10),
                 Semantics(
                   header: true,
                   child: Text(
                     titleText,
                     style: TextStyle(
                       color: roles.primaryText,
-                      fontSize: dimensions.value(28, 38),
+                      fontSize: 38,
                       fontWeight: FontWeight.w600,
                       height: 1.2,
                     ),
                   ),
                 ),
-                SizedBox(height: dimensions.value(6, 10)),
+                SizedBox(height: 10),
                 Text(
                   subtitleText ??
                       switch (_configurationSection) {
@@ -444,14 +349,14 @@ class _SetupState extends State<UpstreamChannelSetupView> {
               ],
             )
           : brand;
-      if (constraints.maxWidth / dimensions.scale < 900 ||
+      if (constraints.maxWidth < 1100 ||
           MediaQuery.textScalerOf(context).scale(14) >= 21) {
         return Column(
           key: const ValueKey('channel-setup-header-stack'),
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             title,
-            SizedBox(height: dimensions.fixed(8)),
+            SizedBox(height: 8),
             Align(alignment: Alignment.centerRight, child: steps),
           ],
         );
@@ -460,7 +365,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Expanded(child: title),
-          SizedBox(width: dimensions.fixed(32)),
+          SizedBox(width: 32),
           steps,
         ],
       );
@@ -535,15 +440,11 @@ class _SetupState extends State<UpstreamChannelSetupView> {
         !scanning &&
         controller.libraryScanStatus != LibraryScanStatus.cancelled &&
         (retry.isNotEmpty || controller.error != null);
-    final dimensions = _ConfigurationDimensions(MediaQuery.sizeOf(context));
     final roles = LineupTheme.of(context);
-    final bodyStyle = Theme.of(context).textTheme.bodyMedium!.copyWith(
-      color: roles.secondaryText,
-      fontSize: dimensions.value(14, 18),
-      height: 1.4,
-    );
+    final bodyStyle = Theme.of(context).textTheme.bodyMedium!
+        .copyWith(color: roles.secondaryText, fontSize: 18, height: 1.4);
     final actionStyle = Theme.of(context).textTheme.labelLarge!
-        .copyWith(fontSize: dimensions.value(14, 18));
+        .copyWith(fontSize: 18);
     final retryLabel = retry.isEmpty ? 'Retry scan' : 'Retry failed scans';
     final scanError = _error ?? controller.error;
     final excluded = _selectedLibraries.length - ready.length;
@@ -606,7 +507,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final singleScroll =
-            constraints.maxHeight / dimensions.scale < 640 ||
+            constraints.maxHeight < 800 ||
             MediaQuery.textScalerOf(context).scale(1) >= 1.5;
         final list = ListView.separated(
           key: const ValueKey('library-selection-list'),
@@ -621,10 +522,10 @@ class _SetupState extends State<UpstreamChannelSetupView> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _header(),
-            SizedBox(height: dimensions.value(20, 32)),
+            SizedBox(height: 32),
             if (controller.libraries.isEmpty)
               Padding(
-                padding: EdgeInsets.only(top: dimensions.fixed(24)),
+                padding: EdgeInsets.only(top: 24),
                 child: LineupEmptyState(
                   icon: Icons.video_library_outlined,
                   title: 'No movie or show libraries found',
@@ -641,7 +542,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
             ],
             if (!scanning && scanError != null)
               Padding(
-                padding: EdgeInsets.only(top: dimensions.fixed(16)),
+                padding: EdgeInsets.only(top: 16),
                 child: Semantics(
                   liveRegion: true,
                   child: Text(
@@ -652,13 +553,13 @@ class _SetupState extends State<UpstreamChannelSetupView> {
               ),
             if (canContinue && excluded > 0)
               Padding(
-                padding: EdgeInsets.only(top: dimensions.fixed(16)),
+                padding: EdgeInsets.only(top: 16),
                 child: Text(
                   '${ready.length} ${ready.length == 1 ? 'library is' : 'libraries are'} ready. Continuing uses only the ready libraries; the other $excluded selected ${excluded == 1 ? 'library will' : 'libraries will'} be excluded.',
                   style: bodyStyle,
                 ),
               ),
-            SizedBox(height: dimensions.value(16, 24)),
+            SizedBox(height: 24),
             footer,
           ],
         );
@@ -666,10 +567,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
           alignment: singleScroll ? Alignment.topCenter : Alignment.center,
           child: ConstrainedBox(
             constraints: BoxConstraints(
-              maxWidth: math.min(
-                constraints.maxWidth,
-                dimensions.value(880, 1040),
-              ),
+              maxWidth: math.min(constraints.maxWidth, 1040),
             ),
             child: singleScroll
                 ? SingleChildScrollView(
@@ -684,13 +582,9 @@ class _SetupState extends State<UpstreamChannelSetupView> {
   }
 
   Widget _selectionSummary() {
-    final dimensions = _ConfigurationDimensions(MediaQuery.sizeOf(context));
     final roles = LineupTheme.of(context);
-    final summaryStyle = Theme.of(context).textTheme.bodyMedium!.copyWith(
-      color: roles.secondaryText,
-      fontSize: dimensions.value(13, 16),
-      height: 1.4,
-    );
+    final summaryStyle = Theme.of(context).textTheme.bodyMedium!
+        .copyWith(color: roles.secondaryText, fontSize: 16, height: 1.4);
     final editable =
         !widget.controller.busy &&
         widget.controller.libraryScanStatus != LibraryScanStatus.scanning;
@@ -703,11 +597,11 @@ class _SetupState extends State<UpstreamChannelSetupView> {
         ? false
         : null;
     return Padding(
-      padding: EdgeInsets.only(bottom: dimensions.value(12, 16)),
+      padding: EdgeInsets.only(bottom: 16),
       child: Row(
         children: [
           if (libraries.length > 1) ...[
-            _scaledCheckbox(
+            _checkbox(
               key: const ValueKey('select-all-libraries'),
               tristate: true,
               value: value,
@@ -733,107 +627,20 @@ class _SetupState extends State<UpstreamChannelSetupView> {
     );
   }
 
-  Widget _scaledCheckbox({
+  Widget _checkbox({
     Key? key,
     required bool? value,
     required ValueChanged<bool?>? onChanged,
     bool tristate = false,
     double width = 48,
   }) {
-    final dimensions = _ConfigurationDimensions(MediaQuery.sizeOf(context));
     final checkbox = Checkbox(
       key: key,
       tristate: tristate,
       value: value,
       onChanged: onChanged,
     );
-    if (dimensions.scale <= 1) {
-      return SizedBox(
-        width: dimensions.fixed(width),
-        height: dimensions.fixed(48),
-        child: Transform.scale(scale: dimensions.scale, child: checkbox),
-      );
-    }
-    return SizedBox(
-      width: dimensions.fixed(width),
-      height: dimensions.fixed(48),
-      child: Center(
-        child: Transform.scale(
-          alignment: Alignment.center,
-          scale: dimensions.scale,
-          child: SizedBox(width: 48, height: 48, child: checkbox),
-        ),
-      ),
-    );
-  }
-
-  Widget _scaledCheckboxTile({
-    Key? key,
-    required bool value,
-    required Widget title,
-    Widget? subtitle,
-    required ValueChanged<bool?> onChanged,
-  }) {
-    final dimensions = _ConfigurationDimensions(MediaQuery.sizeOf(context));
-    return MergeSemantics(
-      key: key,
-      child: ListTileTheme.merge(
-        minLeadingWidth: dimensions.fixed(40),
-        horizontalTitleGap: dimensions.fixed(16),
-        child: ListTile(
-          contentPadding: EdgeInsets.zero,
-          leading: _scaledCheckbox(
-            value: value,
-            onChanged: onChanged,
-            width: 40,
-          ),
-          title: title,
-          subtitle: subtitle,
-          onTap: () => onChanged(!value),
-        ),
-      ),
-    );
-  }
-
-  Widget _scaledSwitch({
-    required bool value,
-    required ValueChanged<bool>? onChanged,
-  }) {
-    final dimensions = _ConfigurationDimensions(MediaQuery.sizeOf(context));
-    final control = Switch(value: value, onChanged: onChanged);
-    if (dimensions.scale <= 1) return control;
-    return SizedBox(
-      width: dimensions.fixed(60),
-      height: dimensions.fixed(40),
-      child: Center(
-        child: Transform.scale(
-          alignment: Alignment.center,
-          scale: dimensions.scale,
-          child: SizedBox(width: 60, height: 40, child: control),
-        ),
-      ),
-    );
-  }
-
-  Widget _scaledSwitchTile({
-    required bool value,
-    required Widget title,
-    Widget? subtitle,
-    required ValueChanged<bool> onChanged,
-  }) {
-    final dimensions = _ConfigurationDimensions(MediaQuery.sizeOf(context));
-    return MergeSemantics(
-      child: ListTile(
-        contentPadding: EdgeInsets.zero,
-        titleAlignment: ListTileTitleAlignment.top,
-        leading: _scaledSwitch(value: value, onChanged: onChanged),
-        title: title,
-        subtitle: subtitle,
-        onTap: () => onChanged(!value),
-        minLeadingWidth: dimensions.fixed(40),
-        horizontalTitleGap: dimensions.fixed(16),
-      ),
-    );
+    return SizedBox(width: width, height: 48, child: checkbox);
   }
 
   ({double width, double closedHeight, double itemHeight}) _dropdownMetrics({
@@ -843,9 +650,8 @@ class _SetupState extends State<UpstreamChannelSetupView> {
     required Iterable<String> labels,
     required TextStyle style,
   }) {
-    final dimensions = _ConfigurationDimensions(MediaQuery.sizeOf(context));
-    final horizontalPadding = dimensions.fixed(10);
-    final arrowWidth = dimensions.fixed(24);
+    final horizontalPadding = 10;
+    final arrowWidth = 24;
     final textScaler = MediaQuery.textScalerOf(context);
     final textDirection = Directionality.of(context);
 
@@ -891,11 +697,8 @@ class _SetupState extends State<UpstreamChannelSetupView> {
     }
     return (
       width: width,
-      closedHeight: math.max(baseHeight, textHeight + dimensions.fixed(8)),
-      itemHeight: math.max(
-        dimensions.fixed(48),
-        textHeight + dimensions.fixed(8),
-      ),
+      closedHeight: math.max(baseHeight, textHeight + 8),
+      itemHeight: math.max(48, textHeight + 8),
     );
   }
 
@@ -911,24 +714,23 @@ class _SetupState extends State<UpstreamChannelSetupView> {
   });
 
   Widget _libraryRow(PlexLibrary library) {
-    final dimensions = _ConfigurationDimensions(MediaQuery.sizeOf(context));
     final roles = LineupTheme.of(context);
     final textTheme = Theme.of(context).textTheme;
     final selected = _selectedLibraries.contains(library.id);
     final fact = widget.controller.libraryScanFacts[library.id];
     final titleStyle = textTheme.bodyMedium!.copyWith(
       color: roles.primaryText,
-      fontSize: dimensions.value(16, 20),
+      fontSize: 20,
       fontWeight: FontWeight.w600,
       height: 1.3,
     );
     final statusStyle = textTheme.bodyMedium!.copyWith(
-      fontSize: dimensions.value(14, 18),
+      fontSize: 18,
       height: 1.4,
     );
     final typeStyle = textTheme.bodyMedium!.copyWith(
       color: roles.mutedText,
-      fontSize: dimensions.value(13, 16),
+      fontSize: 16,
       height: 1.4,
     );
     void toggle() => setState(() {
@@ -942,15 +744,14 @@ class _SetupState extends State<UpstreamChannelSetupView> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final textScale = MediaQuery.textScalerOf(context).scale(1);
-        final effectiveWidth =
-            constraints.maxWidth / dimensions.scale / textScale;
+        final effectiveWidth = constraints.maxWidth / textScale;
         final narrow = effectiveWidth < 620 || textScale >= 1.6;
         final details = Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(library.title, style: titleStyle),
             if (fact != null) ...[
-              SizedBox(height: dimensions.fixed(8)),
+              SizedBox(height: 8),
               Text(
                 _scanDetail(fact),
                 style: statusStyle.copyWith(color: _scanColor(fact.status)),
@@ -967,17 +768,17 @@ class _SetupState extends State<UpstreamChannelSetupView> {
             ? Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _scaledCheckbox(
+                  _checkbox(
                     value: selected,
                     onChanged: widget.controller.busy ? null : (_) => toggle(),
                   ),
-                  SizedBox(width: dimensions.fixed(8)),
+                  SizedBox(width: 8),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         details,
-                        SizedBox(height: dimensions.fixed(8)),
+                        SizedBox(height: 8),
                         Align(alignment: Alignment.centerRight, child: type),
                       ],
                     ),
@@ -987,13 +788,13 @@ class _SetupState extends State<UpstreamChannelSetupView> {
             : Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _scaledCheckbox(
+                  _checkbox(
                     value: selected,
                     onChanged: widget.controller.busy ? null : (_) => toggle(),
                   ),
-                  SizedBox(width: dimensions.fixed(8)),
+                  SizedBox(width: 8),
                   Expanded(child: details),
-                  SizedBox(width: dimensions.fixed(16)),
+                  SizedBox(width: 16),
                   type,
                 ],
               );
@@ -1003,10 +804,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
             excludeFromSemantics: true,
             onTap: widget.controller.busy ? null : toggle,
             child: Padding(
-              padding: EdgeInsets.symmetric(
-                vertical: dimensions.value(12, 18),
-                horizontal: dimensions.fixed(8),
-              ),
+              padding: EdgeInsets.symmetric(vertical: 18, horizontal: 8),
               child: content,
             ),
           ),
@@ -1076,19 +874,12 @@ class _SetupState extends State<UpstreamChannelSetupView> {
 
   Widget _configureStep() {
     final allocation = _allocate(widget.controller.channels);
-    final size = MediaQuery.sizeOf(context);
-    final dimensions = _ConfigurationDimensions(size);
+
     final roles = LineupTheme.of(context);
-    final actionHeight = dimensions.value(44, 56);
-    final actionPadding = EdgeInsets.symmetric(
-      horizontal: dimensions.value(12, 16),
-      vertical: dimensions.value(8, 12),
-    );
-    final actionTextStyle = Theme.of(context).textTheme.labelLarge!.copyWith(
-      fontSize: dimensions.value(14, 18),
-      height: 1.4,
-      fontWeight: FontWeight.normal,
-    );
+    final double actionHeight = 56;
+    final actionPadding = EdgeInsets.symmetric(horizontal: 16, vertical: 12);
+    final actionTextStyle = Theme.of(context).textTheme.labelLarge!
+        .copyWith(fontSize: 18, height: 1.4, fontWeight: FontWeight.normal);
     return _Stage(
       footerGap: 0,
       footer: _Footer(
@@ -1121,12 +912,12 @@ class _SetupState extends State<UpstreamChannelSetupView> {
         builder: (context, constraints) {
           const labels = ['Channel sources', 'Playback order', 'Lineup rules'];
           final compact =
-              constraints.maxWidth / dimensions.scale < 900 ||
+              constraints.maxWidth < 1100 ||
               MediaQuery.textScalerOf(context).scale(1) >= 1.6;
-          final navigationHeight = dimensions.value(44, 56);
+          final double navigationHeight = 56;
           final navigationPadding = EdgeInsets.symmetric(
-            horizontal: dimensions.value(12, 16),
-            vertical: dimensions.value(8, 12),
+            horizontal: 16,
+            vertical: 12,
           );
           final navigation = [
             for (var index = 0; index < labels.length; index++)
@@ -1143,7 +934,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
                     minimumSize: Size(0, navigationHeight),
                     padding: navigationPadding,
                     textStyle: Theme.of(context).textTheme.labelLarge!.copyWith(
-                      fontSize: dimensions.value(14, 18),
+                      fontSize: 18,
                       fontWeight: FontWeight.normal,
                       height: 1.4,
                     ),
@@ -1170,12 +961,12 @@ class _SetupState extends State<UpstreamChannelSetupView> {
                   ),
                 if (_configurationSection == 0 && _selectedLibraries.length > 1)
                   Padding(
-                    padding: EdgeInsets.only(bottom: dimensions.fixed(8)),
+                    padding: EdgeInsets.only(bottom: 8),
                     child: Text(
                       'Combine matching values to create shared channels across your selected libraries.',
                       style: TextStyle(
                         color: roles.secondaryText,
-                        fontSize: dimensions.value(13, 16),
+                        fontSize: 16,
                         height: 1.4,
                       ),
                     ),
@@ -1183,13 +974,9 @@ class _SetupState extends State<UpstreamChannelSetupView> {
                 if (_configurationSection == 0)
                   LayoutBuilder(
                     builder: (_, constraints) {
-                      final localDimensions = _ConfigurationDimensions(
-                        MediaQuery.sizeOf(context),
-                      );
-                      final gap = localDimensions.value(28, 40);
+                      final double gap = 40;
                       final effectiveWidth =
                           constraints.maxWidth /
-                          localDimensions.scale /
                           MediaQuery.textScalerOf(context).scale(1);
                       const sourcePairs = [
                         (
@@ -1219,7 +1006,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
                               columnGap: gap,
                             ),
                             if (index < sourcePairs.length - 1)
-                              SizedBox(height: localDimensions.fixed(12)),
+                              SizedBox(height: 12),
                           ],
                         ],
                       );
@@ -1231,15 +1018,14 @@ class _SetupState extends State<UpstreamChannelSetupView> {
                     builder: (_, constraints) {
                       final effectiveWidth =
                           constraints.maxWidth /
-                          dimensions.scale /
                           MediaQuery.textScalerOf(context).scale(1);
-                      final rulesGap = dimensions.value(40, 64);
+                      final double rulesGap = 64;
                       if (effectiveWidth < 840) {
                         return Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             _limitControls(allocation),
-                            SizedBox(height: dimensions.fixed(20)),
+                            SizedBox(height: 20),
                             _orderControls(),
                           ],
                         );
@@ -1261,12 +1047,8 @@ class _SetupState extends State<UpstreamChannelSetupView> {
               ? Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Wrap(
-                      spacing: dimensions.fixed(8),
-                      runSpacing: dimensions.fixed(4),
-                      children: navigation,
-                    ),
-                    SizedBox(height: dimensions.fixed(16)),
+                    Wrap(spacing: 8, runSpacing: 4, children: navigation),
+                    SizedBox(height: 16),
                     Expanded(child: content),
                   ],
                 )
@@ -1274,18 +1056,18 @@ class _SetupState extends State<UpstreamChannelSetupView> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     SizedBox(
-                      width: dimensions.value(176, 236),
+                      width: 236,
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           for (final item in navigation) ...[
                             item,
-                            SizedBox(height: dimensions.value(8, 12)),
+                            SizedBox(height: 12),
                           ],
                         ],
                       ),
                     ),
-                    SizedBox(width: dimensions.value(28, 40)),
+                    SizedBox(width: 40),
                     Expanded(child: content),
                   ],
                 );
@@ -1295,33 +1077,32 @@ class _SetupState extends State<UpstreamChannelSetupView> {
   }
 
   Widget _heading(String title, String description) {
-    final dimensions = _ConfigurationDimensions(MediaQuery.sizeOf(context));
     final roles = LineupTheme.of(context);
     final titleStyle = TextStyle(
       color: roles.primaryText,
-      fontSize: dimensions.value(18, 24),
+      fontSize: 24,
       fontWeight: FontWeight.w600,
       height: 1.3,
     );
     final descriptionStyle = TextStyle(
       color: roles.secondaryText,
-      fontSize: dimensions.value(14, 18),
+      fontSize: 18,
       height: 1.4,
     );
     return LayoutBuilder(
       builder: (context, constraints) {
         final inline =
-            constraints.maxWidth / dimensions.scale >= 640 &&
+            constraints.maxWidth >= 640 &&
             MediaQuery.textScalerOf(context).scale(1) < 1.4;
         return Padding(
-          padding: EdgeInsets.only(bottom: dimensions.value(8, 12)),
+          padding: EdgeInsets.only(bottom: 12),
           child: inline
               ? Row(
                   crossAxisAlignment: CrossAxisAlignment.baseline,
                   textBaseline: TextBaseline.alphabetic,
                   children: [
                     Text(title, style: titleStyle),
-                    SizedBox(width: dimensions.value(16, 32)),
+                    SizedBox(width: 32),
                     Expanded(child: Text(description, style: descriptionStyle)),
                   ],
                 )
@@ -1329,7 +1110,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(title, style: titleStyle),
-                    SizedBox(height: dimensions.fixed(8)),
+                    SizedBox(height: 8),
                     Text(description, style: descriptionStyle),
                   ],
                 ),
@@ -1339,7 +1120,6 @@ class _SetupState extends State<UpstreamChannelSetupView> {
   }
 
   Widget _configurationSummary(ChannelPlanAllocation result) {
-    final dimensions = _ConfigurationDimensions(MediaQuery.sizeOf(context));
     final roles = LineupTheme.of(context);
     final total = result.channels.length;
     final details = <String>[
@@ -1362,7 +1142,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
     }
     final secondaryStyle = TextStyle(
       color: roles.secondaryText,
-      fontSize: dimensions.value(14, 18),
+      fontSize: 18,
       height: 1.4,
     );
     return MergeSemantics(
@@ -1378,12 +1158,12 @@ class _SetupState extends State<UpstreamChannelSetupView> {
                 '$total',
                 style: TextStyle(
                   color: roles.primaryText,
-                  fontSize: dimensions.value(22, 30),
+                  fontSize: 30,
                   fontWeight: FontWeight.w600,
                   height: 1.4,
                 ),
               ),
-              SizedBox(width: dimensions.fixed(8)),
+              SizedBox(width: 8),
               Flexible(
                 child: Text(
                   'generated ${total == 1 ? 'channel' : 'channels'}',
@@ -1402,11 +1182,10 @@ class _SetupState extends State<UpstreamChannelSetupView> {
     BuilderStrategy strategy,
     ChannelPlanAllocation allocation,
   ) {
-    final dimensions = _ConfigurationDimensions(MediaQuery.sizeOf(context));
     final canGroup =
         _supportsGrouping(strategy) && _selectedLibraries.length > 1;
     return Padding(
-      padding: EdgeInsets.symmetric(vertical: dimensions.value(12, 16)),
+      padding: EdgeInsets.symmetric(vertical: 16),
       child: ListTileTheme.merge(
         titleAlignment: ListTileTitleAlignment.top,
         child: Column(
@@ -1414,7 +1193,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
             _sourceSelectionControl(strategy, allocation),
             if (canGroup)
               Padding(
-                padding: EdgeInsets.only(top: dimensions.fixed(8)),
+                padding: EdgeInsets.only(top: 8),
                 child: _sourceGroupingControl(strategy),
               ),
           ],
@@ -1431,9 +1210,8 @@ class _SetupState extends State<UpstreamChannelSetupView> {
   }) {
     final first = pair.$1;
     final second = pair.$2;
-    final dimensions = _ConfigurationDimensions(MediaQuery.sizeOf(context));
     final roles = LineupTheme.of(context);
-    final rowPadding = dimensions.value(12, 16);
+    final double rowPadding = 16;
     final firstCanGroup =
         _supportsGrouping(first) && _selectedLibraries.length > 1;
     final secondCanGroup =
@@ -1488,20 +1266,14 @@ class _SetupState extends State<UpstreamChannelSetupView> {
               children: [
                 firstCanGroup
                     ? Padding(
-                        padding: EdgeInsets.only(
-                          top: dimensions.fixed(8),
-                          bottom: rowPadding,
-                        ),
+                        padding: EdgeInsets.only(top: 8, bottom: rowPadding),
                         child: _sourceGroupingControl(first),
                       )
                     : const SizedBox.shrink(),
                 const SizedBox.shrink(),
                 secondCanGroup
                     ? Padding(
-                        padding: EdgeInsets.only(
-                          top: dimensions.fixed(8),
-                          bottom: rowPadding,
-                        ),
+                        padding: EdgeInsets.only(top: 8, bottom: rowPadding),
                         child: _sourceGroupingControl(second),
                       )
                     : const SizedBox.shrink(),
@@ -1519,25 +1291,24 @@ class _SetupState extends State<UpstreamChannelSetupView> {
     BuilderStrategy strategy,
     ChannelPlanAllocation allocation,
   ) {
-    final dimensions = _ConfigurationDimensions(MediaQuery.sizeOf(context));
     final roles = LineupTheme.of(context);
     final enabled = _strategies.contains(strategy);
     final eligible = allocation.eligibleOriginalsByStrategy[strategy] ?? 0;
     final included = allocation.allocatedOriginalsByStrategy[strategy] ?? 0;
     final nameStyle = TextStyle(
       color: roles.primaryText,
-      fontSize: dimensions.value(16, 22),
+      fontSize: 22,
       fontWeight: FontWeight.w600,
       height: 1.4,
     );
     final countStyle = TextStyle(
       color: roles.secondaryText,
-      fontSize: dimensions.value(13, 16),
+      fontSize: 16,
       height: 1.4,
     );
     final detailStyle = TextStyle(
       color: roles.secondaryText,
-      fontSize: dimensions.value(13, 18),
+      fontSize: 18,
       height: 1.4,
     );
     final title = Row(
@@ -1547,7 +1318,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
         Expanded(
           child: Text(builderStrategyLabels[strategy]!, style: nameStyle),
         ),
-        SizedBox(width: dimensions.fixed(12)),
+        SizedBox(width: 12),
         Flexible(
           fit: FlexFit.tight,
           child: Text(
@@ -1559,7 +1330,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
       ],
     );
     final subtitle = Padding(
-      padding: EdgeInsets.only(top: dimensions.value(8, 12)),
+      padding: EdgeInsets.only(top: 12),
       child: Text(_strategyDescription(strategy), style: detailStyle),
     );
     void changed(bool? value) => setState(() {
@@ -1569,14 +1340,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
         _strategies.remove(strategy);
       }
     });
-    if (dimensions.scale > 1) {
-      return _scaledCheckboxTile(
-        value: enabled,
-        title: title,
-        subtitle: subtitle,
-        onChanged: changed,
-      );
-    }
+
     return CheckboxListTile(
       value: enabled,
       controlAffinity: ListTileControlAffinity.leading,
@@ -1588,22 +1352,19 @@ class _SetupState extends State<UpstreamChannelSetupView> {
   }
 
   Widget _sourceGroupingControl(BuilderStrategy strategy) {
-    final dimensions = _ConfigurationDimensions(MediaQuery.sizeOf(context));
     final roles = LineupTheme.of(context);
     final enabled = _strategies.contains(strategy);
     final countStyle = TextStyle(
       color: roles.secondaryText,
-      fontSize: dimensions.value(13, 16),
+      fontSize: 16,
       height: 1.4,
     );
     return Padding(
-      padding: EdgeInsets.only(left: dimensions.fixed(56)),
+      padding: EdgeInsets.only(left: 56),
       child: LayoutBuilder(
         builder: (_, constraints) {
           final effectiveWidth =
-              constraints.maxWidth /
-              dimensions.scale /
-              MediaQuery.textScalerOf(context).scale(1);
+              constraints.maxWidth / MediaQuery.textScalerOf(context).scale(1);
           final groupingLabel = switch (strategy) {
             BuilderStrategy.genres => 'Combine matching genres',
             BuilderStrategy.studios => 'Combine matching studios',
@@ -1613,13 +1374,13 @@ class _SetupState extends State<UpstreamChannelSetupView> {
           };
           final groupingStyle = Theme.of(context).textTheme.bodyMedium!
               .copyWith(
-                fontSize: dimensions.value(13, 16),
+                fontSize: 16,
                 height: 1.4,
                 color: enabled ? roles.primaryText : roles.mutedText,
               );
           final metrics = _dropdownMetrics(
-            desiredWidth: dimensions.fixed(300),
-            baseHeight: dimensions.value(40, 44),
+            desiredWidth: 300,
+            baseHeight: 44,
             maxWidth: constraints.maxWidth,
             labels: ['Separate by library', groupingLabel],
             style: groupingStyle,
@@ -1631,17 +1392,15 @@ class _SetupState extends State<UpstreamChannelSetupView> {
               decoration: BoxDecoration(
                 color: roles.primarySurface,
                 border: Border.all(color: roles.defaultBorder),
-                borderRadius: BorderRadius.circular(dimensions.fixed(8)),
+                borderRadius: BorderRadius.circular(8),
               ),
               child: DropdownButtonHideUnderline(
                 child: DropdownButton<bool>(
                   key: ValueKey('source-grouping-${strategy.name}'),
                   isExpanded: true,
                   isDense: true,
-                  iconSize: dimensions.fixed(24),
-                  padding: EdgeInsets.symmetric(
-                    horizontal: dimensions.fixed(10),
-                  ),
+                  iconSize: 24,
+                  padding: EdgeInsets.symmetric(horizontal: 10),
                   itemHeight: metrics.itemHeight,
                   value: _grouped.contains(strategy),
                   style: groupingStyle,
@@ -1675,17 +1434,13 @@ class _SetupState extends State<UpstreamChannelSetupView> {
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       Expanded(child: label),
-                      SizedBox(width: dimensions.fixed(8)),
+                      SizedBox(width: 8),
                       dropdown,
                     ],
                   )
                 : Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      label,
-                      SizedBox(height: dimensions.fixed(8)),
-                      dropdown,
-                    ],
+                    children: [label, SizedBox(height: 8), dropdown],
                   ),
           );
         },
@@ -1694,40 +1449,35 @@ class _SetupState extends State<UpstreamChannelSetupView> {
   }
 
   Widget _playbackControls() {
-    final dimensions = _ConfigurationDimensions(MediaQuery.sizeOf(context));
-    final sectionGap = dimensions.value(16, 24);
+    final double sectionGap = 24;
     final dropdownTextStyle = Theme.of(context).textTheme.titleMedium!;
     final variantMetrics = _dropdownMetrics(
-      desiredWidth: dimensions.fixed(240),
-      baseHeight: dimensions.fixed(48),
+      desiredWidth: 240,
+      baseHeight: 48,
       maxWidth: double.infinity,
       labels: ['None', 'Shuffle', 'In order', 'Mini-marathons'],
       style: dropdownTextStyle,
     );
     final alternateMetrics = _dropdownMetrics(
-      desiredWidth: dimensions.fixed(220),
-      baseHeight: dimensions.fixed(48),
+      desiredWidth: 220,
+      baseHeight: 48,
       maxWidth: double.infinity,
       labels: ['0', '1', '2', '3'],
       style: dropdownTextStyle,
     );
     final additionalVersionsTitle = Text(
       'Additional channel versions',
-      style: TextStyle(
-        fontSize: dimensions.value(16, 22),
-        fontWeight: FontWeight.w600,
-        height: 1.4,
-      ),
+      style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600, height: 1.4),
     );
     final additionalVersionsSubtitle = Padding(
-      padding: EdgeInsets.only(top: dimensions.value(8, 12)),
+      padding: EdgeInsets.only(top: 12),
       child: Text(
         _playback == PlaybackMode.sequential
             ? 'Alternate schedules are not available with In order. A different playback mode can still be added.'
             : 'Create extra channels with alternate schedules or another playback mode.',
         style: TextStyle(
           color: LineupTheme.of(context).secondaryText,
-          fontSize: dimensions.value(13, 18),
+          fontSize: 18,
           height: 1.4,
         ),
       ),
@@ -1744,14 +1494,13 @@ class _SetupState extends State<UpstreamChannelSetupView> {
           builder: (context, constraints) {
             final effectiveWidth =
                 constraints.maxWidth /
-                dimensions.scale /
                 MediaQuery.textScalerOf(context).scale(1);
             final columns = effectiveWidth >= 780
                 ? 3
                 : effectiveWidth >= 520
                 ? 2
                 : 1;
-            final gap = dimensions.value(12, 20);
+            final double gap = 20;
             final width =
                 (constraints.maxWidth - gap * (columns - 1)) / columns;
             return RadioGroup<PlaybackMode>(
@@ -1787,47 +1536,35 @@ class _SetupState extends State<UpstreamChannelSetupView> {
         SizedBox(height: sectionGap),
         _episodeStrip(),
         if (_playback == PlaybackMode.block) ...[
-          SizedBox(height: dimensions.value(12, 16)),
+          SizedBox(height: 16),
           Wrap(
-            spacing: dimensions.fixed(20),
+            spacing: 20,
             crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              SizedBox(
-                width: dimensions.fixed(220),
-                child: _blockField(main: true),
-              ),
-            ],
+            children: [SizedBox(width: 220, child: _blockField(main: true))],
           ),
         ],
-        SizedBox(height: dimensions.value(20, 28)),
-        dimensions.scale > 1
-            ? _scaledSwitchTile(
-                value: _extras,
-                title: additionalVersionsTitle,
-                subtitle: additionalVersionsSubtitle,
-                onChanged: changeAdditionalVersions,
-              )
-            : ListTileTheme.merge(
-                titleAlignment: ListTileTitleAlignment.top,
-                child: SwitchListTile(
-                  value: _extras,
-                  controlAffinity: ListTileControlAffinity.leading,
-                  contentPadding: EdgeInsets.zero,
-                  title: additionalVersionsTitle,
-                  subtitle: additionalVersionsSubtitle,
-                  onChanged: changeAdditionalVersions,
-                ),
-              ),
+        SizedBox(height: 28),
+        ListTileTheme.merge(
+          titleAlignment: ListTileTitleAlignment.top,
+          child: SwitchListTile(
+            value: _extras,
+            controlAffinity: ListTileControlAffinity.leading,
+            contentPadding: EdgeInsets.zero,
+            title: additionalVersionsTitle,
+            subtitle: additionalVersionsSubtitle,
+            onChanged: changeAdditionalVersions,
+          ),
+        ),
         if (_extras)
           Wrap(
-            spacing: dimensions.fixed(16),
-            runSpacing: dimensions.fixed(12),
+            spacing: 16,
+            runSpacing: 12,
             children: [
               SizedBox(
                 width: variantMetrics.width,
                 child: DropdownButtonFormField<PlaybackMode?>(
                   isExpanded: true,
-                  iconSize: dimensions.fixed(24),
+                  iconSize: 24,
                   itemHeight: variantMetrics.itemHeight,
                   initialValue: _variantMode,
                   decoration: const InputDecoration(
@@ -1856,10 +1593,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
                 ),
               ),
               if (_variantMode == PlaybackMode.block)
-                SizedBox(
-                  width: dimensions.fixed(210),
-                  child: _blockField(main: false),
-                ),
+                SizedBox(width: 210, child: _blockField(main: false)),
               SizedBox(
                 width: alternateMetrics.width,
                 child: DropdownButtonFormField<int>(
@@ -1867,7 +1601,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
                   decoration: const InputDecoration(
                     labelText: 'Alternate schedules',
                   ),
-                  iconSize: dimensions.fixed(24),
+                  iconSize: 24,
                   itemHeight: alternateMetrics.itemHeight,
                   items: const [0, 1, 2, 3]
                       .map(
@@ -1907,7 +1641,6 @@ class _SetupState extends State<UpstreamChannelSetupView> {
     String description, {
     required double width,
   }) {
-    final dimensions = _ConfigurationDimensions(MediaQuery.sizeOf(context));
     return SizedBox(
       width: width,
       child: Builder(
@@ -1926,17 +1659,13 @@ class _SetupState extends State<UpstreamChannelSetupView> {
               final selected = state.states.contains(WidgetState.selected);
               final focused = state.states.contains(WidgetState.focused);
               final hovered = state.states.contains(WidgetState.hovered);
-              final radius = BorderRadius.circular(
-                dimensions.fixed(roles.panelRadius),
-              );
+              final radius = BorderRadius.circular(roles.panelRadius);
               final surface = selected
                   ? roles.selectedSurface
                   : roles.primarySurface;
               return Container(
-                constraints: BoxConstraints(
-                  minHeight: dimensions.value(104, 152),
-                ),
-                padding: EdgeInsets.all(dimensions.value(16, 24)),
+                constraints: BoxConstraints(minHeight: 152),
+                padding: EdgeInsets.all(24),
                 decoration: BoxDecoration(
                   color: hovered
                       ? Color.alphaBlend(
@@ -1954,7 +1683,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
                         borderRadius: radius,
                         border: Border.all(
                           color: roles.focusBorder,
-                          width: dimensions.fixed(roles.focusBorderWidth),
+                          width: roles.focusBorderWidth,
                         ),
                       )
                     : null,
@@ -1967,18 +1696,18 @@ class _SetupState extends State<UpstreamChannelSetupView> {
                       title,
                       style: TextStyle(
                         color: roles.primaryText,
-                        fontSize: dimensions.value(16, 22),
+                        fontSize: 22,
                         fontWeight: FontWeight.w600,
                         height: 1.4,
                         letterSpacing: 0,
                       ),
                     ),
-                    SizedBox(height: dimensions.value(8, 12)),
+                    SizedBox(height: 12),
                     Text(
                       description,
                       style: TextStyle(
                         color: roles.secondaryText,
-                        fontSize: dimensions.value(13, 18),
+                        fontSize: 18,
                         height: 1.4,
                         letterSpacing: 0,
                       ),
@@ -2013,10 +1742,9 @@ class _SetupState extends State<UpstreamChannelSetupView> {
       ],
       PlaybackMode.block => _miniMarathonEpisodes(),
     };
-    final dimensions = _ConfigurationDimensions(MediaQuery.sizeOf(context));
     final roles = LineupTheme.of(context);
     return Container(
-      padding: EdgeInsets.symmetric(vertical: dimensions.value(16, 28)),
+      padding: EdgeInsets.symmetric(vertical: 28),
       decoration: BoxDecoration(
         border: Border.symmetric(
           horizontal: BorderSide(color: roles.subtleBorder),
@@ -2025,9 +1753,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final effectiveWidth =
-              constraints.maxWidth /
-              dimensions.scale /
-              MediaQuery.textScalerOf(context).scale(1);
+              constraints.maxWidth / MediaQuery.textScalerOf(context).scale(1);
           final columns = effectiveWidth >= 900
               ? 6
               : effectiveWidth >= 560
@@ -2035,7 +1761,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
               : effectiveWidth >= 320
               ? 2
               : 1;
-          final gap = dimensions.value(8, 12);
+          final double gap = 12;
           final width = (constraints.maxWidth - gap * (columns - 1)) / columns;
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2044,11 +1770,11 @@ class _SetupState extends State<UpstreamChannelSetupView> {
                 'Illustrative schedule · Each tile is one episode',
                 style: TextStyle(
                   color: roles.secondaryText,
-                  fontSize: dimensions.value(14, 18),
+                  fontSize: 18,
                   height: 1.4,
                 ),
               ),
-              SizedBox(height: dimensions.value(12, 20)),
+              SizedBox(height: 20),
               Wrap(
                 spacing: gap,
                 runSpacing: gap,
@@ -2062,31 +1788,28 @@ class _SetupState extends State<UpstreamChannelSetupView> {
                           border: Border(
                             left: BorderSide(
                               color: roles.defaultBorder,
-                              width: dimensions.fixed(2),
+                              width: 2,
                             ),
                           ),
                         ),
                         child: Padding(
                           padding: EdgeInsets.symmetric(
-                            vertical: dimensions.value(12, 22),
-                            horizontal: dimensions.value(12, 20),
+                            vertical: 22,
+                            horizontal: 20,
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
                                 episode.$1,
-                                style: TextStyle(
-                                  fontSize: dimensions.value(14, 20),
-                                  height: 1.4,
-                                ),
+                                style: TextStyle(fontSize: 20, height: 1.4),
                               ),
-                              SizedBox(height: dimensions.value(4, 8)),
+                              SizedBox(height: 8),
                               Text(
                                 'Episode ${episode.$2}',
                                 style: TextStyle(
                                   color: roles.secondaryText,
-                                  fontSize: dimensions.value(12, 17),
+                                  fontSize: 17,
                                   height: 1.4,
                                 ),
                               ),
@@ -2097,7 +1820,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
                     ),
                 ],
               ),
-              SizedBox(height: dimensions.fixed(12)),
+              SizedBox(height: 12),
               Text(
                 switch (_playback) {
                   PlaybackMode.shuffle => 'The example mixes episodes across shows. Tuning in joins the channel’s ongoing schedule.',
@@ -2107,7 +1830,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
                 },
                 style: TextStyle(
                   color: roles.secondaryText,
-                  fontSize: dimensions.value(13, 18),
+                  fontSize: 18,
                   height: 1.4,
                 ),
               ),
@@ -2132,17 +1855,16 @@ class _SetupState extends State<UpstreamChannelSetupView> {
   }
 
   Widget _blockField({required bool main}) {
-    final dimensions = _ConfigurationDimensions(MediaQuery.sizeOf(context));
     final metrics = _dropdownMetrics(
-      desiredWidth: dimensions.fixed(220),
-      baseHeight: dimensions.fixed(48),
-      maxWidth: dimensions.fixed(220),
+      desiredWidth: 220,
+      baseHeight: 48,
+      maxWidth: 220,
       labels: ['2', '3', '4', '5'],
       style: Theme.of(context).textTheme.titleMedium!,
     );
     return DropdownButtonFormField<int>(
       initialValue: main ? _blockSize : _variantBlockSize,
-      iconSize: dimensions.fixed(24),
+      iconSize: 24,
       itemHeight: metrics.itemHeight,
       decoration: InputDecoration(
         labelText: main ? 'Episodes per block' : 'Extra block size',
@@ -2197,34 +1919,33 @@ class _SetupState extends State<UpstreamChannelSetupView> {
   }
 
   Widget _limitControls(ChannelPlanAllocation allocation) {
-    final dimensions = _ConfigurationDimensions(MediaQuery.sizeOf(context));
     final roles = LineupTheme.of(context);
     final textTheme = Theme.of(context).textTheme;
     final headingStyle = textTheme.titleMedium!.copyWith(
       color: roles.primaryText,
-      fontSize: dimensions.value(18, 24),
+      fontSize: 24,
       fontWeight: FontWeight.w600,
       height: 1.3,
     );
     final subtitleStyle = textTheme.bodyMedium!.copyWith(
       color: roles.secondaryText,
-      fontSize: dimensions.value(14, 18),
+      fontSize: 18,
       height: 1.4,
     );
     final labelStyle = textTheme.bodyMedium!.copyWith(
       color: roles.primaryText,
-      fontSize: dimensions.value(16, 22),
+      fontSize: 22,
       fontWeight: FontWeight.normal,
       height: 1.4,
     );
     final descriptionStyle = textTheme.bodyMedium!.copyWith(
       color: roles.secondaryText,
-      fontSize: dimensions.value(13, 18),
+      fontSize: 18,
       height: 1.4,
     );
     final dropdownStyle = textTheme.bodyMedium!.copyWith(
       color: roles.primaryText,
-      fontSize: dimensions.value(14, 18),
+      fontSize: 18,
       height: 1.4,
     );
 
@@ -2241,22 +1962,22 @@ class _SetupState extends State<UpstreamChannelSetupView> {
           border: Border(bottom: BorderSide(color: roles.subtleBorder)),
         ),
         child: Padding(
-          padding: EdgeInsets.symmetric(vertical: dimensions.value(24, 36)),
+          padding: EdgeInsets.symmetric(vertical: 36),
           child: LayoutBuilder(
             builder: (_, constraints) {
               final textScale = MediaQuery.textScalerOf(context).scale(1);
-              final desiredWidth = dimensions.value(90, 110);
+              final double desiredWidth = 110;
               final metrics = _dropdownMetrics(
                 desiredWidth: desiredWidth,
-                baseHeight: dimensions.value(36, 48),
+                baseHeight: 48,
                 maxWidth: constraints.maxWidth,
                 labels: choices.map((choice) => '$choice'),
                 style: dropdownStyle,
               );
               final dropdownWidth = metrics.width;
               final inline =
-                  constraints.maxWidth / dimensions.scale / textScale >= 320 &&
-                  constraints.maxWidth >= dropdownWidth + dimensions.fixed(16);
+                  constraints.maxWidth / textScale >= 320 &&
+                  constraints.maxWidth >= dropdownWidth + 16;
               final dropdown = Semantics(
                 label: label,
                 container: true,
@@ -2267,17 +1988,15 @@ class _SetupState extends State<UpstreamChannelSetupView> {
                     decoration: BoxDecoration(
                       color: roles.primarySurface,
                       border: Border.all(color: roles.defaultBorder),
-                      borderRadius: BorderRadius.circular(dimensions.fixed(8)),
+                      borderRadius: BorderRadius.circular(8),
                     ),
                     child: DropdownButtonHideUnderline(
                       child: DropdownButton<int>(
                         key: key,
                         isExpanded: true,
                         isDense: true,
-                        iconSize: dimensions.fixed(24),
-                        padding: EdgeInsets.symmetric(
-                          horizontal: dimensions.fixed(10),
-                        ),
+                        iconSize: 24,
+                        padding: EdgeInsets.symmetric(horizontal: 10),
                         itemHeight: metrics.itemHeight,
                         value: value,
                         style: dropdownStyle,
@@ -2304,16 +2023,16 @@ class _SetupState extends State<UpstreamChannelSetupView> {
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
                         Expanded(child: Text(label, style: labelStyle)),
-                        SizedBox(width: dimensions.fixed(16)),
+                        SizedBox(width: 16),
                         dropdown,
                       ],
                     )
                   else ...[
                     Text(label, style: labelStyle),
-                    SizedBox(height: dimensions.fixed(8)),
+                    SizedBox(height: 8),
                     Align(alignment: Alignment.centerLeft, child: dropdown),
                   ],
-                  SizedBox(height: dimensions.value(10, 16)),
+                  SizedBox(height: 16),
                   Text(description, style: descriptionStyle),
                 ],
               );
@@ -2327,7 +2046,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text('Channel limits', style: headingStyle),
-        SizedBox(height: dimensions.fixed(8)),
+        SizedBox(height: 8),
         Text(
           'Keep enough variety without overcrowding your guide.',
           style: subtitleStyle,
@@ -2354,7 +2073,6 @@ class _SetupState extends State<UpstreamChannelSetupView> {
   }
 
   Widget _rulesAllocationFeedback(ChannelPlanAllocation allocation) {
-    final dimensions = _ConfigurationDimensions(MediaQuery.sizeOf(context));
     final roles = LineupTheme.of(context);
     final excluded = allocation.excludedOriginals + allocation.excludedExtras;
     if (excluded == 0 && allocation.channels.isNotEmpty) {
@@ -2368,13 +2086,13 @@ class _SetupState extends State<UpstreamChannelSetupView> {
     return Semantics(
       liveRegion: true,
       child: Container(
-        margin: EdgeInsets.only(top: dimensions.value(24, 36)),
-        padding: EdgeInsets.only(left: dimensions.value(14, 20)),
+        margin: EdgeInsets.only(top: 36),
+        padding: EdgeInsets.only(left: 20),
         decoration: BoxDecoration(
           border: Border(
             left: BorderSide(
               color: excluded > 0 ? roles.progressFill : roles.subtleBorder,
-              width: dimensions.fixed(2),
+              width: 2,
             ),
           ),
         ),
@@ -2382,7 +2100,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
           guidance,
           style: TextStyle(
             color: roles.secondaryText,
-            fontSize: dimensions.value(13, 18),
+            fontSize: 18,
             height: 1.4,
           ),
         ),
@@ -2391,34 +2109,33 @@ class _SetupState extends State<UpstreamChannelSetupView> {
   }
 
   Widget _orderControls() {
-    final dimensions = _ConfigurationDimensions(MediaQuery.sizeOf(context));
     final roles = LineupTheme.of(context);
     final textTheme = Theme.of(context).textTheme;
     final headingStyle = textTheme.titleMedium!.copyWith(
       color: roles.primaryText,
-      fontSize: dimensions.value(18, 24),
+      fontSize: 24,
       fontWeight: FontWeight.w600,
       height: 1.3,
     );
     final subtitleStyle = textTheme.bodyMedium!.copyWith(
       color: roles.secondaryText,
-      fontSize: dimensions.value(14, 18),
+      fontSize: 18,
       height: 1.4,
     );
     final nameStyle = textTheme.bodyMedium!.copyWith(
       color: roles.primaryText,
-      fontSize: dimensions.value(15, 21),
+      fontSize: 21,
       height: 1.4,
     );
     final rankStyle = textTheme.bodyMedium!.copyWith(
       color: roles.secondaryText,
-      fontSize: dimensions.value(13, 18),
+      fontSize: 18,
       height: 1.4,
     );
-    final rowHeight = dimensions.value(42, 60);
-    final buttonSize = dimensions.value(32, 44);
-    final buttonIconSize = dimensions.value(20, 24);
-    final rowGap = dimensions.value(12, 16);
+    final double rowHeight = 60;
+    final double buttonSize = 44;
+    final double buttonIconSize = 24;
+    final double rowGap = 16;
 
     Widget rowFor(int index, BuilderStrategy strategy) {
       var hovered = false;
@@ -2455,7 +2172,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     SizedBox(
-                      width: dimensions.value(20, 28),
+                      width: 28,
                       child: Text('${index + 1}', style: rankStyle),
                     ),
                     SizedBox(width: rowGap),
@@ -2471,9 +2188,9 @@ class _SetupState extends State<UpstreamChannelSetupView> {
                         style: nameStyle,
                       ),
                     ),
-                    SizedBox(width: dimensions.fixed(8)),
+                    SizedBox(width: 8),
                     Wrap(
-                      spacing: dimensions.fixed(4),
+                      spacing: 4,
                       children: [
                         IconButton(
                           focusNode: _orderFocus[strategy]!.earlier,
@@ -2518,15 +2235,15 @@ class _SetupState extends State<UpstreamChannelSetupView> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text('Source order', style: headingStyle),
-        SizedBox(height: dimensions.fixed(8)),
+        SizedBox(height: 8),
         Text(
           'Take one channel from each source, then repeat.',
           style: subtitleStyle,
         ),
-        SizedBox(height: dimensions.value(16, 24)),
+        SizedBox(height: 24),
         for (var index = 0; index < _sourceOrder.length; index++)
           rowFor(index, _sourceOrder[index]),
-        SizedBox(height: dimensions.value(16, 24)),
+        SizedBox(height: 24),
         Text(
           'Repeat this order until the limit is reached. Skip sources with no remaining channels.',
           style: subtitleStyle,
@@ -2574,15 +2291,11 @@ class _SetupState extends State<UpstreamChannelSetupView> {
     );
     final noChanges =
         counts.added == 0 && counts.updated == 0 && counts.removed == 0;
-    final dimensions = _ConfigurationDimensions(MediaQuery.sizeOf(context));
     final roles = LineupTheme.of(context);
-    final actionSize = Size(dimensions.fixed(148), dimensions.fixed(54));
-    final actionPadding = EdgeInsets.symmetric(
-      horizontal: dimensions.fixed(24),
-      vertical: dimensions.fixed(16),
-    );
+    final actionSize = Size(148, 54);
+    final actionPadding = EdgeInsets.symmetric(horizontal: 24, vertical: 16);
     final actionTextStyle = Theme.of(context).textTheme.labelLarge!
-        .copyWith(fontSize: dimensions.value(14, 18));
+        .copyWith(fontSize: 18);
     final actionStyle = FilledButton.styleFrom(
       minimumSize: actionSize,
       padding: actionPadding,
@@ -2633,7 +2346,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
         children: [
           if (_notice != null && _notice != 'Updating review…') ...[
             LineupNotice(message: _notice!),
-            SizedBox(height: dimensions.fixed(8)),
+            SizedBox(height: 8),
           ],
           if (noChanges) ...[
             Text(
@@ -2641,37 +2354,26 @@ class _SetupState extends State<UpstreamChannelSetupView> {
               style: Theme.of(context).textTheme.headlineSmall,
             ),
             const Text('No changes needed.'),
-            SizedBox(height: dimensions.fixed(8)),
+            SizedBox(height: 8),
           ],
           _reviewOverview(entries, finalChannels, counts),
-          SizedBox(height: dimensions.value(16, 24)),
+          SizedBox(height: 24),
           Expanded(child: _roster(entries)),
           if (counts.removed > 0)
             Padding(
-              padding: EdgeInsets.only(top: dimensions.value(12, 16)),
-              child: dimensions.scale > 1
-                  ? _scaledCheckboxTile(
-                      key: const ValueKey('channel-setup-replace-confirmation'),
-                      value: _removalConfirmed,
-                      title: Text(
-                        'I understand that ${counts.removed} existing generated ${counts.removed == 1 ? 'channel' : 'channels'} will be removed.',
-                        style: TextStyle(color: roles.liveAccent),
-                      ),
-                      onChanged: (value) =>
-                          setState(() => _removalConfirmed = value == true),
-                    )
-                  : CheckboxListTile(
-                      key: const ValueKey('channel-setup-replace-confirmation'),
-                      controlAffinity: ListTileControlAffinity.leading,
-                      contentPadding: EdgeInsets.zero,
-                      value: _removalConfirmed,
-                      title: Text(
-                        'I understand that ${counts.removed} existing generated ${counts.removed == 1 ? 'channel' : 'channels'} will be removed.',
-                        style: TextStyle(color: roles.liveAccent),
-                      ),
-                      onChanged: (value) =>
-                          setState(() => _removalConfirmed = value == true),
-                    ),
+              padding: EdgeInsets.only(top: 16),
+              child: CheckboxListTile(
+                key: const ValueKey('channel-setup-replace-confirmation'),
+                controlAffinity: ListTileControlAffinity.leading,
+                contentPadding: EdgeInsets.zero,
+                value: _removalConfirmed,
+                title: Text(
+                  'I understand that ${counts.removed} existing generated ${counts.removed == 1 ? 'channel' : 'channels'} will be removed.',
+                  style: TextStyle(color: roles.liveAccent),
+                ),
+                onChanged: (value) =>
+                    setState(() => _removalConfirmed = value == true),
+              ),
             ),
         ],
       ),
@@ -2680,22 +2382,21 @@ class _SetupState extends State<UpstreamChannelSetupView> {
 
   Widget _methodDecision() {
     if (_firstSetup) return const SizedBox.shrink();
-    final dimensions = _ConfigurationDimensions(MediaQuery.sizeOf(context));
     final roles = LineupTheme.of(context);
     final textTheme = Theme.of(context).textTheme;
     final methodStyle = textTheme.bodyMedium!.copyWith(
       color: roles.primaryText,
-      fontSize: dimensions.value(14, 18),
+      fontSize: 18,
       height: 1.4,
     );
     final helpStyle = textTheme.bodyMedium!.copyWith(
       color: roles.secondaryText,
-      fontSize: dimensions.value(13, 18),
+      fontSize: 18,
       height: 1.4,
     );
     final methodMetrics = _dropdownMetrics(
-      desiredWidth: dimensions.value(240, 330),
-      baseHeight: dimensions.fixed(48),
+      desiredWidth: 330,
+      baseHeight: 48,
       maxWidth: double.infinity,
       labels: [
         'Update and add',
@@ -2710,7 +2411,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
         key: const ValueKey('review-build-method'),
         initialValue: _mode,
         isExpanded: true,
-        iconSize: dimensions.fixed(24),
+        iconSize: 24,
         itemHeight: methodMetrics.itemHeight,
         style: methodStyle,
         decoration: const InputDecoration(labelText: 'Build method'),
@@ -2748,27 +2449,21 @@ class _SetupState extends State<UpstreamChannelSetupView> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final effectiveWidth =
-            constraints.maxWidth /
-            dimensions.scale /
-            MediaQuery.textScalerOf(context).scale(1);
+            constraints.maxWidth / MediaQuery.textScalerOf(context).scale(1);
         final inline = effectiveWidth >= 700;
         if (inline) {
           return Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               dropdown,
-              SizedBox(width: dimensions.value(20, 28)),
+              SizedBox(width: 28),
               Expanded(child: explanation),
             ],
           );
         }
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            dropdown,
-            SizedBox(height: dimensions.fixed(8)),
-            explanation,
-          ],
+          children: [dropdown, SizedBox(height: 8), explanation],
         );
       },
     );
@@ -2779,25 +2474,24 @@ class _SetupState extends State<UpstreamChannelSetupView> {
     List<Channel> finalChannels,
     ({int unchanged, int updated, int added, int removed}) counts,
   ) {
-    final dimensions = _ConfigurationDimensions(MediaQuery.sizeOf(context));
     final roles = LineupTheme.of(context);
     final textTheme = Theme.of(context).textTheme;
     final finalCount = finalChannels.length;
     final generated = _finalGeneratedCounts(finalChannels);
     final totalStyle = textTheme.titleLarge!.copyWith(
       color: roles.primaryText,
-      fontSize: dimensions.value(24, 36),
+      fontSize: 36,
       fontWeight: FontWeight.w600,
       height: 1.2,
     );
     final currentStyle = textTheme.bodyMedium!.copyWith(
       color: roles.secondaryText,
-      fontSize: dimensions.value(14, 18),
+      fontSize: 18,
       height: 1.4,
     );
     final supportingStyle = textTheme.bodyMedium!.copyWith(
       color: roles.secondaryText,
-      fontSize: dimensions.value(13, 18),
+      fontSize: 18,
       height: 1.4,
     );
     final total = _firstSetup
@@ -2807,12 +2501,12 @@ class _SetupState extends State<UpstreamChannelSetupView> {
             child: ExcludeSemantics(
               child: Wrap(
                 crossAxisAlignment: WrapCrossAlignment.center,
-                spacing: dimensions.fixed(14),
+                spacing: 14,
                 children: [
                   Text('${_reviewBase.length} current', style: currentStyle),
                   Icon(
                     Icons.arrow_forward,
-                    size: dimensions.value(24, 32),
+                    size: 32,
                     color: roles.secondaryText,
                   ),
                   Text('$finalCount final', style: totalStyle),
@@ -2821,8 +2515,8 @@ class _SetupState extends State<UpstreamChannelSetupView> {
             ),
           );
     final filters = Wrap(
-      spacing: dimensions.fixed(8),
-      runSpacing: dimensions.fixed(4),
+      spacing: 8,
+      runSpacing: 4,
       children: [
         _filterChip(_ReviewFilter.unchanged, counts.unchanged),
         _filterChip(_ReviewFilter.updated, counts.updated),
@@ -2831,8 +2525,8 @@ class _SetupState extends State<UpstreamChannelSetupView> {
       ],
     );
     final sourceBreakdown = Wrap(
-      spacing: dimensions.value(18, 24),
-      runSpacing: dimensions.fixed(4),
+      spacing: 24,
+      runSpacing: 4,
       children: [
         Text('Final generated channels', style: supportingStyle),
         for (final strategy in _sourceOrder)
@@ -2874,10 +2568,10 @@ class _SetupState extends State<UpstreamChannelSetupView> {
       decoration: BoxDecoration(
         color: roles.primarySurface,
         border: Border.all(color: roles.subtleBorder),
-        borderRadius: BorderRadius.circular(dimensions.fixed(8)),
+        borderRadius: BorderRadius.circular(8),
       ),
       child: Padding(
-        padding: EdgeInsets.all(dimensions.value(20, 28)),
+        padding: EdgeInsets.all(28),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -2885,7 +2579,6 @@ class _SetupState extends State<UpstreamChannelSetupView> {
               builder: (context, constraints) {
                 final effectiveWidth =
                     constraints.maxWidth /
-                    dimensions.scale /
                     MediaQuery.textScalerOf(context).scale(1);
                 final inline = !_firstSetup && effectiveWidth >= 760;
                 if (inline) {
@@ -2901,21 +2594,18 @@ class _SetupState extends State<UpstreamChannelSetupView> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     total,
-                    if (!_firstSetup) ...[
-                      SizedBox(height: dimensions.fixed(12)),
-                      filters,
-                    ],
+                    if (!_firstSetup) ...[SizedBox(height: 12), filters],
                   ],
                 );
               },
             ),
             if (!_firstSetup) ...[
-              SizedBox(height: dimensions.value(16, 24)),
+              SizedBox(height: 24),
               Text(
                 'Changes in this review${counts.removed > 0 ? ' · Includes channels being removed' : ''}',
                 style: supportingStyle,
               ),
-              SizedBox(height: dimensions.value(8, 12)),
+              SizedBox(height: 12),
               if (entries.isNotEmpty)
                 Semantics(
                   label:
@@ -2923,38 +2613,26 @@ class _SetupState extends State<UpstreamChannelSetupView> {
                   child: ExcludeSemantics(
                     child: Row(
                       children: [
-                        _segment(
-                          counts.unchanged,
-                          roles.mutedText,
-                          height: dimensions.value(10, 14),
-                        ),
-                        _segment(
-                          counts.updated,
-                          roles.focusBorder,
-                          height: dimensions.value(10, 14),
-                        ),
-                        _segment(
-                          counts.added,
-                          roles.progressFill,
-                          height: dimensions.value(10, 14),
-                        ),
+                        _segment(counts.unchanged, roles.mutedText, height: 14),
+                        _segment(counts.updated, roles.focusBorder, height: 14),
+                        _segment(counts.added, roles.progressFill, height: 14),
                         _segment(
                           counts.removed,
                           Theme.of(context).colorScheme.error,
-                          height: dimensions.value(10, 14),
+                          height: 14,
                         ),
                       ],
                     ),
                   ),
                 ),
             ],
-            SizedBox(height: dimensions.value(16, 24)),
+            SizedBox(height: 24),
             Divider(height: 1, color: roles.subtleBorder),
-            SizedBox(height: dimensions.value(12, 16)),
+            SizedBox(height: 16),
             sourceBreakdown,
             if (_reviewBase.any((channel) => channel.builderKey == null))
               Padding(
-                padding: EdgeInsets.only(top: dimensions.fixed(8)),
+                padding: EdgeInsets.only(top: 8),
                 child: Text(
                   '${_reviewBase.where((channel) => channel.builderKey == null).length} custom channels will be kept.',
                   style: supportingStyle,
@@ -2993,7 +2671,6 @@ class _SetupState extends State<UpstreamChannelSetupView> {
   }
 
   Widget _filterChip(_ReviewFilter filter, int count) {
-    final dimensions = _ConfigurationDimensions(MediaQuery.sizeOf(context));
     final roles = LineupTheme.of(context);
     final selected = _filter == filter;
     final swatchColor = count == 0
@@ -3005,11 +2682,8 @@ class _SetupState extends State<UpstreamChannelSetupView> {
             _ReviewFilter.removed => Theme.of(context).colorScheme.error,
             _ReviewFilter.all => roles.mutedText,
           };
-    final textStyle = Theme.of(context).textTheme.bodyMedium!.copyWith(
-      color: roles.primaryText,
-      fontSize: dimensions.value(13, 18),
-      height: 1.4,
-    );
+    final textStyle = Theme.of(context).textTheme.bodyMedium!
+        .copyWith(color: roles.primaryText, fontSize: 18, height: 1.4);
     return Semantics(
       selected: selected,
       child: TextButton(
@@ -3021,26 +2695,17 @@ class _SetupState extends State<UpstreamChannelSetupView> {
           side: selected
               ? BorderSide(color: roles.defaultBorder)
               : BorderSide.none,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(dimensions.fixed(6)),
-          ),
-          minimumSize: Size(0, dimensions.value(32, 44)),
-          padding: EdgeInsets.symmetric(
-            horizontal: dimensions.value(8, 12),
-            vertical: dimensions.value(4, 8),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+          minimumSize: Size(0, 44),
+          padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           textStyle: textStyle,
         ),
         onPressed: () => setState(() => _filter = filter),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              width: dimensions.value(8, 10),
-              height: dimensions.value(8, 10),
-              color: swatchColor,
-            ),
-            SizedBox(width: dimensions.value(8, 10)),
+            Container(width: 10, height: 10, color: swatchColor),
+            SizedBox(width: 10),
             Text('$count ${_capitalized(filter.name)}'),
           ],
         ),
@@ -3049,18 +2714,11 @@ class _SetupState extends State<UpstreamChannelSetupView> {
   }
 
   Widget _roster(List<_ReviewEntry> all) {
-    final dimensions = _ConfigurationDimensions(MediaQuery.sizeOf(context));
     final roles = LineupTheme.of(context);
-    final textStyle = Theme.of(context).textTheme.bodyMedium!.copyWith(
-      color: roles.secondaryText,
-      fontSize: dimensions.value(13, 18),
-      height: 1.4,
-    );
-    final searchStyle = Theme.of(context).textTheme.bodyMedium!.copyWith(
-      color: roles.primaryText,
-      fontSize: dimensions.value(14, 18),
-      height: 1.4,
-    );
+    final textStyle = Theme.of(context).textTheme.bodyMedium!
+        .copyWith(color: roles.secondaryText, fontSize: 18, height: 1.4);
+    final searchStyle = Theme.of(context).textTheme.bodyMedium!
+        .copyWith(color: roles.primaryText, fontSize: 18, height: 1.4);
     final query = _search.text.trim().toLowerCase();
     final entries = all.where((entry) {
       final found =
@@ -3086,29 +2744,27 @@ class _SetupState extends State<UpstreamChannelSetupView> {
                   hintText: 'Search channels by name or number',
                   hintStyle: searchStyle,
                   contentPadding: EdgeInsets.symmetric(
-                    horizontal: dimensions.fixed(12),
-                    vertical: dimensions.fixed(16),
+                    horizontal: 12,
+                    vertical: 16,
                   ),
                   prefixIconConstraints: BoxConstraints(
-                    minWidth: dimensions.fixed(48),
-                    minHeight: dimensions.fixed(48),
+                    minWidth: 48,
+                    minHeight: 48,
                   ),
-                  prefixIcon: Icon(Icons.search, size: dimensions.fixed(24)),
+                  prefixIcon: Icon(Icons.search, size: 24),
                 ),
                 onChanged: (_) => setState(() {}),
               ),
             ),
             if (!_firstSetup) ...[
-              SizedBox(width: dimensions.fixed(12)),
+              SizedBox(width: 12),
               TextButton(
                 key: const ValueKey('review-show-all'),
                 style: TextButton.styleFrom(
                   foregroundColor: roles.secondaryText,
                   textStyle: searchStyle,
-                  minimumSize: Size(0, dimensions.value(44, 48)),
-                  padding: EdgeInsets.symmetric(
-                    horizontal: dimensions.value(8, 12),
-                  ),
+                  minimumSize: Size(0, 48),
+                  padding: EdgeInsets.symmetric(horizontal: 12),
                 ),
                 onPressed: () => setState(() => _filter = _ReviewFilter.all),
                 child: const Text('Show all'),
@@ -3116,14 +2772,14 @@ class _SetupState extends State<UpstreamChannelSetupView> {
             ],
           ],
         ),
-        SizedBox(height: dimensions.value(6, 8)),
+        SizedBox(height: 8),
         Text(
           filtered
               ? '${_capitalized(_filter.name)} · ${entries.length} matching ${entries.length == 1 ? 'channel' : 'channels'}'
               : '${entries.length} of ${all.length} review entries',
           style: textStyle,
         ),
-        SizedBox(height: dimensions.value(8, 12)),
+        SizedBox(height: 12),
         _rosterHeader(),
         Expanded(
           child: entries.isEmpty
@@ -3139,25 +2795,16 @@ class _SetupState extends State<UpstreamChannelSetupView> {
   }
 
   Widget _rosterHeader() {
-    final dimensions = _ConfigurationDimensions(MediaQuery.sizeOf(context));
     final roles = LineupTheme.of(context);
-    final headerStyle = Theme.of(context).textTheme.bodyMedium!.copyWith(
-      color: roles.secondaryText,
-      fontSize: dimensions.value(14, 18),
-      height: 1.4,
-    );
-    final numberWidth = dimensions.value(58, 80);
-    final changeWidth = dimensions.value(92, 120);
+    final headerStyle = Theme.of(context).textTheme.bodyMedium!
+        .copyWith(color: roles.secondaryText, fontSize: 18, height: 1.4);
+    final double numberWidth = 80;
+    final double changeWidth = 120;
     return DecoratedBox(
       key: const ValueKey('review-roster-header'),
       decoration: BoxDecoration(color: roles.primarySurface),
       child: Padding(
-        padding: EdgeInsets.fromLTRB(
-          dimensions.fixed(12),
-          dimensions.value(6, 8),
-          dimensions.fixed(52),
-          dimensions.value(6, 8),
-        ),
+        padding: EdgeInsets.fromLTRB(12, 8, 52, 8),
         child: Row(
           children: [
             SizedBox(
@@ -3202,17 +2849,16 @@ class _SetupState extends State<UpstreamChannelSetupView> {
   );
 
   Widget _reviewRow(_ReviewEntry entry) {
-    final dimensions = _ConfigurationDimensions(MediaQuery.sizeOf(context));
     final roles = LineupTheme.of(context);
     final textTheme = Theme.of(context).textTheme;
     final nameStyle = textTheme.bodyMedium!.copyWith(
       color: roles.primaryText,
-      fontSize: dimensions.value(15, 20),
+      fontSize: 20,
       height: 1.4,
     );
     final metaStyle = textTheme.bodyMedium!.copyWith(
       color: roles.secondaryText,
-      fontSize: dimensions.value(14, 18),
+      fontSize: 18,
       height: 1.4,
     );
     final changeStyle = metaStyle.copyWith(
@@ -3223,8 +2869,8 @@ class _SetupState extends State<UpstreamChannelSetupView> {
         _ReviewKind.removed => Theme.of(context).colorScheme.error,
       },
     );
-    final numberWidth = dimensions.value(58, 80);
-    final changeWidth = dimensions.value(92, 120);
+    final double numberWidth = 80;
+    final double changeWidth = 120;
     final content = Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -3260,16 +2906,9 @@ class _SetupState extends State<UpstreamChannelSetupView> {
       ),
       child: entry.kind == _ReviewKind.updated && changes.isNotEmpty
           ? ExpansionTile(
-              tilePadding: EdgeInsets.symmetric(
-                horizontal: dimensions.fixed(12),
-              ),
+              tilePadding: EdgeInsets.symmetric(horizontal: 12),
               title: content,
-              childrenPadding: EdgeInsets.fromLTRB(
-                numberWidth + dimensions.fixed(12),
-                0,
-                dimensions.fixed(12),
-                dimensions.value(12, 16),
-              ),
+              childrenPadding: EdgeInsets.fromLTRB(numberWidth + 12, 0, 12, 16),
               children: [
                 for (final change in changes)
                   Align(
@@ -3284,12 +2923,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
               ],
             )
           : Padding(
-              padding: EdgeInsets.fromLTRB(
-                dimensions.fixed(12),
-                dimensions.value(13, 16),
-                dimensions.fixed(52),
-                dimensions.value(13, 16),
-              ),
+              padding: EdgeInsets.fromLTRB(12, 16, 52, 16),
               child: content,
             ),
     );
@@ -3335,28 +2969,27 @@ class _SetupState extends State<UpstreamChannelSetupView> {
   Widget _resultStep() {
     final counts = _counts(_appliedEntries);
     final total = widget.controller.channels.length;
-    final dimensions = _ConfigurationDimensions(MediaQuery.sizeOf(context));
     final roles = LineupTheme.of(context);
     final textTheme = Theme.of(context).textTheme;
     final headingStyle = textTheme.headlineMedium!.copyWith(
       color: roles.primaryText,
-      fontSize: dimensions.value(36, 48),
+      fontSize: 48,
       fontWeight: FontWeight.w600,
       height: 1.18,
-      letterSpacing: dimensions.fixed(-1.2),
+      letterSpacing: -1.2,
     );
     final infoStyle = textTheme.bodyMedium!.copyWith(
       color: roles.secondaryText,
-      fontSize: dimensions.value(20, 24),
+      fontSize: 24,
       height: 1.4,
     );
     final detailStyle = textTheme.bodyMedium!.copyWith(
       color: roles.secondaryText,
-      fontSize: dimensions.value(14, 18),
+      fontSize: 18,
       height: 1.4,
     );
     final actionStyle = textTheme.labelLarge!.copyWith(
-      fontSize: dimensions.value(14, 18),
+      fontSize: 18,
       height: 1.4,
       fontWeight: FontWeight.w600,
     );
@@ -3377,17 +3010,13 @@ class _SetupState extends State<UpstreamChannelSetupView> {
     final copy = Semantics(
       liveRegion: true,
       child: ConstrainedBox(
-        constraints: BoxConstraints(
-          minHeight: _firstSetup
-              ? dimensions.value(96, 116)
-              : dimensions.value(120, 144),
-        ),
+        constraints: BoxConstraints(minHeight: _firstSetup ? 116 : 144),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(headline, textAlign: TextAlign.center, style: headingStyle),
-            SizedBox(height: dimensions.value(16, 24)),
+            SizedBox(height: 24),
             if (_phase == _BuildPhase.complete) ...[
               Text(
                 '$total ${total == 1 ? 'channel' : 'channels'} in your lineup',
@@ -3395,7 +3024,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
                 style: infoStyle,
               ),
               if (!_firstSetup && changeSummary.isNotEmpty) ...[
-                SizedBox(height: dimensions.fixed(4)),
+                SizedBox(height: 4),
                 Text(
                   changeSummary,
                   textAlign: TextAlign.center,
@@ -3410,14 +3039,14 @@ class _SetupState extends State<UpstreamChannelSetupView> {
                 textAlign: TextAlign.center,
                 style: detailStyle,
               ),
-              SizedBox(height: dimensions.fixed(4)),
+              SizedBox(height: 4),
               Text(
                 'Your setup choices are still here.',
                 textAlign: TextAlign.center,
                 style: detailStyle,
               ),
               if (_error != null) ...[
-                SizedBox(height: dimensions.fixed(14)),
+                SizedBox(height: 14),
                 Text(
                   _error!,
                   textAlign: TextAlign.center,
@@ -3429,19 +3058,17 @@ class _SetupState extends State<UpstreamChannelSetupView> {
         ),
       ),
     );
-    final actionHeight = dimensions.value(48, 56);
+    final double actionHeight = 56;
     final actions = ConstrainedBox(
-      constraints: BoxConstraints(minHeight: dimensions.value(108, 120)),
+      constraints: BoxConstraints(minHeight: 120),
       child: applying
-          ? SizedBox(height: dimensions.value(108, 120))
+          ? SizedBox(height: 120)
           : Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 ConstrainedBox(
-                  constraints: BoxConstraints(
-                    minWidth: dimensions.value(170, 190),
-                  ),
+                  constraints: BoxConstraints(minWidth: 190),
                   child: FilledButton(
                     focusNode: _resultFocus,
                     style: FilledButton.styleFrom(
@@ -3455,11 +3082,11 @@ class _SetupState extends State<UpstreamChannelSetupView> {
                   ),
                 ),
                 if (!failure) ...[
-                  SizedBox(height: dimensions.fixed(12)),
+                  SizedBox(height: 12),
                   TextButton(
                     style: TextButton.styleFrom(
                       foregroundColor: roles.secondaryText,
-                      minimumSize: Size(0, dimensions.value(44, 48)),
+                      minimumSize: Size(0, 48),
                       textStyle: actionStyle,
                     ),
                     onPressed: _addCustom,
@@ -3474,19 +3101,19 @@ class _SetupState extends State<UpstreamChannelSetupView> {
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         SizedBox(
-          width: dimensions.fixed(42),
-          height: failure ? dimensions.fixed(42) : 0,
+          width: 42,
+          height: failure ? 42 : 0,
           child: failure
               ? Icon(
                   Icons.error_outline,
-                  size: dimensions.fixed(42),
+                  size: 42,
                   color: Theme.of(context).colorScheme.error,
                 )
               : null,
         ),
-        SizedBox(height: dimensions.value(20, 24)),
+        SizedBox(height: 24),
         _revealResult(copy, slot: 'copy'),
-        SizedBox(height: dimensions.value(24, 32)),
+        SizedBox(height: 32),
         _revealResult(actions, slot: 'actions'),
       ],
     );
@@ -3501,9 +3128,7 @@ class _SetupState extends State<UpstreamChannelSetupView> {
             child: Align(
               alignment: Alignment.center,
               child: ConstrainedBox(
-                constraints: BoxConstraints(
-                  maxWidth: dimensions.value(800, 1000),
-                ),
+                constraints: BoxConstraints(maxWidth: 1000),
                 child: SizedBox(width: double.infinity, child: group),
               ),
             ),
@@ -3696,10 +3321,9 @@ class _Stage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final media = MediaQuery.of(context);
-    final dimensions = _ConfigurationDimensions(media.size);
     final singleScroll =
-        media.size.width / dimensions.scale < 900 ||
-        media.size.height / dimensions.scale < 720 ||
+        media.size.width < 900 ||
+        media.size.height < 720 ||
         media.textScaler.scale(14) >= 24;
     if (singleScroll) {
       return Column(
@@ -3708,15 +3332,12 @@ class _Stage extends StatelessWidget {
             child: SingleChildScrollView(
               key: const ValueKey('channel-setup-single-scroll'),
               child: SizedBox(
-                height: math.max(
-                  dimensions.fixed(760),
-                  media.size.height - dimensions.fixed(120),
-                ),
+                height: math.max(760, media.size.height - 120),
                 child: child,
               ),
             ),
           ),
-          SizedBox(height: dimensions.fixed(footerGap)),
+          SizedBox(height: footerGap),
           footer,
         ],
       );
@@ -3724,7 +3345,7 @@ class _Stage extends StatelessWidget {
     return Column(
       children: [
         Expanded(child: child),
-        SizedBox(height: dimensions.fixed(footerGap)),
+        SizedBox(height: footerGap),
         footer,
       ],
     );
@@ -3747,12 +3368,11 @@ class _Footer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final roles = LineupTheme.of(context);
-    final dimensions = _ConfigurationDimensions(MediaQuery.sizeOf(context));
     if (configuration) {
-      final footerTop = dimensions.value(16, 24);
+      final double footerTop = 24;
       final actionGroup = Wrap(
-        spacing: dimensions.value(12, 20),
-        runSpacing: dimensions.fixed(12),
+        spacing: 20,
+        runSpacing: 12,
         alignment: WrapAlignment.end,
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [...leading, trailing],
@@ -3766,14 +3386,14 @@ class _Footer extends StatelessWidget {
           child: LayoutBuilder(
             builder: (context, constraints) {
               final narrow =
-                  constraints.maxWidth / dimensions.scale < 800 ||
+                  constraints.maxWidth < 800 ||
                   MediaQuery.textScalerOf(context).scale(1) >= 1.5;
               if (narrow) {
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     ?summary,
-                    SizedBox(height: dimensions.fixed(12)),
+                    SizedBox(height: 12),
                     Align(alignment: Alignment.centerRight, child: actionGroup),
                   ],
                 );
@@ -3782,7 +3402,7 @@ class _Footer extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   if (summary != null) Expanded(child: summary!),
-                  if (summary != null) SizedBox(width: dimensions.fixed(24)),
+                  if (summary != null) SizedBox(width: 24),
                   actionGroup,
                 ],
               );
@@ -3796,18 +3416,17 @@ class _Footer extends StatelessWidget {
         border: Border(top: BorderSide(color: roles.subtleBorder)),
       ),
       child: Padding(
-        padding: EdgeInsets.only(top: dimensions.fixed(12)),
+        padding: EdgeInsets.only(top: 12),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            if (leading.isNotEmpty)
-              Wrap(spacing: dimensions.fixed(8), children: leading),
+            if (leading.isNotEmpty) Wrap(spacing: 8, children: leading),
             if (summary != null) ...[
-              SizedBox(width: dimensions.fixed(16)),
+              SizedBox(width: 16),
               Expanded(child: summary!),
             ] else
               const Spacer(),
-            SizedBox(width: dimensions.fixed(16)),
+            SizedBox(width: 16),
             trailing,
           ],
         ),

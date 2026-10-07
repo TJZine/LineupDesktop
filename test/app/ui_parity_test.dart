@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/channels/channel.dart';
-import 'package:lineup_desktop/ui/app_ui.dart';
 
 import '../support/ui_fixture.dart';
 
@@ -97,10 +96,7 @@ void main() {
 
     final rail = find.byKey(const Key('settings-category-rail'));
     expect(MediaQuery.sizeOf(tester.element(rail)), const Size(1920, 1080));
-    expect(
-      tester.getSize(rail).width,
-      312 * LineupLayout.scaleFor(const Size(1920, 1080)),
-    );
+    expect(tester.getSize(rail).width, 312);
     expect(tester.takeException(), isNull);
   });
 

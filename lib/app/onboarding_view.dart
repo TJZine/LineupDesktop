@@ -109,7 +109,6 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
   @override
   Widget build(BuildContext context) {
     final roles = LineupTheme.of(context);
-    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
     final refinedStage = switch (widget.controller.stage) {
       SetupStage.linking || SetupStage.profiles || SetupStage.servers => true,
       _ => false,
@@ -131,7 +130,7 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
         child: SafeArea(
           child: Center(
             child: SingleChildScrollView(
-              padding: EdgeInsets.all(32 * scale),
+              padding: EdgeInsets.all(32),
               child: ConstrainedBox(
                 key: const ValueKey('onboarding-content'),
                 constraints: const BoxConstraints(maxWidth: double.infinity),
@@ -280,12 +279,10 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
     final feedback = _feedbackPinId == pin?.id ? _linkFeedback : null;
     final roles = LineupTheme.of(context);
     final size = MediaQuery.sizeOf(context);
-    final scale = LineupLayout.scaleFor(size);
     final narrow =
-        size.width <= 720 * scale ||
-        MediaQuery.textScalerOf(context).scale(1) >= 1.6;
+        size.width <= 720 || MediaQuery.textScalerOf(context).scale(1) >= 1.6;
     final theme = Theme.of(context);
-    final bodyFontSize = (narrow ? 14.0 : 18.0) * scale;
+    final bodyFontSize = (narrow ? 14.0 : 18.0);
     final bodyStyle = theme.textTheme.bodyMedium?.copyWith(
       fontSize: bodyFontSize,
       height: 1.45,
@@ -300,23 +297,23 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
         Text(
           'Sign in to Plex',
           style: theme.textTheme.headlineMedium?.copyWith(
-            fontSize: (narrow ? 26.0 : 36.0) * scale,
+            fontSize: (narrow ? 26.0 : 36.0),
             height: 1.2,
             fontWeight: FontWeight.w600,
           ),
         ),
-        SizedBox(height: 12 * scale),
+        SizedBox(height: 12),
         Text(
           pin == null || expired
               ? 'Request a fresh code to finish signing in.'
               : 'Open plex.tv/link and enter this code.',
           style: bodyStyle,
         ),
-        SizedBox(height: 20 * scale),
+        SizedBox(height: 20),
         if (pin != null)
           Wrap(
-            spacing: 16 * scale,
-            runSpacing: 12 * scale,
+            spacing: 16,
+            runSpacing: 12,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               Semantics(
@@ -325,8 +322,8 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
                 child: SelectableText(
                   pin.code,
                   style: theme.textTheme.headlineLarge?.copyWith(
-                    fontSize: (narrow ? 32.0 : 40.0) * scale,
-                    letterSpacing: 6 * scale,
+                    fontSize: (narrow ? 32.0 : 40.0),
+                    letterSpacing: 6,
                     fontWeight: FontWeight.w500,
                     color: usable ? roles.primaryText : roles.mutedText,
                   ),
@@ -340,10 +337,10 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
               ),
             ],
           ),
-        SizedBox(height: 16 * scale),
+        SizedBox(height: 16),
         Wrap(
-          spacing: 12 * scale,
-          runSpacing: 12 * scale,
+          spacing: 12,
+          runSpacing: 12,
           children: [
             if (usable)
               FilledButton.icon(
@@ -371,7 +368,7 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
           ],
         ),
         if (feedback != null) ...[
-          SizedBox(height: 12 * scale),
+          SizedBox(height: 12),
           Semantics(liveRegion: true, child: Text(feedback, style: bodyStyle)),
         ],
       ],
@@ -379,7 +376,7 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
     final hasQr = usable || expired;
     return Center(
       child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: 736 * scale),
+        constraints: BoxConstraints(maxWidth: 736),
         child: SizedBox(
           width: double.infinity,
           child: Column(
@@ -388,10 +385,10 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
             children: [
               Center(
                 child: ConstrainedBox(
-                  constraints: BoxConstraints(maxWidth: 736 * scale),
+                  constraints: BoxConstraints(maxWidth: 736),
                   child: LayoutBuilder(
                     builder: (context, bodyConstraints) {
-                      final qrSize = (narrow ? 172.0 : 200.0) * scale;
+                      final qrSize = (narrow ? 172.0 : 200.0);
                       final qr = hasQr
                           ? Column(
                               mainAxisSize: MainAxisSize.min,
@@ -400,7 +397,7 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
                                 Container(
                                   width: qrSize,
                                   height: qrSize,
-                                  padding: EdgeInsets.all(12 * scale),
+                                  padding: EdgeInsets.all(12),
                                   decoration: BoxDecoration(
                                     color: usable
                                         ? Colors.white
@@ -414,7 +411,7 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
                                   child: usable
                                       ? QrImageView(
                                           data: 'https://plex.tv/link',
-                                          size: qrSize - 24 * scale,
+                                          size: qrSize - 24,
                                           padding: EdgeInsets.zero,
                                           semanticsLabel:
                                               'QR code for plex.tv/link',
@@ -429,17 +426,16 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
                                                 ?.copyWith(
                                                   fontSize:
                                                       (theme
-                                                              .textTheme
-                                                              .bodyMedium
-                                                              ?.fontSize ??
-                                                          14) *
-                                                      scale,
+                                                          .textTheme
+                                                          .bodyMedium
+                                                          ?.fontSize ??
+                                                      14),
                                                   color: roles.secondaryText,
                                                 ),
                                           ),
                                         ),
                                 ),
-                                SizedBox(height: 8 * scale),
+                                SizedBox(height: 8),
                                 Text(
                                   expired
                                       ? 'Request a new code'
@@ -448,8 +444,7 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
                                   style: theme.textTheme.bodySmall?.copyWith(
                                     fontSize:
                                         (theme.textTheme.bodySmall?.fontSize ??
-                                            12) *
-                                        scale,
+                                        12),
                                     color: roles.secondaryText,
                                   ),
                                 ),
@@ -462,7 +457,7 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
                               children: [
                                 instructions,
                                 if (hasQr) ...[
-                                  SizedBox(height: 24 * scale),
+                                  SizedBox(height: 24),
                                   Align(alignment: Alignment.center, child: qr),
                                 ],
                               ],
@@ -471,7 +466,7 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
                           ? Row(
                               children: [
                                 Expanded(child: instructions),
-                                if (hasQr) ...[SizedBox(width: 40 * scale), qr],
+                                if (hasQr) ...[SizedBox(width: 40), qr],
                               ],
                             )
                           : SizedBox(
@@ -482,7 +477,7 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
                   ),
                 ),
               ),
-              SizedBox(height: 20 * scale),
+              SizedBox(height: 20),
               const Divider(),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
@@ -495,14 +490,14 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
                           ? 'This code has expired'
                           : 'This code is no longer active.',
                       style: bodyStyle?.copyWith(
-                        fontSize: (narrow ? 14.0 : 16.0) * scale,
+                        fontSize: (narrow ? 14.0 : 16.0),
                         color: roles.secondaryText,
                       ),
                     ),
                   ),
                   if (!controller.secureCancellationRequired)
                     Padding(
-                      padding: EdgeInsets.only(left: 12 * scale),
+                      padding: EdgeInsets.only(left: 12),
                       child: TextButton(
                         onPressed: controller.busy
                             ? null
@@ -534,15 +529,14 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
       children: [
         LayoutBuilder(
           builder: (context, constraints) {
-            final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
             final textScale = MediaQuery.textScalerOf(context)
                 .scale(1)
                 .clamp(1.0, 1.75);
             final availableWidth = constraints.maxWidth.isFinite
                 ? constraints.maxWidth
-                : 1080 * scale;
-            final gap = 16 * scale;
-            final itemWidth = 200 * scale * textScale;
+                : 1080.0;
+            final double gap = 16;
+            final itemWidth = 200 * textScale;
             final count = widget.controller.profiles.length;
             final targetColumns = count <= 3
                 ? count.clamp(1, 3)
@@ -554,8 +548,11 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
             final rows = <Widget>[];
             for (var start = 0; start < count; start += columns) {
               final rowCount = (count - start).clamp(0, columns).toInt();
-              final rowWidth = ((rowCount * itemWidth) + ((rowCount - 1) * gap))
-                  .clamp(0.0, availableWidth);
+              final double rowWidth =
+                  ((rowCount * itemWidth) + ((rowCount - 1) * gap)).clamp(
+                    0.0,
+                    availableWidth,
+                  );
               rows.add(
                 Padding(
                   padding: EdgeInsets.only(top: start == 0 ? 0 : gap),
@@ -604,31 +601,24 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
             return Center(child: Column(children: rows));
           },
         ),
-        SizedBox(
-          height: 28 * LineupLayout.scaleFor(MediaQuery.sizeOf(context)),
-        ),
+        SizedBox(height: 28),
         OutlinedButton.icon(
           onPressed: widget.controller.busy ? null : widget.onLogout,
           style: OutlinedButton.styleFrom(
-            textStyle: Theme.of(context).textTheme.labelLarge?.copyWith(
-              fontSize: 18 * LineupLayout.scaleFor(MediaQuery.sizeOf(context)),
-            ),
+            textStyle: Theme.of(context).textTheme.labelLarge
+                ?.copyWith(fontSize: 18),
           ),
           icon: const Icon(Icons.logout),
           label: const Text('Sign out'),
         ),
         if (widget.controller.profileSelectionCanCancel) ...[
-          SizedBox(
-            height: 12 * LineupLayout.scaleFor(MediaQuery.sizeOf(context)),
-          ),
+          SizedBox(height: 12),
           TextButton(
             focusNode: _profileCancelFocus,
             onPressed: widget.controller.cancelProfileSelection,
             style: TextButton.styleFrom(
-              textStyle: Theme.of(context).textTheme.labelLarge?.copyWith(
-                fontSize:
-                    18 * LineupLayout.scaleFor(MediaQuery.sizeOf(context)),
-              ),
+              textStyle: Theme.of(context).textTheme.labelLarge
+                  ?.copyWith(fontSize: 18),
             ),
             child: const Text('Back'),
           ),
@@ -650,15 +640,11 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
         if (widget.controller.servers.isEmpty && !widget.controller.busy)
           Builder(
             builder: (context) {
-              final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
               final theme = Theme.of(context);
               return Theme(
-                data: theme.copyWith(
-                  textTheme: theme.textTheme.apply(fontSizeFactor: scale),
-                ),
+                data: theme.copyWith(textTheme: theme.textTheme),
                 child: DefaultTextStyle.merge(
-                  style: DefaultTextStyle.of(context).style
-                      .apply(fontSizeFactor: scale),
+                  style: DefaultTextStyle.of(context).style,
                   child: const LineupEmptyState(
                     icon: Icons.dns_outlined,
                     title: 'No servers found',
@@ -670,9 +656,7 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
           ),
         for (final server in widget.controller.servers)
           Padding(
-            padding: EdgeInsets.only(
-              bottom: 12 * LineupLayout.scaleFor(MediaQuery.sizeOf(context)),
-            ),
+            padding: EdgeInsets.only(bottom: 12),
             child: _ServerCard(
               server: server,
               connection: widget.controller.server?.id == server.id
@@ -686,22 +670,18 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
               error: _failedServerId == server.id ? _serverError : null,
             ),
           ),
-        SizedBox(
-          height: 12 * LineupLayout.scaleFor(MediaQuery.sizeOf(context)),
-        ),
+        SizedBox(height: 12),
         Wrap(
-          spacing: 12 * LineupLayout.scaleFor(MediaQuery.sizeOf(context)),
-          runSpacing: 12 * LineupLayout.scaleFor(MediaQuery.sizeOf(context)),
+          spacing: 12,
+          runSpacing: 12,
           alignment: WrapAlignment.center,
           children: [
             OutlinedButton.icon(
               autofocus: widget.controller.servers.isEmpty,
               onPressed: widget.controller.busy ? null : _refreshServers,
               style: OutlinedButton.styleFrom(
-                textStyle: Theme.of(context).textTheme.labelLarge?.copyWith(
-                  fontSize:
-                      18 * LineupLayout.scaleFor(MediaQuery.sizeOf(context)),
-                ),
+                textStyle: Theme.of(context).textTheme.labelLarge
+                    ?.copyWith(fontSize: 18),
               ),
               icon: const Icon(Icons.refresh),
               label: const Text('Refresh servers'),
@@ -710,10 +690,8 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
               OutlinedButton.icon(
                 onPressed: widget.controller.busy ? null : _showProfiles,
                 style: OutlinedButton.styleFrom(
-                  textStyle: Theme.of(context).textTheme.labelLarge?.copyWith(
-                    fontSize:
-                        18 * LineupLayout.scaleFor(MediaQuery.sizeOf(context)),
-                  ),
+                  textStyle: Theme.of(context).textTheme.labelLarge
+                      ?.copyWith(fontSize: 18),
                 ),
                 icon: const Icon(Icons.switch_account),
                 label: const Text('Switch profile'),
@@ -722,10 +700,8 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
               TextButton(
                 onPressed: widget.controller.cancelServerSelection,
                 style: TextButton.styleFrom(
-                  textStyle: Theme.of(context).textTheme.labelLarge?.copyWith(
-                    fontSize:
-                        18 * LineupLayout.scaleFor(MediaQuery.sizeOf(context)),
-                  ),
+                  textStyle: Theme.of(context).textTheme.labelLarge
+                      ?.copyWith(fontSize: 18),
                 ),
                 child: const Text('Back'),
               ),
@@ -793,31 +769,27 @@ class _UpstreamOnboardingViewState extends State<UpstreamOnboardingView> {
 }
 
 ThemeData _onboardingButtonTheme(BuildContext context) {
-  final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
   final theme = Theme.of(context);
   return theme.copyWith(
     filledButtonTheme: FilledButtonThemeData(
-      style: _scaledOnboardingButtonStyle(
+      style: _onboardingButtonStyle(
         theme.filledButtonTheme.style,
-        scale: scale,
         minimumSize: const Size(148, 54),
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
         iconSize: 18,
       ),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
-      style: _scaledOnboardingButtonStyle(
+      style: _onboardingButtonStyle(
         theme.outlinedButtonTheme.style,
-        scale: scale,
         minimumSize: const Size(148, 54),
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
         iconSize: 18,
       ),
     ),
     textButtonTheme: TextButtonThemeData(
-      style: _scaledOnboardingButtonStyle(
+      style: _onboardingButtonStyle(
         theme.textButtonTheme.style,
-        scale: scale,
         minimumSize: const Size(64, 40),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         iconSize: 18,
@@ -826,41 +798,16 @@ ThemeData _onboardingButtonTheme(BuildContext context) {
   );
 }
 
-ButtonStyle _scaledOnboardingButtonStyle(
+ButtonStyle _onboardingButtonStyle(
   ButtonStyle? source, {
-  required double scale,
   required Size minimumSize,
   required EdgeInsets padding,
   required double iconSize,
-}) {
-  final base = source ?? const ButtonStyle();
-  var scaled = base.copyWith(
-    minimumSize: WidgetStatePropertyAll(
-      Size(minimumSize.width * scale, minimumSize.height * scale),
-    ),
-    padding: WidgetStatePropertyAll(
-      EdgeInsets.fromLTRB(
-        padding.left * scale,
-        padding.top * scale,
-        padding.right * scale,
-        padding.bottom * scale,
-      ),
-    ),
-    iconSize: WidgetStatePropertyAll(iconSize * scale),
-  );
-  final textStyle = base.textStyle;
-  if (textStyle == null) return scaled;
-  scaled = scaled.copyWith(
-    textStyle: WidgetStateProperty.resolveWith((states) {
-      final resolved = textStyle.resolve(states);
-      final fontSize = resolved?.fontSize;
-      return resolved == null || fontSize == null
-          ? resolved
-          : resolved.copyWith(fontSize: fontSize * scale);
-    }),
-  );
-  return scaled;
-}
+}) => (source ?? const ButtonStyle()).copyWith(
+  minimumSize: WidgetStatePropertyAll(minimumSize),
+  padding: WidgetStatePropertyAll(padding),
+  iconSize: WidgetStatePropertyAll(iconSize),
+);
 
 class _OnboardingCompactPanel extends StatelessWidget {
   const _OnboardingCompactPanel({
@@ -878,14 +825,12 @@ class _OnboardingCompactPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.sizeOf(context);
-    final scale = LineupLayout.scaleFor(size);
     final narrow =
-        size.width <= 720 * scale ||
-        MediaQuery.textScalerOf(context).scale(1) >= 1.6;
+        size.width <= 720 || MediaQuery.textScalerOf(context).scale(1) >= 1.6;
     final roles = LineupTheme.of(context);
-    final bodyFontSize = (narrow ? 14.0 : 18.0) * scale;
+    final bodyFontSize = (narrow ? 14.0 : 18.0);
     final content = ConstrainedBox(
-      constraints: BoxConstraints(maxWidth: maxWidth * scale),
+      constraints: BoxConstraints(maxWidth: maxWidth),
       child: SizedBox(
         width: double.infinity,
         child: Column(
@@ -897,25 +842,25 @@ class _OnboardingCompactPanel extends StatelessWidget {
               children: [
                 Image.asset(
                   'assets/branding/lineup-logo-mark.png',
-                  height: 24 * scale,
-                  width: 24 * scale,
+                  height: 24,
+                  width: 24,
                 ),
-                SizedBox(width: 8 * scale),
+                SizedBox(width: 8),
                 Text(
                   'LINEUP',
                   style: TextStyle(
                     color: roles.progressFill,
                     fontFamily: 'Arial',
-                    fontSize: 18 * scale,
-                    letterSpacing: 1.5 * scale,
+                    fontSize: 18,
+                    letterSpacing: 1.5,
                   ),
                 ),
               ],
             ),
-            SizedBox(height: 20 * scale),
+            SizedBox(height: 20),
             if (busy) ...[
               LinearProgressIndicator(semanticsLabel: 'Working'),
-              SizedBox(height: 16 * scale),
+              SizedBox(height: 16),
             ],
             if (error != null) ...[
               DefaultTextStyle(
@@ -923,7 +868,7 @@ class _OnboardingCompactPanel extends StatelessWidget {
                     .copyWith(fontSize: bodyFontSize, height: 1.45),
                 child: LineupNotice(message: error!),
               ),
-              SizedBox(height: 16 * scale),
+              SizedBox(height: 16),
             ],
             child,
           ],
@@ -932,7 +877,7 @@ class _OnboardingCompactPanel extends StatelessWidget {
     );
     return Center(
       child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: maxWidth * scale),
+        constraints: BoxConstraints(maxWidth: maxWidth),
         child: content,
       ),
     );
@@ -953,18 +898,12 @@ class _OnboardingPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
     final theme = Theme.of(context);
     return Theme(
-      data: theme.copyWith(
-        textTheme: theme.textTheme.apply(fontSizeFactor: scale),
-      ),
+      data: theme.copyWith(textTheme: theme.textTheme),
       child: Container(
         width: double.infinity,
-        padding: EdgeInsets.symmetric(
-          horizontal: 48 * scale,
-          vertical: 38 * scale,
-        ),
+        padding: EdgeInsets.symmetric(horizontal: 48, vertical: 38),
         decoration: BoxDecoration(
           color: refinedSurface
               ? LineupTheme.of(context).deepBackground
@@ -982,23 +921,17 @@ class _OnboardingPanel extends StatelessWidget {
         ),
         child: Column(
           children: [
-            Image.asset(
-              'assets/branding/lineup-logo-mark.png',
-              height: 62 * scale,
-            ),
+            Image.asset('assets/branding/lineup-logo-mark.png', height: 62),
             if (busy) ...[
-              SizedBox(height: 16 * scale),
+              SizedBox(height: 16),
               const LinearProgressIndicator(semanticsLabel: 'Working'),
             ],
             if (error != null) ...[
-              SizedBox(height: 16 * scale),
+              SizedBox(height: 16),
               LineupNotice(message: error!),
             ],
-            SizedBox(height: 18 * scale),
-            DefaultTextStyle(
-              style: theme.textTheme.bodyMedium!.apply(fontSizeFactor: scale),
-              child: child,
-            ),
+            SizedBox(height: 18),
+            DefaultTextStyle(style: theme.textTheme.bodyMedium!, child: child),
           ],
         ),
       ),
@@ -1030,7 +963,6 @@ class _HeroContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
     final content = Column(
       crossAxisAlignment: centered
           ? CrossAxisAlignment.center
@@ -1042,30 +974,28 @@ class _HeroContent extends StatelessWidget {
             title,
             textAlign: centered ? TextAlign.center : TextAlign.left,
             style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-              fontSize: titleFontSize == null ? null : titleFontSize! * scale,
+              fontSize: titleFontSize,
               fontWeight: titleWeight ?? FontWeight.w800,
             ),
           ),
         ),
-        SizedBox(height: 10 * scale),
+        SizedBox(height: 10),
         Text(
           subtitle,
           textAlign: centered ? TextAlign.center : TextAlign.left,
           style: Theme.of(context).textTheme.titleMedium?.copyWith(
-            fontSize: subtitleFontSize == null
-                ? null
-                : subtitleFontSize! * scale,
+            fontSize: subtitleFontSize,
             color: LineupTheme.of(context).secondaryText,
           ),
         ),
-        SizedBox(height: (compact ? 16 : 30) * scale),
+        SizedBox(height: (compact ? 16 : 30)),
         child,
       ],
     );
     if (maxWidth == null) return content;
     return Center(
       child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: maxWidth! * scale),
+        constraints: BoxConstraints(maxWidth: maxWidth!),
         child: SizedBox(width: double.infinity, child: content),
       ),
     );
@@ -1086,9 +1016,8 @@ class _ProfileCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.sizeOf(context);
-    final scale = LineupLayout.scaleFor(size);
     final roles = LineupTheme.of(context);
+
     final buttonStyle = ButtonStyle(
       alignment: Alignment.topCenter,
       padding: const WidgetStatePropertyAll(EdgeInsets.zero),
@@ -1121,7 +1050,7 @@ class _ProfileCard extends StatelessWidget {
         if (states.contains(WidgetState.focused)) {
           return BorderSide(
             color: roles.focusBorder,
-            width: _onboardingFocusWidth(roles) * scale,
+            width: _onboardingFocusWidth(roles),
           );
         }
         if (states.contains(WidgetState.hovered)) {
@@ -1145,17 +1074,12 @@ class _ProfileCard extends StatelessWidget {
             onPressed: onPressed,
             style: buttonStyle,
             child: Padding(
-              padding: EdgeInsets.fromLTRB(
-                12 * scale,
-                16 * scale,
-                12 * scale,
-                16 * scale,
-              ),
+              padding: EdgeInsets.fromLTRB(12, 16, 12, 16),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   CircleAvatar(
-                    radius: 48 * scale,
+                    radius: 48,
                     backgroundColor: roles.elevatedSurface,
                     foregroundColor: roles.secondaryText,
                     backgroundImage: user.thumb?.isAbsolute == true
@@ -1165,29 +1089,26 @@ class _ProfileCard extends StatelessWidget {
                         ? null
                         : Text(
                             user.name.characters.first.toUpperCase(),
-                            style: TextStyle(fontSize: 32 * scale),
+                            style: TextStyle(fontSize: 32),
                           ),
                   ),
-                  SizedBox(height: 12 * scale),
+                  SizedBox(height: 12),
                   Text(
                     user.name,
                     textAlign: TextAlign.center,
                     softWrap: true,
-                    style: TextStyle(
-                      fontSize: 18 * scale,
-                      fontWeight: FontWeight.w600,
-                    ),
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
                   ),
                   if (user.protected ||
                       user.admin ||
                       user.restricted == true ||
                       active)
                     Padding(
-                      padding: EdgeInsets.only(top: 4 * scale),
+                      padding: EdgeInsets.only(top: 4),
                       child: Wrap(
                         alignment: WrapAlignment.center,
-                        spacing: 4 * scale,
-                        runSpacing: 4 * scale,
+                        spacing: 4,
+                        runSpacing: 4,
                         children: [
                           if (user.protected) const _ProfileBadge('PIN'),
                           if (user.admin) const _ProfileBadge('Admin'),
@@ -1219,7 +1140,7 @@ class _ProfileBadge extends StatelessWidget {
         label,
         style: TextStyle(
           color: LineupTheme.of(context).secondaryText,
-          fontSize: 12 * LineupLayout.scaleFor(MediaQuery.sizeOf(context)),
+          fontSize: 12,
         ),
       ),
     ),
@@ -1244,13 +1165,12 @@ class _ServerCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
     final supportStyle = TextStyle(
       color: LineupTheme.of(context).secondaryText,
-      fontSize: 16 * scale,
+      fontSize: 16,
     );
     final actionStyle = Theme.of(context).textTheme.labelLarge
-        ?.copyWith(fontSize: 18 * scale);
+        ?.copyWith(fontSize: 18);
     final actionLabel = pending
         ? 'Connecting…'
         : error != null
@@ -1260,41 +1180,35 @@ class _ServerCard extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Wrap(
-          spacing: 12 * scale,
-          runSpacing: 8 * scale,
+          spacing: 12,
+          runSpacing: 8,
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             Text(
               server.name,
               softWrap: true,
-              style: TextStyle(
-                fontSize: 22 * scale,
-                fontWeight: FontWeight.w600,
-              ),
+              style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600),
             ),
             if (connection != null)
               Container(
-                padding: EdgeInsets.symmetric(
-                  horizontal: 8 * scale,
-                  vertical: 4 * scale,
-                ),
+                padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                   color: LineupTheme.of(context).progressFill
                       .withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(6 * scale),
+                  borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
                   'Current',
                   style: TextStyle(
                     color: LineupTheme.of(context).progressFill,
-                    fontSize: 12 * scale,
+                    fontSize: 12,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
               ),
           ],
         ),
-        SizedBox(height: 4 * scale),
+        SizedBox(height: 4),
         Text(
           server.owned ? 'Owned server' : 'Shared server',
           style: supportStyle,
@@ -1302,7 +1216,7 @@ class _ServerCard extends StatelessWidget {
         if (previouslyUsed && connection == null)
           Text('Previously used', style: supportStyle),
         if (connection != null) ...[
-          SizedBox(height: 8 * scale),
+          SizedBox(height: 8),
           Text(
             'Current connection: ${plexConnectionDescription(connection!)}',
             softWrap: true,
@@ -1335,7 +1249,7 @@ class _ServerCard extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final stacked =
-            constraints.maxWidth < 520 * scale ||
+            constraints.maxWidth < 520 ||
             MediaQuery.textScalerOf(context).scale(1) >= 1.6;
         final content = stacked
             ? Column(
@@ -1343,7 +1257,7 @@ class _ServerCard extends StatelessWidget {
                 children: [
                   details,
                   if (trailing != null) ...[
-                    SizedBox(height: 12 * scale),
+                    SizedBox(height: 12),
                     Align(alignment: Alignment.centerLeft, child: trailing),
                   ],
                 ],
@@ -1352,15 +1266,12 @@ class _ServerCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(child: details),
-                  if (trailing != null) ...[
-                    SizedBox(width: 24 * scale),
-                    trailing,
-                  ],
+                  if (trailing != null) ...[SizedBox(width: 24), trailing],
                 ],
               );
         return Container(
           width: double.infinity,
-          padding: EdgeInsets.symmetric(vertical: 20 * scale),
+          padding: EdgeInsets.symmetric(vertical: 20),
           decoration: BoxDecoration(
             border: Border(
               bottom: BorderSide(color: LineupTheme.of(context).subtleBorder),
@@ -1371,14 +1282,14 @@ class _ServerCard extends StatelessWidget {
             children: [
               content,
               if (error != null) ...[
-                SizedBox(height: 12 * scale),
+                SizedBox(height: 12),
                 Semantics(
                   liveRegion: true,
                   child: Text(
                     error!,
                     style: TextStyle(
                       color: Theme.of(context).colorScheme.error,
-                      fontSize: 16 * scale,
+                      fontSize: 16,
                     ),
                   ),
                 ),

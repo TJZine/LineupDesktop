@@ -526,27 +526,9 @@ class _SurfaceError extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final roles = LineupTheme.of(context);
-    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
     final textTheme = Theme.of(context).textTheme;
-    final bodyFontSize = textTheme.bodyMedium?.fontSize;
-    final bodyStyle = scale > 1 && bodyFontSize != null
-        ? textTheme.bodyMedium!.copyWith(fontSize: bodyFontSize * scale)
-        : textTheme.bodyMedium;
-    final retryStyle = scale > 1
-        ? TextButton.styleFrom(
-            minimumSize: Size(64 * scale, 36 * scale),
-            padding: EdgeInsets.symmetric(
-              horizontal: 12 * scale,
-              vertical: 8 * scale,
-            ),
-            textStyle: textTheme.labelLarge?.copyWith(
-              fontSize: (textTheme.labelLarge?.fontSize ?? 14) * scale,
-            ),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(roles.panelRadius * scale),
-            ),
-          )
-        : null;
+
+    final bodyStyle = textTheme.bodyMedium;
     return ColoredBox(
       color: roles.deepBackground,
       child: LayoutBuilder(
@@ -559,12 +541,12 @@ class _SurfaceError extends StatelessWidget {
             ),
             child: Center(
               child: Padding(
-                padding: EdgeInsets.all(16 * scale),
+                padding: EdgeInsets.all(16),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.error_outline, size: 24 * scale),
-                    SizedBox(height: 8 * scale),
+                    Icon(Icons.error_outline, size: 24),
+                    SizedBox(height: 8),
                     Text(
                       controller.error ?? controller.status.message,
                       maxLines: 2,
@@ -575,7 +557,6 @@ class _SurfaceError extends StatelessWidget {
                     if (controller.canRetry)
                       TextButton(
                         onPressed: controller.retry,
-                        style: retryStyle,
                         child: const Text('Retry'),
                       ),
                   ],
@@ -605,10 +586,7 @@ class _Osd extends StatelessWidget {
   Widget build(BuildContext context) {
     final roles = LineupTheme.of(context);
     final size = MediaQuery.sizeOf(context);
-    final scale = LineupLayout.scaleFor(size);
-    final horizontalInset = (size.width * 0.05)
-        .clamp(24.0 * scale, 96.0 * scale)
-        .toDouble();
+    final horizontalInset = (size.width * 0.05).clamp(24.0, 96.0).toDouble();
     final channel = controller.currentChannel;
     final program = controller.currentProgram;
     final next = controller.nextProgram;
@@ -640,11 +618,8 @@ class _Osd extends StatelessWidget {
       IconButton(
         tooltip: 'Previous channel',
         onPressed: unsupported ? null : controller.previousChannel,
-        constraints: scale > 1
-            ? BoxConstraints(minWidth: 48 * scale, minHeight: 48 * scale)
-            : null,
-        padding: scale > 1 ? EdgeInsets.all(8 * scale) : null,
-        iconSize: 28 * scale,
+        padding: null,
+        iconSize: 28,
         icon: const Icon(Icons.skip_previous),
       ),
       IconButton(
@@ -652,11 +627,8 @@ class _Osd extends StatelessWidget {
             ? 'Pause'
             : 'Play',
         onPressed: unsupported ? null : controller.togglePlayback,
-        constraints: scale > 1
-            ? BoxConstraints(minWidth: 48 * scale, minHeight: 48 * scale)
-            : null,
-        padding: scale > 1 ? EdgeInsets.all(8 * scale) : null,
-        iconSize: 36 * scale,
+        padding: null,
+        iconSize: 36,
         icon: Icon(
           controller.status.state == PlayerState.playing
               ? Icons.pause
@@ -666,11 +638,8 @@ class _Osd extends StatelessWidget {
       IconButton(
         tooltip: 'Next channel',
         onPressed: unsupported ? null : controller.nextChannel,
-        constraints: scale > 1
-            ? BoxConstraints(minWidth: 48 * scale, minHeight: 48 * scale)
-            : null,
-        padding: scale > 1 ? EdgeInsets.all(8 * scale) : null,
-        iconSize: 28 * scale,
+        padding: null,
+        iconSize: 28,
         icon: const Icon(Icons.skip_next),
       ),
     ];
@@ -755,11 +724,8 @@ class _Osd extends StatelessWidget {
             focusNode: menuFocus,
             tooltip: 'Open Lineup menu',
             onPressed: () => openMenu!(invokerContext, menuFocus),
-            constraints: scale > 1
-                ? BoxConstraints(minWidth: 48 * scale, minHeight: 48 * scale)
-                : null,
-            padding: scale > 1 ? EdgeInsets.all(8 * scale) : null,
-            iconSize: 24 * scale,
+            padding: null,
+            iconSize: 24,
             icon: const Icon(Icons.menu),
           ),
         ),
@@ -770,11 +736,8 @@ class _Osd extends StatelessWidget {
             ? 'Exit fullscreen'
             : 'Fullscreen',
         onPressed: unsupported ? null : controller.toggleFullscreen,
-        constraints: scale > 1
-            ? BoxConstraints(minWidth: 48 * scale, minHeight: 48 * scale)
-            : null,
-        padding: scale > 1 ? EdgeInsets.all(8 * scale) : null,
-        iconSize: 24 * scale,
+        padding: null,
+        iconSize: 24,
         icon: Icon(
           controller.fullscreen ? Icons.fullscreen_exit : Icons.fullscreen,
         ),
@@ -815,18 +778,15 @@ class _Osd extends StatelessWidget {
             fallback: _OsdTitle(title: primaryTitle),
             clearLogo: true,
             logoMaximumSize: Size(
-              (size.width >= 1920 ? 520 : 360) * scale,
-              (size.height >= 900 ? 128 : 72) * scale,
+              (size.width >= 1920 ? 520 : 360),
+              (size.height >= 900 ? 128 : 72),
             ),
-            logoMinimumVisibleSize: Size(
-              96 * scale,
-              (size.height >= 900 ? 28 : 24) * scale,
-            ),
+            logoMinimumVisibleSize: Size(96, (size.height >= 900 ? 28 : 24)),
           )
         else
           _OsdTitle(title: primaryTitle),
         if (statusFacts.isNotEmpty) ...[
-          SizedBox(height: 8 * scale),
+          SizedBox(height: 8),
           Text(
             statusFacts.join(' • '),
             key: const Key('player-osd-status'),
@@ -834,7 +794,7 @@ class _Osd extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
               color: roles.primaryText.withValues(alpha: 0.88),
-              fontSize: (largeDesktop ? 16 : 14) * scale,
+              fontSize: (largeDesktop ? 16 : 14),
               fontWeight: FontWeight.w400,
             ),
           ),
@@ -850,7 +810,7 @@ class _Osd extends StatelessWidget {
           );
     final osdSecondaryStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
       color: roles.primaryText.withValues(alpha: 0.88),
-      fontSize: horizontal ? (largeDesktop ? 16 : 14) * scale : null,
+      fontSize: horizontal ? (largeDesktop ? 16 : 14) : null,
       fontWeight: FontWeight.w400,
     );
     final progress = Row(
@@ -867,7 +827,7 @@ class _Osd extends StatelessWidget {
           ),
         ),
         if (next != null) ...[
-          SizedBox(width: 16 * scale),
+          SizedBox(width: 16),
           Expanded(
             child: Align(
               alignment: Alignment.centerRight,
@@ -889,19 +849,15 @@ class _Osd extends StatelessWidget {
         Row(mainAxisSize: MainAxisSize.min, children: children);
     final wrapActions = MediaQuery.textScalerOf(context).scale(1) > 1;
     final optionGroup = wrapActions
-        ? Wrap(
-            spacing: 8 * scale,
-            runSpacing: 6 * scale,
-            children: optionActions,
-          )
+        ? Wrap(spacing: 8, runSpacing: 6, children: optionActions)
         : actionGroup(optionActions);
     final groupedActions = wrapActions
         ? Wrap(
             key: const Key('player-osd-action-groups'),
             alignment: WrapAlignment.end,
             crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 16 * scale,
-            runSpacing: 6 * scale,
+            spacing: 16,
+            runSpacing: 6,
             children: [
               if (dvrControlsEnabled) actionGroup(transportActions),
               optionGroup,
@@ -914,10 +870,10 @@ class _Osd extends StatelessWidget {
             children: [
               if (dvrControlsEnabled) ...[
                 actionGroup(transportActions),
-                SizedBox(width: 16 * scale),
+                SizedBox(width: 16),
               ],
               optionGroup,
-              SizedBox(width: 16 * scale),
+              SizedBox(width: 16),
               actionGroup(windowActions),
             ],
           );
@@ -927,7 +883,7 @@ class _Osd extends StatelessWidget {
       right: 0,
       bottom: 0,
       child: SizedBox(
-        height: 40 * scale,
+        height: 40,
         child: Semantics(
           label: 'Playback progress',
           value:
@@ -938,7 +894,7 @@ class _Osd extends StatelessWidget {
               Align(
                 alignment: Alignment.bottomCenter,
                 child: SizedBox(
-                  height: 4 * scale,
+                  height: 4,
                   child: LinearProgressIndicator(
                     value: progressValue,
                     color: roles.progressFill,
@@ -949,7 +905,7 @@ class _Osd extends StatelessWidget {
               if (dvrControlsEnabled)
                 SliderTheme(
                   data: SliderTheme.of(context).copyWith(
-                    trackHeight: 4 * scale,
+                    trackHeight: 4,
                     activeTrackColor: Colors.transparent,
                     inactiveTrackColor: Colors.transparent,
                     thumbShape: SliderComponentShape.noThumb,
@@ -983,10 +939,10 @@ class _Osd extends StatelessWidget {
               padding: EdgeInsets.fromLTRB(
                 horizontalInset,
                 horizontal
-                    ? (size.height >= 900 ? 44 : 20) * scale
-                    : (size.height >= 720 ? 56 : 40) * scale,
+                    ? (size.height >= 900 ? 44 : 20)
+                    : (size.height >= 720 ? 56 : 40),
                 horizontalInset,
-                12 * scale + (dvrControlsEnabled ? 40 * scale : 0),
+                12 + (dvrControlsEnabled ? 40 : 0),
               ),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
@@ -1014,7 +970,7 @@ class _Osd extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
                           Expanded(child: identity),
-                          SizedBox(width: 24 * scale),
+                          SizedBox(width: 24),
                           if (wrapActions)
                             Flexible(
                               child: Align(
@@ -1028,7 +984,7 @@ class _Osd extends StatelessWidget {
                       )
                     else ...[
                       identity,
-                      SizedBox(height: 6 * scale),
+                      SizedBox(height: 6),
                       Align(
                         alignment: Alignment.centerRight,
                         child: wrapActions
@@ -1040,7 +996,7 @@ class _Osd extends StatelessWidget {
                               ),
                       ),
                     ],
-                    SizedBox(height: 10 * scale),
+                    SizedBox(height: 10),
                     progress,
                   ],
                 ),
@@ -1050,7 +1006,7 @@ class _Osd extends StatelessWidget {
         ),
         if (channel != null)
           Positioned(
-            top: 24 * scale,
+            top: 24,
             right: horizontalInset,
             child: _ChannelBug(
               key: const Key('player-osd-channel-bug'),
@@ -1072,7 +1028,6 @@ class _OsdTitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.sizeOf(context);
-    final scale = LineupLayout.scaleFor(size);
     final largeDesktop = size.width >= 1920 && size.height >= 900;
     final horizontal = size.width >= 1200 && size.height >= 640;
     return Semantics(
@@ -1087,9 +1042,9 @@ class _OsdTitle extends StatelessWidget {
         style: Theme.of(context).textTheme.titleLarge?.copyWith(
           color: LineupTheme.of(context).primaryText,
           fontSize: largeDesktop
-              ? 28 * scale
+              ? 28
               : horizontal
-              ? 24 * scale
+              ? 24
               : null,
           fontWeight: FontWeight.w600,
         ),
@@ -1112,7 +1067,6 @@ class _ChannelBug extends StatelessWidget {
   Widget build(BuildContext context) {
     final roles = LineupTheme.of(context);
     final size = MediaQuery.sizeOf(context);
-    final scale = LineupLayout.scaleFor(size);
     final inheritedLabelSize =
         Theme.of(context).textTheme.labelLarge?.fontSize ?? 14;
     return Semantics(
@@ -1127,17 +1081,14 @@ class _ChannelBug extends StatelessWidget {
           border: Border.all(color: roles.subtleBorder),
         ),
         child: Padding(
-          padding: EdgeInsets.symmetric(
-            horizontal: 12 * scale,
-            vertical: 7 * scale,
-          ),
+          padding: EdgeInsets.symmetric(horizontal: 12, vertical: 7),
           child: Text(
             '${channel.number} • ${channel.name}',
             style: Theme.of(context).textTheme.labelLarge?.copyWith(
               color: roles.primaryText,
               fontSize: osdPresentation
-                  ? (size.width >= 1920 && size.height >= 900 ? 16 : 14) * scale
-                  : inheritedLabelSize * scale,
+                  ? (size.width >= 1920 && size.height >= 900 ? 16 : 14)
+                  : inheritedLabelSize,
               fontWeight: osdPresentation ? FontWeight.w500 : FontWeight.w800,
             ),
           ),
@@ -1161,22 +1112,21 @@ class _NowPlaying extends StatelessWidget {
     final telemetry = controller.telemetry;
     final roles = LineupTheme.of(context);
     final size = MediaQuery.sizeOf(context);
-    final scale = LineupLayout.scaleFor(size);
     final compact =
-        LineupLayout.isCompactWidth(size.width) || size.height < 650 * scale;
-    final shelfWidth = (size.width * 0.95).clamp(0, 1180 * scale).toDouble();
+        LineupLayout.isCompactWidth(size.width) || size.height < 650;
+    final shelfWidth = (size.width * 0.95).clamp(0, 1180).toDouble();
     final shelfHeight = compact
         ? (size.height * (item.cast.isEmpty ? 0.56 : 0.63))
-              .clamp(300 * scale, 380 * scale)
+              .clamp(300, 380)
               .toDouble()
         : (size.height * (item.cast.isEmpty ? 0.50 : 0.54))
               .clamp(
-                (item.cast.isEmpty ? 380 : 432) * scale,
-                (item.cast.isEmpty ? 560 : 580) * scale,
+                (item.cast.isEmpty ? 380 : 432),
+                (item.cast.isEmpty ? 560 : 580),
               )
               .toDouble();
-    final denseShelf = compact || shelfHeight < 440 * scale;
-    final showPoster = size.width >= 700 * scale && size.height >= 500 * scale;
+    final denseShelf = compact || shelfHeight < 440;
+    final showPoster = size.width >= 700 && size.height >= 500;
     final preferLogo = controller.lineup.settings.preferClearLogos;
     final posterPath = _artworkPath(item, GuideArtworkKind.poster);
     final logoPath = _artworkPath(item, GuideArtworkKind.clearLogo);
@@ -1287,14 +1237,11 @@ class _NowPlaying extends StatelessWidget {
                   clipBehavior: Clip.antiAlias,
                   decoration: BoxDecoration(
                     border: Border(
-                      top: BorderSide(color: roles.subtleBorder, width: scale),
-                      right: BorderSide(
-                        color: roles.subtleBorder,
-                        width: scale,
-                      ),
+                      top: BorderSide(color: roles.subtleBorder, width: 1.0),
+                      right: BorderSide(color: roles.subtleBorder, width: 1.0),
                     ),
                     borderRadius: BorderRadius.only(
-                      topRight: Radius.circular(16 * scale),
+                      topRight: Radius.circular(16),
                     ),
                     gradient: LinearGradient(
                       begin: Alignment.topLeft,
@@ -1329,7 +1276,7 @@ class _NowPlaying extends StatelessWidget {
                               Align(
                                 alignment: Alignment.centerRight,
                                 child: SizedBox(
-                                  width: (compact ? 48 : 64) * scale,
+                                  width: (compact ? 48 : 64),
                                   child: DecoratedBox(
                                     decoration: BoxDecoration(
                                       gradient: LinearGradient(
@@ -1349,10 +1296,10 @@ class _NowPlaying extends StatelessWidget {
                         : null,
                     content: Padding(
                       padding: EdgeInsets.fromLTRB(
-                        (denseShelf ? 18 : 28) * scale,
-                        (denseShelf ? 16 : 24) * scale,
-                        (denseShelf ? 18 : 28) * scale,
-                        (denseShelf ? 14 : 20) * scale,
+                        (denseShelf ? 18 : 28),
+                        (denseShelf ? 16 : 24),
+                        (denseShelf ? 18 : 28),
+                        (denseShelf ? 14 : 20),
                       ),
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
@@ -1386,9 +1333,7 @@ class _NowPlaying extends StatelessWidget {
                                       compact: denseShelf,
                                     ),
                                   if (episodeFacts.isNotEmpty) ...[
-                                    SizedBox(
-                                      height: (denseShelf ? 8 : 10) * scale,
-                                    ),
+                                    SizedBox(height: (denseShelf ? 8 : 10)),
                                     Text(
                                       episodeFacts,
                                       key: const Key(
@@ -1401,9 +1346,7 @@ class _NowPlaying extends StatelessWidget {
                                     ),
                                   ],
                                   if (editorial.isNotEmpty) ...[
-                                    SizedBox(
-                                      height: (denseShelf ? 8 : 10) * scale,
-                                    ),
+                                    SizedBox(height: (denseShelf ? 8 : 10)),
                                     Text(
                                       editorial,
                                       key: const Key(
@@ -1418,13 +1361,13 @@ class _NowPlaying extends StatelessWidget {
                                     ),
                                   ],
                                   if (!compact && badges.isNotEmpty) ...[
-                                    SizedBox(height: 14 * scale),
+                                    SizedBox(height: 14),
                                     Wrap(
                                       key: const Key(
                                         'player-now-playing-badges',
                                       ),
-                                      spacing: 8 * scale,
-                                      runSpacing: 8 * scale,
+                                      spacing: 8,
+                                      runSpacing: 8,
                                       children: [
                                         for (final badge in badges)
                                           _NowPlayingBadge(label: badge),
@@ -1432,9 +1375,7 @@ class _NowPlaying extends StatelessWidget {
                                     ),
                                   ],
                                   if (!compact && playbackFacts != null) ...[
-                                    SizedBox(
-                                      height: (denseShelf ? 8 : 10) * scale,
-                                    ),
+                                    SizedBox(height: (denseShelf ? 8 : 10)),
                                     Text(
                                       playbackFacts,
                                       key: const Key(
@@ -1449,9 +1390,7 @@ class _NowPlaying extends StatelessWidget {
                                     ),
                                   ],
                                   if (item.summary case final summary?) ...[
-                                    SizedBox(
-                                      height: (denseShelf ? 10 : 14) * scale,
-                                    ),
+                                    SizedBox(height: (denseShelf ? 10 : 14)),
                                     Text(
                                       summary,
                                       key: const Key(
@@ -1468,19 +1407,16 @@ class _NowPlaying extends StatelessWidget {
                                             color: roles.primaryText,
                                             fontSize:
                                                 (Theme.of(context)
-                                                        .textTheme
-                                                        .bodyLarge
-                                                        ?.fontSize ??
-                                                    16) *
-                                                scale,
+                                                    .textTheme
+                                                    .bodyLarge
+                                                    ?.fontSize ??
+                                                16),
                                             height: 1.45,
                                           ),
                                     ),
                                   ],
                                   if (item.cast.isNotEmpty) ...[
-                                    SizedBox(
-                                      height: (denseShelf ? 10 : 14) * scale,
-                                    ),
+                                    SizedBox(height: (denseShelf ? 10 : 14)),
                                     _NowPlayingCast(
                                       controller: controller,
                                       cast: item.cast,
@@ -1492,15 +1428,15 @@ class _NowPlaying extends StatelessWidget {
                               ),
                             ),
                           ),
-                          SizedBox(height: 16 * scale),
+                          SizedBox(height: 16),
                           LinearProgressIndicator(
                             key: const Key('player-now-playing-progress'),
                             value: progress,
-                            minHeight: 5 * scale,
+                            minHeight: 5,
                             color: roles.progressFill,
                             backgroundColor: roles.progressTrack,
                           ),
-                          SizedBox(height: 8 * scale),
+                          SizedBox(height: 8),
                           Text(
                             playbackTime,
                             key: const Key('player-now-playing-time'),
@@ -1520,10 +1456,8 @@ class _NowPlaying extends StatelessWidget {
         ),
         if (channel != null)
           Positioned(
-            top: 24 * scale,
-            right: (size.width * 0.05)
-                .clamp(24.0 * scale, 96.0 * scale)
-                .toDouble(),
+            top: 24,
+            right: (size.width * 0.05).clamp(24.0, 96.0).toDouble(),
             child: _ChannelBug(
               key: const Key('player-now-playing-channel-bug'),
               channel: channel,
@@ -1546,12 +1480,11 @@ class _NowPlayingShelfLayout extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
     final posterWidth = poster == null
         ? 0.0
-        : (maxHeight * 2 / 3).clamp(190 * scale, 374 * scale).toDouble();
+        : (maxHeight * 2 / 3).clamp(190, 374).toDouble();
     return ConstrainedBox(
-      constraints: BoxConstraints(maxHeight: maxHeight - scale),
+      constraints: BoxConstraints(maxHeight: maxHeight - 1.0),
       child: Stack(
         children: [
           Padding(
@@ -1576,10 +1509,9 @@ TextStyle? _nowPlayingSecondaryStyle(
   BuildContext context, {
   required bool dense,
 }) {
-  final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
   return Theme.of(context).textTheme.bodyMedium?.copyWith(
     color: LineupTheme.of(context).primaryText.withValues(alpha: 0.88),
-    fontSize: (dense ? 14 : 16) * scale,
+    fontSize: (dense ? 14 : 16),
   );
 }
 
@@ -1611,16 +1543,15 @@ class _NowPlayingIdentityState extends State<_NowPlayingIdentity> {
   Widget build(BuildContext context) => FutureBuilder<Uint8List?>(
     future: _logo,
     builder: (context, snapshot) {
-      final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
       final bytes = snapshot.data;
       final item = widget.program.scheduled.item;
       final showTitle = item.showTitle?.trim();
       final logoMaxHeight = widget.hasCast && widget.compact
-          ? 58.0 * scale
+          ? 58.0
           : widget.compact
-          ? 84.0 * scale
-          : 132.0 * scale;
-      final logoMaxWidth = (widget.compact ? 360.0 : 600.0) * scale;
+          ? 84.0
+          : 132.0;
+      final logoMaxWidth = (widget.compact ? 360.0 : 600.0);
       return LayoutBuilder(
         builder: (context, available) {
           final logoFallback = OverflowBox(
@@ -1657,14 +1588,11 @@ class _NowPlayingIdentityState extends State<_NowPlayingIdentity> {
                     imageKey: const Key('player-now-playing-logo'),
                     excludeFromSemantics: true,
                     maximumSize: Size(logoMaxWidth, logoMaxHeight),
-                    minimumVisibleSize: Size(
-                      96 * scale,
-                      (widget.compact ? 20 : 28) * scale,
-                    ),
+                    minimumVisibleSize: Size(96, (widget.compact ? 20 : 28)),
                     fallback: logoFallback,
                   ),
                 ),
-              SizedBox(height: (widget.compact ? 8 : 12) * scale),
+              SizedBox(height: (widget.compact ? 8 : 12)),
               Text(
                 widget.program.scheduled.item.title,
                 key: const Key('player-now-playing-title'),
@@ -1688,7 +1616,6 @@ class _NowPlayingTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1700,7 +1627,7 @@ class _NowPlayingTitle extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: _nowPlayingSeriesStyle(context, dense: compact),
           ),
-          SizedBox(height: 6 * scale),
+          SizedBox(height: 6),
         ],
         Text(
           item.title,
@@ -1717,17 +1644,15 @@ class _NowPlayingTitle extends StatelessWidget {
 TextStyle? _nowPlayingSeriesStyle(
   BuildContext context, {
   required bool dense,
-}) => _nowPlayingSecondaryStyle(context, dense: dense)?.copyWith(
-  fontSize:
-      (dense ? 16 : 20) * LineupLayout.scaleFor(MediaQuery.sizeOf(context)),
-  fontWeight: FontWeight.w500,
-);
+}) => _nowPlayingSecondaryStyle(
+  context,
+  dense: dense,
+)?.copyWith(fontSize: (dense ? 16 : 20), fontWeight: FontWeight.w500);
 
 TextStyle _nowPlayingTitleStyle(BuildContext context, {required bool dense}) =>
     (Theme.of(context).textTheme.bodyLarge ?? const TextStyle()).copyWith(
       color: LineupTheme.of(context).primaryText,
-      fontSize:
-          (dense ? 24 : 28) * LineupLayout.scaleFor(MediaQuery.sizeOf(context)),
+      fontSize: (dense ? 24 : 28),
       fontWeight: FontWeight.w600,
     );
 
@@ -1794,14 +1719,9 @@ class _ArtworkFallback extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
     return ColoredBox(
       color: roles.primarySurface,
-      child: Icon(
-        Icons.movie_outlined,
-        size: 64 * scale,
-        color: roles.mutedText,
-      ),
+      child: Icon(Icons.movie_outlined, size: 64, color: roles.mutedText),
     );
   }
 }
@@ -1814,7 +1734,6 @@ class _NowPlayingBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final roles = LineupTheme.of(context);
-    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
     return DecoratedBox(
       decoration: BoxDecoration(
         color: roles.elevatedSurface.withValues(alpha: 0.82),
@@ -1822,16 +1741,11 @@ class _NowPlayingBadge extends StatelessWidget {
         borderRadius: BorderRadius.circular(999),
       ),
       child: Padding(
-        padding: EdgeInsets.symmetric(
-          horizontal: 10 * scale,
-          vertical: 4 * scale,
-        ),
+        padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         child: Text(
           label,
           style: Theme.of(context).textTheme.labelMedium?.copyWith(
-            fontSize:
-                (Theme.of(context).textTheme.labelMedium?.fontSize ?? 12) *
-                scale,
+            fontSize: (Theme.of(context).textTheme.labelMedium?.fontSize ?? 12),
           ),
         ),
       ),
@@ -1855,14 +1769,13 @@ class _NowPlayingCast extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final roles = LineupTheme.of(context);
-    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
     final limit = compact ? 4 : 5;
     final visible = cast.take(limit).toList(growable: false);
     final hidden = cast.length - visible.length;
-    final diameter = (dense ? 40.0 : 46.0) * scale;
-    final columnLimit = (dense ? 72.0 : 104.0) * scale;
+    final diameter = (dense ? 40.0 : 46.0);
+    final columnLimit = (dense ? 72.0 : 104.0);
     final columnCount = visible.length + (hidden > 0 ? 1 : 0);
-    final spacing = math.max(0, columnCount - 1) * 8.0 * scale;
+    final spacing = math.max(0, columnCount - 1) * 8.0;
     return Column(
       key: const Key('player-now-playing-cast'),
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1905,7 +1818,7 @@ class _NowPlayingCast extends StatelessWidget {
                         Expanded(
                           child: Padding(
                             padding: EdgeInsets.only(
-                              right: child == children.last ? 0 : 8 * scale,
+                              right: child == children.last ? 0 : 8,
                             ),
                             child: child,
                           ),
@@ -1917,7 +1830,7 @@ class _NowPlayingCast extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       for (final (index, child) in children.indexed) ...[
-                        if (index > 0) SizedBox(width: 8 * scale),
+                        if (index > 0) SizedBox(width: 8),
                         child,
                       ],
                     ],
@@ -1951,12 +1864,11 @@ class _NowPlayingCastColumn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
     final portrait = member.portrait;
     final nameStyle = _nowPlayingSecondaryStyle(
       context,
       dense: dense,
-    )?.copyWith(fontSize: (dense ? 12 : 14) * scale, height: 1.3);
+    )?.copyWith(fontSize: (dense ? 12 : 14), height: 1.3);
     var displayName = member.name;
     final words = member.name.trim().split(RegExp(r'\s+'));
     if (words.length > 2) {
@@ -2002,12 +1914,11 @@ class _NowPlayingCastColumn extends StatelessWidget {
             ),
           ),
         ),
-        SizedBox(height: 6 * scale),
+        SizedBox(height: 6),
         SizedBox(
           width: width,
           height:
-              MediaQuery.textScalerOf(context)
-                  .scale((dense ? 12 : 14) * scale) *
+              MediaQuery.textScalerOf(context).scale((dense ? 12 : 14)) *
               1.3 *
               2,
           child: Tooltip(
@@ -2043,7 +1954,6 @@ class _NowPlayingCastMore extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
     final labelSize = Theme.of(context).textTheme.labelLarge?.fontSize ?? 14;
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -2062,14 +1972,14 @@ class _NowPlayingCastMore extends StatelessWidget {
                 '+$hidden',
                 style: Theme.of(context).textTheme.labelLarge?.copyWith(
                   color: roles.primaryText,
-                  fontSize: labelSize * scale,
+                  fontSize: labelSize,
                   fontWeight: FontWeight.w800,
                 ),
               ),
             ),
           ),
         ),
-        SizedBox(height: 6 * scale),
+        SizedBox(height: 6),
         SizedBox(width: width, child: const SizedBox.shrink()),
       ],
     );
@@ -2084,11 +1994,10 @@ class _CastFallback extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
     return ColoredBox(
       key: ValueKey('player-now-playing-cast-fallback-$index'),
       color: roles.elevatedSurface,
-      child: Icon(Icons.person, size: 24 * scale, color: roles.mutedText),
+      child: Icon(Icons.person, size: 24, color: roles.mutedText),
     );
   }
 }
@@ -2108,289 +2017,273 @@ class _MiniGuide extends StatelessWidget {
     final channels = controller.miniGuideChannels;
     final roles = LineupTheme.of(context);
     final size = MediaQuery.sizeOf(context);
-    final scale = LineupLayout.scaleFor(size);
     final horizontal =
         size.height >= 720 && !LineupLayout.isCompactWidth(size.width);
     final textScale = MediaQuery.textScalerOf(context).scale(1);
     final layoutTextScale = textScale < 1 ? 1.0 : textScale;
     final large = horizontal && size.width >= 1920 && size.height >= 1080;
     final rowHeight = horizontal
-        ? (large ? 66.0 : 56.0) * scale * layoutTextScale
+        ? (large ? 66.0 : 56.0) * layoutTextScale
         : null;
-    final channelColumnWidth = (large ? 365.0 : 250.0) * scale;
-    final columnGap = (large ? 36.0 : 24.0) * scale;
-    final contentInset =
-        (horizontal ? (large ? 48.0 : 32.0) : roles.overlaySafeArea) * scale;
-    final rowInset = (large ? 18.0 : 12.0) * scale;
-    final fadeTail = (large ? 110.0 : 80.0) * scale;
-    final scaledTheme = Theme.of(context).copyWith(
-      textTheme: Theme.of(context).textTheme.apply(fontSizeFactor: scale),
-    );
-    return Theme(
-      data: scaledTheme,
-      child: DefaultTextStyle(
-        style: scaledTheme.textTheme.bodyMedium!,
-        child: Builder(
-          builder: (context) => Align(
-            alignment: Alignment.topCenter,
-            child: SafeArea(
-              bottom: false,
-              child: CustomPaint(
-                painter: _MiniGuideFadePainter(
-                  scrim: roles.scrim,
-                  tailHeight: fadeTail,
+    final channelColumnWidth = (large ? 365.0 : 250.0);
+    final columnGap = (large ? 36.0 : 24.0);
+    final contentInset = (horizontal
+        ? (large ? 48.0 : 32.0)
+        : roles.overlaySafeArea);
+    final rowInset = (large ? 18.0 : 12.0);
+    final fadeTail = (large ? 110.0 : 80.0);
+    final theme = Theme.of(context);
+    return DefaultTextStyle(
+      style: theme.textTheme.bodyMedium!,
+      child: Builder(
+        builder: (context) => Align(
+          alignment: Alignment.topCenter,
+          child: SafeArea(
+            bottom: false,
+            child: CustomPaint(
+              painter: _MiniGuideFadePainter(
+                scrim: roles.scrim,
+                tailHeight: fadeTail,
+              ),
+              child: Container(
+                key: const Key('mini-guide-shelf'),
+                width: double.infinity,
+                constraints: BoxConstraints(maxHeight: size.height),
+                padding: EdgeInsets.fromLTRB(
+                  contentInset,
+                  12,
+                  contentInset,
+                  16,
                 ),
-                child: Container(
-                  key: const Key('mini-guide-shelf'),
-                  width: double.infinity,
-                  constraints: BoxConstraints(maxHeight: size.height),
-                  padding: EdgeInsets.fromLTRB(
-                    contentInset,
-                    12 * scale,
-                    contentInset,
-                    16 * scale,
-                  ),
-                  child: Semantics(
-                    container: true,
-                    explicitChildNodes: true,
-                    label: 'Mini Guide',
-                    child: SingleChildScrollView(
-                      key: const Key('mini-guide-scroll'),
-                      child: Listener(
-                        behavior: HitTestBehavior.opaque,
-                        onPointerSignal: (event) {
-                          if (event is! PointerScrollEvent ||
-                              event.scrollDelta.dy == 0) {
-                            return;
-                          }
-                          GestureBinding.instance.pointerSignalResolver
-                              .register(event, (_) {
-                                controller.moveMiniGuide(
-                                  event.scrollDelta.dy > 0 ? 1 : -1,
-                                );
-                              });
-                        },
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Wrap(
-                              alignment: WrapAlignment.spaceBetween,
-                              crossAxisAlignment: WrapCrossAlignment.center,
-                              spacing: 12 * scale,
-                              runSpacing: 4 * scale,
-                              children: [
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    ExcludeSemantics(
-                                      child: Text(
-                                        'Mini Guide',
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .titleLarge
-                                            ?.copyWith(
-                                              fontSize:
-                                                  (large ? 26 : 20) * scale,
-                                              fontWeight: FontWeight.w500,
-                                            ),
-                                      ),
+                child: Semantics(
+                  container: true,
+                  explicitChildNodes: true,
+                  label: 'Mini Guide',
+                  child: SingleChildScrollView(
+                    key: const Key('mini-guide-scroll'),
+                    child: Listener(
+                      behavior: HitTestBehavior.opaque,
+                      onPointerSignal: (event) {
+                        if (event is! PointerScrollEvent ||
+                            event.scrollDelta.dy == 0) {
+                          return;
+                        }
+                        GestureBinding.instance.pointerSignalResolver.register(
+                          event,
+                          (_) {
+                            controller.moveMiniGuide(
+                              event.scrollDelta.dy > 0 ? 1 : -1,
+                            );
+                          },
+                        );
+                      },
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Wrap(
+                            alignment: WrapAlignment.spaceBetween,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            spacing: 12,
+                            runSpacing: 4,
+                            children: [
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  ExcludeSemantics(
+                                    child: Text(
+                                      'Mini Guide',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleLarge
+                                          ?.copyWith(
+                                            fontSize: (large ? 26 : 20),
+                                            fontWeight: FontWeight.w500,
+                                          ),
                                     ),
-                                    SizedBox(width: 20 * scale),
-                                    Text(
-                                      _time(context, controller.guide.now),
+                                  ),
+                                  SizedBox(width: 20),
+                                  Text(
+                                    _time(context, controller.guide.now),
+                                    style: TextStyle(
+                                      color: roles.secondaryText,
+                                      fontSize: (large ? 18 : 14),
+                                      fontWeight: FontWeight.w400,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  TextButton(
+                                    style: TextButton.styleFrom(
+                                      foregroundColor: roles.secondaryText,
+                                      minimumSize: Size(0, 44),
+                                      padding: EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                      ),
+                                      textStyle: Theme.of(context)
+                                          .textTheme
+                                          .labelLarge
+                                          ?.copyWith(
+                                            fontSize: (large ? 18 : 14),
+                                            fontWeight: FontWeight.w400,
+                                          ),
+                                    ),
+                                    onPressed: () {
+                                      controller.showFullGuide();
+                                      openGuide();
+                                    },
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Text('Full Guide'),
+                                        SizedBox(width: 8),
+                                        ExcludeSemantics(
+                                          child: Icon(
+                                            Icons.arrow_forward,
+                                            size: 16,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  TextButton(
+                                    style: TextButton.styleFrom(
+                                      foregroundColor: roles.secondaryText,
+                                      minimumSize: Size(0, 44),
+                                      padding: EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                      ),
+                                      textStyle: Theme.of(context)
+                                          .textTheme
+                                          .labelLarge
+                                          ?.copyWith(
+                                            fontSize: (large ? 18 : 14),
+                                            fontWeight: FontWeight.w400,
+                                          ),
+                                    ),
+                                    onPressed: controller.closeOverlay,
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Text('Close'),
+                                        SizedBox(width: 8),
+                                        ExcludeSemantics(
+                                          child: Icon(Icons.close, size: 16),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                          if (horizontal)
+                            Padding(
+                              padding: EdgeInsets.fromLTRB(
+                                rowInset,
+                                0,
+                                rowInset,
+                                large ? 8 : 6,
+                              ),
+                              child: Row(
+                                children: [
+                                  SizedBox(
+                                    width: channelColumnWidth,
+                                    child: Text(
+                                      'Channel',
                                       style: TextStyle(
                                         color: roles.secondaryText,
-                                        fontSize: (large ? 18 : 14) * scale,
-                                        fontWeight: FontWeight.w400,
+                                        fontSize: (large ? 16 : 12),
+                                        fontWeight: FontWeight.w500,
                                       ),
                                     ),
-                                  ],
-                                ),
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    TextButton(
-                                      style: TextButton.styleFrom(
-                                        foregroundColor: roles.secondaryText,
-                                        minimumSize: Size(0, 44 * scale),
-                                        padding: EdgeInsets.symmetric(
-                                          horizontal: 8 * scale,
-                                        ),
-                                        textStyle: Theme.of(context)
-                                            .textTheme
-                                            .labelLarge
-                                            ?.copyWith(
-                                              fontSize:
-                                                  (large ? 18 : 14) * scale,
-                                              fontWeight: FontWeight.w400,
-                                            ),
-                                      ),
-                                      onPressed: () {
-                                        controller.showFullGuide();
-                                        openGuide();
-                                      },
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          const Text('Full Guide'),
-                                          SizedBox(width: 8 * scale),
-                                          ExcludeSemantics(
-                                            child: Icon(
-                                              Icons.arrow_forward,
-                                              size: 16 * scale,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    TextButton(
-                                      style: TextButton.styleFrom(
-                                        foregroundColor: roles.secondaryText,
-                                        minimumSize: Size(0, 44 * scale),
-                                        padding: EdgeInsets.symmetric(
-                                          horizontal: 8 * scale,
-                                        ),
-                                        textStyle: Theme.of(context)
-                                            .textTheme
-                                            .labelLarge
-                                            ?.copyWith(
-                                              fontSize:
-                                                  (large ? 18 : 14) * scale,
-                                              fontWeight: FontWeight.w400,
-                                            ),
-                                      ),
-                                      onPressed: controller.closeOverlay,
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          const Text('Close'),
-                                          SizedBox(width: 8 * scale),
-                                          ExcludeSemantics(
-                                            child: Icon(
-                                              Icons.close,
-                                              size: 16 * scale,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                            if (horizontal)
-                              Padding(
-                                padding: EdgeInsets.fromLTRB(
-                                  rowInset,
-                                  0,
-                                  rowInset,
-                                  large ? 8 * scale : 6 * scale,
-                                ),
-                                child: Row(
-                                  children: [
-                                    SizedBox(
-                                      width: channelColumnWidth,
-                                      child: Text(
-                                        'Channel',
-                                        style: TextStyle(
-                                          color: roles.secondaryText,
-                                          fontSize: (large ? 16 : 12) * scale,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                    ),
-                                    SizedBox(width: columnGap),
-                                    Expanded(
-                                      flex: 115,
-                                      child: Text(
-                                        'On now',
-                                        style: TextStyle(
-                                          color: roles.secondaryText,
-                                          fontSize: (large ? 16 : 12) * scale,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                    ),
-                                    SizedBox(width: columnGap),
-                                    Expanded(
-                                      flex: 100,
-                                      child: Text(
-                                        'Up next',
-                                        style: TextStyle(
-                                          color: roles.secondaryText,
-                                          fontSize: (large ? 16 : 12) * scale,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            for (final (index, channel) in channels.indexed)
-                              _MiniGuideRow(
-                                controller: controller,
-                                channel: channel,
-                                rowHeight: rowHeight,
-                                channelColumnWidth: channelColumnWidth,
-                                columnGap: columnGap,
-                                active: active,
-                                large: large,
-                                scale: scale,
-                                rowInset: rowInset,
-                                isLast: index == channels.length - 1,
-                              ),
-                            SizedBox(height: 8 * scale),
-                            Wrap(
-                              alignment: WrapAlignment.spaceBetween,
-                              crossAxisAlignment: WrapCrossAlignment.center,
-                              spacing: 12 * scale,
-                              runSpacing: 4 * scale,
-                              children: [
-                                Text(
-                                  'Up / Down · Browse · Enter Tune · Esc Close',
-                                  style: TextStyle(
-                                    color: roles.secondaryText,
-                                    fontSize: (large ? 16 : 12) * scale,
                                   ),
-                                ),
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    IconButton(
-                                      tooltip: 'Previous channel',
-                                      constraints: BoxConstraints(
-                                        minWidth: 44 * scale,
-                                        minHeight: 44 * scale,
-                                      ),
-                                      padding: EdgeInsets.zero,
-                                      onPressed: () =>
-                                          controller.moveMiniGuide(-1),
-                                      icon: Icon(
-                                        Icons.arrow_upward,
-                                        size: 24 * scale,
+                                  SizedBox(width: columnGap),
+                                  Expanded(
+                                    flex: 115,
+                                    child: Text(
+                                      'On now',
+                                      style: TextStyle(
+                                        color: roles.secondaryText,
+                                        fontSize: (large ? 16 : 12),
+                                        fontWeight: FontWeight.w500,
                                       ),
                                     ),
-                                    IconButton(
-                                      tooltip: 'Next channel',
-                                      constraints: BoxConstraints(
-                                        minWidth: 44 * scale,
-                                        minHeight: 44 * scale,
-                                      ),
-                                      padding: EdgeInsets.zero,
-                                      onPressed: () =>
-                                          controller.moveMiniGuide(1),
-                                      icon: Icon(
-                                        Icons.arrow_downward,
-                                        size: 24 * scale,
+                                  ),
+                                  SizedBox(width: columnGap),
+                                  Expanded(
+                                    flex: 100,
+                                    child: Text(
+                                      'Up next',
+                                      style: TextStyle(
+                                        color: roles.secondaryText,
+                                        fontSize: (large ? 16 : 12),
+                                        fontWeight: FontWeight.w500,
                                       ),
                                     ),
-                                  ],
-                                ),
-                              ],
+                                  ),
+                                ],
+                              ),
                             ),
-                          ],
-                        ),
+                          for (final (index, channel) in channels.indexed)
+                            _MiniGuideRow(
+                              controller: controller,
+                              channel: channel,
+                              rowHeight: rowHeight,
+                              channelColumnWidth: channelColumnWidth,
+                              columnGap: columnGap,
+                              active: active,
+                              large: large,
+                              rowInset: rowInset,
+                              isLast: index == channels.length - 1,
+                            ),
+                          SizedBox(height: 8),
+                          Wrap(
+                            alignment: WrapAlignment.spaceBetween,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            spacing: 12,
+                            runSpacing: 4,
+                            children: [
+                              Text(
+                                'Up / Down · Browse · Enter Tune · Esc Close',
+                                style: TextStyle(
+                                  color: roles.secondaryText,
+                                  fontSize: (large ? 16 : 12),
+                                ),
+                              ),
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    tooltip: 'Previous channel',
+                                    constraints: BoxConstraints(
+                                      minWidth: 44,
+                                      minHeight: 44,
+                                    ),
+                                    padding: EdgeInsets.zero,
+                                    onPressed: () =>
+                                        controller.moveMiniGuide(-1),
+                                    icon: Icon(Icons.arrow_upward, size: 24),
+                                  ),
+                                  IconButton(
+                                    tooltip: 'Next channel',
+                                    constraints: BoxConstraints(
+                                      minWidth: 44,
+                                      minHeight: 44,
+                                    ),
+                                    padding: EdgeInsets.zero,
+                                    onPressed: () =>
+                                        controller.moveMiniGuide(1),
+                                    icon: Icon(Icons.arrow_downward, size: 24),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -2413,7 +2306,6 @@ class _MiniGuideRow extends StatelessWidget {
     required this.columnGap,
     required this.active,
     required this.large,
-    required this.scale,
     required this.rowInset,
     required this.isLast,
   });
@@ -2425,7 +2317,6 @@ class _MiniGuideRow extends StatelessWidget {
   final double columnGap;
   final bool active;
   final bool large;
-  final double scale;
   final double rowInset;
   final bool isLast;
 
@@ -2459,13 +2350,11 @@ class _MiniGuideRow extends StatelessWidget {
               spanMilliseconds;
     final titleStyle = Theme.of(context).textTheme.bodyMedium?.copyWith(
       color: foreground,
-      fontSize: (large ? 20 : 14) * scale,
+      fontSize: (large ? 20 : 14),
       fontWeight: FontWeight.w500,
     );
-    final metadataStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
-      color: roles.secondaryText,
-      fontSize: (large ? 16 : 12) * scale,
-    );
+    final metadataStyle = Theme.of(context).textTheme.bodySmall
+        ?.copyWith(color: roles.secondaryText, fontSize: (large ? 16 : 12));
     final nextTitleStyle = titleStyle?.copyWith(
       color: roles.secondaryText,
       fontWeight: FontWeight.w400,
@@ -2494,16 +2383,14 @@ class _MiniGuideRow extends StatelessWidget {
               ExcludeSemantics(
                 child: Icon(
                   Icons.play_arrow_rounded,
-                  size: (large ? 14 : 12) * scale,
+                  size: (large ? 14 : 12),
                   color: roles.secondaryText,
                 ),
               ),
-              SizedBox(width: 4 * scale),
+              SizedBox(width: 4),
               Text(
                 'Watching',
-                style: metadataStyle?.copyWith(
-                  fontSize: (large ? 14 : 12) * scale,
-                ),
+                style: metadataStyle?.copyWith(fontSize: (large ? 14 : 12)),
               ),
             ],
           ),
@@ -2531,10 +2418,10 @@ class _MiniGuideRow extends StatelessWidget {
             style: metadataStyle,
           ),
         if (current != null) ...[
-          SizedBox(height: 3 * scale),
+          SizedBox(height: 3),
           LinearProgressIndicator(
             value: progress.clamp(0, 1),
-            minHeight: 2 * scale,
+            minHeight: 2,
             color: roles.progressFill,
             backgroundColor: roles.progressTrack.withValues(alpha: 0.72),
             semanticsLabel: 'Program progress',
@@ -2569,8 +2456,8 @@ class _MiniGuideRow extends StatelessWidget {
       maxLines: 1,
     )..layout();
     final numberWidth = math.max(
-      (large ? 46.0 : 32.0) * scale,
-      numberMeasure.width + 8 * scale,
+      (large ? 46.0 : 32.0),
+      numberMeasure.width + 8,
     );
     numberMeasure.dispose();
     final number = SizedBox(
@@ -2590,13 +2477,13 @@ class _MiniGuideRow extends StatelessWidget {
           border: Border(
             left: BorderSide(
               color: focused ? roles.focusBorder : Colors.transparent,
-              width: roles.focusBorderWidth * scale,
+              width: roles.focusBorderWidth,
             ),
             bottom: BorderSide(
               color: isLast
                   ? Colors.transparent
                   : roles.primaryText.withValues(alpha: 0.10),
-              width: scale,
+              width: 1.0,
             ),
           ),
         ),
@@ -2614,7 +2501,7 @@ class _MiniGuideRow extends StatelessWidget {
                 ? Padding(
                     padding: EdgeInsets.symmetric(
                       horizontal: rowInset,
-                      vertical: 7 * scale,
+                      vertical: 7,
                     ),
                     child: Row(
                       children: [
@@ -2695,13 +2582,6 @@ class _MiniGuideFadePainter extends CustomPainter {
       scrim != oldDelegate.scrim || tailHeight != oldDelegate.tailHeight;
 }
 
-double _playerDrawerGeometryScale(Size size) {
-  final referenceScale = math.min(size.width / 1920, size.height / 1080);
-  return referenceScale < 1
-      ? referenceScale.clamp(2 / 3, 1).toDouble()
-      : LineupLayout.scaleFor(size);
-}
-
 class _SleepTimerPicker extends StatelessWidget {
   const _SleepTimerPicker({
     required this.controller,
@@ -2723,12 +2603,10 @@ class _SleepTimerPicker extends StatelessWidget {
     final roles = LineupTheme.of(context);
     final mediaQuery = MediaQuery.of(context);
     final size = mediaQuery.size;
-    final scale = LineupLayout.scaleFor(size);
-    final geometryScale = _playerDrawerGeometryScale(size);
     final availableHeight =
-        size.height - mediaQuery.padding.vertical - (24 + 132) * scale;
+        size.height - mediaQuery.padding.vertical - (24 + 132);
     final maxHeight = math
-        .min(size.height - 180 * scale, availableHeight)
+        .min(size.height - 180, availableHeight)
         .clamp(240.0, double.infinity)
         .toDouble();
     final supportingText = Color.lerp(
@@ -2736,9 +2614,7 @@ class _SleepTimerPicker extends StatelessWidget {
       roles.primaryText,
       0.65,
     )!;
-    final scaledTheme = Theme.of(context).copyWith(
-      textTheme: Theme.of(context).textTheme.apply(fontSizeFactor: scale),
-    );
+    final theme = Theme.of(context);
     final selected = controller.sleepDuration;
     final remaining = controller.sleepRemaining;
     final choices = <(String, Duration?)>[
@@ -2747,107 +2623,87 @@ class _SleepTimerPicker extends StatelessWidget {
       ('1 hour', const Duration(hours: 1)),
       ('90 minutes', const Duration(minutes: 90)),
     ];
-    return Theme(
-      data: scaledTheme,
-      child: DefaultTextStyle(
-        style: scaledTheme.textTheme.bodyMedium!,
-        child: SafeArea(
-          child: Align(
-            alignment: Alignment.bottomRight,
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(
-                24 * scale,
-                24 * scale,
-                roles.overlaySafeArea * scale,
-                132 * scale,
-              ),
-              child: Material(
-                key: const Key('sleep-timer-picker'),
-                color: roles.scrim.withValues(alpha: 0.92),
-                borderRadius: BorderRadius.circular(roles.panelRadius * scale),
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxWidth: 354 * geometryScale,
-                    maxHeight: maxHeight,
-                  ),
-                  child: SingleChildScrollView(
-                    child: Padding(
-                      padding: EdgeInsets.fromLTRB(
-                        12 * geometryScale,
-                        24 * geometryScale,
-                        12 * geometryScale,
-                        12 * geometryScale,
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Padding(
-                            padding: EdgeInsets.symmetric(
-                              horizontal: 18 * geometryScale,
-                            ),
-                            child: Text(
-                              'Stop playback after…',
-                              style: scaledTheme.textTheme.titleMedium
-                                  ?.copyWith(color: roles.primaryText),
+    return DefaultTextStyle(
+      style: theme.textTheme.bodyMedium!,
+      child: SafeArea(
+        child: Align(
+          alignment: Alignment.bottomRight,
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(24, 24, roles.overlaySafeArea, 132),
+            child: Material(
+              key: const Key('sleep-timer-picker'),
+              color: roles.scrim.withValues(alpha: 0.92),
+              borderRadius: BorderRadius.circular(roles.panelRadius),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: 354,
+                  maxHeight: maxHeight,
+                ),
+                child: SingleChildScrollView(
+                  child: Padding(
+                    padding: EdgeInsets.fromLTRB(12, 24, 12, 12),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 18),
+                          child: Text(
+                            'Stop playback after…',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              color: roles.primaryText,
                             ),
                           ),
-                          if (remaining case final value?)
-                            Padding(
-                              padding: EdgeInsets.only(
-                                top: 8 * geometryScale,
-                                left: 18 * geometryScale,
-                                right: 18 * geometryScale,
-                              ),
-                              child: Text(
-                                'Stops in ${(value.inSeconds / 60).ceil()} min',
-                                style: scaledTheme.textTheme.bodySmall
-                                    ?.copyWith(color: supportingText),
+                        ),
+                        if (remaining case final value?)
+                          Padding(
+                            padding: EdgeInsets.only(
+                              top: 8,
+                              left: 18,
+                              right: 18,
+                            ),
+                            child: Text(
+                              'Stops in ${(value.inSeconds / 60).ceil()} min',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: supportingText,
                               ),
                             ),
-                          SizedBox(height: 18 * geometryScale),
-                          for (final choice in choices)
-                            ListTile(
-                              key: Key(
-                                'sleep-timer-${choice.$2?.inMinutes ?? 'off'}',
-                              ),
-                              dense: true,
-                              minTileHeight: 60 * geometryScale,
-                              selected: choice.$2 == selected,
-                              selectedTileColor: roles.progressFill.withValues(
-                                alpha: 0.10,
-                              ),
-                              focusColor: roles.focusedSurface,
-                              horizontalTitleGap: geometryScale > 1
-                                  ? 16 * geometryScale
-                                  : null,
-                              minVerticalPadding: geometryScale > 1
-                                  ? 8 * geometryScale
-                                  : null,
-                              contentPadding: EdgeInsets.symmetric(
-                                horizontal: 18 * geometryScale,
-                              ),
-                              autofocus: choice.$2 == selected,
-                              title: Text(
-                                choice.$1,
-                                style: scaledTheme.textTheme.bodyLarge
-                                    ?.copyWith(
-                                      color: roles.primaryText,
-                                      fontSize: 13 * scale,
-                                    ),
-                              ),
-                              trailing: choice.$2 == selected
-                                  ? Icon(
-                                      Icons.check,
-                                      color: roles.progressFill,
-                                      size: 24 * scale,
-                                      semanticLabel: 'Selected preset',
-                                    )
-                                  : null,
-                              onTap: () => _choose(choice.$2),
+                          ),
+                        SizedBox(height: 18),
+                        for (final choice in choices)
+                          ListTile(
+                            key: Key(
+                              'sleep-timer-${choice.$2?.inMinutes ?? 'off'}',
                             ),
-                        ],
-                      ),
+                            dense: true,
+                            minTileHeight: 60,
+                            selected: choice.$2 == selected,
+                            selectedTileColor: roles.progressFill.withValues(
+                              alpha: 0.10,
+                            ),
+                            focusColor: roles.focusedSurface,
+                            contentPadding: EdgeInsets.symmetric(
+                              horizontal: 18,
+                            ),
+                            autofocus: choice.$2 == selected,
+                            title: Text(
+                              choice.$1,
+                              style: theme.textTheme.bodyLarge?.copyWith(
+                                color: roles.primaryText,
+                                fontSize: 13,
+                              ),
+                            ),
+                            trailing: choice.$2 == selected
+                                ? Icon(
+                                    Icons.check,
+                                    color: roles.progressFill,
+                                    size: 24,
+                                    semanticLabel: 'Selected preset',
+                                  )
+                                : null,
+                            onTap: () => _choose(choice.$2),
+                          ),
+                      ],
                     ),
                   ),
                 ),
@@ -2905,29 +2761,13 @@ class _TracksState extends State<_Tracks> {
     final selectedTrack = tracks.where((track) => track.selected).firstOrNull;
     return LayoutBuilder(
       builder: (context, constraints) {
-        final size = constraints.biggest;
-        final scale = LineupLayout.scaleFor(size);
-        final geometryScale = _playerDrawerGeometryScale(size);
-        final railWidth = math.min(
-          constraints.maxWidth * 0.4,
-          600.0 * geometryScale,
-        );
-        final fadeWidth = math.min(
-          100.0 * geometryScale,
-          constraints.maxWidth - railWidth,
-        );
+        final railWidth = math.min(constraints.maxWidth * 0.4, 600.0);
+        final fadeWidth = math.min(100.0, constraints.maxWidth - railWidth);
         final padding = constraints.maxWidth <= 800
-            ? EdgeInsets.all(20 * geometryScale)
-            : EdgeInsets.fromLTRB(
-                36 * geometryScale,
-                48 * geometryScale,
-                48 * geometryScale,
-                36 * geometryScale,
-              );
+            ? EdgeInsets.all(20)
+            : EdgeInsets.fromLTRB(36, 48, 48, 36);
         final textTheme = Theme.of(context).textTheme;
-        TextStyle? scaled(TextStyle? style) => style?.fontSize == null
-            ? style
-            : style!.copyWith(fontSize: style.fontSize! * scale);
+
         final supportingText = Color.lerp(
           roles.secondaryText,
           roles.primaryText,
@@ -2970,8 +2810,9 @@ class _TracksState extends State<_Tracks> {
                                 widget.type == PlayerTrackType.audio
                                     ? 'Audio'
                                     : 'Subtitles',
-                                style: scaled(textTheme.headlineSmall)
-                                    ?.copyWith(fontWeight: FontWeight.w500),
+                                style: textTheme.headlineSmall?.copyWith(
+                                  fontWeight: FontWeight.w500,
+                                ),
                               ),
                             ),
                             TextButton(
@@ -2980,34 +2821,27 @@ class _TracksState extends State<_Tracks> {
                                   widget.type != PlayerTrackType.subtitle,
                               onPressed: widget.controller.closeOverlay,
                               style: TextButton.styleFrom(
-                                textStyle: scaled(textTheme.labelLarge),
+                                textStyle: textTheme.labelLarge,
                                 foregroundColor: supportingText,
-                                padding: scale > 1
-                                    ? EdgeInsets.symmetric(
-                                        horizontal: 12 * scale,
-                                        vertical: 8 * scale,
-                                      )
-                                    : null,
-                                minimumSize: scale > 1
-                                    ? Size(64 * scale, 40 * scale)
-                                    : null,
+                                padding: null,
+                                minimumSize: null,
                               ),
                               child: const Text('Close'),
                             ),
                           ],
                         ),
-                        SizedBox(height: 36 * geometryScale),
+                        SizedBox(height: 36),
                         if (tracks.isEmpty &&
                             widget.type == PlayerTrackType.subtitle)
                           Padding(
-                            padding: EdgeInsets.only(bottom: 12 * scale),
+                            padding: EdgeInsets.only(bottom: 12),
                             child: Text(
                               widget.controller.tuning ||
                                       widget.controller.status.state ==
                                           PlayerState.loading
                                   ? 'Loading tracks…'
                                   : 'No subtitle tracks available',
-                              style: scaled(textTheme.bodyMedium),
+                              style: textTheme.bodyMedium,
                             ),
                           ),
                         Expanded(
@@ -3022,7 +2856,7 @@ class _TracksState extends State<_Tracks> {
                                                   PlayerState.loading
                                           ? 'Loading tracks…'
                                           : 'No audio tracks available',
-                                      style: scaled(textTheme.bodyMedium),
+                                      style: textTheme.bodyMedium,
                                     ),
                                   )
                                 // Native track projection is bounded to 256 rows.
@@ -3082,9 +2916,7 @@ class _TracksState extends State<_Tracks> {
                                                   const <String>[];
                                               final metadataText = metadata
                                                   .join(' • ');
-                                              final minTileHeight =
-                                                  (metadata.isEmpty ? 56 : 72) *
-                                                  scale;
+
                                               final tooltip =
                                                   display?.tooltipText ?? title;
                                               final pending =
@@ -3142,22 +2974,11 @@ class _TracksState extends State<_Tracks> {
                                                         ),
                                                     focusColor:
                                                         roles.focusedSurface,
-                                                    minTileHeight: scale > 1
-                                                        ? minTileHeight
-                                                        : null,
-                                                    horizontalTitleGap:
-                                                        scale > 1
-                                                        ? 16 * scale
-                                                        : null,
-                                                    minVerticalPadding:
-                                                        scale > 1
-                                                        ? 8 * scale
-                                                        : null,
+                                                    minTileHeight: null,
                                                     contentPadding:
                                                         EdgeInsets.symmetric(
-                                                          horizontal:
-                                                              12 * scale,
-                                                          vertical: 8 * scale,
+                                                          horizontal: 12,
+                                                          vertical: 8,
                                                         ),
                                                     title: Tooltip(
                                                       message: tooltip,
@@ -3169,11 +2990,9 @@ class _TracksState extends State<_Tracks> {
                                                         overflow: TextOverflow
                                                             .ellipsis,
                                                         softWrap: true,
-                                                        style:
-                                                            scaled(
-                                                              textTheme
-                                                                  .bodyLarge,
-                                                            )?.copyWith(
+                                                        style: textTheme
+                                                            .bodyLarge
+                                                            ?.copyWith(
                                                               color: roles
                                                                   .primaryText,
                                                               fontWeight:
@@ -3191,27 +3010,23 @@ class _TracksState extends State<_Tracks> {
                                                                 TextOverflow
                                                                     .ellipsis,
                                                             softWrap: true,
-                                                            style:
-                                                                scaled(
-                                                                  textTheme
-                                                                      .bodyMedium,
-                                                                )?.copyWith(
+                                                            style: textTheme
+                                                                .bodyMedium
+                                                                ?.copyWith(
                                                                   color:
                                                                       supportingText,
                                                                 ),
                                                           ),
                                                     trailing: SizedBox(
-                                                      width: 30 * scale,
+                                                      width: 30,
                                                       child: Center(
                                                         child: pending
                                                             ? SizedBox.square(
-                                                                dimension:
-                                                                    18 * scale,
+                                                                dimension: 18,
                                                                 child:
                                                                     CircularProgressIndicator(
                                                                       strokeWidth:
-                                                                          2 *
-                                                                          scale,
+                                                                          2,
                                                                     ),
                                                               )
                                                             : selected
@@ -3219,8 +3034,7 @@ class _TracksState extends State<_Tracks> {
                                                                 Icons.check,
                                                                 color: roles
                                                                     .progressFill,
-                                                                size:
-                                                                    24 * scale,
+                                                                size: 24,
                                                               )
                                                             : const SizedBox.shrink(),
                                                       ),
@@ -3237,16 +3051,16 @@ class _TracksState extends State<_Tracks> {
                                   ),
                           ),
                         ),
-                        SizedBox(height: 24 * geometryScale),
+                        SizedBox(height: 24),
                         if (widget.controller.trackSelectionError
                             case final error?)
                           Padding(
-                            padding: EdgeInsets.only(top: 10 * scale),
+                            padding: EdgeInsets.only(top: 10),
                             child: Semantics(
                               liveRegion: true,
                               child: Text(
                                 error,
-                                style: scaled(textTheme.bodyMedium)?.copyWith(
+                                style: textTheme.bodyMedium?.copyWith(
                                   color: Theme.of(context).colorScheme.error,
                                 ),
                               ),
@@ -3254,11 +3068,12 @@ class _TracksState extends State<_Tracks> {
                           ),
                         Padding(
                           key: const Key('playback-options-footer'),
-                          padding: EdgeInsets.only(top: 20 * geometryScale),
+                          padding: EdgeInsets.only(top: 20),
                           child: Text(
                             'Up/Down Browse · Enter Select · Esc Close',
-                            style: scaled(textTheme.bodySmall)
-                                ?.copyWith(color: supportingText),
+                            style: textTheme.bodySmall?.copyWith(
+                              color: supportingText,
+                            ),
                           ),
                         ),
                       ],
@@ -3279,37 +3094,21 @@ class _ChannelNumber extends StatelessWidget {
   final PlayerCoordinator controller;
   @override
   Widget build(BuildContext context) {
-    final roles = LineupTheme.of(context);
-    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
     final numberStyle = Theme.of(context).textTheme.displayMedium;
-    final numberFontSize = numberStyle?.fontSize;
+
     return Center(
       child: Semantics(
         liveRegion: true,
         label: 'Channel number ${controller.channelNumber}',
         child: Card(
           key: const Key('channel-number-buffer'),
-          margin: scale > 1 ? EdgeInsets.all(4 * scale) : null,
-          shape: scale > 1
-              ? RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(
-                    roles.panelRadius * scale,
-                  ),
-                  side: BorderSide(color: roles.subtleBorder, width: scale),
-                )
-              : null,
           child: Padding(
-            padding: EdgeInsets.symmetric(
-              horizontal: 34 * scale,
-              vertical: 24 * scale,
-            ),
+            padding: EdgeInsets.symmetric(horizontal: 34, vertical: 24),
             child: Text(
               controller.channelNumber,
               maxLines: 1,
               softWrap: false,
-              style: scale > 1 && numberFontSize != null
-                  ? numberStyle!.copyWith(fontSize: numberFontSize * scale)
-                  : numberStyle,
+              style: numberStyle,
             ),
           ),
         ),
@@ -3323,44 +3122,9 @@ class _ErrorOverlay extends StatelessWidget {
   final PlayerCoordinator controller;
   @override
   Widget build(BuildContext context) {
-    final roles = LineupTheme.of(context);
-    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
     final textTheme = Theme.of(context).textTheme;
-    final bodyFontSize = textTheme.bodyMedium?.fontSize;
-    final bodyStyle = scale > 1 && bodyFontSize != null
-        ? textTheme.bodyMedium!.copyWith(fontSize: bodyFontSize * scale)
-        : textTheme.bodyMedium;
-    final filledButtonStyle = scale > 1
-        ? FilledButton.styleFrom(
-            minimumSize: Size(148 * scale, 54 * scale),
-            padding: EdgeInsets.symmetric(
-              horizontal: 24 * scale,
-              vertical: 16 * scale,
-            ),
-            textStyle: textTheme.labelLarge?.copyWith(
-              fontSize: 17 * scale,
-              fontWeight: FontWeight.w700,
-            ),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(roles.panelRadius * scale),
-            ),
-          )
-        : null;
-    final closeButtonStyle = scale > 1
-        ? TextButton.styleFrom(
-            minimumSize: Size(64 * scale, 36 * scale),
-            padding: EdgeInsets.symmetric(
-              horizontal: 12 * scale,
-              vertical: 8 * scale,
-            ),
-            textStyle: textTheme.labelLarge?.copyWith(
-              fontSize: (textTheme.labelLarge?.fontSize ?? 14) * scale,
-            ),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(roles.panelRadius * scale),
-            ),
-          )
-        : null;
+
+    final bodyStyle = textTheme.bodyMedium;
     return LayoutBuilder(
       builder: (context, constraints) => Center(
         child: ConstrainedBox(
@@ -3370,44 +3134,33 @@ class _ErrorOverlay extends StatelessWidget {
                 : double.infinity,
           ),
           child: Card(
-            margin: scale > 1 ? EdgeInsets.all(4 * scale) : null,
-            shape: scale > 1
-                ? RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(
-                      roles.panelRadius * scale,
-                    ),
-                    side: BorderSide(color: roles.subtleBorder, width: scale),
-                  )
-                : null,
             child: SingleChildScrollView(
               child: Padding(
-                padding: EdgeInsets.all(24 * scale),
+                padding: EdgeInsets.all(24),
                 child: Semantics(
                   liveRegion: true,
                   label: 'Playback error',
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.error_outline, size: 42 * scale),
-                      SizedBox(height: 12 * scale),
+                      Icon(Icons.error_outline, size: 42),
+                      SizedBox(height: 12),
                       Text(
                         controller.error ?? 'Playback failed.',
                         style: bodyStyle,
                       ),
-                      SizedBox(height: 16 * scale),
+                      SizedBox(height: 16),
                       Wrap(
-                        spacing: 10 * scale,
-                        runSpacing: scale > 1 ? 10 * scale : 0,
+                        spacing: 10,
+                        runSpacing: 0,
                         children: [
                           if (controller.canRetry)
                             FilledButton(
                               onPressed: controller.retry,
-                              style: filledButtonStyle,
                               child: const Text('Retry'),
                             ),
                           TextButton(
                             onPressed: controller.closeOverlay,
-                            style: closeButtonStyle,
                             child: const Text('Close'),
                           ),
                         ],
@@ -3429,20 +3182,11 @@ class _Loading extends StatelessWidget {
   final String label;
   @override
   Widget build(BuildContext context) {
-    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
     return Center(
       child: Semantics(
         liveRegion: true,
         label: label,
-        child: scale > 1
-            ? CircularProgressIndicator(
-                strokeWidth: 4 * scale,
-                constraints: BoxConstraints(
-                  minWidth: 40 * scale,
-                  minHeight: 40 * scale,
-                ),
-              )
-            : const CircularProgressIndicator(),
+        child: const CircularProgressIndicator(),
       ),
     );
   }
@@ -3453,16 +3197,11 @@ class _Unsupported extends StatelessWidget {
   final String message;
   @override
   Widget build(BuildContext context) {
-    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
     final textTheme = Theme.of(context).textTheme;
-    final headlineFontSize = textTheme.headlineSmall?.fontSize;
-    final headlineStyle = scale > 1 && headlineFontSize != null
-        ? textTheme.headlineSmall!.copyWith(fontSize: headlineFontSize * scale)
-        : textTheme.headlineSmall;
-    final bodyFontSize = textTheme.bodyMedium?.fontSize;
-    final bodyStyle = scale > 1 && bodyFontSize != null
-        ? textTheme.bodyMedium!.copyWith(fontSize: bodyFontSize * scale)
-        : textTheme.bodyMedium;
+
+    final headlineStyle = textTheme.headlineSmall;
+
+    final bodyStyle = textTheme.bodyMedium;
     return LayoutBuilder(
       builder: (context, constraints) => SingleChildScrollView(
         child: ConstrainedBox(
@@ -3475,10 +3214,10 @@ class _Unsupported extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.desktop_windows_outlined, size: 54 * scale),
-                SizedBox(height: 18 * scale),
+                Icon(Icons.desktop_windows_outlined, size: 54),
+                SizedBox(height: 18),
                 Text('Playback unavailable', style: headlineStyle),
-                SizedBox(height: 8 * scale),
+                SizedBox(height: 8),
                 Text(message, style: bodyStyle),
               ],
             ),
@@ -3547,10 +3286,9 @@ Widget _osdAction(
 }) {
   final roles = LineupTheme.of(context);
   final size = MediaQuery.sizeOf(context);
-  final scale = LineupLayout.scaleFor(size);
   final largeDesktop = size.width >= 1920 && size.height >= 900;
   return ConstrainedBox(
-    constraints: BoxConstraints(maxWidth: (compact ? 132 : 180) * scale),
+    constraints: BoxConstraints(maxWidth: (compact ? 132 : 180)),
     child: Tooltip(
       message: tooltip,
       excludeFromSemantics: semanticLabel != null,
@@ -3566,18 +3304,16 @@ Widget _osdAction(
           onPressed: onPressed,
           style: TextButton.styleFrom(
             foregroundColor: roles.primaryText,
-            padding: EdgeInsets.symmetric(
-              horizontal: (compact ? 5 : 8) * scale,
-            ),
-            minimumSize: Size(0, 40 * scale),
+            padding: EdgeInsets.symmetric(horizontal: (compact ? 5 : 8)),
+            minimumSize: Size(0, 40),
             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             visualDensity: VisualDensity.compact,
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: (compact ? 17 : 18) * scale),
-              SizedBox(width: 8 * scale),
+              Icon(icon, size: (compact ? 17 : 18)),
+              SizedBox(width: 8),
               Flexible(
                 child: Text(
                   label,
@@ -3585,7 +3321,7 @@ Widget _osdAction(
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.labelLarge?.copyWith(
                     color: roles.primaryText,
-                    fontSize: (largeDesktop ? 16 : 14) * scale,
+                    fontSize: (largeDesktop ? 16 : 14),
                     fontWeight: FontWeight.w500,
                   ),
                 ),

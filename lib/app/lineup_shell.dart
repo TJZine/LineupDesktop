@@ -210,8 +210,10 @@ class _LineupShellState extends State<LineupShell> {
     final renderObject = invokerContext.findRenderObject();
     if (renderObject is! RenderBox || !renderObject.hasSize) return;
     setState(() {
-      _appMenuAnchor =
-          renderObject.localToGlobal(Offset.zero) & renderObject.size;
+      _appMenuAnchor = MatrixUtils.transformRect(
+        renderObject.getTransformTo(context.findRenderObject()),
+        Offset.zero & renderObject.size,
+      );
       _appMenuInvokerFocus = invokerFocus;
       _appMenuOpen = true;
     });
@@ -373,19 +375,12 @@ class _LineupShellState extends State<LineupShell> {
     final anchor = _appMenuAnchor;
     if (anchor == null) return const SizedBox.shrink();
     final roles = LineupTheme.of(context);
-    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
     final textTheme = Theme.of(context).textTheme;
     final titleStyle = textTheme.titleLarge?.copyWith(
-      fontSize: (textTheme.titleLarge?.fontSize ?? 22) * scale,
+      fontSize: (textTheme.titleLarge?.fontSize ?? 22),
     );
-    final labelStyle = textTheme.labelLarge?.copyWith(fontSize: 16 * scale);
-    final detailStyle = textTheme.bodySmall?.copyWith(fontSize: 14 * scale);
-    final menuShape = scale > 1
-        ? RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(roles.panelRadius * scale),
-            side: BorderSide(color: roles.subtleBorder, width: scale),
-          )
-        : null;
+    final labelStyle = textTheme.labelLarge?.copyWith(fontSize: 16);
+    final detailStyle = textTheme.bodySmall?.copyWith(fontSize: 14);
     final profileName = widget.controller.profile?.name;
     final accountName = widget.controller.account?.name ?? 'Plex account';
     final serverName = widget.controller.server?.name ?? 'No server selected';
@@ -398,7 +393,7 @@ class _LineupShellState extends State<LineupShell> {
           color: roles.scrim.withValues(alpha: 0.45),
         ),
         CustomSingleChildLayout(
-          delegate: _AnchoredMenuLayout(anchor, scale),
+          delegate: _AnchoredMenuLayout(anchor),
           child: FocusScope(
             node: _appMenuScope,
             autofocus: true,
@@ -417,30 +412,24 @@ class _LineupShellState extends State<LineupShell> {
               child: Card(
                 key: const Key('immersive-app-menu'),
                 margin: EdgeInsets.zero,
-                shape: menuShape,
                 child: SingleChildScrollView(
-                  padding: EdgeInsets.all(12 * scale),
+                  padding: EdgeInsets.all(12),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Padding(
-                        padding: EdgeInsets.fromLTRB(
-                          12 * scale,
-                          4 * scale,
-                          4 * scale,
-                          8 * scale,
-                        ),
+                        padding: EdgeInsets.fromLTRB(12, 4, 4, 8),
                         child: Row(
                           children: [
                             Expanded(child: Text('Lineup', style: titleStyle)),
                             IconButton(
                               constraints: BoxConstraints(
-                                minWidth: 48 * scale,
-                                minHeight: 48 * scale,
+                                minWidth: 48,
+                                minHeight: 48,
                               ),
-                              padding: EdgeInsets.all(8 * scale),
-                              iconSize: 24 * scale,
+                              padding: EdgeInsets.all(8),
+                              iconSize: 24,
                               tooltip: 'Close Lineup menu',
                               onPressed: _closeAppMenu,
                               icon: const Icon(Icons.close),
@@ -454,7 +443,6 @@ class _LineupShellState extends State<LineupShell> {
                         autofocus: true,
                         labelStyle: labelStyle,
                         detailStyle: detailStyle,
-                        scale: scale,
                       ),
                       _menuDestination(
                         index: 4,
@@ -465,7 +453,6 @@ class _LineupShellState extends State<LineupShell> {
                             : 'Choose a channel in Guide',
                         labelStyle: labelStyle,
                         detailStyle: detailStyle,
-                        scale: scale,
                       ),
                       if (_canShowNowPlaying)
                         Tooltip(
@@ -474,8 +461,8 @@ class _LineupShellState extends State<LineupShell> {
                             key: const Key('app-menu-now-playing'),
                             style: TextButton.styleFrom(
                               alignment: Alignment.centerLeft,
-                              minimumSize: Size(0, 48 * scale),
-                              padding: EdgeInsets.all(12 * scale),
+                              minimumSize: Size(0, 48),
+                              padding: EdgeInsets.all(12),
                               foregroundColor: roles.secondaryText,
                               textStyle: labelStyle,
                             ),
@@ -488,16 +475,14 @@ class _LineupShellState extends State<LineupShell> {
                         label: 'Channels',
                         labelStyle: labelStyle,
                         detailStyle: detailStyle,
-                        scale: scale,
                       ),
                       _menuDestination(
                         index: 2,
                         label: 'Settings',
                         labelStyle: labelStyle,
                         detailStyle: detailStyle,
-                        scale: scale,
                       ),
-                      Divider(height: 24 * scale, thickness: scale),
+                      Divider(height: 24, thickness: 1.0),
                       Semantics(
                         selected:
                             _selectedIndex == 2 &&
@@ -506,7 +491,7 @@ class _LineupShellState extends State<LineupShell> {
                         child: TextButton(
                           style: TextButton.styleFrom(
                             alignment: Alignment.centerLeft,
-                            padding: EdgeInsets.all(12 * scale),
+                            padding: EdgeInsets.all(12),
                             foregroundColor:
                                 _selectedIndex == 2 &&
                                     _settingsCategory ==
@@ -520,7 +505,7 @@ class _LineupShellState extends State<LineupShell> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               const Text('Account'),
-                              SizedBox(height: 4 * scale),
+                              SizedBox(height: 4),
                               Text(
                                 profileName == null
                                     ? accountName
@@ -528,7 +513,7 @@ class _LineupShellState extends State<LineupShell> {
                                 softWrap: true,
                                 style: detailStyle,
                               ),
-                              SizedBox(height: 3 * scale),
+                              SizedBox(height: 3),
                               Text(
                                 serverName,
                                 softWrap: true,
@@ -559,7 +544,6 @@ class _LineupShellState extends State<LineupShell> {
     String? helper,
     required TextStyle? labelStyle,
     required TextStyle? detailStyle,
-    required double scale,
   }) {
     final selected = _selectedIndex == index;
     final semanticLabel = [
@@ -578,8 +562,8 @@ class _LineupShellState extends State<LineupShell> {
         autofocus: autofocus,
         style: TextButton.styleFrom(
           alignment: Alignment.centerLeft,
-          minimumSize: Size(0, 48 * scale),
-          padding: EdgeInsets.all(12 * scale),
+          minimumSize: Size(0, 48),
+          padding: EdgeInsets.all(12),
           foregroundColor: selected
               ? LineupTheme.of(context).primaryText
               : LineupTheme.of(context).secondaryText,
@@ -741,18 +725,17 @@ class _LineupShellState extends State<LineupShell> {
 }
 
 class _AnchoredMenuLayout extends SingleChildLayoutDelegate {
-  const _AnchoredMenuLayout(this.anchor, this.scale);
+  const _AnchoredMenuLayout(this.anchor);
 
   final Rect anchor;
-  final double scale;
 
-  double get _margin => 16 * scale;
-  double get _gap => 8 * scale;
+  double get _margin => 16;
+  double get _gap => 8;
 
   @override
   BoxConstraints getConstraintsForChild(BoxConstraints constraints) =>
       BoxConstraints(
-        maxWidth: (constraints.maxWidth - _margin * 2).clamp(0.0, 320 * scale),
+        maxWidth: (constraints.maxWidth - _margin * 2).clamp(0.0, 320),
         maxHeight: (constraints.maxHeight - _margin * 2).clamp(
           0.0,
           double.infinity,
@@ -784,7 +767,7 @@ class _AnchoredMenuLayout extends SingleChildLayoutDelegate {
 
   @override
   bool shouldRelayout(_AnchoredMenuLayout oldDelegate) =>
-      oldDelegate.anchor != anchor || oldDelegate.scale != scale;
+      oldDelegate.anchor != anchor;
 }
 
 Uri _mediaUri(String value) {
@@ -909,68 +892,42 @@ class _SettingsViewState extends State<SettingsView> {
             color: roles.deepBackground.withValues(alpha: 0.94),
             child: LayoutBuilder(
               builder: (context, constraints) {
-                final size = Size(constraints.maxWidth, constraints.maxHeight);
-                final layoutScale = LineupLayout.scaleFor(size);
-                final scale =
-                    layoutScale *
-                    (size.height / 1080).clamp(0.82, 1.0).toDouble();
                 final compact =
                     LineupLayout.isCompactWidth(constraints.maxWidth) ||
                     MediaQuery.textScalerOf(context).scale(1) >= 2;
-                final scaledTheme = Theme.of(context).copyWith(
-                  textTheme: Theme.of(context).textTheme
-                      .apply(fontSizeFactor: layoutScale),
-                );
-                return Theme(
-                  data: scaledTheme,
-                  child: DefaultTextStyle(
-                    style: scaledTheme.textTheme.bodyMedium!,
-                    child: Builder(
-                      builder: (context) => Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          _settingsHeader(context, scale),
-                          Expanded(
-                            child: compact
-                                ? Column(
+                final theme = Theme.of(context);
+                return DefaultTextStyle(
+                  style: theme.textTheme.bodyMedium!,
+                  child: Builder(
+                    builder: (context) => Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _settingsHeader(context),
+                        Expanded(
+                          child: compact
+                              ? Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    _categoryRail(context, true),
+                                    Expanded(child: _detailPane(context, true)),
+                                  ],
+                                )
+                              : Padding(
+                                  padding: EdgeInsets.fromLTRB(48, 32, 48, 0),
+                                  child: Row(
                                     crossAxisAlignment:
                                         CrossAxisAlignment.stretch,
                                     children: [
-                                      _categoryRail(context, true, scale),
+                                      _categoryRail(context, false),
                                       Expanded(
-                                        child: _detailPane(
-                                          context,
-                                          true,
-                                          scale,
-                                        ),
+                                        child: _detailPane(context, false),
                                       ),
                                     ],
-                                  )
-                                : Padding(
-                                    padding: EdgeInsets.fromLTRB(
-                                      48 * scale,
-                                      32 * scale,
-                                      48 * scale,
-                                      0,
-                                    ),
-                                    child: Row(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.stretch,
-                                      children: [
-                                        _categoryRail(context, false, scale),
-                                        Expanded(
-                                          child: _detailPane(
-                                            context,
-                                            false,
-                                            scale,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
                                   ),
-                          ),
-                        ],
-                      ),
+                                ),
+                        ),
+                      ],
                     ),
                   ),
                 );
@@ -982,10 +939,10 @@ class _SettingsViewState extends State<SettingsView> {
     );
   }
 
-  Widget _settingsHeader(BuildContext context, double scale) => Container(
+  Widget _settingsHeader(BuildContext context) => Container(
     alignment: Alignment.center,
-    constraints: BoxConstraints(minHeight: 96 * scale),
-    margin: EdgeInsets.symmetric(horizontal: 48 * scale),
+    constraints: BoxConstraints(minHeight: 96),
+    margin: EdgeInsets.symmetric(horizontal: 48),
     decoration: BoxDecoration(
       border: Border(
         bottom: BorderSide(color: LineupTheme.of(context).subtleBorder),
@@ -993,33 +950,30 @@ class _SettingsViewState extends State<SettingsView> {
     ),
     child: OverflowBar(
       alignment: MainAxisAlignment.spaceBetween,
-      spacing: 12 * scale,
-      overflowSpacing: 8 * scale,
+      spacing: 12,
+      overflowSpacing: 8,
       children: [
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             TextButton.icon(
               onPressed: widget.onBack,
-              icon: Icon(Icons.arrow_back, size: 18 * scale),
+              icon: Icon(Icons.arrow_back, size: 18),
               label: const Text('Back'),
               style: TextButton.styleFrom(
                 foregroundColor: LineupTheme.of(context).secondaryText,
-                minimumSize: Size(0, 48 * scale),
-                padding: EdgeInsets.symmetric(
-                  horizontal: 4 * scale,
-                  vertical: 8 * scale,
-                ),
+                minimumSize: Size(0, 48),
+                padding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
                 textStyle: Theme.of(context).textTheme.labelLarge
-                    ?.copyWith(fontSize: 18 * scale),
+                    ?.copyWith(fontSize: 18),
               ),
             ),
-            SizedBox(width: 12 * scale),
+            SizedBox(width: 12),
             Text(
               'Settings',
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
                 color: LineupTheme.of(context).primaryText,
-                fontSize: 26 * scale,
+                fontSize: 26,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -1034,23 +988,20 @@ class _SettingsViewState extends State<SettingsView> {
                   widget.onOpenMenu!(buttonContext, widget.menuFocusNode!),
               style: TextButton.styleFrom(
                 foregroundColor: LineupTheme.of(context).primaryText,
-                minimumSize: Size(0, 48 * scale),
-                padding: EdgeInsets.symmetric(
-                  horizontal: 4 * scale,
-                  vertical: 8 * scale,
-                ),
+                minimumSize: Size(0, 48),
+                padding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
                 textStyle: Theme.of(context).textTheme.labelLarge?.copyWith(
-                  fontSize: 20 * scale,
+                  fontSize: 20,
                   fontWeight: FontWeight.w500,
-                  letterSpacing: 1.5 * scale,
+                  letterSpacing: 1.5,
                 ),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   const Text('LINEUP'),
-                  SizedBox(width: 12 * scale),
-                  Icon(Icons.menu, size: 18 * scale),
+                  SizedBox(width: 12),
+                  Icon(Icons.menu, size: 18),
                 ],
               ),
             ),
@@ -1059,18 +1010,18 @@ class _SettingsViewState extends State<SettingsView> {
     ),
   );
 
-  Widget _categoryRail(BuildContext context, bool compact, double scale) {
+  Widget _categoryRail(BuildContext context, bool compact) {
     final roles = LineupTheme.of(context);
     final content = Padding(
       padding: EdgeInsets.fromLTRB(
-        compact ? 20 * scale : 0,
-        compact ? 14 * scale : 8 * scale,
-        compact ? 20 * scale : 32 * scale,
-        compact ? 12 * scale : 0,
+        compact ? 20 : 0,
+        compact ? 14 : 8,
+        compact ? 20 : 32,
+        compact ? 12 : 0,
       ),
       child: compact
-          ? _categorySelector(context, true, scale)
-          : _categorySelector(context, false, scale),
+          ? _categorySelector(context, true)
+          : _categorySelector(context, false),
     );
     return DecoratedBox(
       key: const Key('settings-category-rail'),
@@ -1084,31 +1035,30 @@ class _SettingsViewState extends State<SettingsView> {
               : BorderSide.none,
         ),
       ),
-      child: compact ? content : SizedBox(width: 312 * scale, child: content),
+      child: compact ? content : SizedBox(width: 312, child: content),
     );
   }
 
-  Widget _detailPane(BuildContext context, bool compact, double scale) =>
-      Padding(
-        key: const Key('settings-detail-pane'),
-        padding: EdgeInsets.fromLTRB(
-          (compact ? 20 : 48) * scale,
-          (compact ? 20 : 8) * scale,
-          (compact ? 20 : 24) * scale,
-          (compact ? 20 : 24) * scale,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [Expanded(child: _categoryDetail(context))],
-        ),
-      );
+  Widget _detailPane(BuildContext context, bool compact) => Padding(
+    key: const Key('settings-detail-pane'),
+    padding: EdgeInsets.fromLTRB(
+      (compact ? 20 : 48),
+      (compact ? 20 : 8),
+      (compact ? 20 : 24),
+      (compact ? 20 : 24),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [Expanded(child: _categoryDetail(context))],
+    ),
+  );
 
-  Widget _categorySelector(BuildContext context, bool compact, double scale) {
+  Widget _categorySelector(BuildContext context, bool compact) {
     final roles = LineupTheme.of(context);
     final controls = [
       for (final category in SettingsCategory.values)
         Padding(
-          padding: EdgeInsets.only(right: 10 * scale, bottom: 10 * scale),
+          padding: EdgeInsets.only(right: 10, bottom: 10),
           child: Semantics(
             selected: category == _category,
             button: true,
@@ -1119,7 +1069,7 @@ class _SettingsViewState extends State<SettingsView> {
                     : Colors.transparent,
                 border: Border(
                   left: BorderSide(
-                    width: 2 * scale,
+                    width: 2,
                     color: category == _category
                         ? roles.progressFill
                         : Colors.transparent,
@@ -1134,15 +1084,12 @@ class _SettingsViewState extends State<SettingsView> {
                   foregroundColor: category == _category
                       ? roles.primaryText
                       : roles.secondaryText,
-                  padding: EdgeInsets.symmetric(
-                    horizontal: 16 * scale,
-                    vertical: 18 * scale,
-                  ),
+                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 18),
                   minimumSize: Size(0, 0),
                   textStyle: Theme.of(context).textTheme.labelLarge
-                      ?.copyWith(fontSize: 18 * scale),
+                      ?.copyWith(fontSize: 18),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(5 * scale),
+                    borderRadius: BorderRadius.circular(5),
                   ),
                 ),
                 onPressed: () {
@@ -1170,11 +1117,8 @@ class _SettingsViewState extends State<SettingsView> {
 
   Widget _categoryDetail(BuildContext context) {
     final value = _displaySettings;
-    final size = MediaQuery.sizeOf(context);
     final roles = LineupTheme.of(context);
-    final scale =
-        LineupLayout.scaleFor(size) *
-        (size.height / 1080).clamp(0.82, 1.0).toDouble();
+
     return ListView(
       children: [
         _SettingsSection(
@@ -1342,13 +1286,10 @@ class _SettingsViewState extends State<SettingsView> {
                       ? null
                       : widget.controller.showProfiles,
                   style: OutlinedButton.styleFrom(
-                    minimumSize: Size(0, 48 * scale),
-                    padding: EdgeInsets.symmetric(
-                      horizontal: 16 * scale,
-                      vertical: 10 * scale,
-                    ),
+                    minimumSize: Size(0, 48),
+                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                     textStyle: Theme.of(context).textTheme.labelLarge
-                        ?.copyWith(fontSize: 16 * scale),
+                        ?.copyWith(fontSize: 16),
                   ),
                   child: const Text('Switch profile'),
                 ),
@@ -1382,18 +1323,15 @@ class _SettingsViewState extends State<SettingsView> {
                 control: OutlinedButton(
                   onPressed: widget.controller.showServers,
                   style: OutlinedButton.styleFrom(
-                    minimumSize: Size(0, 48 * scale),
-                    padding: EdgeInsets.symmetric(
-                      horizontal: 16 * scale,
-                      vertical: 10 * scale,
-                    ),
+                    minimumSize: Size(0, 48),
+                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                     textStyle: Theme.of(context).textTheme.labelLarge
-                        ?.copyWith(fontSize: 16 * scale),
+                        ?.copyWith(fontSize: 16),
                   ),
                   child: const Text('Switch server'),
                 ),
               ),
-              SizedBox(height: 24 * scale),
+              SizedBox(height: 24),
               _SettingsRow(
                 label: const Text('Signed-in Plex account'),
                 helper: Text(widget.controller.account?.name ?? 'Plex account'),
@@ -1416,16 +1354,13 @@ class _SettingsViewState extends State<SettingsView> {
                                   : roles.subtleBorder,
                             ),
                     ),
-                    minimumSize: WidgetStatePropertyAll(Size(0, 48 * scale)),
+                    minimumSize: WidgetStatePropertyAll(Size(0, 48)),
                     padding: WidgetStatePropertyAll(
-                      EdgeInsets.symmetric(
-                        horizontal: 16 * scale,
-                        vertical: 10 * scale,
-                      ),
+                      EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                     ),
                     textStyle: WidgetStatePropertyAll(
                       Theme.of(context).textTheme.labelLarge
-                          ?.copyWith(fontSize: 16 * scale),
+                          ?.copyWith(fontSize: 16),
                     ),
                   ),
                   child: const Text('Sign out of Plex'),
@@ -1456,13 +1391,10 @@ class _SettingsViewState extends State<SettingsView> {
                 control: OutlinedButton(
                   onPressed: widget.onOpenDiagnostics,
                   style: OutlinedButton.styleFrom(
-                    minimumSize: Size(0, 48 * scale),
-                    padding: EdgeInsets.symmetric(
-                      horizontal: 16 * scale,
-                      vertical: 10 * scale,
-                    ),
+                    minimumSize: Size(0, 48),
+                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                     textStyle: Theme.of(context).textTheme.labelLarge
-                        ?.copyWith(fontSize: 16 * scale),
+                        ?.copyWith(fontSize: 16),
                   ),
                   child: const Text('Open Diagnostics'),
                 ),
@@ -1475,14 +1407,10 @@ class _SettingsViewState extends State<SettingsView> {
   }
 
   Widget _settingFeedback(String keyName) {
-    final size = MediaQuery.sizeOf(context);
-    final scale =
-        LineupLayout.scaleFor(size) *
-        (size.height / 1080).clamp(0.82, 1.0).toDouble();
     final error = _errors[keyName];
     if (error != null) {
       return Padding(
-        padding: EdgeInsets.fromLTRB(16 * scale, 0, 16 * scale, 8 * scale),
+        padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
         child: Text(
           error,
           key: ValueKey('setting-error-$keyName'),
@@ -1492,7 +1420,7 @@ class _SettingsViewState extends State<SettingsView> {
     }
     if (_showSaving.contains(keyName)) {
       return Padding(
-        padding: EdgeInsets.fromLTRB(16 * scale, 0, 16 * scale, 8 * scale),
+        padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
         child: Text('Saving…'),
       );
     }
@@ -1574,12 +1502,8 @@ class _SettingsSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.sizeOf(context);
-    final scale =
-        LineupLayout.scaleFor(size) *
-        (size.height / 1080).clamp(0.82, 1.0).toDouble();
-    final theme = Theme.of(context);
     final roles = LineupTheme.of(context);
+    final theme = Theme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -1589,22 +1513,22 @@ class _SettingsSection extends StatelessWidget {
             title,
             style: theme.textTheme.headlineMedium?.copyWith(
               color: roles.primaryText,
-              fontSize: 32 * scale,
+              fontSize: 32,
               fontWeight: FontWeight.w500,
               height: 1.2,
             ),
           ),
         ),
-        SizedBox(height: 6 * scale),
+        SizedBox(height: 6),
         Text(
           description,
           style: theme.textTheme.bodyLarge?.copyWith(
             color: roles.secondaryText,
-            fontSize: 16 * scale,
+            fontSize: 16,
             height: 1.5,
           ),
         ),
-        SizedBox(height: 32 * scale),
+        SizedBox(height: 32),
         ...children,
       ],
     );
@@ -1627,13 +1551,9 @@ class _SettingsRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
-      final size = MediaQuery.sizeOf(context);
-      final scale =
-          LineupLayout.scaleFor(size) *
-          (size.height / 1080).clamp(0.82, 1.0).toDouble();
       final reflow =
-          constraints.maxWidth < 600 * scale ||
-          MediaQuery.textScalerOf(context).scale(1) >= 2;
+          constraints.maxWidth < 900 ||
+          MediaQuery.textScalerOf(context).scale(1) >= 1.5;
       final theme = Theme.of(context);
       final roles = LineupTheme.of(context);
       final description = Column(
@@ -1642,17 +1562,17 @@ class _SettingsRow extends StatelessWidget {
           DefaultTextStyle.merge(
             style: theme.textTheme.titleMedium?.copyWith(
               color: roles.primaryText,
-              fontSize: 20 * scale,
+              fontSize: 20,
               fontWeight: FontWeight.w500,
               height: 1.2,
             ),
             child: label,
           ),
-          SizedBox(height: 6 * scale),
+          SizedBox(height: 6),
           DefaultTextStyle.merge(
             style: theme.textTheme.bodyLarge?.copyWith(
               color: roles.secondaryText,
-              fontSize: 16 * scale,
+              fontSize: 16,
               height: 1.5,
             ),
             child: helper,
@@ -1660,13 +1580,8 @@ class _SettingsRow extends StatelessWidget {
         ],
       );
       return Container(
-        constraints: BoxConstraints(minHeight: 132 * scale),
-        padding: EdgeInsets.fromLTRB(
-          0,
-          (first ? 16 : 28) * scale,
-          0,
-          28 * scale,
-        ),
+        constraints: BoxConstraints(minHeight: 132),
+        padding: EdgeInsets.fromLTRB(0, (first ? 16 : 28), 0, 28),
         decoration: BoxDecoration(
           border: Border(bottom: BorderSide(color: roles.subtleBorder)),
         ),
@@ -1675,7 +1590,7 @@ class _SettingsRow extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   description,
-                  SizedBox(height: 16 * scale),
+                  SizedBox(height: 16),
                   Align(alignment: Alignment.centerLeft, child: control),
                 ],
               )
@@ -1683,7 +1598,7 @@ class _SettingsRow extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   Expanded(child: description),
-                  SizedBox(width: 32 * scale),
+                  SizedBox(width: 32),
                   ConstrainedBox(
                     constraints: BoxConstraints(
                       maxWidth: constraints.maxWidth * 0.45,
@@ -1719,12 +1634,10 @@ class _SettingsSwitchTile extends StatelessWidget {
       helper: subtitle,
       control: Builder(
         builder: (context) {
-          final size = MediaQuery.sizeOf(context);
-          final scale =
-              LineupLayout.scaleFor(size) *
-              (size.height / 1080).clamp(0.82, 1.0).toDouble();
-          final textScale = MediaQuery.textScalerOf(context).scale(1);
-          final controlScale = math.max(1.0, scale * math.max(1.0, textScale));
+          final controlScale = math.max(
+            1.0,
+            MediaQuery.textScalerOf(context).scale(1),
+          );
           return SizedBox(
             width: 60 * controlScale,
             height: 48 * controlScale,
@@ -1761,12 +1674,10 @@ class _Dropdown<T> extends StatelessWidget {
   final bool first;
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.sizeOf(context);
-    final scale =
-        LineupLayout.scaleFor(size) *
-        (size.height / 1080).clamp(0.82, 1.0).toDouble();
-    final textScale = MediaQuery.textScalerOf(context).scale(1);
-    final controlScale = math.max(1.0, scale * math.max(1.0, textScale));
+    final controlScale = math.max(
+      1.0,
+      MediaQuery.textScalerOf(context).scale(1),
+    );
     final theme = Theme.of(context);
     return MergeSemantics(
       child: _SettingsRow(
@@ -1780,7 +1691,7 @@ class _Dropdown<T> extends StatelessWidget {
             isExpanded: true,
             itemHeight: 48 * controlScale,
             icon: Icon(Icons.arrow_drop_down, size: 20 * controlScale),
-            style: theme.textTheme.bodyLarge?.copyWith(fontSize: 16 * scale),
+            style: theme.textTheme.bodyLarge?.copyWith(fontSize: 16),
             decoration: InputDecoration(
               border: const OutlineInputBorder(),
               contentPadding: EdgeInsets.symmetric(

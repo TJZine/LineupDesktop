@@ -7,7 +7,6 @@ import '../channels/channel.dart';
 import '../channels/scheduler.dart';
 import '../guide/guide_controller.dart';
 import '../ui/app_theme.dart';
-import '../ui/app_ui.dart';
 import 'lineup_controller.dart';
 
 const channelAirCheckDebounce = Duration(milliseconds: 80);
@@ -71,8 +70,6 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
   late String _targetKey;
   String? _wantedOriginalKey;
 
-  double get _uiScale => LineupLayout.scaleFor(MediaQuery.sizeOf(context));
-
   TextStyle _airCheckButtonTextStyle({Color? color, FontWeight? fontWeight}) {
     final base =
         Theme.of(context).outlinedButtonTheme.style?.textStyle
@@ -80,23 +77,11 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
         Theme.of(context).textTheme.labelLarge ??
         const TextStyle(fontSize: 14);
     return base.copyWith(
-      fontSize: (base.fontSize ?? 14) * _uiScale,
+      fontSize: (base.fontSize ?? 14),
       color: color,
       fontWeight: fontWeight,
     );
   }
-
-  ButtonStyle? _airCheckActionStyle() => _uiScale > 1
-      ? TextButton.styleFrom(
-          minimumSize: Size(64 * _uiScale, 40 * _uiScale),
-          padding: EdgeInsets.symmetric(
-            horizontal: 12 * _uiScale,
-            vertical: 8 * _uiScale,
-          ),
-          iconSize: 18 * _uiScale,
-          textStyle: Theme.of(context).textTheme.labelLarge,
-        )
-      : null;
 
   @override
   void initState() {
@@ -418,12 +403,12 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Padding(
-              padding: EdgeInsets.all((widget.compact ? 14 : 20) * _uiScale),
+              padding: EdgeInsets.all((widget.compact ? 14 : 20)),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   _monitorHeader(now),
-                  SizedBox(height: 10 * _uiScale),
+                  SizedBox(height: 10),
                   if (preview == null && error == null)
                     _emptyRibbon(
                       Semantics(
@@ -439,9 +424,9 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
                     _emptyRibbon(_errorView(error!))
                   else ...[
                     _facts(preview),
-                    SizedBox(height: 8 * _uiScale),
+                    SizedBox(height: 8),
                     _selection(preview, now),
-                    SizedBox(height: 8 * _uiScale),
+                    SizedBox(height: 8),
                     _verticalSchedule(preview, now),
                     if (_futureHours < 24)
                       Align(
@@ -450,7 +435,7 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
                           onPressed: _stale
                               ? null
                               : () => _extendPreview(preview),
-                          style: _airCheckActionStyle(),
+
                           child: const Text('Show next 6 hours'),
                         ),
                       ),
@@ -476,11 +461,11 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
                         key: Key('air-check-on-now-warning'),
                       ),
                     if (_comparisonFailed) ...[
-                      SizedBox(height: 8 * _uiScale),
+                      SizedBox(height: 8),
                       _comparisonErrorView(),
                     ],
                     if (error != null) ...[
-                      SizedBox(height: 8 * _uiScale),
+                      SizedBox(height: 8),
                       if (preview.key != _targetKey)
                         const Text('Previous preview'),
                       _errorView(error),
@@ -528,13 +513,13 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
     return Wrap(
       alignment: WrapAlignment.spaceBetween,
       crossAxisAlignment: WrapCrossAlignment.center,
-      spacing: 12 * _uiScale,
-      runSpacing: 4 * _uiScale,
+      spacing: 12,
+      runSpacing: 4,
       children: [
         Wrap(
           crossAxisAlignment: WrapCrossAlignment.center,
-          spacing: 10 * _uiScale,
-          runSpacing: 4 * _uiScale,
+          spacing: 10,
+          runSpacing: 4,
           children: [
             Semantics(
               header: true,
@@ -542,7 +527,7 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
               child: Text(
                 'Schedule preview',
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontSize: (widget.compact ? 16 : 24) * _uiScale,
+                  fontSize: (widget.compact ? 16 : 24),
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -551,7 +536,7 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
               status,
               style: TextStyle(
                 color: roles.secondaryText,
-                fontSize: (widget.compact ? 11 : 16) * _uiScale,
+                fontSize: (widget.compact ? 11 : 16),
                 fontWeight: FontWeight.w400,
               ),
             ),
@@ -570,11 +555,9 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
   }
 
   Widget _emptyRibbon(Widget child) => Container(
-    constraints: BoxConstraints(
-      minHeight: (widget.compact ? 76 : 104) * _uiScale,
-    ),
+    constraints: BoxConstraints(minHeight: (widget.compact ? 76 : 104)),
     alignment: Alignment.centerLeft,
-    padding: EdgeInsets.all(12 * _uiScale),
+    padding: EdgeInsets.all(12),
     decoration: BoxDecoration(
       color: LineupTheme.of(context).elevatedSurface,
       border: Border.all(color: LineupTheme.of(context).subtleBorder),
@@ -584,15 +567,15 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
   );
 
   Widget _facts(_AirCheckPreview preview) => Wrap(
-    spacing: 10 * _uiScale,
-    runSpacing: 4 * _uiScale,
+    spacing: 10,
+    runSpacing: 4,
     crossAxisAlignment: WrapCrossAlignment.center,
     children: [
       Text(
         'CH ${preview.channel.number} · ${preview.channel.name.toUpperCase()}',
         style: TextStyle(
           color: LineupTheme.of(context).secondaryText,
-          fontSize: (widget.compact ? 12 : 16) * _uiScale,
+          fontSize: (widget.compact ? 12 : 16),
           fontWeight: FontWeight.w500,
         ),
       ),
@@ -607,11 +590,8 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
     return ConstrainedBox(
       constraints: BoxConstraints(
         maxHeight: widget.compact
-            ? 360 * _uiScale
-            : (MediaQuery.sizeOf(context).height * .30).clamp(
-                300 * _uiScale,
-                680 * _uiScale,
-              ),
+            ? 360
+            : (MediaQuery.sizeOf(context).height * .30).clamp(300, 680),
       ),
       child: ListView.separated(
         key: const Key('air-check-schedule-list'),
@@ -661,14 +641,14 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
               onPressed: activate,
               child: Padding(
                 padding: EdgeInsets.symmetric(
-                  horizontal: 12 * _uiScale,
-                  vertical: (widget.compact ? 10 : 14) * _uiScale,
+                  horizontal: 12,
+                  vertical: (widget.compact ? 10 : 14),
                 ),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     SizedBox(
-                      width: (widget.compact ? 76 : 94) * _uiScale,
+                      width: (widget.compact ? 76 : 94),
                       child: Text(
                         current
                             ? 'ON NOW'
@@ -683,7 +663,7 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
                         ),
                       ),
                     ),
-                    SizedBox(width: 12 * _uiScale),
+                    SizedBox(width: 12),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -691,7 +671,7 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
                           Text(
                             program.scheduled.item.title,
                             style: TextStyle(
-                              fontSize: (widget.compact ? 14 : 20) * _uiScale,
+                              fontSize: (widget.compact ? 14 : 20),
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -757,32 +737,32 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
           '${_temporal(selected, now).toUpperCase()} · ${_dateContext(selected.scheduled.start)} · ${_time(context, selected.scheduled.start)}–${_time(context, selected.scheduled.end)}',
           style: TextStyle(
             color: LineupTheme.of(context).secondaryText,
-            fontSize: (widget.compact ? 11 : 16) * _uiScale,
+            fontSize: (widget.compact ? 11 : 16),
             fontWeight: FontWeight.w500,
-            letterSpacing: .7 * _uiScale,
+            letterSpacing: .7,
           ),
         ),
-        SizedBox(height: 6 * _uiScale),
+        SizedBox(height: 6),
         Text(
           showTitle?.isNotEmpty == true ? showTitle! : item.title,
           style: Theme.of(context).textTheme.titleMedium?.copyWith(
-            fontSize: (widget.compact ? 16 : 28) * _uiScale,
+            fontSize: (widget.compact ? 16 : 28),
             fontWeight: FontWeight.w700,
           ),
         ),
         if (episode.isNotEmpty) Text(episode),
-        SizedBox(height: 6 * _uiScale),
+        SizedBox(height: 6),
         Text(
           '${_duration(selected.scheduled.end.difference(selected.scheduled.start))} · ${widget.inclusionReason}',
           style: TextStyle(color: LineupTheme.of(context).secondaryText),
         ),
         if (summary?.isNotEmpty == true) ...[
-          SizedBox(height: 4 * _uiScale),
+          SizedBox(height: 4),
           Text(summary!, maxLines: _synopsisExpanded ? null : 3),
           TextButton(
             onPressed: () =>
                 setState(() => _synopsisExpanded = !_synopsisExpanded),
-            style: _airCheckActionStyle(),
+
             child: Text(_synopsisExpanded ? 'Show less' : 'Read more'),
           ),
         ],
@@ -795,7 +775,7 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
                 _selectionFollowsNow = true;
                 _synopsisExpanded = false;
               }),
-              style: _airCheckActionStyle(),
+
               child: const Text('Back to now'),
             ),
           ),
@@ -807,8 +787,8 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SizedBox(
-          width: (widget.compact ? 96 : 144) * _uiScale,
-          height: (widget.compact ? 72 : 108) * _uiScale,
+          width: (widget.compact ? 96 : 144),
+          height: (widget.compact ? 72 : 108),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(
               LineupTheme.of(context).panelRadius,
@@ -819,7 +799,7 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
             ),
           ),
         ),
-        SizedBox(width: 12 * _uiScale),
+        SizedBox(width: 12),
         Expanded(child: details),
       ],
     );
@@ -842,36 +822,33 @@ class _ChannelAirCheckState extends State<ChannelAirCheck> {
         'This source has no playable programs. Choose available programming.',
       _ => 'Air Check could not verify this schedule. Retry before saving.',
     };
-    return Semantics(
-      liveRegion: true,
-      child: Row(
-        children: [
-          Expanded(child: Text(message)),
-          TextButton(
-            onPressed: retry,
-            style: _airCheckActionStyle(),
-            child: const Text('Retry Air Check'),
-          ),
-        ],
-      ),
-    );
+    return _retryMessage(message, 'Retry Air Check');
   }
 
-  Widget _comparisonErrorView() => Semantics(
+  Widget _comparisonErrorView() => _retryMessage(
+    'Air Check could not compare this draft with the saved schedule. Retry before saving.',
+    'Retry comparison',
+  );
+
+  Widget _retryMessage(String message, String label) => Semantics(
     liveRegion: true,
-    child: Row(
-      children: [
-        const Expanded(
-          child: Text(
-            'Air Check could not compare this draft with the saved schedule. Retry before saving.',
-          ),
-        ),
-        TextButton(
-          onPressed: retry,
-          style: _airCheckActionStyle(),
-          child: const Text('Retry comparison'),
-        ),
-      ],
+    child: LayoutBuilder(
+      builder: (context, constraints) {
+        final action = TextButton(onPressed: retry, child: Text(label));
+        if (constraints.maxWidth / MediaQuery.textScalerOf(context).scale(1) <
+            480) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [Text(message), const SizedBox(height: 8), action],
+          );
+        }
+        return Row(
+          children: [
+            Expanded(child: Text(message)),
+            action,
+          ],
+        );
+      },
     ),
   );
 

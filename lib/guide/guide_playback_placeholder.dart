@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../ui/app_theme.dart';
-import '../ui/app_ui.dart';
 
 /// Keeps the Guide's video region stable when there is no usable picture.
 class GuidePlaybackPlaceholder extends StatefulWidget {
@@ -60,16 +59,12 @@ class _GuidePlaybackPlaceholderState extends State<GuidePlaybackPlaceholder>
   @override
   Widget build(BuildContext context) {
     final roles = LineupTheme.of(context);
-    final size = MediaQuery.sizeOf(context);
-    final scale = LineupLayout.scaleFor(size);
+
     final textScale = MediaQuery.textScalerOf(context).scale(1);
-    final retryStyle = scale > 1 || textScale > 1
+    final retryStyle = textScale > 1
         ? TextButton.styleFrom(
-            minimumSize: Size(0, 48 * scale),
-            padding: EdgeInsets.symmetric(
-              horizontal: 12 * scale,
-              vertical: 8 * scale,
-            ),
+            minimumSize: Size(0, 48),
+            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           )
         : null;
     return ColoredBox(
@@ -93,7 +88,7 @@ class _GuidePlaybackPlaceholderState extends State<GuidePlaybackPlaceholder>
             ),
           Center(
             child: SingleChildScrollView(
-              padding: EdgeInsets.all(16 * scale),
+              padding: EdgeInsets.all(16),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -105,7 +100,7 @@ class _GuidePlaybackPlaceholderState extends State<GuidePlaybackPlaceholder>
                     style: Theme.of(context).textTheme.titleLarge,
                   ),
                   if (widget.unavailable && widget.message != null) ...[
-                    SizedBox(height: 8 * scale),
+                    SizedBox(height: 8),
                     Text(
                       widget.message!,
                       maxLines: 3,
@@ -116,7 +111,7 @@ class _GuidePlaybackPlaceholderState extends State<GuidePlaybackPlaceholder>
                     ),
                   ],
                   if (widget.onRetry != null) ...[
-                    SizedBox(height: 8 * scale),
+                    SizedBox(height: 8),
                     TextButton(
                       style: retryStyle,
                       onPressed: widget.onRetry,

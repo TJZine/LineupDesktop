@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lineup_desktop/ui/lineup_canvas.dart';
 import 'package:lineup_desktop/app/diagnostics_view.dart';
 import 'package:lineup_desktop/diagnostics/diagnostics.dart';
 import 'package:lineup_desktop/playback/native_player.dart';
@@ -14,6 +15,7 @@ void main() {
   Future<void> show(WidgetTester tester, FixtureController controller) async {
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         theme: LineupTheme.forName(
           LineupThemeName.emberSteel,
           largeFocusIndicators: false,

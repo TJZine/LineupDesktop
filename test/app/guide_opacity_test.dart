@@ -87,11 +87,15 @@ Future<void> _expectClassicOpacity(
   final height = capture.height;
   final pixels = capture.pixels!;
 
-  final boundaryOrigin = tester.getTopLeft(boundaryFinder);
-  final allowed = aperture == null
+  final apertureBox = aperture == null
       ? null
-      : (tester.getTopLeft(aperture) - boundaryOrigin) &
-            tester.getSize(aperture);
+      : tester.renderObject<RenderBox>(aperture);
+  final allowed = apertureBox == null
+      ? null
+      : MatrixUtils.transformRect(
+          apertureBox.getTransformTo(boundary),
+          Offset.zero & apertureBox.size,
+        );
   Offset? firstUnexpectedTransparency;
   var transparentPixels = 0;
   for (var y = 0; y < height; y++) {

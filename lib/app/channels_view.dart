@@ -258,7 +258,6 @@ class ChannelsViewState extends State<ChannelsView> {
               .where((channel) => _selectedIds.contains(channel.id))
               .toList(growable: false)
         : matching;
-    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
     if (_healthContentGeneration != widget.controller.contentGeneration) {
       _healthContentGeneration = widget.controller.contentGeneration;
       _healthEpoch++;
@@ -268,31 +267,25 @@ class ChannelsViewState extends State<ChannelsView> {
     _pruneHealth(liveIds);
     _scheduleFocusPrune(liveIds);
     final headingStyle = Theme.of(context).textTheme.headlineMedium?.copyWith(
-      fontSize: _directorySize(36, 28) * scale,
+      fontSize: _directorySize(36, 28),
       fontWeight: FontWeight.w600,
     );
     final countStyle = Theme.of(context).textTheme.headlineMedium?.copyWith(
-      fontSize: _directorySize(28, 24) * scale,
+      fontSize: _directorySize(28, 24),
       fontWeight: FontWeight.w400,
       color: LineupTheme.of(context).secondaryText,
     );
     final bodyStyle = Theme.of(context).textTheme.bodyMedium
-        ?.copyWith(fontSize: _directorySize(18, 14) * scale);
+        ?.copyWith(fontSize: _directorySize(18, 14));
     final labelStyle = Theme.of(context).textTheme.labelLarge
-        ?.copyWith(fontSize: _directorySize(18, 14) * scale);
+        ?.copyWith(fontSize: _directorySize(18, 14));
     final menuContextStyle = Theme.of(context).textTheme.bodyMedium?.copyWith(
-      fontSize:
-          (Theme.of(context).textTheme.bodyMedium?.fontSize ?? 14) * scale,
+      fontSize: (Theme.of(context).textTheme.bodyMedium?.fontSize ?? 14),
     );
     final menuButtonStyle = TextButton.styleFrom(
-      minimumSize: Size(64 * scale, 40 * scale),
-      padding: EdgeInsetsDirectional.fromSTEB(
-        12 * scale,
-        8 * scale,
-        16 * scale,
-        8 * scale,
-      ),
-      iconSize: 18 * scale,
+      minimumSize: Size(64, 40),
+      padding: EdgeInsetsDirectional.fromSTEB(12, 8, 16, 8),
+      iconSize: 18,
     );
     final baseFilledTextStyle = Theme.of(context)
         .filledButtonTheme
@@ -307,26 +300,16 @@ class ChannelsViewState extends State<ChannelsView> {
     final filledFontSize = baseFilledTextStyle?.fontSize ?? 17;
     final outlinedFontSize = baseOutlinedTextStyle?.fontSize ?? 17;
     final emptyFilledButtonStyle = FilledButton.styleFrom(
-      minimumSize: Size(148 * scale, 54 * scale),
-      padding: EdgeInsets.symmetric(
-        horizontal: 24 * scale,
-        vertical: 16 * scale,
-      ),
-      iconSize: 18 * scale,
-      textStyle: baseFilledTextStyle?.copyWith(
-        fontSize: filledFontSize * scale,
-      ),
+      minimumSize: Size(148, 54),
+      padding: EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+      iconSize: 18,
+      textStyle: baseFilledTextStyle?.copyWith(fontSize: filledFontSize),
     );
     final emptyOutlinedButtonStyle = OutlinedButton.styleFrom(
-      minimumSize: Size(148 * scale, 54 * scale),
-      padding: EdgeInsets.symmetric(
-        horizontal: 24 * scale,
-        vertical: 16 * scale,
-      ),
-      iconSize: 18 * scale,
-      textStyle: baseOutlinedTextStyle?.copyWith(
-        fontSize: outlinedFontSize * scale,
-      ),
+      minimumSize: Size(148, 54),
+      padding: EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+      iconSize: 18,
+      textStyle: baseOutlinedTextStyle?.copyWith(fontSize: outlinedFontSize),
     );
     return LineupPage(
       title: 'Channels',
@@ -346,9 +329,9 @@ class ChannelsViewState extends State<ChannelsView> {
               ),
             ),
           ),
-          SizedBox(width: 16 * scale),
-          SizedBox(height: 24 * scale, child: const VerticalDivider(width: 1)),
-          SizedBox(width: 16 * scale),
+          SizedBox(width: 16),
+          SizedBox(height: 24, child: const VerticalDivider(width: 1)),
+          SizedBox(width: 16),
           Text('Channels', style: menuContextStyle),
         ],
       ),
@@ -356,9 +339,7 @@ class ChannelsViewState extends State<ChannelsView> {
         children: [
           const Divider(height: 1),
           Padding(
-            padding: EdgeInsets.symmetric(
-              vertical: _directorySize(24, 16) * scale,
-            ),
+            padding: EdgeInsets.symmetric(vertical: _directorySize(24, 16)),
             child: Row(
               children: [
                 Expanded(
@@ -375,11 +356,11 @@ class ChannelsViewState extends State<ChannelsView> {
                                 : 'Channels',
                             style: headingStyle,
                           ),
-                          SizedBox(width: 12 * scale),
+                          SizedBox(width: 12),
                           Text('${channels.length}', style: countStyle),
                         ],
                       ),
-                      SizedBox(height: 6 * scale),
+                      SizedBox(height: 6),
                       Text(
                         _mode == _DirectoryMode.reorder
                             ? 'Channels appear in number order. Reordering changes channel numbers.'
@@ -396,8 +377,8 @@ class ChannelsViewState extends State<ChannelsView> {
                     child: Align(
                       alignment: Alignment.centerRight,
                       child: Wrap(
-                        spacing: 8 * scale,
-                        runSpacing: 8 * scale,
+                        spacing: 8,
+                        runSpacing: 8,
                         alignment: WrapAlignment.end,
                         children: [
                           OutlinedButton(
@@ -406,10 +387,10 @@ class ChannelsViewState extends State<ChannelsView> {
                                 ? null
                                 : widget.controller.enterChannelSetup,
                             style: OutlinedButton.styleFrom(
-                              minimumSize: Size(0, 48 * scale),
+                              minimumSize: Size(0, 48),
                               padding: EdgeInsets.symmetric(
-                                horizontal: 24 * scale,
-                                vertical: 16 * scale,
+                                horizontal: 24,
+                                vertical: 16,
                               ),
                               textStyle: labelStyle,
                             ),
@@ -418,10 +399,10 @@ class ChannelsViewState extends State<ChannelsView> {
                           FilledButton(
                             onPressed: _saving ? null : openNew,
                             style: FilledButton.styleFrom(
-                              minimumSize: Size(0, 48 * scale),
+                              minimumSize: Size(0, 48),
                               padding: EdgeInsets.symmetric(
-                                horizontal: 24 * scale,
-                                vertical: 16 * scale,
+                                horizontal: 24,
+                                vertical: 16,
                               ),
                               textStyle: labelStyle,
                             ),
@@ -436,19 +417,18 @@ class ChannelsViewState extends State<ChannelsView> {
           ),
           if (_error != null) ...[
             LineupNotice(message: _error!),
-            SizedBox(height: 12 * scale),
+            SizedBox(height: 12),
           ],
           if (channels.isNotEmpty) ...[
             _directoryControls(matching),
-            SizedBox(height: 20 * scale),
+            SizedBox(height: 20),
             DefaultTextStyle.merge(
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                fontSize: _directorySize(18, 14) * scale,
+                fontSize: _directorySize(18, 14),
                 color: LineupTheme.of(context).secondaryText,
               ),
               child: _mode == _DirectoryMode.reorder
                   ? _reorderColumns(
-                      scale: scale,
                       drag: const SizedBox.shrink(),
                       number: const Text('Number'),
                       name: const Text('Channel'),
@@ -458,7 +438,6 @@ class ChannelsViewState extends State<ChannelsView> {
                       heading: true,
                     )
                   : _directoryColumns(
-                      scale: scale,
                       leading: _mode == _DirectoryMode.selection
                           ? const SizedBox.shrink()
                           : null,
@@ -480,8 +459,8 @@ class ChannelsViewState extends State<ChannelsView> {
                     title: 'Build your first channel',
                     message: 'Generate a lineup from Plex or create one custom channel.',
                     action: Wrap(
-                      spacing: 8 * scale,
-                      runSpacing: 8 * scale,
+                      spacing: 8,
+                      runSpacing: 8,
                       alignment: WrapAlignment.center,
                       children: [
                         FilledButton.icon(
@@ -503,7 +482,7 @@ class ChannelsViewState extends State<ChannelsView> {
                     ),
                   )
                 : _mode == _DirectoryMode.reorder
-                ? _reorderList(channels, scale)
+                ? _reorderList(channels)
                 : visible.isEmpty
                 ? LineupEmptyState(
                     icon: Icons.search_off,
@@ -525,14 +504,14 @@ class ChannelsViewState extends State<ChannelsView> {
                           .textTheme
                           .titleMedium
                           ?.copyWith(
-                            fontSize: _directorySize(22, 16) * scale,
+                            fontSize: _directorySize(22, 16),
                             fontWeight: FontWeight.w500,
                           );
                       final rowSupportStyle = Theme.of(context)
                           .textTheme
                           .bodyMedium
                           ?.copyWith(
-                            fontSize: _directorySize(18, 14) * scale,
+                            fontSize: _directorySize(18, 14),
                             color: LineupTheme.of(context).secondaryText,
                           );
                       final ownership = channel.builderKey == null
@@ -561,9 +540,8 @@ class ChannelsViewState extends State<ChannelsView> {
                                 ? () => _toggleSelected(channel.id)
                                 : () => _open(channel),
                             child: _directoryColumns(
-                              scale: scale,
                               leading: _mode == _DirectoryMode.selection
-                                  ? _scaledChannelCheckbox(
+                                  ? Checkbox(
                                       semanticLabel: 'Select ${channel.name}',
                                       value: _selectedIds.contains(channel.id),
                                       onChanged: _saving
@@ -611,27 +589,9 @@ class ChannelsViewState extends State<ChannelsView> {
                                   : PopupMenuButton<_RowAction>(
                                       enabled: !_saving,
                                       tooltip: 'Actions for ${channel.name}',
-                                      padding: EdgeInsets.all(8 * scale),
-                                      iconSize: 24 * scale,
-                                      menuPadding: scale > 1
-                                          ? EdgeInsets.symmetric(
-                                              vertical: 8 * scale,
-                                            )
-                                          : null,
-                                      constraints: scale > 1
-                                          ? BoxConstraints(
-                                              minWidth: 112 * scale,
-                                              maxWidth: 280 * scale,
-                                            )
-                                          : null,
-                                      style: scale > 1
-                                          ? IconButton.styleFrom(
-                                              minimumSize: Size(
-                                                40 * scale,
-                                                40 * scale,
-                                              ),
-                                            )
-                                          : null,
+                                      padding: EdgeInsets.all(8),
+                                      iconSize: 24,
+                                      menuPadding: null,
                                       onSelected: (action) => switch (action) {
                                         _RowAction.duplicate => _openDuplicate(
                                           channel,
@@ -642,17 +602,17 @@ class ChannelsViewState extends State<ChannelsView> {
                                         if (channel.builderKey != null)
                                           PopupMenuItem(
                                             value: _RowAction.duplicate,
-                                            height: 48 * scale,
+                                            height: 48,
                                             padding: EdgeInsets.symmetric(
-                                              horizontal: 12 * scale,
+                                              horizontal: 12,
                                             ),
                                             child: Text('Duplicate as custom'),
                                           ),
                                         PopupMenuItem(
                                           value: _RowAction.delete,
-                                          height: 48 * scale,
+                                          height: 48,
                                           padding: EdgeInsets.symmetric(
-                                            horizontal: 12 * scale,
+                                            horizontal: 12,
                                           ),
                                           child: Text('Delete'),
                                         ),
@@ -670,29 +630,7 @@ class ChannelsViewState extends State<ChannelsView> {
     );
   }
 
-  Widget _scaledChannelCheckbox({
-    required String semanticLabel,
-    required bool value,
-    required ValueChanged<bool?>? onChanged,
-  }) {
-    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
-    final checkbox = Checkbox(
-      semanticLabel: semanticLabel,
-      value: value,
-      onChanged: onChanged,
-    );
-    if (scale <= 1) return checkbox;
-    return Center(
-      child: Transform.scale(
-        alignment: Alignment.center,
-        scale: scale,
-        child: SizedBox(width: 48, height: 48, child: checkbox),
-      ),
-    );
-  }
-
   Widget _directoryColumns({
-    required double scale,
     required Widget number,
     required Widget name,
     required Widget source,
@@ -703,33 +641,33 @@ class ChannelsViewState extends State<ChannelsView> {
     bool heading = false,
   }) {
     final textScale = MediaQuery.textScalerOf(context).scale(1);
-    final numberWidth = 52 * scale * textScale;
+    final numberWidth = 52 * textScale;
     return ConstrainedBox(
       constraints: heading
           ? const BoxConstraints()
-          : BoxConstraints(minHeight: _directorySize(80, 68) * scale),
+          : BoxConstraints(minHeight: _directorySize(80, 68)),
       child: Padding(
         padding: EdgeInsets.symmetric(
-          horizontal: 12 * scale,
-          vertical: (heading ? 8 : 10) * scale,
+          horizontal: 12,
+          vertical: (heading ? 8 : 10),
         ),
         child: Row(
           children: [
             if (leading != null) ...[
-              SizedBox(width: 36 * scale, child: leading),
-              SizedBox(width: 16 * scale),
+              SizedBox(width: 36, child: leading),
+              SizedBox(width: 16),
             ],
             SizedBox(width: numberWidth, child: number),
-            SizedBox(width: 16 * scale),
+            SizedBox(width: 16),
             Expanded(flex: 4, child: name),
-            SizedBox(width: 16 * scale),
+            SizedBox(width: 16),
             Expanded(flex: 2, child: source),
-            SizedBox(width: 16 * scale),
+            SizedBox(width: 16),
             Expanded(flex: 2, child: playback),
-            SizedBox(width: 16 * scale),
+            SizedBox(width: 16),
             Expanded(child: type),
-            SizedBox(width: 16 * scale),
-            SizedBox(width: 44 * scale, child: action),
+            SizedBox(width: 16),
+            SizedBox(width: 44, child: action),
           ],
         ),
       ),
@@ -737,7 +675,6 @@ class ChannelsViewState extends State<ChannelsView> {
   }
 
   Widget _reorderColumns({
-    required double scale,
     required Widget drag,
     required Widget number,
     required Widget name,
@@ -747,7 +684,7 @@ class ChannelsViewState extends State<ChannelsView> {
     bool heading = false,
   }) {
     final textScale = MediaQuery.textScalerOf(context).scale(1);
-    final numberWidth = 76 * scale * textScale;
+    final numberWidth = 76 * textScale;
     return DecoratedBox(
       decoration: heading
           ? const BoxDecoration()
@@ -759,26 +696,26 @@ class ChannelsViewState extends State<ChannelsView> {
       child: ConstrainedBox(
         constraints: heading
             ? const BoxConstraints()
-            : BoxConstraints(minHeight: _directorySize(80, 68) * scale),
+            : BoxConstraints(minHeight: _directorySize(80, 68)),
         child: Padding(
           padding: EdgeInsets.symmetric(
-            horizontal: 12 * scale,
-            vertical: (heading ? 8 : 10) * scale,
+            horizontal: 12,
+            vertical: (heading ? 8 : 10),
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              SizedBox(width: 36 * scale, child: drag),
-              SizedBox(width: 16 * scale),
+              SizedBox(width: 36, child: drag),
+              SizedBox(width: 16),
               SizedBox(width: numberWidth, child: number),
-              SizedBox(width: 16 * scale),
+              SizedBox(width: 16),
               Expanded(flex: 4, child: name),
-              SizedBox(width: 16 * scale),
+              SizedBox(width: 16),
               Expanded(flex: 2, child: source),
-              SizedBox(width: 16 * scale),
+              SizedBox(width: 16),
               Expanded(flex: 2, child: playback),
-              SizedBox(width: 16 * scale),
-              SizedBox(width: 144 * scale, child: action),
+              SizedBox(width: 16),
+              SizedBox(width: 144, child: action),
             ],
           ),
         ),
@@ -792,27 +729,21 @@ class ChannelsViewState extends State<ChannelsView> {
       : expanded;
 
   TextStyle _channelBodyStyle(BuildContext context) {
-    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
     return Theme.of(context).textTheme.bodyMedium
-            ?.copyWith(fontSize: _directorySize(18, 14) * scale) ??
-        TextStyle(fontSize: _directorySize(18, 14) * scale);
+            ?.copyWith(fontSize: _directorySize(18, 14)) ??
+        TextStyle(fontSize: _directorySize(18, 14));
   }
 
   TextStyle _channelControlStyle(BuildContext context) {
-    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
     return Theme.of(context).textTheme.labelLarge
-            ?.copyWith(fontSize: _directorySize(18, 14) * scale) ??
-        TextStyle(fontSize: _directorySize(18, 14) * scale);
+            ?.copyWith(fontSize: _directorySize(18, 14)) ??
+        TextStyle(fontSize: _directorySize(18, 14));
   }
 
   ButtonStyle _channelQuietButtonStyle(BuildContext context) {
-    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
     return TextButton.styleFrom(
-      minimumSize: Size(0, 48 * scale),
-      padding: EdgeInsets.symmetric(
-        horizontal: 16 * scale,
-        vertical: 10 * scale,
-      ),
+      minimumSize: Size(0, 48),
+      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       visualDensity: VisualDensity.standard,
       foregroundColor: LineupTheme.of(context).secondaryText,
       textStyle: _channelControlStyle(context),
@@ -820,16 +751,12 @@ class ChannelsViewState extends State<ChannelsView> {
   }
 
   ButtonStyle _channelFilterStyle(BuildContext context) {
-    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
     final roles = LineupTheme.of(context);
     return ButtonStyle(
       padding: LineupLayout.isCompactWidth(MediaQuery.sizeOf(context).width)
           ? null
           : WidgetStatePropertyAll(
-              EdgeInsets.symmetric(
-                horizontal: 16 * scale,
-                vertical: 11 * scale,
-              ),
+              EdgeInsets.symmetric(horizontal: 16, vertical: 11),
             ),
       visualDensity: VisualDensity.standard,
       tapTargetSize:
@@ -866,7 +793,7 @@ class ChannelsViewState extends State<ChannelsView> {
       constraints: BoxConstraints(
         minHeight: LineupLayout.isCompactWidth(MediaQuery.sizeOf(context).width)
             ? 0
-            : 48 * LineupLayout.scaleFor(MediaQuery.sizeOf(context)),
+            : 48,
       ),
       child: SegmentedButton<_DirectoryFilter>(
         segments: const [
@@ -907,7 +834,6 @@ class ChannelsViewState extends State<ChannelsView> {
     ];
     return LayoutBuilder(
       builder: (context, constraints) {
-        final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
         final search = TextField(
           key: const Key('channels-search'),
           enabled: !_saving,
@@ -917,36 +843,33 @@ class ChannelsViewState extends State<ChannelsView> {
           decoration: InputDecoration(
             hintText: 'Search by name or number',
             isDense: true,
-            contentPadding: EdgeInsets.symmetric(
-              horizontal: 16 * scale,
-              vertical: 11 * scale,
-            ),
-            constraints: BoxConstraints(minHeight: 48 * scale),
+            contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+            constraints: BoxConstraints(minHeight: 48),
           ),
           onChanged: (_) => setState(() {}),
         );
-        final wide = constraints.maxWidth >= 1200 * scale && textScale < 1.4;
+        final wide = constraints.maxWidth >= 1200 && textScale < 1.4;
         if (wide) {
           return Row(
             children: [
               Expanded(child: search),
-              SizedBox(width: 8 * scale),
+              SizedBox(width: 8),
               filters,
-              SizedBox(width: 8 * scale),
+              SizedBox(width: 8),
               if (_mode == _DirectoryMode.normal) ...actions,
             ],
           );
         }
-        final desiredWidth = constraints.maxWidth - 530 * scale * textScale;
-        final minimumSearchWidth = 280 * scale;
+        final desiredWidth = constraints.maxWidth - 530 * textScale;
+        final minimumSearchWidth = 280;
         final searchWidth = constraints.maxWidth < minimumSearchWidth
             ? constraints.maxWidth
             : desiredWidth
                   .clamp(minimumSearchWidth, constraints.maxWidth)
                   .toDouble();
         return Wrap(
-          spacing: 8 * scale,
-          runSpacing: 8 * scale,
+          spacing: 8,
+          runSpacing: 8,
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             SizedBox(width: searchWidth, child: search),
@@ -964,25 +887,21 @@ class ChannelsViewState extends State<ChannelsView> {
         _reorderBase.map((channel) => channel.id),
         _reorderIds,
       );
-      final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Align(
             alignment: Alignment.centerRight,
             child: Wrap(
-              spacing: 8 * scale,
-              runSpacing: 8 * scale,
+              spacing: 8,
+              runSpacing: 8,
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 TextButton(
                   onPressed: _saving ? null : _cancelReorder,
                   style: _channelQuietButtonStyle(context).copyWith(
                     padding: WidgetStatePropertyAll(
-                      EdgeInsets.symmetric(
-                        horizontal: 16 * scale,
-                        vertical: 16 * scale,
-                      ),
+                      EdgeInsets.symmetric(horizontal: 16, vertical: 16),
                     ),
                   ),
                   child: const Text('Cancel'),
@@ -990,11 +909,8 @@ class ChannelsViewState extends State<ChannelsView> {
                 FilledButton(
                   onPressed: changed && !_saving ? _saveOrder : null,
                   style: FilledButton.styleFrom(
-                    minimumSize: Size(0, 48 * scale),
-                    padding: EdgeInsets.symmetric(
-                      horizontal: 24 * scale,
-                      vertical: 16 * scale,
-                    ),
+                    minimumSize: Size(0, 48),
+                    padding: EdgeInsets.symmetric(horizontal: 24, vertical: 16),
                     textStyle: _channelControlStyle(context),
                   ),
                   child: Text(_saving ? 'Saving…' : 'Save order'),
@@ -1005,7 +921,6 @@ class ChannelsViewState extends State<ChannelsView> {
         ],
       );
     }
-    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -1014,13 +929,12 @@ class ChannelsViewState extends State<ChannelsView> {
         else
           _directoryToolbar(),
         if (_mode == _DirectoryMode.selection) ...[
-          SizedBox(height: 8 * scale),
+          SizedBox(height: 8),
           LayoutBuilder(
             builder: (context, constraints) {
-              final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
               final leading = Wrap(
-                spacing: 8 * scale,
-                runSpacing: 8 * scale,
+                spacing: 8,
+                runSpacing: 8,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   TextButton(
@@ -1064,18 +978,15 @@ class ChannelsViewState extends State<ChannelsView> {
                 ],
               );
               final trailing = Wrap(
-                spacing: 8 * scale,
-                runSpacing: 8 * scale,
+                spacing: 8,
+                runSpacing: 8,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   TextButton(
                     onPressed: _saving ? null : _cancelSelection,
                     style: _channelQuietButtonStyle(context).copyWith(
                       padding: WidgetStatePropertyAll(
-                        EdgeInsets.symmetric(
-                          horizontal: 16 * scale,
-                          vertical: 16 * scale,
-                        ),
+                        EdgeInsets.symmetric(horizontal: 16, vertical: 16),
                       ),
                     ),
                     child: const Text('Cancel'),
@@ -1086,10 +997,10 @@ class ChannelsViewState extends State<ChannelsView> {
                         : _deleteSelected,
                     style: OutlinedButton.styleFrom(
                       foregroundColor: Theme.of(context).colorScheme.error,
-                      minimumSize: Size(0, 48 * scale),
+                      minimumSize: Size(0, 48),
                       padding: EdgeInsets.symmetric(
-                        horizontal: 24 * scale,
-                        vertical: 16 * scale,
+                        horizontal: 24,
+                        vertical: 16,
                       ),
                       textStyle: _channelControlStyle(context),
                     ),
@@ -1097,12 +1008,12 @@ class ChannelsViewState extends State<ChannelsView> {
                   ),
                 ],
               );
-              if (constraints.maxWidth < 760 * scale) {
+              if (constraints.maxWidth < 760) {
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     leading,
-                    SizedBox(height: 8 * scale),
+                    SizedBox(height: 8),
                     Align(alignment: Alignment.centerRight, child: trailing),
                   ],
                 );
@@ -1110,7 +1021,7 @@ class ChannelsViewState extends State<ChannelsView> {
               return Row(
                 children: [
                   Expanded(child: leading),
-                  SizedBox(width: 12 * scale),
+                  SizedBox(width: 12),
                   trailing,
                 ],
               );
@@ -1201,7 +1112,7 @@ class ChannelsViewState extends State<ChannelsView> {
     _reorderIds = const [];
   });
 
-  Widget _reorderList(List<Channel> current, double scale) {
+  Widget _reorderList(List<Channel> current) {
     final byId = {for (final channel in current) channel.id: channel};
     final positions = _reorderBase.map((channel) => channel.number).toList()
       ..sort();
@@ -1221,24 +1132,21 @@ class ChannelsViewState extends State<ChannelsView> {
             _reorderBase.firstWhere((item) => item.id == _reorderIds[index]);
         final nextNumber = positions[index];
         final rowNameStyle = Theme.of(context).textTheme.titleMedium?.copyWith(
-          fontSize: _directorySize(22, 16) * scale,
+          fontSize: _directorySize(22, 16),
           fontWeight: FontWeight.w500,
         );
         final rowSupportStyle = Theme.of(context).textTheme.bodyMedium
             ?.copyWith(
-              fontSize: _directorySize(18, 14) * scale,
+              fontSize: _directorySize(18, 14),
               color: LineupTheme.of(context).secondaryText,
             );
         final moves = Wrap(
           alignment: WrapAlignment.end,
           children: [
             IconButton(
-              constraints: BoxConstraints(
-                minWidth: 40 * scale,
-                minHeight: 40 * scale,
-              ),
-              padding: EdgeInsets.all(8 * scale),
-              iconSize: 24 * scale,
+              constraints: BoxConstraints(minWidth: 40, minHeight: 40),
+              padding: EdgeInsets.all(8),
+              iconSize: 24,
               tooltip: 'Move ${channel.name} up',
               onPressed: _saving || index == 0
                   ? null
@@ -1246,12 +1154,9 @@ class ChannelsViewState extends State<ChannelsView> {
               icon: const Icon(Icons.arrow_upward),
             ),
             IconButton(
-              constraints: BoxConstraints(
-                minWidth: 40 * scale,
-                minHeight: 40 * scale,
-              ),
-              padding: EdgeInsets.all(8 * scale),
-              iconSize: 24 * scale,
+              constraints: BoxConstraints(minWidth: 40, minHeight: 40),
+              padding: EdgeInsets.all(8),
+              iconSize: 24,
               tooltip: 'Move ${channel.name} down',
               onPressed: _saving || index == _reorderIds.length - 1
                   ? null
@@ -1259,12 +1164,9 @@ class ChannelsViewState extends State<ChannelsView> {
               icon: const Icon(Icons.arrow_downward),
             ),
             IconButton(
-              constraints: BoxConstraints(
-                minWidth: 40 * scale,
-                minHeight: 40 * scale,
-              ),
-              padding: EdgeInsets.all(8 * scale),
-              iconSize: 24 * scale,
+              constraints: BoxConstraints(minWidth: 40, minHeight: 40),
+              padding: EdgeInsets.all(8),
+              iconSize: 24,
               tooltip: 'Move ${channel.name} before or after another channel',
               onPressed: _saving ? null : () => _moveTo(index, byId),
               icon: const Icon(Icons.low_priority),
@@ -1274,11 +1176,10 @@ class ChannelsViewState extends State<ChannelsView> {
         return KeyedSubtree(
           key: ValueKey('reorder-${channel.id}'),
           child: _reorderColumns(
-            scale: scale,
             drag: ReorderableDragStartListener(
               enabled: !_saving,
               index: index,
-              child: Icon(Icons.drag_handle, size: 24 * scale),
+              child: Icon(Icons.drag_handle, size: 24),
             ),
             number: Text(
               channel.number == nextNumber
@@ -1590,57 +1491,29 @@ class _MoveChannelDialogState extends State<_MoveChannelDialog> {
         .toList(growable: false);
     final size = MediaQuery.sizeOf(context);
     final viewInsets = MediaQuery.viewInsetsOf(context);
-    final scale = LineupLayout.scaleFor(size);
     final theme = Theme.of(context);
-    final dialogTextTheme = theme.textTheme.apply(fontSizeFactor: scale);
-    final contentWidth = (size.width - 128 * scale)
-        .clamp(0.0, 520 * scale)
-        .toDouble();
-    final contentHeight = (size.height - viewInsets.vertical - 200 * scale)
-        .clamp(0.0, 440 * scale)
+    final dialogTextTheme = theme.textTheme;
+    final contentWidth = (size.width - 128).clamp(0.0, 520).toDouble();
+    final contentHeight = (size.height - viewInsets.vertical - 200)
+        .clamp(0.0, 440)
         .toDouble();
     final actionStyle = TextButton.styleFrom(
-      minimumSize: Size(64 * scale, 40 * scale),
-      padding: EdgeInsets.symmetric(
-        horizontal: 12 * scale,
-        vertical: 8 * scale,
-      ),
+      minimumSize: Size(64, 40),
+      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       textStyle: dialogTextTheme.labelLarge,
     );
     final searchDecoration = InputDecoration(
       labelText: 'Search channels',
-      prefixIcon: Icon(Icons.search, size: 24 * scale),
-      contentPadding: scale > 1
-          ? EdgeInsets.symmetric(horizontal: 16 * scale, vertical: 16 * scale)
-          : null,
-      prefixIconConstraints: scale > 1
-          ? BoxConstraints(minWidth: 48 * scale, minHeight: 48 * scale)
-          : null,
-      constraints: scale > 1 ? BoxConstraints(minHeight: 48 * scale) : null,
+      prefixIcon: Icon(Icons.search, size: 24),
+      prefixIconConstraints: null,
     );
     final dialog = AlertDialog(
-      insetPadding: EdgeInsets.symmetric(
-        horizontal: 40 * scale,
-        vertical: 24 * scale,
-      ),
-      titlePadding: EdgeInsets.only(
-        left: 24 * scale,
-        top: 24 * scale,
-        right: 24 * scale,
-      ),
-      contentPadding: EdgeInsets.fromLTRB(
-        24 * scale,
-        16 * scale,
-        24 * scale,
-        24 * scale,
-      ),
-      actionsPadding: EdgeInsets.only(
-        left: 24 * scale,
-        right: 24 * scale,
-        bottom: 24 * scale,
-      ),
-      buttonPadding: EdgeInsets.symmetric(horizontal: 8 * scale),
-      actionsOverflowButtonSpacing: 8 * scale,
+      insetPadding: EdgeInsets.symmetric(horizontal: 40, vertical: 24),
+      titlePadding: EdgeInsets.only(left: 24, top: 24, right: 24),
+      contentPadding: EdgeInsets.fromLTRB(24, 16, 24, 24),
+      actionsPadding: EdgeInsets.only(left: 24, right: 24, bottom: 24),
+      buttonPadding: EdgeInsets.symmetric(horizontal: 8),
+      actionsOverflowButtonSpacing: 8,
       title: const Text('Move channel'),
       content: SizedBox(
         width: contentWidth,
@@ -1653,22 +1526,15 @@ class _MoveChannelDialogState extends State<_MoveChannelDialog> {
               decoration: searchDecoration,
               onChanged: (_) => setState(() {}),
             ),
-            SizedBox(height: 8 * scale),
+            SizedBox(height: 8),
             Expanded(
               child: ListView.builder(
                 itemCount: channels.length,
                 itemBuilder: (context, index) {
                   final channel = channels[index];
                   return ListTile(
-                    contentPadding: scale > 1
-                        ? EdgeInsetsDirectional.only(
-                            start: 16 * scale,
-                            end: 24 * scale,
-                          )
-                        : null,
-                    minTileHeight: 56 * scale,
-                    horizontalTitleGap: 16 * scale,
-                    minVerticalPadding: scale > 1 ? 8 * scale : null,
+                    minTileHeight: 56,
+                    horizontalTitleGap: 16,
                     title: Text(
                       '${channel.number} · ${channel.name}',
                       softWrap: true,
@@ -1708,12 +1574,7 @@ class _MoveChannelDialogState extends State<_MoveChannelDialog> {
         ),
       ],
     );
-    return scale > 1
-        ? Theme(
-            data: theme.copyWith(textTheme: dialogTextTheme),
-            child: dialog,
-          )
-        : dialog;
+    return dialog;
   }
 }
 
@@ -1744,48 +1605,39 @@ class _ChannelDeletionDialogState extends State<_ChannelDeletionDialog> {
     final channels = widget.channels;
     final size = MediaQuery.sizeOf(context);
     final viewInsets = MediaQuery.viewInsetsOf(context);
-    final scale = LineupLayout.scaleFor(size);
     final compact = LineupLayout.isCompactWidth(size.width);
     final roles = LineupTheme.of(context);
     final theme = Theme.of(context);
     final count = channels.length;
     final headingStyle = theme.textTheme.headlineSmall?.copyWith(
-      fontSize: (compact ? 24 : 32) * scale,
+      fontSize: (compact ? 24 : 32),
       fontWeight: FontWeight.w600,
     );
     final supportStyle = theme.textTheme.bodyLarge?.copyWith(
-      fontSize: (compact ? 14 : 18) * scale,
+      fontSize: (compact ? 14 : 18),
       color: roles.secondaryText,
     );
     final nameStyle = theme.textTheme.titleMedium?.copyWith(
-      fontSize: (compact ? 16 : 20) * scale,
+      fontSize: (compact ? 16 : 20),
       fontWeight: FontWeight.w500,
     );
     final numberStyle = theme.textTheme.bodyMedium?.copyWith(
-      fontSize: (compact ? 14 : 18) * scale,
+      fontSize: (compact ? 14 : 18),
       color: roles.secondaryText,
     );
     final actionStyle = theme.textTheme.labelLarge?.copyWith(
-      fontSize: (compact ? 14 : 18) * scale,
+      fontSize: (compact ? 14 : 18),
     );
-    final actionPadding = EdgeInsets.symmetric(
-      horizontal: 16 * scale,
-      vertical: 16 * scale,
-    );
-    final availableWidth = (size.width - (48 * scale))
-        .clamp(0.0, 680 * scale)
-        .toDouble();
-    final availableHeight = (size.height - viewInsets.vertical - (48 * scale))
-        .clamp(0.0, 720 * scale)
+    final actionPadding = EdgeInsets.symmetric(horizontal: 16, vertical: 16);
+    final availableWidth = (size.width - (48)).clamp(0.0, 680).toDouble();
+    final availableHeight = (size.height - viewInsets.vertical - (48))
+        .clamp(0.0, 720)
         .toDouble();
 
     return Dialog(
       backgroundColor: roles.primarySurface,
       surfaceTintColor: Colors.transparent,
-      insetPadding: EdgeInsets.symmetric(
-        horizontal: 24 * scale,
-        vertical: 24 * scale,
-      ),
+      insetPadding: EdgeInsets.symmetric(horizontal: 24, vertical: 24),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(roles.panelRadius),
         side: BorderSide(color: roles.subtleBorder),
@@ -1796,7 +1648,7 @@ class _ChannelDeletionDialogState extends State<_ChannelDeletionDialog> {
           maxHeight: availableHeight,
         ),
         child: Padding(
-          padding: EdgeInsets.all((compact ? 24 : 32) * scale),
+          padding: EdgeInsets.all((compact ? 24 : 32)),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1809,16 +1661,16 @@ class _ChannelDeletionDialogState extends State<_ChannelDeletionDialog> {
                   style: headingStyle,
                 ),
               ),
-              SizedBox(height: 8 * scale),
+              SizedBox(height: 8),
               Text(
                 count == 1
                     ? 'This removes this channel from your lineup. This action cannot be undone.'
                     : 'This removes these channels from your lineup. This action cannot be undone.',
                 style: supportStyle,
               ),
-              SizedBox(height: 16 * scale),
+              SizedBox(height: 16),
               Divider(height: 1, color: roles.subtleBorder),
-              SizedBox(height: 8 * scale),
+              SizedBox(height: 8),
               Flexible(
                 fit: FlexFit.loose,
                 child: Scrollbar(
@@ -1827,27 +1679,27 @@ class _ChannelDeletionDialogState extends State<_ChannelDeletionDialog> {
                   child: ListView.separated(
                     controller: _scrollController,
                     shrinkWrap: true,
-                    padding: EdgeInsets.only(right: 12 * scale),
+                    padding: EdgeInsets.only(right: 12),
                     itemCount: channels.length,
                     separatorBuilder: (_, _) =>
                         Divider(height: 1, color: roles.subtleBorder),
                     itemBuilder: (context, index) {
                       final channel = channels[index];
                       return ConstrainedBox(
-                        constraints: BoxConstraints(minHeight: 52 * scale),
+                        constraints: BoxConstraints(minHeight: 52),
                         child: Padding(
-                          padding: EdgeInsets.symmetric(vertical: 10 * scale),
+                          padding: EdgeInsets.symmetric(vertical: 10),
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               SizedBox(
-                                width: 56 * scale,
+                                width: 56,
                                 child: Text(
                                   '${channel.number}',
                                   style: numberStyle,
                                 ),
                               ),
-                              SizedBox(width: 16 * scale),
+                              SizedBox(width: 16),
                               Expanded(
                                 child: Text(
                                   channel.name,
@@ -1863,11 +1715,11 @@ class _ChannelDeletionDialogState extends State<_ChannelDeletionDialog> {
                   ),
                 ),
               ),
-              SizedBox(height: 16 * scale),
+              SizedBox(height: 16),
               Wrap(
                 alignment: WrapAlignment.end,
-                spacing: 8 * scale,
-                runSpacing: 8 * scale,
+                spacing: 8,
+                runSpacing: 8,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   TextButton(
@@ -1875,7 +1727,7 @@ class _ChannelDeletionDialogState extends State<_ChannelDeletionDialog> {
                     onPressed: () => Navigator.pop(context, false),
                     style: TextButton.styleFrom(
                       foregroundColor: roles.secondaryText,
-                      minimumSize: Size(0, 48 * scale),
+                      minimumSize: Size(0, 48),
                       padding: actionPadding,
                       textStyle: actionStyle,
                     ),
@@ -1886,7 +1738,7 @@ class _ChannelDeletionDialogState extends State<_ChannelDeletionDialog> {
                     style: FilledButton.styleFrom(
                       backgroundColor: theme.colorScheme.error,
                       foregroundColor: theme.colorScheme.onError,
-                      minimumSize: Size(0, 48 * scale),
+                      minimumSize: Size(0, 48),
                       padding: actionPadding,
                       textStyle: actionStyle,
                     ),

@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../playback/native_player.dart';
 import '../settings/lineup_settings.dart';
 import '../ui/app_theme.dart';
+import '../ui/lineup_canvas.dart';
 import 'lineup_controller.dart';
 import 'lineup_shell.dart';
 
@@ -41,6 +42,7 @@ class _LineupStartupState extends State<LineupStartup> {
             LineupThemeName.emberSteel,
             largeFocusIndicators: false,
           ),
+          builder: LineupCanvas.builder,
           home: snapshot.hasError
               ? const _StartupFailureBody(requiredEngineFailure: false)
               : const _StartupProgress(),
@@ -149,13 +151,8 @@ class _LineupBootstrapState extends State<LineupBootstrap> {
       themeAnimationDuration: settings.reduceMotion
           ? Duration.zero
           : kThemeAnimationDuration,
-      builder: (context, child) => MediaQuery(
-        data: MediaQuery.of(context).copyWith(
-          disableAnimations:
-              MediaQuery.disableAnimationsOf(context) || settings.reduceMotion,
-        ),
-        child: child!,
-      ),
+      builder: (context, child) =>
+          LineupCanvas(reduceMotion: settings.reduceMotion, child: child!),
       home: FutureBuilder<void>(
         future: _startup,
         builder: (context, snapshot) {

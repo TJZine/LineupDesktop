@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lineup_desktop/ui/lineup_canvas.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/channels/scheduler.dart';
@@ -30,6 +31,21 @@ final _narrowLogoPng = base64Decode(
 );
 
 void main() {
+  test('16:10 height extends information without enlarging five rows', () {
+    final reference = GuideLayoutPolicy.forSize(
+      const Size(1920, 1080),
+      hasPicture: true,
+    );
+    final tall = GuideLayoutPolicy.forSize(
+      const Size(1920, 1200),
+      hasPicture: true,
+    );
+    expect(tall.minimumRows, 5);
+    expect(tall.rowHeight, reference.rowHeight);
+    expect(tall.pictureWidth, reference.pictureWidth);
+    expect(tall.showcaseHeight - reference.showcaseHeight, closeTo(120, .001));
+  });
+
   test('clear logo usability follows decoded size and actual constraints', () {
     const ordinary = Size(1200, 400);
     const extremeWide = Size(1200, 20);
@@ -66,7 +82,10 @@ void main() {
       Size(double.infinity, 720),
       Size(1280, double.infinity),
     ]) {
-      final policy = GuideLayoutPolicy.forSize(size, hasPicture: true);
+      final policy = GuideLayoutPolicy.forSize(
+        size / LineupCanvas.scaleFor(size),
+        hasPicture: true,
+      );
       expect(policy.showcaseHeight, isNonNegative, reason: '$size');
       expect(policy.showcaseHeight.isFinite, isTrue, reason: '$size');
       expect(policy.pictureWidth, isNonNegative, reason: '$size');
@@ -98,6 +117,7 @@ void main() {
     addTearDown(guide.dispose);
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: GuideView(
           controller: guide,
           onClose: () {},
@@ -129,6 +149,7 @@ void main() {
     addTearDown(guide.dispose);
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: GuideView(
           controller: guide,
           onClose: () {},
@@ -172,6 +193,7 @@ void main() {
       final elapsed = Stopwatch()..start();
       await tester.pumpWidget(
         MaterialApp(
+          builder: LineupCanvas.builder,
           home: GuideView(
             controller: guide,
             onClose: () {},
@@ -216,6 +238,7 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: GuideView(
           controller: guide,
           onClose: () {},
@@ -301,6 +324,7 @@ void main() {
     final firstViewport = Stopwatch()..start();
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: GuideView(
           controller: guide,
           onClose: () {},
@@ -412,6 +436,7 @@ void main() {
     addTearDown(guide.dispose);
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: GuideView(
           controller: guide,
           onClose: () {},
@@ -515,6 +540,7 @@ void main() {
       loadSchedule: (channel) async => _schedule(channel),
     );
     addTearDown(guide.dispose);
+    final tallGeometry = <double, (double, double, double)>{};
     var tunes = 0;
     var closes = 0;
 
@@ -534,6 +560,7 @@ void main() {
       Size(1600, 900),
       Size(1920, 1079),
       Size(1920, 1080),
+      Size(1920, 1200),
       Size(2560, 1440),
       Size(3840, 2160),
     ]) {
@@ -542,6 +569,7 @@ void main() {
         ..physicalSize = size;
       await tester.pumpWidget(
         MaterialApp(
+          builder: LineupCanvas.builder,
           home: GuideView(
             controller: guide,
             pictureInPicture: const ColoredBox(color: Colors.black),
@@ -558,21 +586,34 @@ void main() {
         find.byKey(const Key('guide-picture-corner-mask')),
         findsOneWidget,
       );
-      final pictureSize = tester.getSize(picture);
+      final pictureSize = _drawnSize(tester, picture);
       expect(
         pictureSize.width / pictureSize.height,
         closeTo(16 / 9, 0.001),
         reason: '$size',
       );
-      final policy = GuideLayoutPolicy.forSize(size, hasPicture: true);
+      final policy = GuideLayoutPolicy.forSize(
+        size / LineupCanvas.scaleFor(size),
+        hasPicture: true,
+      );
       expect(
         pictureSize.width,
-        closeTo(policy.pictureWidth, 1),
+        closeTo(policy.pictureWidth * LineupCanvas.scaleFor(size), 1),
         reason: '$size',
       );
       final list = tester.widget<ListView>(
         find.byKey(const Key('guide-schedule-list')),
       );
+      if (size.width == 1920 && (size.height == 1080 || size.height == 1200)) {
+        tallGeometry[size.height] = (
+          list.itemExtent!,
+          pictureSize.width,
+          _drawnSize(
+            tester,
+            find.byKey(const Key('guide-information-area')),
+          ).height,
+        );
+      }
       final scheduleHeight = tester
           .getSize(find.byKey(const Key('guide-schedule-list')))
           .height;
@@ -593,6 +634,9 @@ void main() {
       expect(tester.takeException(), isNull, reason: '$size');
     }
 
+    expect(tallGeometry[1200]!.$1, tallGeometry[1080]!.$1);
+    expect(tallGeometry[1200]!.$2, tallGeometry[1080]!.$2);
+    expect(tallGeometry[1200]!.$3 - tallGeometry[1080]!.$3, closeTo(120, .001));
     final pictureSemantics = find.bySemanticsLabel(
       'Now playing picture in picture. Open full player.',
     );
@@ -613,6 +657,7 @@ void main() {
       ..physicalSize = const Size(1280, 720);
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: GuideView(
           controller: guide,
           onClose: () => closes++,
@@ -625,10 +670,12 @@ void main() {
       find.byKey(const Key('guide-schedule-list')),
     );
     expect(
-      (tester.getSize(find.byKey(const Key('guide-schedule-list'))).height /
-              classicList.itemExtent!)
+      (_drawnSize(tester, find.byKey(const Key('guide-schedule-list'))).height /
+              (classicList.itemExtent! * .8))
           .floor(),
       greaterThanOrEqualTo(5),
+      reason:
+          'height=${_drawnSize(tester, find.byKey(const Key('guide-schedule-list'))).height} row=${classicList.itemExtent}',
     );
     await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
     expect(closes, 1);
@@ -689,7 +736,7 @@ void main() {
         builder: (context, child) => MediaQuery(
           data: MediaQuery.of(context)
               .copyWith(textScaler: const TextScaler.linear(1.25)),
-          child: child!,
+          child: LineupCanvas(child: child!),
         ),
         home: GuideView(
           controller: guide,
@@ -801,6 +848,7 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
+          builder: LineupCanvas.builder,
           home: GuideView(
             controller: guide,
             onClose: () {},
@@ -867,6 +915,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: GuideView(
           controller: guide,
           onClose: () {},
@@ -942,6 +991,7 @@ void main() {
         ..physicalSize = size;
       await tester.pumpWidget(
         MaterialApp(
+          builder: LineupCanvas.builder,
           home: GuideView(
             controller: guide,
             pictureInPicture: const SizedBox.expand(),
@@ -1002,6 +1052,7 @@ void main() {
     addTearDown(guide.dispose);
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: GuideView(
           controller: guide,
           onClose: () {},
@@ -1059,6 +1110,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: GuideView(
           controller: guide,
           pictureInPicture: const ColoredBox(color: Colors.black),
@@ -1130,6 +1182,7 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
+          builder: LineupCanvas.builder,
           home: GuideView(
             controller: guide,
             pictureInPicture: const ColoredBox(color: Colors.black),
@@ -1177,6 +1230,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: GuideView(
           controller: guide,
           pictureInPicture: const ColoredBox(color: Colors.black),
@@ -1192,14 +1246,17 @@ void main() {
       const Size(1920, 1080),
     );
     expect(
-      tester.getSize(find.byKey(const Key('guide-picture-in-picture'))).width,
+      _drawnSize(
+        tester,
+        find.byKey(const Key('guide-picture-in-picture')),
+      ).width,
       closeTo(576, 0.01),
     );
     final list = tester.widget<ListView>(
       find.byKey(const Key('guide-schedule-list')),
     );
     expect(
-      (tester.getSize(find.byKey(const Key('guide-schedule-list'))).height /
+      (_drawnSize(tester, find.byKey(const Key('guide-schedule-list'))).height /
               list.itemExtent!)
           .floor(),
       greaterThanOrEqualTo(5),
@@ -1223,6 +1280,7 @@ void main() {
     addTearDown(guide.dispose);
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: GuideView(
           controller: guide,
           onClose: () {},
@@ -1255,6 +1313,7 @@ void main() {
     var tunes = 0;
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: GuideView(
           controller: guide,
           onClose: () => closes++,
@@ -1321,6 +1380,7 @@ void main() {
       );
       await tester.pumpWidget(
         MaterialApp(
+          builder: LineupCanvas.builder,
           home: GuideView(
             controller: guide,
             onClose: () {},
@@ -1376,6 +1436,7 @@ void main() {
       now = guide.windowStart.add(const Duration(hours: 1));
       await tester.pumpWidget(
         MaterialApp(
+          builder: LineupCanvas.builder,
           home: GuideView(
             controller: guide,
             onClose: () {},
@@ -1389,7 +1450,7 @@ void main() {
         tester.getTopLeft(marker()).dx,
         closeTo(
           tester.getTopLeft(focusedCell()).dx +
-              tester.getSize(focusedCell()).width / 2,
+              _drawnSize(tester, focusedCell()).width / 2,
           0.01,
         ),
       );
@@ -1435,6 +1496,7 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: GuideView(
           controller: guide,
           onClose: () {},
@@ -1454,7 +1516,7 @@ void main() {
     expect(label, findsOneWidget);
     expect(find.text('Libraries'), findsOneWidget);
     expect(tester.widget<Text>(label).data, libraryId);
-    expect(tester.getSize(label).height, greaterThan(16));
+    expect(_drawnSize(tester, label).height, greaterThan(16));
     await tester.tap(find.byTooltip('Remove library filter'));
     await tester.pump();
     expect(guide.libraryFilterId, isNull);
@@ -1492,7 +1554,7 @@ void main() {
             builder: (context, child) => MediaQuery(
               data: MediaQuery.of(context)
                   .copyWith(textScaler: const TextScaler.linear(2)),
-              child: child!,
+              child: LineupCanvas(child: child!),
             ),
             home: GuideView(
               controller: guide,
@@ -1524,6 +1586,7 @@ void main() {
     addTearDown(guide.dispose);
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: GuideView(
           controller: guide,
           watchingChannelId: lineup.currentChannelId,
@@ -1546,6 +1609,7 @@ void main() {
     // Remembering a channel is not evidence of current playback.
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: GuideView(
           controller: guide,
           onClose: () {},
@@ -1575,6 +1639,7 @@ void main() {
     addTearDown(guide.dispose);
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: GuideView(
           controller: guide,
           watchingChannelId: lineup.currentChannelId,
@@ -1607,6 +1672,7 @@ void main() {
     );
     addTearDown(guide.dispose);
     Widget buildGuide() => MaterialApp(
+      builder: LineupCanvas.builder,
       home: GuideView(controller: guide, onClose: () {}, onTune: (_) async {}),
     );
 
@@ -1662,6 +1728,7 @@ void main() {
     );
     addTearDown(guide.dispose);
     Widget buildGuide() => MaterialApp(
+      builder: LineupCanvas.builder,
       home: GuideView(controller: guide, onClose: () {}, onTune: (_) async {}),
     );
     void expectFocusedRowVisible() {
@@ -1735,6 +1802,7 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: GuideView(
           controller: guide,
           onClose: () {},
@@ -1852,3 +1920,14 @@ class _Credentials implements CredentialStore {
   @override
   Future<void> writeProfileToken(String profileId, String token) async {}
 }
+
+Rect _drawnRect(WidgetTester tester, Finder finder) {
+  final box = tester.renderObject<RenderBox>(finder);
+  return MatrixUtils.transformRect(
+    box.getTransformTo(null),
+    Offset.zero & box.size,
+  );
+}
+
+Size _drawnSize(WidgetTester tester, Finder finder) =>
+    _drawnRect(tester, finder).size;

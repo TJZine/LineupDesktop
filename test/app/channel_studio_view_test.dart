@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lineup_desktop/ui/lineup_canvas.dart';
 import 'package:lineup_desktop/app/channel_air_check.dart';
 import 'package:lineup_desktop/app/channel_studio_view.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
@@ -508,6 +509,7 @@ void main() {
     addTearDown(controller.dispose);
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: Scaffold(
           body: ChannelStudioView(
             controller: controller,
@@ -614,6 +616,7 @@ void main() {
     addTearDown(controller.dispose);
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: Scaffold(
           body: ChannelStudioView(
             controller: controller,
@@ -655,6 +658,7 @@ void main() {
     addTearDown(controller.dispose);
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: Scaffold(
           body: ChannelStudioView(
             controller: controller,
@@ -1234,6 +1238,7 @@ void main() {
       addTearDown(controller.dispose);
       await tester.pumpWidget(
         MaterialApp(
+          builder: LineupCanvas.builder,
           home: Scaffold(
             body: ChannelStudioView(
               key: key,
@@ -1293,6 +1298,7 @@ void main() {
     addTearDown(controller.dispose);
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: Scaffold(
           body: ChannelStudioView(
             key: key,
@@ -2192,6 +2198,7 @@ void main() {
     addTearDown(controller.dispose);
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: Scaffold(
           body: ChannelStudioView(
             key: key,
@@ -2574,6 +2581,12 @@ void main() {
   testWidgets(
     'repeated persisted manual IDs keep occurrence focus and snapshots',
     (tester) async {
+      // Exercise the compact canvas, where all three occurrence rows remain visible.
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(640, 480);
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
       final studioKey = GlobalKey<ChannelStudioViewState>();
       const first = ChannelItem(
         id: 'repeat',
@@ -3930,7 +3943,10 @@ void main() {
       expect(find.byKey(const Key('studio-station')), findsOneWidget);
       expect(find.text('Save channel'), findsOneWidget);
       expect(
-        tester.getSize(find.byKey(const ValueKey('lineup-page-content'))).width,
+        _drawnSize(
+          tester,
+          find.byKey(const ValueKey('lineup-page-content')),
+        ).width,
         lessThanOrEqualTo(size.width),
       );
       final programmingTop = tester.getTopLeft(
@@ -3943,7 +3959,7 @@ void main() {
       final airCheckTop = tester.getTopLeft(
         find.byKey(const Key('channel-air-check')),
       );
-      if (size.width < 900) {
+      if ((size / LineupCanvas.scaleFor(size)).width < 900) {
         expect(programmingTop.dy, lessThan(airCheckTop.dy));
         expect(_studioScrollOffset(tester), 0);
         for (final finder in [
@@ -3982,7 +3998,10 @@ void main() {
     await _settleAirCheck(tester);
     expect(tester.takeException(), isNull);
     expect(
-      tester.getSize(find.byKey(const ValueKey('lineup-page-content'))).width,
+      _drawnSize(
+        tester,
+        find.byKey(const ValueKey('lineup-page-content')),
+      ).width,
       lessThanOrEqualTo(1920),
     );
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -4348,7 +4367,7 @@ void _expectIntersectsViewport(
   Finder finder,
   Size viewport,
 ) {
-  expect((Offset.zero & viewport).overlaps(tester.getRect(finder)), isTrue);
+  expect((Offset.zero & viewport).overlaps(_drawnRect(tester, finder)), isTrue);
 }
 
 void _expectFitsHorizontally(
@@ -4356,7 +4375,7 @@ void _expectFitsHorizontally(
   Finder finder,
   Size viewport,
 ) {
-  final rect = tester.getRect(finder);
+  final rect = _drawnRect(tester, finder);
   expect(rect.left, greaterThanOrEqualTo(0));
   expect(rect.right, lessThanOrEqualTo(viewport.width));
 }
@@ -4399,7 +4418,7 @@ Widget _studio(
   builder: (context, child) => MediaQuery(
     data: MediaQuery.of(context)
         .copyWith(textScaler: textScaler, disableAnimations: disableAnimations),
-    child: child!,
+    child: LineupCanvas(child: child!),
   ),
   home: Scaffold(
     body: ChannelStudioView(
@@ -4869,6 +4888,7 @@ class _RecoveryHarnessState extends State<_RecoveryHarness> {
 
   @override
   Widget build(BuildContext context) => MaterialApp(
+    builder: LineupCanvas.builder,
     home: Scaffold(
       body: open
           ? ChannelStudioView(
@@ -4901,3 +4921,14 @@ Future<void> _choosePlayback(WidgetTester tester, String label) async {
   await tester.tap(find.text(label).last);
   await tester.pumpAndSettle();
 }
+
+Rect _drawnRect(WidgetTester tester, Finder finder) {
+  final box = tester.renderObject<RenderBox>(finder);
+  return MatrixUtils.transformRect(
+    box.getTransformTo(null),
+    Offset.zero & box.size,
+  );
+}
+
+Size _drawnSize(WidgetTester tester, Finder finder) =>
+    _drawnRect(tester, finder).size;

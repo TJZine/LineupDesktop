@@ -2,6 +2,7 @@ import 'dart:ui' show SemanticsAction, Tristate;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lineup_desktop/ui/lineup_canvas.dart';
 import 'package:lineup_desktop/app/lineup_shell.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
 import 'package:lineup_desktop/settings/lineup_settings.dart';
@@ -132,6 +133,7 @@ Future<void> _showSettings(
 ) async {
   await tester.pumpWidget(
     MaterialApp(
+      builder: LineupCanvas.builder,
       theme: LineupTheme.forName(
         LineupThemeName.emberSteel,
         largeFocusIndicators: false,

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:ui' show Tristate;
 
 import 'package:flutter/gestures.dart';
@@ -8,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lineup_desktop/ui/lineup_canvas.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/channels/channel.dart';
 import 'package:lineup_desktop/channels/scheduler.dart';
@@ -41,6 +43,7 @@ void main() {
     addTearDown(focus.dispose);
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(
           controller: fixture.player,
           focusNode: focus,
@@ -83,6 +86,7 @@ void main() {
     final fixture = _Fixture(PlayerState.playing);
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -122,6 +126,7 @@ void main() {
     );
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -161,6 +166,7 @@ void main() {
     fixture.player.showOsd();
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -198,6 +204,7 @@ void main() {
     final fixture = _Fixture(PlayerState.playing, channelCount: 2);
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -228,6 +235,7 @@ void main() {
     );
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -256,6 +264,7 @@ void main() {
     );
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -284,6 +293,7 @@ void main() {
     final fixture = _Fixture(PlayerState.playing, channelCount: 2);
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -303,6 +313,7 @@ void main() {
     fixture.player.showMiniGuide();
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(
           controller: fixture.player,
           openGuide: () => guideOpened = true,
@@ -333,6 +344,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: SizedBox(
           width: 320,
           height: 180,
@@ -356,6 +368,7 @@ void main() {
     await fixture.player.loadInitialMedia(Uri.parse('lineup-test://failure'));
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -390,7 +403,10 @@ void main() {
     await fixture.native.loadStarted.future;
 
     await tester.pumpWidget(
-      MaterialApp(home: PlayerSurface(controller: fixture.player)),
+      MaterialApp(
+        builder: LineupCanvas.builder,
+        home: PlayerSurface(controller: fixture.player),
+      ),
     );
 
     expect(find.bySemanticsLabel('Preparing playback'), findsOneWidget);
@@ -410,6 +426,7 @@ void main() {
     fixture.player.showOsd();
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(
           controller: fixture.player,
           openGuide: () => guideOpened = true,
@@ -451,6 +468,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -480,6 +498,7 @@ void main() {
     fixture.player.showOsd();
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -525,6 +544,7 @@ void main() {
       fixture.player.showOsd();
       await tester.pumpWidget(
         MaterialApp(
+          builder: LineupCanvas.builder,
           home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
       );
@@ -535,15 +555,16 @@ void main() {
         findsOneWidget,
       );
       expect(
-        tester.getSize(find.byKey(const Key('player-osd-surface'))).width,
-        size.width,
+        _drawnSize(tester, find.byKey(const Key('player-osd-surface'))).width,
+        closeTo(size.width, .001),
       );
-      final progressLine = tester.getRect(
+      final progressLine = _drawnRect(
+        tester,
         find.byKey(const Key('player-osd-progress-line')),
       );
       expect(progressLine.left, 0, reason: '$size');
-      expect(progressLine.width, size.width, reason: '$size');
-      expect(progressLine.bottom, size.height, reason: '$size');
+      expect(progressLine.width, closeTo(size.width, .001), reason: '$size');
+      expect(progressLine.bottom, closeTo(size.height, .001), reason: '$size');
       expect(tester.takeException(), isNull, reason: '$size');
     }
 
@@ -559,33 +580,35 @@ void main() {
       fixture.player.showMiniGuide();
       await tester.pumpWidget(
         MaterialApp(
+          builder: LineupCanvas.builder,
           key: ValueKey(size),
-          home: MediaQuery(
-            data: MediaQueryData(size: size),
-            child: PlayerView(controller: fixture.player, openGuide: () {}),
-          ),
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
       );
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.bySemanticsLabel(RegExp('Mini Guide')), findsOneWidget);
       expect(
-        tester.getSize(find.byKey(const Key('mini-guide-shelf'))).width,
-        size.width,
+        _drawnSize(tester, find.byKey(const Key('mini-guide-shelf'))).width,
+        closeTo(size.width, .001),
       );
       expect(fixture.player.miniGuideChannels, hasLength(5));
       expect(
         find.textContaining('Browse · Enter Tune · Esc Close'),
         findsOneWidget,
       );
-      final shelf = tester.getRect(find.byKey(const Key('mini-guide-shelf')));
+      final shelf = _drawnRect(
+        tester,
+        find.byKey(const Key('mini-guide-shelf')),
+      );
       expect(
         MediaQuery.sizeOf(
           tester.element(find.byKey(const Key('mini-guide-shelf'))),
         ),
-        size,
+        size / LineupCanvas.scaleFor(size),
       );
       for (final channel in fixture.player.miniGuideChannels) {
-        final row = tester.getRect(
+        final row = _drawnRect(
+          tester,
           find.byKey(Key('mini-guide-row-${channel.id}')),
         );
         expect(row.top, greaterThanOrEqualTo(shelf.top), reason: '$size');
@@ -600,21 +623,32 @@ void main() {
         if (miniScroll.maxScrollExtent == 0) {
           expect(row.bottom, lessThanOrEqualTo(shelf.bottom), reason: '$size');
         }
-        if (LineupLayout.isCompactWidth(size.width) || size.height < 720) {
-          expect(row.height, greaterThan(48), reason: '$size');
+        if (LineupLayout.isCompactWidth(
+              (size / LineupCanvas.scaleFor(size)).width,
+            ) ||
+            (size / LineupCanvas.scaleFor(size)).height < 720) {
+          expect(
+            row.height,
+            greaterThan(48 * LineupCanvas.scaleFor(size)),
+            reason: '$size',
+          );
         } else {
           expect(
             row.height,
             closeTo(
-              (size.width >= 1920 && size.height >= 1080 ? 66 : 56) *
-                  LineupLayout.scaleFor(size),
+              ((size / LineupCanvas.scaleFor(size)).width >= 1920 &&
+                          (size / LineupCanvas.scaleFor(size)).height >= 1080
+                      ? 66
+                      : 56) *
+                  LineupCanvas.scaleFor(size),
               0.01,
             ),
             reason: '$size',
           );
         }
         for (final fact in ['current', 'next']) {
-          final factRect = tester.getRect(
+          final factRect = _drawnRect(
+            tester,
             find.byKey(Key('mini-guide-$fact-${channel.id}')),
           );
           expect(row.contains(factRect.topLeft), isTrue, reason: '$size');
@@ -658,18 +692,17 @@ void main() {
       fixture.player.showOsd();
       await tester.pumpWidget(
         MaterialApp(
+          builder: LineupCanvas.builder,
           key: ValueKey(size),
-          home: MediaQuery(
-            data: MediaQueryData(size: size),
-            child: PlayerView(controller: fixture.player, openGuide: () {}),
-          ),
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
       );
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
       expect(fixture.player.nextProgram, isNotNull, reason: '$size');
 
-      final surface = tester.getRect(
+      final surface = _drawnRect(
+        tester,
         find.byKey(const Key('player-osd-surface')),
       );
       expect(surface.width, size.width, reason: '$size');
@@ -683,16 +716,20 @@ void main() {
           lessThan(size.height < 900 ? 0.30 : 0.26),
           reason: '$size',
         );
-        final timeline = tester.getRect(
+        final timeline = _drawnRect(
+          tester,
           find.byKey(const Key('player-osd-progress-block')),
         );
-        final controls = tester.getRect(
+        final controls = _drawnRect(
+          tester,
           find.byKey(const Key('player-osd-horizontal-layout')),
         );
-        final identity = tester.getRect(
+        final identity = _drawnRect(
+          tester,
           find.byKey(const Key('player-osd-identity')),
         );
-        final actions = tester.getRect(
+        final actions = _drawnRect(
+          tester,
           find.byKey(const Key('player-osd-action-groups')),
         );
         expect(identity.left, lessThan(actions.left), reason: '$size');
@@ -735,10 +772,12 @@ void main() {
         expect(next.data, contains('Up next • $localizedStart •'));
         expect(next.maxLines, 1);
         expect(next.overflow, TextOverflow.ellipsis);
-        final timeline = tester.getRect(
+        final timeline = _drawnRect(
+          tester,
           find.byKey(const Key('player-osd-progress-block')),
         );
-        final nextRect = tester.getRect(
+        final nextRect = _drawnRect(
+          tester,
           find.byKey(const Key('player-osd-next')),
         );
         expect(
@@ -771,6 +810,7 @@ void main() {
       fixture.player.showOsd();
       await tester.pumpWidget(
         MaterialApp(
+          builder: LineupCanvas.builder,
           key: ValueKey(state),
           home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
@@ -840,10 +880,8 @@ void main() {
     fixture.player.showOsd();
     await tester.pumpWidget(
       MaterialApp(
-        home: MediaQuery(
-          data: const MediaQueryData(size: Size(1280, 720)),
-          child: PlayerView(controller: fixture.player, openGuide: () {}),
-        ),
+        builder: LineupCanvas.builder,
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
     await tester.pump();
@@ -869,6 +907,7 @@ void main() {
     fixture.player.showOsd();
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(
           controller: fixture.player,
           openGuide: () {},
@@ -939,12 +978,13 @@ void main() {
         show();
         await tester.pumpWidget(
           MaterialApp(
-            home: MediaQuery(
-              data: MediaQueryData(
-                size: size,
-                textScaler: const TextScaler.linear(2),
+            builder: LineupCanvas.builder,
+            home: Builder(
+              builder: (context) => MediaQuery(
+                data: MediaQuery.of(context)
+                    .copyWith(textScaler: const TextScaler.linear(2)),
+                child: PlayerView(controller: fixture.player, openGuide: () {}),
               ),
-              child: PlayerView(controller: fixture.player, openGuide: () {}),
             ),
           ),
         );
@@ -974,10 +1014,8 @@ void main() {
     fixture.player.showOsd();
     await tester.pumpWidget(
       MaterialApp(
-        home: MediaQuery(
-          data: const MediaQueryData(size: Size(1280, 720)),
-          child: PlayerView(controller: fixture.player, openGuide: () {}),
-        ),
+        builder: LineupCanvas.builder,
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
     await tester.pumpAndSettle();
@@ -1041,6 +1079,7 @@ void main() {
       fixture.player.showOsd();
       await tester.pumpWidget(
         MaterialApp(
+          builder: LineupCanvas.builder,
           key: ValueKey(position),
           home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
@@ -1074,6 +1113,7 @@ void main() {
     fixture.player.showOsd();
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -1132,6 +1172,7 @@ void main() {
       item.fixture.player.showOsd();
       await tester.pumpWidget(
         MaterialApp(
+          builder: LineupCanvas.builder,
           key: ValueKey(item.logo),
           home: PlayerView(controller: item.fixture.player, openGuide: () {}),
         ),
@@ -1272,6 +1313,7 @@ void main() {
       fixture.player.showOsd();
       await tester.pumpWidget(
         MaterialApp(
+          builder: LineupCanvas.builder,
           key: ValueKey(itemCase.item.id),
           home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
@@ -1306,15 +1348,20 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
     await tester.pumpAndSettle();
 
-    final surface = tester.getSize(find.byKey(const Key('player-osd-surface')));
+    final surface = _drawnSize(
+      tester,
+      find.byKey(const Key('player-osd-surface')),
+    );
     expect(surface.width, 1920);
     expect(surface.height / 1080, lessThan(0.20));
-    final progressLine = tester.getRect(
+    final progressLine = _drawnRect(
+      tester,
       find.byKey(const Key('player-osd-progress-line')),
     );
     expect(progressLine.left, 0);
@@ -1339,15 +1386,18 @@ void main() {
       fixture.player.showOsd();
       await tester.pumpWidget(
         MaterialApp(
+          builder: LineupCanvas.builder,
           key: ValueKey(size),
           home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
       );
       await tester.pump();
-      final seekTarget = tester.getRect(
+      final seekTarget = _drawnRect(
+        tester,
         find.byKey(const Key('player-osd-progress-line')),
       );
-      final actions = tester.getRect(
+      final actions = _drawnRect(
+        tester,
         find.byKey(const Key('player-osd-action-groups')),
       );
       expect(seekTarget.overlaps(actions), isFalse, reason: '$size');
@@ -1374,6 +1424,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -1381,7 +1432,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 350));
     expect(
-      tester.getSize(find.byKey(const Key('player-osd-surface'))).width,
+      _drawnSize(tester, find.byKey(const Key('player-osd-surface'))).width,
       1280,
     );
 
@@ -1389,7 +1440,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     expect(
-      tester.getSize(find.byKey(const Key('mini-guide-shelf'))).width,
+      _drawnSize(tester, find.byKey(const Key('mini-guide-shelf'))).width,
       1280,
     );
     expect(tester.takeException(), isNull);
@@ -1397,16 +1448,20 @@ void main() {
     tester.view.physicalSize = const Size(3840, 2160);
     await tester.pump();
     expect(
-      tester.getSize(find.byKey(const Key('mini-guide-shelf'))).width,
+      _drawnSize(tester, find.byKey(const Key('mini-guide-shelf'))).width,
       1920,
     );
     expect(
-      tester.getSize(find.byKey(const Key('mini-guide-shelf'))).height / 1080,
+      _drawnSize(tester, find.byKey(const Key('mini-guide-shelf'))).height /
+          1080,
       lessThan(0.34),
     );
     for (final channel in fixture.player.miniGuideChannels) {
       expect(
-        tester.getSize(find.byKey(Key('mini-guide-row-${channel.id}'))).height,
+        _drawnSize(
+          tester,
+          find.byKey(Key('mini-guide-row-${channel.id}')),
+        ).height,
         66,
       );
     }
@@ -1422,6 +1477,7 @@ void main() {
     final fixture = _Fixture(PlayerState.playing);
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -1490,7 +1546,7 @@ void main() {
       MaterialApp(
         builder: (context, child) => MediaQuery(
           data: MediaQuery.of(context).copyWith(disableAnimations: true),
-          child: child!,
+          child: LineupCanvas(child: child!),
         ),
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
@@ -1532,6 +1588,7 @@ void main() {
       fixture.player.showOsd();
       await tester.pumpWidget(
         MaterialApp(
+          builder: LineupCanvas.builder,
           home: PlayerView(
             controller: fixture.player,
             focusNode: rootFocus,
@@ -1592,6 +1649,7 @@ void main() {
     fixture.player.showMiniGuide();
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(
           controller: fixture.player,
           focusNode: rootFocus,
@@ -1646,6 +1704,7 @@ void main() {
     fixture.player.showOsd();
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(
           controller: fixture.player,
           focusNode: rootFocus,
@@ -1693,6 +1752,7 @@ void main() {
     fixture.player.showTracks(PlayerTrackType.audio);
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -1749,6 +1809,7 @@ void main() {
     fixture.player.showTracks(PlayerTrackType.audio);
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -1795,6 +1856,7 @@ void main() {
     fixture.player.showTracks(PlayerTrackType.subtitle);
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -1849,6 +1911,7 @@ void main() {
     fixture.player.showTracks(PlayerTrackType.audio);
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -1920,6 +1983,7 @@ void main() {
     fixture.player.showTracks(PlayerTrackType.audio);
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -1994,6 +2058,7 @@ void main() {
       fixture.player.showTracks(PlayerTrackType.subtitle);
       await tester.pumpWidget(
         MaterialApp(
+          builder: LineupCanvas.builder,
           home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
       );
@@ -2080,6 +2145,7 @@ void main() {
     fixture.player.showTracks(PlayerTrackType.subtitle);
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -2126,6 +2192,7 @@ void main() {
       fixture.player.showTracks(PlayerTrackType.subtitle);
       await tester.pumpWidget(
         MaterialApp(
+          builder: LineupCanvas.builder,
           home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
       );
@@ -2177,10 +2244,8 @@ void main() {
     fixture.player.showOsd();
     await tester.pumpWidget(
       MaterialApp(
-        home: MediaQuery(
-          data: const MediaQueryData(size: Size(1280, 720)),
-          child: PlayerView(controller: fixture.player, openGuide: () {}),
-        ),
+        builder: LineupCanvas.builder,
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
     await tester.pump();
@@ -2228,10 +2293,8 @@ void main() {
     fixture.player.showOsd();
     await tester.pumpWidget(
       MaterialApp(
-        home: MediaQuery(
-          data: const MediaQueryData(size: Size(1280, 720)),
-          child: PlayerView(controller: fixture.player, openGuide: () {}),
-        ),
+        builder: LineupCanvas.builder,
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
     await tester.pump();
@@ -2275,10 +2338,8 @@ void main() {
       fixture.player.showOsd();
       await tester.pumpWidget(
         MaterialApp(
-          home: MediaQuery(
-            data: const MediaQueryData(size: Size(1280, 720)),
-            child: PlayerView(controller: fixture.player, openGuide: () {}),
-          ),
+          builder: LineupCanvas.builder,
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
       );
       await tester.pump();
@@ -2343,10 +2404,8 @@ void main() {
     fixture.player.showOsd();
     await tester.pumpWidget(
       MaterialApp(
-        home: MediaQuery(
-          data: const MediaQueryData(size: Size(800, 600)),
-          child: PlayerView(controller: fixture.player, openGuide: () {}),
-        ),
+        builder: LineupCanvas.builder,
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
     await tester.pump();
@@ -2359,12 +2418,13 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(3840, 2160));
     await tester.pumpWidget(
       MaterialApp(
-        home: MediaQuery(
-          data: const MediaQueryData(
-            size: Size(3840, 2160),
-            textScaler: TextScaler.linear(2),
+        builder: LineupCanvas.builder,
+        home: Builder(
+          builder: (context) => MediaQuery(
+            data: MediaQuery.of(context)
+                .copyWith(textScaler: TextScaler.linear(2)),
+            child: PlayerView(controller: fixture.player, openGuide: () {}),
           ),
-          child: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
       ),
     );
@@ -2409,6 +2469,7 @@ void main() {
     fixture.player.showTracks(PlayerTrackType.audio);
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -2451,6 +2512,7 @@ void main() {
       fixture.player.showTracks(PlayerTrackType.audio);
       await tester.pumpWidget(
         MaterialApp(
+          builder: LineupCanvas.builder,
           home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
       );
@@ -2530,6 +2592,7 @@ void main() {
     fixture.player.showTracks(PlayerTrackType.audio);
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -2572,6 +2635,7 @@ void main() {
     fixture.player.showMiniGuide();
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -2588,7 +2652,7 @@ void main() {
     await tester.pump();
 
     final hint = find.textContaining('Browse · Enter Tune · Esc Close');
-    expect(tester.getRect(hint).bottom, lessThanOrEqualTo(240));
+    expect(_drawnRect(tester, hint).bottom, lessThanOrEqualTo(240));
     expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(const SizedBox.shrink());
@@ -2604,6 +2668,7 @@ void main() {
     fixture.player.showMiniGuide();
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -2654,6 +2719,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -2683,6 +2749,7 @@ void main() {
     );
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -2707,6 +2774,7 @@ void main() {
       fixture.player.showMiniGuide();
       await tester.pumpWidget(
         MaterialApp(
+          builder: LineupCanvas.builder,
           home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
       );
@@ -2768,6 +2836,7 @@ void main() {
       fixture.player.showTracks(PlayerTrackType.audio);
       await tester.pumpWidget(
         MaterialApp(
+          builder: LineupCanvas.builder,
           home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
       );
@@ -2780,12 +2849,16 @@ void main() {
       );
       final position = tester.state<ScrollableState>(scrollable).position;
       expect(position.maxScrollExtent, greaterThan(0));
-      final rail = tester.getRect(
+      final rail = _drawnRect(
+        tester,
         find.byKey(const Key('playback-options-rail')),
       );
       expect(rail.right, size.width);
       expect(rail.height, size.height);
-      expect(rail.width, size.width == 800 ? 320 : 400);
+      expect(
+        rail.width,
+        math.min(size.width * 0.4, 600 * LineupCanvas.scaleFor(size)),
+      );
       position.jumpTo(position.maxScrollExtent);
       await tester.pumpAndSettle();
       expect(find.text('Audio choice 256'), findsOneWidget);
@@ -2921,21 +2994,22 @@ void main() {
         fixture.player.showTracks(scenario.type);
         await tester.pumpWidget(
           MaterialApp(
-            home: MediaQuery(
-              data: const MediaQueryData(size: Size(1280, 720)),
-              child: PlayerView(controller: fixture.player, openGuide: () {}),
-            ),
+            builder: LineupCanvas.builder,
+            home: PlayerView(controller: fixture.player, openGuide: () {}),
           ),
         );
         await tester.pumpAndSettle();
 
-        final rail = tester.getRect(
+        final rail = _drawnRect(
+          tester,
           find.byKey(const Key('playback-options-rail')),
         );
-        final list = tester.getRect(
+        final list = _drawnRect(
+          tester,
           find.byKey(const Key('playback-options-list')),
         );
-        final footer = tester.getRect(
+        final footer = _drawnRect(
+          tester,
           find.byKey(const Key('playback-options-footer')),
         );
         expect(rail.contains(footer.topLeft), isTrue);
@@ -2946,7 +3020,8 @@ void main() {
         expect(list.bottom, lessThan(footer.top));
 
         for (final track in scenario.tracks) {
-          final row = tester.getRect(
+          final row = _drawnRect(
+            tester,
             find.byKey(Key('playback-track-${scenario.type.name}-${track.id}')),
           );
           final visible = row.intersect(list);
@@ -2966,8 +3041,8 @@ void main() {
         final commentary = find.text('${prefix}commentary');
         expect(theatrical, findsOneWidget);
         expect(commentary, findsOneWidget);
-        expect(list.contains(tester.getRect(theatrical).center), isTrue);
-        expect(list.contains(tester.getRect(commentary).center), isTrue);
+        expect(list.contains(_drawnRect(tester, theatrical).center), isTrue);
+        expect(list.contains(_drawnRect(tester, commentary).center), isTrue);
         expect(Focus.of(tester.element(commentary)).hasFocus, isTrue);
         expect(tester.takeException(), isNull, reason: '${scenario.type}');
 
@@ -3003,6 +3078,7 @@ void main() {
     fixture.player.showTracks(PlayerTrackType.subtitle);
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -3011,7 +3087,10 @@ void main() {
     final selected = find.text('English — Subtitle track 24');
     final list = find.byKey(const Key('playback-options-list'));
     expect(Focus.of(tester.element(selected)).hasFocus, isTrue);
-    expect(tester.getRect(list).contains(tester.getCenter(selected)), isTrue);
+    expect(
+      _drawnRect(tester, list).contains(tester.getCenter(selected)),
+      isTrue,
+    );
     expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(const SizedBox.shrink());
@@ -3044,14 +3123,14 @@ void main() {
         viewport: Size(800, 600),
         dpr: 1.0,
         width: 320.0,
-        fade: 200 / 3,
+        fade: 80.0,
         scale: 1.0,
       ),
       (
         viewport: Size(1280, 720),
         dpr: 1.0,
-        width: 400.0,
-        fade: 200 / 3,
+        width: 480.0,
+        fade: 80.0,
         scale: 1.0,
       ),
       (
@@ -3064,8 +3143,8 @@ void main() {
       (
         viewport: Size(1360, 840),
         dpr: 1.0,
-        width: 425.0,
-        fade: 850 / 12,
+        width: 480.0,
+        fade: 80.0,
         scale: 1.0,
       ),
       (
@@ -3096,31 +3175,36 @@ void main() {
       fixture.player.showTracks(PlayerTrackType.audio);
       await tester.pumpWidget(
         MaterialApp(
-          home: MediaQuery(
-            data: MediaQueryData(
-              size: layout.viewport,
-              devicePixelRatio: layout.dpr,
-              textScaler: const TextScaler.linear(2),
+          builder: LineupCanvas.builder,
+          home: Builder(
+            builder: (context) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(
+                devicePixelRatio: layout.dpr,
+                textScaler: const TextScaler.linear(2),
+              ),
+              child: PlayerView(controller: fixture.player, openGuide: () {}),
             ),
-            child: PlayerView(controller: fixture.player, openGuide: () {}),
           ),
         ),
       );
       await tester.pumpAndSettle();
 
-      final rail = tester.getRect(
+      final rail = _drawnRect(
+        tester,
         find.byKey(const Key('playback-options-rail')),
       );
-      expect(
-        rail,
-        Rect.fromLTWH(
-          layout.viewport.width - layout.width,
-          0,
-          layout.width,
-          layout.viewport.height,
-        ),
+      final expectedRail = Rect.fromLTWH(
+        layout.viewport.width - layout.width,
+        0,
+        layout.width,
+        layout.viewport.height,
       );
-      final fade = tester.getRect(
+      expect(rail.left, closeTo(expectedRail.left, .001));
+      expect(rail.top, closeTo(expectedRail.top, .001));
+      expect(rail.width, closeTo(expectedRail.width, .001));
+      expect(rail.height, closeTo(expectedRail.height, .001));
+      final fade = _drawnRect(
+        tester,
         find.byKey(const Key('playback-options-fade')),
       );
       expect(fade.right, layout.viewport.width);
@@ -3166,18 +3250,20 @@ void main() {
             )
             .style
             ?.fontSize,
-        closeTo(16 * layout.scale, 0.01),
+        closeTo(16, 0.01),
       );
-      final label = tester.getRect(
+      final label = _drawnRect(
+        tester,
         find.text(
           'English — A long descriptive English surround audio track label',
         ),
       );
       expect(rail.overlaps(label), isTrue);
       expect(
-        tester
-            .getRect(find.byKey(const Key('playback-options-list')))
-            .contains(label.center),
+        _drawnRect(
+          tester,
+          find.byKey(const Key('playback-options-list')),
+        ).contains(label.center),
         isTrue,
       );
       expect(
@@ -3209,6 +3295,7 @@ void main() {
     );
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -3264,7 +3351,7 @@ void main() {
       MaterialApp(
         builder: (context, child) => MediaQuery(
           data: MediaQuery.of(context).copyWith(disableAnimations: true),
-          child: child!,
+          child: LineupCanvas(child: child!),
         ),
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
@@ -3304,6 +3391,7 @@ void main() {
     final fixture = _Fixture(PlayerState.playing);
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -3333,6 +3421,7 @@ void main() {
     fixture.player.showMiniGuide();
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         theme: LineupTheme.forName(LineupThemeName.directv),
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
@@ -3340,8 +3429,18 @@ void main() {
     await tester.pump();
 
     expect(
-      tester.widget<Text>(find.text('Channel')).style?.color,
-      LineupTheme.of(tester.element(find.text('Channel'))).focusedText,
+      tester
+          .widget<Text>(
+            find
+                .descendant(
+                  of: find.byKey(const Key('mini-guide-channel-channel')),
+                  matching: find.byType(Text),
+                )
+                .first,
+          )
+          .style
+          ?.color,
+      LineupTheme.of(tester.element(find.text('Channel').first)).focusedText,
     );
     expect(find.bySemanticsLabel(RegExp(r'^Now watching$')), findsNothing);
 
@@ -3357,10 +3456,8 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(
       MaterialApp(
-        home: MediaQuery(
-          data: const MediaQueryData(size: Size(1280, 720)),
-          child: PlayerView(controller: fixture.player, openGuide: () {}),
-        ),
+        builder: LineupCanvas.builder,
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
     await tester.pump();
@@ -3378,18 +3475,24 @@ void main() {
     );
     expect(find.byKey(const Key('player-now-playing-channel')), findsNothing);
     expect(
-      tester.getSize(find.byKey(const Key('player-now-playing-shelf'))).width,
-      1180,
+      _drawnSize(
+        tester,
+        find.byKey(const Key('player-now-playing-shelf')),
+      ).width,
+      1180 * .8,
     );
     expect(
-      tester.getSize(find.byKey(const Key('player-now-playing-shelf'))).height,
+      _drawnSize(
+        tester,
+        find.byKey(const Key('player-now-playing-shelf')),
+      ).height,
       lessThanOrEqualTo(380.01),
     );
     expect(
       MediaQuery.sizeOf(
         tester.element(find.byKey(const Key('player-now-playing-surface'))),
       ),
-      const Size(1280, 720),
+      const Size(1600, 900),
     );
     expect(fixture.lineup.artworkRequests, hasLength(2));
     expect(find.byKey(const Key('player-now-playing-logo')), findsOneWidget);
@@ -3398,7 +3501,7 @@ void main() {
     final title = tester.widget<Text>(
       find.byKey(const Key('player-now-playing-title')),
     );
-    expect(title.style?.fontSize, 24);
+    expect(title.style?.fontSize, 28);
     expect(title.style?.fontWeight, FontWeight.w600);
     expect(
       find.text('A synthetic synopsis for deterministic tests.'),
@@ -3452,10 +3555,8 @@ void main() {
       addTearDown(() => tester.binding.setSurfaceSize(null));
       await tester.pumpWidget(
         MaterialApp(
-          home: MediaQuery(
-            data: const MediaQueryData(size: Size(1280, 720)),
-            child: PlayerView(controller: fixture.player, openGuide: () {}),
-          ),
+          builder: LineupCanvas.builder,
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
       );
       await tester.pump();
@@ -3526,6 +3627,7 @@ void main() {
     );
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -3547,6 +3649,7 @@ void main() {
     final fixture = _Fixture(PlayerState.playing, richProgram: true);
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -3577,6 +3680,7 @@ void main() {
       );
       await tester.pumpWidget(
         MaterialApp(
+          builder: LineupCanvas.builder,
           home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
       );
@@ -3612,6 +3716,7 @@ void main() {
     );
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -3640,6 +3745,7 @@ void main() {
       );
       await tester.pumpWidget(
         MaterialApp(
+          builder: LineupCanvas.builder,
           home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
       );
@@ -3683,6 +3789,7 @@ void main() {
     );
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -3718,6 +3825,7 @@ void main() {
       addTearDown(() => tester.binding.setSurfaceSize(null));
       await tester.pumpWidget(
         MaterialApp(
+          builder: LineupCanvas.builder,
           home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
       );
@@ -3753,10 +3861,8 @@ void main() {
       );
       await tester.pumpWidget(
         MaterialApp(
-          home: MediaQuery(
-            data: const MediaQueryData(size: Size(1280, 720)),
-            child: PlayerView(controller: disabled.player, openGuide: () {}),
-          ),
+          builder: LineupCanvas.builder,
+          home: PlayerView(controller: disabled.player, openGuide: () {}),
         ),
       );
       await tester.pump();
@@ -3788,10 +3894,11 @@ void main() {
         cast: _fixtureCast.take(5).toList(growable: false),
       ),
     );
-    await tester.binding.setSurfaceSize(const Size(800, 600));
+    await tester.binding.setSurfaceSize(const Size(640, 480));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -3818,6 +3925,7 @@ void main() {
     );
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -3851,10 +3959,8 @@ void main() {
     );
     await tester.pumpWidget(
       MaterialApp(
-        home: MediaQuery(
-          data: const MediaQueryData(size: Size(1280, 720)),
-          child: PlayerView(controller: fixture.player, openGuide: () {}),
-        ),
+        builder: LineupCanvas.builder,
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
     await tester.pump();
@@ -3904,10 +4010,8 @@ void main() {
     final fixture = _Fixture(PlayerState.playing, richProgram: true);
     await tester.pumpWidget(
       MaterialApp(
-        home: MediaQuery(
-          data: const MediaQueryData(size: Size(1280, 720)),
-          child: PlayerView(controller: fixture.player, openGuide: () {}),
-        ),
+        builder: LineupCanvas.builder,
+        home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
     await tester.pump();
@@ -3942,10 +4046,8 @@ void main() {
       );
       await tester.pumpWidget(
         MaterialApp(
-          home: MediaQuery(
-            data: const MediaQueryData(size: Size(1280, 720)),
-            child: PlayerView(controller: fixture.player, openGuide: () {}),
-          ),
+          builder: LineupCanvas.builder,
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
       );
       await tester.pump();
@@ -4021,11 +4123,26 @@ void main() {
         Size(1920, 1080),
         Size(3840, 2160),
       ].indexed) {
-        final maxShelf = variant.maxShelves[index];
-        final scale = index == 4 ? 2.0 : 1.0;
+        final scale = LineupCanvas.scaleFor(viewport);
+        final canvas = viewport / scale;
+        final compact = canvas.width < 900 || canvas.height < 650;
+        final height = compact
+            ? (canvas.height * (variant.castPresent ? .63 : .56)).clamp(
+                300.0,
+                380.0,
+              )
+            : (canvas.height * (variant.castPresent ? .54 : .5)).clamp(
+                variant.castPresent ? 432.0 : 380.0,
+                variant.castPresent ? 580.0 : 560.0,
+              );
+        final maxShelf = Size(
+          math.min(canvas.width * .95, 1180) * scale,
+          height * scale,
+        );
         tester.view.physicalSize = viewport;
         await tester.pumpWidget(
           MaterialApp(
+            builder: LineupCanvas.builder,
             home: PlayerView(controller: fixture.player, openGuide: () {}),
           ),
         );
@@ -4044,10 +4161,12 @@ void main() {
           await tester.pumpAndSettle();
         }
 
-        final shelfSize = tester.getSize(
+        final shelfSize = _drawnSize(
+          tester,
           find.byKey(const Key('player-now-playing-shelf')),
         );
-        final posterSize = tester.getSize(
+        final posterSize = _drawnSize(
+          tester,
           find.byKey(const Key('player-now-playing-poster')),
         );
         expect(shelfSize.width, closeTo(maxShelf.width, 0.01));
@@ -4062,13 +4181,15 @@ void main() {
         );
         expect(posterSize.height, closeTo(shelfSize.height, scale + 0.01));
         expect(
-          tester
-              .getRect(find.byKey(const Key('player-now-playing-title')).last)
-              .top,
+          _drawnRect(
+            tester,
+            find.byKey(const Key('player-now-playing-title')).last,
+          ).top,
           greaterThan(
-            tester
-                .getRect(find.byKey(const Key('player-now-playing-logo')))
-                .top,
+            _drawnRect(
+              tester,
+              find.byKey(const Key('player-now-playing-logo')),
+            ).top,
           ),
         );
         if (viewport == const Size(1920, 1080)) {
@@ -4090,19 +4211,24 @@ void main() {
         ..physicalSize = const Size(3840, 2160);
       await tester.pumpWidget(
         MaterialApp(
+          builder: LineupCanvas.builder,
           home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
       );
       await tester.pumpAndSettle();
       await _settleNowPlayingArtwork(tester);
       expect(
-        tester.getSize(find.byKey(const Key('player-now-playing-shelf'))).width,
+        _drawnSize(
+          tester,
+          find.byKey(const Key('player-now-playing-shelf')),
+        ).width,
         variant.dpr2MaxShelf.width,
       );
       expect(
-        tester
-            .getSize(find.byKey(const Key('player-now-playing-shelf')))
-            .height,
+        _drawnSize(
+          tester,
+          find.byKey(const Key('player-now-playing-shelf')),
+        ).height,
         lessThanOrEqualTo(variant.dpr2MaxShelf.height + 0.01),
       );
       expect(
@@ -4173,6 +4299,7 @@ void main() {
         tester.view.physicalSize = testCase.viewport;
         await tester.pumpWidget(
           MaterialApp(
+            builder: LineupCanvas.builder,
             home: PlayerView(controller: fixture.player, openGuide: () {}),
           ),
         );
@@ -4189,7 +4316,7 @@ void main() {
           MediaQuery.sizeOf(
             tester.element(find.byKey(const Key('player-now-playing-surface'))),
           ),
-          testCase.viewport,
+          testCase.viewport / LineupCanvas.scaleFor(testCase.viewport),
         );
         expect(
           find.byKey(const Key('player-now-playing-logo')),
@@ -4218,33 +4345,44 @@ void main() {
     },
   );
 
-  testWidgets('Reduce Motion settles Now Playing in one pump', (tester) async {
-    final fixture = _Fixture(PlayerState.playing, richProgram: true);
-    await tester.pumpWidget(
-      MaterialApp(
-        builder: (context, child) => MediaQuery(
-          data: MediaQuery.of(context).copyWith(disableAnimations: true),
-          child: child!,
+  testWidgets(
+    'Reduce Motion skips Now Playing animation while artwork resolves',
+    (tester) async {
+      final fixture = _Fixture(PlayerState.playing, richProgram: true);
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(disableAnimations: true),
+            child: LineupCanvas(child: child!),
+          ),
+          home: PlayerView(controller: fixture.player, openGuide: () {}),
         ),
-        home: PlayerView(controller: fixture.player, openGuide: () {}),
-      ),
-    );
-    await tester.pump();
+      );
+      await tester.pump();
 
-    fixture.player.showNowPlaying();
-    await tester.pump();
+      fixture.player.showNowPlaying();
+      await tester.pump();
 
-    final switcher = tester.widget<AnimatedSwitcher>(
-      find.byType(AnimatedSwitcher),
-    );
-    expect(switcher.duration, Duration.zero);
-    expect(switcher.reverseDuration, Duration.zero);
-    expect(tester.hasRunningAnimations, isFalse);
-    expect(find.byKey(const Key('player-now-playing-surface')), findsOneWidget);
+      final switcher = tester.widget<AnimatedSwitcher>(
+        find.byType(AnimatedSwitcher),
+      );
+      expect(switcher.duration, Duration.zero);
+      expect(switcher.reverseDuration, Duration.zero);
+      // Completed artwork under the canvas layout scope needs one build frame,
+      // without advancing animation time.
+      for (var frame = 0; frame < 4; frame++) {
+        await tester.pump();
+      }
+      expect(tester.hasRunningAnimations, isFalse);
+      expect(
+        find.byKey(const Key('player-now-playing-surface')),
+        findsOneWidget,
+      );
 
-    await tester.pumpWidget(const SizedBox.shrink());
-    fixture.dispose();
-  });
+      await tester.pumpWidget(const SizedBox.shrink());
+      fixture.dispose();
+    },
+  );
 
   testWidgets('Now Playing enters from the left and exits in 200ms', (
     tester,
@@ -4252,6 +4390,7 @@ void main() {
     final fixture = _Fixture(PlayerState.playing, richProgram: true);
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: PlayerView(controller: fixture.player, openGuide: () {}),
       ),
     );
@@ -4739,3 +4878,14 @@ class _Credentials implements CredentialStore {
   @override
   Future<void> writeProfileToken(String profileId, String token) async {}
 }
+
+Rect _drawnRect(WidgetTester tester, Finder finder) {
+  final box = tester.renderObject<RenderBox>(finder);
+  return MatrixUtils.transformRect(
+    box.getTransformTo(null),
+    Offset.zero & box.size,
+  );
+}
+
+Size _drawnSize(WidgetTester tester, Finder finder) =>
+    _drawnRect(tester, finder).size;

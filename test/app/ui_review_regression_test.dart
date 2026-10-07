@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lineup_desktop/ui/lineup_canvas.dart';
 import 'package:lineup_desktop/app/channel_air_check.dart';
 import 'package:lineup_desktop/app/channel_setup_view.dart';
 import 'package:lineup_desktop/app/channel_studio_view.dart';
@@ -26,6 +27,7 @@ void main() {
   ) async {
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: LineupSelectionCard(
           selected: true,
           onPressed: () {},
@@ -50,7 +52,8 @@ void main() {
     );
 
     await tester.pumpWidget(
-      const MaterialApp(
+      MaterialApp(
+        builder: LineupCanvas.builder,
         home: LineupSelectionCard(
           selected: false,
           onPressed: null,
@@ -80,6 +83,7 @@ void main() {
   ) async {
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         theme: LineupTheme.forName(LineupThemeName.swiss),
         home: const Column(
           children: [
@@ -136,6 +140,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: Align(
           child: SizedBox(
             width: 800,
@@ -337,6 +342,7 @@ void main() {
     addTearDown(controller.dispose);
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: Builder(
           builder: (context) => TextButton(
             onPressed: () => showDialog<void>(
@@ -674,7 +680,10 @@ void main() {
       ];
     addTearDown(controller.dispose);
     await tester.pumpWidget(
-      MaterialApp(home: UpstreamChannelSetupView(controller: controller)),
+      MaterialApp(
+        builder: LineupCanvas.builder,
+        home: UpstreamChannelSetupView(controller: controller),
+      ),
     );
     await tester.pumpAndSettle();
 
@@ -707,7 +716,10 @@ void main() {
       ];
     addTearDown(controller.dispose);
     await tester.pumpWidget(
-      MaterialApp(home: UpstreamChannelSetupView(controller: controller)),
+      MaterialApp(
+        builder: LineupCanvas.builder,
+        home: UpstreamChannelSetupView(controller: controller),
+      ),
     );
     await tester.pumpAndSettle();
 
@@ -738,7 +750,10 @@ void main() {
       ];
     addTearDown(controller.dispose);
     await tester.pumpWidget(
-      MaterialApp(home: UpstreamChannelSetupView(controller: controller)),
+      MaterialApp(
+        builder: LineupCanvas.builder,
+        home: UpstreamChannelSetupView(controller: controller),
+      ),
     );
     await tester.pumpAndSettle();
     await tester.tap(find.text('Scan selected libraries'));
@@ -817,7 +832,10 @@ void main() {
       addTearDown(controller.dispose);
 
       await tester.pumpWidget(
-        MaterialApp(home: UpstreamChannelSetupView(controller: controller)),
+        MaterialApp(
+          builder: LineupCanvas.builder,
+          home: UpstreamChannelSetupView(controller: controller),
+        ),
       );
       await tester.pumpAndSettle();
       Focus.of(tester.element(find.text('Select all'))).requestFocus();
@@ -845,6 +863,7 @@ void main() {
     addTearDown(outsideFocus.dispose);
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: Column(
           children: [
             TextButton(
@@ -884,6 +903,7 @@ Future<void> _openChannelEditor(
 ) async {
   await tester.pumpWidget(
     MaterialApp(
+      builder: LineupCanvas.builder,
       home: Builder(
         builder: (context) => TextButton(
           onPressed: () => showDialog<void>(

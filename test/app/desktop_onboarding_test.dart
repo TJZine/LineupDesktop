@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lineup_desktop/ui/lineup_canvas.dart';
 import 'package:lineup_desktop/app/lineup_controller.dart';
 import 'package:lineup_desktop/app/onboarding_view.dart';
 import 'package:lineup_desktop/plex/plex_models.dart';
@@ -13,6 +14,60 @@ import 'package:lineup_desktop/ui/app_theme.dart';
 import '../support/ui_fixture.dart';
 
 void main() {
+  testWidgets(
+    'onboarding reflows at the two floor-constrained desktop windows',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetPhysicalSize);
+      for (final window in const [Size(1280, 720), Size(1366, 768)]) {
+        tester.view.physicalSize = window;
+        for (final stage in [
+          SetupStage.welcome,
+          SetupStage.linking,
+          SetupStage.profiles,
+          SetupStage.servers,
+        ]) {
+          final controller = FixtureController()
+            ..settings = const LineupSettings(reduceMotion: true)
+            ..stage = stage
+            ..profiles = const [
+              PlexHomeUser(
+                id: 'guest',
+                name: 'Synthetic guest profile',
+                protected: false,
+              ),
+            ]
+            ..servers = const [
+              PlexServer(
+                id: 'server',
+                name: 'Synthetic local server',
+                connections: [],
+              ),
+            ];
+          await tester.pumpWidget(
+            MaterialApp(
+              builder: LineupCanvas.builder,
+              home: UpstreamOnboardingView(
+                controller: controller,
+                onLogout: () async {},
+                openBrowser: () async {},
+              ),
+            ),
+          );
+          await tester.pump();
+          expect(
+            find.byKey(const ValueKey('onboarding-content')),
+            findsOneWidget,
+          );
+          expect(tester.takeException(), isNull, reason: '$window $stage');
+          await tester.pumpWidget(const SizedBox.shrink());
+          controller.dispose();
+        }
+      }
+    },
+  );
+
   Future<void> show(
     WidgetTester tester,
     FixtureController controller, {
@@ -20,6 +75,7 @@ void main() {
   }) async {
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         theme: LineupTheme.forName(
           LineupThemeName.emberSteel,
           largeFocusIndicators: false,
@@ -80,6 +136,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
+        builder: LineupCanvas.builder,
         home: Align(
           alignment: Alignment.topLeft,
           child: SizedBox(

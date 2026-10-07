@@ -34,113 +34,91 @@ class GuideLayoutPolicy {
   }) {
     final width = size.width.isFinite ? size.width.clamp(0, 10000) : 0.0;
     final height = size.height.isFinite ? size.height.clamp(0, 10000) : 0.0;
-    final scale = LineupLayout.scaleFor(size);
-    final compact = width < LineupLayout.expandedNavigation || height < 900;
+    final compact = width < LineupLayout.expandedNavigation;
     final padding = horizontalPadding(size);
     const minimumRows = 5;
-    final targetPictureHeight = height * 0.3;
     final chromeHeight =
         padding * 2 +
         toolbarHeight(size, textScale: textScale) +
-        2 * scale +
-        8 * scale +
+        10 +
         controlsHeight(size, textScale: textScale) +
-        38 * scale * textScale;
-    final availableShowcaseHeight =
-        (height - chromeHeight - 56 * scale * textScale).clamp(
-          0.0,
-          double.infinity,
-        );
-    var showcaseHeight = targetPictureHeight.clamp(
-      0.0,
-      availableShowcaseHeight,
+        38 * textScale;
+    final minimumRowHeight = 58 * textScale;
+    // Extra height belongs to the information area; the five reference rows
+    // retain their geometry. Below the root floor, reserve navigable rows first.
+    final referenceRowHeight = math.max(
+      minimumRowHeight,
+      (1080 - chromeHeight - 324) / minimumRows,
     );
-    var pictureWidth = showcaseHeight * 16 / 9;
-    if (hasPicture) {
-      final minimumDetailsWidth = (compact ? 300.0 : 360.0) * scale;
-      final widthBudget =
-          width - padding * 2 - 12 * scale - minimumDetailsWidth;
-      pictureWidth = pictureWidth.clamp(
-        0.0,
-        widthBudget.clamp(0.0, 2000 * scale),
-      );
-      showcaseHeight = pictureWidth * 9 / 16;
-    }
-    // At 2560x1440, exact division can render as 4.9999 rows and floor to
-    // four in the viewport invariant; keep the scaled five-row composition.
-    final rowHeight =
-        ((height - chromeHeight - showcaseHeight) / minimumRows -
-                (scale > 1 ? 0.01 : 0))
-            .clamp(58 * scale * textScale, double.infinity)
-            .toDouble();
+    final available = math.max(0.0, height - chromeHeight);
+    // Reserve a subpixel tail so floating point viewport division retains
+    // the fifth row after painting through the root transform.
+    final rowHeight = math.max(
+      minimumRowHeight,
+      math.min(referenceRowHeight, available * 0.7 / minimumRows) - 0.001,
+    );
+    final showcaseHeight = math.max(
+      0.0,
+      available - rowHeight * minimumRows - 0.01,
+    );
+    final pictureHeight = math.min(
+      324.0,
+      math.max(0.0, available - rowHeight * minimumRows),
+    );
+    final widthBudget = math.max(0.0, width - padding * 2 - 12 - 360);
+    final pictureWidth = hasPicture
+        ? math.min(pictureHeight * 16 / 9, widthBudget)
+        : pictureHeight * 16 / 9;
     return GuideLayoutPolicy._(
       compact: compact,
       padding: padding,
       channelRailWidth:
-          (compact ? 176 : (width >= 1800 ? 300 : 208)) *
-          scale *
+          (width >= 1800
+              ? 300
+              : width >= 1100
+              ? 208
+              : 176) *
           textScale.clamp(1, 1.5),
       showcaseHeight: showcaseHeight,
       pictureWidth: pictureWidth,
       rowHeight: rowHeight,
       minimumRows: minimumRows,
-      showSecondaryMetadata: showcaseHeight >= 180 * scale * textScale,
-      showSummary: showcaseHeight >= 210 * scale * textScale,
+      showSecondaryMetadata: showcaseHeight >= 180 * textScale,
+      showSummary: showcaseHeight >= 210 * textScale,
     );
   }
 
   static double toolbarHeight(Size size, {double textScale = 1}) {
-    final scale = LineupLayout.scaleFor(size);
-    final compact =
-        size.width < LineupLayout.expandedNavigation || size.height < 900;
-    final wordmarkSize = (compact ? 22.0 : 30.0) * scale;
-    final enlargedContent = wordmarkSize * textScale * 1.2 + 16 * scale;
-    return math.max(56 * scale, enlargedContent);
+    final wordmarkSize = 30.0;
+    final enlargedContent = wordmarkSize * textScale * 1.2 + 16;
+    return math.max(56, enlargedContent);
   }
 
-  static double horizontalPadding(Size size) {
-    final width = size.width.isFinite ? size.width.clamp(0, 10000) : 0.0;
-    final height = size.height.isFinite ? size.height.clamp(0, 10000) : 0.0;
-    final scale = LineupLayout.scaleFor(size);
-    return (width < LineupLayout.expandedNavigation || height < 720
-            ? 12.0
-            : 20.0) *
-        scale;
-  }
+  static double horizontalPadding(Size size) => 20;
 
   static double availableWidth(Size size) =>
       (size.width - horizontalPadding(size) * 2).clamp(0.0, double.infinity);
 
   static double controlHeight(Size size, {double textScale = 1}) {
-    final scale = LineupLayout.scaleFor(size);
-    final compact =
-        size.width < LineupLayout.expandedNavigation || size.height < 900;
-    final fontSize = (compact ? 14.0 : 18.0) * scale;
-    final enlargedContent = fontSize * textScale * 1.4 + 16 * scale;
-    return math.max(48 * scale, enlargedContent);
+    final fontSize = 18.0;
+    final enlargedContent = fontSize * textScale * 1.4 + 16;
+    return math.max(48, enlargedContent);
   }
 
   static bool controlsWrapForWidth(
     double availableWidth, {
     double textScale = 1,
-    double scale = 1,
-  }) => availableWidth < 1000 * scale * textScale;
+  }) => availableWidth < 1000 * textScale;
 
   static bool controlsWrap(Size size, {double textScale = 1}) {
-    final scale = LineupLayout.scaleFor(size);
-    return controlsWrapForWidth(
-      availableWidth(size),
-      textScale: textScale,
-      scale: scale,
-    );
+    return controlsWrapForWidth(availableWidth(size), textScale: textScale);
   }
 
   static double controlsHeight(Size size, {double textScale = 1}) {
-    final scale = LineupLayout.scaleFor(size);
     final height = controlHeight(size, textScale: textScale);
     return controlsWrap(size, textScale: textScale)
         ? height * 2
-        : math.max(56 * scale, height);
+        : math.max(56, height);
   }
 
   final bool compact;
@@ -485,6 +463,26 @@ class _GuideViewState extends State<GuideView>
                       .inMicroseconds;
               return Stack(
                 children: [
+                  if (fraction >= 0 && fraction < 1)
+                    Positioned(
+                      left:
+                          policy.channelRailWidth +
+                          _guideTimelineGutter +
+                          timelineWidth * fraction,
+                      top: 0,
+                      bottom: 0,
+                      child: Semantics(
+                        container: true,
+                        label: 'Current time',
+                        child: IgnorePointer(
+                          child: Container(
+                            key: const Key('guide-now-line'),
+                            width: 2,
+                            color: LineupTheme.of(context).liveAccent,
+                          ),
+                        ),
+                      ),
+                    ),
                   Column(
                     children: [
                       _TimeHeader(
@@ -513,9 +511,6 @@ class _GuideViewState extends State<GuideView>
                                   showProvenance:
                                       policy.rowHeight >=
                                       78 *
-                                          LineupLayout.scaleFor(
-                                            MediaQuery.sizeOf(context),
-                                          ) *
                                           MediaQuery.textScalerOf(context)
                                               .scale(1),
                                   onTune: widget.onTune,
@@ -526,30 +521,6 @@ class _GuideViewState extends State<GuideView>
                       ),
                     ],
                   ),
-                  if (fraction >= 0 && fraction < 1)
-                    Positioned(
-                      left:
-                          policy.channelRailWidth +
-                          _guideTimelineGutter +
-                          timelineWidth * fraction,
-                      top: 0,
-                      bottom: 0,
-                      child: Semantics(
-                        container: true,
-                        label: 'Current time',
-                        child: IgnorePointer(
-                          child: Container(
-                            key: const Key('guide-now-line'),
-                            width:
-                                2 *
-                                LineupLayout.scaleFor(
-                                  MediaQuery.sizeOf(context),
-                                ),
-                            color: LineupTheme.of(context).liveAccent,
-                          ),
-                        ),
-                      ),
-                    ),
                 ],
               );
             },
@@ -578,22 +549,16 @@ class _GuideViewState extends State<GuideView>
               textScale: MediaQuery.textScalerOf(context).scale(1),
             );
             final schedule = _schedule(policy, channels);
-            final scaledTheme = Theme.of(context).copyWith(
-              textTheme: Theme.of(context).textTheme
-                  .apply(fontSizeFactor: LineupLayout.scaleFor(outer.biggest)),
-            );
-            return Theme(
-              data: scaledTheme,
-              child: DefaultTextStyle(
-                style: scaledTheme.textTheme.bodyMedium!,
-                child: _ClassicGuideSurface(
-                  color: roles.deepBackground,
-                  padding: policy.padding,
-                  showcaseHeight: policy.showcaseHeight,
-                  toolbar: _toolbar(policy),
-                  showcase: _showcase(policy),
-                  body: schedule,
-                ),
+            final theme = Theme.of(context);
+            return DefaultTextStyle(
+              style: theme.textTheme.bodyMedium!,
+              child: _ClassicGuideSurface(
+                color: roles.deepBackground,
+                padding: policy.padding,
+                showcaseHeight: policy.showcaseHeight,
+                toolbar: _toolbar(policy),
+                showcase: _showcase(policy),
+                body: schedule,
               ),
             );
           },
@@ -626,17 +591,8 @@ class _ClassicGuideSurface extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
-    final textScale = MediaQuery.textScalerOf(context).scale(1);
-    final enlarged = scale > 1 || textScale > 1;
-    final overlap = enlarged ? _paintOverlap * scale : 0.0;
+    const overlap = _paintOverlap;
     Widget sideFill({required bool left}) {
-      if (overlap == 0) {
-        return ColoredBox(
-          color: color,
-          child: SizedBox(width: padding),
-        );
-      }
       return SizedBox(
         width: padding,
         child: Stack(
@@ -659,41 +615,28 @@ class _ClassicGuideSurface extends StatelessWidget {
 
     return Column(
       children: [
-        if (enlarged)
-          ColoredBox(
-            color: color,
-            child: Column(
-              children: [
-                Padding(
-                  padding: EdgeInsets.fromLTRB(padding, padding, padding, 0),
-                  child: toolbar,
-                ),
-                SizedBox(width: double.infinity, height: 2 * scale),
-              ],
-            ),
-          )
-        else ...[
-          ColoredBox(
-            color: color,
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(padding, padding, padding, 0),
-              child: toolbar,
-            ),
+        ColoredBox(
+          color: color,
+          child: Column(
+            children: [
+              Padding(
+                padding: EdgeInsets.fromLTRB(padding, padding, padding, 0),
+                child: toolbar,
+              ),
+              const SizedBox(width: double.infinity, height: 2),
+            ],
           ),
-          ColoredBox(
-            color: color,
-            child: const SizedBox(width: double.infinity, height: 2),
-          ),
-        ],
+        ),
         if (showcase != null)
           SizedBox(
+            key: const Key('guide-information-area'),
             height: showcaseHeight,
             child: OverflowBox(
               alignment: Alignment.center,
-              minHeight: showcaseHeight + _paintOverlap * scale,
-              maxHeight: showcaseHeight + _paintOverlap * scale,
+              minHeight: showcaseHeight + _paintOverlap,
+              maxHeight: showcaseHeight + _paintOverlap,
               child: SizedBox(
-                height: showcaseHeight + _paintOverlap * scale,
+                height: showcaseHeight + _paintOverlap,
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -711,7 +654,7 @@ class _ClassicGuideSurface extends StatelessWidget {
             child: Padding(
               padding: EdgeInsets.fromLTRB(
                 padding,
-                showcase == null ? 0 : 8 * scale,
+                showcase == null ? 0 : 8,
                 padding,
                 padding,
               ),
@@ -743,9 +686,8 @@ class _Toolbar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.sizeOf(context);
-    final scale = LineupLayout.scaleFor(size);
     final textScale = MediaQuery.textScalerOf(context).scale(1);
-    final enlargedControls = scale > 1 || textScale > 1;
+    final enlargedControls = textScale > 1;
     final roles = LineupTheme.of(context);
     final now = controller.now.toLocal();
     final localizations = MaterialLocalizations.of(context);
@@ -760,26 +702,20 @@ class _Toolbar extends StatelessWidget {
     final showDate = size.width >= 1100;
     final wordmarkStyle = TextStyle(
       fontFamily: 'Arial',
-      fontSize: (compact ? 22 : 30) * scale,
+      fontSize: 30.0,
       fontWeight: FontWeight.w400,
-      letterSpacing: 3 * scale,
+      letterSpacing: 3,
       color: roles.primaryText,
     );
-    final sectionStyle = TextStyle(
-      fontSize: (compact ? 16 : 20) * scale,
-      color: roles.primaryText,
-    );
+    final sectionStyle = TextStyle(fontSize: 20.0, color: roles.primaryText);
     final supportingStyle = TextStyle(
-      fontSize: (compact ? 14 : 18) * scale,
+      fontSize: 18.0,
       color: roles.secondaryText,
     );
     final menuButtonStyle = enlargedControls
         ? TextButton.styleFrom(
-            minimumSize: Size(48 * scale, 48 * scale),
-            padding: EdgeInsets.symmetric(
-              horizontal: 12 * scale,
-              vertical: 8 * scale,
-            ),
+            minimumSize: Size(48, 48),
+            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           )
         : null;
     return Container(
@@ -802,10 +738,10 @@ class _Toolbar extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text('LINEUP', style: wordmarkStyle),
-                      SizedBox(width: 4 * scale),
+                      SizedBox(width: 4),
                       Icon(
                         Icons.expand_more,
-                        size: (compact ? 18 : 22) * scale,
+                        size: 22.0,
                         color: roles.secondaryText,
                       ),
                     ],
@@ -815,10 +751,10 @@ class _Toolbar extends StatelessWidget {
             )
           else
             Text('LINEUP', style: wordmarkStyle),
-          SizedBox(width: (compact ? 14 : 20) * scale),
+          SizedBox(width: 20.0),
           Text('Guide', style: sectionStyle),
           if (showPlaying) ...[
-            SizedBox(width: (compact ? 12 : 20) * scale),
+            SizedBox(width: 20.0),
             Expanded(
               child: Text(
                 '${tunedChannel.number} · ${tunedChannel.name}${tunedProgram == null ? '' : ' — ${tunedProgram.scheduled.item.title}'}',
@@ -837,14 +773,14 @@ class _Toolbar extends StatelessWidget {
               maxLines: 1,
               style: supportingStyle.copyWith(color: roles.mutedText),
             ),
-          SizedBox(width: 8 * scale),
+          SizedBox(width: 8),
           IconButton(
             tooltip: 'Close Guide',
             onPressed: onClose,
             constraints: enlargedControls
-                ? BoxConstraints(minWidth: 48 * scale, minHeight: 48 * scale)
+                ? BoxConstraints(minWidth: 48, minHeight: 48)
                 : null,
-            iconSize: 24 * scale,
+            iconSize: 24,
             icon: const Icon(Icons.close),
           ),
         ],
@@ -871,34 +807,22 @@ class _GuideControls extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.sizeOf(context);
-    final scale = LineupLayout.scaleFor(size);
     final textScale = MediaQuery.textScalerOf(context).scale(1);
-    final compact =
-        size.width < LineupLayout.expandedNavigation || size.height < 900;
-    final controlStyle = Theme.of(context).textTheme.bodyMedium!.copyWith(
-      fontSize: (compact ? 14 : 18) * scale,
-      color: LineupTheme.of(context).secondaryText,
-    );
+
+    final controlStyle = Theme.of(context).textTheme.bodyMedium!
+        .copyWith(fontSize: 18.0, color: LineupTheme.of(context).secondaryText);
     final controlHeight = GuideLayoutPolicy.controlHeight(
       size,
       textScale: textScale,
     );
-    final enlargedControls = scale > 1 || textScale > 1;
+    final enlargedControls = textScale > 1;
     final roles = LineupTheme.of(context);
     final libraryIds = controller.availableLibraryIds.toList()..sort();
     final selectedLibrary = controller.libraryFilterId;
     final selectedLibraryName = selectedLibrary == null
         ? null
         : _libraryName(controller, selectedLibrary);
-    Widget menuItemContent(Widget child) => scale > 1
-        ? ConstrainedBox(
-            constraints: BoxConstraints(minHeight: 48 * scale),
-            child: Padding(
-              padding: EdgeInsets.symmetric(vertical: 8 * scale),
-              child: child,
-            ),
-          )
-        : child;
+    Widget menuItemContent(Widget child) => child;
     final picker = SizedBox(
       width: railWidth,
       height: controlHeight,
@@ -908,8 +832,8 @@ class _GuideControls extends StatelessWidget {
           style: controlStyle,
           isExpanded: true,
           isDense: enlargedControls,
-          padding: EdgeInsets.symmetric(horizontal: 10 * scale),
-          iconSize: 24 * scale,
+          padding: EdgeInsets.symmetric(horizontal: 10),
+          iconSize: 24,
           itemHeight: enlargedControls ? null : controlHeight,
           value: selectedLibrary,
           hint: Text(selectedLibrary == null ? 'All libraries' : 'Libraries'),
@@ -949,22 +873,13 @@ class _GuideControls extends StatelessWidget {
                   selectedLibraryName,
                   key: const Key('guide-active-library-label'),
                   softWrap: true,
-                  style: TextStyle(
-                    fontSize: (compact ? 14 : 16) * scale,
-                    color: roles.mutedText,
-                  ),
+                  style: TextStyle(fontSize: 16.0, color: roles.mutedText),
                 ),
               ),
               IconButton(
                 tooltip: 'Remove library filter',
                 onPressed: () => controller.setLibraryFilter(null),
-                constraints: scale > 1
-                    ? BoxConstraints(
-                        minWidth: 48 * scale,
-                        minHeight: 48 * scale,
-                      )
-                    : null,
-                iconSize: 17 * scale,
+                iconSize: 17,
                 icon: const Icon(Icons.close),
               ),
             ],
@@ -990,32 +905,23 @@ class _GuideControls extends StatelessWidget {
                   : IconButton(
                       tooltip: 'Clear search',
                       onPressed: searchController.clear,
-                      constraints: scale > 1
-                          ? BoxConstraints(
-                              minWidth: 48 * scale,
-                              minHeight: 48 * scale,
-                            )
-                          : null,
-                      icon: Icon(Icons.close, size: 17 * scale),
+                      icon: Icon(Icons.close, size: 17),
                     ),
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(6 * scale),
+                borderRadius: BorderRadius.circular(6),
                 borderSide: BorderSide(color: roles.subtleBorder),
               ),
               enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(6 * scale),
+                borderRadius: BorderRadius.circular(6),
                 borderSide: BorderSide(color: roles.subtleBorder),
               ),
               focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(6 * scale),
-                borderSide: BorderSide(
-                  color: roles.focusBorder,
-                  width: 2 * scale,
-                ),
+                borderRadius: BorderRadius.circular(6),
+                borderSide: BorderSide(color: roles.focusBorder, width: 2),
               ),
               contentPadding: EdgeInsets.symmetric(
-                horizontal: 14 * scale,
-                vertical: 12 * scale,
+                horizontal: 14,
+                vertical: 12,
               ),
             ),
           ),
@@ -1031,10 +937,7 @@ class _GuideControls extends StatelessWidget {
           onPressed: controller.canBrowseEarlier
               ? () => controller.moveWindow(-1)
               : null,
-          constraints: scale > 1
-              ? BoxConstraints(minWidth: 48 * scale, minHeight: 48 * scale)
-              : null,
-          iconSize: 24 * scale,
+          iconSize: 24,
           icon: const Icon(Icons.chevron_left),
         ),
         TextButton(
@@ -1042,12 +945,9 @@ class _GuideControls extends StatelessWidget {
           style: TextButton.styleFrom(
             textStyle: controlStyle,
             foregroundColor: roles.secondaryText,
-            minimumSize: enlargedControls ? Size(0, 48 * scale) : null,
+            minimumSize: enlargedControls ? Size(0, 48) : null,
             padding: enlargedControls
-                ? EdgeInsets.symmetric(
-                    horizontal: 12 * scale,
-                    vertical: 8 * scale,
-                  )
+                ? EdgeInsets.symmetric(horizontal: 12, vertical: 8)
                 : null,
           ),
           child: const Text('Now'),
@@ -1056,23 +956,18 @@ class _GuideControls extends StatelessWidget {
           key: const Key('guide-later'),
           tooltip: 'Later by 30 minutes',
           onPressed: () => controller.moveWindow(1),
-          constraints: scale > 1
-              ? BoxConstraints(minWidth: 48 * scale, minHeight: 48 * scale)
-              : null,
-          iconSize: 24 * scale,
+          iconSize: 24,
           icon: const Icon(Icons.chevron_right),
         ),
-        SizedBox(width: 8 * scale),
+        SizedBox(width: 8),
         DropdownButtonHideUnderline(
           child: DropdownButton<int>(
             key: const Key('guide-hours'),
             style: controlStyle,
             isDense: enlargedControls,
-            iconSize: 24 * scale,
+            iconSize: 24,
             itemHeight: enlargedControls ? null : controlHeight,
-            padding: scale > 1
-                ? EdgeInsets.symmetric(horizontal: 8 * scale)
-                : null,
+            padding: null,
             value:
                 LineupSettings.guideHoursOptions.contains(controller.guideHours)
                 ? controller.guideHours
@@ -1103,7 +998,6 @@ class _GuideControls extends StatelessWidget {
         if (GuideLayoutPolicy.controlsWrapForWidth(
           constraints.maxWidth,
           textScale: textScale,
-          scale: scale,
         )) {
           return Column(
             mainAxisSize: MainAxisSize.min,
@@ -1111,14 +1005,14 @@ class _GuideControls extends StatelessWidget {
               Row(
                 children: [
                   picker,
-                  SizedBox(width: 8 * scale),
+                  SizedBox(width: 8),
                   Expanded(child: label),
                 ],
               ),
               Row(
                 children: [
                   Expanded(child: search(double.infinity)),
-                  SizedBox(width: 8 * scale),
+                  SizedBox(width: 8),
                   navigation,
                 ],
               ),
@@ -1135,10 +1029,10 @@ class _GuideControls extends StatelessWidget {
           child: Row(
             children: [
               picker,
-              SizedBox(width: 8 * scale),
+              SizedBox(width: 8),
               Expanded(child: label),
-              search((compact ? 260 : 340) * scale),
-              SizedBox(width: 8 * scale),
+              search(340.0),
+              SizedBox(width: 8),
               navigation,
             ],
           ),
@@ -1171,8 +1065,7 @@ class _GuideShowcase extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
-    final radius = 12 * scale;
+    final double radius = 12;
     final pictureFrame = Stack(
       fit: StackFit.expand,
       children: [
@@ -1214,11 +1107,11 @@ class _GuideShowcase extends StatelessWidget {
             ),
           ),
           SizedBox(
-            width: 12 * scale,
+            width: 12,
             child: OverflowBox(
               alignment: Alignment.centerLeft,
-              minWidth: 13 * scale,
-              maxWidth: 13 * scale,
+              minWidth: 13,
+              maxWidth: 13,
               child: ColoredBox(color: LineupTheme.of(context).deepBackground),
             ),
           ),
@@ -1270,9 +1163,8 @@ class _TimeHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final slots = controller.guideHours * 2;
-    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
     final textScale = MediaQuery.textScalerOf(context).scale(1);
-    final headerHeight = 38 * scale * textScale;
+    final headerHeight = 38 * textScale;
     if (slots <= 0) return SizedBox(height: headerHeight);
     return SizedBox(
       height: headerHeight,
@@ -1281,7 +1173,7 @@ class _TimeHeader extends StatelessWidget {
           SizedBox(
             width: railWidth,
             child: Padding(
-              padding: EdgeInsets.only(left: 10 * scale),
+              padding: EdgeInsets.only(left: 10),
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
@@ -1299,13 +1191,14 @@ class _TimeHeader extends StatelessWidget {
             child: LayoutBuilder(
               builder: (context, constraints) {
                 final width = constraints.maxWidth;
-                if (!width.isFinite || width < 2 * scale) {
+                if (!width.isFinite || width < 2) {
                   return const SizedBox.shrink();
                 }
                 final slotWidth = width / slots;
-                final stride = (68 * scale * textScale / slotWidth)
-                    .ceil()
-                    .clamp(1, slots);
+                final stride = (68 * textScale / slotWidth).ceil().clamp(
+                  1,
+                  slots,
+                );
                 return Row(
                   children: [
                     for (var index = 0; index < slots; index++)
@@ -1321,7 +1214,7 @@ class _TimeHeader extends StatelessWidget {
                           ),
                           child: index % stride == 0
                               ? Padding(
-                                  padding: EdgeInsets.only(left: 12 * scale),
+                                  padding: EdgeInsets.only(left: 12),
                                   child: Align(
                                     alignment: Alignment.centerLeft,
                                     child: Builder(
@@ -1404,8 +1297,6 @@ class _GuideRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.sizeOf(context);
-    final scale = LineupLayout.scaleFor(size);
     final roles = LineupTheme.of(context);
     final focusedChannel = channel.id == controller.focusedChannelId;
     final focusChannelRail =
@@ -1425,7 +1316,7 @@ class _GuideRow extends StatelessWidget {
     }
 
     return Padding(
-      padding: EdgeInsets.symmetric(vertical: 2 * scale),
+      padding: EdgeInsets.symmetric(vertical: 2),
       child: Row(
         children: [
           Semantics(
@@ -1444,7 +1335,7 @@ class _GuideRow extends StatelessWidget {
                     ? Duration.zero
                     : const Duration(milliseconds: 90),
                 width: railWidth,
-                padding: EdgeInsets.symmetric(horizontal: 10 * scale),
+                padding: EdgeInsets.symmetric(horizontal: 10),
                 decoration: BoxDecoration(
                   color: focusChannelRail ? focusFill : roles.primarySurface,
                   border: Border(
@@ -1464,12 +1355,12 @@ class _GuideRow extends StatelessWidget {
                 child: Row(
                   children: [
                     SizedBox(
-                      width: railWidth < 180 * scale ? 40 * scale : 48 * scale,
+                      width: railWidth < 180 ? 40 : 48,
                       child: Text(
                         '${channel.number}',
                         style: TextStyle(
                           color: roles.secondaryText,
-                          fontSize: (showProvenance ? 28 : 22) * scale,
+                          fontSize: (showProvenance ? 28 : 22),
                           fontWeight: FontWeight.w500,
                           fontFeatures: const [ui.FontFeature.tabularFigures()],
                         ),
@@ -1480,7 +1371,7 @@ class _GuideRow extends StatelessWidget {
                         builder: (context, constraints) {
                           final nameStyle = DefaultTextStyle.of(context).style
                               .copyWith(
-                                fontSize: (showProvenance ? 20 : 16) * scale,
+                                fontSize: (showProvenance ? 20 : 16),
                                 fontWeight: FontWeight.w500,
                               );
                           final painter = TextPainter(
@@ -1498,7 +1389,7 @@ class _GuideRow extends StatelessWidget {
                           final supportStyle = DefaultTextStyle.of(context)
                               .style
                               .copyWith(
-                                fontSize: (showProvenance ? 16 : 14) * scale,
+                                fontSize: (showProvenance ? 16 : 14),
                                 color: roles.mutedText,
                               );
                           final supportHeight = _textHeight(
@@ -1542,10 +1433,10 @@ class _GuideRow extends StatelessWidget {
                                           children: [
                                             Icon(
                                               Icons.play_arrow_rounded,
-                                              size: 14 * scale,
+                                              size: 14,
                                               color: roles.secondaryText,
                                             ),
-                                            SizedBox(width: 4 * scale),
+                                            SizedBox(width: 4),
                                             Flexible(
                                               child: Text(
                                                 supportLabel,
@@ -1613,16 +1504,11 @@ class _Programs extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.sizeOf(context);
-    final scale = LineupLayout.scaleFor(size);
     final textScale = MediaQuery.textScalerOf(context).scale(1);
-    final retryStyle = scale > 1 || textScale > 1
+    final retryStyle = textScale > 1
         ? TextButton.styleFrom(
-            minimumSize: Size(0, 48 * scale),
-            padding: EdgeInsets.symmetric(
-              horizontal: 12 * scale,
-              vertical: 8 * scale,
-            ),
+            minimumSize: Size(0, 48),
+            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           )
         : null;
     if (data.state == GuideLoadState.loading ||
@@ -1643,7 +1529,7 @@ class _Programs extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             const Text('Schedule unavailable'),
-            SizedBox(width: 8 * scale),
+            SizedBox(width: 8),
             TextButton(
               onPressed: () => controller.retry(channel.id),
               style: retryStyle,
@@ -1685,7 +1571,7 @@ class _Programs extends StatelessWidget {
                 left: 0,
                 top: 0,
                 bottom: 0,
-                width: 14 * scale,
+                width: 14,
                 child: IgnorePointer(
                   child: DecoratedBox(
                     decoration: BoxDecoration(
@@ -1704,7 +1590,7 @@ class _Programs extends StatelessWidget {
                 right: 0,
                 top: 0,
                 bottom: 0,
-                width: 14 * scale,
+                width: 14,
                 child: IgnorePointer(
                   child: DecoratedBox(
                     decoration: BoxDecoration(
@@ -1745,6 +1631,14 @@ class _Programs extends StatelessWidget {
       focused: program.id == controller.focusedProgramId,
       selected: program.id == controller.selectedProgramId,
       current: current,
+      nowOffset: current
+          ? viewportWidth *
+                    now.difference(controller.windowStart).inMicroseconds /
+                    controller.windowEnd
+                        .difference(controller.windowStart)
+                        .inMicroseconds -
+                rect.left
+          : null,
       past: !program.scheduled.end.isAfter(now),
       left: rect.left,
       width: rect.width,
@@ -1796,17 +1690,15 @@ class _ScheduleStatus extends StatelessWidget {
                   ]).animate(pulse),
             child: Container(
               key: const Key('guide-schedule-activity-dot'),
-              width: 7 * LineupLayout.scaleFor(MediaQuery.sizeOf(context)),
-              height: 7 * LineupLayout.scaleFor(MediaQuery.sizeOf(context)),
+              width: 7,
+              height: 7,
               decoration: BoxDecoration(
                 color: LineupTheme.of(context).progressFill,
                 shape: BoxShape.circle,
               ),
             ),
           ),
-          SizedBox(
-            width: 9 * LineupLayout.scaleFor(MediaQuery.sizeOf(context)),
-          ),
+          SizedBox(width: 9),
           Text(label),
         ],
       ),
@@ -1846,6 +1738,7 @@ class _ProgramCell extends StatefulWidget {
     required this.reduceMotion,
     required this.largeFocusIndicators,
     this.onDoubleTap,
+    this.nowOffset,
     super.key,
   });
   final GuideProgram program;
@@ -1859,6 +1752,7 @@ class _ProgramCell extends StatefulWidget {
   final bool reduceMotion;
   final bool largeFocusIndicators;
   final VoidCallback? onDoubleTap;
+  final double? nowOffset;
 
   @override
   State<_ProgramCell> createState() => _ProgramCellState();
@@ -1869,7 +1763,6 @@ class _ProgramCellState extends State<_ProgramCell> {
 
   @override
   Widget build(BuildContext context) {
-    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
     final roles = LineupTheme.of(context);
     final focusFill = Color.alphaBlend(
       roles.focusBorder.withValues(alpha: 0.24),
@@ -1888,11 +1781,11 @@ class _ProgramCellState extends State<_ProgramCell> {
 
     return Positioned(
       left: widget.left,
-      width: widget.width.clamp(28 * scale, 2000 * scale),
+      width: widget.width.clamp(28, 2000),
       top: 0,
       bottom: 0,
       child: Padding(
-        padding: EdgeInsets.only(right: scale),
+        padding: EdgeInsets.only(right: 1.0),
         child: Semantics(
           button: true,
           selected: widget.selected,
@@ -1915,24 +1808,45 @@ class _ProgramCellState extends State<_ProgramCell> {
                 duration: widget.reduceMotion
                     ? Duration.zero
                     : const Duration(milliseconds: 90),
-                padding: EdgeInsets.symmetric(
-                  horizontal: 9 * scale,
-                  vertical: 6 * scale,
-                ),
+
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(5 * scale),
+                  borderRadius: BorderRadius.circular(5),
                   color: fill,
                   border: border,
                 ),
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    _ProgramCellContent(
-                      program: widget.program,
-                      focused: widget.focused,
-                      current: widget.current,
-                      past: widget.past,
-                      reduceMotion: widget.reduceMotion,
+                    if (widget.nowOffset case final x?
+                        when x >= 0 && x < widget.width)
+                      Positioned(
+                        left:
+                            x -
+                            border.dimensions
+                                .resolve(Directionality.of(context))
+                                .left,
+                        top: 0,
+                        bottom: 0,
+                        child: IgnorePointer(
+                          child: ColoredBox(
+                            key: const Key('guide-cell-now-line'),
+                            color: roles.liveAccent,
+                            child: const SizedBox(width: 2),
+                          ),
+                        ),
+                      ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 9,
+                        vertical: 6,
+                      ),
+                      child: _ProgramCellContent(
+                        program: widget.program,
+                        focused: widget.focused,
+                        current: widget.current,
+                        past: widget.past,
+                        reduceMotion: widget.reduceMotion,
+                      ),
                     ),
                   ],
                 ),
@@ -1971,16 +1885,12 @@ class _ProgramCellContent extends StatelessWidget {
         : null;
     return LayoutBuilder(
       builder: (context, constraints) {
-        final size = MediaQuery.sizeOf(context);
-        final scale = LineupLayout.scaleFor(size);
-        final compact =
-            size.width < LineupLayout.expandedNavigation || size.height < 900;
-        final gap = (compact ? 8 : 12) * scale;
+        final double gap = 12.0;
         final scaler = MediaQuery.textScalerOf(context);
         final direction = Directionality.of(context);
         final roles = LineupTheme.of(context);
         final titleStyle = Theme.of(context).textTheme.bodyMedium?.copyWith(
-          fontSize: (compact ? 16 : 22) * scale,
+          fontSize: 22.0,
           color: focused
               ? roles.focusedText
               : past
@@ -1989,18 +1899,18 @@ class _ProgramCellContent extends StatelessWidget {
           fontWeight: focused ? FontWeight.w600 : FontWeight.w500,
         );
         final secondaryStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
-          fontSize: (compact ? 14 : 18) * scale,
+          fontSize: 18.0,
           color: focused ? roles.secondaryText : roles.mutedText,
         );
         final tagStyle = Theme.of(context).textTheme.labelSmall?.copyWith(
-          fontSize: (compact ? 10 : 14) * scale,
+          fontSize: 14.0,
           color: focused ? roles.secondaryText : null,
           fontWeight: FontWeight.w500,
           letterSpacing: 0.2,
         );
         final time =
             '${_time(context, program.scheduled.start)}–${_time(context, program.scheduled.end)}';
-        final liveWidth = current ? 7 * scale + gap : 0.0;
+        final liveWidth = current ? 7 + gap : 0.0;
         final titleWidth = _textWidth(
           primaryTitle,
           titleStyle,
@@ -2024,61 +1934,63 @@ class _ProgramCellContent extends StatelessWidget {
             constraints.maxHeight >=
             _textHeight(titleStyle, scaler, direction) +
                 _textHeight(secondaryStyle, scaler, direction);
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: FocusedTicker(
-                    text: primaryTitle,
-                    focused: focused,
-                    reduceMotion: reduceMotion,
-                    style: titleStyle,
-                  ),
-                ),
-                if (showEpisode) ...[
-                  SizedBox(width: gap),
-                  Text(episodeCode, style: tagStyle),
-                ],
-                if (current) ...[
-                  SizedBox(width: gap),
-                  Container(
-                    width: 7 * scale,
-                    height: 7 * scale,
-                    decoration: BoxDecoration(
-                      color: LineupTheme.of(context).liveAccent,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-            if (showBottom && (episodeTitle != null || showTime))
+        return ClipRect(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
               Row(
                 children: [
-                  if (episodeTitle != null)
-                    Expanded(
-                      child: FocusedTicker(
-                        text: episodeTitle,
-                        focused: focused,
-                        reduceMotion: reduceMotion,
-                        style: secondaryStyle,
+                  Expanded(
+                    child: FocusedTicker(
+                      text: primaryTitle,
+                      focused: focused,
+                      reduceMotion: reduceMotion,
+                      style: titleStyle,
+                    ),
+                  ),
+                  if (showEpisode) ...[
+                    SizedBox(width: gap),
+                    Text(episodeCode, style: tagStyle),
+                  ],
+                  if (current) ...[
+                    SizedBox(width: gap),
+                    Container(
+                      width: 7,
+                      height: 7,
+                      decoration: BoxDecoration(
+                        color: LineupTheme.of(context).liveAccent,
+                        shape: BoxShape.circle,
                       ),
                     ),
-                  if (episodeTitle != null && showTime) SizedBox(width: gap),
-                  if (showTime)
-                    Text(
-                      time,
-                      maxLines: 1,
-                      style: secondaryStyle?.copyWith(
-                        fontFeatures: const [ui.FontFeature.tabularFigures()],
-                      ),
-                    ),
+                  ],
                 ],
               ),
-          ],
+              if (showBottom && (episodeTitle != null || showTime))
+                Row(
+                  children: [
+                    if (episodeTitle != null)
+                      Expanded(
+                        child: FocusedTicker(
+                          text: episodeTitle,
+                          focused: focused,
+                          reduceMotion: reduceMotion,
+                          style: secondaryStyle,
+                        ),
+                      ),
+                    if (episodeTitle != null && showTime) SizedBox(width: gap),
+                    if (showTime)
+                      Text(
+                        time,
+                        maxLines: 1,
+                        style: secondaryStyle?.copyWith(
+                          fontFeatures: const [ui.FontFeature.tabularFigures()],
+                        ),
+                      ),
+                  ],
+                ),
+            ],
+          ),
         );
       },
     );
@@ -2191,7 +2103,6 @@ class _DetailsState extends State<_Details> {
   @override
   Widget build(BuildContext context) {
     final controller = widget.controller;
-    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
     final channel = controller.focusedChannel;
     final focusedProgram = controller.focusedProgram;
     final selectedProgram = controller.selectedProgram;
@@ -2267,10 +2178,7 @@ class _DetailsState extends State<_Details> {
               ),
             ],
             Padding(
-              padding: EdgeInsets.symmetric(
-                horizontal: (widget.compact ? 14 : 20) * scale,
-                vertical: (widget.compact ? 10 : 14) * scale,
-              ),
+              padding: EdgeInsets.symmetric(horizontal: 20.0, vertical: 14.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -2316,7 +2224,6 @@ class _GuideDetailsPlaceholder extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scale = LineupLayout.scaleFor(MediaQuery.sizeOf(context));
     if (controller.channels.isEmpty && controller.lineup.channels.isNotEmpty) {
       return const Align(
         alignment: Alignment.centerLeft,
@@ -2352,7 +2259,7 @@ class _GuideDetailsPlaceholder extends StatelessWidget {
               fontWeight: FontWeight.w700,
             ),
           ),
-          SizedBox(height: 8 * scale),
+          SizedBox(height: 8),
           Text(status),
         ],
       ),
@@ -2397,36 +2304,33 @@ class _ProgramDetails extends StatelessWidget {
     final progress = scheduledDuration.inMilliseconds <= 0
         ? 0.0
         : elapsed.inMilliseconds / scheduledDuration.inMilliseconds;
-    final size = MediaQuery.sizeOf(context);
-    final scale = LineupLayout.scaleFor(size);
-    final compact =
-        size.width < LineupLayout.expandedNavigation || size.height < 900;
+
     final roles = LineupTheme.of(context);
-    final gap = (compact ? 8 : 10) * scale;
+    final double gap = 10.0;
     final channelStyle = TextStyle(
-      fontSize: (compact ? 14 : 16) * scale,
+      fontSize: 16.0,
       color: roles.mutedText,
       fontWeight: FontWeight.w500,
     );
     final leadStyle = TextStyle(
-      fontSize: (compact ? 30 : 38) * scale,
+      fontSize: 38.0,
       height: 1.15,
       fontWeight: FontWeight.w500,
       color: roles.primaryText,
     );
     final secondaryStyle = TextStyle(
-      fontSize: (compact ? 18 : 22) * scale,
+      fontSize: 22.0,
       height: 1.2,
       color: roles.secondaryText,
     );
     final metadataStyle = TextStyle(
-      fontSize: (compact ? 14 : 16) * scale,
+      fontSize: 16.0,
       height: 1.2,
       color: roles.mutedText,
       fontFeatures: const [ui.FontFeature.tabularFigures()],
     );
     final bodyStyle = TextStyle(
-      fontSize: (compact ? 16 : 18) * scale,
+      fontSize: 18.0,
       height: 1.3,
       color: roles.secondaryText,
     );
@@ -2465,8 +2369,8 @@ class _ProgramDetails extends StatelessWidget {
                   alignment: Alignment.centerLeft,
                   child: ConstrainedBox(
                     constraints: BoxConstraints(
-                      maxWidth: (showSecondaryMetadata ? 420 : 280) * scale,
-                      maxHeight: (showSecondaryMetadata ? 64 : 42) * scale,
+                      maxWidth: (showSecondaryMetadata ? 420 : 280),
+                      maxHeight: (showSecondaryMetadata ? 64 : 42),
                     ),
                     child: ClearLogoImage(
                       clearLogo!,
@@ -2550,21 +2454,19 @@ class _ProgramDetails extends StatelessWidget {
                 Align(
                   alignment: Alignment.centerLeft,
                   child: ConstrainedBox(
-                    constraints: BoxConstraints(
-                      maxWidth: (compact ? 520 : 740) * scale,
-                    ),
+                    constraints: BoxConstraints(maxWidth: 740.0),
                     child: Semantics(
                       label:
                           '${_duration(elapsed)} elapsed, ${_duration(scheduledDuration - elapsed)} remaining',
                       child: LinearProgressIndicator(
                         key: const Key('guide-program-progress'),
                         value: progress,
-                        minHeight: 4 * scale,
+                        minHeight: 4,
                       ),
                     ),
                   ),
                 ),
-                SizedBox(height: 4 * scale),
+                SizedBox(height: 4),
                 Text(
                   '${_duration(elapsed)} elapsed  ·  ${_duration(scheduledDuration - elapsed)} remaining',
                   style: metadataStyle,
