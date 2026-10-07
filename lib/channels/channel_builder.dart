@@ -289,6 +289,8 @@ typedef ChannelPlanAllocation = ({
   int allocatedExtras,
   int excludedExtras,
   int numberLimitExcluded,
+  int existingSkipped,
+  List<Channel> unmatchedGenerated,
   Map<BuilderStrategy, int> eligibleOriginalsByStrategy,
   Map<BuilderStrategy, int> allocatedOriginalsByStrategy,
   Map<BuilderStrategy, int> allocatedChannelsByStrategy,
@@ -318,7 +320,9 @@ ChannelPlanAllocation materializeChannelPlan({
         })
       >[];
   for (final proposal in proposals) {
-    final isSeries = proposal.series || _containsShows(proposal.source);
+    final isSeries =
+        proposal.mode == PlaybackMode.shuffle &&
+        (proposal.series || _containsShows(proposal.source));
     final baseMode = isSeries ? seriesMode : proposal.mode;
     final baseBlockSize = baseMode == PlaybackMode.block
         ? seriesBlockSize
@@ -339,7 +343,22 @@ ChannelPlanAllocation materializeChannelPlan({
   final output = <Channel>[];
   final allocatedOriginalsByStrategy = <BuilderStrategy, int>{};
   final allocatedChannelsByStrategy = <BuilderStrategy, int>{};
+  final existingBuilderKeys = mode == ChannelBuildMode.append
+      ? existing
+            .map((channel) => channel.builderKey)
+            .whereType<String>()
+            .toSet()
+      : const <String>{};
   final selectedOriginals =
+      <
+        ({
+          ChannelProposal proposal,
+          String suffix,
+          PlaybackMode mode,
+          int? blockSize,
+        })
+      >[];
+  final expansionOriginals =
       <
         ({
           ChannelProposal proposal,
@@ -350,6 +369,9 @@ ChannelPlanAllocation materializeChannelPlan({
       >[];
   var next = 1;
   var numberLimitExcluded = 0;
+  var existingSkipped = 0;
+  var skippedOriginals = 0;
+  var skippedExtras = 0;
 
   Channel? materialize(
     ({
@@ -407,10 +429,18 @@ ChannelPlanAllocation materializeChannelPlan({
 
   for (final entry in originals) {
     if (output.length == maximumChannels) break;
+    if (existingBuilderKeys.contains(
+      _builderKey(entry.proposal, entry.suffix),
+    )) {
+      existingSkipped++;
+      skippedOriginals++;
+      expansionOriginals.add(entry);
+      continue;
+    }
     final channel = materialize(entry);
     if (channel == null) {
-      numberLimitExcluded = originals.length - selectedOriginals.length;
-      break;
+      numberLimitExcluded++;
+      continue;
     }
     output.add(channel);
     allocatedChannelsByStrategy.update(
@@ -419,6 +449,7 @@ ChannelPlanAllocation materializeChannelPlan({
       ifAbsent: () => 1,
     );
     selectedOriginals.add(entry);
+    expansionOriginals.add(entry);
     allocatedOriginalsByStrategy.update(
       entry.proposal.strategy,
       (count) => count + 1,
@@ -427,7 +458,7 @@ ChannelPlanAllocation materializeChannelPlan({
   }
 
   final extrasByOriginal = [
-    for (final original in selectedOriginals)
+    for (final original in expansionOriginals)
       _extraVersions(
         original,
         alternateCopies: alternateCopies,
@@ -448,11 +479,17 @@ ChannelPlanAllocation materializeChannelPlan({
   ) {
     for (final extras in extrasByOriginal) {
       if (round >= extras.length) continue;
+      if (existingBuilderKeys.contains(
+        _builderKey(extras[round].proposal, extras[round].suffix),
+      )) {
+        existingSkipped++;
+        skippedExtras++;
+        continue;
+      }
       final channel = materialize(extras[round]);
       if (channel == null) {
-        numberLimitExcluded += eligibleExtras - allocatedExtras;
-        round = eligibleExtras;
-        break;
+        numberLimitExcluded++;
+        continue;
       }
       output.add(channel);
       allocatedChannelsByStrategy.update(
@@ -464,8 +501,22 @@ ChannelPlanAllocation materializeChannelPlan({
       if (output.length == maximumChannels) break;
     }
   }
-  final excludedOriginals = originals.length - selectedOriginals.length;
-  final excludedExtras = eligibleExtras - allocatedExtras;
+  final excludedOriginals =
+      originals.length - selectedOriginals.length - skippedOriginals;
+  final excludedExtras = eligibleExtras - allocatedExtras - skippedExtras;
+  final plannedBuilderKeys = output
+      .map((channel) => channel.builderKey)
+      .whereType<String>()
+      .toSet();
+  final unmatchedGenerated = mode == ChannelBuildMode.merge
+      ? existing
+            .where(
+              (channel) =>
+                  channel.builderKey != null &&
+                  !plannedBuilderKeys.contains(channel.builderKey),
+            )
+            .toList()
+      : const <Channel>[];
   return (
     channels: List.unmodifiable(output),
     allocatedOriginals: selectedOriginals.length,
@@ -473,6 +524,8 @@ ChannelPlanAllocation materializeChannelPlan({
     allocatedExtras: allocatedExtras,
     excludedExtras: excludedExtras,
     numberLimitExcluded: numberLimitExcluded,
+    existingSkipped: existingSkipped,
+    unmatchedGenerated: List.unmodifiable(unmatchedGenerated),
     eligibleOriginalsByStrategy: Map.unmodifiable({
       for (final strategy in BuilderStrategy.values)
         strategy: proposals
